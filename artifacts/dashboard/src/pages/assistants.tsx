@@ -41,7 +41,6 @@ import {
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { AgentMetricsBar } from "@/components/agent-metrics-bar";
@@ -961,16 +960,23 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                   <div className="flex-1 space-y-2">
                     <p className="text-xs font-medium text-zinc-300">Smart Endpointing</p>
                     <p className="text-[10px] text-zinc-600">Enable for more accurate speech endpoint detection.</p>
-                    <ToggleGroup
-                      type="single"
-                      value={asrSmartEndpointing}
-                      onValueChange={(v) => { if (v) { setAsrSmartEndpointing(v); setDirty(true); } }}
-                      className="justify-start border border-zinc-700 rounded-lg p-0.5 bg-zinc-900/60 w-fit gap-0"
-                    >
-                      <ToggleGroupItem value="off" className="text-xs h-7 px-3 rounded-md data-[state=on]:bg-zinc-700 data-[state=on]:text-white text-zinc-500 hover:text-zinc-300">Off</ToggleGroupItem>
-                      <ToggleGroupItem value="vapi" className="text-xs h-7 px-3 rounded-md data-[state=on]:bg-zinc-700 data-[state=on]:text-white text-zinc-500 hover:text-zinc-300 font-semibold tracking-wide">VAPI</ToggleGroupItem>
-                      <ToggleGroupItem value="livekit" className="text-xs h-7 px-3 rounded-md data-[state=on]:bg-zinc-700 data-[state=on]:text-white text-zinc-500 hover:text-zinc-300">LiveKit</ToggleGroupItem>
-                    </ToggleGroup>
+                    <div className="flex border border-zinc-700 rounded-lg p-0.5 bg-zinc-900/60 w-fit gap-0">
+                      {(["off", "vapi", "livekit"] as const).map((opt) => (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() => { setAsrSmartEndpointing(opt); setDirty(true); }}
+                          className={[
+                            "text-xs h-7 px-4 rounded-md transition-colors",
+                            asrSmartEndpointing === opt
+                              ? "bg-zinc-700 text-white font-semibold shadow-sm"
+                              : "text-zinc-500 hover:text-zinc-300 font-medium",
+                          ].join(" ")}
+                        >
+                          {opt === "off" ? "Off" : opt === "vapi" ? "VAPI" : "LiveKit"}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
