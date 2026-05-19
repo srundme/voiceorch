@@ -3,8 +3,22 @@ import type { ConversationTurn, LLMAdapter } from "../../types.js";
 
 /**
  * Groq — OpenAI-compatible API with ultra-fast inference
- * Models: llama-3.3-70b-versatile, llama-3.1-8b-instant, mixtral-8x7b-32768, gemma2-9b-it
+ * Models: llama-3.3-70b-versatile, llama-3.1-8b-instant, gemma2-9b-it
  */
+
+/** Map decommissioned → current replacement */
+const GROQ_MODEL_REPLACEMENTS: Record<string, string> = {
+  "mixtral-8x7b-32768":   "llama-3.3-70b-versatile",
+  "llama2-70b-4096":       "llama-3.3-70b-versatile",
+  "llama-3.1-70b-versatile": "llama-3.3-70b-versatile",
+};
+const GROQ_DEFAULT = "llama-3.3-70b-versatile";
+
+function resolveGroqModel(model: string | null): string {
+  const m = model ?? "";
+  return GROQ_MODEL_REPLACEMENTS[m] ?? (m || GROQ_DEFAULT);
+}
+
 export class GroqLLM implements LLMAdapter {
   private client: OpenAI;
   private model: string;
@@ -14,7 +28,7 @@ export class GroqLLM implements LLMAdapter {
       apiKey,
       baseURL: "https://api.groq.com/openai/v1",
     });
-    this.model = model ?? "llama-3.3-70b-versatile";
+    this.model = resolveGroqModel(model);
   }
 
   async chat(

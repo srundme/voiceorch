@@ -74,7 +74,7 @@ const ASR_MODELS: Record<string, { value: string; label: string }[]> = {
 const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
   openai:  [{ value: "gpt-4o-mini", label: "GPT-4o Mini" }, { value: "gpt-4o", label: "GPT-4o" }, { value: "gpt-4-turbo", label: "GPT-4 Turbo" }, { value: "gpt-3.5-turbo", label: "GPT-3.5 Turbo" }],
   google:  [{ value: "gemini-2.0-flash", label: "Gemini 2.0 Flash" }, { value: "gemini-1.5-pro", label: "Gemini 1.5 Pro" }, { value: "gemini-1.5-flash", label: "Gemini 1.5 Flash" }],
-  groq:    [{ value: "llama-3.1-70b-versatile", label: "Llama 3.1 70B" }, { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B" }, { value: "mixtral-8x7b-32768", label: "Mixtral 8x7B" }],
+  groq:    [{ value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B (recommended)" }, { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B (fast)" }, { value: "gemma2-9b-it", label: "Gemma 2 9B" }],
   sarvam:  [{ value: "sarvam-2b-v0.5", label: "Sarvam 2B v0.5" }],
 };
 
