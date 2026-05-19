@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Plus, Key, Lock, Settings2, Trash2, AlertCircle, ExternalLink } from "lucide-react";
+import { Plus, Lock, Trash2, ExternalLink } from "lucide-react";
 import {
   useListProviders,
   useCreateProvider,
@@ -40,42 +40,119 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Textarea } from "@/components/ui/textarea";
 
-// Providers supported by the orchestration engine
-const SUPPORTED_PROVIDERS: Record<string, { label: string; value: string; hint: string; docsUrl: string; extraConfigHint?: string }[]> = {
+/* ── Provider definitions ─────────────────────────────────────────────────── */
+
+interface ExtraField {
+  key: string;
+  label: string;
+  placeholder: string;
+  hint?: string;
+}
+
+interface ProviderDef {
+  label: string;
+  value: string;
+  apiKeyLabel: string;
+  apiKeyPlaceholder: string;
+  docsUrl: string;
+  docsLabel: string;
+  extraFields?: ExtraField[];
+}
+
+const SUPPORTED_PROVIDERS: Record<string, ProviderDef[]> = {
   asr: [
-    { label: "Azure Speech", value: "azure", hint: "Azure Cognitive Services speech key", docsUrl: "https://portal.azure.com", extraConfigHint: '{"region": "eastus"}' },
-    { label: "AssemblyAI", value: "assemblyai", hint: "AssemblyAI API key (v2-...)", docsUrl: "https://www.assemblyai.com/app" },
-    { label: "Sarvam AI (Saarika)", value: "sarvam", hint: "Sarvam API key", docsUrl: "https://dashboard.sarvam.ai" },
-    { label: "Cartesia", value: "cartesia", hint: "Cartesia API key", docsUrl: "https://play.cartesia.ai/keys" },
+    {
+      label: "Azure Speech", value: "azure",
+      apiKeyLabel: "Speech Key", apiKeyPlaceholder: "Paste your Azure Speech key…",
+      docsUrl: "https://portal.azure.com", docsLabel: "portal.azure.com",
+      extraFields: [{ key: "region", label: "Region", placeholder: "e.g. eastus", hint: "Azure region where your speech resource is deployed" }],
+    },
+    {
+      label: "AssemblyAI", value: "assemblyai",
+      apiKeyLabel: "API Key", apiKeyPlaceholder: "v2-…",
+      docsUrl: "https://www.assemblyai.com/app", docsLabel: "assemblyai.com",
+    },
+    {
+      label: "Sarvam AI", value: "sarvam",
+      apiKeyLabel: "API Key", apiKeyPlaceholder: "Paste your Sarvam key…",
+      docsUrl: "https://dashboard.sarvam.ai", docsLabel: "dashboard.sarvam.ai",
+    },
+    {
+      label: "Cartesia", value: "cartesia",
+      apiKeyLabel: "API Key", apiKeyPlaceholder: "Paste your Cartesia key…",
+      docsUrl: "https://play.cartesia.ai/keys", docsLabel: "play.cartesia.ai",
+    },
   ],
   llm: [
-    { label: "OpenAI", value: "openai", hint: "OpenAI API key (sk-...)", docsUrl: "https://platform.openai.com/api-keys" },
-    { label: "Google Gemini", value: "google", hint: "Google AI Studio API key (AIza...)", docsUrl: "https://aistudio.google.com/app/apikey" },
-    { label: "Groq", value: "groq", hint: "Groq API key (gsk_...)", docsUrl: "https://console.groq.com/keys" },
-    { label: "Sarvam AI", value: "sarvam", hint: "Sarvam API key", docsUrl: "https://dashboard.sarvam.ai" },
+    {
+      label: "OpenAI", value: "openai",
+      apiKeyLabel: "API Key", apiKeyPlaceholder: "sk-…",
+      docsUrl: "https://platform.openai.com/api-keys", docsLabel: "platform.openai.com",
+    },
+    {
+      label: "Google Gemini", value: "google",
+      apiKeyLabel: "API Key", apiKeyPlaceholder: "AIza…",
+      docsUrl: "https://aistudio.google.com/app/apikey", docsLabel: "aistudio.google.com",
+    },
+    {
+      label: "Groq", value: "groq",
+      apiKeyLabel: "API Key", apiKeyPlaceholder: "gsk_…",
+      docsUrl: "https://console.groq.com/keys", docsLabel: "console.groq.com",
+    },
+    {
+      label: "Sarvam AI", value: "sarvam",
+      apiKeyLabel: "API Key", apiKeyPlaceholder: "Paste your Sarvam key…",
+      docsUrl: "https://dashboard.sarvam.ai", docsLabel: "dashboard.sarvam.ai",
+    },
   ],
   tts: [
-    { label: "ElevenLabs", value: "elevenlabs", hint: "ElevenLabs API key (sk_...)", docsUrl: "https://elevenlabs.io/app/settings/api-keys" },
-    { label: "Cartesia (Sonic)", value: "cartesia", hint: "Cartesia API key", docsUrl: "https://play.cartesia.ai/keys" },
-    { label: "Sarvam AI (Bulbul)", value: "sarvam", hint: "Sarvam API key", docsUrl: "https://dashboard.sarvam.ai" },
+    {
+      label: "ElevenLabs", value: "elevenlabs",
+      apiKeyLabel: "API Key", apiKeyPlaceholder: "sk_…",
+      docsUrl: "https://elevenlabs.io/app/settings/api-keys", docsLabel: "elevenlabs.io",
+    },
+    {
+      label: "Cartesia (Sonic)", value: "cartesia",
+      apiKeyLabel: "API Key", apiKeyPlaceholder: "Paste your Cartesia key…",
+      docsUrl: "https://play.cartesia.ai/keys", docsLabel: "play.cartesia.ai",
+    },
+    {
+      label: "Sarvam AI (Bulbul)", value: "sarvam",
+      apiKeyLabel: "API Key", apiKeyPlaceholder: "Paste your Sarvam key…",
+      docsUrl: "https://dashboard.sarvam.ai", docsLabel: "dashboard.sarvam.ai",
+    },
   ],
   telephony: [
-    { label: "Twilio", value: "twilio", hint: "Twilio Auth Token", docsUrl: "https://console.twilio.com", extraConfigHint: '{"accountSid": "ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "fromNumber": "+1234567890"}' },
-    { label: "Plivo", value: "plivo", hint: "Plivo Auth Token", docsUrl: "https://console.plivo.com", extraConfigHint: '{"authId": "MAXXXXXXXXXXXXXXXXXX", "fromNumber": "+1234567890"}' },
-    { label: "Vobiz", value: "vobiz", hint: "Vobiz Auth Token", docsUrl: "https://docs.vobiz.ai", extraConfigHint: '{"authId": "MA_XXXXXXXX", "fromNumber": "+1234567890"}' },
+    {
+      label: "Twilio", value: "twilio",
+      apiKeyLabel: "Auth Token", apiKeyPlaceholder: "Paste your Twilio Auth Token…",
+      docsUrl: "https://console.twilio.com", docsLabel: "console.twilio.com",
+      extraFields: [
+        { key: "accountSid", label: "Account SID", placeholder: "ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", hint: "Found on your Twilio console home page" },
+        { key: "fromNumber", label: "Your Twilio Phone Number", placeholder: "+1234567890", hint: "The phone number you bought on Twilio (E.164 format)" },
+      ],
+    },
+    {
+      label: "Plivo", value: "plivo",
+      apiKeyLabel: "Auth Token", apiKeyPlaceholder: "Paste your Plivo Auth Token…",
+      docsUrl: "https://console.plivo.com", docsLabel: "console.plivo.com",
+      extraFields: [
+        { key: "authId", label: "Auth ID", placeholder: "MAXXXXXXXXXXXXXXXXXX", hint: "Found on your Plivo console dashboard" },
+        { key: "fromNumber", label: "Your Plivo Phone Number", placeholder: "+1234567890", hint: "The phone number you bought on Plivo (E.164 format)" },
+      ],
+    },
+    {
+      label: "Vobiz", value: "vobiz",
+      apiKeyLabel: "Auth Token", apiKeyPlaceholder: "Paste your Vobiz Auth Token…",
+      docsUrl: "https://docs.vobiz.ai", docsLabel: "docs.vobiz.ai",
+      extraFields: [
+        { key: "authId", label: "Auth ID", placeholder: "MA_XXXXXXXX", hint: "Found in Vobiz Console → API Credentials" },
+        { key: "fromNumber", label: "Your Vobiz Phone Number", placeholder: "+1234567890", hint: "The DID number you have on Vobiz (E.164 format)" },
+      ],
+    },
   ],
 };
-
-const providerFormSchema = z.object({
-  providerType: z.enum(["asr", "llm", "tts", "telephony"]),
-  providerName: z.string().min(1, "Provider is required"),
-  apiKey: z.string().min(1, "API key is required"),
-  extraConfig: z.string().optional(),
-});
-
-type ProviderFormValues = z.infer<typeof providerFormSchema>;
 
 const TYPE_LABELS: Record<string, string> = {
   asr: "Speech-to-Text (ASR)",
@@ -91,11 +168,25 @@ const TYPE_ICONS: Record<string, string> = {
   telephony: "📞",
 };
 
+/* ── Form schema ──────────────────────────────────────────────────────────── */
+
+const providerFormSchema = z.object({
+  providerType: z.enum(["asr", "llm", "tts", "telephony"]),
+  providerName: z.string().min(1, "Please select a provider"),
+  apiKey: z.string().min(1, "API key is required"),
+  extraFields: z.record(z.string()).optional(),
+});
+
+type ProviderFormValues = z.infer<typeof providerFormSchema>;
+
+/* ── Page ─────────────────────────────────────────────────────────────────── */
+
 export default function ProvidersList() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [initialType, setInitialType] = useState<string>("llm");
+  const [extraFieldValues, setExtraFieldValues] = useState<Record<string, string>>({});
 
   const { data: providers, isLoading } = useListProviders({
     query: { queryKey: getListProvidersQueryKey() }
@@ -106,35 +197,42 @@ export default function ProvidersList() {
 
   const form = useForm<ProviderFormValues>({
     resolver: zodResolver(providerFormSchema),
-    defaultValues: {
-      providerType: "llm",
-      providerName: "",
-      apiKey: "",
-      extraConfig: "",
-    },
+    defaultValues: { providerType: "llm", providerName: "", apiKey: "" },
   });
 
   const selectedType = form.watch("providerType");
   const selectedProviderValue = form.watch("providerName");
   const availableProviders = SUPPORTED_PROVIDERS[selectedType] ?? [];
-  const selectedProviderMeta = availableProviders.find(p => p.value === selectedProviderValue);
+  const selectedDef = availableProviders.find(p => p.value === selectedProviderValue);
 
   const openDialog = (type?: string) => {
     const t = (type ?? "llm") as ProviderFormValues["providerType"];
-    form.reset({ providerType: t, providerName: "", apiKey: "", extraConfig: "" });
+    form.reset({ providerType: t, providerName: "", apiKey: "" });
+    setExtraFieldValues({});
     setInitialType(t);
     setIsAddOpen(true);
   };
 
   const onSubmit = (data: ProviderFormValues) => {
+    const extraConfig = selectedDef?.extraFields && selectedDef.extraFields.length > 0
+      ? JSON.stringify(
+          Object.fromEntries(
+            selectedDef.extraFields
+              .map(f => [f.key, extraFieldValues[f.key] ?? ""])
+              .filter(([, v]) => v)
+          )
+        )
+      : undefined;
+
     createProvider.mutate(
-      { data },
+      { data: { providerType: data.providerType, providerName: data.providerName, apiKey: data.apiKey, extraConfig } },
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getListProvidersQueryKey() });
           setIsAddOpen(false);
           form.reset();
-          toast({ title: "Provider added", description: "Your API key has been securely saved." });
+          setExtraFieldValues({});
+          toast({ title: "Provider added", description: "Your credentials have been securely saved." });
         },
         onError: () => {
           toast({ title: "Error", description: "Failed to save provider.", variant: "destructive" });
@@ -144,13 +242,13 @@ export default function ProvidersList() {
   };
 
   const handleDelete = (id: number) => {
-    if (confirm("Are you sure? Any agents using this key will fail to connect.")) {
+    if (confirm("Are you sure? Agents using this key will stop working.")) {
       deleteProvider.mutate(
         { id },
         {
           onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: getListProvidersQueryKey() });
-            toast({ title: "Provider deleted", description: "The provider key has been removed." });
+            toast({ title: "Provider deleted" });
           },
           onError: () => {
             toast({ title: "Error", description: "Failed to delete provider.", variant: "destructive" });
@@ -171,7 +269,7 @@ export default function ProvidersList() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Providers</h2>
-          <p className="text-muted-foreground">Manage your API keys for voice AI services. Keys are stored securely and never exposed in full.</p>
+          <p className="text-muted-foreground">Add your API keys for voice AI services. Keys are stored securely and never exposed in full.</p>
         </div>
         <Button onClick={() => openDialog()} data-testid="button-add-provider">
           <Plus className="mr-2 h-4 w-4" /> Add Provider Key
@@ -180,15 +278,18 @@ export default function ProvidersList() {
 
       {/* Add Provider Dialog */}
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="sm:max-w-[460px]">
+        <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>
             <DialogTitle>Add Provider Key</DialogTitle>
             <DialogDescription>
-              Select a provider and paste in your API key. Keys are stored on the server and used at call time.
+              Fill in your credentials below. They are stored on the server and used at call time.
             </DialogDescription>
           </DialogHeader>
+
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-2">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-1">
+
+              {/* Service Category */}
               <FormField
                 control={form.control}
                 name="providerType"
@@ -199,7 +300,8 @@ export default function ProvidersList() {
                       onValueChange={(val) => {
                         field.onChange(val);
                         form.setValue("providerName", "");
-                        form.setValue("extraConfig", "");
+                        form.setValue("apiKey", "");
+                        setExtraFieldValues({});
                       }}
                       value={field.value}
                     >
@@ -220,21 +322,21 @@ export default function ProvidersList() {
                 )}
               />
 
+              {/* Provider */}
               <FormField
                 control={form.control}
                 name="providerName"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Provider</FormLabel>
-                    <Select onValueChange={(val) => {
-                      field.onChange(val);
-                      const meta = availableProviders.find(p => p.value === val);
-                      if (meta?.extraConfigHint) {
-                        form.setValue("extraConfig", meta.extraConfigHint);
-                      } else {
-                        form.setValue("extraConfig", "");
-                      }
-                    }} value={field.value}>
+                    <Select
+                      onValueChange={(val) => {
+                        field.onChange(val);
+                        form.setValue("apiKey", "");
+                        setExtraFieldValues({});
+                      }}
+                      value={field.value}
+                    >
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select provider" />
@@ -246,16 +348,16 @@ export default function ProvidersList() {
                         ))}
                       </SelectContent>
                     </Select>
-                    {selectedProviderMeta && (
+                    {selectedDef && (
                       <FormDescription className="flex items-center gap-1">
-                        Get your key at{" "}
+                        Get credentials at{" "}
                         <a
-                          href={selectedProviderMeta.docsUrl}
+                          href={selectedDef.docsUrl}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-primary inline-flex items-center gap-0.5 hover:underline"
                         >
-                          {selectedProviderMeta.docsUrl.replace("https://", "")}
+                          {selectedDef.docsLabel}
                           <ExternalLink className="h-3 w-3" />
                         </a>
                       </FormDescription>
@@ -265,48 +367,48 @@ export default function ProvidersList() {
                 )}
               />
 
-              <FormField
-                control={form.control}
-                name="apiKey"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>API Key</FormLabel>
-                    <FormControl>
+              {/* Dynamic extra fields — shown BEFORE API key for telephony so it reads naturally */}
+              {selectedDef?.extraFields && selectedDef.extraFields.length > 0 && (
+                <div className="space-y-3">
+                  {selectedDef.extraFields.map(f => (
+                    <div key={f.key} className="space-y-1.5">
+                      <label className="text-sm font-medium leading-none">{f.label}</label>
                       <Input
-                        type="password"
-                        placeholder={selectedProviderMeta?.hint ?? "Paste your API key..."}
-                        {...field}
+                        placeholder={f.placeholder}
+                        value={extraFieldValues[f.key] ?? ""}
+                        onChange={e => setExtraFieldValues(prev => ({ ...prev, [f.key]: e.target.value }))}
                       />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                      {f.hint && <p className="text-[11px] text-muted-foreground">{f.hint}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
 
-              <FormField
-                control={form.control}
-                name="extraConfig"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Extra Config <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder='{"region": "eastus"}'
-                        className="font-mono text-xs resize-none"
-                        rows={3}
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormDescription>JSON extras required by some providers (e.g. region, account SID).</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {/* API Key / Auth Token */}
+              {selectedDef && (
+                <FormField
+                  control={form.control}
+                  name="apiKey"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{selectedDef.apiKeyLabel}</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="password"
+                          placeholder={selectedDef.apiKeyPlaceholder}
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
 
               <DialogFooter className="pt-2">
                 <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>Cancel</Button>
                 <Button type="submit" disabled={createProvider.isPending} data-testid="button-save-provider">
-                  {createProvider.isPending ? "Saving..." : "Save Key"}
+                  {createProvider.isPending ? "Saving…" : "Save"}
                 </Button>
               </DialogFooter>
             </form>
