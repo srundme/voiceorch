@@ -1,28 +1,37 @@
 import type { WebSocket } from "ws";
-import { createSession, getSession, endSession, failSession } from "../session.js";
+import { createSession, endSession, failSession } from "../session.js";
 import { logger } from "../../lib/logger.js";
 
 /**
  * Vobiz WebSocket handler
  *
- * Vobiz uses a JSON+binary hybrid protocol similar to Twilio Media Streams.
- * Audio format: PCM μ-law 8kHz mono (PCMU G.711)
+ * Vobiz uses the same Media Streams protocol as Twilio:
+ *   • JSON events over WebSocket
+ *   • Audio: base64-encoded µ-law 8 kHz mono (G.711 PCMU), 20 ms chunks
  *
- * Flow:
- *   1. Vobiz calls POST /api/webhooks/vobiz/voice
- *   2. We return JSON with WebSocket URL
- *   3. Vobiz opens WS → sends events
+ * Inbound event flow from Vobiz → server:
+ *   { event: "connected" }
+ *   { event: "start",  start: { callSid, from, to, ... } }
+ *   { event: "media",  media: { payload: "<base64 mulaw>" } }
+ *   { event: "stop" }
+ *
+ * Outbound (server → Vobiz) to play audio to caller:
+ *   { event: "media", media: { payload: "<base64 mulaw>" } }
+ *
+ * Docs: https://docs.vobiz.ai/guides/ai-voice-agent
  */
 
-interface VobizEvent {
-  event: "session.start" | "audio.in" | "session.end" | "error";
-  session_id?: string;
-  call_id?: string;
-  from?: string;
-  to?: string;
-  agent_id?: number;
-  audio?: string; // base64 mulaw
-  error?: string;
+interface VobizMessage {
+  event: "connected" | "start" | "media" | "stop";
+  start?: {
+    callSid?: string;
+    from?: string;
+    to?: string;
+    streamSid?: string;
+  };
+  media?: {
+    payload: string; // base64 µ-law
+  };
 }
 
 export async function handleVobizWebSocket(
@@ -34,33 +43,28 @@ export async function handleVobizWebSocket(
   function sendAudioToVobiz(audio: Buffer): void {
     if (ws.readyState !== ws.OPEN) return;
     ws.send(JSON.stringify({
-      event: "audio.out",
-      audio: audio.toString("base64"),
-      encoding: "mulaw",
-      sample_rate: 8000,
+      event: "media",
+      media: { payload: audio.toString("base64") },
     }));
   }
 
   ws.on("message", async (raw: Buffer | string) => {
-    // Binary frames = raw mulaw audio
-    if (Buffer.isBuffer(raw)) {
-      if (!sessionId) return;
-      const session = getSession(sessionId);
-      if (session) session.pipeline.onAudioIn(raw);
-      return;
-    }
-
-    let event: VobizEvent;
+    let msg: VobizMessage;
     try {
-      event = JSON.parse(raw.toString()) as VobizEvent;
+      msg = JSON.parse(raw.toString()) as VobizMessage;
     } catch {
       return;
     }
 
-    switch (event.event) {
-      case "session.start": {
-        const fromNumber = event.from ?? "+10000000000";
-        const toNumber = event.to ?? "+10000000001";
+    switch (msg.event) {
+      case "connected":
+        logger.info({ agentId }, "Vobiz WebSocket connected");
+        break;
+
+      case "start": {
+        const fromNumber = msg.start?.from ?? "+10000000000";
+        const toNumber   = msg.start?.to   ?? "+10000000001";
+        const callSid    = msg.start?.callSid ?? msg.start?.streamSid;
 
         try {
           const { sessionId: sid } = await createSession({
@@ -68,39 +72,29 @@ export async function handleVobizWebSocket(
             telephonyProvider: "vobiz",
             toNumber,
             fromNumber,
-            externalCallId: event.call_id,
+            externalCallId: callSid,
             onAudioOut: sendAudioToVobiz,
             onCallEnd: () => ws.close(),
           });
           sessionId = sid;
-
-          // Acknowledge session start
-          ws.send(JSON.stringify({ event: "session.ready", session_id: sessionId }));
-          logger.info({ sessionId, agentId }, "Vobiz session started");
+          logger.info({ sessionId, agentId, fromNumber, toNumber }, "Vobiz session started");
         } catch (err) {
           logger.error({ err, agentId }, "Failed to create Vobiz session");
-          ws.send(JSON.stringify({ event: "error", message: String(err) }));
           ws.close();
         }
         break;
       }
 
-      case "audio.in": {
-        if (!sessionId || !event.audio) break;
+      case "media": {
+        if (!sessionId || !msg.media?.payload) break;
+        const { getSession } = await import("../session.js");
         const session = getSession(sessionId);
-        if (!session) break;
-        const chunk = Buffer.from(event.audio, "base64");
-        session.pipeline.onAudioIn(chunk);
+        if (session) session.pipeline.onAudioIn(Buffer.from(msg.media.payload, "base64"));
         break;
       }
 
-      case "session.end":
+      case "stop":
         if (sessionId) await endSession(sessionId);
-        break;
-
-      case "error":
-        logger.error({ sessionId, error: event.error }, "Vobiz reported error");
-        if (sessionId) await failSession(sessionId, event.error ?? "Unknown Vobiz error");
         break;
     }
   });
@@ -114,15 +108,13 @@ export async function handleVobizWebSocket(
   });
 }
 
-/** Return JSON config for Vobiz to connect to our WebSocket */
-export function getVobizConnectResponse(wsBaseUrl: string, agentId: number) {
-  return {
-    action: "connect",
-    websocket_url: `${wsBaseUrl}/api/ws/vobiz/${agentId}`,
-    audio_format: {
-      encoding: "mulaw",
-      sample_rate: 8000,
-      channels: 1,
-    },
-  };
+/**
+ * Return VoiceXML telling Vobiz to open a bidirectional WebSocket stream.
+ * Vobiz uses the same <Stream> directive as Twilio.
+ */
+export function getVobizAnswerXML(wsBaseUrl: string, agentId: number): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Stream bidirectional="true" keepCallAlive="true">${wsBaseUrl}/api/ws/vobiz/${agentId}</Stream>
+</Response>`;
 }

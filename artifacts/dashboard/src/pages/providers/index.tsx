@@ -64,7 +64,7 @@ const SUPPORTED_PROVIDERS: Record<string, { label: string; value: string; hint: 
   telephony: [
     { label: "Twilio", value: "twilio", hint: "Twilio Auth Token", docsUrl: "https://console.twilio.com", extraConfigHint: '{"accountSid": "ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "fromNumber": "+1234567890"}' },
     { label: "Plivo", value: "plivo", hint: "Plivo Auth Token", docsUrl: "https://console.plivo.com", extraConfigHint: '{"authId": "MAXXXXXXXXXXXXXXXXXX", "fromNumber": "+1234567890"}' },
-    { label: "Vobiz", value: "vobiz", hint: "Vobiz API key", docsUrl: "https://vobiz.in" },
+    { label: "Vobiz", value: "vobiz", hint: "Vobiz Auth Token", docsUrl: "https://docs.vobiz.ai", extraConfigHint: '{"authId": "MA_XXXXXXXX", "fromNumber": "+1234567890"}' },
   ],
 };
 

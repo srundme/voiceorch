@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { getTwilioVoiceTwiML } from "../orchestration/telephony/twilio.js";
 import { getPlivoAnswerXML } from "../orchestration/telephony/plivo.js";
-import { getVobizConnectResponse } from "../orchestration/telephony/vobiz.js";
+import { getVobizAnswerXML } from "../orchestration/telephony/vobiz.js";
 import { db, agentsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
@@ -76,7 +76,7 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
   }
 
   const wsBaseUrl = getWsBaseUrl(req);
-  res.json(getVobizConnectResponse(wsBaseUrl, agentId));
+  res.set("Content-Type", "text/xml").send(getVobizAnswerXML(wsBaseUrl, agentId));
 });
 
 // ── Twilio status callbacks ──────────────────────────────────────────────────

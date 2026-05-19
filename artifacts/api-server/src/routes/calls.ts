@@ -129,6 +129,29 @@ router.post("/calls/outbound", async (req, res): Promise<void> => {
         fromNumber: cfg["fromNumber"]!, toNumber,
         answerUrl: `${baseUrl}/api/webhooks/plivo/voice?agentId=${agentId}`,
       });
+    } else if (provider === "vobiz") {
+      const cfg = providerRow.extraConfig ? JSON.parse(providerRow.extraConfig) as Record<string, string> : {};
+      if (!cfg["authId"]) { res.status(400).json({ error: 'Vobiz provider is missing "authId" in Extra Config. Edit the provider and add: {"authId":"MA_XXXXXXXX","fromNumber":"+1xxx"}' }); return; }
+      if (!cfg["fromNumber"]) { res.status(400).json({ error: 'Vobiz provider is missing "fromNumber" in Extra Config.' }); return; }
+      const url = `https://api.vobiz.ai/api/v1/Account/${cfg["authId"]}/Call/`;
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: {
+          "X-Auth-ID": cfg["authId"]!, "X-Auth-Token": providerRow.apiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          to: toNumber, from: cfg["fromNumber"]!,
+          answer_url: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${agentId}`,
+          hangup_url:  `${baseUrl}/api/webhooks/vobiz/status`,
+        }),
+      });
+      if (!resp.ok) {
+        const err = await resp.text();
+        throw new Error(`Vobiz API error ${resp.status}: ${err}`);
+      }
+      const data = await resp.json() as { call_uuid?: string; request_uuid?: string };
+      providerCallId = data.call_uuid ?? data.request_uuid ?? "unknown";
     } else {
       res.status(400).json({ error: `Outbound calling is not yet supported for provider: ${provider}` });
       return;
