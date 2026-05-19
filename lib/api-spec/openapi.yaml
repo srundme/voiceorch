@@ -494,6 +494,9 @@ components:
         webhookUrl:
           type: ["string", "null"]
           description: URL to POST a call summary JSON to when the call ends
+        noiseCancellationEnabled:
+          type: ["boolean", "null"]
+          description: Request noise reduction from the ASR provider on every transcription call
         totalCalls:
           type: integer
         successfulCalls:
@@ -552,6 +555,8 @@ components:
           type: number
         webhookUrl:
           type: string
+        noiseCancellationEnabled:
+          type: boolean
 
     AgentUpdate:
       type: object
@@ -596,6 +601,8 @@ components:
           type: number
         webhookUrl:
           type: string
+        noiseCancellationEnabled:
+          type: boolean
         status:
           type: string
 

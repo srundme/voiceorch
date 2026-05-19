@@ -28,4 +28,5 @@ export interface AgentInput {
   backchannelingEnabled?: boolean;
   backchannelingFrequency?: number;
   webhookUrl?: string;
+  noiseCancellationEnabled?: boolean;
 }

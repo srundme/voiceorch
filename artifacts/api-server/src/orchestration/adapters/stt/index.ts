@@ -9,7 +9,8 @@ export function createSTTAdapter(
   provider: string,
   apiKey: string,
   model: string | null,
-  extraConfig: string | null
+  extraConfig: string | null,
+  noiseCancellationEnabled = false
 ): STTAdapter {
   switch (provider.toLowerCase()) {
     case "azure":
@@ -21,7 +22,7 @@ export function createSTTAdapter(
     case "cartesia":
       return new CartesiaSTT(apiKey, model);
     case "deepgram":
-      return new DeepgramSTT(apiKey, model);
+      return new DeepgramSTT(apiKey, model, noiseCancellationEnabled);
     default:
       throw new Error(`Unknown STT provider: ${provider}`);
   }

@@ -27,5 +27,6 @@ export interface AgentUpdate {
   backchannelingEnabled?: boolean;
   backchannelingFrequency?: number;
   webhookUrl?: string;
+  noiseCancellationEnabled?: boolean;
   status?: string;
 }

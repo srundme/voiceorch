@@ -148,6 +148,7 @@ const agentFormSchema = z.object({
   backchannelingEnabled:    z.boolean().optional(),
   backchannelingFrequency:  z.number().min(0).max(1).optional(),
   webhookUrl:               z.string().optional(),
+  noiseCancellationEnabled: z.boolean().optional(),
 });
 
 type AgentFormValues = z.infer<typeof agentFormSchema>;
@@ -205,6 +206,7 @@ export default function AgentNew() {
       backchannelingEnabled:    false,
       backchannelingFrequency:  0.5,
       webhookUrl:               "",
+      noiseCancellationEnabled: false,
     },
   });
 
@@ -370,6 +372,26 @@ export default function AgentNew() {
                           <FormMessage />
                         </FormItem>
                       )} />
+                    </div>
+
+                    <div className="space-y-3 p-4 border rounded-md bg-muted/20">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium leading-none">Noise Cancellation</p>
+                          <p className="text-xs text-muted-foreground mt-1">Request noise reduction from the ASR provider</p>
+                        </div>
+                        <FormField control={form.control} name="noiseCancellationEnabled" render={({ field }) => (
+                          <FormItem>
+                            <Select onValueChange={(v) => field.onChange(v === "true")} value={field.value ? "true" : "false"}>
+                              <FormControl><SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger></FormControl>
+                              <SelectContent>
+                                <SelectItem value="false">Off</SelectItem>
+                                <SelectItem value="true">On</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </FormItem>
+                        )} />
+                      </div>
                     </div>
 
                     <div className="space-y-3 p-4 border rounded-md bg-muted/20">

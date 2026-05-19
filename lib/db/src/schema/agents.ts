@@ -27,6 +27,7 @@ export const agentsTable = pgTable("agents", {
   backchannelingEnabled: boolean("backchanneling_enabled").default(false),
   backchannelingFrequency: real("backchanneling_frequency"),
   webhookUrl: text("webhook_url"),
+  noiseCancellationEnabled: boolean("noise_cancellation_enabled").default(false),
 
   // ── Stats ────────────────────────────────────────────────────────────────────
   totalCalls: integer("total_calls").notNull().default(0),

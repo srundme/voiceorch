@@ -21,6 +21,7 @@ export interface AgentConfig {
   backchannelingEnabled: boolean;
   backchannelingFrequency: number | null;
   webhookUrl: string | null;
+  noiseCancellationEnabled: boolean;
 }
 
 export interface ProviderKey {

@@ -42,6 +42,7 @@ export const ListAgentsResponseItem = zod.object({
   "backchannelingEnabled": zod.boolean().nullish().describe('Inject short acknowledgement phrases while the LLM is thinking'),
   "backchannelingFrequency": zod.number().nullish().describe('Probability (0–1) of backchanneling on each turn'),
   "webhookUrl": zod.string().nullish().describe('URL to POST a call summary JSON to when the call ends'),
+  "noiseCancellationEnabled": zod.boolean().nullish().describe('Request noise reduction from the ASR provider on every transcription call'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -77,7 +78,8 @@ export const CreateAgentBody = zod.object({
   "language": zod.string().optional(),
   "backchannelingEnabled": zod.boolean().optional(),
   "backchannelingFrequency": zod.number().optional(),
-  "webhookUrl": zod.string().optional()
+  "webhookUrl": zod.string().optional(),
+  "noiseCancellationEnabled": zod.boolean().optional()
 })
 
 
@@ -111,6 +113,7 @@ export const GetAgentResponse = zod.object({
   "backchannelingEnabled": zod.boolean().nullish().describe('Inject short acknowledgement phrases while the LLM is thinking'),
   "backchannelingFrequency": zod.number().nullish().describe('Probability (0–1) of backchanneling on each turn'),
   "webhookUrl": zod.string().nullish().describe('URL to POST a call summary JSON to when the call ends'),
+  "noiseCancellationEnabled": zod.boolean().nullish().describe('Request noise reduction from the ASR provider on every transcription call'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -147,6 +150,7 @@ export const UpdateAgentBody = zod.object({
   "backchannelingEnabled": zod.boolean().optional(),
   "backchannelingFrequency": zod.number().optional(),
   "webhookUrl": zod.string().optional(),
+  "noiseCancellationEnabled": zod.boolean().optional(),
   "status": zod.string().optional()
 })
 
@@ -173,6 +177,7 @@ export const UpdateAgentResponse = zod.object({
   "backchannelingEnabled": zod.boolean().nullish().describe('Inject short acknowledgement phrases while the LLM is thinking'),
   "backchannelingFrequency": zod.number().nullish().describe('Probability (0–1) of backchanneling on each turn'),
   "webhookUrl": zod.string().nullish().describe('URL to POST a call summary JSON to when the call ends'),
+  "noiseCancellationEnabled": zod.boolean().nullish().describe('Request noise reduction from the ASR provider on every transcription call'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -219,6 +224,7 @@ export const ToggleAgentResponse = zod.object({
   "backchannelingEnabled": zod.boolean().nullish().describe('Inject short acknowledgement phrases while the LLM is thinking'),
   "backchannelingFrequency": zod.number().nullish().describe('Probability (0–1) of backchanneling on each turn'),
   "webhookUrl": zod.string().nullish().describe('URL to POST a call summary JSON to when the call ends'),
+  "noiseCancellationEnabled": zod.boolean().nullish().describe('Request noise reduction from the ASR provider on every transcription call'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),

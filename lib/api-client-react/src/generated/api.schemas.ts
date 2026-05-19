@@ -83,6 +83,11 @@ export interface Agent {
      * @nullable
      */
   webhookUrl?: string | null;
+  /**
+     * Request noise reduction from the ASR provider on every transcription call
+     * @nullable
+     */
+  noiseCancellationEnabled?: boolean | null;
   totalCalls?: number;
   successfulCalls?: number;
   /** @nullable */
@@ -113,6 +118,7 @@ export interface AgentInput {
   backchannelingEnabled?: boolean;
   backchannelingFrequency?: number;
   webhookUrl?: string;
+  noiseCancellationEnabled?: boolean;
 }
 
 export interface AgentUpdate {
@@ -136,6 +142,7 @@ export interface AgentUpdate {
   backchannelingEnabled?: boolean;
   backchannelingFrequency?: number;
   webhookUrl?: string;
+  noiseCancellationEnabled?: boolean;
   status?: string;
 }
 

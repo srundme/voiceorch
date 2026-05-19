@@ -60,7 +60,8 @@ export class OrchestrationPipeline {
 
     this.stt = createSTTAdapter(
       this.agent.asrProvider, sttKey, this.agent.asrModel,
-      keys.get(`${this.agent.asrProvider}:extraConfig`) ?? null
+      keys.get(`${this.agent.asrProvider}:extraConfig`) ?? null,
+      this.agent.noiseCancellationEnabled
     );
     this.llm = createLLMAdapter(this.agent.llmProvider, llmKey, this.agent.llmModel);
     this.tts = createTTSAdapter(

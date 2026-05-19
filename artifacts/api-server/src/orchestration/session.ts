@@ -60,6 +60,7 @@ export async function createSession(params: {
     backchannelingEnabled: agent.backchannelingEnabled ?? false,
     backchannelingFrequency: agent.backchannelingFrequency ?? null,
     webhookUrl: agent.webhookUrl ?? null,
+    noiseCancellationEnabled: agent.noiseCancellationEnabled ?? false,
   };
 
   const providerRows = await db.select().from(providersTable).where(eq(providersTable.isActive, true));
