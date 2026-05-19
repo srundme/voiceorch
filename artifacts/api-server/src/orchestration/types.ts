@@ -116,4 +116,6 @@ export interface SessionConfig {
   onCallTransfer?: (transferTo: string) => void;
   onBargeIn?: () => void;
   onMetrics?: (metrics: PipelineMetrics) => void;
+  /** Called after every completed turn with the full conversation history — used to persist to Redis */
+  onConversationUpdate?: (history: ConversationTurn[]) => void;
 }

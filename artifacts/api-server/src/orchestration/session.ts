@@ -3,6 +3,12 @@ import { eq } from "drizzle-orm";
 import { OrchestrationPipeline } from "./pipeline.js";
 import type { AgentConfig, AgentTool, TelephonyProvider, PipelineMetrics } from "./types.js";
 import { logger } from "../lib/logger.js";
+import {
+  saveSessionMeta,
+  patchSessionMeta,
+  saveConversation,
+  removeSession,
+} from "./sessionStore.js";
 
 interface MetricsAcc {
   sttTotal: number;
@@ -89,6 +95,9 @@ export async function createSession(params: {
   let wasTransferred = false;
   let transferredTo: string | null = null;
 
+  const sessionId = `${params.telephonyProvider}-${callRecord.id}-${Date.now()}`;
+  const redisTtl = (agentConfig.maxDuration ?? 600) + 600; // maxDuration + 10 min buffer
+
   const pipeline = new OrchestrationPipeline({
     callId: callRecord.id,
     agentConfig,
@@ -103,6 +112,7 @@ export async function createSession(params: {
       wasTransferred = true;
       transferredTo = to;
       logger.info({ callId: callRecord.id, transferTo: to }, "Call transfer initiated");
+      void patchSessionMeta(sessionId, { wasTransferred: true, transferredTo: to }, redisTtl);
     },
     onBargeIn: params.onBargeIn,
     onMetrics: (m: PipelineMetrics) => {
@@ -114,10 +124,17 @@ export async function createSession(params: {
         { callId: callRecord.id, ...m, turnCount: metricsAcc.count },
         "Per-turn metrics"
       );
+      void patchSessionMeta(sessionId, {
+        sttTotal: metricsAcc.sttTotal,
+        llmTotal: metricsAcc.llmTotal,
+        ttsTotal: metricsAcc.ttsTotal,
+        metricsCount: metricsAcc.count,
+      }, redisTtl);
+    },
+    onConversationUpdate: (history) => {
+      void saveConversation(callRecord.id, history, redisTtl);
     },
   });
-
-  const sessionId = `${params.telephonyProvider}-${callRecord.id}-${Date.now()}`;
 
   sessions.set(sessionId, {
     callId: callRecord.id,
@@ -127,6 +144,20 @@ export async function createSession(params: {
     get wasTransferred() { return wasTransferred; },
     get transferredTo() { return transferredTo; },
   });
+
+  // Persist initial session metadata to Redis
+  void saveSessionMeta(sessionId, {
+    callId: callRecord.id,
+    agentId: params.agentId,
+    startedAt: new Date().toISOString(),
+    wasTransferred: false,
+    transferredTo: null,
+    status: "active",
+    sttTotal: 0,
+    llmTotal: 0,
+    ttsTotal: 0,
+    metricsCount: 0,
+  }, redisTtl);
 
   setTimeout(() => { void endSession(sessionId); }, agentConfig.maxDuration * 1000);
 
@@ -156,6 +187,8 @@ export async function endSession(sessionId: string): Promise<void> {
 
   sessions.delete(sessionId);
   session.pipeline.close();
+  void patchSessionMeta(sessionId, { status: "ended" }, 3600);
+  void removeSession(sessionId, session.callId);
 
   const endedAt = new Date();
   const durationSeconds = Math.floor((endedAt.getTime() - session.startedAt.getTime()) / 1000);
@@ -233,6 +266,8 @@ export async function failSession(sessionId: string, errorMessage: string): Prom
 
   sessions.delete(sessionId);
   session.pipeline.close();
+  void patchSessionMeta(sessionId, { status: "failed" }, 3600);
+  void removeSession(sessionId, session.callId);
 
   await db.update(callsTable).set({
     status: "failed",

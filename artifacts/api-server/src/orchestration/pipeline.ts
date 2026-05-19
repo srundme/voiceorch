@@ -199,6 +199,7 @@ export class OrchestrationPipeline {
       logger.info({ callId: this.config.callId, greeting: greeting.slice(0, 80) }, "Sending greeting");
       this.conversationHistory.push({ role: "assistant", content: greeting });
       this.config.onTranscript("agent", greeting);
+      this.config.onConversationUpdate?.(this.conversationHistory);
       this.firstAudioSentAt = null;
       this.isPlaying = true;
       try {
@@ -476,6 +477,7 @@ export class OrchestrationPipeline {
 
     this.conversationHistory.push({ role: "assistant", content: llmResponse });
     this.config.onTranscript("agent", llmResponse);
+    this.config.onConversationUpdate?.(this.conversationHistory);
 
     await playPromise;
 
