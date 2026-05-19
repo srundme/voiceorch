@@ -45,12 +45,14 @@ export async function handleVobizWebSocket(
   let streamSid: string | null = null;
 
   function sendAudioToVobiz(audio: Buffer): void {
-    if (!streamSid || ws.readyState !== ws.OPEN) return;
-    ws.send(JSON.stringify({
+    if (ws.readyState !== ws.OPEN) return;
+    // streamSid is included when Vobiz provides it; some Vobiz setups omit it
+    const msg: Record<string, unknown> = {
       event: "media",
-      streamSid,
       media: { payload: audio.toString("base64") },
-    }));
+    };
+    if (streamSid) msg["streamSid"] = streamSid;
+    ws.send(JSON.stringify(msg));
   }
 
   ws.on("message", async (raw: Buffer | string) => {
@@ -75,7 +77,8 @@ export async function handleVobizWebSocket(
         const fromNumber = msg.start?.from ?? params["From"] ?? "+10000000000";
         const toNumber   = msg.start?.to   ?? params["To"]   ?? "+10000000001";
 
-        logger.info({ agentId, streamSid, callSid, fromNumber, toNumber }, "Vobiz start event");
+        // Log the full raw payload so we can see exactly what Vobiz sends
+        logger.info({ agentId, streamSid, callSid, fromNumber, toNumber, raw: raw.toString() }, "Vobiz start event");
 
         try {
           const { sessionId: sid } = await createSession({
