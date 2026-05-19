@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { createSession, endSession, failSession } from "../session.js";
+import { createSession, getSession, endSession, failSession } from "../session.js";
 import { logger } from "../../lib/logger.js";
 
 /**
@@ -11,25 +11,28 @@ import { logger } from "../../lib/logger.js";
  *
  * Inbound event flow from Vobiz → server:
  *   { event: "connected" }
- *   { event: "start",  start: { callSid, from, to, ... } }
- *   { event: "media",  media: { payload: "<base64 mulaw>" } }
+ *   { event: "start",  streamSid: "MZ...", start: { callSid, streamSid, from, to, ... } }
+ *   { event: "media",  streamSid: "MZ...", media: { payload: "<base64 mulaw>" } }
  *   { event: "stop" }
  *
  * Outbound (server → Vobiz) to play audio to caller:
- *   { event: "media", media: { payload: "<base64 mulaw>" } }
+ *   { event: "media", streamSid: "MZ...", media: { payload: "<base64 mulaw>" } }
  *
  * Docs: https://docs.vobiz.ai/guides/ai-voice-agent
  */
 
 interface VobizMessage {
   event: "connected" | "start" | "media" | "stop";
+  streamSid?: string;
   start?: {
     callSid?: string;
+    streamSid?: string;
     from?: string;
     to?: string;
-    streamSid?: string;
+    customParameters?: Record<string, string>;
   };
   media?: {
+    track?: string;
     payload: string; // base64 µ-law
   };
 }
@@ -39,11 +42,13 @@ export async function handleVobizWebSocket(
   agentId: number
 ): Promise<void> {
   let sessionId: string | null = null;
+  let streamSid: string | null = null;
 
   function sendAudioToVobiz(audio: Buffer): void {
-    if (ws.readyState !== ws.OPEN) return;
+    if (!streamSid || ws.readyState !== ws.OPEN) return;
     ws.send(JSON.stringify({
       event: "media",
+      streamSid,
       media: { payload: audio.toString("base64") },
     }));
   }
@@ -62,9 +67,15 @@ export async function handleVobizWebSocket(
         break;
 
       case "start": {
-        const fromNumber = msg.start?.from ?? "+10000000000";
-        const toNumber   = msg.start?.to   ?? "+10000000001";
-        const callSid    = msg.start?.callSid ?? msg.start?.streamSid;
+        // Capture streamSid from top-level or nested start object (mirrors Twilio protocol)
+        streamSid = msg.streamSid ?? msg.start?.streamSid ?? null;
+        const callSid = msg.start?.callSid ?? streamSid;
+
+        const params = msg.start?.customParameters ?? {};
+        const fromNumber = msg.start?.from ?? params["From"] ?? "+10000000000";
+        const toNumber   = msg.start?.to   ?? params["To"]   ?? "+10000000001";
+
+        logger.info({ agentId, streamSid, callSid, fromNumber, toNumber }, "Vobiz start event");
 
         try {
           const { sessionId: sid } = await createSession({
@@ -72,12 +83,12 @@ export async function handleVobizWebSocket(
             telephonyProvider: "vobiz",
             toNumber,
             fromNumber,
-            externalCallId: callSid,
+            externalCallId: callSid ?? undefined,
             onAudioOut: sendAudioToVobiz,
             onCallEnd: () => ws.close(),
           });
           sessionId = sid;
-          logger.info({ sessionId, agentId, fromNumber, toNumber }, "Vobiz session started");
+          logger.info({ sessionId, agentId, fromNumber, toNumber, streamSid }, "Vobiz session started");
         } catch (err) {
           logger.error({ err, agentId }, "Failed to create Vobiz session");
           ws.close();
@@ -87,23 +98,27 @@ export async function handleVobizWebSocket(
 
       case "media": {
         if (!sessionId || !msg.media?.payload) break;
-        const { getSession } = await import("../session.js");
+        // Only process inbound audio (ignore outbound echo if track is specified)
+        if (msg.media.track && msg.media.track !== "inbound") break;
         const session = getSession(sessionId);
         if (session) session.pipeline.onAudioIn(Buffer.from(msg.media.payload, "base64"));
         break;
       }
 
       case "stop":
+        logger.info({ sessionId }, "Vobiz stream stopped");
         if (sessionId) await endSession(sessionId);
         break;
     }
   });
 
   ws.on("close", async () => {
+    logger.info({ sessionId }, "Vobiz WS closed");
     if (sessionId) await endSession(sessionId);
   });
 
   ws.on("error", async (err: unknown) => {
+    logger.error({ sessionId, err }, "Vobiz WS error");
     if (sessionId) await failSession(sessionId, String(err));
   });
 }
