@@ -23,6 +23,19 @@ export interface ToolDefinition {
 
 // ── Core pipeline types ───────────────────────────────────────────────────────
 
+/** Per-provider STT configuration derived from agent settings */
+export interface STTConfig {
+  language: string | null;
+  backgroundDenoising: boolean;
+  confidenceThreshold: number;
+  endOfTurnConfidence: number;
+  endOfTurnTimeout: number;
+  keyterms: string[];
+  /** "off" | "vapi" | "livekit" — "vapi" enables Deepgram utterance-end VAD events */
+  smartEndpointing: string;
+  autoFallback: boolean;
+}
+
 export interface AgentConfig {
   id: number;
   name: string;
@@ -47,6 +60,9 @@ export interface AgentConfig {
   backchannelingFrequency: number | null;
   webhookUrl: string | null;
   noiseCancellationEnabled: boolean;
+
+  // Tier 2 — Transcriber Settings
+  sttConfig: STTConfig;
 
   // Tools
   tools: AgentTool[];

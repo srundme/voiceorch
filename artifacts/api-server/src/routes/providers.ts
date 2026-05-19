@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { db, providersTable } from "@workspace/db";
 import {
   CreateProviderBody,
@@ -9,6 +9,7 @@ import {
   ListProvidersResponse,
   UpdateProviderResponse,
 } from "@workspace/api-zod";
+import { requireAuth } from "../middlewares/requireAuth.js";
 
 const router: IRouter = Router();
 
@@ -29,22 +30,32 @@ function toProviderConfig(p: typeof providersTable.$inferSelect) {
   };
 }
 
-router.get("/providers", async (req, res): Promise<void> => {
-  const providers = await db.select().from(providersTable).orderBy(providersTable.createdAt);
+router.get("/providers", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const providers = await db
+    .select()
+    .from(providersTable)
+    .where(eq(providersTable.userId, clerkId))
+    .orderBy(providersTable.createdAt);
   res.json(ListProvidersResponse.parse(providers.map(toProviderConfig)));
 });
 
-router.post("/providers", async (req, res): Promise<void> => {
+router.post("/providers", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
   const parsed = CreateProviderBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [provider] = await db.insert(providersTable).values(parsed.data).returning();
+  const [provider] = await db
+    .insert(providersTable)
+    .values({ ...parsed.data, userId: clerkId })
+    .returning();
   res.status(201).json(toProviderConfig(provider));
 });
 
-router.patch("/providers/:id", async (req, res): Promise<void> => {
+router.patch("/providers/:id", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
   const params = UpdateProviderParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -58,7 +69,7 @@ router.patch("/providers/:id", async (req, res): Promise<void> => {
   const [provider] = await db
     .update(providersTable)
     .set(parsed.data)
-    .where(eq(providersTable.id, params.data.id))
+    .where(and(eq(providersTable.id, params.data.id), eq(providersTable.userId, clerkId)))
     .returning();
   if (!provider) {
     res.status(404).json({ error: "Provider not found" });
@@ -67,13 +78,17 @@ router.patch("/providers/:id", async (req, res): Promise<void> => {
   res.json(UpdateProviderResponse.parse(toProviderConfig(provider)));
 });
 
-router.delete("/providers/:id", async (req, res): Promise<void> => {
+router.delete("/providers/:id", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
   const params = DeleteProviderParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
     return;
   }
-  const [deleted] = await db.delete(providersTable).where(eq(providersTable.id, params.data.id)).returning();
+  const [deleted] = await db
+    .delete(providersTable)
+    .where(and(eq(providersTable.id, params.data.id), eq(providersTable.userId, clerkId)))
+    .returning();
   if (!deleted) {
     res.status(404).json({ error: "Provider not found" });
     return;

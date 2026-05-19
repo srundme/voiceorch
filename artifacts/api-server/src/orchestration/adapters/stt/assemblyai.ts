@@ -1,5 +1,6 @@
 import { pcmToWav } from "../../audio.js";
 import type { STTAdapter } from "./base.js";
+import type { STTConfig } from "../../types.js";
 
 /**
  * AssemblyAI — REST transcription
@@ -9,10 +10,12 @@ import type { STTAdapter } from "./base.js";
 export class AssemblyAISTT implements STTAdapter {
   private key: string;
   private model: string;
+  private cfg: STTConfig;
 
-  constructor(apiKey: string, model: string | null) {
+  constructor(apiKey: string, model: string | null, cfg: STTConfig) {
     this.key = apiKey;
     this.model = model ?? "best";
+    this.cfg = cfg;
   }
 
   async transcribe(audioBuffer: Buffer, sampleRate = 16000): Promise<string> {
@@ -32,16 +35,21 @@ export class AssemblyAISTT implements STTAdapter {
     const { upload_url } = (await uploadResp.json()) as { upload_url: string };
 
     // Step 2: Submit transcription
+    const body: Record<string, unknown> = {
+      audio_url: upload_url,
+      speech_model: this.model,
+    };
+
+    if (this.cfg.language) body.language_code = this.cfg.language;
+    if (this.cfg.keyterms.length > 0) body.word_boost = this.cfg.keyterms;
+
     const transcriptResp = await fetch("https://api.assemblyai.com/v2/transcript", {
       method: "POST",
       headers: {
         Authorization: this.key,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        audio_url: upload_url,
-        speech_model: this.model,
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!transcriptResp.ok) throw new Error(`AssemblyAI transcript error: ${transcriptResp.status}`);
@@ -53,8 +61,16 @@ export class AssemblyAISTT implements STTAdapter {
       const pollResp = await fetch(`https://api.assemblyai.com/v2/transcript/${id}`, {
         headers: { Authorization: this.key },
       });
-      const result = (await pollResp.json()) as { status: string; text?: string };
-      if (result.status === "completed") return result.text?.trim() ?? "";
+      const result = (await pollResp.json()) as { status: string; text?: string; confidence?: number };
+      if (result.status === "completed") {
+        if (
+          result.confidence !== undefined &&
+          result.confidence < this.cfg.confidenceThreshold
+        ) {
+          return "";
+        }
+        return result.text?.trim() ?? "";
+      }
       if (result.status === "error") throw new Error("AssemblyAI transcription failed");
     }
 

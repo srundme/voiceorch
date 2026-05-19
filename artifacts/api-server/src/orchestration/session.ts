@@ -1,5 +1,5 @@
 import { db, agentsTable, callsTable, providersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { OrchestrationPipeline } from "./pipeline.js";
 import type { AgentConfig, AgentTool, TelephonyProvider, PipelineMetrics } from "./types.js";
 import { logger } from "../lib/logger.js";
@@ -73,10 +73,27 @@ export async function createSession(params: {
     backchannelingFrequency: agent.backchannelingFrequency ?? null,
     webhookUrl: agent.webhookUrl ?? null,
     noiseCancellationEnabled: agent.noiseCancellationEnabled ?? false,
+    sttConfig: {
+      language: agent.asrLanguage ?? null,
+      backgroundDenoising: agent.asrBackgroundDenoising ?? false,
+      confidenceThreshold: agent.asrConfidenceThreshold ?? 0.40,
+      endOfTurnConfidence: agent.asrEndOfTurnConfidence ?? 0.70,
+      endOfTurnTimeout: agent.asrEndOfTurnTimeout ?? 5000,
+      keyterms: agent.asrKeyterms
+        ? agent.asrKeyterms.split(",").map(s => s.trim()).filter(Boolean)
+        : [],
+      smartEndpointing: agent.asrSmartEndpointing ?? "off",
+      autoFallback: agent.asrAutoFallback ?? false,
+    },
     tools,
   };
 
-  const providerRows = await db.select().from(providersTable).where(eq(providersTable.isActive, true));
+  // Scope provider keys to this agent's owner; fall back to all active if agent has no userId
+  const providerRows = agent.userId
+    ? await db.select().from(providersTable).where(
+        and(eq(providersTable.isActive, true), eq(providersTable.userId, agent.userId))
+      )
+    : await db.select().from(providersTable).where(eq(providersTable.isActive, true));
   const providerKeys = new Map<string, string>();
   for (const row of providerRows) {
     providerKeys.set(row.providerName.toLowerCase(), row.apiKey);

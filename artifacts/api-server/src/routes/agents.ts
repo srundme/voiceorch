@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { db, agentsTable } from "@workspace/db";
 import {
   CreateAgentBody,
@@ -13,31 +13,45 @@ import {
   UpdateAgentResponse,
   ToggleAgentResponse,
 } from "@workspace/api-zod";
+import { requireAuth } from "../middlewares/requireAuth.js";
 
 const router: IRouter = Router();
 
-router.get("/agents", async (req, res): Promise<void> => {
-  const agents = await db.select().from(agentsTable).orderBy(agentsTable.createdAt);
+router.get("/agents", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const agents = await db
+    .select()
+    .from(agentsTable)
+    .where(eq(agentsTable.userId, clerkId))
+    .orderBy(agentsTable.createdAt);
   res.json(ListAgentsResponse.parse(agents));
 });
 
-router.post("/agents", async (req, res): Promise<void> => {
+router.post("/agents", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
   const parsed = CreateAgentBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [agent] = await db.insert(agentsTable).values(parsed.data).returning();
+  const [agent] = await db
+    .insert(agentsTable)
+    .values({ ...parsed.data, userId: clerkId })
+    .returning();
   res.status(201).json(GetAgentResponse.parse(agent));
 });
 
-router.get("/agents/:id", async (req, res): Promise<void> => {
+router.get("/agents/:id", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
   const params = GetAgentParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
     return;
   }
-  const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, params.data.id));
+  const [agent] = await db
+    .select()
+    .from(agentsTable)
+    .where(and(eq(agentsTable.id, params.data.id), eq(agentsTable.userId, clerkId)));
   if (!agent) {
     res.status(404).json({ error: "Agent not found" });
     return;
@@ -45,7 +59,8 @@ router.get("/agents/:id", async (req, res): Promise<void> => {
   res.json(GetAgentResponse.parse(agent));
 });
 
-router.patch("/agents/:id", async (req, res): Promise<void> => {
+router.patch("/agents/:id", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
   const params = UpdateAgentParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -59,7 +74,7 @@ router.patch("/agents/:id", async (req, res): Promise<void> => {
   const [agent] = await db
     .update(agentsTable)
     .set({ ...parsed.data, updatedAt: new Date() })
-    .where(eq(agentsTable.id, params.data.id))
+    .where(and(eq(agentsTable.id, params.data.id), eq(agentsTable.userId, clerkId)))
     .returning();
   if (!agent) {
     res.status(404).json({ error: "Agent not found" });
@@ -68,13 +83,17 @@ router.patch("/agents/:id", async (req, res): Promise<void> => {
   res.json(UpdateAgentResponse.parse(agent));
 });
 
-router.delete("/agents/:id", async (req, res): Promise<void> => {
+router.delete("/agents/:id", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
   const params = DeleteAgentParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
     return;
   }
-  const [deleted] = await db.delete(agentsTable).where(eq(agentsTable.id, params.data.id)).returning();
+  const [deleted] = await db
+    .delete(agentsTable)
+    .where(and(eq(agentsTable.id, params.data.id), eq(agentsTable.userId, clerkId)))
+    .returning();
   if (!deleted) {
     res.status(404).json({ error: "Agent not found" });
     return;
@@ -82,13 +101,17 @@ router.delete("/agents/:id", async (req, res): Promise<void> => {
   res.sendStatus(204);
 });
 
-router.patch("/agents/:id/toggle", async (req, res): Promise<void> => {
+router.patch("/agents/:id/toggle", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
   const params = ToggleAgentParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
     return;
   }
-  const [existing] = await db.select().from(agentsTable).where(eq(agentsTable.id, params.data.id));
+  const [existing] = await db
+    .select()
+    .from(agentsTable)
+    .where(and(eq(agentsTable.id, params.data.id), eq(agentsTable.userId, clerkId)));
   if (!existing) {
     res.status(404).json({ error: "Agent not found" });
     return;
@@ -97,7 +120,7 @@ router.patch("/agents/:id/toggle", async (req, res): Promise<void> => {
   const [agent] = await db
     .update(agentsTable)
     .set({ status: newStatus, updatedAt: new Date() })
-    .where(eq(agentsTable.id, params.data.id))
+    .where(and(eq(agentsTable.id, params.data.id), eq(agentsTable.userId, clerkId)))
     .returning();
   res.json(ToggleAgentResponse.parse(agent));
 });

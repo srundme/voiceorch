@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { db, callsTable, agentsTable, providersTable, usersTable, walletTransactionsTable } from "@workspace/db";
 import {
   InitiateCallBody,
@@ -192,10 +192,17 @@ router.get("/calls", async (req, res): Promise<void> => {
     return;
   }
 
-  let dbQuery = db.select().from(callsTable).$dynamic();
+  const clerkId = (req as any).clerkUserId as string | undefined;
 
-  if (query.data.agentId != null) {
-    dbQuery = dbQuery.where(eq(callsTable.agentId, query.data.agentId)) as typeof dbQuery;
+  const conditions: ReturnType<typeof eq>[] = [];
+  if (clerkId) conditions.push(eq(callsTable.userId, clerkId));
+  if (query.data.agentId != null) conditions.push(eq(callsTable.agentId, query.data.agentId));
+
+  let dbQuery = db.select().from(callsTable).$dynamic();
+  if (conditions.length === 1) {
+    dbQuery = dbQuery.where(conditions[0]) as typeof dbQuery;
+  } else if (conditions.length > 1) {
+    dbQuery = dbQuery.where(and(...conditions)) as typeof dbQuery;
   }
 
   const calls = await dbQuery.orderBy(desc(callsTable.createdAt));

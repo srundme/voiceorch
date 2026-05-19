@@ -1,4 +1,5 @@
 import type { STTAdapter } from "./base.js";
+import type { STTConfig } from "../../types.js";
 import { AzureSTT } from "./azure.js";
 import { AssemblyAISTT } from "./assemblyai.js";
 import { SarvamSTT } from "./sarvam.js";
@@ -9,19 +10,20 @@ export function createSTTAdapter(
   provider: string,
   apiKey: string,
   model: string | null,
-  extraConfig: string | null
+  extraConfig: string | null,
+  cfg: STTConfig
 ): STTAdapter {
   switch (provider.toLowerCase()) {
     case "azure":
-      return new AzureSTT(apiKey, model, extraConfig);
+      return new AzureSTT(apiKey, model, extraConfig, cfg);
     case "assemblyai":
-      return new AssemblyAISTT(apiKey, model);
+      return new AssemblyAISTT(apiKey, model, cfg);
     case "sarvam":
-      return new SarvamSTT(apiKey, model);
+      return new SarvamSTT(apiKey, model, cfg);
     case "cartesia":
-      return new CartesiaSTT(apiKey, model);
+      return new CartesiaSTT(apiKey, model, cfg);
     case "deepgram":
-      return new DeepgramSTT(apiKey, model);
+      return new DeepgramSTT(apiKey, model, cfg);
     default:
       throw new Error(`Unknown STT provider: ${provider}`);
   }

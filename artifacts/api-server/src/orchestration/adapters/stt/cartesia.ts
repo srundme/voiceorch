@@ -1,19 +1,19 @@
 import { pcmToWav } from "../../audio.js";
 import type { STTAdapter } from "./base.js";
+import type { STTConfig } from "../../types.js";
 
 /**
- * Cartesia — Speech-to-Text
- * Docs: https://docs.cartesia.ai
- * Note: Cartesia primarily offers TTS; STT falls back to Whisper-compatible endpoint.
- * If Cartesia releases dedicated STT, update this adapter.
+ * Cartesia — Speech-to-Text (Whisper-compatible endpoint)
  */
 export class CartesiaSTT implements STTAdapter {
   private key: string;
   private model: string;
+  private cfg: STTConfig;
 
-  constructor(apiKey: string, model: string | null) {
+  constructor(apiKey: string, model: string | null, cfg: STTConfig) {
     this.key = apiKey;
     this.model = model ?? "whisper-1";
+    this.cfg = cfg;
   }
 
   async transcribe(audioBuffer: Buffer, sampleRate = 16000): Promise<string> {
@@ -24,6 +24,7 @@ export class CartesiaSTT implements STTAdapter {
     new Uint8Array(wavAb).set(wav);
     formData.append("file", new Blob([wavAb], { type: "audio/wav" }), "audio.wav");
     formData.append("model", this.model);
+    if (this.cfg.language) formData.append("language", this.cfg.language);
 
     const resp = await fetch("https://api.cartesia.ai/v1/audio/transcriptions", {
       method: "POST",

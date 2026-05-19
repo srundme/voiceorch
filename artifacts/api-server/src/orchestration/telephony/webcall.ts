@@ -5,7 +5,7 @@ import { createSTTAdapter } from "../adapters/stt/index.js";
 import { createLLMAdapter } from "../adapters/llm/index.js";
 import { createTTSAdapter } from "../adapters/tts/index.js";
 import { logger } from "../../lib/logger.js";
-import type { ConversationTurn } from "../types.js";
+import type { ConversationTurn, STTConfig } from "../types.js";
 
 // ── Tuning constants ─────────────────────────────────────────────────────────
 const VAD_SILENCE_MS       = 300;
@@ -74,7 +74,20 @@ export async function handleWebCallWebSocket(
     return;
   }
 
-  const stt = createSTTAdapter(agent.asrProvider, sttKey, agent.asrModel, null);
+  const sttConfig: STTConfig = {
+    language: agent.asrLanguage ?? null,
+    backgroundDenoising: agent.asrBackgroundDenoising ?? false,
+    confidenceThreshold: agent.asrConfidenceThreshold ?? 0.40,
+    endOfTurnConfidence: agent.asrEndOfTurnConfidence ?? 0.70,
+    endOfTurnTimeout: agent.asrEndOfTurnTimeout ?? 5000,
+    keyterms: agent.asrKeyterms
+      ? agent.asrKeyterms.split(",").map((s) => s.trim()).filter(Boolean)
+      : [],
+    smartEndpointing: agent.asrSmartEndpointing ?? "off",
+    autoFallback: agent.asrAutoFallback ?? false,
+  };
+
+  const stt = createSTTAdapter(agent.asrProvider, sttKey, agent.asrModel, null, sttConfig);
   const llm = createLLMAdapter(agent.llmProvider, llmKey, agent.llmModel);
   const tts = createTTSAdapter(agent.ttsProvider, ttsKey, agent.ttsVoice, agent.ttsModel);
 

@@ -1,12 +1,11 @@
 import { pcmToWav } from "../../audio.js";
 import type { STTAdapter } from "./base.js";
+import type { STTConfig } from "../../types.js";
 
 /**
  * Azure Cognitive Services — Batch Speech-to-Text via REST
- * Docs: https://learn.microsoft.com/en-us/azure/cognitive-services/speech-service/rest-speech-to-text
- *
- * extraConfig JSON: { "region": "eastus", "language": "en-US" }
- * apiKey: Azure Speech subscription key
+ * extraConfig JSON: { "region": "eastus" }
+ * Language is taken from STTConfig.language (overrides extraConfig.language).
  */
 export class AzureSTT implements STTAdapter {
   private key: string;
@@ -14,12 +13,18 @@ export class AzureSTT implements STTAdapter {
   private language: string;
   private model: string | null;
 
-  constructor(apiKey: string, model: string | null, extraConfig: string | null) {
+  constructor(
+    apiKey: string,
+    model: string | null,
+    extraConfig: string | null,
+    cfg: STTConfig
+  ) {
     this.key = apiKey;
     this.model = model;
-    const cfg = extraConfig ? JSON.parse(extraConfig) : {};
-    this.region = cfg.region ?? "eastus";
-    this.language = cfg.language ?? "en-US";
+    const extra = extraConfig ? (JSON.parse(extraConfig) as { region?: string; language?: string }) : {};
+    this.region = extra.region ?? "eastus";
+    // sttConfig.language takes priority over extraConfig.language
+    this.language = cfg.language ?? extra.language ?? "en-US";
   }
 
   async transcribe(audioBuffer: Buffer, sampleRate = 16000): Promise<string> {

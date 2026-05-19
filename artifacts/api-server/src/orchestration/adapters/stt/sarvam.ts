@@ -1,10 +1,10 @@
 import { pcmToWav } from "../../audio.js";
 import type { STTAdapter } from "./base.js";
+import type { STTConfig } from "../../types.js";
 
 /**
  * Sarvam AI — Speech-to-Text (saarika model)
  * Docs: https://docs.sarvam.ai/api-reference/speech-to-text
- * Models: saarika:v1, saarika:v2, saarika:flash
  */
 const VALID_SARVAM_STT_MODELS = new Set([
   "saarika:v2.5", "saarika:v2", "saarika:v1", "saarika:flash",
@@ -15,11 +15,13 @@ const DEFAULT_SARVAM_STT_MODEL = "saarika:v2";
 export class SarvamSTT implements STTAdapter {
   private key: string;
   private model: string;
+  private cfg: STTConfig;
 
-  constructor(apiKey: string, model: string | null) {
+  constructor(apiKey: string, model: string | null, cfg: STTConfig) {
     this.key = apiKey;
     const candidate = model ?? "";
     this.model = VALID_SARVAM_STT_MODELS.has(candidate) ? candidate : DEFAULT_SARVAM_STT_MODEL;
+    this.cfg = cfg;
   }
 
   async transcribe(audioBuffer: Buffer, sampleRate = 16000): Promise<string> {
@@ -30,7 +32,8 @@ export class SarvamSTT implements STTAdapter {
     new Uint8Array(wavAb).set(wav);
     formData.append("file", new Blob([wavAb], { type: "audio/wav" }), "audio.wav");
     formData.append("model", this.model);
-    formData.append("language_code", "en-IN");
+    // Use configured language; Sarvam uses IETF BCP 47 codes (e.g. hi-IN, en-IN)
+    formData.append("language_code", this.cfg.language ?? "en-IN");
 
     const resp = await fetch("https://api.sarvam.ai/speech-to-text", {
       method: "POST",
