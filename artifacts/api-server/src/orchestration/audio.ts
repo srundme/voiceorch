@@ -60,9 +60,10 @@ export function upsample8to16(buf8k: Buffer): Buffer {
 
 // Downsample from 16kHz to 8kHz (drop every other sample)
 export function downsample16to8(buf16k: Buffer): Buffer {
-  const samples = buf16k.length / 2;
-  const out = Buffer.allocUnsafe((samples / 2) * 2);
-  for (let i = 0; i < samples / 2; i++) {
+  const samples    = Math.floor(buf16k.length / 2);
+  const outSamples = Math.floor(samples / 2);
+  const out        = Buffer.allocUnsafe(outSamples * 2);
+  for (let i = 0; i < outSamples; i++) {
     const s = buf16k.readInt16LE(i * 4);
     out.writeInt16LE(s, i * 2);
   }
