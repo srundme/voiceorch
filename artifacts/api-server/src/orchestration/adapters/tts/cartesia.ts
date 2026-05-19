@@ -14,8 +14,12 @@ export class CartesiaTTS implements TTSAdapter {
     this.key = apiKey;
     this.voiceId = voice ?? "a0e99841-438c-4a64-b679-ae501e7d6091"; // British Reading Lady
     // Normalise legacy / invalid model IDs to the supported set
-    const VALID = new Set(["sonic-2", "sonic-3", "sonic-3-5", "sonic-turbo", "sonic-latest"]);
-    this.modelId = model && VALID.has(model) ? model : "sonic-2";
+    const VALID = new Set(["sonic-2", "sonic-3", "sonic-turbo",
+      "sonic-2-2025-03-07", "sonic-2-2025-04-16", "sonic-2-2025-05-08", "sonic-2-2025-06-11",
+      "sonic-3-2026-01-12", "sonic-3-latest",
+      "sonic-turbo-2025-03-07", "sonic-turbo-2025-06-04",
+      "sonic-english", "sonic-multilingual"]);
+    this.modelId = model && VALID.has(model) ? model : "sonic-3";
   }
 
   async synthesize(text: string): Promise<Buffer> {
