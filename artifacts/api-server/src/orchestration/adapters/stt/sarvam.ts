@@ -6,13 +6,20 @@ import type { STTAdapter } from "./base.js";
  * Docs: https://docs.sarvam.ai/api-reference/speech-to-text
  * Models: saarika:v1, saarika:v2, saarika:flash
  */
+const VALID_SARVAM_STT_MODELS = new Set([
+  "saarika:v2.5", "saarika:v2", "saarika:v1", "saarika:flash",
+  "saaras:v3", "saaras:v3-realtime",
+]);
+const DEFAULT_SARVAM_STT_MODEL = "saarika:v2";
+
 export class SarvamSTT implements STTAdapter {
   private key: string;
   private model: string;
 
   constructor(apiKey: string, model: string | null) {
     this.key = apiKey;
-    this.model = model ?? "saarika:v2";
+    const candidate = model ?? "";
+    this.model = VALID_SARVAM_STT_MODELS.has(candidate) ? candidate : DEFAULT_SARVAM_STT_MODEL;
   }
 
   async transcribe(audioBuffer: Buffer, sampleRate = 16000): Promise<string> {
