@@ -43,45 +43,51 @@ import { format } from "date-fns";
 /* ── Provider catalogues ─────────────────────────────────────────────────── */
 
 const ASR_PROVIDERS = [
-  { value: "azure", label: "Azure Speech" },
+  { value: "deepgram",   label: "Deepgram" },
+  { value: "azure",      label: "Azure Speech" },
   { value: "assemblyai", label: "AssemblyAI" },
-  { value: "sarvam", label: "Sarvam" },
-  { value: "cartesia", label: "Cartesia" },
+  { value: "whisper",    label: "Whisper" },
+  { value: "sarvam",     label: "Sarvam" },
+  { value: "cartesia",   label: "Cartesia" },
 ];
 const LLM_PROVIDERS = [
-  { value: "openai", label: "OpenAI" },
-  { value: "google", label: "Google Gemini" },
-  { value: "groq", label: "Groq" },
-  { value: "sarvam", label: "Sarvam" },
+  { value: "openai",     label: "OpenAI" },
+  { value: "anthropic",  label: "Anthropic" },
+  { value: "google",     label: "Google Gemini" },
+  { value: "groq",       label: "Groq" },
+  { value: "deepseek",   label: "DeepSeek" },
+  { value: "mistral",    label: "Mistral" },
+  { value: "cohere",     label: "Cohere" },
+  { value: "sarvam",     label: "Sarvam" },
 ];
 const TTS_PROVIDERS = [
   { value: "elevenlabs", label: "ElevenLabs" },
-  { value: "cartesia", label: "Cartesia" },
-  { value: "sarvam", label: "Sarvam" },
+  { value: "openai",     label: "OpenAI TTS" },
+  { value: "azure",      label: "Azure TTS" },
+  { value: "cartesia",   label: "Cartesia" },
+  { value: "deepgram",   label: "Deepgram" },
+  { value: "aws_polly",  label: "AWS Polly" },
+  { value: "sarvam",     label: "Sarvam" },
 ];
 const TELEPHONY_PROVIDERS = [
-  { value: "twilio", label: "Twilio" },
-  { value: "plivo", label: "Plivo" },
-  { value: "vobiz", label: "Vobiz" },
+  { value: "twilio",  label: "Twilio" },
+  { value: "plivo",   label: "Plivo" },
+  { value: "vonage",  label: "Vonage" },
+  { value: "vobiz",   label: "Vobiz" },
 ];
 const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
-  openai: [
-    { value: "gpt-4o-mini", label: "GPT-4o Mini" },
-    { value: "gpt-4o", label: "GPT-4o" },
-    { value: "gpt-4-turbo", label: "GPT-4 Turbo" },
-  ],
-  google: [
-    { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash" },
-    { value: "gemini-1.5-pro", label: "Gemini 1.5 Pro" },
-  ],
-  groq: [
-    { value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B" },
-    { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B (fast)" },
-  ],
-  sarvam: [{ value: "sarvam-2b-v0.5", label: "Sarvam 2B" }],
+  openai:    [{ value: "gpt-4o-mini", label: "GPT-4o Mini" }, { value: "gpt-4o", label: "GPT-4o" }, { value: "gpt-4-turbo", label: "GPT-4 Turbo" }, { value: "gpt-3.5-turbo", label: "GPT-3.5 Turbo" }],
+  anthropic: [{ value: "claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet" }, { value: "claude-3-5-haiku-20241022", label: "Claude 3.5 Haiku" }, { value: "claude-3-opus-20240229", label: "Claude 3 Opus" }],
+  google:    [{ value: "gemini-2.0-flash", label: "Gemini 2.0 Flash" }, { value: "gemini-1.5-pro", label: "Gemini 1.5 Pro" }, { value: "gemini-1.5-flash", label: "Gemini 1.5 Flash" }],
+  groq:      [{ value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B" }, { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B (fast)" }, { value: "gemma2-9b-it", label: "Gemma 2 9B" }],
+  deepseek:  [{ value: "deepseek-chat", label: "DeepSeek Chat" }, { value: "deepseek-reasoner", label: "DeepSeek Reasoner" }],
+  mistral:   [{ value: "mistral-large-latest", label: "Mistral Large" }, { value: "mistral-small-latest", label: "Mistral Small" }],
+  cohere:    [{ value: "command-r-plus", label: "Command R+" }, { value: "command-r", label: "Command R" }],
+  sarvam:    [{ value: "sarvam-2b-v0.5", label: "Sarvam 2B" }],
 };
 const ASR_MODELS: Record<string, { value: string; label: string }[]> = {
-  azure:      [{ value: "en-US-standard", label: "en-US-standard" }, { value: "en-IN-standard", label: "en-IN-standard" }],
+  deepgram:   [{ value: "nova-3", label: "Nova 3 (latest)" }, { value: "nova-2", label: "Nova 2" }, { value: "nova-2-general", label: "Nova 2 General" }],
+  azure:      [{ value: "en-US-standard", label: "en-US-standard" }, { value: "en-US-enhanced", label: "en-US-enhanced" }, { value: "en-IN-standard", label: "en-IN-standard" }],
   assemblyai: [{ value: "best", label: "Best" }, { value: "nano", label: "Nano (fast)" }],
   sarvam:     [{ value: "saarika:v2.5", label: "Saarika v2.5" }, { value: "saarika:flash", label: "Saarika Flash" }],
   cartesia:   [{ value: "sonic-english", label: "Sonic English" }],
@@ -498,8 +504,8 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
         {/* ── Assistant tab ── */}
         <TabsContent value="assistant" className="flex-1 overflow-y-auto m-0 px-5 py-4">
           <div className="max-w-2xl space-y-6">
-            {/* Provider cards row */}
-            <div className="grid grid-cols-3 gap-3">
+            {/* Provider cards — 2×2 grid */}
+            <div className="grid grid-cols-2 gap-3">
               {/* Transcriber */}
               <div className="bg-zinc-800/60 border border-zinc-700/50 rounded-xl p-3.5 space-y-2">
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Transcriber</p>
@@ -557,9 +563,14 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                     {TTS_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-zinc-300 text-xs">{p.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
+              </div>
+
+              {/* Telephony */}
+              <div className="bg-zinc-800/60 border border-zinc-700/50 rounded-xl p-3.5 space-y-2">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Telephony</p>
                 <Select value={telephony} onValueChange={mark(setTelephony)}>
-                  <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-400">
-                    <SelectValue placeholder="Telephony" />
+                  <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200">
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-zinc-900 border-zinc-700">
                     {TELEPHONY_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-zinc-300 text-xs">{p.label}</SelectItem>)}
@@ -745,7 +756,7 @@ function NewAgentPanel({ onCreated }: { onCreated: (id: number) => void }) {
             />
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <div className="bg-zinc-800/60 border border-zinc-700/50 rounded-xl p-3.5 space-y-2">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Transcriber</p>
               <Select value={asr} onValueChange={setAsr}>
@@ -772,8 +783,11 @@ function NewAgentPanel({ onCreated }: { onCreated: (id: number) => void }) {
                   {TTS_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-zinc-300 text-xs">{p.label}</SelectItem>)}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="bg-zinc-800/60 border border-zinc-700/50 rounded-xl p-3.5 space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Telephony</p>
               <Select value={tel} onValueChange={setTel}>
-                <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-400"><SelectValue placeholder="Telephony" /></SelectTrigger>
+                <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200"><SelectValue /></SelectTrigger>
                 <SelectContent className="bg-zinc-900 border-zinc-700">
                   {TELEPHONY_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-zinc-300 text-xs">{p.label}</SelectItem>)}
                 </SelectContent>
