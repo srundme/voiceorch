@@ -3,13 +3,14 @@ import { Link, useParams } from "wouter";
 import { format, parseISO } from "date-fns";
 import {
   ArrowLeft, Settings2, Activity, Phone, BarChart2, Clock,
-  Mic, MicOff, PhoneOff, Copy, Check, Loader2, Volume2
+  Mic, MicOff, PhoneOff, Copy, Check, Loader2, Volume2, PhoneOutgoing
 } from "lucide-react";
 import {
   useGetAgent,
   getGetAgentQueryKey,
   useListCalls,
-  getListCallsQueryKey
+  getListCallsQueryKey,
+  useInitiateOutboundCall,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -18,6 +19,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter,
+  DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
 
 /* ── Web Call Panel ───────────────────────────────────────────────────────── */
 
@@ -332,6 +340,9 @@ export default function AgentDetail() {
   const params = useParams();
   const id = parseInt(params.id || "0", 10);
   const [activeTab, setActiveTab] = useState("overview");
+  const [callDialogOpen, setCallDialogOpen] = useState(false);
+  const [toNumber, setToNumber] = useState("");
+  const { toast } = useToast();
 
   const { data: agent, isLoading: agentLoading } = useGetAgent(id, {
     query: { enabled: !!id, queryKey: getGetAgentQueryKey(id) }
@@ -340,6 +351,26 @@ export default function AgentDetail() {
   const { data: calls, isLoading: callsLoading } = useListCalls({ agentId: id }, {
     query: { enabled: !!id && activeTab === "calls", queryKey: getListCallsQueryKey({ agentId: id }) }
   });
+
+  const outboundCall = useInitiateOutboundCall();
+
+  function handleMakeCall() {
+    if (!toNumber.trim()) return;
+    outboundCall.mutate(
+      { data: { agentId: id, toNumber: toNumber.trim(), webhookBaseUrl: window.location.origin } },
+      {
+        onSuccess: () => {
+          toast({ title: "Call initiated", description: `Dialing ${toNumber} — the agent will connect momentarily.` });
+          setCallDialogOpen(false);
+          setToNumber("");
+        },
+        onError: (err: unknown) => {
+          const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Failed to initiate call.";
+          toast({ title: "Call failed", description: msg, variant: "destructive" });
+        },
+      }
+    );
+  }
 
   const formatDuration = (seconds?: number | null) => {
     if (!seconds) return "0s";
@@ -375,18 +406,74 @@ export default function AgentDetail() {
 
   return (
     <div className="flex-1 space-y-6 p-6 md:p-8 pt-6 h-full flex flex-col">
+      {/* Make a Call Dialog */}
+      <Dialog open={callDialogOpen} onOpenChange={setCallDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <PhoneOutgoing className="h-5 w-5 text-primary" />
+              Make a Phone Call
+            </DialogTitle>
+            <DialogDescription>
+              This will dial the number using your <span className="font-medium capitalize">{agent.telephonyProvider}</span> account.
+              The agent <span className="font-medium">{agent.name}</span> will handle the conversation.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="toNumber">Destination number (E.164 format)</Label>
+              <Input
+                id="toNumber"
+                placeholder="+1234567890"
+                value={toNumber}
+                onChange={e => setToNumber(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") handleMakeCall(); }}
+              />
+              <p className="text-xs text-muted-foreground">
+                Include country code, e.g. <code className="font-mono bg-muted px-1 rounded">+14155552671</code>
+              </p>
+            </div>
+            <div className="rounded-md bg-muted/50 border p-3 text-xs text-muted-foreground space-y-1">
+              <p className="font-medium text-foreground">Before making a call, ensure:</p>
+              <p>• Your <span className="font-medium capitalize">{agent.telephonyProvider}</span> provider key is configured on the <Link href="/providers" className="underline">Providers page</Link></p>
+              {agent.telephonyProvider === "twilio" && <p>• Extra Config includes <code className="font-mono bg-muted px-1">accountSid</code> and <code className="font-mono bg-muted px-1">fromNumber</code></p>}
+              {agent.telephonyProvider === "plivo"  && <p>• Extra Config includes <code className="font-mono bg-muted px-1">authId</code> and <code className="font-mono bg-muted px-1">fromNumber</code></p>}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCallDialogOpen(false)}>Cancel</Button>
+            <Button
+              onClick={handleMakeCall}
+              disabled={!toNumber.trim() || outboundCall.isPending}
+              className="gap-2"
+            >
+              {outboundCall.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <PhoneOutgoing className="h-4 w-4" />}
+              {outboundCall.isPending ? "Dialing…" : "Call Now"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="flex items-center gap-4">
         <Link href="/agents">
           <Button variant="outline" size="icon" className="h-8 w-8">
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-1">
           <h2 className="text-3xl font-bold tracking-tight">{agent.name}</h2>
           {agent.status === "active"   && <Badge className="bg-green-500 hover:bg-green-600">Active</Badge>}
           {agent.status === "inactive" && <Badge variant="secondary">Inactive</Badge>}
           {agent.status === "draft"    && <Badge variant="outline" className="text-yellow-500 border-yellow-500">Draft</Badge>}
         </div>
+        <Button
+          variant="outline"
+          className="gap-2 ml-auto"
+          onClick={() => setCallDialogOpen(true)}
+        >
+          <PhoneOutgoing className="h-4 w-4" />
+          Make a Call
+        </Button>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">

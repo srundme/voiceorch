@@ -242,6 +242,29 @@ paths:
         "404":
           description: Not found
 
+  /calls/outbound:
+    post:
+      operationId: initiateOutboundCall
+      tags: [calls]
+      summary: Initiate an outbound phone call via the agent's telephony provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OutboundCallBody"
+      responses:
+        "201":
+          description: Outbound call initiated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Call"
+        "400":
+          description: Validation error or provider misconfiguration
+        "404":
+          description: Agent or telephony provider not found
+
   /calls/{id}/end:
     patch:
       operationId: endCall
@@ -574,6 +597,19 @@ components:
           type: string
         metadata:
           type: string
+
+    OutboundCallBody:
+      type: object
+      required: [agentId, toNumber]
+      properties:
+        agentId:
+          type: integer
+        toNumber:
+          type: string
+          description: "E.164 destination number (e.g. +1234567890)"
+        webhookBaseUrl:
+          type: string
+          description: "Override public base URL for webhooks (auto-detected if omitted)"
 
     CallUpdate:
       type: object

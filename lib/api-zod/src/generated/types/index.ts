@@ -19,6 +19,7 @@ export * from './dailyCallVolume';
 export * from './dashboardStats';
 export * from './healthStatus';
 export * from './listCallsParams';
+export * from './outboundCallBody';
 export * from './providerConfig';
 export * from './providerConfigProviderType';
 export * from './providerInput';

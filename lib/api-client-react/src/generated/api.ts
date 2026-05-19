@@ -31,6 +31,7 @@ import type {
   DashboardStats,
   HealthStatus,
   ListCallsParams,
+  OutboundCallBody,
   ProviderConfig,
   ProviderInput,
   ProviderUpdate
@@ -864,6 +865,77 @@ export const useUpdateCall = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getUpdateCallMutationOptions(options));
+    }
+
+export const getInitiateOutboundCallUrl = () => {
+
+
+
+
+  return `/api/calls/outbound`
+}
+
+/**
+ * @summary Initiate an outbound phone call via the agent's telephony provider
+ */
+export const initiateOutboundCall = async (outboundCallBody: OutboundCallBody, options?: RequestInit): Promise<Call> => {
+
+  return customFetch<Call>(getInitiateOutboundCallUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      outboundCallBody,)
+  }
+);}
+
+
+
+
+export const getInitiateOutboundCallMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof initiateOutboundCall>>, TError,{data: BodyType<OutboundCallBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof initiateOutboundCall>>, TError,{data: BodyType<OutboundCallBody>}, TContext> => {
+
+const mutationKey = ['initiateOutboundCall'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof initiateOutboundCall>>, {data: BodyType<OutboundCallBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  initiateOutboundCall(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type InitiateOutboundCallMutationResult = NonNullable<Awaited<ReturnType<typeof initiateOutboundCall>>>
+    export type InitiateOutboundCallMutationBody = BodyType<OutboundCallBody>
+    export type InitiateOutboundCallMutationError = ErrorType<void>
+
+    /**
+ * @summary Initiate an outbound phone call via the agent's telephony provider
+ */
+export const useInitiateOutboundCall = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof initiateOutboundCall>>, TError,{data: BodyType<OutboundCallBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof initiateOutboundCall>>,
+        TError,
+        {data: BodyType<OutboundCallBody>},
+        TContext
+      > => {
+      return useMutation(getInitiateOutboundCallMutationOptions(options));
     }
 
 export const getEndCallUrl = (id: number,) => {

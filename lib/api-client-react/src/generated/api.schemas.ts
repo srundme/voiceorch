@@ -130,6 +130,14 @@ export interface CallInput {
   metadata?: string;
 }
 
+export interface OutboundCallBody {
+  agentId: number;
+  /** E.164 destination number (e.g. +1234567890) */
+  toNumber: string;
+  /** Override public base URL for webhooks (auto-detected if omitted) */
+  webhookBaseUrl?: string;
+}
+
 export interface CallUpdate {
   status?: string;
   durationSeconds?: number;

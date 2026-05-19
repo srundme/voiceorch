@@ -280,6 +280,16 @@ export const UpdateCallResponse = zod.object({
 
 
 /**
+ * @summary Initiate an outbound phone call via the agent's telephony provider
+ */
+export const InitiateOutboundCallBody = zod.object({
+  "agentId": zod.number(),
+  "toNumber": zod.string().describe('E.164 destination number (e.g. +1234567890)'),
+  "webhookBaseUrl": zod.string().optional().describe('Override public base URL for webhooks (auto-detected if omitted)')
+})
+
+
+/**
  * @summary End an active call
  */
 export const EndCallParams = zod.object({
