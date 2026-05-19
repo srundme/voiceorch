@@ -35,6 +35,7 @@ export async function createSession(params: {
   toNumber: string;
   fromNumber: string;
   externalCallId?: string;
+  platformTelephony?: boolean;
   onAudioOut: (audio: Buffer) => void;
   onCallEnd: () => void;
   onBargeIn?: () => void;
@@ -104,7 +105,10 @@ export async function createSession(params: {
     status: "in_progress",
     toNumber: params.toNumber,
     fromNumber: params.fromNumber,
-    metadata: params.externalCallId ? JSON.stringify({ externalCallId: params.externalCallId }) : null,
+    metadata: JSON.stringify({
+      ...(params.externalCallId ? { externalCallId: params.externalCallId } : {}),
+      ...(params.platformTelephony ? { platformTelephony: true } : {}),
+    }) || null,
   }).returning();
 
   if (!callRecord) throw new Error("Failed to create call record");

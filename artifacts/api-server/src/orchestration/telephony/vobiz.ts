@@ -51,7 +51,8 @@ interface VobizMessage {
 
 export async function handleVobizWebSocket(
   ws: WebSocket,
-  agentId: number
+  agentId: number,
+  platformTelephony = false
 ): Promise<void> {
   let sessionId: string | null = null;
   let streamId: string | null = null;
@@ -113,6 +114,7 @@ export async function handleVobizWebSocket(
             toNumber,
             fromNumber,
             externalCallId: callId ?? undefined,
+            platformTelephony,
             onAudioOut: sendAudioToVobiz,
             onCallEnd: () => ws.close(),
             onBargeIn: sendBargeIn,
@@ -157,9 +159,12 @@ export async function handleVobizWebSocket(
 /**
  * Return VoiceXML telling Vobiz to open a bidirectional WebSocket stream.
  */
-export function getVobizAnswerXML(wsBaseUrl: string, agentId: number): string {
+export function getVobizAnswerXML(wsBaseUrl: string, agentId: number, platformTelephony = false): string {
+  const wsUrl = platformTelephony
+    ? `${wsBaseUrl}/api/ws/vobiz/${agentId}?pt=1`
+    : `${wsBaseUrl}/api/ws/vobiz/${agentId}`;
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Stream bidirectional="true" keepCallAlive="true">${wsBaseUrl}/api/ws/vobiz/${agentId}</Stream>
+  <Stream bidirectional="true" keepCallAlive="true">${wsUrl}</Stream>
 </Response>`;
 }

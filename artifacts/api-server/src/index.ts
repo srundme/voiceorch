@@ -29,23 +29,24 @@ const wss = new WebSocketServer({ noServer: true });
 server.on("upgrade", (request, socket, head) => {
   const url = request.url ?? "";
 
-  // Match /api/ws/<provider>/<agentId>
+  // Match /api/ws/<provider>/<agentId>[?pt=1]
   const match = url.match(/^\/api\/ws\/(twilio|plivo|vobiz|webcall)\/(\d+)/);
   if (!match) {
     socket.destroy();
     return;
   }
 
-  const provider = match[1] as "twilio" | "plivo" | "vobiz" | "webcall";
-  const agentId  = parseInt(match[2]!, 10);
+  const provider          = match[1] as "twilio" | "plivo" | "vobiz" | "webcall";
+  const agentId           = parseInt(match[2]!, 10);
+  const platformTelephony = url.includes("pt=1");
 
   wss.handleUpgrade(request, socket, head, (ws: import("ws").WebSocket) => {
-    logger.info({ provider, agentId, url }, "WebSocket upgraded");
+    logger.info({ provider, agentId, platformTelephony, url }, "WebSocket upgraded");
     switch (provider) {
-      case "twilio":   void handleTwilioWebSocket(ws, agentId);   break;
-      case "plivo":    void handlePlivoWebSocket(ws, agentId);    break;
-      case "vobiz":    void handleVobizWebSocket(ws, agentId);    break;
-      case "webcall":  void handleWebCallWebSocket(ws, agentId);  break;
+      case "twilio":   void handleTwilioWebSocket(ws, agentId);                      break;
+      case "plivo":    void handlePlivoWebSocket(ws, agentId);                       break;
+      case "vobiz":    void handleVobizWebSocket(ws, agentId, platformTelephony);    break;
+      case "webcall":  void handleWebCallWebSocket(ws, agentId);                     break;
     }
   });
 });

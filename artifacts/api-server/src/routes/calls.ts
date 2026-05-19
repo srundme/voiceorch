@@ -376,22 +376,31 @@ router.patch("/calls/:id/end", async (req, res): Promise<void> => {
       .where(eq(agentsTable.id, agent.id));
   }
 
-  // Deduct platform fee: $0.03/min from wallet (if call has a userId)
+  // Deduct platform fee from wallet (if call has a userId)
+  // Rate: $0.03/min base + $0.005/min if using platform-managed telephony (Vobiz managed number)
   const callUserId = call.userId ?? agent?.userId ?? null;
   if (callUserId && durationSeconds > 0) {
+    let callMeta: Record<string, unknown> = {};
+    try { callMeta = JSON.parse(existing.metadata ?? "{}"); } catch { /* ok */ }
+    const isPlatformTelephony = callMeta["platformTelephony"] === true;
+
+    // 3 cents/min base; +0.5 cents/min for platform telephony = 3.5 cents/min total
+    const rateCentsPerMin = isPlatformTelephony ? 3.5 : 3;
     const billableMinutes = Math.ceil(durationSeconds / 60);
-    const debitCents = billableMinutes * 3; // $0.03/min = 3 cents/min
+    const debitCents      = Math.round(billableMinutes * rateCentsPerMin);
+    const rateLabel       = isPlatformTelephony ? "$0.035" : "$0.030";
+
     const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, callUserId));
     if (user) {
       const newBalance = Math.max(0, user.walletBalanceCents - debitCents);
       await db.update(usersTable).set({ walletBalanceCents: newBalance }).where(eq(usersTable.id, user.id));
       await db.insert(walletTransactionsTable).values({
-        userId: user.id,
-        type: "call_debit",
+        userId:      user.id,
+        type:        "call_debit",
         amountCents: -debitCents,
-        description: `Call #${call.id} — ${billableMinutes} min × $0.03`,
-        status: "completed",
-        callId: call.id,
+        description: `Call #${call.id} — ${billableMinutes} min × ${rateLabel}${isPlatformTelephony ? " (incl. platform telephony)" : ""}`,
+        status:      "completed",
+        callId:      call.id,
       });
     }
   }

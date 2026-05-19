@@ -76,15 +76,20 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
   // 1. Explicit agentId param (outbound / legacy)
   let agentId = parseInt(String(req.query["agentId"] ?? "0"), 10);
 
+  let platformTelephony = false;
+
   if (!agentId) {
-    // 2. Managed number routing — look up the "To" number
+    // 2. Managed number routing — look up the "To" number (platform telephony)
     const toNumber: string = String(req.body?.To ?? req.body?.to ?? "").trim();
     if (toNumber) {
       const [pn] = await db
         .select({ agentId: phoneNumbersTable.agentId })
         .from(phoneNumbersTable)
         .where(eq(phoneNumbersTable.number, toNumber));
-      if (pn?.agentId) agentId = pn.agentId;
+      if (pn?.agentId) {
+        agentId = pn.agentId;
+        platformTelephony = true; // using our carrier, charge $0.005/min surcharge
+      }
     }
   }
 
@@ -93,7 +98,7 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
     return;
   }
 
-  res.set("Content-Type", "text/xml").send(getVobizAnswerXML(wsBaseUrl, agentId));
+  res.set("Content-Type", "text/xml").send(getVobizAnswerXML(wsBaseUrl, agentId, platformTelephony));
 });
 
 // ── Twilio status callbacks ──────────────────────────────────────────────────
