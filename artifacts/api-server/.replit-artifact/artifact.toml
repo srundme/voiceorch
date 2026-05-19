@@ -1,4 +1,5 @@
 kind = "api"
+deploymentTarget = "vm"
 previewPath = "/api"
 title = "API Server"
 version = "1.0.0"

@@ -1,11 +1,21 @@
 import http from "http";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 import { WebSocketServer } from "ws";
 import app from "./app.js";
 import { logger } from "./lib/logger.js";
+import { initAudioPool } from "./orchestration/audioPool.js";
 import { handleTwilioWebSocket } from "./orchestration/telephony/twilio.js";
 import { handlePlivoWebSocket } from "./orchestration/telephony/plivo.js";
 import { handleVobizWebSocket } from "./orchestration/telephony/vobiz.js";
 import { handleWebCallWebSocket } from "./orchestration/telephony/webcall.js";
+
+// Initialise the audio worker pool before any WebSocket connections arrive.
+// Both dev (build+start) and prod run from dist/, where esbuild emits the worker as
+// dist/orchestration/audioWorker.mjs.
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const workerFile = join(__dirname, "orchestration", "audioWorker.mjs");
+initAudioPool(new URL(`file://${workerFile}`));
 
 const rawPort = process.env["PORT"];
 if (!rawPort) throw new Error("PORT environment variable is required but was not provided.");

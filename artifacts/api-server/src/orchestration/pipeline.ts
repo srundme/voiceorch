@@ -1,7 +1,9 @@
 import { createSTTAdapter } from "./adapters/stt/index.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { createTTSAdapter } from "./adapters/tts/index.js";
-import { decodeMulaw, encodeMulaw, upsample8to16, downsample16to8, hasSpeechEnergy, NoiseCanceller } from "./audio.js";
+import { encodeMulaw, upsample8to16, downsample16to8 } from "./audio.js";
+import { processAudioIn, processRawPcm8kIn, destroyAudioSession } from "./audioPool.js";
+import type { AudioProcessResult } from "./audioPool.js";
 import type { AgentConfig, AgentTool, ConversationTurn, SessionConfig, StreamSTT, ToolDefinition } from "./types.js";
 import { logger } from "../lib/logger.js";
 
@@ -41,7 +43,6 @@ export class OrchestrationPipeline {
 
   private conversationHistory: ConversationTurn[] = [];
   private closed = false;
-  private noiseCanceller: NoiseCanceller | null = null;
 
   constructor(config: SessionConfig) {
     this.config = config;
@@ -69,8 +70,7 @@ export class OrchestrationPipeline {
     );
 
     if (this.agent.noiseCancellationEnabled) {
-      this.noiseCanceller = new NoiseCanceller();
-      logger.info({ callId: config.callId }, "Noise cancellation enabled");
+      logger.info({ callId: config.callId }, "Noise cancellation enabled (audio worker pool)");
     }
 
     logger.info({ callId: config.callId, agent: this.agent.name }, "Pipeline initialized");
@@ -133,29 +133,35 @@ export class OrchestrationPipeline {
 
   // ── Audio input ─────────────────────────────────────────────────────────────
 
-  /** Incoming mulaw from Twilio / Plivo */
+  /** Incoming mulaw from Twilio / Plivo — offloads decode + noise-cancel + VAD to worker thread */
   onAudioIn(mulawChunk: Buffer): void {
-    this.onRawPcm8kIn(decodeMulaw(mulawChunk));
+    if (this.closed) return;
+    const callId = String(this.config.callId);
+    processAudioIn(callId, mulawChunk, this.agent.noiseCancellationEnabled)
+      .then((result) => this.handleProcessedAudio(result))
+      .catch((err) => logger.error({ callId: this.config.callId, err }, "Audio worker error (mulaw)"));
   }
 
-  /** Incoming raw LINEAR16 PCM @ 8 kHz from Vobiz (bypasses mulaw decode) */
+  /** Incoming raw LINEAR16 PCM @ 8 kHz from Vobiz — offloads noise-cancel + VAD to worker thread */
   onRawPcm8kIn(pcm8k: Buffer): void {
     if (this.closed) return;
+    const callId = String(this.config.callId);
+    processRawPcm8kIn(callId, pcm8k, this.agent.noiseCancellationEnabled)
+      .then((result) => this.handleProcessedAudio(result))
+      .catch((err) => logger.error({ callId: this.config.callId, err }, "Audio worker error (pcm8k)"));
+  }
 
-    if (this.noiseCanceller) {
-      pcm8k = this.noiseCanceller.process(pcm8k);
-    }
+  /** Handles pre-processed audio returned by the audio worker pool. */
+  private handleProcessedAudio({ pcm8k, pcm16k, hasSpeech }: AudioProcessResult): void {
+    if (this.closed) return;
 
     // Streaming STT path: feed all audio directly to Deepgram — no local VAD needed
     if (this.streamSTT) {
-      const pcm16k = upsample8to16(pcm8k);
       this.streamSTT.sendAudio(pcm16k);
       return;
     }
 
     // Batch STT path with local VAD + barge-in detection
-    const hasSpeech = hasSpeechEnergy(pcm8k, VAD_THRESHOLD);
-
     if (hasSpeech) {
       this.resetHangupTimer();
 

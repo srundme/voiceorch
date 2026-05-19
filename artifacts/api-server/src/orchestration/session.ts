@@ -9,6 +9,7 @@ import {
   saveConversation,
   removeSession,
 } from "./sessionStore.js";
+import { destroyAudioSession } from "./audioPool.js";
 
 interface MetricsAcc {
   sttTotal: number;
@@ -187,6 +188,7 @@ export async function endSession(sessionId: string): Promise<void> {
 
   sessions.delete(sessionId);
   session.pipeline.close();
+  destroyAudioSession(String(session.callId));
   void patchSessionMeta(sessionId, { status: "ended" }, 3600);
   void removeSession(sessionId, session.callId);
 
