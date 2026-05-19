@@ -92,6 +92,11 @@ export async function createSession(params: {
 
   logger.info({ sessionId, callId: callRecord.id, agent: agent.name }, "Session created");
 
+  // Send AI-generated greeting immediately when the call connects
+  pipeline.greet().catch((err) => {
+    logger.error({ sessionId, err }, "Greeting failed");
+  });
+
   return { sessionId, callDbId: callRecord.id };
 }
 

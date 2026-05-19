@@ -8,6 +8,7 @@ import { logger } from "../lib/logger.js";
 const VAD_SILENCE_MS = 700;       // how long of silence triggers STT
 const MIN_SPEECH_BYTES = 3200;    // minimum audio bytes (~200ms@8kHz) before sending to STT
 const CHUNK_SIZE_MULAW = 160;     // 20ms @ 8kHz mulaw
+const VAD_THRESHOLD = 100;        // RMS threshold for telephony audio (mulaw 8kHz decoded)
 
 export class OrchestrationPipeline {
   private config: SessionConfig;
@@ -70,13 +71,51 @@ export class OrchestrationPipeline {
     // Decode mulaw → linear16 PCM @ 8kHz
     const pcm8k = decodeMulaw(mulawChunk);
 
-    if (hasSpeechEnergy(pcm8k)) {
+    if (hasSpeechEnergy(pcm8k, VAD_THRESHOLD)) {
       this.audioBuffer.push(pcm8k);
       this.resetSilenceTimer();
     } else if (this.audioBuffer.length > 0) {
       // Silence detected — accumulate a little more before flushing
       this.audioBuffer.push(pcm8k);
       this.scheduleSilenceFlush();
+    }
+  }
+
+  /**
+   * Send an AI-generated opening greeting as soon as the call connects.
+   * Blocks audio processing until the greeting audio has been fully sent.
+   */
+  async greet(): Promise<void> {
+    if (this.closed) return;
+    this.isProcessing = true;
+    try {
+      let greeting = "";
+      await this.llm.chat(
+        [],
+        this.agent.systemPrompt,
+        (token) => { greeting += token; },
+        (full)  => { greeting = full; }
+      );
+
+      if (!greeting.trim() || this.closed) return;
+
+      logger.info({ callId: this.config.callId, greeting: greeting.slice(0, 80) }, "Sending greeting");
+      this.conversationHistory.push({ role: "assistant", content: greeting });
+      this.config.onTranscript("agent", greeting);
+
+      const ttsPcm16k = await this.tts.synthesize(greeting);
+      const ttsPcm8k  = downsample16to8(ttsPcm16k);
+      const ttsMusaw  = encodeMulaw(ttsPcm8k);
+
+      for (let i = 0; i < ttsMusaw.length; i += CHUNK_SIZE_MULAW) {
+        if (this.closed) break;
+        this.config.onAudioOut(ttsMusaw.slice(i, i + CHUNK_SIZE_MULAW));
+        await new Promise((r) => setTimeout(r, 20));
+      }
+    } catch (err) {
+      logger.error({ callId: this.config.callId, err }, "Greeting error");
+    } finally {
+      this.isProcessing = false;
     }
   }
 
