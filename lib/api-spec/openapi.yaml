@@ -18,6 +18,8 @@ tags:
     description: Provider key management
   - name: analytics
     description: Dashboard analytics
+  - name: knowledge-base
+    description: Knowledge base and RAG document management
 
 paths:
   /healthz:
@@ -422,6 +424,203 @@ paths:
                 items:
                   $ref: "#/components/schemas/DailyCallVolume"
 
+  # ── Knowledge Bases ─────────────────────────────────────────────────────────
+  /knowledge-bases:
+    get:
+      operationId: listKnowledgeBases
+      tags: [knowledge-base]
+      summary: List all knowledge bases
+      responses:
+        "200":
+          description: List of knowledge bases
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/KnowledgeBase"
+    post:
+      operationId: createKnowledgeBase
+      tags: [knowledge-base]
+      summary: Create a new knowledge base
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KnowledgeBaseInput"
+      responses:
+        "201":
+          description: Created knowledge base
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeBase"
+        "400":
+          description: Validation error
+
+  /knowledge-bases/{id}:
+    get:
+      operationId: getKnowledgeBase
+      tags: [knowledge-base]
+      summary: Get a knowledge base with its documents
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Knowledge base with documents
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeBaseDetail"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateKnowledgeBase
+      tags: [knowledge-base]
+      summary: Update a knowledge base
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KnowledgeBaseUpdate"
+      responses:
+        "200":
+          description: Updated knowledge base
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeBase"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteKnowledgeBase
+      tags: [knowledge-base]
+      summary: Delete a knowledge base and all its data
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  /knowledge-bases/{id}/documents:
+    get:
+      operationId: listKbDocuments
+      tags: [knowledge-base]
+      summary: List documents in a knowledge base
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of documents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/KbDocument"
+    post:
+      operationId: addKbDocument
+      tags: [knowledge-base]
+      summary: Add a document (text paste or URL) and start ingestion
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KbDocumentInput"
+      responses:
+        "202":
+          description: Document accepted for processing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KbDocument"
+        "400":
+          description: Validation error
+        "404":
+          description: Knowledge base not found
+
+  /knowledge-bases/{id}/documents/{docId}:
+    delete:
+      operationId: deleteKbDocument
+      tags: [knowledge-base]
+      summary: Delete a document and its chunks
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: docId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  /knowledge-bases/{id}/query:
+    post:
+      operationId: queryKnowledgeBase
+      tags: [knowledge-base]
+      summary: Test retrieval — returns top-K chunks for a query
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KbQueryInput"
+      responses:
+        "200":
+          description: Ranked chunks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/KbChunkResult"
+        "400":
+          description: Validation error
+        "404":
+          description: Not found
+
 components:
   schemas:
     HealthStatus:
@@ -519,6 +718,9 @@ components:
         noiseCancellationEnabled:
           type: ["boolean", "null"]
           description: Request noise reduction from the ASR provider on every transcription call
+        knowledgeBaseId:
+          type: ["integer", "null"]
+          description: ID of an attached knowledge base for RAG context injection
         tools:
           type: ["array", "null"]
           items:
@@ -635,6 +837,9 @@ components:
           type: string
         noiseCancellationEnabled:
           type: boolean
+        knowledgeBaseId:
+          type: integer
+          description: ID of an attached knowledge base for RAG context injection
         tools:
           type: array
           items:
@@ -821,4 +1026,166 @@ components:
         completed:
           type: integer
         failed:
+          type: integer
+
+    # ── Knowledge Base ──────────────────────────────────────────────────────────
+    KnowledgeBase:
+      type: object
+      required: [id, name, embeddingModel, chunkSize, chunkOverlap, documentCount, chunkCount, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        embeddingModel:
+          type: string
+        chunkSize:
+          type: integer
+        chunkOverlap:
+          type: integer
+        documentCount:
+          type: integer
+        chunkCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    KnowledgeBaseDetail:
+      type: object
+      required: [id, name, embeddingModel, chunkSize, chunkOverlap, documentCount, chunkCount, createdAt, updatedAt, documents]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        embeddingModel:
+          type: string
+        chunkSize:
+          type: integer
+        chunkOverlap:
+          type: integer
+        documentCount:
+          type: integer
+        chunkCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        documents:
+          type: array
+          items:
+            $ref: "#/components/schemas/KbDocument"
+
+    KnowledgeBaseInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        embeddingModel:
+          type: string
+          default: text-embedding-3-small
+        chunkSize:
+          type: integer
+          default: 512
+        chunkOverlap:
+          type: integer
+          default: 64
+
+    KnowledgeBaseUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+
+    KbDocument:
+      type: object
+      required: [id, knowledgeBaseId, name, sourceType, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        knowledgeBaseId:
+          type: integer
+        name:
+          type: string
+        sourceType:
+          type: string
+          enum: [text, url]
+        sourceUrl:
+          type: ["string", "null"]
+        charCount:
+          type: ["integer", "null"]
+        status:
+          type: string
+          enum: [pending, processing, ready, error]
+        processingError:
+          type: ["string", "null"]
+        chunkCount:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    KbDocumentInput:
+      type: object
+      required: [name, sourceType]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        sourceType:
+          type: string
+          enum: [text, url]
+        content:
+          type: string
+          description: Raw text content (required when sourceType=text)
+        sourceUrl:
+          type: string
+          description: URL to fetch and ingest (required when sourceType=url)
+
+    KbQueryInput:
+      type: object
+      required: [query]
+      properties:
+        query:
+          type: string
+          minLength: 1
+        topK:
+          type: integer
+          default: 5
+          description: Number of chunks to return
+
+    KbChunkResult:
+      type: object
+      required: [content, score, documentId, documentName, chunkIndex]
+      properties:
+        content:
+          type: string
+        score:
+          type: number
+          description: Relevance score (higher = more relevant)
+        documentId:
+          type: integer
+        documentName:
+          type: string
+        chunkIndex:
           type: integer

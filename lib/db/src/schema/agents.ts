@@ -1,4 +1,5 @@
 import { pgTable, text, serial, timestamp, integer, real, boolean, json } from "drizzle-orm/pg-core";
+import { knowledgeBasesTable } from "./knowledge-base";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -28,6 +29,9 @@ export const agentsTable = pgTable("agents", {
   backchannelingFrequency: real("backchanneling_frequency"),
   webhookUrl: text("webhook_url"),
   noiseCancellationEnabled: boolean("noise_cancellation_enabled").default(false),
+
+  // ── Knowledge Base ────────────────────────────────────────────────────────────
+  knowledgeBaseId: integer("knowledge_base_id").references(() => knowledgeBasesTable.id, { onDelete: "set null" }),
 
   // ── Tools ─────────────────────────────────────────────────────────────────────
   tools: json("tools").$type<Record<string, unknown>[]>(),

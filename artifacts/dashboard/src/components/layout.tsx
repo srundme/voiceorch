@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
   Users, Phone, Key, Settings, Mic, Menu,
-  LayoutDashboard, TestTube, BarChart3, ChevronRight,
+  LayoutDashboard, TestTube, BarChart3, ChevronRight, BookOpen,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -11,8 +11,9 @@ const NAV_SECTIONS = [
   {
     label: "BUILD",
     items: [
-      { name: "Assistants", href: "/",        icon: Users,          exact: true },
-      { name: "Providers",  href: "/providers", icon: Key },
+      { name: "Assistants",      href: "/",                  icon: Users,    exact: true },
+      { name: "Knowledge Bases", href: "/knowledge-bases",   icon: BookOpen },
+      { name: "Providers",       href: "/providers",          icon: Key },
     ],
   },
   {

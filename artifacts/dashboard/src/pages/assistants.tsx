@@ -4,7 +4,7 @@ import {
   Search, Plus, Phone, Mic, MicOff, PhoneOff, Volume2,
   Settings2, MoreHorizontal, Pencil, Trash2, PlayCircle,
   Check, Copy, Loader2, ChevronDown, Sparkles, PhoneOutgoing,
-  BarChart2, Clock, CheckCircle2, XCircle,
+  BarChart2, Clock, CheckCircle2, XCircle, BookOpen,
 } from "lucide-react";
 import {
   useListAgents,
@@ -14,6 +14,7 @@ import {
   useToggleAgent,
   useListCalls,
   useCreateAgent,
+  useListKnowledgeBases,
   getListAgentsQueryKey,
   getGetAgentQueryKey,
   getListCallsQueryKey,
@@ -375,7 +376,10 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
   const [ttsProvider, setTtsProvider]         = useState("");
   const [ttsModel, setTtsModel]               = useState("");
   const [telephony, setTelephony]             = useState("");
+  const [knowledgeBaseId, setKnowledgeBaseId] = useState<number | null>(null);
   const [dirty, setDirty]                     = useState(false);
+
+  const { data: kbs } = useListKnowledgeBases();
 
   useEffect(() => {
     if (!agent) return;
@@ -387,6 +391,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
     setTtsProvider(agent.ttsProvider ?? "");
     setTtsModel(agent.ttsModel ?? "");
     setTelephony(agent.telephonyProvider ?? "");
+    setKnowledgeBaseId(agent.knowledgeBaseId ?? null);
     setDirty(false);
   }, [agent?.id]);
 
@@ -404,6 +409,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
           asrProvider, llmProvider, llmModel: llmModel || undefined,
           ttsProvider, ttsModel: ttsModel || undefined,
           telephonyProvider: telephony,
+          knowledgeBaseId: knowledgeBaseId ?? undefined,
         } as Parameters<typeof update.mutate>[0]["data"],
       },
       {
@@ -683,6 +689,31 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                 placeholder="This is a blank template. You can change the model, temperature, and messages."
                 className="bg-zinc-800/60 border-zinc-700 text-zinc-200 text-sm resize-none min-h-[160px] placeholder:text-zinc-600 focus:border-zinc-600"
               />
+            </div>
+
+            {/* Knowledge Base */}
+            <div className="bg-zinc-800/40 border border-zinc-700/40 rounded-xl p-3.5 space-y-2">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <BookOpen className="w-3 h-3 text-emerald-400" />
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Knowledge Base</p>
+              </div>
+              <Select
+                value={knowledgeBaseId?.toString() ?? "none"}
+                onValueChange={(v) => { setKnowledgeBaseId(v === "none" ? null : parseInt(v)); setDirty(true); }}
+              >
+                <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200">
+                  <SelectValue placeholder="No knowledge base attached" />
+                </SelectTrigger>
+                <SelectContent className="bg-zinc-900 border-zinc-700">
+                  <SelectItem value="none" className="text-zinc-400 text-xs">— None —</SelectItem>
+                  {(kbs ?? []).map(kb => (
+                    <SelectItem key={kb.id} value={kb.id.toString()} className="text-zinc-300 text-xs">
+                      {kb.name} <span className="text-zinc-500 ml-1">({kb.chunkCount} chunks)</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] text-zinc-600">Relevant chunks are injected into the system prompt on every call.</p>
             </div>
 
             {/* Description */}

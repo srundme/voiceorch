@@ -19,6 +19,7 @@ import CallsList from "@/pages/calls/index";
 import CallDetail from "@/pages/calls/[id]";
 import ProvidersList from "@/pages/providers/index";
 import Settings from "@/pages/settings/index";
+import KnowledgeBasePage from "@/pages/knowledge-base";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -41,6 +42,7 @@ function Router() {
         <Route path="/agents/:id" component={AgentDetail} />
         <Route path="/calls" component={CallsList} />
         <Route path="/calls/:id" component={CallDetail} />
+        <Route path="/knowledge-bases" component={KnowledgeBasePage} />
         <Route path="/providers" component={ProvidersList} />
         <Route path="/settings" component={Settings} />
         <Route component={NotFound} />

@@ -6,6 +6,7 @@ import providersRouter from "./providers.js";
 import analyticsRouter from "./analytics.js";
 import webhooksRouter from "./webhooks.js";
 import widgetRouter from "./widget.js";
+import knowledgeBaseRouter from "./knowledge-base.js";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(providersRouter);
 router.use(analyticsRouter);
 router.use(webhooksRouter);
 router.use(widgetRouter);
+router.use(knowledgeBaseRouter);
 
 export default router;

@@ -43,6 +43,7 @@ export const ListAgentsResponseItem = zod.object({
   "backchannelingFrequency": zod.number().nullish().describe('Probability (0–1) of backchanneling on each turn'),
   "webhookUrl": zod.string().nullish().describe('URL to POST a call summary JSON to when the call ends'),
   "noiseCancellationEnabled": zod.boolean().nullish().describe('Request noise reduction from the ASR provider on every transcription call'),
+  "knowledgeBaseId": zod.number().nullish().describe('ID of an attached knowledge base for RAG context injection'),
   "tools": zod.array(zod.object({
   "type": zod.enum(['call_transfer']).describe('Tool type — currently only call_transfer is supported'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
@@ -128,6 +129,7 @@ export const GetAgentResponse = zod.object({
   "backchannelingFrequency": zod.number().nullish().describe('Probability (0–1) of backchanneling on each turn'),
   "webhookUrl": zod.string().nullish().describe('URL to POST a call summary JSON to when the call ends'),
   "noiseCancellationEnabled": zod.boolean().nullish().describe('Request noise reduction from the ASR provider on every transcription call'),
+  "knowledgeBaseId": zod.number().nullish().describe('ID of an attached knowledge base for RAG context injection'),
   "tools": zod.array(zod.object({
   "type": zod.enum(['call_transfer']).describe('Tool type — currently only call_transfer is supported'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
@@ -172,6 +174,7 @@ export const UpdateAgentBody = zod.object({
   "backchannelingFrequency": zod.number().optional(),
   "webhookUrl": zod.string().optional(),
   "noiseCancellationEnabled": zod.boolean().optional(),
+  "knowledgeBaseId": zod.number().optional().describe('ID of an attached knowledge base for RAG context injection'),
   "tools": zod.array(zod.object({
   "type": zod.enum(['call_transfer']).describe('Tool type — currently only call_transfer is supported'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
@@ -206,6 +209,7 @@ export const UpdateAgentResponse = zod.object({
   "backchannelingFrequency": zod.number().nullish().describe('Probability (0–1) of backchanneling on each turn'),
   "webhookUrl": zod.string().nullish().describe('URL to POST a call summary JSON to when the call ends'),
   "noiseCancellationEnabled": zod.boolean().nullish().describe('Request noise reduction from the ASR provider on every transcription call'),
+  "knowledgeBaseId": zod.number().nullish().describe('ID of an attached knowledge base for RAG context injection'),
   "tools": zod.array(zod.object({
   "type": zod.enum(['call_transfer']).describe('Tool type — currently only call_transfer is supported'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
@@ -260,6 +264,7 @@ export const ToggleAgentResponse = zod.object({
   "backchannelingFrequency": zod.number().nullish().describe('Probability (0–1) of backchanneling on each turn'),
   "webhookUrl": zod.string().nullish().describe('URL to POST a call summary JSON to when the call ends'),
   "noiseCancellationEnabled": zod.boolean().nullish().describe('Request noise reduction from the ASR provider on every transcription call'),
+  "knowledgeBaseId": zod.number().nullish().describe('ID of an attached knowledge base for RAG context injection'),
   "tools": zod.array(zod.object({
   "type": zod.enum(['call_transfer']).describe('Tool type — currently only call_transfer is supported'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
@@ -532,5 +537,183 @@ export const GetDailyCallVolumeResponseItem = zod.object({
   "failed": zod.number()
 })
 export const GetDailyCallVolumeResponse = zod.array(GetDailyCallVolumeResponseItem)
+
+
+/**
+ * @summary List all knowledge bases
+ */
+export const ListKnowledgeBasesResponseItem = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "embeddingModel": zod.string(),
+  "chunkSize": zod.number(),
+  "chunkOverlap": zod.number(),
+  "documentCount": zod.number(),
+  "chunkCount": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListKnowledgeBasesResponse = zod.array(ListKnowledgeBasesResponseItem)
+
+
+/**
+ * @summary Create a new knowledge base
+ */
+
+export const createKnowledgeBaseBodyEmbeddingModelDefault = `text-embedding-3-small`;
+export const createKnowledgeBaseBodyChunkSizeDefault = 512;
+export const createKnowledgeBaseBodyChunkOverlapDefault = 64;
+
+export const CreateKnowledgeBaseBody = zod.object({
+  "name": zod.string().min(1),
+  "description": zod.string().optional(),
+  "embeddingModel": zod.string().default(createKnowledgeBaseBodyEmbeddingModelDefault),
+  "chunkSize": zod.number().default(createKnowledgeBaseBodyChunkSizeDefault),
+  "chunkOverlap": zod.number().default(createKnowledgeBaseBodyChunkOverlapDefault)
+})
+
+
+/**
+ * @summary Get a knowledge base with its documents
+ */
+export const GetKnowledgeBaseParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetKnowledgeBaseResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "embeddingModel": zod.string(),
+  "chunkSize": zod.number(),
+  "chunkOverlap": zod.number(),
+  "documentCount": zod.number(),
+  "chunkCount": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "documents": zod.array(zod.object({
+  "id": zod.number(),
+  "knowledgeBaseId": zod.number(),
+  "name": zod.string(),
+  "sourceType": zod.enum(['text', 'url']),
+  "sourceUrl": zod.string().nullish(),
+  "charCount": zod.number().nullish(),
+  "status": zod.enum(['pending', 'processing', 'ready', 'error']),
+  "processingError": zod.string().nullish(),
+  "chunkCount": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Update a knowledge base
+ */
+export const UpdateKnowledgeBaseParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateKnowledgeBaseBody = zod.object({
+  "name": zod.string().optional(),
+  "description": zod.string().optional()
+})
+
+export const UpdateKnowledgeBaseResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "embeddingModel": zod.string(),
+  "chunkSize": zod.number(),
+  "chunkOverlap": zod.number(),
+  "documentCount": zod.number(),
+  "chunkCount": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a knowledge base and all its data
+ */
+export const DeleteKnowledgeBaseParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary List documents in a knowledge base
+ */
+export const ListKbDocumentsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListKbDocumentsResponseItem = zod.object({
+  "id": zod.number(),
+  "knowledgeBaseId": zod.number(),
+  "name": zod.string(),
+  "sourceType": zod.enum(['text', 'url']),
+  "sourceUrl": zod.string().nullish(),
+  "charCount": zod.number().nullish(),
+  "status": zod.enum(['pending', 'processing', 'ready', 'error']),
+  "processingError": zod.string().nullish(),
+  "chunkCount": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListKbDocumentsResponse = zod.array(ListKbDocumentsResponseItem)
+
+
+/**
+ * @summary Add a document (text paste or URL) and start ingestion
+ */
+export const AddKbDocumentParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+
+
+export const AddKbDocumentBody = zod.object({
+  "name": zod.string().min(1),
+  "sourceType": zod.enum(['text', 'url']),
+  "content": zod.string().optional().describe('Raw text content (required when sourceType=text)'),
+  "sourceUrl": zod.string().optional().describe('URL to fetch and ingest (required when sourceType=url)')
+})
+
+
+/**
+ * @summary Delete a document and its chunks
+ */
+export const DeleteKbDocumentParams = zod.object({
+  "id": zod.coerce.number(),
+  "docId": zod.coerce.number()
+})
+
+
+/**
+ * @summary Test retrieval — returns top-K chunks for a query
+ */
+export const QueryKnowledgeBaseParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+export const queryKnowledgeBaseBodyTopKDefault = 5;
+
+export const QueryKnowledgeBaseBody = zod.object({
+  "query": zod.string().min(1),
+  "topK": zod.number().default(queryKnowledgeBaseBodyTopKDefault).describe('Number of chunks to return')
+})
+
+export const QueryKnowledgeBaseResponseItem = zod.object({
+  "content": zod.string(),
+  "score": zod.number().describe('Relevance score (higher = more relevant)'),
+  "documentId": zod.number(),
+  "documentName": zod.string(),
+  "chunkIndex": zod.number()
+})
+export const QueryKnowledgeBaseResponse = zod.array(QueryKnowledgeBaseResponseItem)
 
 

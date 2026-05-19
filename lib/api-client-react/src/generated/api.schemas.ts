@@ -112,6 +112,11 @@ export interface Agent {
      */
   noiseCancellationEnabled?: boolean | null;
   /**
+     * ID of an attached knowledge base for RAG context injection
+     * @nullable
+     */
+  knowledgeBaseId?: number | null;
+  /**
      * List of tools (functions) the LLM can invoke during a call
      * @nullable
      */
@@ -173,6 +178,8 @@ export interface AgentUpdate {
   backchannelingFrequency?: number;
   webhookUrl?: string;
   noiseCancellationEnabled?: boolean;
+  /** ID of an attached knowledge base for RAG context injection */
+  knowledgeBaseId?: number;
   /** List of tools (functions) the LLM can invoke during a call */
   tools?: AgentTool[];
   status?: string;
@@ -324,6 +331,119 @@ export interface DailyCallVolume {
   total: number;
   completed: number;
   failed: number;
+}
+
+export interface KnowledgeBase {
+  id: number;
+  name: string;
+  /** @nullable */
+  description?: string | null;
+  embeddingModel: string;
+  chunkSize: number;
+  chunkOverlap: number;
+  documentCount: number;
+  chunkCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type KbDocumentSourceType = typeof KbDocumentSourceType[keyof typeof KbDocumentSourceType];
+
+
+export const KbDocumentSourceType = {
+  text: 'text',
+  url: 'url',
+} as const;
+
+export type KbDocumentStatus = typeof KbDocumentStatus[keyof typeof KbDocumentStatus];
+
+
+export const KbDocumentStatus = {
+  pending: 'pending',
+  processing: 'processing',
+  ready: 'ready',
+  error: 'error',
+} as const;
+
+export interface KbDocument {
+  id: number;
+  knowledgeBaseId: number;
+  name: string;
+  sourceType: KbDocumentSourceType;
+  /** @nullable */
+  sourceUrl?: string | null;
+  /** @nullable */
+  charCount?: number | null;
+  status: KbDocumentStatus;
+  /** @nullable */
+  processingError?: string | null;
+  /** @nullable */
+  chunkCount?: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface KnowledgeBaseDetail {
+  id: number;
+  name: string;
+  /** @nullable */
+  description?: string | null;
+  embeddingModel: string;
+  chunkSize: number;
+  chunkOverlap: number;
+  documentCount: number;
+  chunkCount: number;
+  createdAt: string;
+  updatedAt: string;
+  documents: KbDocument[];
+}
+
+export interface KnowledgeBaseInput {
+  /** @minLength 1 */
+  name: string;
+  description?: string;
+  embeddingModel?: string;
+  chunkSize?: number;
+  chunkOverlap?: number;
+}
+
+export interface KnowledgeBaseUpdate {
+  name?: string;
+  description?: string;
+}
+
+export type KbDocumentInputSourceType = typeof KbDocumentInputSourceType[keyof typeof KbDocumentInputSourceType];
+
+
+export const KbDocumentInputSourceType = {
+  text: 'text',
+  url: 'url',
+} as const;
+
+export interface KbDocumentInput {
+  /** @minLength 1 */
+  name: string;
+  sourceType: KbDocumentInputSourceType;
+  /** Raw text content (required when sourceType=text) */
+  content?: string;
+  /** URL to fetch and ingest (required when sourceType=url) */
+  sourceUrl?: string;
+}
+
+export interface KbQueryInput {
+  /** @minLength 1 */
+  query: string;
+  /** Number of chunks to return */
+  topK?: number;
+}
+
+export interface KbChunkResult {
+  content: string;
+  /** Relevance score (higher = more relevant) */
+  score: number;
+  documentId: number;
+  documentName: string;
+  chunkIndex: number;
 }
 
 export type ListCallsParams = {

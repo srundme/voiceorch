@@ -79,6 +79,11 @@ export interface Agent {
      */
   noiseCancellationEnabled?: boolean | null;
   /**
+     * ID of an attached knowledge base for RAG context injection
+     * @nullable
+     */
+  knowledgeBaseId?: number | null;
+  /**
      * List of tools (functions) the LLM can invoke during a call
      * @nullable
      */
