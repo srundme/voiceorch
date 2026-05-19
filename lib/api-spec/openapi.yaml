@@ -790,6 +790,31 @@ components:
           description: "ASR provider: deepgram, azure, whisper"
         asrModel:
           type: ["string", "null"]
+        asrLanguage:
+          type: ["string", "null"]
+          description: Language code for the ASR provider (e.g. en, es, hi-IN)
+        asrBackgroundDenoising:
+          type: ["boolean", "null"]
+          description: Filter background noise while the user is talking
+        asrConfidenceThreshold:
+          type: ["number", "null"]
+          description: Transcripts below this confidence score (0–1) will be filtered out
+        asrEndOfTurnConfidence:
+          type: ["number", "null"]
+          description: Confidence threshold (0.5–0.9) required to finish a turn (Deepgram)
+        asrEndOfTurnTimeout:
+          type: ["integer", "null"]
+          description: Maximum time to wait (ms) after speech before finishing a turn
+        asrKeyterms:
+          type: ["string", "null"]
+          description: Comma-separated keywords to boost transcription accuracy
+        asrSmartEndpointing:
+          type: ["string", "null"]
+          enum: [off, vapi, livekit, null]
+          description: Smart endpointing mode for more accurate speech endpoint detection
+        asrAutoFallback:
+          type: ["boolean", "null"]
+          description: Automatically pick a backup STT provider if the primary fails
         llmProvider:
           type: string
           description: "LLM provider: openai, deepseek, anthropic, mistral, cohere"
@@ -879,6 +904,22 @@ components:
           type: string
         asrModel:
           type: string
+        asrLanguage:
+          type: string
+        asrBackgroundDenoising:
+          type: boolean
+        asrConfidenceThreshold:
+          type: number
+        asrEndOfTurnConfidence:
+          type: number
+        asrEndOfTurnTimeout:
+          type: integer
+        asrKeyterms:
+          type: string
+        asrSmartEndpointing:
+          type: string
+        asrAutoFallback:
+          type: boolean
         llmProvider:
           type: string
         llmModel:
@@ -930,6 +971,22 @@ components:
           type: string
         asrModel:
           type: string
+        asrLanguage:
+          type: string
+        asrBackgroundDenoising:
+          type: boolean
+        asrConfidenceThreshold:
+          type: number
+        asrEndOfTurnConfidence:
+          type: number
+        asrEndOfTurnTimeout:
+          type: integer
+        asrKeyterms:
+          type: string
+        asrSmartEndpointing:
+          type: string
+        asrAutoFallback:
+          type: boolean
         llmProvider:
           type: string
         llmModel:

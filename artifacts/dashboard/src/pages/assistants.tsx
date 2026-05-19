@@ -5,6 +5,7 @@ import {
   Settings2, MoreHorizontal, Pencil, Trash2, PlayCircle,
   Check, Copy, Loader2, ChevronDown, Sparkles, PhoneOutgoing,
   BarChart2, Clock, CheckCircle2, XCircle, BookOpen,
+  AlertTriangle, Target, AlignLeft, Zap, RefreshCw,
 } from "lucide-react";
 import {
   useListAgents,
@@ -38,6 +39,9 @@ import {
   DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { AgentMetricsBar } from "@/components/agent-metrics-bar";
@@ -88,11 +92,111 @@ const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
   sarvam:    [{ value: "sarvam-2b-v0.5", label: "Sarvam 2B" }],
 };
 const ASR_MODELS: Record<string, { value: string; label: string }[]> = {
-  deepgram:   [{ value: "nova-3", label: "Nova 3 (latest)" }, { value: "nova-2", label: "Nova 2" }, { value: "nova-2-general", label: "Nova 2 General" }],
+  deepgram:   [
+    { value: "nova-3",          label: "Nova 3 (latest)" },
+    { value: "nova-3-medical",  label: "Nova 3 Medical" },
+    { value: "nova-2",          label: "Nova 2" },
+    { value: "nova-2-general",  label: "Nova 2 General" },
+    { value: "nova-2-medical",  label: "Nova 2 Medical" },
+    { value: "enhanced",        label: "Enhanced" },
+    { value: "base",            label: "Base" },
+    { value: "whisper-large",   label: "Whisper Large" },
+    { value: "flux",            label: "Flux General English" },
+  ],
   azure:      [{ value: "en-US-standard", label: "en-US-standard" }, { value: "en-US-enhanced", label: "en-US-enhanced" }, { value: "en-IN-standard", label: "en-IN-standard" }],
   assemblyai: [{ value: "best", label: "Best" }, { value: "nano", label: "Nano (fast)" }],
   sarvam:     [{ value: "saarika:v2.5", label: "Saarika v2.5" }, { value: "saarika:flash", label: "Saarika Flash" }],
   cartesia:   [{ value: "sonic-english", label: "Sonic English" }],
+};
+const ASR_LANGUAGES: Record<string, { value: string; label: string }[]> = {
+  deepgram: [
+    { value: "en",    label: "English" },
+    { value: "es",    label: "Spanish" },
+    { value: "fr",    label: "French" },
+    { value: "de",    label: "German" },
+    { value: "hi",    label: "Hindi" },
+    { value: "pt",    label: "Portuguese" },
+    { value: "ja",    label: "Japanese" },
+    { value: "ko",    label: "Korean" },
+    { value: "nl",    label: "Dutch" },
+    { value: "ru",    label: "Russian" },
+    { value: "tr",    label: "Turkish" },
+    { value: "zh",    label: "Chinese" },
+    { value: "it",    label: "Italian" },
+    { value: "sv",    label: "Swedish" },
+    { value: "pl",    label: "Polish" },
+    { value: "id",    label: "Indonesian" },
+  ],
+  assemblyai: [
+    { value: "en",    label: "English" },
+    { value: "es",    label: "Spanish" },
+    { value: "fr",    label: "French" },
+    { value: "de",    label: "German" },
+    { value: "it",    label: "Italian" },
+    { value: "pt",    label: "Portuguese" },
+    { value: "nl",    label: "Dutch" },
+    { value: "fi",    label: "Finnish" },
+    { value: "uk",    label: "Ukrainian" },
+  ],
+  whisper: [
+    { value: "auto",  label: "Auto-detect" },
+    { value: "en",    label: "English" },
+    { value: "es",    label: "Spanish" },
+    { value: "fr",    label: "French" },
+    { value: "de",    label: "German" },
+    { value: "hi",    label: "Hindi" },
+    { value: "zh",    label: "Chinese" },
+    { value: "ja",    label: "Japanese" },
+    { value: "ko",    label: "Korean" },
+    { value: "ar",    label: "Arabic" },
+    { value: "ru",    label: "Russian" },
+    { value: "pt",    label: "Portuguese" },
+    { value: "it",    label: "Italian" },
+  ],
+  azure: [
+    { value: "en-US", label: "English (US)" },
+    { value: "en-GB", label: "English (UK)" },
+    { value: "en-IN", label: "English (India)" },
+    { value: "es-ES", label: "Spanish (Spain)" },
+    { value: "es-MX", label: "Spanish (Mexico)" },
+    { value: "fr-FR", label: "French" },
+    { value: "de-DE", label: "German" },
+    { value: "hi-IN", label: "Hindi" },
+    { value: "ja-JP", label: "Japanese" },
+    { value: "ko-KR", label: "Korean" },
+    { value: "zh-CN", label: "Chinese (Mandarin)" },
+    { value: "pt-BR", label: "Portuguese (Brazil)" },
+    { value: "it-IT", label: "Italian" },
+  ],
+  sarvam: [
+    { value: "hi-IN", label: "Hindi" },
+    { value: "bn-IN", label: "Bengali" },
+    { value: "kn-IN", label: "Kannada" },
+    { value: "ml-IN", label: "Malayalam" },
+    { value: "mr-IN", label: "Marathi" },
+    { value: "ta-IN", label: "Tamil" },
+    { value: "te-IN", label: "Telugu" },
+    { value: "gu-IN", label: "Gujarati" },
+    { value: "pa-IN", label: "Punjabi" },
+    { value: "en-IN", label: "English (India)" },
+  ],
+  cartesia: [
+    { value: "en",    label: "English" },
+    { value: "es",    label: "Spanish" },
+    { value: "fr",    label: "French" },
+    { value: "de",    label: "German" },
+    { value: "ja",    label: "Japanese" },
+    { value: "zh",    label: "Chinese" },
+    { value: "pt",    label: "Portuguese" },
+    { value: "hi",    label: "Hindi" },
+    { value: "it",    label: "Italian" },
+    { value: "ko",    label: "Korean" },
+    { value: "nl",    label: "Dutch" },
+    { value: "pl",    label: "Polish" },
+    { value: "ru",    label: "Russian" },
+    { value: "sv",    label: "Swedish" },
+    { value: "tr",    label: "Turkish" },
+  ],
 };
 const TTS_MODELS: Record<string, { value: string; label: string }[]> = {
   cartesia: [
@@ -369,16 +473,25 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
   const deleteAgent = useDeleteAgent();
 
   // Local editable state for inline editing
-  const [systemPrompt, setSystemPrompt]       = useState("");
-  const [greetingMessage, setGreetingMessage] = useState("");
-  const [asrProvider, setAsrProvider]         = useState("");
-  const [llmProvider, setLlmProvider]         = useState("");
-  const [llmModel, setLlmModel]               = useState("");
-  const [ttsProvider, setTtsProvider]         = useState("");
-  const [ttsModel, setTtsModel]               = useState("");
-  const [telephony, setTelephony]             = useState("");
-  const [knowledgeBaseId, setKnowledgeBaseId] = useState<number | null>(null);
-  const [dirty, setDirty]                     = useState(false);
+  const [systemPrompt, setSystemPrompt]                     = useState("");
+  const [greetingMessage, setGreetingMessage]               = useState("");
+  const [asrProvider, setAsrProvider]                       = useState("");
+  const [asrModel, setAsrModel]                             = useState("");
+  const [asrLanguage, setAsrLanguage]                       = useState("en");
+  const [asrBackgroundDenoising, setAsrBackgroundDenoising] = useState(false);
+  const [asrConfidenceThreshold, setAsrConfidenceThreshold] = useState(0.40);
+  const [asrEndOfTurnConfidence, setAsrEndOfTurnConfidence] = useState(0.70);
+  const [asrEndOfTurnTimeout, setAsrEndOfTurnTimeout]       = useState(5000);
+  const [asrKeyterms, setAsrKeyterms]                       = useState("");
+  const [asrSmartEndpointing, setAsrSmartEndpointing]       = useState("off");
+  const [asrAutoFallback, setAsrAutoFallback]               = useState(false);
+  const [llmProvider, setLlmProvider]                       = useState("");
+  const [llmModel, setLlmModel]                             = useState("");
+  const [ttsProvider, setTtsProvider]                       = useState("");
+  const [ttsModel, setTtsModel]                             = useState("");
+  const [telephony, setTelephony]                           = useState("");
+  const [knowledgeBaseId, setKnowledgeBaseId]               = useState<number | null>(null);
+  const [dirty, setDirty]                                   = useState(false);
 
   const { data: kbs } = useListKnowledgeBases();
 
@@ -387,6 +500,15 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
     setSystemPrompt(agent.systemPrompt ?? "");
     setGreetingMessage(agent.greetingMessage ?? "");
     setAsrProvider(agent.asrProvider ?? "");
+    setAsrModel(agent.asrModel ?? "");
+    setAsrLanguage(agent.asrLanguage ?? "en");
+    setAsrBackgroundDenoising(agent.asrBackgroundDenoising ?? false);
+    setAsrConfidenceThreshold(agent.asrConfidenceThreshold ?? 0.40);
+    setAsrEndOfTurnConfidence(agent.asrEndOfTurnConfidence ?? 0.70);
+    setAsrEndOfTurnTimeout(agent.asrEndOfTurnTimeout ?? 5000);
+    setAsrKeyterms(agent.asrKeyterms ?? "");
+    setAsrSmartEndpointing(agent.asrSmartEndpointing ?? "off");
+    setAsrAutoFallback(agent.asrAutoFallback ?? false);
     setLlmProvider(agent.llmProvider ?? "");
     setLlmModel(agent.llmModel ?? "");
     setTtsProvider(agent.ttsProvider ?? "");
@@ -407,7 +529,17 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
         data: {
           systemPrompt,
           greetingMessage: greetingMessage || undefined,
-          asrProvider, llmProvider, llmModel: llmModel || undefined,
+          asrProvider,
+          asrModel: asrModel || undefined,
+          asrLanguage: asrLanguage || undefined,
+          asrBackgroundDenoising,
+          asrConfidenceThreshold,
+          asrEndOfTurnConfidence,
+          asrEndOfTurnTimeout,
+          asrKeyterms: asrKeyterms || undefined,
+          asrSmartEndpointing,
+          asrAutoFallback,
+          llmProvider, llmModel: llmModel || undefined,
           ttsProvider, ttsModel: ttsModel || undefined,
           telephonyProvider: telephony,
           knowledgeBaseId: knowledgeBaseId ?? undefined,
@@ -578,7 +710,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
               {/* Transcriber */}
               <div className="bg-zinc-800/60 border border-zinc-700/50 rounded-xl p-3.5 space-y-2">
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Transcriber</p>
-                <Select value={asrProvider} onValueChange={mark(setAsrProvider)}>
+                <Select value={asrProvider} onValueChange={(v) => { mark(setAsrProvider)(v); setAsrModel(ASR_MODELS[v]?.[0]?.value ?? ""); setAsrLanguage(ASR_LANGUAGES[v]?.[0]?.value ?? "en"); }}>
                   <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200">
                     <SelectValue />
                   </SelectTrigger>
@@ -587,7 +719,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                   </SelectContent>
                 </Select>
                 {asrModelOptions.length > 0 && (
-                  <Select value={agent.asrModel ?? asrModelOptions[0]?.value} onValueChange={() => setDirty(true)}>
+                  <Select value={asrModel || asrModelOptions[0]?.value} onValueChange={mark(setAsrModel)}>
                     <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-400">
                       <SelectValue />
                     </SelectTrigger>
@@ -663,6 +795,210 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                     {TELEPHONY_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-zinc-300 text-xs">{p.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+
+            {/* ── Transcriber Settings ─────────────────────────────────────── */}
+            <div className="bg-zinc-800/40 border border-zinc-700/40 rounded-xl overflow-hidden">
+              {/* Header */}
+              <div className="flex items-start gap-2.5 px-4 py-3 border-b border-zinc-700/40">
+                <Mic className="h-3.5 w-3.5 text-sky-400 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-xs font-semibold text-zinc-300">Transcriber Settings</p>
+                  <p className="text-[10px] text-zinc-600 mt-0.5">Configure the speech-to-text transcriber that converts caller speech into text for the LLM.</p>
+                </div>
+              </div>
+
+              <div className="px-4 py-4 space-y-5">
+                {/* Language */}
+                {(ASR_LANGUAGES[asrProvider] ?? []).length > 0 && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-zinc-400">Language</Label>
+                    <Select value={asrLanguage} onValueChange={mark(setAsrLanguage)}>
+                      <SelectTrigger className="h-8 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200">
+                        <SelectValue placeholder="Select language" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-zinc-900 border-zinc-700">
+                        {(ASR_LANGUAGES[asrProvider] ?? []).map(l => (
+                          <SelectItem key={l.value} value={l.value} className="text-zinc-300 text-xs">{l.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {/* Flux model hint */}
+                {asrProvider === "deepgram" && (asrModel || "") === "flux" && (
+                  <div className="flex items-start gap-2 bg-amber-950/30 border border-amber-800/40 rounded-lg px-3 py-2">
+                    <AlertTriangle className="h-3.5 w-3.5 text-amber-500 mt-0.5 shrink-0" />
+                    <p className="text-[11px] text-amber-400/90 leading-relaxed">
+                      Make sure your Smart Endpointing Plan in Advanced &gt; Start Speaking Plan is disabled to leverage Flux end-of-turn detection.
+                    </p>
+                  </div>
+                )}
+
+                {/* Background Denoising */}
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center shrink-0">
+                    <Volume2 className="h-3.5 w-3.5 text-zinc-400" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-xs font-medium text-zinc-300">Background Denoising</p>
+                    <p className="text-[10px] text-zinc-600">Filter background noise while the user is talking.</p>
+                  </div>
+                  <Switch
+                    checked={asrBackgroundDenoising}
+                    onCheckedChange={mark(setAsrBackgroundDenoising)}
+                    className="data-[state=checked]:bg-emerald-500"
+                  />
+                </div>
+
+                {/* Confidence Threshold */}
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center shrink-0 mt-0.5">
+                    <Target className="h-3.5 w-3.5 text-zinc-400" />
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-medium text-zinc-300">Confidence Threshold</p>
+                        <p className="text-[10px] text-zinc-600">Transcripts below this confidence score will be filtered out.</p>
+                      </div>
+                      <span className="text-xs font-mono bg-zinc-800 border border-zinc-700 rounded px-1.5 py-0.5 text-zinc-300 min-w-[42px] text-center shrink-0">
+                        {asrConfidenceThreshold.toFixed(2)}
+                      </span>
+                    </div>
+                    <Slider
+                      min={0} max={1} step={0.01}
+                      value={[asrConfidenceThreshold]}
+                      onValueChange={([v]) => { setAsrConfidenceThreshold(v); setDirty(true); }}
+                    />
+                    <div className="flex justify-between text-[10px] text-zinc-600">
+                      <span>0</span><span>1.0</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* End of Turn Confidence — Deepgram only */}
+                {asrProvider === "deepgram" && (
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center shrink-0 mt-0.5">
+                      <Target className="h-3.5 w-3.5 text-zinc-400" />
+                    </div>
+                    <div className="flex-1 space-y-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-medium text-zinc-300">End of Turn Confidence</p>
+                          <p className="text-[10px] text-zinc-600">Confidence threshold required to finish a turn.</p>
+                        </div>
+                        <span className="text-xs font-mono bg-zinc-800 border border-zinc-700 rounded px-1.5 py-0.5 text-zinc-300 min-w-[42px] text-center shrink-0">
+                          {asrEndOfTurnConfidence.toFixed(2)}
+                        </span>
+                      </div>
+                      <Slider
+                        min={0.5} max={0.9} step={0.01}
+                        value={[asrEndOfTurnConfidence]}
+                        onValueChange={([v]) => { setAsrEndOfTurnConfidence(v); setDirty(true); }}
+                      />
+                      <div className="flex justify-between text-[10px] text-zinc-600">
+                        <span>0.5</span><span>0.9</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* End of Turn Timeout */}
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center shrink-0 mt-0.5">
+                    <Clock className="h-3.5 w-3.5 text-zinc-400" />
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-medium text-zinc-300">End of Turn Timeout</p>
+                        <p className="text-[10px] text-zinc-600">Maximum time to wait after speech before finishing a turn.</p>
+                      </div>
+                      <span className="text-xs font-mono bg-zinc-800 border border-zinc-700 rounded px-1.5 py-0.5 text-zinc-300 min-w-[48px] text-center shrink-0">
+                        {asrEndOfTurnTimeout}
+                      </span>
+                    </div>
+                    <Slider
+                      min={500} max={10000} step={100}
+                      value={[asrEndOfTurnTimeout]}
+                      onValueChange={([v]) => { setAsrEndOfTurnTimeout(v); setDirty(true); }}
+                    />
+                    <div className="flex justify-between text-[10px] text-zinc-600">
+                      <span>500ms</span><span>10s</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Keyterms */}
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center shrink-0 mt-0.5">
+                    <AlignLeft className="h-3.5 w-3.5 text-zinc-400" />
+                  </div>
+                  <div className="flex-1 space-y-1.5">
+                    <p className="text-xs font-medium text-zinc-300">Keyterms</p>
+                    <p className="text-[10px] text-zinc-600">Enter keywords separated by commas for transcription.</p>
+                    <Textarea
+                      value={asrKeyterms}
+                      onChange={(e) => { setAsrKeyterms(e.target.value); setDirty(true); }}
+                      placeholder="e.g. VoiceOrch, API, webhook"
+                      className="bg-zinc-900/60 border-zinc-700 text-zinc-200 text-xs resize-none min-h-[68px] placeholder:text-zinc-600 focus:border-zinc-600"
+                    />
+                    <p className="text-[10px] text-zinc-600">
+                      Currently ~{asrKeyterms.split(",").filter(t => t.trim()).length} tokens used.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Smart Endpointing */}
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center shrink-0 mt-0.5">
+                    <Zap className="h-3.5 w-3.5 text-zinc-400" />
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    <p className="text-xs font-medium text-zinc-300">Smart Endpointing</p>
+                    <p className="text-[10px] text-zinc-600">Enable for more accurate speech endpoint detection.</p>
+                    <ToggleGroup
+                      type="single"
+                      value={asrSmartEndpointing}
+                      onValueChange={(v) => { if (v) { setAsrSmartEndpointing(v); setDirty(true); } }}
+                      className="justify-start border border-zinc-700 rounded-lg p-0.5 bg-zinc-900/60 w-fit gap-0"
+                    >
+                      <ToggleGroupItem value="off" className="text-xs h-7 px-3 rounded-md data-[state=on]:bg-zinc-700 data-[state=on]:text-white text-zinc-500 hover:text-zinc-300">Off</ToggleGroupItem>
+                      <ToggleGroupItem value="vapi" className="text-xs h-7 px-3 rounded-md data-[state=on]:bg-zinc-700 data-[state=on]:text-white text-zinc-500 hover:text-zinc-300 font-semibold tracking-wide">VAPI</ToggleGroupItem>
+                      <ToggleGroupItem value="livekit" className="text-xs h-7 px-3 rounded-md data-[state=on]:bg-zinc-700 data-[state=on]:text-white text-zinc-500 hover:text-zinc-300">LiveKit</ToggleGroupItem>
+                    </ToggleGroup>
+                  </div>
+                </div>
+
+                {/* Transcriber Fallback */}
+                <div className="space-y-3 pt-1 border-t border-zinc-700/40">
+                  <div className="flex items-start gap-3 pt-3">
+                    <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center shrink-0">
+                      <RefreshCw className="h-3.5 w-3.5 text-zinc-400" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-zinc-300">Transcriber Fallback</p>
+                      <p className="text-[10px] text-zinc-600 mt-0.5 leading-relaxed">
+                        Protect your calls from STT failures. Auto fallback is recommended for most users. If you also add manual fallbacks, those are tried first before auto fallback kicks in.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between pl-11">
+                    <div>
+                      <p className="text-xs text-zinc-400 font-medium">Auto Fallback</p>
+                      <p className="text-[10px] text-zinc-600">Let VoiceOrch automatically pick a backup STT provider.</p>
+                    </div>
+                    <Switch
+                      checked={asrAutoFallback}
+                      onCheckedChange={mark(setAsrAutoFallback)}
+                      className="data-[state=checked]:bg-emerald-500"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
 

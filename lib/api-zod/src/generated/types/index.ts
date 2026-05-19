@@ -7,6 +7,7 @@
  */
 
 export * from './agent';
+export * from './agentAsrSmartEndpointing';
 export * from './agentInput';
 export * from './agentStatus';
 export * from './agentTool';

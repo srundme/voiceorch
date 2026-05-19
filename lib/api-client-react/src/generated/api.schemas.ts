@@ -41,6 +41,19 @@ export const AgentStatus = {
   draft: 'draft',
 } as const;
 
+/**
+ * Smart endpointing mode for more accurate speech endpoint detection
+ * @nullable
+ */
+export type AgentAsrSmartEndpointing = typeof AgentAsrSmartEndpointing[keyof typeof AgentAsrSmartEndpointing] | null;
+
+
+export const AgentAsrSmartEndpointing = {
+  off: 'off',
+  vapi: 'vapi',
+  livekit: 'livekit',
+} as const;
+
 export interface Agent {
   id: number;
   name: string;
@@ -51,6 +64,46 @@ export interface Agent {
   asrProvider: string;
   /** @nullable */
   asrModel?: string | null;
+  /**
+     * Language code for the ASR provider (e.g. en, es, hi-IN)
+     * @nullable
+     */
+  asrLanguage?: string | null;
+  /**
+     * Filter background noise while the user is talking
+     * @nullable
+     */
+  asrBackgroundDenoising?: boolean | null;
+  /**
+     * Transcripts below this confidence score (0–1) will be filtered out
+     * @nullable
+     */
+  asrConfidenceThreshold?: number | null;
+  /**
+     * Confidence threshold (0.5–0.9) required to finish a turn (Deepgram)
+     * @nullable
+     */
+  asrEndOfTurnConfidence?: number | null;
+  /**
+     * Maximum time to wait (ms) after speech before finishing a turn
+     * @nullable
+     */
+  asrEndOfTurnTimeout?: number | null;
+  /**
+     * Comma-separated keywords to boost transcription accuracy
+     * @nullable
+     */
+  asrKeyterms?: string | null;
+  /**
+     * Smart endpointing mode for more accurate speech endpoint detection
+     * @nullable
+     */
+  asrSmartEndpointing?: AgentAsrSmartEndpointing;
+  /**
+     * Automatically pick a backup STT provider if the primary fails
+     * @nullable
+     */
+  asrAutoFallback?: boolean | null;
   /** LLM provider: openai, deepseek, anthropic, mistral, cohere */
   llmProvider: string;
   /** @nullable */
@@ -150,6 +203,14 @@ export interface AgentInput {
   description?: string;
   asrProvider: string;
   asrModel?: string;
+  asrLanguage?: string;
+  asrBackgroundDenoising?: boolean;
+  asrConfidenceThreshold?: number;
+  asrEndOfTurnConfidence?: number;
+  asrEndOfTurnTimeout?: number;
+  asrKeyterms?: string;
+  asrSmartEndpointing?: string;
+  asrAutoFallback?: boolean;
   llmProvider: string;
   llmModel?: string;
   ttsProvider: string;
@@ -176,6 +237,14 @@ export interface AgentUpdate {
   description?: string;
   asrProvider?: string;
   asrModel?: string;
+  asrLanguage?: string;
+  asrBackgroundDenoising?: boolean;
+  asrConfidenceThreshold?: number;
+  asrEndOfTurnConfidence?: number;
+  asrEndOfTurnTimeout?: number;
+  asrKeyterms?: string;
+  asrSmartEndpointing?: string;
+  asrAutoFallback?: boolean;
   llmProvider?: string;
   llmModel?: string;
   ttsProvider?: string;

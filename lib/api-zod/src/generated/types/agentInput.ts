@@ -13,6 +13,14 @@ export interface AgentInput {
   description?: string;
   asrProvider: string;
   asrModel?: string;
+  asrLanguage?: string;
+  asrBackgroundDenoising?: boolean;
+  asrConfidenceThreshold?: number;
+  asrEndOfTurnConfidence?: number;
+  asrEndOfTurnTimeout?: number;
+  asrKeyterms?: string;
+  asrSmartEndpointing?: string;
+  asrAutoFallback?: boolean;
   llmProvider: string;
   llmModel?: string;
   ttsProvider: string;
