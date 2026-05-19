@@ -1,40 +1,50 @@
 import type { WebSocket } from "ws";
 import { createSession, getSession, endSession, failSession } from "../session.js";
+import { decodeMulaw } from "../audio.js";
 import { logger } from "../../lib/logger.js";
 
 /**
  * Vobiz WebSocket handler
  *
- * Vobiz uses the same Media Streams protocol as Twilio:
- *   • JSON events over WebSocket
- *   • Audio: base64-encoded µ-law 8 kHz mono (G.711 PCMU), 20 ms chunks
+ * Vobiz uses a Twilio-like Media Streams protocol but with LINEAR16 PCM audio,
+ * NOT mulaw. Key differences from Twilio:
  *
- * Inbound event flow from Vobiz → server:
+ * Inbound event flow (Vobiz → server):
  *   { event: "connected" }
- *   { event: "start",  streamSid: "MZ...", start: { callSid, streamSid, from, to, ... } }
- *   { event: "media",  streamSid: "MZ...", media: { payload: "<base64 mulaw>" } }
+ *   { event: "start",  start: { callId, streamId, accountId, tracks, mediaFormat: { encoding: "audio/x-l16", sampleRate: 8000 } } }
+ *   { event: "media",  media: { payload: "<base64 LINEAR16 PCM 8kHz>" } }
  *   { event: "stop" }
  *
  * Outbound (server → Vobiz) to play audio to caller:
- *   { event: "media", streamSid: "MZ...", media: { payload: "<base64 mulaw>" } }
+ *   { event: "media", streamId: "...", media: { payload: "<base64 LINEAR16 PCM 8kHz>" } }
+ *
+ * Audio format: LINEAR16 PCM at 8000 Hz (NOT mulaw like Twilio/Plivo)
  *
  * Docs: https://docs.vobiz.ai/guides/ai-voice-agent
  */
 
 interface VobizMessage {
   event: "connected" | "start" | "media" | "stop";
-  streamSid?: string;
+  sequenceNumber?: number;
+  streamId?: string;
   start?: {
-    callSid?: string;
-    streamSid?: string;
+    callId?: string;
+    streamId?: string;
+    accountId?: string;
+    tracks?: string[];
+    mediaFormat?: {
+      encoding: string;
+      sampleRate: number;
+    };
+    customParameters?: Record<string, string>;
     from?: string;
     to?: string;
-    customParameters?: Record<string, string>;
   };
   media?: {
     track?: string;
-    payload: string; // base64 µ-law
+    payload: string; // base64-encoded LINEAR16 PCM 8kHz
   };
+  extra_headers?: string;
 }
 
 export async function handleVobizWebSocket(
@@ -42,16 +52,22 @@ export async function handleVobizWebSocket(
   agentId: number
 ): Promise<void> {
   let sessionId: string | null = null;
-  let streamSid: string | null = null;
+  let streamId: string | null = null;
 
-  function sendAudioToVobiz(audio: Buffer): void {
+  /**
+   * Send audio to Vobiz caller.
+   * Pipeline delivers mulaw-encoded chunks; we decode them back to LINEAR16 PCM
+   * because Vobiz uses audio/x-l16 (not mulaw like Twilio).
+   */
+  function sendAudioToVobiz(mulawChunk: Buffer): void {
     if (ws.readyState !== ws.OPEN) return;
-    // streamSid is included when Vobiz provides it; some Vobiz setups omit it
+    // Vobiz expects LINEAR16 PCM — decode the mulaw the pipeline produced
+    const pcm = decodeMulaw(mulawChunk);
     const msg: Record<string, unknown> = {
       event: "media",
-      media: { payload: audio.toString("base64") },
+      media: { payload: pcm.toString("base64") },
     };
-    if (streamSid) msg["streamSid"] = streamSid;
+    if (streamId) msg["streamId"] = streamId;
     ws.send(JSON.stringify(msg));
   }
 
@@ -69,16 +85,15 @@ export async function handleVobizWebSocket(
         break;
 
       case "start": {
-        // Capture streamSid from top-level or nested start object (mirrors Twilio protocol)
-        streamSid = msg.streamSid ?? msg.start?.streamSid ?? null;
-        const callSid = msg.start?.callSid ?? streamSid;
+        // Vobiz uses "streamId" (UUID), not Twilio's "streamSid"
+        streamId = msg.start?.streamId ?? msg.streamId ?? null;
+        const callId = msg.start?.callId ?? null;
 
         const params = msg.start?.customParameters ?? {};
         const fromNumber = msg.start?.from ?? params["From"] ?? "+10000000000";
         const toNumber   = msg.start?.to   ?? params["To"]   ?? "+10000000001";
 
-        // Log the full raw payload so we can see exactly what Vobiz sends
-        logger.info({ agentId, streamSid, callSid, fromNumber, toNumber, raw: raw.toString() }, "Vobiz start event");
+        logger.info({ agentId, streamId, callId, fromNumber, toNumber, encoding: msg.start?.mediaFormat?.encoding }, "Vobiz start event");
 
         try {
           const { sessionId: sid } = await createSession({
@@ -86,12 +101,12 @@ export async function handleVobizWebSocket(
             telephonyProvider: "vobiz",
             toNumber,
             fromNumber,
-            externalCallId: callSid ?? undefined,
+            externalCallId: callId ?? undefined,
             onAudioOut: sendAudioToVobiz,
             onCallEnd: () => ws.close(),
           });
           sessionId = sid;
-          logger.info({ sessionId, agentId, fromNumber, toNumber, streamSid }, "Vobiz session started");
+          logger.info({ sessionId, agentId, fromNumber, toNumber, streamId }, "Vobiz session started");
         } catch (err) {
           logger.error({ err, agentId }, "Failed to create Vobiz session");
           ws.close();
@@ -101,10 +116,13 @@ export async function handleVobizWebSocket(
 
       case "media": {
         if (!sessionId || !msg.media?.payload) break;
-        // Only process inbound audio (ignore outbound echo if track is specified)
+        // Ignore outbound echo tracks
         if (msg.media.track && msg.media.track !== "inbound") break;
         const session = getSession(sessionId);
-        if (session) session.pipeline.onAudioIn(Buffer.from(msg.media.payload, "base64"));
+        if (!session) break;
+        // Vobiz sends LINEAR16 PCM — pass directly as raw PCM (bypass mulaw decode)
+        const pcm8k = Buffer.from(msg.media.payload, "base64");
+        session.pipeline.onRawPcm8kIn(pcm8k);
         break;
       }
 
@@ -128,7 +146,6 @@ export async function handleVobizWebSocket(
 
 /**
  * Return VoiceXML telling Vobiz to open a bidirectional WebSocket stream.
- * Vobiz uses the same <Stream> directive as Twilio.
  */
 export function getVobizAnswerXML(wsBaseUrl: string, agentId: number): string {
   return `<?xml version="1.0" encoding="UTF-8"?>

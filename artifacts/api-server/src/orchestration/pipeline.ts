@@ -64,12 +64,14 @@ export class OrchestrationPipeline {
     );
   }
 
-  /** Called with each incoming mulaw audio chunk from telephony */
+  /** Called with each incoming mulaw audio chunk from Twilio/Plivo */
   onAudioIn(mulawChunk: Buffer): void {
-    if (this.closed || this.isProcessing) return;
+    this.onRawPcm8kIn(decodeMulaw(mulawChunk));
+  }
 
-    // Decode mulaw → linear16 PCM @ 8kHz
-    const pcm8k = decodeMulaw(mulawChunk);
+  /** Called with raw LINEAR16 PCM at 8 kHz — used by providers that don't use mulaw (e.g. Vobiz) */
+  onRawPcm8kIn(pcm8k: Buffer): void {
+    if (this.closed || this.isProcessing) return;
 
     if (hasSpeechEnergy(pcm8k, VAD_THRESHOLD)) {
       this.audioBuffer.push(pcm8k);
