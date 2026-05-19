@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { AgentStatus } from './agentStatus';
+import type { AgentTool } from './agentTool';
 
 export interface Agent {
   id: number;
@@ -77,6 +78,11 @@ export interface Agent {
      * @nullable
      */
   noiseCancellationEnabled?: boolean | null;
+  /**
+     * List of tools (functions) the LLM can invoke during a call
+     * @nullable
+     */
+  tools?: AgentTool[] | null;
   totalCalls?: number;
   successfulCalls?: number;
   /** @nullable */

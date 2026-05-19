@@ -1,8 +1,8 @@
 import OpenAI from "openai";
-import type { ConversationTurn, LLMAdapter } from "../../types.js";
+import type { ConversationTurn, LLMAdapter, ToolDefinition } from "../../types.js";
 
 /**
- * OpenAI — streaming chat completions
+ * OpenAI — streaming chat completions with native function/tool calling
  * Models: gpt-4o, gpt-4o-mini, gpt-4-turbo, gpt-3.5-turbo
  */
 export class OpenAILLM implements LLMAdapter {
@@ -18,8 +18,23 @@ export class OpenAILLM implements LLMAdapter {
     messages: ConversationTurn[],
     systemPrompt: string,
     onToken: (token: string) => void,
-    onDone: (fullText: string) => void
+    onDone: (fullText: string) => void,
+    options?: {
+      tools?: ToolDefinition[];
+      onToolCall?: (name: string, args: Record<string, unknown>) => void;
+    }
   ): Promise<void> {
+    const openAiTools = options?.tools?.length
+      ? options.tools.map((t) => ({
+          type: "function" as const,
+          function: {
+            name: t.name,
+            description: t.description,
+            parameters: t.parameters,
+          },
+        }))
+      : undefined;
+
     const stream = await this.client.chat.completions.create({
       model: this.model,
       stream: true,
@@ -27,16 +42,45 @@ export class OpenAILLM implements LLMAdapter {
         { role: "system", content: systemPrompt },
         ...messages.map((m) => ({ role: m.role, content: m.content })),
       ],
+      ...(openAiTools ? { tools: openAiTools, tool_choice: "auto" } : {}),
     });
 
     let full = "";
+    let toolCallName = "";
+    let toolCallArgs = "";
+    let isToolCall = false;
+
     for await (const chunk of stream) {
-      const token = chunk.choices[0]?.delta?.content ?? "";
+      const delta = chunk.choices[0]?.delta;
+      if (!delta) continue;
+
+      // Regular text tokens
+      const token = delta.content ?? "";
       if (token) {
         full += token;
         onToken(token);
       }
+
+      // Tool call deltas (streamed in fragments)
+      if (delta.tool_calls) {
+        isToolCall = true;
+        for (const tc of delta.tool_calls) {
+          if (tc.function?.name) toolCallName += tc.function.name;
+          if (tc.function?.arguments) toolCallArgs += tc.function.arguments;
+        }
+      }
     }
-    onDone(full);
+
+    if (isToolCall && toolCallName && options?.onToolCall) {
+      let args: Record<string, unknown> = {};
+      try {
+        args = JSON.parse(toolCallArgs || "{}") as Record<string, unknown>;
+      } catch {
+        // malformed args — pass empty
+      }
+      options.onToolCall(toolCallName, args);
+    } else {
+      onDone(full);
+    }
   }
 }

@@ -5,6 +5,7 @@
  * VoiceOrch - AI Voice Agent Orchestration Platform API
  * OpenAPI spec version: 0.1.0
  */
+import type { AgentTool } from './agentTool';
 
 export interface AgentInput {
   /** @minLength 1 */
@@ -29,4 +30,6 @@ export interface AgentInput {
   backchannelingFrequency?: number;
   webhookUrl?: string;
   noiseCancellationEnabled?: boolean;
+  /** List of tools (functions) the LLM can invoke during a call */
+  tools?: AgentTool[];
 }

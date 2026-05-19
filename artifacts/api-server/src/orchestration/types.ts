@@ -1,3 +1,28 @@
+// ── Agent tools ───────────────────────────────────────────────────────────────
+
+export interface CallTransferTool {
+  type: "call_transfer";
+  name: string;
+  description: string;
+  transferTo: string;
+  warmHandoffMessage?: string;
+}
+
+export type AgentTool = CallTransferTool;
+
+/** JSON Schema-compatible tool definition passed to LLM providers */
+export interface ToolDefinition {
+  name: string;
+  description: string;
+  parameters: {
+    type: "object";
+    properties: Record<string, { type: string; description?: string }>;
+    required?: string[];
+  };
+}
+
+// ── Core pipeline types ───────────────────────────────────────────────────────
+
 export interface AgentConfig {
   id: number;
   name: string;
@@ -22,6 +47,9 @@ export interface AgentConfig {
   backchannelingFrequency: number | null;
   webhookUrl: string | null;
   noiseCancellationEnabled: boolean;
+
+  // Tools
+  tools: AgentTool[];
 }
 
 export interface ProviderKey {
@@ -52,7 +80,11 @@ export interface LLMAdapter {
     messages: ConversationTurn[],
     systemPrompt: string,
     onToken: (token: string) => void,
-    onDone: (fullText: string) => void
+    onDone: (fullText: string) => void,
+    options?: {
+      tools?: ToolDefinition[];
+      onToolCall?: (name: string, args: Record<string, unknown>) => void;
+    }
   ): Promise<void>;
 }
 
@@ -81,6 +113,7 @@ export interface SessionConfig {
   onAudioOut: (audio: Buffer) => void;
   onTranscript: (speaker: "user" | "agent", text: string) => void;
   onCallEnd: () => void;
+  onCallTransfer?: (transferTo: string) => void;
   onBargeIn?: () => void;
   onMetrics?: (metrics: PipelineMetrics) => void;
 }

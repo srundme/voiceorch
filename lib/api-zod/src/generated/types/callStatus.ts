@@ -15,4 +15,5 @@ export const CallStatus = {
   completed: 'completed',
   failed: 'failed',
   cancelled: 'cancelled',
+  transferred: 'transferred',
 } as const;

@@ -43,6 +43,13 @@ export const ListAgentsResponseItem = zod.object({
   "backchannelingFrequency": zod.number().nullish().describe('Probability (0–1) of backchanneling on each turn'),
   "webhookUrl": zod.string().nullish().describe('URL to POST a call summary JSON to when the call ends'),
   "noiseCancellationEnabled": zod.boolean().nullish().describe('Request noise reduction from the ASR provider on every transcription call'),
+  "tools": zod.array(zod.object({
+  "type": zod.enum(['call_transfer']).describe('Tool type — currently only call_transfer is supported'),
+  "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
+  "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
+  "transferTo": zod.string().describe('E.164 phone number to transfer the call to (e.g. +12125551234)'),
+  "warmHandoffMessage": zod.string().optional().describe('Optional message the agent speaks to the caller before transferring')
+})).nullish().describe('List of tools (functions) the LLM can invoke during a call'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -79,7 +86,14 @@ export const CreateAgentBody = zod.object({
   "backchannelingEnabled": zod.boolean().optional(),
   "backchannelingFrequency": zod.number().optional(),
   "webhookUrl": zod.string().optional(),
-  "noiseCancellationEnabled": zod.boolean().optional()
+  "noiseCancellationEnabled": zod.boolean().optional(),
+  "tools": zod.array(zod.object({
+  "type": zod.enum(['call_transfer']).describe('Tool type — currently only call_transfer is supported'),
+  "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
+  "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
+  "transferTo": zod.string().describe('E.164 phone number to transfer the call to (e.g. +12125551234)'),
+  "warmHandoffMessage": zod.string().optional().describe('Optional message the agent speaks to the caller before transferring')
+})).optional().describe('List of tools (functions) the LLM can invoke during a call')
 })
 
 
@@ -114,6 +128,13 @@ export const GetAgentResponse = zod.object({
   "backchannelingFrequency": zod.number().nullish().describe('Probability (0–1) of backchanneling on each turn'),
   "webhookUrl": zod.string().nullish().describe('URL to POST a call summary JSON to when the call ends'),
   "noiseCancellationEnabled": zod.boolean().nullish().describe('Request noise reduction from the ASR provider on every transcription call'),
+  "tools": zod.array(zod.object({
+  "type": zod.enum(['call_transfer']).describe('Tool type — currently only call_transfer is supported'),
+  "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
+  "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
+  "transferTo": zod.string().describe('E.164 phone number to transfer the call to (e.g. +12125551234)'),
+  "warmHandoffMessage": zod.string().optional().describe('Optional message the agent speaks to the caller before transferring')
+})).nullish().describe('List of tools (functions) the LLM can invoke during a call'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -151,6 +172,13 @@ export const UpdateAgentBody = zod.object({
   "backchannelingFrequency": zod.number().optional(),
   "webhookUrl": zod.string().optional(),
   "noiseCancellationEnabled": zod.boolean().optional(),
+  "tools": zod.array(zod.object({
+  "type": zod.enum(['call_transfer']).describe('Tool type — currently only call_transfer is supported'),
+  "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
+  "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
+  "transferTo": zod.string().describe('E.164 phone number to transfer the call to (e.g. +12125551234)'),
+  "warmHandoffMessage": zod.string().optional().describe('Optional message the agent speaks to the caller before transferring')
+})).optional().describe('List of tools (functions) the LLM can invoke during a call'),
   "status": zod.string().optional()
 })
 
@@ -178,6 +206,13 @@ export const UpdateAgentResponse = zod.object({
   "backchannelingFrequency": zod.number().nullish().describe('Probability (0–1) of backchanneling on each turn'),
   "webhookUrl": zod.string().nullish().describe('URL to POST a call summary JSON to when the call ends'),
   "noiseCancellationEnabled": zod.boolean().nullish().describe('Request noise reduction from the ASR provider on every transcription call'),
+  "tools": zod.array(zod.object({
+  "type": zod.enum(['call_transfer']).describe('Tool type — currently only call_transfer is supported'),
+  "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
+  "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
+  "transferTo": zod.string().describe('E.164 phone number to transfer the call to (e.g. +12125551234)'),
+  "warmHandoffMessage": zod.string().optional().describe('Optional message the agent speaks to the caller before transferring')
+})).nullish().describe('List of tools (functions) the LLM can invoke during a call'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -225,6 +260,13 @@ export const ToggleAgentResponse = zod.object({
   "backchannelingFrequency": zod.number().nullish().describe('Probability (0–1) of backchanneling on each turn'),
   "webhookUrl": zod.string().nullish().describe('URL to POST a call summary JSON to when the call ends'),
   "noiseCancellationEnabled": zod.boolean().nullish().describe('Request noise reduction from the ASR provider on every transcription call'),
+  "tools": zod.array(zod.object({
+  "type": zod.enum(['call_transfer']).describe('Tool type — currently only call_transfer is supported'),
+  "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
+  "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
+  "transferTo": zod.string().describe('E.164 phone number to transfer the call to (e.g. +12125551234)'),
+  "warmHandoffMessage": zod.string().optional().describe('Optional message the agent speaks to the caller before transferring')
+})).nullish().describe('List of tools (functions) the LLM can invoke during a call'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -245,7 +287,7 @@ export const ListCallsResponseItem = zod.object({
   "id": zod.number(),
   "agentId": zod.number(),
   "agentName": zod.string(),
-  "status": zod.enum(['pending', 'in_progress', 'completed', 'failed', 'cancelled']),
+  "status": zod.enum(['pending', 'in_progress', 'completed', 'failed', 'cancelled', 'transferred']),
   "toNumber": zod.string(),
   "fromNumber": zod.string(),
   "durationSeconds": zod.number().nullish(),
@@ -284,7 +326,7 @@ export const GetCallResponse = zod.object({
   "id": zod.number(),
   "agentId": zod.number(),
   "agentName": zod.string(),
-  "status": zod.enum(['pending', 'in_progress', 'completed', 'failed', 'cancelled']),
+  "status": zod.enum(['pending', 'in_progress', 'completed', 'failed', 'cancelled', 'transferred']),
   "toNumber": zod.string(),
   "fromNumber": zod.string(),
   "durationSeconds": zod.number().nullish(),
@@ -320,7 +362,7 @@ export const UpdateCallResponse = zod.object({
   "id": zod.number(),
   "agentId": zod.number(),
   "agentName": zod.string(),
-  "status": zod.enum(['pending', 'in_progress', 'completed', 'failed', 'cancelled']),
+  "status": zod.enum(['pending', 'in_progress', 'completed', 'failed', 'cancelled', 'transferred']),
   "toNumber": zod.string(),
   "fromNumber": zod.string(),
   "durationSeconds": zod.number().nullish(),
@@ -357,7 +399,7 @@ export const EndCallResponse = zod.object({
   "id": zod.number(),
   "agentId": zod.number(),
   "agentName": zod.string(),
-  "status": zod.enum(['pending', 'in_progress', 'completed', 'failed', 'cancelled']),
+  "status": zod.enum(['pending', 'in_progress', 'completed', 'failed', 'cancelled', 'transferred']),
   "toNumber": zod.string(),
   "fromNumber": zod.string(),
   "durationSeconds": zod.number().nullish(),
@@ -453,7 +495,7 @@ export const GetRecentCallsResponseItem = zod.object({
   "id": zod.number(),
   "agentId": zod.number(),
   "agentName": zod.string(),
-  "status": zod.enum(['pending', 'in_progress', 'completed', 'failed', 'cancelled']),
+  "status": zod.enum(['pending', 'in_progress', 'completed', 'failed', 'cancelled', 'transferred']),
   "toNumber": zod.string(),
   "fromNumber": zod.string(),
   "durationSeconds": zod.number().nullish(),

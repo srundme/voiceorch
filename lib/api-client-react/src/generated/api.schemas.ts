@@ -9,6 +9,29 @@ export interface HealthStatus {
   status: string;
 }
 
+/**
+ * Tool type — currently only call_transfer is supported
+ */
+export type AgentToolType = typeof AgentToolType[keyof typeof AgentToolType];
+
+
+export const AgentToolType = {
+  call_transfer: 'call_transfer',
+} as const;
+
+export interface AgentTool {
+  /** Tool type — currently only call_transfer is supported */
+  type: AgentToolType;
+  /** LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human) */
+  name: string;
+  /** Explains to the LLM when and why to invoke this tool */
+  description: string;
+  /** E.164 phone number to transfer the call to (e.g. +12125551234) */
+  transferTo: string;
+  /** Optional message the agent speaks to the caller before transferring */
+  warmHandoffMessage?: string;
+}
+
 export type AgentStatus = typeof AgentStatus[keyof typeof AgentStatus];
 
 
@@ -88,6 +111,11 @@ export interface Agent {
      * @nullable
      */
   noiseCancellationEnabled?: boolean | null;
+  /**
+     * List of tools (functions) the LLM can invoke during a call
+     * @nullable
+     */
+  tools?: AgentTool[] | null;
   totalCalls?: number;
   successfulCalls?: number;
   /** @nullable */
@@ -119,6 +147,8 @@ export interface AgentInput {
   backchannelingFrequency?: number;
   webhookUrl?: string;
   noiseCancellationEnabled?: boolean;
+  /** List of tools (functions) the LLM can invoke during a call */
+  tools?: AgentTool[];
 }
 
 export interface AgentUpdate {
@@ -143,6 +173,8 @@ export interface AgentUpdate {
   backchannelingFrequency?: number;
   webhookUrl?: string;
   noiseCancellationEnabled?: boolean;
+  /** List of tools (functions) the LLM can invoke during a call */
+  tools?: AgentTool[];
   status?: string;
 }
 
@@ -155,6 +187,7 @@ export const CallStatus = {
   completed: 'completed',
   failed: 'failed',
   cancelled: 'cancelled',
+  transferred: 'transferred',
 } as const;
 
 export interface Call {

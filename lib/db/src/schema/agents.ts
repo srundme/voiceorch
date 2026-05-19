@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, real, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, real, boolean, json } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -28,6 +28,9 @@ export const agentsTable = pgTable("agents", {
   backchannelingFrequency: real("backchanneling_frequency"),
   webhookUrl: text("webhook_url"),
   noiseCancellationEnabled: boolean("noise_cancellation_enabled").default(false),
+
+  // ── Tools ─────────────────────────────────────────────────────────────────────
+  tools: json("tools").$type<Record<string, unknown>[]>(),
 
   // ── Stats ────────────────────────────────────────────────────────────────────
   totalCalls: integer("total_calls").notNull().default(0),

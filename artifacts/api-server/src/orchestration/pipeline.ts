@@ -2,7 +2,7 @@ import { createSTTAdapter } from "./adapters/stt/index.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { createTTSAdapter } from "./adapters/tts/index.js";
 import { decodeMulaw, encodeMulaw, upsample8to16, downsample16to8, hasSpeechEnergy, NoiseCanceller } from "./audio.js";
-import type { AgentConfig, ConversationTurn, SessionConfig, StreamSTT } from "./types.js";
+import type { AgentConfig, AgentTool, ConversationTurn, SessionConfig, StreamSTT, ToolDefinition } from "./types.js";
 import { logger } from "../lib/logger.js";
 
 const VAD_SILENCE_MS   = 250;    // silence window before STT flush
@@ -295,6 +295,43 @@ export class OrchestrationPipeline {
     }
   }
 
+  // ── Tool execution ───────────────────────────────────────────────────────────
+
+  private async handleToolCall(toolName: string, args: Record<string, unknown>): Promise<void> {
+    const tool = this.agent.tools.find((t) => t.name === toolName);
+    if (!tool) {
+      logger.warn({ callId: this.config.callId, toolName }, "LLM called unknown tool — ignoring");
+      return;
+    }
+
+    logger.info({ callId: this.config.callId, toolName, toolType: tool.type, args }, "Tool invoked by LLM");
+
+    if (tool.type === "call_transfer") {
+      await this.executeCallTransfer(tool, args);
+    }
+  }
+
+  private async executeCallTransfer(tool: AgentTool & { type: "call_transfer" }, _args: Record<string, unknown>): Promise<void> {
+    logger.info({ callId: this.config.callId, transferTo: tool.transferTo }, "Executing call transfer");
+
+    // Speak the warm handoff message (if configured) before transferring
+    if (tool.warmHandoffMessage?.trim()) {
+      this.config.onTranscript("agent", tool.warmHandoffMessage);
+      this.isPlaying = true;
+      try {
+        await this.playSentence(tool.warmHandoffMessage);
+      } catch (err) {
+        logger.error({ callId: this.config.callId, err }, "Warm handoff TTS error");
+      } finally {
+        this.isPlaying = false;
+      }
+    }
+
+    // Notify session layer (triggers telephony transfer + marks call as transferred)
+    this.config.onCallTransfer?.(tool.transferTo);
+    this.config.onCallEnd();
+  }
+
   // ── Core turn logic ───────────────────────────────────────────────────────────
 
   private async processTurn(transcript: string, sttLatencyMs: number): Promise<void> {
@@ -331,12 +368,30 @@ export class OrchestrationPipeline {
       }
     }
 
+    // ── Build tool definitions from agent config ──
+    const toolDefs: ToolDefinition[] = this.agent.tools.map((t) => ({
+      name: t.name,
+      description: t.description,
+      parameters: {
+        type: "object" as const,
+        properties: {
+          reason: {
+            type: "string",
+            description: "Brief reason for invoking this tool",
+          },
+        },
+        required: [],
+      },
+    }));
+
     const llmStart = Date.now();
     let llmFirstTokenAt: number | null = null;
 
     let llmResponse = "";
     let pendingText  = "";
     let allEnqueued  = false;
+    let triggeredToolName: string | null = null;
+    let triggeredToolArgs: Record<string, unknown> = {};
 
     const sentenceQueue: string[] = [];
     let wakePlayer: (() => void) | null = null;
@@ -384,8 +439,28 @@ export class OrchestrationPipeline {
         for (const s of sentences) enqueue(s);
         pendingText = remainder;
       },
-      async (fullText) => { llmResponse = fullText; }
+      async (fullText) => { llmResponse = fullText; },
+      toolDefs.length > 0
+        ? {
+            tools: toolDefs,
+            onToolCall: (name, args) => {
+              triggeredToolName = name;
+              triggeredToolArgs = args;
+            },
+          }
+        : undefined
     );
+
+    // ── If LLM called a tool, execute it and skip TTS ──
+    if (triggeredToolName) {
+      allEnqueued = true;
+      const finalWake = wakePlayer as (() => void) | null;
+      wakePlayer = null;
+      if (finalWake) finalWake();
+      await playPromise;
+      await this.handleToolCall(triggeredToolName, triggeredToolArgs);
+      return;
+    }
 
     const tail = pendingText.trim();
     if (tail.length >= 2) enqueue(tail);

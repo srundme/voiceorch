@@ -1,7 +1,7 @@
 import { db, agentsTable, callsTable, providersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { OrchestrationPipeline } from "./pipeline.js";
-import type { AgentConfig, TelephonyProvider, PipelineMetrics } from "./types.js";
+import type { AgentConfig, AgentTool, TelephonyProvider, PipelineMetrics } from "./types.js";
 import { logger } from "../lib/logger.js";
 
 interface MetricsAcc {
@@ -16,6 +16,8 @@ interface ActiveSession {
   pipeline: OrchestrationPipeline;
   startedAt: Date;
   metricsAcc: MetricsAcc;
+  wasTransferred: boolean;
+  transferredTo: string | null;
 }
 
 const sessions = new Map<string, ActiveSession>();
@@ -39,6 +41,9 @@ export async function createSession(params: {
     ? agent.endCallPhrases.split(",").map(s => s.trim()).filter(Boolean)
     : [];
 
+  // Parse tools JSON column (null-safe, type-cast to AgentTool[])
+  const tools = Array.isArray(agent.tools) ? (agent.tools as unknown as AgentTool[]) : [];
+
   const agentConfig: AgentConfig = {
     id: agent.id,
     name: agent.name,
@@ -61,6 +66,7 @@ export async function createSession(params: {
     backchannelingFrequency: agent.backchannelingFrequency ?? null,
     webhookUrl: agent.webhookUrl ?? null,
     noiseCancellationEnabled: agent.noiseCancellationEnabled ?? false,
+    tools,
   };
 
   const providerRows = await db.select().from(providersTable).where(eq(providersTable.isActive, true));
@@ -80,6 +86,8 @@ export async function createSession(params: {
   if (!callRecord) throw new Error("Failed to create call record");
 
   const metricsAcc: MetricsAcc = { sttTotal: 0, llmTotal: 0, ttsTotal: 0, count: 0 };
+  let wasTransferred = false;
+  let transferredTo: string | null = null;
 
   const pipeline = new OrchestrationPipeline({
     callId: callRecord.id,
@@ -91,6 +99,11 @@ export async function createSession(params: {
       logger.debug({ callId: callRecord.id, speaker, text: text.slice(0, 80) }, "Transcript");
     },
     onCallEnd: params.onCallEnd,
+    onCallTransfer: (to) => {
+      wasTransferred = true;
+      transferredTo = to;
+      logger.info({ callId: callRecord.id, transferTo: to }, "Call transfer initiated");
+    },
     onBargeIn: params.onBargeIn,
     onMetrics: (m: PipelineMetrics) => {
       metricsAcc.sttTotal += m.sttLatencyMs;
@@ -111,6 +124,8 @@ export async function createSession(params: {
     pipeline,
     startedAt: new Date(),
     metricsAcc,
+    get wasTransferred() { return wasTransferred; },
+    get transferredTo() { return transferredTo; },
   });
 
   setTimeout(() => { void endSession(sessionId); }, agentConfig.maxDuration * 1000);
@@ -152,14 +167,18 @@ export async function endSession(sessionId: string): Promise<void> {
   const avgTtsMs = metricsAcc.count > 0 ? Math.round(metricsAcc.ttsTotal / metricsAcc.count) : null;
 
   try {
+    const callStatus = session.wasTransferred ? "transferred" : "completed";
     await db.update(callsTable).set({
-      status: "completed",
+      status: callStatus,
       endedAt,
       durationSeconds,
       transcript: transcript || null,
       sttLatencyMs: avgSttMs,
       llmLatencyMs: avgLlmMs,
       ttsFirstChunkMs: avgTtsMs,
+      ...(session.wasTransferred && session.transferredTo
+        ? { metadata: JSON.stringify({ transferredTo: session.transferredTo }) }
+        : {}),
     }).where(eq(callsTable.id, session.callId));
 
     const [call] = await db.select().from(callsTable).where(eq(callsTable.id, session.callId));

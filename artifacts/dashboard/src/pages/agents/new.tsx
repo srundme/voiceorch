@@ -1,10 +1,10 @@
 import React, { useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { ArrowLeft, Save, Bot } from "lucide-react";
+import { ArrowLeft, Save, Bot, Plus, Trash2, PhoneForwarded } from "lucide-react";
 import { useCreateAgent, getListAgentsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
-import { useForm, useWatch } from "react-hook-form";
+import { useForm, useWatch, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -149,6 +149,13 @@ const agentFormSchema = z.object({
   backchannelingFrequency:  z.number().min(0).max(1).optional(),
   webhookUrl:               z.string().optional(),
   noiseCancellationEnabled: z.boolean().optional(),
+  tools: z.array(z.object({
+    type: z.literal("call_transfer"),
+    name: z.string().min(1, "Function name required"),
+    description: z.string().min(1, "Description required"),
+    transferTo: z.string().min(1, "Phone number required"),
+    warmHandoffMessage: z.string().optional(),
+  })).optional(),
 });
 
 type AgentFormValues = z.infer<typeof agentFormSchema>;
@@ -207,7 +214,13 @@ export default function AgentNew() {
       backchannelingFrequency:  0.5,
       webhookUrl:               "",
       noiseCancellationEnabled: false,
+      tools: [],
     },
+  });
+
+  const { fields: toolFields, append: appendTool, remove: removeTool } = useFieldArray({
+    control: form.control,
+    name: "tools",
   });
 
   const asrProvider = useWatch({ control: form.control, name: "asrProvider" });
@@ -604,6 +617,73 @@ export default function AgentNew() {
               </CardContent>
             </Card>
           </div>
+
+          {/* ── Tools ── */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2"><PhoneForwarded className="h-4 w-4" /> Tools</CardTitle>
+                  <CardDescription>Actions the LLM can trigger mid-call. The agent decides when to use them based on the conversation.</CardDescription>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => appendTool({ type: "call_transfer", name: "transfer_to_human", description: "Transfer the call to a human agent when the caller requests it or the issue cannot be resolved automatically.", transferTo: "", warmHandoffMessage: "" })}
+                >
+                  <Plus className="h-4 w-4 mr-1" /> Add Tool
+                </Button>
+              </div>
+            </CardHeader>
+            {toolFields.length > 0 && (
+              <CardContent className="space-y-4">
+                {toolFields.map((field, index) => (
+                  <div key={field.id} className="border rounded-md p-4 bg-muted/20 space-y-3 relative">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Call Transfer</span>
+                      <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => removeTool(index)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <FormField control={form.control} name={`tools.${index}.name`} render={({ field: f }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs">Function Name</FormLabel>
+                          <FormControl><Input placeholder="e.g. transfer_to_human" {...f} /></FormControl>
+                          <FormDescription className="text-[10px]">snake_case, no spaces — used by the LLM to call this tool</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <FormField control={form.control} name={`tools.${index}.transferTo`} render={({ field: f }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs">Transfer To (phone number)</FormLabel>
+                          <FormControl><Input placeholder="+12125551234" {...f} /></FormControl>
+                          <FormDescription className="text-[10px]">E.164 format — the human agent's number</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    </div>
+                    <FormField control={form.control} name={`tools.${index}.description`} render={({ field: f }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Description (shown to LLM)</FormLabel>
+                        <FormControl><Textarea className="min-h-[60px] text-sm" placeholder="Transfer the call to a human agent when the caller is frustrated or the issue cannot be resolved automatically." {...f} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name={`tools.${index}.warmHandoffMessage`} render={({ field: f }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Warm Handoff Message (optional)</FormLabel>
+                        <FormControl><Input placeholder="e.g. I'm connecting you with a specialist now. Please hold for a moment." {...f} /></FormControl>
+                        <FormDescription className="text-[10px]">Spoken to the caller before the transfer happens</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  </div>
+                ))}
+              </CardContent>
+            )}
+          </Card>
 
           <div className="fixed bottom-0 left-0 md:left-64 right-0 p-4 bg-background/80 backdrop-blur-sm border-t border-border flex justify-end z-10">
             <div className="max-w-5xl mx-auto w-full flex justify-end gap-4">
