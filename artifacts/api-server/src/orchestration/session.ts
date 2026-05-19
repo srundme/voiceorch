@@ -18,7 +18,6 @@ interface ActiveSession {
   metricsAcc: MetricsAcc;
 }
 
-// In-memory session registry
 const sessions = new Map<string, ActiveSession>();
 
 export async function createSession(params: {
@@ -35,6 +34,11 @@ export async function createSession(params: {
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, params.agentId));
   if (!agent) throw new Error(`Agent ${params.agentId} not found`);
 
+  // Parse comma-separated end-call phrases
+  const endCallPhrases = agent.endCallPhrases
+    ? agent.endCallPhrases.split(",").map(s => s.trim()).filter(Boolean)
+    : [];
+
   const agentConfig: AgentConfig = {
     id: agent.id,
     name: agent.name,
@@ -49,6 +53,13 @@ export async function createSession(params: {
     ttsVoice: agent.ttsVoice,
     ttsModel: agent.ttsModel,
     telephonyProvider: agent.telephonyProvider,
+    greetingMessage: agent.greetingMessage ?? null,
+    endCallPhrases,
+    silenceTimeoutSeconds: agent.silenceTimeoutSeconds ?? null,
+    language: agent.language ?? null,
+    backchannelingEnabled: agent.backchannelingEnabled ?? false,
+    backchannelingFrequency: agent.backchannelingFrequency ?? null,
+    webhookUrl: agent.webhookUrl ?? null,
   };
 
   const providerRows = await db.select().from(providersTable).where(eq(providersTable.isActive, true));
@@ -67,7 +78,6 @@ export async function createSession(params: {
 
   if (!callRecord) throw new Error("Failed to create call record");
 
-  let fullTranscript = "";
   const metricsAcc: MetricsAcc = { sttTotal: 0, llmTotal: 0, ttsTotal: 0, count: 0 };
 
   const pipeline = new OrchestrationPipeline({
@@ -77,7 +87,7 @@ export async function createSession(params: {
     telephonyProvider: params.telephonyProvider,
     onAudioOut: params.onAudioOut,
     onTranscript: (speaker, text) => {
-      fullTranscript += `${speaker === "user" ? "Caller" : "Agent"}: ${text}\n`;
+      logger.debug({ callId: callRecord.id, speaker, text: text.slice(0, 80) }, "Transcript");
     },
     onCallEnd: params.onCallEnd,
     onBargeIn: params.onBargeIn,
@@ -135,7 +145,6 @@ export async function endSession(sessionId: string): Promise<void> {
   const durationSeconds = Math.floor((endedAt.getTime() - session.startedAt.getTime()) / 1000);
   const transcript = session.pipeline.getTranscript();
 
-  // Compute average latency metrics across all turns
   const { metricsAcc } = session;
   const avgSttMs = metricsAcc.count > 0 ? Math.round(metricsAcc.sttTotal / metricsAcc.count) : null;
   const avgLlmMs = metricsAcc.count > 0 ? Math.round(metricsAcc.llmTotal / metricsAcc.count) : null;
@@ -164,6 +173,28 @@ export async function endSession(sessionId: string): Promise<void> {
           successfulCalls: newSuccessful,
           avgDurationSeconds: newAvg,
         }).where(eq(agentsTable.id, ag.id));
+
+        // ── Post-call webhook ─────────────────────────────────────────────────
+        if (ag.webhookUrl) {
+          fetch(ag.webhookUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              callId: session.callId,
+              agentId: ag.id,
+              agentName: ag.name,
+              status: "completed",
+              durationSeconds,
+              transcript,
+              avgSttLatencyMs: avgSttMs,
+              avgLlmLatencyMs: avgLlmMs,
+              avgTtsLatencyMs: avgTtsMs,
+              endedAt: endedAt.toISOString(),
+            }),
+          }).catch((err) => {
+            logger.error({ sessionId, webhookUrl: ag.webhookUrl, err }, "Webhook delivery failed");
+          });
+        }
       }
     }
   } catch (err) {

@@ -63,6 +63,23 @@ const TELEPHONY_PROVIDERS = [
   { value: "vobiz",  label: "Vobiz" },
 ];
 
+const LANGUAGES = [
+  { value: "en-US", label: "English (US)" },
+  { value: "en-GB", label: "English (UK)" },
+  { value: "en-IN", label: "English (India)" },
+  { value: "es",    label: "Spanish" },
+  { value: "es-MX", label: "Spanish (Mexico)" },
+  { value: "fr",    label: "French" },
+  { value: "de",    label: "German" },
+  { value: "it",    label: "Italian" },
+  { value: "pt-BR", label: "Portuguese (Brazil)" },
+  { value: "hi",    label: "Hindi" },
+  { value: "ja",    label: "Japanese" },
+  { value: "ko",    label: "Korean" },
+  { value: "zh",    label: "Chinese (Mandarin)" },
+  { value: "ar",    label: "Arabic" },
+];
+
 const ASR_MODELS: Record<string, { value: string; label: string }[]> = {
   azure:      [{ value: "en-US-standard", label: "en-US-standard" }, { value: "en-US-enhanced", label: "en-US-enhanced" }, { value: "en-IN-standard", label: "en-IN-standard" }],
   assemblyai: [{ value: "best", label: "Best (default)" }, { value: "nano", label: "Nano (fast)" }],
@@ -125,6 +142,13 @@ const agentFormSchema = z.object({
   systemPrompt:      z.string().min(1, "System prompt is required"),
   temperature:       z.number().min(0).max(2).optional(),
   maxDuration:       z.number().min(10).max(3600).optional(),
+  greetingMessage:          z.string().optional(),
+  endCallPhrases:           z.string().optional(),
+  silenceTimeoutSeconds:    z.number().min(5).max(300).optional(),
+  language:                 z.string().optional(),
+  backchannelingEnabled:    z.boolean().optional(),
+  backchannelingFrequency:  z.number().min(0).max(1).optional(),
+  webhookUrl:               z.string().optional(),
 });
 
 type AgentFormValues = z.infer<typeof agentFormSchema>;
@@ -173,10 +197,12 @@ export default function AgentEdit() {
       llmProvider: "openai", llmModel: "", ttsProvider: "elevenlabs",
       ttsVoice: "", ttsModel: "", telephonyProvider: "twilio",
       systemPrompt: "", temperature: 0.7, maxDuration: 600,
+      greetingMessage: "", endCallPhrases: "", silenceTimeoutSeconds: 30,
+      language: "en-US", backchannelingEnabled: false, backchannelingFrequency: 0.5,
+      webhookUrl: "",
     },
   });
 
-  // Pre-fill form once agent data loads
   useEffect(() => {
     if (!agent) return;
     form.reset({
@@ -193,12 +219,21 @@ export default function AgentEdit() {
       systemPrompt:      agent.systemPrompt,
       temperature:       agent.temperature ?? 0.7,
       maxDuration:       agent.maxDuration ?? 600,
+      greetingMessage:         agent.greetingMessage ?? "",
+      endCallPhrases:          agent.endCallPhrases ?? "",
+      silenceTimeoutSeconds:   agent.silenceTimeoutSeconds ?? 30,
+      language:                agent.language ?? "en-US",
+      backchannelingEnabled:   agent.backchannelingEnabled ?? false,
+      backchannelingFrequency: agent.backchannelingFrequency ?? 0.5,
+      webhookUrl:              agent.webhookUrl ?? "",
     });
   }, [agent]);
 
   const asrProvider = useWatch({ control: form.control, name: "asrProvider" });
   const llmProvider = useWatch({ control: form.control, name: "llmProvider" });
   const ttsProvider = useWatch({ control: form.control, name: "ttsProvider" });
+  const backchannelingEnabled = useWatch({ control: form.control, name: "backchannelingEnabled" });
+  const backchannelingFrequency = useWatch({ control: form.control, name: "backchannelingFrequency" });
 
   const onSubmit = (data: AgentFormValues) => {
     updateAgent.mutate(
@@ -287,7 +322,7 @@ export default function AgentEdit() {
                   <FormItem>
                     <FormLabel>System Prompt</FormLabel>
                     <FormControl>
-                      <Textarea placeholder="You are a helpful assistant..." className="min-h-[150px] font-mono text-sm" {...field} />
+                      <Textarea placeholder="You are a helpful assistant..." className="min-h-[120px] font-mono text-sm" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -305,6 +340,115 @@ export default function AgentEdit() {
                     <FormMessage />
                   </FormItem>
                 )} />
+              </CardContent>
+            </Card>
+
+            {/* ── Conversation Behavior ── */}
+            <Card className="md:col-span-2">
+              <CardHeader>
+                <CardTitle>Conversation Behavior</CardTitle>
+                <CardDescription>Control how the agent opens, responds, and ends calls.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <FormField control={form.control} name="greetingMessage" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Greeting Message</FormLabel>
+                        <FormControl>
+                          <Textarea placeholder="e.g. Hello! Thanks for calling. How can I help you today?" className="min-h-[80px]" {...field} />
+                        </FormControl>
+                        <FormDescription>First thing the agent says. Leave blank to let the LLM generate one.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="endCallPhrases" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>End-Call Phrases</FormLabel>
+                        <FormControl>
+                          <Input placeholder="goodbye, bye, have a great day, thank you for calling" {...field} />
+                        </FormControl>
+                        <FormDescription>Comma-separated. Triggers automatic hangup when detected.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <FormField control={form.control} name="language" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Language</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                            <FormControl><SelectTrigger><SelectValue placeholder="Select language" /></SelectTrigger></FormControl>
+                            <SelectContent>
+                              {LANGUAGES.map(l => <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                          <FormDescription>Passed to ASR + TTS.</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+
+                      <FormField control={form.control} name="silenceTimeoutSeconds" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Silence Timeout (s)</FormLabel>
+                          <FormControl>
+                            <Input type="number" min={5} max={300} placeholder="30" {...field}
+                              onChange={(e) => field.onChange(parseInt(e.target.value, 10))} />
+                          </FormControl>
+                          <FormDescription>Hang up after N seconds silence.</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    </div>
+
+                    <div className="space-y-3 p-4 border rounded-md bg-muted/20">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium leading-none">Backchanneling</p>
+                          <p className="text-xs text-muted-foreground mt-1">Agent says "I see", "Got it" etc. while thinking</p>
+                        </div>
+                        <FormField control={form.control} name="backchannelingEnabled" render={({ field }) => (
+                          <FormItem>
+                            <Select onValueChange={(v) => field.onChange(v === "true")} value={field.value ? "true" : "false"}>
+                              <FormControl><SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger></FormControl>
+                              <SelectContent>
+                                <SelectItem value="false">Off</SelectItem>
+                                <SelectItem value="true">On</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </FormItem>
+                        )} />
+                      </div>
+                      {backchannelingEnabled && (
+                        <FormField control={form.control} name="backchannelingFrequency" render={({ field }) => (
+                          <FormItem>
+                            <div className="flex justify-between text-xs text-muted-foreground">
+                              <span>Frequency</span>
+                              <span>{Math.round((backchannelingFrequency ?? 0.5) * 100)}% of turns</span>
+                            </div>
+                            <FormControl>
+                              <Slider min={0} max={1} step={0.05} value={[field.value ?? 0.5]}
+                                onValueChange={(vals) => field.onChange(vals[0])} />
+                            </FormControl>
+                          </FormItem>
+                        )} />
+                      )}
+                    </div>
+
+                    <FormField control={form.control} name="webhookUrl" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Post-Call Webhook URL</FormLabel>
+                        <FormControl>
+                          <Input placeholder="https://your-server.com/webhook/calls" {...field} />
+                        </FormControl>
+                        <FormDescription>Receives a JSON summary when each call ends.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  </div>
+                </div>
               </CardContent>
             </Card>
 
@@ -408,9 +552,7 @@ export default function AgentEdit() {
                     )}
                     <FormField control={form.control} name="ttsVoice" render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-xs">
-                          {TTS_VOICES[ttsProvider] ? "Voice" : "Voice ID"}
-                        </FormLabel>
+                        <FormLabel className="text-xs">{TTS_VOICES[ttsProvider] ? "Voice" : "Voice ID"}</FormLabel>
                         <FormControl>
                           {TTS_VOICES[ttsProvider] ? (
                             <ModelSelect options={TTS_VOICES[ttsProvider]!} value={field.value} onChange={field.onChange} placeholder="Select voice" />
@@ -463,7 +605,6 @@ export default function AgentEdit() {
             </Card>
           </div>
 
-          {/* ── Footer ── */}
           <div className="fixed bottom-0 left-0 md:left-64 right-0 p-4 bg-background/80 backdrop-blur-sm border-t border-border flex justify-end z-10">
             <div className="max-w-5xl mx-auto w-full flex justify-end gap-4">
               <Link href={`/agents/${id}`}><Button type="button" variant="outline">Cancel</Button></Link>

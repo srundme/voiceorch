@@ -21,4 +21,11 @@ export interface AgentInput {
   systemPrompt: string;
   temperature?: number;
   maxDuration?: number;
+  greetingMessage?: string;
+  endCallPhrases?: string;
+  silenceTimeoutSeconds?: number;
+  language?: string;
+  backchannelingEnabled?: boolean;
+  backchannelingFrequency?: number;
+  webhookUrl?: string;
 }

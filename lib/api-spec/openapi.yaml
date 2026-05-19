@@ -473,6 +473,27 @@ components:
         maxDuration:
           type: ["integer", "null"]
           description: Max call duration in seconds
+        greetingMessage:
+          type: ["string", "null"]
+          description: First thing the agent says when a call connects. If blank the LLM generates an opener.
+        endCallPhrases:
+          type: ["string", "null"]
+          description: Comma-separated phrases that trigger hangup (e.g. "goodbye,bye,thanks for calling")
+        silenceTimeoutSeconds:
+          type: ["integer", "null"]
+          description: Hang up automatically after this many seconds of caller silence
+        language:
+          type: ["string", "null"]
+          description: Primary language code passed to ASR / TTS (e.g. en-US, es, fr, hi)
+        backchannelingEnabled:
+          type: ["boolean", "null"]
+          description: Inject short acknowledgement phrases while the LLM is thinking
+        backchannelingFrequency:
+          type: ["number", "null"]
+          description: Probability (0–1) of backchanneling on each turn
+        webhookUrl:
+          type: ["string", "null"]
+          description: URL to POST a call summary JSON to when the call ends
         totalCalls:
           type: integer
         successfulCalls:
@@ -517,6 +538,20 @@ components:
           type: number
         maxDuration:
           type: integer
+        greetingMessage:
+          type: string
+        endCallPhrases:
+          type: string
+        silenceTimeoutSeconds:
+          type: integer
+        language:
+          type: string
+        backchannelingEnabled:
+          type: boolean
+        backchannelingFrequency:
+          type: number
+        webhookUrl:
+          type: string
 
     AgentUpdate:
       type: object
@@ -547,6 +582,20 @@ components:
           type: number
         maxDuration:
           type: integer
+        greetingMessage:
+          type: string
+        endCallPhrases:
+          type: string
+        silenceTimeoutSeconds:
+          type: integer
+        language:
+          type: string
+        backchannelingEnabled:
+          type: boolean
+        backchannelingFrequency:
+          type: number
+        webhookUrl:
+          type: string
         status:
           type: string
 

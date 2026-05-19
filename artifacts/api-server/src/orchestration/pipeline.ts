@@ -11,6 +11,10 @@ const CHUNK_SIZE_MULAW = 160;    // 20ms @ 8kHz mulaw for paced batch playback
 const VAD_THRESHOLD    = 100;    // RMS threshold for speech detection
 const STREAM_ACCUM_BYTES = 640;  // 20ms of 16kHz PCM before forwarding a TTS stream chunk
 
+const BACKCHANNEL_PHRASES = [
+  "I see.", "Got it.", "Okay.", "Mm-hmm.", "Sure.", "I understand.", "Go on.",
+];
+
 export class OrchestrationPipeline {
   private config: SessionConfig;
   private agent: AgentConfig;
@@ -20,11 +24,12 @@ export class OrchestrationPipeline {
 
   private audioBuffer: Buffer[] = [];
   private silenceTimer: ReturnType<typeof setTimeout> | null = null;
+  private silenceHangupTimer: ReturnType<typeof setTimeout> | null = null;
   private isProcessing = false;
 
   // Barge-in state
-  private isPlaying = false;           // true while audio chunks are actively being sent
-  private bargeInRequested = false;    // set when caller speaks during agent playback
+  private isPlaying = false;
+  private bargeInRequested = false;
   private bargeInCallback: (() => void) | null;
 
   // Streaming STT (Deepgram live transcription)
@@ -68,6 +73,9 @@ export class OrchestrationPipeline {
     if (this.stt.transcribeStream) {
       this.initStreamingSTT();
     }
+
+    // Start silence hangup timer if configured
+    this.resetHangupTimer();
   }
 
   // ── Streaming STT ───────────────────────────────────────────────────────────
@@ -77,6 +85,7 @@ export class OrchestrationPipeline {
     try {
       this.streamSTT = this.stt.transcribeStream((text, isFinal) => {
         if (!isFinal || !text.trim() || this.closed) return;
+        this.resetHangupTimer();
         void this.handleStreamingTranscript(text);
       });
       logger.info({ callId: this.config.callId }, "Streaming STT initialized (Deepgram)");
@@ -91,21 +100,18 @@ export class OrchestrationPipeline {
    */
   private async handleStreamingTranscript(transcript: string): Promise<void> {
     if (this.isPlaying) {
-      // Caller spoke while agent was playing — interrupt playback
       this.bargeInRequested = true;
       this.bargeInCallback?.();
       logger.info({ callId: this.config.callId }, "Barge-in detected (streaming STT)");
     }
 
     if (this.isProcessing) {
-      // Already processing — queue the new utterance; it runs after current turn
       this.pendingTranscript = transcript;
       return;
     }
 
     this.isProcessing = true;
     try {
-      // sttLatencyMs = 0: Deepgram's endpointing already accounts for the silence window
       await this.processTurn(transcript, 0);
     } catch (err) {
       logger.error({ callId: this.config.callId, err }, "Turn error (streaming STT)");
@@ -140,12 +146,15 @@ export class OrchestrationPipeline {
     // Batch STT path with local VAD + barge-in detection
     const hasSpeech = hasSpeechEnergy(pcm8k, VAD_THRESHOLD);
 
-    if (hasSpeech && this.isPlaying && !this.bargeInRequested) {
-      // First speech energy during playback = barge-in
-      this.bargeInRequested = true;
-      this.bargeInCallback?.();
-      this.audioBuffer = []; // discard stale audio
-      logger.info({ callId: this.config.callId }, "Barge-in detected (batch STT)");
+    if (hasSpeech) {
+      this.resetHangupTimer();
+
+      if (this.isPlaying && !this.bargeInRequested) {
+        this.bargeInRequested = true;
+        this.bargeInCallback?.();
+        this.audioBuffer = [];
+        logger.info({ callId: this.config.callId }, "Barge-in detected (batch STT)");
+      }
     }
 
     if (this.isProcessing) return;
@@ -165,12 +174,17 @@ export class OrchestrationPipeline {
     if (this.closed) return;
     this.isProcessing = true;
     try {
-      let greeting = "";
-      await this.llm.chat(
-        [], this.agent.systemPrompt,
-        (token) => { greeting += token; },
-        (full)  => { greeting = full; }
-      );
+      let greeting = this.agent.greetingMessage ?? "";
+
+      if (!greeting.trim()) {
+        // Fallback: ask the LLM to generate an opener
+        await this.llm.chat(
+          [], this.agent.systemPrompt,
+          (token) => { greeting += token; },
+          (full)  => { greeting = full; }
+        );
+      }
+
       if (!greeting.trim() || this.closed) return;
       logger.info({ callId: this.config.callId, greeting: greeting.slice(0, 80) }, "Sending greeting");
       this.conversationHistory.push({ role: "assistant", content: greeting });
@@ -206,13 +220,21 @@ export class OrchestrationPipeline {
     }, VAD_SILENCE_MS);
   }
 
+  /** Reset (or start) the silence-hangup countdown. Fires onCallEnd if no speech for silenceTimeoutSeconds. */
+  private resetHangupTimer(): void {
+    if (!this.agent.silenceTimeoutSeconds) return;
+    if (this.silenceHangupTimer) clearTimeout(this.silenceHangupTimer);
+    this.silenceHangupTimer = setTimeout(() => {
+      this.silenceHangupTimer = null;
+      if (!this.closed) {
+        logger.info({ callId: this.config.callId }, "Silence timeout — ending call");
+        this.config.onCallEnd();
+      }
+    }, this.agent.silenceTimeoutSeconds * 1000);
+  }
+
   // ── TTS playback ─────────────────────────────────────────────────────────────
 
-  /**
-   * Synthesise and stream a single sentence to the telephony channel.
-   * Uses streaming TTS if available (lower time-to-first-audio).
-   * Checks bargeInRequested at every audio boundary and aborts early.
-   */
   private async playSentence(text: string): Promise<void> {
     if (this.bargeInRequested) return;
 
@@ -250,7 +272,6 @@ export class OrchestrationPipeline {
         flush
       );
     } else {
-      // Batch fallback: pace to real-time to avoid flooding telephony buffers
       const ttsPcm16k = await this.tts.synthesize(text);
       if (this.bargeInRequested) return;
       const ttsPcm8k  = downsample16to8(ttsPcm16k);
@@ -266,20 +287,42 @@ export class OrchestrationPipeline {
 
   // ── Core turn logic ───────────────────────────────────────────────────────────
 
-  /**
-   * Given a final transcript, run the full LLM → sentence-streaming TTS pipeline.
-   * Records per-turn latency metrics: STT (passed in), LLM TTFT, TTS first-chunk.
-   */
   private async processTurn(transcript: string, sttLatencyMs: number): Promise<void> {
     this.bargeInRequested = false;
     this.firstAudioSentAt = null;
 
-    const llmStart = Date.now();
-    let llmFirstTokenAt: number | null = null;
-
     logger.info({ callId: this.config.callId, transcript, sttLatencyMs }, "Processing turn");
     this.config.onTranscript("user", transcript);
     this.conversationHistory.push({ role: "user", content: transcript });
+
+    // ── End-call phrase detection ──
+    if (this.agent.endCallPhrases.length > 0) {
+      const lower = transcript.toLowerCase();
+      if (this.agent.endCallPhrases.some(p => lower.includes(p.toLowerCase()))) {
+        logger.info({ callId: this.config.callId, transcript }, "End-call phrase detected — hanging up");
+        this.config.onCallEnd();
+        return;
+      }
+    }
+
+    // ── Backchanneling: short acknowledgement while LLM thinks ──
+    if (this.agent.backchannelingEnabled && !this.closed && !this.bargeInRequested) {
+      const freq = this.agent.backchannelingFrequency ?? 0.5;
+      if (Math.random() < freq) {
+        const phrase = BACKCHANNEL_PHRASES[Math.floor(Math.random() * BACKCHANNEL_PHRASES.length)]!;
+        this.isPlaying = true;
+        try {
+          await this.playSentence(phrase);
+        } catch (err) {
+          logger.error({ callId: this.config.callId, err }, "Backchannel TTS error");
+        } finally {
+          this.isPlaying = false;
+        }
+      }
+    }
+
+    const llmStart = Date.now();
+    let llmFirstTokenAt: number | null = null;
 
     let llmResponse = "";
     let pendingText  = "";
@@ -297,8 +340,6 @@ export class OrchestrationPipeline {
       }
     };
 
-    // Playback coroutine — runs concurrently with LLM generation
-    // isPlaying is set on the first sentence and cleared when all sentences finish
     const playTask = async (): Promise<void> => {
       let idx = 0;
       while (true) {
@@ -336,7 +377,6 @@ export class OrchestrationPipeline {
       async (fullText) => { llmResponse = fullText; }
     );
 
-    // Flush any trailing text that didn't end with punctuation
     const tail = pendingText.trim();
     if (tail.length >= 2) enqueue(tail);
     allEnqueued = true;
@@ -354,7 +394,6 @@ export class OrchestrationPipeline {
 
     await playPromise;
 
-    // Emit per-turn latency metrics
     const llmLatencyMs = llmFirstTokenAt ? llmFirstTokenAt - llmStart : Date.now() - llmStart;
     const ttsFirstChunkMs = this.firstAudioSentAt ? this.firstAudioSentAt - llmStart : 0;
     logger.info(
@@ -364,10 +403,6 @@ export class OrchestrationPipeline {
     this.config.onMetrics?.({ sttLatencyMs, llmLatencyMs, ttsFirstChunkMs });
   }
 
-  /**
-   * Flush the accumulated audio buffer through batch STT → processTurn.
-   * Triggered by the VAD silence timer.
-   */
   private async flushAndProcess(): Promise<void> {
     if (this.isProcessing || this.audioBuffer.length === 0) return;
 
@@ -400,8 +435,6 @@ export class OrchestrationPipeline {
     }
   }
 
-  // ── Utilities ─────────────────────────────────────────────────────────────────
-
   getTranscript(): string {
     return this.conversationHistory
       .map((t) => `${t.role === "user" ? "Caller" : "Agent"}: ${t.content}`)
@@ -414,6 +447,10 @@ export class OrchestrationPipeline {
       clearTimeout(this.silenceTimer);
       this.silenceTimer = null;
     }
+    if (this.silenceHangupTimer) {
+      clearTimeout(this.silenceHangupTimer);
+      this.silenceHangupTimer = null;
+    }
     this.streamSTT?.close();
     this.streamSTT = null;
     logger.info({ callId: this.config.callId }, "Pipeline closed");
@@ -421,11 +458,6 @@ export class OrchestrationPipeline {
 }
 
 // ── Sentence segmentation ─────────────────────────────────────────────────────
-//
-// Priority order:
-//   1. Standard sentence-end punctuation: . ! ?
-//   2. Comma break: trigger after a comma when ≥60 chars accumulated
-//      (avoids tiny TTS calls while still reducing first-sentence latency)
 
 function extractSentences(text: string): { sentences: string[]; remainder: string } {
   const sentences: string[] = [];

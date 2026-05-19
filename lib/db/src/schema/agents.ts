@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, real } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, real, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -18,6 +18,17 @@ export const agentsTable = pgTable("agents", {
   systemPrompt: text("system_prompt").notNull(),
   temperature: real("temperature"),
   maxDuration: integer("max_duration"),
+
+  // ── Conversation Behavior (Tier 1) ───────────────────────────────────────────
+  greetingMessage: text("greeting_message"),
+  endCallPhrases: text("end_call_phrases"),
+  silenceTimeoutSeconds: integer("silence_timeout_seconds"),
+  language: text("language"),
+  backchannelingEnabled: boolean("backchanneling_enabled").default(false),
+  backchannelingFrequency: real("backchanneling_frequency"),
+  webhookUrl: text("webhook_url"),
+
+  // ── Stats ────────────────────────────────────────────────────────────────────
   totalCalls: integer("total_calls").notNull().default(0),
   successfulCalls: integer("successful_calls").notNull().default(0),
   avgDurationSeconds: integer("avg_duration_seconds"),

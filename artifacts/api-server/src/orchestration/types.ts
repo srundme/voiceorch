@@ -12,6 +12,15 @@ export interface AgentConfig {
   ttsVoice: string | null;
   ttsModel: string | null;
   telephonyProvider: string;
+
+  // Tier 1 — Conversation Behavior
+  greetingMessage: string | null;
+  endCallPhrases: string[];
+  silenceTimeoutSeconds: number | null;
+  language: string | null;
+  backchannelingEnabled: boolean;
+  backchannelingFrequency: number | null;
+  webhookUrl: string | null;
 }
 
 export interface ProviderKey {

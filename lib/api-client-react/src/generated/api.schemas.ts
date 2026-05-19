@@ -48,6 +48,41 @@ export interface Agent {
      * @nullable
      */
   maxDuration?: number | null;
+  /**
+     * First thing the agent says when a call connects. If blank the LLM generates an opener.
+     * @nullable
+     */
+  greetingMessage?: string | null;
+  /**
+     * Comma-separated phrases that trigger hangup (e.g. "goodbye,bye,thanks for calling")
+     * @nullable
+     */
+  endCallPhrases?: string | null;
+  /**
+     * Hang up automatically after this many seconds of caller silence
+     * @nullable
+     */
+  silenceTimeoutSeconds?: number | null;
+  /**
+     * Primary language code passed to ASR / TTS (e.g. en-US, es, fr, hi)
+     * @nullable
+     */
+  language?: string | null;
+  /**
+     * Inject short acknowledgement phrases while the LLM is thinking
+     * @nullable
+     */
+  backchannelingEnabled?: boolean | null;
+  /**
+     * Probability (0–1) of backchanneling on each turn
+     * @nullable
+     */
+  backchannelingFrequency?: number | null;
+  /**
+     * URL to POST a call summary JSON to when the call ends
+     * @nullable
+     */
+  webhookUrl?: string | null;
   totalCalls?: number;
   successfulCalls?: number;
   /** @nullable */
@@ -71,6 +106,13 @@ export interface AgentInput {
   systemPrompt: string;
   temperature?: number;
   maxDuration?: number;
+  greetingMessage?: string;
+  endCallPhrases?: string;
+  silenceTimeoutSeconds?: number;
+  language?: string;
+  backchannelingEnabled?: boolean;
+  backchannelingFrequency?: number;
+  webhookUrl?: string;
 }
 
 export interface AgentUpdate {
@@ -87,6 +129,13 @@ export interface AgentUpdate {
   systemPrompt?: string;
   temperature?: number;
   maxDuration?: number;
+  greetingMessage?: string;
+  endCallPhrases?: string;
+  silenceTimeoutSeconds?: number;
+  language?: string;
+  backchannelingEnabled?: boolean;
+  backchannelingFrequency?: number;
+  webhookUrl?: string;
   status?: string;
 }
 
