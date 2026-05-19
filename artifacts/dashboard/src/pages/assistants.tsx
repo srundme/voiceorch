@@ -1163,6 +1163,7 @@ function NewAgentPanel({ onCreated }: { onCreated: (id: number) => void }) {
   const [name, setName]       = useState("New Assistant");
   const [asr, setAsr]         = useState("assemblyai");
   const [llm, setLlm]         = useState("openai");
+  const [llmModel, setLlmModel] = useState(LLM_MODELS["openai"]?.[0]?.value ?? "");
   const [tts, setTts]         = useState("elevenlabs");
   const [ttsModel, setTtsModel] = useState("");
   const [tel, setTel]         = useState("twilio");
@@ -1177,7 +1178,7 @@ function NewAgentPanel({ onCreated }: { onCreated: (id: number) => void }) {
           name,
           asrProvider: asr,
           llmProvider: llm,
-          llmModel: LLM_MODELS[llm]?.[0]?.value ?? undefined,
+          llmModel: llmModel || LLM_MODELS[llm]?.[0]?.value || undefined,
           ttsProvider: tts,
           ttsModel: ttsModel || undefined,
           telephonyProvider: tel,
@@ -1224,12 +1225,22 @@ function NewAgentPanel({ onCreated }: { onCreated: (id: number) => void }) {
             </div>
             <div className="bg-zinc-800/60 border border-zinc-700/50 rounded-xl p-3.5 space-y-2">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Model</p>
-              <Select value={llm} onValueChange={setLlm}>
+              <Select value={llm} onValueChange={(v) => { setLlm(v); setLlmModel(LLM_MODELS[v]?.[0]?.value ?? ""); }}>
                 <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200"><SelectValue /></SelectTrigger>
                 <SelectContent className="bg-zinc-900 border-zinc-700">
                   {LLM_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-zinc-300 text-xs">{p.label}</SelectItem>)}
                 </SelectContent>
               </Select>
+              {LLM_MODELS[llm] && (
+                <Select value={llmModel} onValueChange={setLlmModel}>
+                  <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-400"><SelectValue placeholder="Select model" /></SelectTrigger>
+                  <SelectContent className="bg-zinc-900 border-zinc-700">
+                    {LLM_MODELS[llm]!.map(m => (
+                      <SelectItem key={m.value} value={m.value} className="text-zinc-300 text-xs">{m.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
             <div className="bg-zinc-800/60 border border-zinc-700/50 rounded-xl p-3.5 space-y-2">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Voice</p>
