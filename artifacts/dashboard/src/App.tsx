@@ -22,6 +22,7 @@ import ProvidersList from "@/pages/providers/index";
 import Settings from "@/pages/settings/index";
 import KnowledgeBasePage from "@/pages/knowledge-base";
 import WalletPage from "@/pages/wallet";
+import ActivityPage from "@/pages/activity";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -159,6 +160,7 @@ function ProtectedApp() {
             <Route path="/app/knowledge-bases" component={KnowledgeBasePage} />
             <Route path="/app/providers" component={ProvidersList} />
             <Route path="/app/wallet" component={WalletPage} />
+            <Route path="/app/activity" component={ActivityPage} />
             <Route path="/app/settings" component={Settings} />
             <Route component={NotFound} />
           </Switch>

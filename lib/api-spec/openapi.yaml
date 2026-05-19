@@ -22,6 +22,10 @@ tags:
     description: Knowledge base and RAG document management
   - name: wallet
     description: Wallet balance, top-up, and billing
+  - name: account
+    description: API keys, org key, and concurrent call limits
+  - name: activity-logs
+    description: Audit log of all platform events
 
 paths:
   /healthz:
@@ -739,6 +743,78 @@ paths:
         "401":
           description: Unauthorized
 
+  # ── Account ──────────────────────────────────────────────────────────────────
+  /account:
+    get:
+      operationId: getAccount
+      tags: [account]
+      summary: Get account keys, org key, and concurrency settings
+      responses:
+        "200":
+          description: Account info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountInfo"
+        "401":
+          description: Unauthorized
+
+  /account/regenerate-api-key:
+    post:
+      operationId: regenerateApiKey
+      tags: [account]
+      summary: Regenerate the user's API key
+      responses:
+        "200":
+          description: New account info with fresh API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountInfo"
+        "401":
+          description: Unauthorized
+
+  /account/add-concurrent:
+    post:
+      operationId: addConcurrentSlot
+      tags: [account]
+      summary: Purchase one additional concurrent call slot ($5 deducted from wallet)
+      responses:
+        "200":
+          description: Updated account info with incremented concurrent limit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountInfo"
+        "402":
+          description: Insufficient wallet balance
+        "401":
+          description: Unauthorized
+
+  # ── Activity Logs ─────────────────────────────────────────────────────────────
+  /activity-logs:
+    get:
+      operationId: listActivityLogs
+      tags: [activity-logs]
+      summary: List audit log events for the authenticated user
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+      responses:
+        "200":
+          description: List of activity log entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityLog"
+        "401":
+          description: Unauthorized
+
 components:
   schemas:
     HealthStatus:
@@ -1075,6 +1151,9 @@ components:
         ttsFirstChunkMs:
           type: ["integer", "null"]
           description: Average TTS time-to-first-audio-chunk across all turns (ms)
+        executionId:
+          type: ["string", "null"]
+          description: Unique execution identifier for this call (exec_xxxxxxxx)
 
     CallEndPayload:
       type: object
@@ -1179,6 +1258,46 @@ components:
           type: boolean
         extraConfig:
           type: string
+
+    # ── Account ────────────────────────────────────────────────────────────────
+    AccountInfo:
+      type: object
+      required: [apiKey, orgKey, concurrentLimit, walletId]
+      properties:
+        apiKey:
+          type: ["string", "null"]
+          description: Secret API key for programmatic platform access (vok_ prefix)
+        orgKey:
+          type: ["string", "null"]
+          description: Organisation-level key for webhook verification (voo_ prefix)
+        concurrentLimit:
+          type: integer
+          description: Maximum simultaneous active calls allowed
+        walletId:
+          type: integer
+          description: Internal wallet / user ID
+
+    # ── Activity Log ───────────────────────────────────────────────────────────
+    ActivityLog:
+      type: object
+      required: [id, eventType, description, createdAt]
+      properties:
+        id:
+          type: integer
+        eventType:
+          type: string
+          description: "e.g. agent.created, call.started, provider.added"
+        resourceType:
+          type: ["string", "null"]
+        resourceId:
+          type: ["string", "null"]
+        description:
+          type: string
+        metadata:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
 
     # ── Analytics ──────────────────────────────────────────────────────────────
     DashboardStats:

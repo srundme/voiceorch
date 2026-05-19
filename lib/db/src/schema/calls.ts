@@ -14,6 +14,7 @@ export const callsTable = pgTable("calls", {
   transcript: text("transcript"),
   recordingUrl: text("recording_url"),
   errorMessage: text("error_message"),
+  executionId: text("execution_id"),
   metadata: text("metadata"),
   sttLatencyMs: integer("stt_latency_ms"),
   llmLatencyMs: integer("llm_latency_ms"),

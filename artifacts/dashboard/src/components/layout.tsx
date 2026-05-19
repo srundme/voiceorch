@@ -22,8 +22,9 @@ const NAV_SECTIONS = [
   {
     label: "OBSERVE",
     items: [
-      { name: "Analytics",  href: "/app/analytics", icon: BarChart3 },
-      { name: "Logs",       href: "/app/calls",      icon: Phone },
+      { name: "Analytics",     href: "/app/analytics",      icon: BarChart3 },
+      { name: "Logs",          href: "/app/calls",           icon: Phone },
+      { name: "Activity",      href: "/app/activity",        icon: LayoutDashboard },
     ],
   },
   {

@@ -42,4 +42,9 @@ export interface Call {
      * @nullable
      */
   ttsFirstChunkMs?: number | null;
+  /**
+     * Unique execution identifier for this call (exec_xxxxxxxx)
+     * @nullable
+     */
+  executionId?: string | null;
 }

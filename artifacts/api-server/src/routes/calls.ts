@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { randomBytes } from "crypto";
 import { eq, desc, and } from "drizzle-orm";
 import { db, callsTable, agentsTable, providersTable, usersTable, walletTransactionsTable } from "@workspace/db";
 import {
@@ -174,8 +175,10 @@ router.post("/calls/outbound", async (req, res): Promise<void> => {
     return;
   }
 
+  const executionId = `exec_${randomBytes(4).toString("hex")}`;
   const [call] = await db.insert(callsTable).values({
     agentId, toNumber, fromNumber: "outbound", status: "in_progress",
+    executionId,
     metadata: JSON.stringify({ providerCallId, provider }),
   }).returning();
 
@@ -223,9 +226,10 @@ router.post("/calls", async (req, res): Promise<void> => {
     return;
   }
 
+  const executionId = `exec_${randomBytes(4).toString("hex")}`;
   const [call] = await db
     .insert(callsTable)
-    .values({ ...parsed.data, status: "pending" })
+    .values({ ...parsed.data, status: "pending", executionId })
     .returning();
 
   await db

@@ -1,8 +1,12 @@
 import { getAuth } from "@clerk/express";
 import type { Request, Response, NextFunction } from "express";
+import { randomBytes } from "crypto";
 import { db } from "@workspace/db";
 import { usersTable, walletTransactionsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
+
+function generateApiKey() { return `vok_${randomBytes(24).toString("hex")}`; }
+function generateOrgKey() { return `voo_${randomBytes(24).toString("hex")}`; }
 
 const FREE_CREDIT_CENTS = 500; // $5.00
 
@@ -27,6 +31,8 @@ export async function provisionUser(req: Request, _res: Response, next: NextFunc
           name: name ?? null,
           walletBalanceCents: FREE_CREDIT_CENTS,
           freeCreditsGranted: true,
+          apiKey: generateApiKey(),
+          orgKey: generateOrgKey(),
         })
         .returning();
 

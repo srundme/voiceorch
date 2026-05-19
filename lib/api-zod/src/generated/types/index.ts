@@ -6,6 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './accountInfo';
+export * from './activityLog';
 export * from './agent';
 export * from './agentAsrSmartEndpointing';
 export * from './agentInput';
@@ -34,6 +36,7 @@ export * from './knowledgeBase';
 export * from './knowledgeBaseDetail';
 export * from './knowledgeBaseInput';
 export * from './knowledgeBaseUpdate';
+export * from './listActivityLogsParams';
 export * from './listCallsParams';
 export * from './listTransactionsParams';
 export * from './outboundCallBody';

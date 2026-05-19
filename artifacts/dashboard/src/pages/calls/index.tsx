@@ -141,6 +141,7 @@ export default function CallsList() {
             <TableHeader className="bg-muted/50 sticky top-0 z-10 backdrop-blur-sm">
               <TableRow className="border-border/50 hover:bg-transparent">
                 <TableHead className="w-[150px]">Date</TableHead>
+                <TableHead className="w-[120px]">Execution ID</TableHead>
                 <TableHead>Agent</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>To / From</TableHead>
@@ -164,6 +165,7 @@ export default function CallsList() {
                 Array.from({ length: 8 }).map((_, i) => (
                   <TableRow key={i} className="border-border/50">
                     <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-32" /></TableCell>
                     <TableCell><Skeleton className="h-6 w-20 rounded-full" /></TableCell>
                     <TableCell><Skeleton className="h-8 w-32" /></TableCell>
@@ -183,6 +185,9 @@ export default function CallsList() {
                     <TableRow key={call.id} className="cursor-pointer hover:bg-muted/50 transition-colors border-border/50">
                       <TableCell className="whitespace-nowrap text-muted-foreground font-medium text-xs">
                         {format(parseISO(call.createdAt), "MMM d, HH:mm:ss")}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs text-zinc-500">
+                        {(call as any).executionId ?? `#${call.id}`}
                       </TableCell>
                       <TableCell>
                         <Link href={`/agents/${call.agentId}`}>
@@ -250,7 +255,7 @@ export default function CallsList() {
                 })
               ) : (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-64 text-center text-muted-foreground border-0">
+                  <TableCell colSpan={8} className="h-64 text-center text-muted-foreground border-0">
                     <div className="flex flex-col items-center justify-center">
                       <Phone className="h-10 w-10 opacity-20 mb-3" />
                       <p>No calls found matching your filters.</p>

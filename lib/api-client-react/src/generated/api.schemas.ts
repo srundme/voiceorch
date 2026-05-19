@@ -316,6 +316,11 @@ export interface Call {
      * @nullable
      */
   ttsFirstChunkMs?: number | null;
+  /**
+     * Unique execution identifier for this call (exec_xxxxxxxx)
+     * @nullable
+     */
+  executionId?: string | null;
 }
 
 export interface CallEndPayload {
@@ -400,6 +405,37 @@ export interface ProviderUpdate {
   apiKey?: string;
   isActive?: boolean;
   extraConfig?: string;
+}
+
+export interface AccountInfo {
+  /**
+     * Secret API key for programmatic platform access (vok_ prefix)
+     * @nullable
+     */
+  apiKey: string | null;
+  /**
+     * Organisation-level key for webhook verification (voo_ prefix)
+     * @nullable
+     */
+  orgKey: string | null;
+  /** Maximum simultaneous active calls allowed */
+  concurrentLimit: number;
+  /** Internal wallet / user ID */
+  walletId: number;
+}
+
+export interface ActivityLog {
+  id: number;
+  /** e.g. agent.created, call.started, provider.added */
+  eventType: string;
+  /** @nullable */
+  resourceType?: string | null;
+  /** @nullable */
+  resourceId?: string | null;
+  description: string;
+  /** @nullable */
+  metadata?: string | null;
+  createdAt: string;
 }
 
 export interface DashboardStats {
@@ -631,5 +667,9 @@ status?: string | null;
 export type ListTransactionsParams = {
 limit?: number;
 offset?: number;
+};
+
+export type ListActivityLogsParams = {
+limit?: number;
 };
 

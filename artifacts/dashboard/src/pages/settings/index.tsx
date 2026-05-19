@@ -2,12 +2,15 @@ import React, { useState } from "react";
 import { Link } from "wouter";
 import {
   Phone, Copy, Check, ExternalLink, Zap, Key, BookOpen,
-  ChevronDown, ChevronRight, AlertTriangle, CheckCircle2
+  ChevronDown, ChevronRight, AlertTriangle, CheckCircle2,
+  RefreshCw, Plus, Eye, EyeOff, Users
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useListAgents, useListProviders, getListAgentsQueryKey, getListProvidersQueryKey } from "@workspace/api-client-react";
+import { useListAgents, useListProviders, useGetAccount, useRegenerateApiKey, useAddConcurrentSlot, getListAgentsQueryKey, getListProvidersQueryKey, getGetAccountQueryKey } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 import type { ProviderConfigProviderType } from "@workspace/api-client-react";
 
 const BASE_DOMAIN = window.location.hostname;
@@ -116,12 +119,32 @@ function TelephonyGuide({ provider, agentId }: TelephonyGuideProps) {
   );
 }
 
+function MaskedKey({ value }: { value: string | null | undefined }) {
+  const [show, setShow] = useState(false);
+  if (!value) return <span className="text-zinc-600 text-xs italic">Not generated yet</span>;
+  const masked = value.slice(0, 8) + "•".repeat(20) + value.slice(-4);
+  return (
+    <div className="flex items-center gap-2 bg-muted/60 border border-border/60 rounded-md px-3 py-2 font-mono text-xs text-foreground/90 overflow-x-auto flex-1">
+      <span className="flex-1 whitespace-nowrap">{show ? value : masked}</span>
+      <button onClick={() => setShow(s => !s)} className="text-zinc-500 hover:text-zinc-300 transition-colors">
+        {show ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+      </button>
+      <CopyButton text={value} />
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const [expandedProvider, setExpandedProvider] = useState<string | null>("twilio");
   const [selectedAgentId, setSelectedAgentId] = useState<number>(1);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const { data: agents } = useListAgents({ query: { queryKey: getListAgentsQueryKey() } });
   const { data: providers } = useListProviders({ query: { queryKey: getListProvidersQueryKey() } });
+  const { data: account, isLoading: accountLoading } = useGetAccount({ query: { queryKey: getGetAccountQueryKey() } });
+  const regenerate = useRegenerateApiKey();
+  const addSlot = useAddConcurrentSlot();
 
   const providerTypes: ProviderConfigProviderType[] = ["asr", "llm", "tts", "telephony"];
   const configuredTypes = new Set(providers?.map(p => p.providerType) ?? []);
@@ -241,6 +264,79 @@ export default function SettingsPage() {
               )}
             </div>
           ))}
+        </CardContent>
+      </Card>
+
+      {/* API Keys & Account */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Key className="h-5 w-5 text-primary" />
+            API Keys & Account
+          </CardTitle>
+          <CardDescription>
+            Use these keys to call the VoiceOrch REST API from your own applications.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          {accountLoading ? (
+            <div className="h-24 bg-muted/30 rounded-lg animate-pulse" />
+          ) : (
+            <>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium">Secret API Key <span className="text-[10px] text-zinc-500 font-mono ml-1">vok_…</span></p>
+                  <Button
+                    variant="ghost" size="sm" className="h-7 text-xs gap-1.5 text-zinc-400 hover:text-white"
+                    disabled={regenerate.isPending}
+                    onClick={() => regenerate.mutate(undefined, {
+                      onSuccess: () => { queryClient.invalidateQueries({ queryKey: getGetAccountQueryKey() }); toast({ title: "API key regenerated" }); },
+                      onError: () => toast({ title: "Error", variant: "destructive", description: "Failed to regenerate key" }),
+                    })}
+                  >
+                    <RefreshCw className={`h-3 w-3 ${regenerate.isPending ? "animate-spin" : ""}`} /> Regenerate
+                  </Button>
+                </div>
+                <MaskedKey value={account?.apiKey} />
+                <p className="text-[11px] text-zinc-600">Include as <code className="bg-zinc-800 px-1 rounded text-zinc-400">Authorization: Bearer &lt;key&gt;</code> header.</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <p className="text-sm font-medium">Organisation Key <span className="text-[10px] text-zinc-500 font-mono ml-1">voo_…</span></p>
+                <MaskedKey value={account?.orgKey} />
+                <p className="text-[11px] text-zinc-600">Use to verify webhook signatures sent from VoiceOrch to your server.</p>
+              </div>
+
+              <div className="flex items-center justify-between p-4 rounded-lg border border-border/60 bg-muted/20">
+                <div className="flex items-start gap-3">
+                  <Users className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium">Concurrent Call Slots</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Max simultaneous active calls. Add more at $5.00 / slot (deducted from wallet).</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="text-2xl font-bold tabular-nums">{account?.concurrentLimit ?? "—"}</span>
+                  <Button
+                    size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white"
+                    disabled={addSlot.isPending}
+                    onClick={() => addSlot.mutate(undefined, {
+                      onSuccess: () => { queryClient.invalidateQueries({ queryKey: getGetAccountQueryKey() }); toast({ title: "Concurrent slot added", description: "Your limit has been increased by 1." }); },
+                      onError: (e: any) => toast({ title: "Error", variant: "destructive", description: e?.message ?? "Insufficient balance" }),
+                    })}
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Add Slot ($5)
+                  </Button>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 p-3 rounded-md border border-border/40 bg-muted/10">
+                <p className="text-xs text-muted-foreground flex-1">Wallet ID (internal)</p>
+                <code className="font-mono text-xs text-foreground/70">#{account?.walletId ?? "—"}</code>
+                {account?.walletId && <CopyButton text={String(account.walletId)} />}
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 

@@ -364,7 +364,8 @@ export const ListCallsResponseItem = zod.object({
   "endedAt": zod.coerce.date().nullish(),
   "sttLatencyMs": zod.number().nullish().describe('Average STT round-trip latency across all turns (ms)'),
   "llmLatencyMs": zod.number().nullish().describe('Average LLM time-to-first-token across all turns (ms)'),
-  "ttsFirstChunkMs": zod.number().nullish().describe('Average TTS time-to-first-audio-chunk across all turns (ms)')
+  "ttsFirstChunkMs": zod.number().nullish().describe('Average TTS time-to-first-audio-chunk across all turns (ms)'),
+  "executionId": zod.string().nullish().describe('Unique execution identifier for this call (exec_xxxxxxxx)')
 })
 export const ListCallsResponse = zod.array(ListCallsResponseItem)
 
@@ -403,7 +404,8 @@ export const GetCallResponse = zod.object({
   "endedAt": zod.coerce.date().nullish(),
   "sttLatencyMs": zod.number().nullish().describe('Average STT round-trip latency across all turns (ms)'),
   "llmLatencyMs": zod.number().nullish().describe('Average LLM time-to-first-token across all turns (ms)'),
-  "ttsFirstChunkMs": zod.number().nullish().describe('Average TTS time-to-first-audio-chunk across all turns (ms)')
+  "ttsFirstChunkMs": zod.number().nullish().describe('Average TTS time-to-first-audio-chunk across all turns (ms)'),
+  "executionId": zod.string().nullish().describe('Unique execution identifier for this call (exec_xxxxxxxx)')
 })
 
 
@@ -439,7 +441,8 @@ export const UpdateCallResponse = zod.object({
   "endedAt": zod.coerce.date().nullish(),
   "sttLatencyMs": zod.number().nullish().describe('Average STT round-trip latency across all turns (ms)'),
   "llmLatencyMs": zod.number().nullish().describe('Average LLM time-to-first-token across all turns (ms)'),
-  "ttsFirstChunkMs": zod.number().nullish().describe('Average TTS time-to-first-audio-chunk across all turns (ms)')
+  "ttsFirstChunkMs": zod.number().nullish().describe('Average TTS time-to-first-audio-chunk across all turns (ms)'),
+  "executionId": zod.string().nullish().describe('Unique execution identifier for this call (exec_xxxxxxxx)')
 })
 
 
@@ -482,7 +485,8 @@ export const EndCallResponse = zod.object({
   "endedAt": zod.coerce.date().nullish(),
   "sttLatencyMs": zod.number().nullish().describe('Average STT round-trip latency across all turns (ms)'),
   "llmLatencyMs": zod.number().nullish().describe('Average LLM time-to-first-token across all turns (ms)'),
-  "ttsFirstChunkMs": zod.number().nullish().describe('Average TTS time-to-first-audio-chunk across all turns (ms)')
+  "ttsFirstChunkMs": zod.number().nullish().describe('Average TTS time-to-first-audio-chunk across all turns (ms)'),
+  "executionId": zod.string().nullish().describe('Unique execution identifier for this call (exec_xxxxxxxx)')
 })
 
 
@@ -578,7 +582,8 @@ export const GetRecentCallsResponseItem = zod.object({
   "endedAt": zod.coerce.date().nullish(),
   "sttLatencyMs": zod.number().nullish().describe('Average STT round-trip latency across all turns (ms)'),
   "llmLatencyMs": zod.number().nullish().describe('Average LLM time-to-first-token across all turns (ms)'),
-  "ttsFirstChunkMs": zod.number().nullish().describe('Average TTS time-to-first-audio-chunk across all turns (ms)')
+  "ttsFirstChunkMs": zod.number().nullish().describe('Average TTS time-to-first-audio-chunk across all turns (ms)'),
+  "executionId": zod.string().nullish().describe('Unique execution identifier for this call (exec_xxxxxxxx)')
 })
 export const GetRecentCallsResponse = zod.array(GetRecentCallsResponseItem)
 
@@ -881,5 +886,59 @@ export const UpdateAutopayResponse = zod.object({
   "autoPayThresholdCents": zod.number(),
   "autoPayAmountCents": zod.number()
 })
+
+
+/**
+ * @summary Get account keys, org key, and concurrency settings
+ */
+export const GetAccountResponse = zod.object({
+  "apiKey": zod.string().nullable().describe('Secret API key for programmatic platform access (vok_ prefix)'),
+  "orgKey": zod.string().nullable().describe('Organisation-level key for webhook verification (voo_ prefix)'),
+  "concurrentLimit": zod.number().describe('Maximum simultaneous active calls allowed'),
+  "walletId": zod.number().describe('Internal wallet \/ user ID')
+})
+
+
+/**
+ * @summary Regenerate the user's API key
+ */
+export const RegenerateApiKeyResponse = zod.object({
+  "apiKey": zod.string().nullable().describe('Secret API key for programmatic platform access (vok_ prefix)'),
+  "orgKey": zod.string().nullable().describe('Organisation-level key for webhook verification (voo_ prefix)'),
+  "concurrentLimit": zod.number().describe('Maximum simultaneous active calls allowed'),
+  "walletId": zod.number().describe('Internal wallet \/ user ID')
+})
+
+
+/**
+ * @summary Purchase one additional concurrent call slot ($5 deducted from wallet)
+ */
+export const AddConcurrentSlotResponse = zod.object({
+  "apiKey": zod.string().nullable().describe('Secret API key for programmatic platform access (vok_ prefix)'),
+  "orgKey": zod.string().nullable().describe('Organisation-level key for webhook verification (voo_ prefix)'),
+  "concurrentLimit": zod.number().describe('Maximum simultaneous active calls allowed'),
+  "walletId": zod.number().describe('Internal wallet \/ user ID')
+})
+
+
+/**
+ * @summary List audit log events for the authenticated user
+ */
+export const listActivityLogsQueryLimitDefault = 100;
+
+export const ListActivityLogsQueryParams = zod.object({
+  "limit": zod.coerce.number().default(listActivityLogsQueryLimitDefault)
+})
+
+export const ListActivityLogsResponseItem = zod.object({
+  "id": zod.number(),
+  "eventType": zod.string().describe('e.g. agent.created, call.started, provider.added'),
+  "resourceType": zod.string().nullish(),
+  "resourceId": zod.string().nullish(),
+  "description": zod.string(),
+  "metadata": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const ListActivityLogsResponse = zod.array(ListActivityLogsResponseItem)
 
 

@@ -10,6 +10,7 @@ import {
   UpdateProviderResponse,
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { logActivity } from "../lib/activity.js";
 
 const router: IRouter = Router();
 
@@ -51,6 +52,7 @@ router.post("/providers", requireAuth, async (req, res): Promise<void> => {
     .insert(providersTable)
     .values({ ...parsed.data, userId: clerkId })
     .returning();
+  await logActivity({ userId: clerkId, eventType: "provider.added", resourceType: "provider", resourceId: String(provider.id), description: `${provider.providerType.toUpperCase()} provider "${provider.providerName}" added` });
   res.status(201).json(toProviderConfig(provider));
 });
 
@@ -93,6 +95,7 @@ router.delete("/providers/:id", requireAuth, async (req, res): Promise<void> => 
     res.status(404).json({ error: "Provider not found" });
     return;
   }
+  await logActivity({ userId: clerkId, eventType: "provider.deleted", resourceType: "provider", resourceId: String(deleted.id), description: `${deleted.providerType.toUpperCase()} provider "${deleted.providerName}" deleted` });
   res.sendStatus(204);
 });
 

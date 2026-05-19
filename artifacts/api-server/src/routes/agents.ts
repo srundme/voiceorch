@@ -14,6 +14,7 @@ import {
   ToggleAgentResponse,
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { logActivity } from "../lib/activity.js";
 
 const router: IRouter = Router();
 
@@ -38,6 +39,7 @@ router.post("/agents", requireAuth, async (req, res): Promise<void> => {
     .insert(agentsTable)
     .values({ ...parsed.data, userId: clerkId })
     .returning();
+  await logActivity({ userId: clerkId, eventType: "agent.created", resourceType: "agent", resourceId: String(agent.id), description: `Agent "${agent.name}" created` });
   res.status(201).json(GetAgentResponse.parse(agent));
 });
 
@@ -98,6 +100,7 @@ router.delete("/agents/:id", requireAuth, async (req, res): Promise<void> => {
     res.status(404).json({ error: "Agent not found" });
     return;
   }
+  await logActivity({ userId: clerkId, eventType: "agent.deleted", resourceType: "agent", resourceId: String(deleted.id), description: `Agent "${deleted.name}" deleted` });
   res.sendStatus(204);
 });
 
@@ -122,6 +125,7 @@ router.patch("/agents/:id/toggle", requireAuth, async (req, res): Promise<void> 
     .set({ status: newStatus, updatedAt: new Date() })
     .where(and(eq(agentsTable.id, params.data.id), eq(agentsTable.userId, clerkId)))
     .returning();
+  await logActivity({ userId: clerkId, eventType: "agent.toggled", resourceType: "agent", resourceId: String(agent.id), description: `Agent "${agent.name}" set to ${newStatus}` });
   res.json(ToggleAgentResponse.parse(agent));
 });
 
