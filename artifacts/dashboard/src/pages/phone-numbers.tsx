@@ -124,10 +124,14 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
 
-  const { data: available, isFetching, refetch } = useListAvailablePhoneNumbers(
+  const { data: available, isFetching, error: searchError, refetch } = useListAvailablePhoneNumbers(
     { countryCode: country, numberType, pattern: pattern || undefined },
-    { query: { enabled: false, queryKey: getListAvailablePhoneNumbersQueryKey({ countryCode: country, numberType }) } }
+    { query: { enabled: false, queryKey: getListAvailablePhoneNumbersQueryKey({ countryCode: country, numberType }), retry: false } }
   );
+
+  const platformNotConfigured =
+    searchError != null &&
+    (searchError as any)?.response?.status === 503;
 
   const purchase = usePurchasePhoneNumber();
 
@@ -257,6 +261,19 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
               {isFetching ? (
                 <div className="space-y-2 p-3">
                   {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}
+                </div>
+              ) : platformNotConfigured ? (
+                <div className="flex flex-col gap-2 p-4">
+                  <div className="flex items-start gap-2.5 text-amber-400">
+                    <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                    <div className="text-sm">
+                      <p className="font-medium">Carrier credentials not set up</p>
+                      <p className="text-amber-400/70 mt-0.5 text-xs leading-relaxed">
+                        To provision real phone numbers, add <code className="font-mono bg-zinc-800 px-1 rounded">VOBIZ_AUTH_ID</code> and{" "}
+                        <code className="font-mono bg-zinc-800 px-1 rounded">VOBIZ_AUTH_TOKEN</code> as environment secrets in your Replit project.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               ) : !available || available.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-8 text-zinc-500 text-sm">

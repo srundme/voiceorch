@@ -75,8 +75,7 @@ router.get("/phone-numbers/available", requireAuth, async (req, res): Promise<vo
   const { authId, authToken, configured } = getPlatformVobizCreds();
 
   if (!configured) {
-    // Return empty list with a clear message rather than crashing
-    res.json([]);
+    res.status(503).json({ error: "Platform carrier credentials not configured.", code: "PLATFORM_NOT_CONFIGURED" });
     return;
   }
 
