@@ -70,7 +70,108 @@ export function downsample16to8(buf16k: Buffer): Buffer {
   return out;
 }
 
-// Energy-based voice activity detection: returns true if audio contains speech
+// ── Noise Cancellation ───────────────────────────────────────────────────────
+//
+// Two-stage pipeline applied to 8 kHz LINEAR16 PCM before it reaches any STT:
+//
+//   1. 4th-order Butterworth bandpass filter (300–3400 Hz)
+//      Removes sub-300 Hz mains hum / HVAC rumble and >3400 Hz hiss.
+//      Coefficients computed for fs=8000 Hz via bilinear transform.
+//
+//   2. Adaptive noise gate
+//      Maintains a rolling estimate of the background noise floor (RMS of
+//      low-energy frames) and suppresses frames whose energy is below
+//      GATE_RATIO × noiseFloor.  Speech frames are passed unmodified.
+
+// --- Butterworth 300–3400 Hz bandpass @ 8000 Hz (biquad cascade, 2 sections) ---
+// Each section: [b0, b1, b2, a1, a2]  (a0 = 1, direct form II)
+const BP_SECTIONS: [number, number, number, number, number][] = [
+  // Section 1
+  [ 0.13072,  0.0,      -0.13072, -1.38122,  0.73856 ],
+  // Section 2
+  [ 1.0,     -2.0,       1.0,     -1.64996,  0.84016 ],
+];
+
+interface BiquadState { x1: number; x2: number; y1: number; y2: number }
+
+function makeBiquadStates(): BiquadState[] {
+  return BP_SECTIONS.map(() => ({ x1: 0, x2: 0, y1: 0, y2: 0 }));
+}
+
+function applyBiquadSection(
+  sample: number,
+  coeff: [number, number, number, number, number],
+  s: BiquadState
+): number {
+  const [b0, b1, b2, a1, a2] = coeff;
+  const y = b0 * sample + b1 * s.x1 + b2 * s.x2 - a1 * s.y1 - a2 * s.y2;
+  s.x2 = s.x1; s.x1 = sample;
+  s.y2 = s.y1; s.y1 = y;
+  return y;
+}
+
+function bandpassFilter(samples: Int16Array, states: BiquadState[]): Int16Array {
+  const out = new Int16Array(samples.length);
+  for (let i = 0; i < samples.length; i++) {
+    let v = samples[i]! / 32768;
+    for (let s = 0; s < BP_SECTIONS.length; s++) {
+      v = applyBiquadSection(v, BP_SECTIONS[s]!, states[s]!);
+    }
+    out[i] = Math.max(-32768, Math.min(32767, Math.round(v * 32768)));
+  }
+  return out;
+}
+
+// --- Adaptive noise gate ---
+const GATE_RATIO        = 3.0;   // suppress frames below 3× estimated noise floor
+const NOISE_ALPHA       = 0.98;  // slow-tracking IIR for noise floor estimate
+const NOISE_FRAME_BYTES = 320;   // 20 ms @ 8 kHz → 160 samples → 320 bytes
+
+function rms(samples: Int16Array): number {
+  let sum = 0;
+  for (let i = 0; i < samples.length; i++) sum += (samples[i]! / 32768) ** 2;
+  return Math.sqrt(sum / samples.length);
+}
+
+/**
+ * NoiseCanceller is stateful — create one instance per call session.
+ * Call process(pcm8k) on every incoming 8 kHz LINEAR16 PCM chunk.
+ */
+export class NoiseCanceller {
+  private readonly bqStates: BiquadState[] = makeBiquadStates();
+  private noiseFloor = 0.02;   // initial estimate (~-34 dBFS)
+
+  process(pcm8k: Buffer): Buffer {
+    const samples = new Int16Array(pcm8k.buffer, pcm8k.byteOffset, pcm8k.length / 2);
+
+    // Stage 1 — bandpass
+    const filtered = bandpassFilter(samples, this.bqStates);
+
+    // Stage 2 — adaptive noise gate (process in 20 ms frames)
+    const frameSize = NOISE_FRAME_BYTES / 2;   // 160 samples
+    const out = new Int16Array(filtered.length);
+
+    for (let offset = 0; offset < filtered.length; offset += frameSize) {
+      const end   = Math.min(offset + frameSize, filtered.length);
+      const frame = filtered.subarray(offset, end);
+      const energy = rms(frame);
+
+      if (energy < this.noiseFloor * GATE_RATIO) {
+        // Low-energy frame: update noise estimate and zero-out
+        this.noiseFloor = NOISE_ALPHA * this.noiseFloor + (1 - NOISE_ALPHA) * energy;
+        out.fill(0, offset, end);
+      } else {
+        // Speech frame: pass through, update noise estimate slowly
+        this.noiseFloor = NOISE_ALPHA * this.noiseFloor + (1 - NOISE_ALPHA) * energy * 0.05;
+        out.set(frame, offset);
+      }
+    }
+
+    return Buffer.from(out.buffer);
+  }
+}
+
+// ── Energy-based voice activity detection: returns true if audio contains speech
 export function hasSpeechEnergy(pcmBuffer: Buffer, threshold = 300): boolean {
   if (pcmBuffer.length < 2) return false;
   let sumSq = 0;

@@ -1,7 +1,7 @@
 import { createSTTAdapter } from "./adapters/stt/index.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { createTTSAdapter } from "./adapters/tts/index.js";
-import { decodeMulaw, encodeMulaw, upsample8to16, downsample16to8, hasSpeechEnergy } from "./audio.js";
+import { decodeMulaw, encodeMulaw, upsample8to16, downsample16to8, hasSpeechEnergy, NoiseCanceller } from "./audio.js";
 import type { AgentConfig, ConversationTurn, SessionConfig, StreamSTT } from "./types.js";
 import { logger } from "../lib/logger.js";
 
@@ -41,6 +41,7 @@ export class OrchestrationPipeline {
 
   private conversationHistory: ConversationTurn[] = [];
   private closed = false;
+  private noiseCanceller: NoiseCanceller | null = null;
 
   constructor(config: SessionConfig) {
     this.config = config;
@@ -60,13 +61,17 @@ export class OrchestrationPipeline {
 
     this.stt = createSTTAdapter(
       this.agent.asrProvider, sttKey, this.agent.asrModel,
-      keys.get(`${this.agent.asrProvider}:extraConfig`) ?? null,
-      this.agent.noiseCancellationEnabled
+      keys.get(`${this.agent.asrProvider}:extraConfig`) ?? null
     );
     this.llm = createLLMAdapter(this.agent.llmProvider, llmKey, this.agent.llmModel);
     this.tts = createTTSAdapter(
       this.agent.ttsProvider, ttsKey, this.agent.ttsVoice, this.agent.ttsModel
     );
+
+    if (this.agent.noiseCancellationEnabled) {
+      this.noiseCanceller = new NoiseCanceller();
+      logger.info({ callId: config.callId }, "Noise cancellation enabled");
+    }
 
     logger.info({ callId: config.callId, agent: this.agent.name }, "Pipeline initialized");
 
@@ -136,6 +141,10 @@ export class OrchestrationPipeline {
   /** Incoming raw LINEAR16 PCM @ 8 kHz from Vobiz (bypasses mulaw decode) */
   onRawPcm8kIn(pcm8k: Buffer): void {
     if (this.closed) return;
+
+    if (this.noiseCanceller) {
+      pcm8k = this.noiseCanceller.process(pcm8k);
+    }
 
     // Streaming STT path: feed all audio directly to Deepgram — no local VAD needed
     if (this.streamSTT) {

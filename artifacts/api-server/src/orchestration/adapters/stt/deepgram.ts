@@ -23,8 +23,7 @@ interface DeepgramStreamMessage {
 export class DeepgramSTT implements STTAdapter {
   constructor(
     private readonly key: string,
-    private readonly model: string | null,
-    private readonly noiseCancellation = false
+    private readonly model: string | null
   ) {}
 
   async transcribe(audioBuffer: Buffer, sampleRate = 16000): Promise<string> {
@@ -34,7 +33,6 @@ export class DeepgramSTT implements STTAdapter {
       `?model=${encodeURIComponent(model)}`,
       `&punctuate=true&smart_format=true`,
       `&encoding=linear16&sample_rate=${sampleRate}`,
-      this.noiseCancellation ? "&filler_words=false&numerals=true" : "",
     ].join("");
 
     const resp = await fetch(url, {
@@ -66,7 +64,6 @@ export class DeepgramSTT implements STTAdapter {
       punctuate: "true",
       smart_format: "true",
       endpointing: "300",
-      ...(this.noiseCancellation ? { filler_words: "false", numerals: "true" } : {}),
     });
     const wsUrl = `wss://api.deepgram.com/v1/listen?${params.toString()}`;
 
