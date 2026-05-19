@@ -128,8 +128,9 @@ router.get("/widget.js", (req, res): void => {
   var audioCtx  = null;
   var processor = null;
   var stream    = null;
-  var nextPlayAt = 0;
-  var msgCount  = 0;
+  var nextPlayAt   = 0;
+  var activeSrcs   = [];
+  var msgCount     = 0;
 
   /* ── Toggle panel ────────────────────────────────────────────────────── */
   btn.addEventListener("click", function () {
@@ -176,6 +177,13 @@ router.get("/widget.js", (req, res): void => {
     return f32;
   }
 
+  /* ── Stop all playing audio (barge-in) ──────────────────────────────── */
+  function stopAllAudio() {
+    activeSrcs.forEach(function(s) { try { s.stop(); } catch(_){} });
+    activeSrcs = [];
+    if (audioCtx) nextPlayAt = audioCtx.currentTime;
+  }
+
   /* ── Play received PCM chunk ─────────────────────────────────────────── */
   function playPCM(arrayBuf) {
     if (!audioCtx) return;
@@ -188,6 +196,8 @@ router.get("/widget.js", (req, res): void => {
     nextPlayAt = Math.max(audioCtx.currentTime + 0.02, nextPlayAt);
     src.start(nextPlayAt);
     nextPlayAt += abuf.duration;
+    activeSrcs.push(src);
+    src.onended = function() { activeSrcs = activeSrcs.filter(function(s){ return s !== src; }); };
   }
 
   /* ── Start call ──────────────────────────────────────────────────────── */
@@ -234,6 +244,9 @@ router.get("/widget.js", (req, res): void => {
             actionBtn.disabled = false;
             actionBtn.textContent = "End Call";
             actionBtn.className = "vo-call-btn end";
+            setStatus("listening", "Listening…");
+          } else if (msg.type === "interrupted") {
+            stopAllAudio();
             setStatus("listening", "Listening…");
           } else if (msg.type === "status") {
             var labels = { idle:"Ready", listening:"Listening…", thinking:"Thinking…", speaking:"Speaking…" };

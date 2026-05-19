@@ -32,12 +32,13 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
   const [duration, setDuration] = useState<number | null>(null);
   const [copied, setCopied]     = useState(false);
 
-  const wsRef        = useRef<WebSocket | null>(null);
-  const audioCtxRef  = useRef<AudioContext | null>(null);
-  const processorRef = useRef<ScriptProcessorNode | null>(null);
-  const streamRef    = useRef<MediaStream | null>(null);
-  const nextPlayRef  = useRef(0);
-  const scrollRef    = useRef<HTMLDivElement>(null);
+  const wsRef          = useRef<WebSocket | null>(null);
+  const audioCtxRef    = useRef<AudioContext | null>(null);
+  const processorRef   = useRef<ScriptProcessorNode | null>(null);
+  const streamRef      = useRef<MediaStream | null>(null);
+  const nextPlayRef    = useRef(0);
+  const activeSourcesRef = useRef<AudioBufferSourceNode[]>([]);
+  const scrollRef      = useRef<HTMLDivElement>(null);
 
   const transcriptRef = useRef<HTMLDivElement>(null);
 
@@ -56,6 +57,17 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
     return int16;
   }
 
+  /** Stop all queued/playing agent audio immediately (barge-in). */
+  function stopAllAudio() {
+    for (const src of activeSourcesRef.current) {
+      try { src.stop(); } catch { /* already ended */ }
+    }
+    activeSourcesRef.current = [];
+    // Reset playback clock so next audio plays immediately
+    const ctx = audioCtxRef.current;
+    if (ctx) nextPlayRef.current = ctx.currentTime;
+  }
+
   function playPCM16(buf: ArrayBuffer) {
     const ctx = audioCtxRef.current;
     if (!ctx) return;
@@ -71,6 +83,11 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
     nextPlayRef.current = Math.max(now + 0.02, nextPlayRef.current);
     src.start(nextPlayRef.current);
     nextPlayRef.current += abuf.duration;
+    // Track so we can stop on barge-in
+    activeSourcesRef.current.push(src);
+    src.onended = () => {
+      activeSourcesRef.current = activeSourcesRef.current.filter(s => s !== src);
+    };
   }
 
   // ── Start call ─────────────────────────────────────────────────────────────
@@ -121,6 +138,10 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
             text?: string; durationSeconds?: number; message?: string;
           };
           if (msg.type === "ready") {
+            setStatus("listening");
+          } else if (msg.type === "interrupted") {
+            // Barge-in: user spoke while agent was talking — stop audio immediately
+            stopAllAudio();
             setStatus("listening");
           } else if (msg.type === "status" && msg.status) {
             setStatus(msg.status);

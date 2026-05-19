@@ -8,14 +8,14 @@ import { logger } from "../../lib/logger.js";
 import type { ConversationTurn } from "../types.js";
 
 // ── Tuning constants ─────────────────────────────────────────────────────────
-const VAD_SILENCE_MS      = 300;  // was 600ms — shorter silence window
-const SPEECH_RMS_THRESHOLD = 400; // Int16 RMS
-const MIN_PCM_BYTES        = 6400; // ~200ms at 16kHz Int16
-const AUDIO_CHUNK_BYTES    = 1280; // 40ms per WS frame (was 640/20ms)
+const VAD_SILENCE_MS       = 300;
+const SPEECH_RMS_THRESHOLD = 400;   // normal VAD threshold
+const BARGE_IN_RMS         = 600;   // higher threshold while agent is speaking (avoids echo false-positives)
+const MIN_PCM_BYTES        = 6400;  // ~200ms at 16kHz Int16
+const AUDIO_CHUNK_BYTES    = 1280;  // 40ms per WS frame
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Compute RMS energy from Int16LE PCM buffer */
 function rmsEnergy(buf: Buffer): number {
   let sum = 0;
   const samples = buf.length >> 1;
@@ -26,37 +26,25 @@ function rmsEnergy(buf: Buffer): number {
   return samples > 0 ? Math.sqrt(sum / samples) : 0;
 }
 
-/**
- * Extract complete sentences from a token buffer.
- * Returns [completeSentences[], remainingBuffer].
- * Splits on .!? followed by whitespace.
- */
 function extractSentences(buf: string): [string[], string] {
   const parts = buf.split(/(?<=[.!?])\s+/);
   if (parts.length <= 1) return [[], buf];
   const complete = parts.slice(0, -1).map(s => s.trim()).filter(Boolean);
-  const rest = parts[parts.length - 1] ?? "";
-  return [complete, rest];
+  return [complete, parts[parts.length - 1] ?? ""];
 }
 
 type Status = "idle" | "listening" | "thinking" | "speaking";
 
 /**
- * WebCall WebSocket handler — low-latency browser voice pipeline.
+ * WebCall WebSocket handler — with barge-in (interruption) support.
  *
- * Latency optimisations:
- *   1. Shorter VAD silence window (300ms instead of 600ms)
- *   2. Sentence-level pipelined TTS: synthesise sentence N+1 in the
- *      background while playing sentence N, so first audio arrives as
- *      soon as the first sentence of the LLM response is ready — not
- *      after the whole reply is synthesised.
- *   3. Larger WS audio frames (40ms) to reduce per-frame overhead.
- *
- * Protocol (unchanged):
- *   Client → Server  Binary Int16LE PCM at 16kHz
- *   Client → Server  JSON {"type":"end"}
- *   Server → Client  JSON {"type":"ready"|"status"|"transcript"|"error"|"ended", ...}
- *   Server → Client  Binary Int16LE PCM at 16kHz
+ * Barge-in flow:
+ *   1. While agent is streaming audio (speaking = true), the server keeps
+ *      monitoring incoming PCM energy from the client.
+ *   2. If energy exceeds BARGE_IN_RMS, the server sets interrupted = true
+ *      (halting the audio loop) and sends { type:"interrupted" } to the client.
+ *   3. The client immediately stops all queued/playing audio on receipt of
+ *      that message, and the server starts a new STT → LLM → TTS cycle.
  */
 export async function handleWebCallWebSocket(
   ws: WebSocket,
@@ -104,35 +92,34 @@ export async function handleWebCallWebSocket(
   const callId    = callRecord.id;
   const startedAt = new Date();
   const history: ConversationTurn[] = [];
-  let closed = false;
+  let closed      = false;
 
-  // ── Audio buffering + VAD ─────────────────────────────────────────────────
+  // ── State ─────────────────────────────────────────────────────────────────
   const audioChunks: Buffer[] = [];
   let silenceTimer: ReturnType<typeof setTimeout> | null = null;
-  let processing = false;
+  let processing  = false;
+  let speaking    = false;   // true while audio frames are being sent to client
+  let interrupted = false;   // barge-in flag; checked inside audio loop
 
+  // ── Pipeline ─────────────────────────────────────────────────────────────
   async function process() {
     if (processing || audioChunks.length === 0) return;
     const pcm = Buffer.concat(audioChunks.splice(0));
     if (pcm.length < MIN_PCM_BYTES) return;
 
-    processing = true;
+    processing  = true;
+    interrupted = false;
     sendStatus("thinking");
 
     try {
-      // ── 1. STT ──────────────────────────────────────────────────────────
+      // 1. STT
       const userText = await stt.transcribe(pcm, 16000);
       if (!userText?.trim()) { processing = false; return; }
 
       send({ type: "transcript", speaker: "user", text: userText });
       history.push({ role: "user", content: userText });
 
-      // ── 2. LLM — stream tokens, kick off TTS per sentence ───────────────
-      //
-      // sentenceJobs holds TTS synthesis Promises in order.
-      // Each Promise is started the moment a complete sentence is detected
-      // in the token stream, so synthesis of sentence N+1 runs concurrently
-      // with audio playback of sentence N.
+      // 2. LLM — stream tokens, queue TTS per sentence
       const sentenceJobs: Promise<Buffer>[] = [];
       let tokenBuf  = "";
       let fullReply = "";
@@ -155,52 +142,55 @@ export async function handleWebCallWebSocket(
         (full) => { fullReply = full; }
       );
 
-      // Flush anything left in the buffer after LLM finishes
       if (tokenBuf.trim()) queueSentence(tokenBuf);
 
       if (!fullReply.trim() || sentenceJobs.length === 0) {
-        processing = false;
         sendStatus("listening");
+        processing = false;
         return;
       }
 
       history.push({ role: "assistant", content: fullReply });
       sendStatus("speaking");
+      speaking = true;
 
-      // ── 3. Pipelined playback ────────────────────────────────────────────
-      //
-      // Await each job in sequence.  By the time job[0] resolves and we
-      // finish playing it, job[1] has been running in the background and
-      // is likely already resolved — so the gap between sentences is near zero.
+      // 3. Pipelined sentence playback — barge-in checks at every frame
       let transcriptSent = false;
 
       for (let i = 0; i < sentenceJobs.length; i++) {
-        if (closed) break;
+        if (closed || interrupted) break;
 
         const pcmOut = await sentenceJobs[i]!;
+        if (interrupted || closed) break;
 
-        // Show transcript at the moment first audio is ready
         if (!transcriptSent) {
           send({ type: "transcript", speaker: "agent", text: fullReply });
           transcriptSent = true;
         }
 
-        // Stream audio in 40ms frames
         for (let j = 0; j < pcmOut.length; j += AUDIO_CHUNK_BYTES) {
-          if (closed) break;
+          if (closed || interrupted) break;
           sendAudio(pcmOut.slice(j, j + AUDIO_CHUNK_BYTES));
           await new Promise(r => setTimeout(r, 40));
         }
       }
 
-      if (!closed) sendStatus("listening");
+      speaking = false;
+
+      if (interrupted) {
+        // Barge-in: immediately process whatever the user said
+        logger.info({ callId }, "Barge-in detected — processing user interruption");
+        if (audioChunks.length > 0) void process();
+      } else if (!closed) {
+        sendStatus("listening");
+      }
 
     } catch (err) {
+      speaking = false;
       logger.error({ callId, err }, "WebCall pipeline error");
       send({ type: "error", message: String(err) });
     } finally {
       processing = false;
-      if (audioChunks.length > 0) void process();
     }
   }
 
@@ -227,7 +217,7 @@ export async function handleWebCallWebSocket(
     clearTimeout(maxTimer);
     clearSilenceTimer();
 
-    const endedAt        = new Date();
+    const endedAt         = new Date();
     const durationSeconds = Math.floor((endedAt.getTime() - startedAt.getTime()) / 1000);
     const transcript      = history.map(t => `${t.role === "user" ? "Caller" : "Agent"}: ${t.content}`).join("\n");
 
@@ -268,6 +258,22 @@ export async function handleWebCallWebSocket(
     }
 
     const rms = rmsEnergy(data);
+
+    if (speaking) {
+      // Agent is speaking — use elevated threshold to ignore echo
+      if (rms > BARGE_IN_RMS) {
+        audioChunks.push(Buffer.from(data)); // buffer user speech for next turn
+        if (!interrupted) {
+          interrupted = true;
+          send({ type: "interrupted" }); // tell client to stop playing
+          sendStatus("thinking");
+          logger.info({ callId, rms }, "Barge-in triggered");
+        }
+      }
+      return; // don't touch silence timer while speaking
+    }
+
+    // Normal VAD (agent silent)
     if (rms > SPEECH_RMS_THRESHOLD) {
       audioChunks.push(Buffer.from(data));
       clearSilenceTimer();
