@@ -92,6 +92,53 @@ const ASR_MODELS: Record<string, { value: string; label: string }[]> = {
   sarvam:     [{ value: "saarika:v2.5", label: "Saarika v2.5" }, { value: "saarika:flash", label: "Saarika Flash" }],
   cartesia:   [{ value: "sonic-english", label: "Sonic English" }],
 };
+const TTS_MODELS: Record<string, { value: string; label: string }[]> = {
+  cartesia: [
+    { value: "sonic-3",     label: "Sonic 3 (latest)" },
+    { value: "sonic-2",     label: "Sonic 2 (stable)" },
+    { value: "sonic-turbo", label: "Sonic Turbo (fast)" },
+  ],
+  openai: [
+    { value: "tts-1",    label: "TTS-1 (fast)" },
+    { value: "tts-1-hd", label: "TTS-1 HD (quality)" },
+  ],
+  deepgram: [
+    { value: "aura-2",          label: "Aura 2 (latest)" },
+    { value: "aura-asteria-en", label: "Aura Asteria" },
+    { value: "aura-luna-en",    label: "Aura Luna" },
+    { value: "aura-stella-en",  label: "Aura Stella" },
+    { value: "aura-athena-en",  label: "Aura Athena" },
+    { value: "aura-hera-en",    label: "Aura Hera" },
+    { value: "aura-orion-en",   label: "Aura Orion (male)" },
+    { value: "aura-arcas-en",   label: "Aura Arcas (male)" },
+    { value: "aura-perseus-en", label: "Aura Perseus (male)" },
+    { value: "aura-angus-en",   label: "Aura Angus (male)" },
+  ],
+  sarvam: [
+    { value: "meera",    label: "Meera (female)" },
+    { value: "pavithra", label: "Pavithra (female)" },
+    { value: "maitreyi", label: "Maitreyi (female)" },
+    { value: "arvind",   label: "Arvind (male)" },
+    { value: "amol",     label: "Amol (male)" },
+    { value: "amartya",  label: "Amartya (male)" },
+  ],
+  azure: [
+    { value: "en-US-JennyNeural",    label: "Jenny (female, US)" },
+    { value: "en-US-GuyNeural",      label: "Guy (male, US)" },
+    { value: "en-US-AriaNeural",     label: "Aria (female, US)" },
+    { value: "en-GB-SoniaNeural",    label: "Sonia (female, UK)" },
+    { value: "en-IN-NeerjaNeural",   label: "Neerja (female, IN)" },
+  ],
+  aws_polly: [
+    { value: "Joanna", label: "Joanna (female, US)" },
+    { value: "Matthew", label: "Matthew (male, US)" },
+    { value: "Ivy",    label: "Ivy (female, US, child)" },
+    { value: "Amy",    label: "Amy (female, UK)" },
+    { value: "Brian",  label: "Brian (male, UK)" },
+    { value: "Emma",   label: "Emma (female, UK)" },
+    { value: "Kajal",  label: "Kajal (female, IN)" },
+  ],
+};
 
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
 
@@ -320,14 +367,15 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
   const deleteAgent = useDeleteAgent();
 
   // Local editable state for inline editing
-  const [systemPrompt, setSystemPrompt]     = useState("");
+  const [systemPrompt, setSystemPrompt]       = useState("");
   const [greetingMessage, setGreetingMessage] = useState("");
-  const [asrProvider, setAsrProvider]       = useState("");
-  const [llmProvider, setLlmProvider]       = useState("");
-  const [llmModel, setLlmModel]             = useState("");
-  const [ttsProvider, setTtsProvider]       = useState("");
-  const [telephony, setTelephony]           = useState("");
-  const [dirty, setDirty]                   = useState(false);
+  const [asrProvider, setAsrProvider]         = useState("");
+  const [llmProvider, setLlmProvider]         = useState("");
+  const [llmModel, setLlmModel]               = useState("");
+  const [ttsProvider, setTtsProvider]         = useState("");
+  const [ttsModel, setTtsModel]               = useState("");
+  const [telephony, setTelephony]             = useState("");
+  const [dirty, setDirty]                     = useState(false);
 
   useEffect(() => {
     if (!agent) return;
@@ -337,6 +385,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
     setLlmProvider(agent.llmProvider ?? "");
     setLlmModel(agent.llmModel ?? "");
     setTtsProvider(agent.ttsProvider ?? "");
+    setTtsModel(agent.ttsModel ?? "");
     setTelephony(agent.telephonyProvider ?? "");
     setDirty(false);
   }, [agent?.id]);
@@ -353,7 +402,8 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
           systemPrompt,
           greetingMessage: greetingMessage || undefined,
           asrProvider, llmProvider, llmModel: llmModel || undefined,
-          ttsProvider, telephonyProvider: telephony,
+          ttsProvider, ttsModel: ttsModel || undefined,
+          telephonyProvider: telephony,
         } as Parameters<typeof update.mutate>[0]["data"],
       },
       {
@@ -555,7 +605,13 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
               {/* Voice */}
               <div className="bg-zinc-800/60 border border-zinc-700/50 rounded-xl p-3.5 space-y-2">
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Voice</p>
-                <Select value={ttsProvider} onValueChange={mark(setTtsProvider)}>
+                <Select
+                  value={ttsProvider}
+                  onValueChange={(v) => {
+                    mark(setTtsProvider)(v);
+                    setTtsModel(TTS_MODELS[v]?.[0]?.value ?? "");
+                  }}
+                >
                   <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200">
                     <SelectValue />
                   </SelectTrigger>
@@ -563,6 +619,18 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                     {TTS_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-zinc-300 text-xs">{p.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
+                {TTS_MODELS[ttsProvider] && (
+                  <Select value={ttsModel} onValueChange={mark(setTtsModel)}>
+                    <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-400">
+                      <SelectValue placeholder="Select model / voice" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-zinc-900 border-zinc-700">
+                      {TTS_MODELS[ttsProvider]!.map(m => (
+                        <SelectItem key={m.value} value={m.value} className="text-zinc-300 text-xs">{m.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               {/* Telephony */}
@@ -710,6 +778,7 @@ function NewAgentPanel({ onCreated }: { onCreated: (id: number) => void }) {
   const [asr, setAsr]         = useState("assemblyai");
   const [llm, setLlm]         = useState("openai");
   const [tts, setTts]         = useState("elevenlabs");
+  const [ttsModel, setTtsModel] = useState("");
   const [tel, setTel]         = useState("twilio");
   const [prompt, setPrompt]   = useState("You are a helpful AI voice assistant. Be concise and professional.");
 
@@ -724,6 +793,7 @@ function NewAgentPanel({ onCreated }: { onCreated: (id: number) => void }) {
           llmProvider: llm,
           llmModel: LLM_MODELS[llm]?.[0]?.value ?? undefined,
           ttsProvider: tts,
+          ttsModel: ttsModel || undefined,
           telephonyProvider: tel,
           systemPrompt: prompt,
           maxDuration: 300,
@@ -777,12 +847,28 @@ function NewAgentPanel({ onCreated }: { onCreated: (id: number) => void }) {
             </div>
             <div className="bg-zinc-800/60 border border-zinc-700/50 rounded-xl p-3.5 space-y-2">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Voice</p>
-              <Select value={tts} onValueChange={setTts}>
+              <Select
+                value={tts}
+                onValueChange={(v) => {
+                  setTts(v);
+                  setTtsModel(TTS_MODELS[v]?.[0]?.value ?? "");
+                }}
+              >
                 <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200"><SelectValue /></SelectTrigger>
                 <SelectContent className="bg-zinc-900 border-zinc-700">
                   {TTS_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-zinc-300 text-xs">{p.label}</SelectItem>)}
                 </SelectContent>
               </Select>
+              {TTS_MODELS[tts] && (
+                <Select value={ttsModel} onValueChange={setTtsModel}>
+                  <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-400"><SelectValue placeholder="Select model / voice" /></SelectTrigger>
+                  <SelectContent className="bg-zinc-900 border-zinc-700">
+                    {TTS_MODELS[tts]!.map(m => (
+                      <SelectItem key={m.value} value={m.value} className="text-zinc-300 text-xs">{m.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
             <div className="bg-zinc-800/60 border border-zinc-700/50 rounded-xl p-3.5 space-y-2">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Telephony</p>
