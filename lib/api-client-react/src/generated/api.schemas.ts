@@ -121,6 +121,21 @@ export interface Call {
   createdAt: string;
   /** @nullable */
   endedAt?: string | null;
+  /**
+     * Average STT round-trip latency across all turns (ms)
+     * @nullable
+     */
+  sttLatencyMs?: number | null;
+  /**
+     * Average LLM time-to-first-token across all turns (ms)
+     * @nullable
+     */
+  llmLatencyMs?: number | null;
+  /**
+     * Average TTS time-to-first-audio-chunk across all turns (ms)
+     * @nullable
+     */
+  ttsFirstChunkMs?: number | null;
 }
 
 export interface CallInput {

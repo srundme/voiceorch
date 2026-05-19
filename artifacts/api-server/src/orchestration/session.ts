@@ -1,17 +1,24 @@
 import { db, agentsTable, callsTable, providersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { OrchestrationPipeline } from "./pipeline.js";
-import type { AgentConfig, TelephonyProvider } from "./types.js";
+import type { AgentConfig, TelephonyProvider, PipelineMetrics } from "./types.js";
 import { logger } from "../lib/logger.js";
+
+interface MetricsAcc {
+  sttTotal: number;
+  llmTotal: number;
+  ttsTotal: number;
+  count: number;
+}
 
 interface ActiveSession {
   callId: number;
   pipeline: OrchestrationPipeline;
   startedAt: Date;
-  transcript: string;
+  metricsAcc: MetricsAcc;
 }
 
-// In-memory session registry  
+// In-memory session registry
 const sessions = new Map<string, ActiveSession>();
 
 export async function createSession(params: {
@@ -19,12 +26,12 @@ export async function createSession(params: {
   telephonyProvider: TelephonyProvider;
   toNumber: string;
   fromNumber: string;
-  externalCallId?: string; // Twilio CallSid, Plivo CallUUID, etc.
+  externalCallId?: string;
   onAudioOut: (audio: Buffer) => void;
   onCallEnd: () => void;
+  onBargeIn?: () => void;
 }): Promise<{ sessionId: string; callDbId: number }> {
 
-  // Load agent config from DB
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, params.agentId));
   if (!agent) throw new Error(`Agent ${params.agentId} not found`);
 
@@ -44,14 +51,12 @@ export async function createSession(params: {
     telephonyProvider: agent.telephonyProvider,
   };
 
-  // Load all provider API keys
   const providerRows = await db.select().from(providersTable).where(eq(providersTable.isActive, true));
   const providerKeys = new Map<string, string>();
   for (const row of providerRows) {
     providerKeys.set(row.providerName.toLowerCase(), row.apiKey);
   }
 
-  // Create call record in DB
   const [callRecord] = await db.insert(callsTable).values({
     agentId: params.agentId,
     status: "in_progress",
@@ -63,6 +68,7 @@ export async function createSession(params: {
   if (!callRecord) throw new Error("Failed to create call record");
 
   let fullTranscript = "";
+  const metricsAcc: MetricsAcc = { sttTotal: 0, llmTotal: 0, ttsTotal: 0, count: 0 };
 
   const pipeline = new OrchestrationPipeline({
     callId: callRecord.id,
@@ -74,6 +80,17 @@ export async function createSession(params: {
       fullTranscript += `${speaker === "user" ? "Caller" : "Agent"}: ${text}\n`;
     },
     onCallEnd: params.onCallEnd,
+    onBargeIn: params.onBargeIn,
+    onMetrics: (m: PipelineMetrics) => {
+      metricsAcc.sttTotal += m.sttLatencyMs;
+      metricsAcc.llmTotal += m.llmLatencyMs;
+      metricsAcc.ttsTotal += m.ttsFirstChunkMs;
+      metricsAcc.count++;
+      logger.info(
+        { callId: callRecord.id, ...m, turnCount: metricsAcc.count },
+        "Per-turn metrics"
+      );
+    },
   });
 
   const sessionId = `${params.telephonyProvider}-${callRecord.id}-${Date.now()}`;
@@ -82,17 +99,13 @@ export async function createSession(params: {
     callId: callRecord.id,
     pipeline,
     startedAt: new Date(),
-    transcript: fullTranscript,
+    metricsAcc,
   });
 
-  // Auto-end after maxDuration
-  setTimeout(() => {
-    void endSession(sessionId);
-  }, agentConfig.maxDuration * 1000);
+  setTimeout(() => { void endSession(sessionId); }, agentConfig.maxDuration * 1000);
 
   logger.info({ sessionId, callId: callRecord.id, agent: agent.name }, "Session created");
 
-  // Send AI-generated greeting immediately when the call connects
   pipeline.greet().catch((err) => {
     logger.error({ sessionId, err }, "Greeting failed");
   });
@@ -122,15 +135,23 @@ export async function endSession(sessionId: string): Promise<void> {
   const durationSeconds = Math.floor((endedAt.getTime() - session.startedAt.getTime()) / 1000);
   const transcript = session.pipeline.getTranscript();
 
+  // Compute average latency metrics across all turns
+  const { metricsAcc } = session;
+  const avgSttMs = metricsAcc.count > 0 ? Math.round(metricsAcc.sttTotal / metricsAcc.count) : null;
+  const avgLlmMs = metricsAcc.count > 0 ? Math.round(metricsAcc.llmTotal / metricsAcc.count) : null;
+  const avgTtsMs = metricsAcc.count > 0 ? Math.round(metricsAcc.ttsTotal / metricsAcc.count) : null;
+
   try {
     await db.update(callsTable).set({
       status: "completed",
       endedAt,
       durationSeconds,
       transcript: transcript || null,
+      sttLatencyMs: avgSttMs,
+      llmLatencyMs: avgLlmMs,
+      ttsFirstChunkMs: avgTtsMs,
     }).where(eq(callsTable.id, session.callId));
 
-    // Update agent stats
     const [call] = await db.select().from(callsTable).where(eq(callsTable.id, session.callId));
     if (call) {
       const [ag] = await db.select().from(agentsTable).where(eq(agentsTable.id, call.agentId));
@@ -149,7 +170,10 @@ export async function endSession(sessionId: string): Promise<void> {
     logger.error({ sessionId, err }, "Error finalizing session");
   }
 
-  logger.info({ sessionId, durationSeconds }, "Session ended");
+  logger.info(
+    { sessionId, durationSeconds, avgSttMs, avgLlmMs, avgTtsMs },
+    "Session ended"
+  );
 }
 
 export async function failSession(sessionId: string, errorMessage: string): Promise<void> {

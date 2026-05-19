@@ -584,6 +584,15 @@ components:
         endedAt:
           type: ["string", "null"]
           format: date-time
+        sttLatencyMs:
+          type: ["integer", "null"]
+          description: Average STT round-trip latency across all turns (ms)
+        llmLatencyMs:
+          type: ["integer", "null"]
+          description: Average LLM time-to-first-token across all turns (ms)
+        ttsFirstChunkMs:
+          type: ["integer", "null"]
+          description: Average TTS time-to-first-audio-chunk across all turns (ms)
 
     CallInput:
       type: object

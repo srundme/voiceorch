@@ -16,7 +16,9 @@ import { logger } from "../../lib/logger.js";
  *   { event: "stop" }
  *
  * Outbound (server → Vobiz) to play audio to caller:
- *   { event: "media", streamId: "...", media: { payload: "<base64 LINEAR16 PCM 8kHz>" } }
+ *   { event: "playAudio", media: { contentType: "audio/x-l16", sampleRate: 8000, payload: "<base64 PCM>" } }
+ *
+ * Barge-in: send { event: "clearAudio", streamId } to discard Vobiz's playback buffer.
  *
  * Audio format: LINEAR16 PCM at 8000 Hz (NOT mulaw like Twilio/Plivo)
  *
@@ -56,13 +58,10 @@ export async function handleVobizWebSocket(
 
   /**
    * Send audio to Vobiz caller via the playAudio WebSocket event.
-   * Vobiz uses event:"playAudio" (NOT "media" like Twilio) with contentType/sampleRate.
-   * Pipeline delivers mulaw chunks; we decode them back to LINEAR16 PCM (audio/x-l16).
-   * https://docs.vobiz.ai/xml/stream/play-audio
+   * Pipeline delivers mulaw chunks; decode them back to LINEAR16 PCM (audio/x-l16).
    */
   function sendAudioToVobiz(mulawChunk: Buffer): void {
     if (ws.readyState !== ws.OPEN) return;
-    // Vobiz expects LINEAR16 PCM — decode the mulaw the pipeline produced
     const pcm = decodeMulaw(mulawChunk);
     ws.send(JSON.stringify({
       event: "playAudio",
@@ -72,6 +71,16 @@ export async function handleVobizWebSocket(
         payload: pcm.toString("base64"),
       },
     }));
+  }
+
+  /**
+   * Barge-in: tell Vobiz to immediately discard any buffered playback audio.
+   * Called by the pipeline when the caller speaks during agent playback.
+   */
+  function sendBargeIn(): void {
+    if (!streamId || ws.readyState !== ws.OPEN) return;
+    ws.send(JSON.stringify({ event: "clearAudio", streamId }));
+    logger.info({ streamId }, "Vobiz clearAudio sent (barge-in)");
   }
 
   ws.on("message", async (raw: Buffer | string) => {
@@ -88,7 +97,6 @@ export async function handleVobizWebSocket(
         break;
 
       case "start": {
-        // Vobiz uses "streamId" (UUID), not Twilio's "streamSid"
         streamId = msg.start?.streamId ?? msg.streamId ?? null;
         const callId = msg.start?.callId ?? null;
 
@@ -107,6 +115,7 @@ export async function handleVobizWebSocket(
             externalCallId: callId ?? undefined,
             onAudioOut: sendAudioToVobiz,
             onCallEnd: () => ws.close(),
+            onBargeIn: sendBargeIn,
           });
           sessionId = sid;
           logger.info({ sessionId, agentId, fromNumber, toNumber, streamId }, "Vobiz session started");
@@ -119,11 +128,9 @@ export async function handleVobizWebSocket(
 
       case "media": {
         if (!sessionId || !msg.media?.payload) break;
-        // Ignore outbound echo tracks
         if (msg.media.track && msg.media.track !== "inbound") break;
         const session = getSession(sessionId);
         if (!session) break;
-        // Vobiz sends LINEAR16 PCM — pass directly as raw PCM (bypass mulaw decode)
         const pcm8k = Buffer.from(msg.media.payload, "base64");
         session.pipeline.onRawPcm8kIn(pcm8k);
         break;

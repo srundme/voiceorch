@@ -14,6 +14,9 @@ export const callsTable = pgTable("calls", {
   recordingUrl: text("recording_url"),
   errorMessage: text("error_message"),
   metadata: text("metadata"),
+  sttLatencyMs: integer("stt_latency_ms"),
+  llmLatencyMs: integer("llm_latency_ms"),
+  ttsFirstChunkMs: integer("tts_first_chunk_ms"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   endedAt: timestamp("ended_at", { withTimezone: true }),
 });

@@ -57,6 +57,12 @@ export interface TTSAdapter {
 
 export type TelephonyProvider = "twilio" | "plivo" | "vobiz";
 
+export interface PipelineMetrics {
+  sttLatencyMs: number;
+  llmLatencyMs: number;
+  ttsFirstChunkMs: number;
+}
+
 export interface SessionConfig {
   callId: number;
   agentConfig: AgentConfig;
@@ -65,4 +71,6 @@ export interface SessionConfig {
   onAudioOut: (audio: Buffer) => void;
   onTranscript: (speaker: "user" | "agent", text: string) => void;
   onCallEnd: () => void;
+  onBargeIn?: () => void;
+  onMetrics?: (metrics: PipelineMetrics) => void;
 }

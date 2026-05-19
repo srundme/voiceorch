@@ -3,6 +3,7 @@ import { AzureSTT } from "./azure.js";
 import { AssemblyAISTT } from "./assemblyai.js";
 import { SarvamSTT } from "./sarvam.js";
 import { CartesiaSTT } from "./cartesia.js";
+import { DeepgramSTT } from "./deepgram.js";
 
 export function createSTTAdapter(
   provider: string,
@@ -19,6 +20,8 @@ export function createSTTAdapter(
       return new SarvamSTT(apiKey, model);
     case "cartesia":
       return new CartesiaSTT(apiKey, model);
+    case "deepgram":
+      return new DeepgramSTT(apiKey, model);
     default:
       throw new Error(`Unknown STT provider: ${provider}`);
   }

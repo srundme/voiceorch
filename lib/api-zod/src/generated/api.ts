@@ -206,7 +206,10 @@ export const ListCallsResponseItem = zod.object({
   "errorMessage": zod.string().nullish(),
   "metadata": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
-  "endedAt": zod.coerce.date().nullish()
+  "endedAt": zod.coerce.date().nullish(),
+  "sttLatencyMs": zod.number().nullish().describe('Average STT round-trip latency across all turns (ms)'),
+  "llmLatencyMs": zod.number().nullish().describe('Average LLM time-to-first-token across all turns (ms)'),
+  "ttsFirstChunkMs": zod.number().nullish().describe('Average TTS time-to-first-audio-chunk across all turns (ms)')
 })
 export const ListCallsResponse = zod.array(ListCallsResponseItem)
 
@@ -242,7 +245,10 @@ export const GetCallResponse = zod.object({
   "errorMessage": zod.string().nullish(),
   "metadata": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
-  "endedAt": zod.coerce.date().nullish()
+  "endedAt": zod.coerce.date().nullish(),
+  "sttLatencyMs": zod.number().nullish().describe('Average STT round-trip latency across all turns (ms)'),
+  "llmLatencyMs": zod.number().nullish().describe('Average LLM time-to-first-token across all turns (ms)'),
+  "ttsFirstChunkMs": zod.number().nullish().describe('Average TTS time-to-first-audio-chunk across all turns (ms)')
 })
 
 
@@ -275,7 +281,10 @@ export const UpdateCallResponse = zod.object({
   "errorMessage": zod.string().nullish(),
   "metadata": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
-  "endedAt": zod.coerce.date().nullish()
+  "endedAt": zod.coerce.date().nullish(),
+  "sttLatencyMs": zod.number().nullish().describe('Average STT round-trip latency across all turns (ms)'),
+  "llmLatencyMs": zod.number().nullish().describe('Average LLM time-to-first-token across all turns (ms)'),
+  "ttsFirstChunkMs": zod.number().nullish().describe('Average TTS time-to-first-audio-chunk across all turns (ms)')
 })
 
 
@@ -309,7 +318,10 @@ export const EndCallResponse = zod.object({
   "errorMessage": zod.string().nullish(),
   "metadata": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
-  "endedAt": zod.coerce.date().nullish()
+  "endedAt": zod.coerce.date().nullish(),
+  "sttLatencyMs": zod.number().nullish().describe('Average STT round-trip latency across all turns (ms)'),
+  "llmLatencyMs": zod.number().nullish().describe('Average LLM time-to-first-token across all turns (ms)'),
+  "ttsFirstChunkMs": zod.number().nullish().describe('Average TTS time-to-first-audio-chunk across all turns (ms)')
 })
 
 
@@ -402,7 +414,10 @@ export const GetRecentCallsResponseItem = zod.object({
   "errorMessage": zod.string().nullish(),
   "metadata": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
-  "endedAt": zod.coerce.date().nullish()
+  "endedAt": zod.coerce.date().nullish(),
+  "sttLatencyMs": zod.number().nullish().describe('Average STT round-trip latency across all turns (ms)'),
+  "llmLatencyMs": zod.number().nullish().describe('Average LLM time-to-first-token across all turns (ms)'),
+  "ttsFirstChunkMs": zod.number().nullish().describe('Average TTS time-to-first-audio-chunk across all turns (ms)')
 })
 export const GetRecentCallsResponse = zod.array(GetRecentCallsResponseItem)
 

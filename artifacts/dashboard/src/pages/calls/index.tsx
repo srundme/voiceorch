@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Link } from "wouter";
 import { format, parseISO } from "date-fns";
-import { Search, Filter, Phone } from "lucide-react";
+import { Search, Phone, Mic, Cpu, Volume2 } from "lucide-react";
 import { 
   useListCalls, 
   getListCallsQueryKey,
@@ -28,6 +28,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export default function CallsList() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -59,6 +65,11 @@ export default function CallsList() {
     return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
   };
 
+  const formatMs = (ms?: number | null) => {
+    if (ms == null) return null;
+    return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`;
+  };
+
   const getStatusBadge = (status: string) => {
     switch(status) {
       case "completed": return <Badge variant="default" className="bg-primary/20 text-primary hover:bg-primary/30 border-transparent">Completed</Badge>;
@@ -70,7 +81,15 @@ export default function CallsList() {
     }
   };
 
+  const getLatencyColor = (ms: number | null | undefined, thresholds: [number, number]) => {
+    if (ms == null) return "text-muted-foreground";
+    if (ms <= thresholds[0]) return "text-emerald-600 dark:text-emerald-400";
+    if (ms <= thresholds[1]) return "text-yellow-600 dark:text-yellow-400";
+    return "text-red-600 dark:text-red-400";
+  };
+
   return (
+    <TooltipProvider>
     <div className="flex-1 space-y-6 p-6 md:p-8 pt-6 h-full flex flex-col">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -126,6 +145,17 @@ export default function CallsList() {
                 <TableHead>Status</TableHead>
                 <TableHead>To / From</TableHead>
                 <TableHead>Duration</TableHead>
+                <TableHead>
+                  <Tooltip>
+                    <TooltipTrigger className="cursor-default">Latency (avg)</TooltipTrigger>
+                    <TooltipContent side="top" className="text-xs max-w-[220px]">
+                      <p className="mb-1 font-semibold">Per-call averages across all turns</p>
+                      <p><span className="text-blue-400">STT</span> — speech-to-text round-trip</p>
+                      <p><span className="text-violet-400">LLM</span> — time to first token</p>
+                      <p><span className="text-orange-400">TTS</span> — time to first audio chunk</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TableHead>
                 <TableHead className="text-right">Action</TableHead>
               </TableRow>
             </TableHeader>
@@ -138,40 +168,89 @@ export default function CallsList() {
                     <TableCell><Skeleton className="h-6 w-20 rounded-full" /></TableCell>
                     <TableCell><Skeleton className="h-8 w-32" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-12" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-28" /></TableCell>
                     <TableCell className="text-right"><Skeleton className="h-8 w-16 ml-auto" /></TableCell>
                   </TableRow>
                 ))
               ) : calls && calls.length > 0 ? (
-                calls.map((call) => (
-                  <TableRow key={call.id} className="cursor-pointer hover:bg-muted/50 transition-colors border-border/50">
-                    <TableCell className="whitespace-nowrap text-muted-foreground font-medium text-xs">
-                      {format(parseISO(call.createdAt), "MMM d, HH:mm:ss")}
-                    </TableCell>
-                    <TableCell>
-                       <Link href={`/agents/${call.agentId}`}>
-                         <span className="font-medium text-primary hover:underline">{call.agentName}</span>
-                       </Link>
-                    </TableCell>
-                    <TableCell>
-                      {getStatusBadge(call.status)}
-                    </TableCell>
-                    <TableCell>
-                      <div className="text-sm font-medium">{call.toNumber}</div>
-                      <div className="text-xs text-muted-foreground">{call.fromNumber}</div>
-                    </TableCell>
-                    <TableCell className="font-mono text-sm text-muted-foreground">
-                      {formatDuration(call.durationSeconds)}
-                    </TableCell>
-                    <TableCell className="text-right">
+                calls.map((call) => {
+                  const sttMs = formatMs(call.sttLatencyMs);
+                  const llmMs = formatMs(call.llmLatencyMs);
+                  const ttsMs = formatMs(call.ttsFirstChunkMs);
+                  const hasLatency = sttMs || llmMs || ttsMs;
+
+                  return (
+                    <TableRow key={call.id} className="cursor-pointer hover:bg-muted/50 transition-colors border-border/50">
+                      <TableCell className="whitespace-nowrap text-muted-foreground font-medium text-xs">
+                        {format(parseISO(call.createdAt), "MMM d, HH:mm:ss")}
+                      </TableCell>
+                      <TableCell>
+                        <Link href={`/agents/${call.agentId}`}>
+                          <span className="font-medium text-primary hover:underline">{call.agentName}</span>
+                        </Link>
+                      </TableCell>
+                      <TableCell>
+                        {getStatusBadge(call.status)}
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm font-medium">{call.toNumber}</div>
+                        <div className="text-xs text-muted-foreground">{call.fromNumber}</div>
+                      </TableCell>
+                      <TableCell className="font-mono text-sm text-muted-foreground">
+                        {formatDuration(call.durationSeconds)}
+                      </TableCell>
+                      <TableCell>
+                        {hasLatency ? (
+                          <div className="flex items-center gap-2 text-xs font-mono">
+                            {sttMs && (
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <span className={`flex items-center gap-0.5 ${getLatencyColor(call.sttLatencyMs, [400, 800])}`}>
+                                    <Mic className="h-3 w-3" />
+                                    {sttMs}
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent>STT latency (avg)</TooltipContent>
+                              </Tooltip>
+                            )}
+                            {llmMs && (
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <span className={`flex items-center gap-0.5 ${getLatencyColor(call.llmLatencyMs, [300, 600])}`}>
+                                    <Cpu className="h-3 w-3" />
+                                    {llmMs}
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent>LLM first-token latency (avg)</TooltipContent>
+                              </Tooltip>
+                            )}
+                            {ttsMs && (
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <span className={`flex items-center gap-0.5 ${getLatencyColor(call.ttsFirstChunkMs, [200, 500])}`}>
+                                    <Volume2 className="h-3 w-3" />
+                                    {ttsMs}
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent>TTS first-audio latency from LLM start (avg)</TooltipContent>
+                              </Tooltip>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground/50">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
                         <Link href={`/calls/${call.id}`}>
-                        <Button variant="secondary" size="sm" className="h-8 text-xs font-semibold">View Log</Button>
-                      </Link>
-                    </TableCell>
-                  </TableRow>
-                ))
+                          <Button variant="secondary" size="sm" className="h-8 text-xs font-semibold">View Log</Button>
+                        </Link>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               ) : (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-64 text-center text-muted-foreground border-0">
+                  <TableCell colSpan={7} className="h-64 text-center text-muted-foreground border-0">
                     <div className="flex flex-col items-center justify-center">
                       <Phone className="h-10 w-10 opacity-20 mb-3" />
                       <p>No calls found matching your filters.</p>
@@ -184,5 +263,6 @@ export default function CallsList() {
         </CardContent>
       </Card>
     </div>
+    </TooltipProvider>
   );
 }

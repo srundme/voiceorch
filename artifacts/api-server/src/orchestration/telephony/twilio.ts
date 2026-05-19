@@ -78,6 +78,12 @@ export async function handleTwilioWebSocket(
             externalCallId: callSid ?? undefined,
             onAudioOut: sendAudioToTwilio,
             onCallEnd: () => ws.close(),
+            onBargeIn: () => {
+              // Clear any audio Twilio has buffered but not yet played
+              if (streamSid && ws.readyState === ws.OPEN) {
+                ws.send(JSON.stringify({ event: "clear", streamSid }));
+              }
+            },
           });
           sessionId = sid;
           logger.info({ sessionId, callSid, agentId }, "Twilio session started");
