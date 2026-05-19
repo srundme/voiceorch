@@ -140,7 +140,7 @@ export default function WalletPage() {
                 )}
                 <p className="text-xs text-zinc-500 mt-2">
                   {wallet?.freeCreditsGranted && <span className="text-emerald-400 mr-2">✓ $5 free credit applied</span>}
-                  Approx. {Math.floor((wallet?.balanceCents ?? 0) / 3)} minutes of calls remaining
+                  Approx. {Math.floor((wallet?.balanceCents ?? 0) / 3)} minutes of orchestration remaining <span className="text-zinc-600">(platform fee only — provider costs billed separately to your keys)</span>
                 </p>
               </div>
               {balanceLow && (
