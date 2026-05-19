@@ -126,7 +126,13 @@ export async function handleWebCallWebSocket(
 
       function queueSentence(text: string) {
         const t = text.trim();
-        if (t) sentenceJobs.push(tts.synthesize(t));
+        if (!t) return;
+        const job = tts.synthesize(t);
+        // Attach a no-op catch immediately so Node.js doesn't fire
+        // unhandledRejection before the for-loop below awaits the job.
+        // The rejection still propagates when we await in the loop.
+        job.catch(() => {});
+        sentenceJobs.push(job);
       }
 
       await llm.chat(

@@ -23,7 +23,7 @@ export class CartesiaTTS implements TTSAdapter {
       method: "POST",
       headers: {
         "X-API-Key": this.key,
-        "Cartesia-Version": "2024-06-10",
+        "Cartesia-Version": "2026-03-01",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
