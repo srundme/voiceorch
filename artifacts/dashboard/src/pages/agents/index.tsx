@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link } from "wouter";
-import { Search, Plus, Filter, MoreHorizontal, Settings2, PlayCircle, BarChart2, Phone, Users } from "lucide-react";
+import { Search, Plus, Filter, MoreHorizontal, Settings2, PlayCircle, BarChart2, Phone, Users, Pencil } from "lucide-react";
 import { 
   useListAgents, 
   useToggleAgent,
@@ -170,7 +170,13 @@ export default function AgentsList() {
                         <Link href={`/agents/${agent.id}`}>
                           <DropdownMenuItem className="cursor-pointer">
                             <Settings2 className="mr-2 h-4 w-4" />
-                            Configure Agent
+                            View Details
+                          </DropdownMenuItem>
+                        </Link>
+                        <Link href={`/agents/${agent.id}/edit`}>
+                          <DropdownMenuItem className="cursor-pointer">
+                            <Pencil className="mr-2 h-4 w-4" />
+                            Edit Agent
                           </DropdownMenuItem>
                         </Link>
                         <DropdownMenuItem className="cursor-pointer" onClick={() => handleToggle(agent.id, agent.status)}>

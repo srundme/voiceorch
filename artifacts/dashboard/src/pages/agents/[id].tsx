@@ -3,7 +3,7 @@ import { Link, useParams } from "wouter";
 import { format, parseISO } from "date-fns";
 import {
   ArrowLeft, Settings2, Activity, Phone, BarChart2, Clock,
-  Mic, MicOff, PhoneOff, Copy, Check, Loader2, Volume2, PhoneOutgoing
+  Mic, MicOff, PhoneOff, Copy, Check, Loader2, Volume2, PhoneOutgoing, Pencil
 } from "lucide-react";
 import {
   useGetAgent,
@@ -466,14 +466,22 @@ export default function AgentDetail() {
           {agent.status === "inactive" && <Badge variant="secondary">Inactive</Badge>}
           {agent.status === "draft"    && <Badge variant="outline" className="text-yellow-500 border-yellow-500">Draft</Badge>}
         </div>
-        <Button
-          variant="outline"
-          className="gap-2 ml-auto"
-          onClick={() => setCallDialogOpen(true)}
-        >
-          <PhoneOutgoing className="h-4 w-4" />
-          Make a Call
-        </Button>
+        <div className="flex items-center gap-2 ml-auto">
+          <Link href={`/agents/${id}/edit`}>
+            <Button variant="outline" className="gap-2">
+              <Pencil className="h-4 w-4" />
+              Edit Agent
+            </Button>
+          </Link>
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => setCallDialogOpen(true)}
+          >
+            <PhoneOutgoing className="h-4 w-4" />
+            Make a Call
+          </Button>
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">

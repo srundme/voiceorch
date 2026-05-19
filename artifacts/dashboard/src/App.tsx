@@ -13,6 +13,7 @@ import Dashboard from "@/pages/dashboard";
 import AgentsList from "@/pages/agents/index";
 import AgentNew from "@/pages/agents/new";
 import AgentDetail from "@/pages/agents/[id]";
+import AgentEdit from "@/pages/agents/edit";
 import CallsList from "@/pages/calls/index";
 import CallDetail from "@/pages/calls/[id]";
 import ProvidersList from "@/pages/providers/index";
@@ -34,6 +35,7 @@ function Router() {
         <Route path="/" component={Dashboard} />
         <Route path="/agents" component={AgentsList} />
         <Route path="/agents/new" component={AgentNew} />
+        <Route path="/agents/:id/edit" component={AgentEdit} />
         <Route path="/agents/:id" component={AgentDetail} />
         <Route path="/calls" component={CallsList} />
         <Route path="/calls/:id" component={CallDetail} />
