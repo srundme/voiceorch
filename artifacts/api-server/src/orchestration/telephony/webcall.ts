@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { db, agentsTable, callsTable, providersTable } from "@workspace/db";
+import { db, agentsTable, callsTable, providersTable, usersTable, walletTransactionsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { createSTTAdapter } from "../adapters/stt/index.js";
 import { createLLMAdapter } from "../adapters/llm/index.js";
@@ -60,6 +60,17 @@ export async function handleWebCallWebSocket(
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId));
   if (!agent) { send({ type: "error", message: "Agent not found" }); ws.close(); return; }
 
+  // Balance gate — reject before any call setup if wallet is empty
+  if (agent.userId) {
+    const [user] = await db.select({ walletBalanceCents: usersTable.walletBalanceCents })
+      .from(usersTable).where(eq(usersTable.clerkId, agent.userId));
+    if (user && user.walletBalanceCents <= 0) {
+      send({ type: "error", message: "Insufficient balance. Please top up your wallet to start calls." });
+      ws.close();
+      return;
+    }
+  }
+
   const providerRows = await db.select().from(providersTable).where(eq(providersTable.isActive, true));
   const providerKeys = new Map<string, string>();
   for (const row of providerRows) providerKeys.set(row.providerName.toLowerCase(), row.apiKey);
@@ -94,6 +105,7 @@ export async function handleWebCallWebSocket(
   // ── Create call DB record ─────────────────────────────────────────────────
   const [callRecord] = await db.insert(callsTable).values({
     agentId,
+    userId: agent.userId ?? null,
     status: "in_progress",
     toNumber: "webcall",
     fromNumber: "browser",
@@ -256,6 +268,26 @@ export async function handleWebCallWebSocket(
           : durationSeconds;
         await db.update(agentsTable).set({ successfulCalls: newSuccessful, avgDurationSeconds: newAvg })
           .where(eq(agentsTable.id, agentId));
+      }
+
+      // Deduct platform fee: $0.03/min from wallet
+      const callUserId = agent.userId ?? null;
+      if (callUserId && durationSeconds > 0) {
+        const billableMinutes = Math.ceil(durationSeconds / 60);
+        const debitCents = billableMinutes * 3;
+        const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, callUserId));
+        if (user) {
+          const newBalance = Math.max(0, user.walletBalanceCents - debitCents);
+          await db.update(usersTable).set({ walletBalanceCents: newBalance }).where(eq(usersTable.id, user.id));
+          await db.insert(walletTransactionsTable).values({
+            userId: user.id,
+            type: "call_debit",
+            amountCents: -debitCents,
+            description: `WebCall #${callId} — ${billableMinutes} min × $0.03`,
+            status: "completed",
+            callId,
+          });
+        }
       }
     } catch (err) {
       logger.error({ callId, err }, "Error finalising webcall");

@@ -106,6 +106,16 @@ router.post("/calls/outbound", async (req, res): Promise<void> => {
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
 
+  // Balance gate — block if wallet is empty
+  if (agent.userId) {
+    const [user] = await db.select({ walletBalanceCents: usersTable.walletBalanceCents })
+      .from(usersTable).where(eq(usersTable.clerkId, agent.userId));
+    if (user && user.walletBalanceCents <= 0) {
+      res.status(402).json({ error: "Insufficient balance. Please top up your wallet to start calls." });
+      return;
+    }
+  }
+
   const provider = agent.telephonyProvider.toLowerCase();
   const [providerRow] = await db
     .select()
@@ -224,6 +234,16 @@ router.post("/calls", async (req, res): Promise<void> => {
   if (!agent) {
     res.status(400).json({ error: "Agent not found" });
     return;
+  }
+
+  // Balance gate — block if wallet is empty
+  if (agent.userId) {
+    const [user] = await db.select({ walletBalanceCents: usersTable.walletBalanceCents })
+      .from(usersTable).where(eq(usersTable.clerkId, agent.userId));
+    if (user && user.walletBalanceCents <= 0) {
+      res.status(402).json({ error: "Insufficient balance. Please top up your wallet to start calls." });
+      return;
+    }
   }
 
   const executionId = `exec_${randomBytes(4).toString("hex")}`;
