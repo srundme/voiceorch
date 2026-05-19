@@ -57,12 +57,12 @@ export default function AgentNew() {
     defaultValues: {
       name: "",
       description: "",
-      asrProvider: "deepgram",
-      asrModel: "nova-2",
+      asrProvider: "azure",
+      asrModel: "en-US-standard",
       llmProvider: "openai",
-      llmModel: "gpt-4-turbo",
+      llmModel: "gpt-4o-mini",
       ttsProvider: "elevenlabs",
-      ttsVoice: "rachel",
+      ttsVoice: "",
       telephonyProvider: "twilio",
       systemPrompt: "You are a helpful AI voice assistant.",
       temperature: 0.7,
@@ -225,9 +225,10 @@ export default function AgentNew() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="deepgram">Deepgram</SelectItem>
-                              <SelectItem value="azure">Azure</SelectItem>
-                              <SelectItem value="whisper">Whisper</SelectItem>
+                              <SelectItem value="azure">Azure Speech</SelectItem>
+                              <SelectItem value="assemblyai">AssemblyAI</SelectItem>
+                              <SelectItem value="sarvam">Sarvam (Saarika)</SelectItem>
+                              <SelectItem value="cartesia">Cartesia</SelectItem>
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -267,9 +268,9 @@ export default function AgentNew() {
                             </FormControl>
                             <SelectContent>
                               <SelectItem value="openai">OpenAI</SelectItem>
-                              <SelectItem value="anthropic">Anthropic</SelectItem>
-                              <SelectItem value="deepseek">DeepSeek</SelectItem>
-                              <SelectItem value="mistral">Mistral</SelectItem>
+                              <SelectItem value="google">Google Gemini</SelectItem>
+                              <SelectItem value="groq">Groq</SelectItem>
+                              <SelectItem value="sarvam">Sarvam</SelectItem>
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -309,9 +310,8 @@ export default function AgentNew() {
                             </FormControl>
                             <SelectContent>
                               <SelectItem value="elevenlabs">ElevenLabs</SelectItem>
-                              <SelectItem value="openai">OpenAI</SelectItem>
-                              <SelectItem value="deepgram">Deepgram Aura</SelectItem>
-                              <SelectItem value="cartesia">Cartesia</SelectItem>
+                              <SelectItem value="cartesia">Cartesia (Sonic)</SelectItem>
+                              <SelectItem value="sarvam">Sarvam (Bulbul)</SelectItem>
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -351,8 +351,8 @@ export default function AgentNew() {
                             </FormControl>
                             <SelectContent>
                               <SelectItem value="twilio">Twilio</SelectItem>
-                              <SelectItem value="vonage">Vonage</SelectItem>
                               <SelectItem value="plivo">Plivo</SelectItem>
+                              <SelectItem value="vobiz">Vobiz</SelectItem>
                             </SelectContent>
                           </Select>
                           <FormMessage />
