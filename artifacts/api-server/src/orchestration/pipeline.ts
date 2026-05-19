@@ -5,7 +5,7 @@ import { decodeMulaw, encodeMulaw, upsample8to16, downsample16to8, hasSpeechEner
 import type { AgentConfig, ConversationTurn, SessionConfig } from "./types.js";
 import { logger } from "../lib/logger.js";
 
-const VAD_SILENCE_MS = 700;       // how long of silence triggers STT
+const VAD_SILENCE_MS = 400;       // silence window before STT flush (was 700ms)
 const MIN_SPEECH_BYTES = 3200;    // minimum audio bytes (~200ms@8kHz) before sending to STT
 const CHUNK_SIZE_MULAW = 160;     // 20ms @ 8kHz mulaw
 const VAD_THRESHOLD = 100;        // RMS threshold for telephony audio (mulaw 8kHz decoded)
@@ -105,15 +105,7 @@ export class OrchestrationPipeline {
       this.conversationHistory.push({ role: "assistant", content: greeting });
       this.config.onTranscript("agent", greeting);
 
-      const ttsPcm16k = await this.tts.synthesize(greeting);
-      const ttsPcm8k  = downsample16to8(ttsPcm16k);
-      const ttsMusaw  = encodeMulaw(ttsPcm8k);
-
-      for (let i = 0; i < ttsMusaw.length; i += CHUNK_SIZE_MULAW) {
-        if (this.closed) break;
-        this.config.onAudioOut(ttsMusaw.slice(i, i + CHUNK_SIZE_MULAW));
-        await new Promise((r) => setTimeout(r, 20));
-      }
+      await this.synthesizeAndPlay(greeting);
     } catch (err) {
       logger.error({ callId: this.config.callId, err }, "Greeting error");
     } finally {
@@ -134,6 +126,21 @@ export class OrchestrationPipeline {
       this.silenceTimer = null;
       void this.flushAndProcess();
     }, VAD_SILENCE_MS);
+  }
+
+  /**
+   * Synthesize text and play it immediately as a single TTS call.
+   * Used for the greeting and as a fallback.
+   */
+  private async synthesizeAndPlay(text: string): Promise<void> {
+    const ttsPcm16k = await this.tts.synthesize(text);
+    const ttsPcm8k  = downsample16to8(ttsPcm16k);
+    const ttsMusaw  = encodeMulaw(ttsPcm8k);
+    for (let i = 0; i < ttsMusaw.length; i += CHUNK_SIZE_MULAW) {
+      if (this.closed) break;
+      this.config.onAudioOut(ttsMusaw.slice(i, i + CHUNK_SIZE_MULAW));
+      await new Promise<void>((r) => setTimeout(r, 20));
+    }
   }
 
   private async flushAndProcess(): Promise<void> {
@@ -162,48 +169,133 @@ export class OrchestrationPipeline {
 
       logger.info({ callId: this.config.callId, transcript }, "STT result");
       this.config.onTranscript("user", transcript);
-
-      // Add to conversation history
       this.conversationHistory.push({ role: "user", content: transcript });
 
-      // 2. LLM — collect full response (sentence-by-sentence TTS would be more responsive
-      //    but requires partial sentence detection; for MVP we do full response → TTS)
-      let llmResponse = "";
-      const sentenceBuffer: string[] = [];
+      // 2+3. LLM → sentence-streaming TTS → audio playback
+      //
+      // Instead of waiting for the full LLM response before synthesizing:
+      //   - As LLM streams tokens we detect sentence boundaries
+      //   - Each complete sentence is immediately queued for TTS synthesis
+      //   - A synthesis task runs concurrently with LLM generation
+      //   - A playback task plays sentences in order as synthesis completes
+      //
+      // Result: first audio chunk starts playing ~(LLM time-to-first-sentence + TTS latency)
+      // instead of ~(full LLM time + full TTS time).
 
+      let llmResponse = "";
+      let pendingText = "";
+      let allEnqueued = false;
+
+      // Queue of sentences: text is set when enqueued, pcm16k is set when TTS finishes
+      const sentenceQueue: Array<{ text: string; pcm16k?: Buffer }> = [];
+
+      /**
+       * Extract complete sentences (ending with . ! ?) from accumulated text.
+       * Returns the sentences found and the leftover partial sentence.
+       */
+      function extractComplete(text: string): { sentences: string[]; remainder: string } {
+        const sentences: string[] = [];
+        // Match sequences that end with sentence-ending punctuation
+        const re = /([^.!?]*[.!?]+)\s*/g;
+        let last = 0;
+        let m: RegExpExecArray | null;
+        while ((m = re.exec(text)) !== null) {
+          const s = m[1].trim();
+          if (s.length >= 4) sentences.push(s); // skip trivially short fragments
+          last = re.lastIndex;
+        }
+        return { sentences, remainder: text.slice(last) };
+      }
+
+      // TTS synthesis task — runs concurrently, picks up sentences as they're enqueued
+      const synthTask = async (): Promise<void> => {
+        let idx = 0;
+        while (true) {
+          if (idx < sentenceQueue.length) {
+            const job = sentenceQueue[idx];
+            if (job.pcm16k === undefined) {
+              try {
+                job.pcm16k = await this.tts.synthesize(job.text);
+              } catch (err) {
+                logger.error({ callId: this.config.callId, err, text: job.text.slice(0, 40) }, "TTS sentence error");
+                job.pcm16k = Buffer.alloc(0); // mark done so playback doesn't stall
+              }
+            }
+            idx++;
+          } else if (allEnqueued) {
+            break;
+          } else {
+            await new Promise<void>((r) => setTimeout(r, 5));
+          }
+        }
+      };
+
+      // Playback task — plays sentences in order as their pcm16k becomes available
+      const playTask = async (): Promise<void> => {
+        let idx = 0;
+        while (true) {
+          const job = sentenceQueue[idx];
+          if (job !== undefined && job.pcm16k !== undefined) {
+            idx++;
+            if (job.pcm16k.length > 0) {
+              const ttsPcm8k = downsample16to8(job.pcm16k);
+              const ttsMusaw = encodeMulaw(ttsPcm8k);
+              for (let i = 0; i < ttsMusaw.length; i += CHUNK_SIZE_MULAW) {
+                if (this.closed) return;
+                this.config.onAudioOut(ttsMusaw.slice(i, i + CHUNK_SIZE_MULAW));
+                await new Promise<void>((r) => setTimeout(r, 20));
+              }
+            }
+          } else if (allEnqueued && idx >= sentenceQueue.length) {
+            break;
+          } else {
+            await new Promise<void>((r) => setTimeout(r, 5));
+          }
+        }
+      };
+
+      // Launch synthesis and playback tasks before LLM call so they're ready immediately
+      const synthPromise = synthTask();
+      const playPromise  = playTask();
+
+      // 2. LLM — stream tokens, detect sentence boundaries, enqueue for TTS
       await this.llm.chat(
         this.conversationHistory,
         this.agent.systemPrompt,
         (token) => {
-          llmResponse += token;
-          sentenceBuffer.push(token);
+          llmResponse  += token;
+          pendingText  += token;
+          const { sentences, remainder } = extractComplete(pendingText);
+          for (const s of sentences) {
+            sentenceQueue.push({ text: s });
+          }
+          pendingText = remainder;
         },
         async (fullText) => {
           llmResponse = fullText;
         }
       );
 
-      logger.info({ callId: this.config.callId, response: llmResponse.slice(0, 80) }, "LLM response");
+      // Flush any remaining text that didn't end with punctuation
+      const remaining = pendingText.trim();
+      if (remaining.length >= 2) {
+        sentenceQueue.push({ text: remaining });
+      }
+      allEnqueued = true;
+
+      logger.info(
+        { callId: this.config.callId, response: llmResponse.slice(0, 80), sentences: sentenceQueue.length },
+        "LLM complete"
+      );
+
       this.conversationHistory.push({ role: "assistant", content: llmResponse });
       this.config.onTranscript("agent", llmResponse);
 
-      // 3. Text-to-Speech
-      const ttsPcm16k = await this.tts.synthesize(llmResponse);
-      logger.info({ callId: this.config.callId, bytes: ttsPcm16k.length }, "TTS audio ready");
+      // Wait for all synthesis and playback to finish
+      await Promise.all([synthPromise, playPromise]);
 
-      // Downsample 16kHz → 8kHz for telephony
-      const ttsPcm8k = downsample16to8(ttsPcm16k);
+      logger.info({ callId: this.config.callId }, "Audio playback complete");
 
-      // Encode to mulaw for telephony
-      const ttsMusaw = encodeMulaw(ttsPcm8k);
-
-      // Send audio out in 20ms chunks (160 bytes of mulaw @ 8kHz)
-      for (let i = 0; i < ttsMusaw.length; i += CHUNK_SIZE_MULAW) {
-        if (this.closed) break;
-        const chunk = ttsMusaw.slice(i, i + CHUNK_SIZE_MULAW);
-        this.config.onAudioOut(chunk);
-        await new Promise((r) => setTimeout(r, 20)); // pace to real-time
-      }
     } catch (err) {
       logger.error({ callId: this.config.callId, err }, "Pipeline error");
     } finally {
