@@ -10,6 +10,7 @@ import knowledgeBaseRouter from "./knowledge-base.js";
 import walletRouter from "./wallet.js";
 import accountRouter from "./account.js";
 import activityLogsRouter from "./activity-logs.js";
+import phoneNumbersRouter from "./phone-numbers.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
 const router: IRouter = Router();
@@ -26,5 +27,6 @@ router.use(knowledgeBaseRouter);
 router.use(walletRouter);
 router.use(accountRouter);
 router.use(activityLogsRouter);
+router.use(phoneNumbersRouter);
 
 export default router;

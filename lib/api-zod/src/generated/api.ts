@@ -942,3 +942,94 @@ export const ListActivityLogsResponseItem = zod.object({
 export const ListActivityLogsResponse = zod.array(ListActivityLogsResponseItem)
 
 
+/**
+ * @summary List all phone numbers owned by the authenticated user
+ */
+export const ListPhoneNumbersResponseItem = zod.object({
+  "id": zod.number(),
+  "userId": zod.string(),
+  "number": zod.string().describe('E.164 phone number (e.g. +12125551234)'),
+  "countryCode": zod.string().describe('ISO 3166-1 alpha-2 (e.g. US, IN)'),
+  "region": zod.string().nullish(),
+  "numberType": zod.enum(['local', 'toll_free', 'mobile']),
+  "vobizNumberId": zod.string().nullish(),
+  "agentId": zod.number().nullish(),
+  "agentName": zod.string().nullish(),
+  "status": zod.enum(['active', 'released']),
+  "purchasedAt": zod.coerce.date(),
+  "releasedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const ListPhoneNumbersResponse = zod.array(ListPhoneNumbersResponseItem)
+
+
+/**
+ * @summary Search available phone numbers from Vobiz
+ */
+export const listAvailablePhoneNumbersQueryNumberTypeDefault = `local`;
+
+export const ListAvailablePhoneNumbersQueryParams = zod.object({
+  "countryCode": zod.coerce.string(),
+  "numberType": zod.enum(['local', 'toll_free', 'mobile']).default(listAvailablePhoneNumbersQueryNumberTypeDefault),
+  "pattern": zod.coerce.string().optional()
+})
+
+export const ListAvailablePhoneNumbersResponseItem = zod.object({
+  "number": zod.string().describe('E.164 phone number'),
+  "countryCode": zod.string(),
+  "region": zod.string().nullish(),
+  "numberType": zod.enum(['local', 'toll_free', 'mobile']),
+  "monthlyRateCents": zod.number().optional().describe('Monthly cost in cents (0 = one-time purchase only)')
+})
+export const ListAvailablePhoneNumbersResponse = zod.array(ListAvailablePhoneNumbersResponseItem)
+
+
+/**
+ * @summary Purchase a phone number ($5 deducted from wallet)
+ */
+export const purchasePhoneNumberBodyNumberTypeDefault = `local`;
+
+export const PurchasePhoneNumberBody = zod.object({
+  "number": zod.string().describe('E.164 number to purchase (from the available list)'),
+  "countryCode": zod.string(),
+  "region": zod.string().optional(),
+  "numberType": zod.enum(['local', 'toll_free', 'mobile']).default(purchasePhoneNumberBodyNumberTypeDefault)
+})
+
+
+/**
+ * @summary Assign a phone number to an agent (or clear assignment)
+ */
+export const AssignPhoneNumberParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const AssignPhoneNumberBody = zod.object({
+  "agentId": zod.number().nullish().describe('Agent to route inbound calls to. Null to clear assignment.')
+})
+
+export const AssignPhoneNumberResponse = zod.object({
+  "id": zod.number(),
+  "userId": zod.string(),
+  "number": zod.string().describe('E.164 phone number (e.g. +12125551234)'),
+  "countryCode": zod.string().describe('ISO 3166-1 alpha-2 (e.g. US, IN)'),
+  "region": zod.string().nullish(),
+  "numberType": zod.enum(['local', 'toll_free', 'mobile']),
+  "vobizNumberId": zod.string().nullish(),
+  "agentId": zod.number().nullish(),
+  "agentName": zod.string().nullish(),
+  "status": zod.enum(['active', 'released']),
+  "purchasedAt": zod.coerce.date(),
+  "releasedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Release a phone number back to Vobiz
+ */
+export const ReleasePhoneNumberParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+

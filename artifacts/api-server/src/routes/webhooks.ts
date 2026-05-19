@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { getTwilioVoiceTwiML } from "../orchestration/telephony/twilio.js";
 import { getPlivoAnswerXML } from "../orchestration/telephony/plivo.js";
 import { getVobizAnswerXML } from "../orchestration/telephony/vobiz.js";
-import { db, agentsTable } from "@workspace/db";
+import { db, agentsTable, phoneNumbersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
 const router: IRouter = Router();
@@ -64,18 +64,35 @@ router.post("/webhooks/plivo/voice", async (req, res): Promise<void> => {
 // ── Vobiz ────────────────────────────────────────────────────────────────────
 
 /**
- * POST /api/webhooks/vobiz/voice?agentId=<id>
- * Vobiz calls this when a call arrives; expects JSON response.
+ * POST /api/webhooks/vobiz/voice
+ * Vobiz calls this when a call arrives.
+ * Resolution order:
+ *   1. ?agentId= query param (legacy / outbound callback)
+ *   2. `To` body field → look up managed phone number → get assigned agentId
  */
 router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
-  const agentId = parseInt(String(req.query["agentId"] ?? req.body?.agentId ?? "0"), 10);
+  const wsBaseUrl = getWsBaseUrl(req);
+
+  // 1. Explicit agentId param (outbound / legacy)
+  let agentId = parseInt(String(req.query["agentId"] ?? "0"), 10);
 
   if (!agentId) {
-    res.status(400).json({ error: "agentId is required" });
+    // 2. Managed number routing — look up the "To" number
+    const toNumber: string = String(req.body?.To ?? req.body?.to ?? "").trim();
+    if (toNumber) {
+      const [pn] = await db
+        .select({ agentId: phoneNumbersTable.agentId })
+        .from(phoneNumbersTable)
+        .where(eq(phoneNumbersTable.number, toNumber));
+      if (pn?.agentId) agentId = pn.agentId;
+    }
+  }
+
+  if (!agentId) {
+    res.status(400).set("Content-Type", "text/xml").send("<Response><Speak>Agent not configured for this number.</Speak><Hangup/></Response>");
     return;
   }
 
-  const wsBaseUrl = getWsBaseUrl(req);
   res.set("Content-Type", "text/xml").send(getVobizAnswerXML(wsBaseUrl, agentId));
 });
 

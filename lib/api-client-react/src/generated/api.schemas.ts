@@ -653,6 +653,91 @@ export interface AutoPaySettings {
   autoPayAmountCents?: number;
 }
 
+export type PhoneNumberNumberType = typeof PhoneNumberNumberType[keyof typeof PhoneNumberNumberType];
+
+
+export const PhoneNumberNumberType = {
+  local: 'local',
+  toll_free: 'toll_free',
+  mobile: 'mobile',
+} as const;
+
+export type PhoneNumberStatus = typeof PhoneNumberStatus[keyof typeof PhoneNumberStatus];
+
+
+export const PhoneNumberStatus = {
+  active: 'active',
+  released: 'released',
+} as const;
+
+export interface PhoneNumber {
+  id: number;
+  userId: string;
+  /** E.164 phone number (e.g. +12125551234) */
+  number: string;
+  /** ISO 3166-1 alpha-2 (e.g. US, IN) */
+  countryCode: string;
+  /** @nullable */
+  region?: string | null;
+  numberType: PhoneNumberNumberType;
+  /** @nullable */
+  vobizNumberId?: string | null;
+  /** @nullable */
+  agentId?: number | null;
+  /** @nullable */
+  agentName?: string | null;
+  status: PhoneNumberStatus;
+  purchasedAt: string;
+  /** @nullable */
+  releasedAt?: string | null;
+  createdAt: string;
+}
+
+export type AvailablePhoneNumberNumberType = typeof AvailablePhoneNumberNumberType[keyof typeof AvailablePhoneNumberNumberType];
+
+
+export const AvailablePhoneNumberNumberType = {
+  local: 'local',
+  toll_free: 'toll_free',
+  mobile: 'mobile',
+} as const;
+
+export interface AvailablePhoneNumber {
+  /** E.164 phone number */
+  number: string;
+  countryCode: string;
+  /** @nullable */
+  region?: string | null;
+  numberType: AvailablePhoneNumberNumberType;
+  /** Monthly cost in cents (0 = one-time purchase only) */
+  monthlyRateCents?: number;
+}
+
+export type PurchasePhoneNumberInputNumberType = typeof PurchasePhoneNumberInputNumberType[keyof typeof PurchasePhoneNumberInputNumberType];
+
+
+export const PurchasePhoneNumberInputNumberType = {
+  local: 'local',
+  toll_free: 'toll_free',
+  mobile: 'mobile',
+} as const;
+
+export interface PurchasePhoneNumberInput {
+  /** E.164 number to purchase (from the available list) */
+  number: string;
+  countryCode: string;
+  region?: string;
+  numberType?: PurchasePhoneNumberInputNumberType;
+}
+
+export interface AssignPhoneNumberInput {
+  /**
+     * Agent to route inbound calls to. Null to clear assignment.
+     * @nullable
+     */
+  agentId?: number | null;
+}
+
 export type ListCallsParams = {
 /**
  * @nullable
@@ -672,4 +757,25 @@ offset?: number;
 export type ListActivityLogsParams = {
 limit?: number;
 };
+
+export type ListAvailablePhoneNumbersParams = {
+/**
+ * ISO 3166-1 alpha-2 country code (e.g. US, IN, GB)
+ */
+countryCode: string;
+numberType?: ListAvailablePhoneNumbersNumberType;
+/**
+ * Optional digit pattern to search for
+ */
+pattern?: string;
+};
+
+export type ListAvailablePhoneNumbersNumberType = typeof ListAvailablePhoneNumbersNumberType[keyof typeof ListAvailablePhoneNumbersNumberType];
+
+
+export const ListAvailablePhoneNumbersNumberType = {
+  local: 'local',
+  toll_free: 'toll_free',
+  mobile: 'mobile',
+} as const;
 

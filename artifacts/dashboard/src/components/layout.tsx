@@ -28,6 +28,12 @@ const NAV_SECTIONS = [
     ],
   },
   {
+    label: "NUMBERS",
+    items: [
+      { name: "Phone Numbers", href: "/app/phone-numbers",  icon: Phone },
+    ],
+  },
+  {
     label: "MANAGE",
     items: [
       { name: "Wallet",    href: "/app/wallet",   icon: Wallet },

@@ -26,6 +26,8 @@ tags:
     description: API keys, org key, and concurrent call limits
   - name: activity-logs
     description: Audit log of all platform events
+  - name: phone-numbers
+    description: Managed phone number provisioning (platform Vobiz account)
 
 paths:
   /healthz:
@@ -815,6 +817,130 @@ paths:
         "401":
           description: Unauthorized
 
+  # ── Phone Numbers ────────────────────────────────────────────────────────────
+  /phone-numbers:
+    get:
+      operationId: listPhoneNumbers
+      tags: [phone-numbers]
+      summary: List all phone numbers owned by the authenticated user
+      responses:
+        "200":
+          description: List of owned phone numbers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PhoneNumber"
+        "401":
+          description: Unauthorized
+
+  /phone-numbers/available:
+    get:
+      operationId: listAvailablePhoneNumbers
+      tags: [phone-numbers]
+      summary: Search available phone numbers from Vobiz
+      parameters:
+        - name: countryCode
+          in: query
+          required: true
+          schema:
+            type: string
+            description: ISO 3166-1 alpha-2 country code (e.g. US, IN, GB)
+        - name: numberType
+          in: query
+          schema:
+            type: string
+            enum: [local, toll_free, mobile]
+            default: local
+        - name: pattern
+          in: query
+          schema:
+            type: string
+            description: Optional digit pattern to search for
+      responses:
+        "200":
+          description: List of available numbers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AvailablePhoneNumber"
+        "401":
+          description: Unauthorized
+
+  /phone-numbers/purchase:
+    post:
+      operationId: purchasePhoneNumber
+      tags: [phone-numbers]
+      summary: Purchase a phone number ($5 deducted from wallet)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PurchasePhoneNumberInput"
+      responses:
+        "201":
+          description: Phone number purchased and assigned to user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PhoneNumber"
+        "402":
+          description: Insufficient balance
+        "401":
+          description: Unauthorized
+
+  /phone-numbers/{id}/assign:
+    patch:
+      operationId: assignPhoneNumber
+      tags: [phone-numbers]
+      summary: Assign a phone number to an agent (or clear assignment)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignPhoneNumberInput"
+      responses:
+        "200":
+          description: Number assignment updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PhoneNumber"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Phone number not found
+
+  /phone-numbers/{id}:
+    delete:
+      operationId: releasePhoneNumber
+      tags: [phone-numbers]
+      summary: Release a phone number back to Vobiz
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Number released
+        "401":
+          description: Unauthorized
+        "404":
+          description: Phone number not found
+
 components:
   schemas:
     HealthStatus:
@@ -1599,3 +1725,83 @@ components:
           type: integer
           minimum: 1000
           description: Amount to auto-charge (cents, minimum 1000 = $10)
+
+    # ── Phone Numbers ───────────────────────────────────────────────────────────
+    PhoneNumber:
+      type: object
+      required: [id, userId, number, countryCode, numberType, status, purchasedAt, createdAt]
+      properties:
+        id:
+          type: integer
+        userId:
+          type: string
+        number:
+          type: string
+          description: E.164 phone number (e.g. +12125551234)
+        countryCode:
+          type: string
+          description: ISO 3166-1 alpha-2 (e.g. US, IN)
+        region:
+          type: ["string", "null"]
+        numberType:
+          type: string
+          enum: [local, toll_free, mobile]
+        vobizNumberId:
+          type: ["string", "null"]
+        agentId:
+          type: ["integer", "null"]
+        agentName:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [active, released]
+        purchasedAt:
+          type: string
+          format: date-time
+        releasedAt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    AvailablePhoneNumber:
+      type: object
+      required: [number, countryCode, numberType]
+      properties:
+        number:
+          type: string
+          description: E.164 phone number
+        countryCode:
+          type: string
+        region:
+          type: ["string", "null"]
+        numberType:
+          type: string
+          enum: [local, toll_free, mobile]
+        monthlyRateCents:
+          type: integer
+          description: Monthly cost in cents (0 = one-time purchase only)
+
+    PurchasePhoneNumberInput:
+      type: object
+      required: [number, countryCode]
+      properties:
+        number:
+          type: string
+          description: E.164 number to purchase (from the available list)
+        countryCode:
+          type: string
+        region:
+          type: string
+        numberType:
+          type: string
+          enum: [local, toll_free, mobile]
+          default: local
+
+    AssignPhoneNumberInput:
+      type: object
+      properties:
+        agentId:
+          type: ["integer", "null"]
+          description: Agent to route inbound calls to. Null to clear assignment.
