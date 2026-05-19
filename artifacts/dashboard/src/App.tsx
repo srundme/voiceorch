@@ -9,6 +9,7 @@ import NotFound from "@/pages/not-found";
 import { Layout } from "@/components/layout";
 
 // Pages
+import AssistantsPage from "@/pages/assistants";
 import Dashboard from "@/pages/dashboard";
 import AgentsList from "@/pages/agents/index";
 import AgentNew from "@/pages/agents/new";
@@ -32,7 +33,8 @@ function Router() {
   return (
     <Layout>
       <Switch>
-        <Route path="/" component={Dashboard} />
+        <Route path="/" component={AssistantsPage} />
+        <Route path="/analytics" component={Dashboard} />
         <Route path="/agents" component={AgentsList} />
         <Route path="/agents/new" component={AgentNew} />
         <Route path="/agents/:id/edit" component={AgentEdit} />
