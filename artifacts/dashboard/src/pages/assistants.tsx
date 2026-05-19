@@ -40,6 +40,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import { AgentMetricsBar } from "@/components/agent-metrics-bar";
 
 /* ── Provider catalogues ─────────────────────────────────────────────────── */
 
@@ -542,6 +543,18 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
           </div>
         )}
       </div>
+
+      {/* VAPI-style cost + latency bar */}
+      <AgentMetricsBar
+        asrProvider={agent.asrProvider}
+        llmProvider={agent.llmProvider}
+        llmModel={agent.llmModel}
+        ttsProvider={agent.ttsProvider}
+        telephonyProvider={agent.telephonyProvider}
+        avgSttLatencyMs={agent.avgSttLatencyMs}
+        avgLlmLatencyMs={agent.avgLlmLatencyMs}
+        avgTtsFirstChunkMs={agent.avgTtsFirstChunkMs}
+      />
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">

@@ -92,6 +92,21 @@ export interface Agent {
   successfulCalls?: number;
   /** @nullable */
   avgDurationSeconds?: number | null;
+  /**
+     * Rolling average STT latency across all completed calls (ms)
+     * @nullable
+     */
+  avgSttLatencyMs?: number | null;
+  /**
+     * Rolling average LLM first-token latency across all completed calls (ms)
+     * @nullable
+     */
+  avgLlmLatencyMs?: number | null;
+  /**
+     * Rolling average TTS first-audio-chunk latency across all completed calls (ms)
+     * @nullable
+     */
+  avgTtsFirstChunkMs?: number | null;
   createdAt: Date;
   updatedAt: Date;
 }

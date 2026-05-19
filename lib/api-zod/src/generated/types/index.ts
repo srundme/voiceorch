@@ -14,6 +14,7 @@ export * from './agentToolType';
 export * from './agentUpdate';
 export * from './autoPaySettings';
 export * from './call';
+export * from './callEndPayload';
 export * from './callInput';
 export * from './callStatus';
 export * from './callStatusCount';

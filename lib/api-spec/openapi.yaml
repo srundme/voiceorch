@@ -280,6 +280,11 @@ paths:
           required: true
           schema:
             type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CallEndPayload"
       responses:
         "200":
           description: Call ended
@@ -845,6 +850,15 @@ components:
           type: integer
         avgDurationSeconds:
           type: ["integer", "null"]
+        avgSttLatencyMs:
+          type: ["integer", "null"]
+          description: Rolling average STT latency across all completed calls (ms)
+        avgLlmLatencyMs:
+          type: ["integer", "null"]
+          description: Rolling average LLM first-token latency across all completed calls (ms)
+        avgTtsFirstChunkMs:
+          type: ["integer", "null"]
+          description: Rolling average TTS first-audio-chunk latency across all completed calls (ms)
         createdAt:
           type: string
           format: date-time
@@ -1004,6 +1018,19 @@ components:
         ttsFirstChunkMs:
           type: ["integer", "null"]
           description: Average TTS time-to-first-audio-chunk across all turns (ms)
+
+    CallEndPayload:
+      type: object
+      properties:
+        sttLatencyMs:
+          type: integer
+          description: Average STT latency measured for this call (ms)
+        llmLatencyMs:
+          type: integer
+          description: Average LLM first-token latency measured for this call (ms)
+        ttsFirstChunkMs:
+          type: integer
+          description: Average TTS first-audio-chunk latency measured for this call (ms)
 
     CallInput:
       type: object

@@ -125,6 +125,21 @@ export interface Agent {
   successfulCalls?: number;
   /** @nullable */
   avgDurationSeconds?: number | null;
+  /**
+     * Rolling average STT latency across all completed calls (ms)
+     * @nullable
+     */
+  avgSttLatencyMs?: number | null;
+  /**
+     * Rolling average LLM first-token latency across all completed calls (ms)
+     * @nullable
+     */
+  avgLlmLatencyMs?: number | null;
+  /**
+     * Rolling average TTS first-audio-chunk latency across all completed calls (ms)
+     * @nullable
+     */
+  avgTtsFirstChunkMs?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -232,6 +247,15 @@ export interface Call {
      * @nullable
      */
   ttsFirstChunkMs?: number | null;
+}
+
+export interface CallEndPayload {
+  /** Average STT latency measured for this call (ms) */
+  sttLatencyMs?: number;
+  /** Average LLM first-token latency measured for this call (ms) */
+  llmLatencyMs?: number;
+  /** Average TTS first-audio-chunk latency measured for this call (ms) */
+  ttsFirstChunkMs?: number;
 }
 
 export interface CallInput {

@@ -25,6 +25,7 @@ import type {
   AgentUpdate,
   AutoPaySettings,
   Call,
+  CallEndPayload,
   CallInput,
   CallStatusCount,
   CallUpdate,
@@ -964,14 +965,16 @@ export const getEndCallUrl = (id: number,) => {
 /**
  * @summary End an active call
  */
-export const endCall = async (id: number, options?: RequestInit): Promise<Call> => {
+export const endCall = async (id: number,
+    callEndPayload?: CallEndPayload, options?: RequestInit): Promise<Call> => {
 
   return customFetch<Call>(getEndCallUrl(id),
   {
     ...options,
-    method: 'PATCH'
-
-
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      callEndPayload,)
   }
 );}
 
@@ -979,8 +982,8 @@ export const endCall = async (id: number, options?: RequestInit): Promise<Call> 
 
 
 export const getEndCallMutationOptions = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof endCall>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof endCall>>, TError,{id: number}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof endCall>>, TError,{id: number;data?: BodyType<CallEndPayload>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof endCall>>, TError,{id: number;data?: BodyType<CallEndPayload>}, TContext> => {
 
 const mutationKey = ['endCall'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -992,10 +995,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof endCall>>, {id: number}> = (props) => {
-          const {id} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof endCall>>, {id: number;data?: BodyType<CallEndPayload>}> = (props) => {
+          const {id,data} = props ?? {};
 
-          return  endCall(id,requestOptions)
+          return  endCall(id,data,requestOptions)
         }
 
 
@@ -1006,18 +1009,18 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type EndCallMutationResult = NonNullable<Awaited<ReturnType<typeof endCall>>>
-
+    export type EndCallMutationBody = BodyType<CallEndPayload> | undefined
     export type EndCallMutationError = ErrorType<void>
 
     /**
  * @summary End an active call
  */
 export const useEndCall = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof endCall>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof endCall>>, TError,{id: number;data?: BodyType<CallEndPayload>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof endCall>>,
         TError,
-        {id: number},
+        {id: number;data?: BodyType<CallEndPayload>},
         TContext
       > => {
       return useMutation(getEndCallMutationOptions(options));

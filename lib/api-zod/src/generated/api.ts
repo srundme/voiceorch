@@ -54,6 +54,9 @@ export const ListAgentsResponseItem = zod.object({
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
+  "avgSttLatencyMs": zod.number().nullish().describe('Rolling average STT latency across all completed calls (ms)'),
+  "avgLlmLatencyMs": zod.number().nullish().describe('Rolling average LLM first-token latency across all completed calls (ms)'),
+  "avgTtsFirstChunkMs": zod.number().nullish().describe('Rolling average TTS first-audio-chunk latency across all completed calls (ms)'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -140,6 +143,9 @@ export const GetAgentResponse = zod.object({
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
+  "avgSttLatencyMs": zod.number().nullish().describe('Rolling average STT latency across all completed calls (ms)'),
+  "avgLlmLatencyMs": zod.number().nullish().describe('Rolling average LLM first-token latency across all completed calls (ms)'),
+  "avgTtsFirstChunkMs": zod.number().nullish().describe('Rolling average TTS first-audio-chunk latency across all completed calls (ms)'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -220,6 +226,9 @@ export const UpdateAgentResponse = zod.object({
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
+  "avgSttLatencyMs": zod.number().nullish().describe('Rolling average STT latency across all completed calls (ms)'),
+  "avgLlmLatencyMs": zod.number().nullish().describe('Rolling average LLM first-token latency across all completed calls (ms)'),
+  "avgTtsFirstChunkMs": zod.number().nullish().describe('Rolling average TTS first-audio-chunk latency across all completed calls (ms)'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -275,6 +284,9 @@ export const ToggleAgentResponse = zod.object({
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
+  "avgSttLatencyMs": zod.number().nullish().describe('Rolling average STT latency across all completed calls (ms)'),
+  "avgLlmLatencyMs": zod.number().nullish().describe('Rolling average LLM first-token latency across all completed calls (ms)'),
+  "avgTtsFirstChunkMs": zod.number().nullish().describe('Rolling average TTS first-audio-chunk latency across all completed calls (ms)'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -398,6 +410,12 @@ export const InitiateOutboundCallBody = zod.object({
  */
 export const EndCallParams = zod.object({
   "id": zod.coerce.number()
+})
+
+export const EndCallBody = zod.object({
+  "sttLatencyMs": zod.number().optional().describe('Average STT latency measured for this call (ms)'),
+  "llmLatencyMs": zod.number().optional().describe('Average LLM first-token latency measured for this call (ms)'),
+  "ttsFirstChunkMs": zod.number().optional().describe('Average TTS first-audio-chunk latency measured for this call (ms)')
 })
 
 export const EndCallResponse = zod.object({

@@ -15,6 +15,17 @@ import {
   EndCallResponse,
 } from "@workspace/api-zod";
 
+function parseLatencyBody(body: unknown): { sttLatencyMs?: number; llmLatencyMs?: number; ttsFirstChunkMs?: number } {
+  if (!body || typeof body !== "object") return {};
+  const b = body as Record<string, unknown>;
+  const intOrUndef = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.floor(v) : undefined);
+  return {
+    sttLatencyMs:    intOrUndef(b.sttLatencyMs),
+    llmLatencyMs:    intOrUndef(b.llmLatencyMs),
+    ttsFirstChunkMs: intOrUndef(b.ttsFirstChunkMs),
+  };
+}
+
 const router: IRouter = Router();
 
 async function enrichCall(call: typeof callsTable.$inferSelect) {
@@ -281,9 +292,21 @@ router.patch("/calls/:id/end", async (req, res): Promise<void> => {
   const endedAt = new Date();
   const durationSeconds = Math.floor((endedAt.getTime() - existing.createdAt.getTime()) / 1000);
 
+  // Parse optional latency payload
+  const latency = parseLatencyBody(req.body);
+
+  const callUpdateSet: Partial<typeof callsTable.$inferInsert> = {
+    status: "completed",
+    endedAt,
+    durationSeconds,
+  };
+  if (latency.sttLatencyMs != null) callUpdateSet.sttLatencyMs = latency.sttLatencyMs;
+  if (latency.llmLatencyMs != null) callUpdateSet.llmLatencyMs = latency.llmLatencyMs;
+  if (latency.ttsFirstChunkMs != null) callUpdateSet.ttsFirstChunkMs = latency.ttsFirstChunkMs;
+
   const [call] = await db
     .update(callsTable)
-    .set({ status: "completed", endedAt, durationSeconds })
+    .set(callUpdateSet)
     .where(eq(callsTable.id, params.data.id))
     .returning();
 
@@ -294,13 +317,31 @@ router.patch("/calls/:id/end", async (req, res): Promise<void> => {
 
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, call.agentId));
   if (agent) {
-    const newSuccessful = agent.successfulCalls + 1;
-    const newAvg = agent.avgDurationSeconds
-      ? Math.floor((agent.avgDurationSeconds * agent.successfulCalls + durationSeconds) / newSuccessful)
+    const prevCount = agent.successfulCalls;
+    const newSuccessful = prevCount + 1;
+
+    function rollingAvg(prev: number | null, prevN: number, next: number | null | undefined): number | undefined {
+      if (next == null) return prev ?? undefined;
+      return prev != null
+        ? Math.floor((prev * prevN + next) / newSuccessful)
+        : next;
+    }
+
+    const newAvgDuration = agent.avgDurationSeconds != null
+      ? Math.floor((agent.avgDurationSeconds * prevCount + durationSeconds) / newSuccessful)
       : durationSeconds;
+
+    const agentStatUpdate: Record<string, number | undefined> = {
+      successfulCalls: newSuccessful,
+      avgDurationSeconds: newAvgDuration,
+      avgSttLatencyMs: rollingAvg(agent.avgSttLatencyMs, prevCount, latency.sttLatencyMs),
+      avgLlmLatencyMs: rollingAvg(agent.avgLlmLatencyMs, prevCount, latency.llmLatencyMs),
+      avgTtsFirstChunkMs: rollingAvg(agent.avgTtsFirstChunkMs, prevCount, latency.ttsFirstChunkMs),
+    };
+
     await db
       .update(agentsTable)
-      .set({ successfulCalls: newSuccessful, avgDurationSeconds: newAvg })
+      .set(agentStatUpdate)
       .where(eq(agentsTable.id, agent.id));
   }
 

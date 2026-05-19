@@ -41,6 +41,9 @@ export const agentsTable = pgTable("agents", {
   totalCalls: integer("total_calls").notNull().default(0),
   successfulCalls: integer("successful_calls").notNull().default(0),
   avgDurationSeconds: integer("avg_duration_seconds"),
+  avgSttLatencyMs: integer("avg_stt_latency_ms"),
+  avgLlmLatencyMs: integer("avg_llm_latency_ms"),
+  avgTtsFirstChunkMs: integer("avg_tts_first_chunk_ms"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
