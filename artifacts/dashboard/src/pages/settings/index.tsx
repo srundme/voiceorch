@@ -151,7 +151,8 @@ export default function SettingsPage() {
   const allConfigured = providerTypes.every(t => configuredTypes.has(t));
 
   return (
-    <div className="flex-1 space-y-6 p-6 md:p-8 pt-6 max-w-5xl mx-auto">
+    <div className="h-full overflow-y-auto">
+    <div className="space-y-6 p-6 md:p-8 pt-6 max-w-5xl mx-auto">
       <div>
         <h2 className="text-3xl font-bold tracking-tight">Settings</h2>
         <p className="text-muted-foreground">Configure your VoiceOrch integration and go live.</p>
@@ -381,6 +382,7 @@ export default function SettingsPage() {
           ))}
         </CardContent>
       </Card>
+    </div>
     </div>
   );
 }

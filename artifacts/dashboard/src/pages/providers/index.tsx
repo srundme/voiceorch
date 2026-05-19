@@ -265,7 +265,8 @@ export default function ProvidersList() {
   }, {} as Record<string, typeof providers>) ?? {};
 
   return (
-    <div className="flex-1 space-y-8 p-6 md:p-8 pt-6 max-w-6xl mx-auto flex flex-col">
+    <div className="h-full overflow-y-auto">
+    <div className="space-y-8 p-6 md:p-8 pt-6 max-w-6xl mx-auto flex flex-col">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Providers</h2>
@@ -485,6 +486,7 @@ export default function ProvidersList() {
           </div>
         )}
       </div>
+    </div>
     </div>
   );
 }

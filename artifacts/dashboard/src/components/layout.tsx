@@ -196,7 +196,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </Sheet>
 
       {/* Page content */}
-      <main className="flex-1 min-w-0 flex flex-col overflow-hidden">
+      <main className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
         {children}
       </main>
     </div>
