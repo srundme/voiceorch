@@ -3,20 +3,28 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: VoiceOrch - AI Voice Agent Orchestration Platform API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: agents
+    description: Voice agent management
+  - name: calls
+    description: Call management
+  - name: providers
+    description: Provider key management
+  - name: analytics
+    description: Dashboard analytics
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +32,373 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ── Agents ──────────────────────────────────────────────────────────────────
+  /agents:
+    get:
+      operationId: listAgents
+      tags: [agents]
+      summary: List all agents
+      responses:
+        "200":
+          description: List of agents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Agent"
+    post:
+      operationId: createAgent
+      tags: [agents]
+      summary: Create a new agent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentInput"
+      responses:
+        "201":
+          description: Created agent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+        "400":
+          description: Validation error
+
+  /agents/{id}:
+    get:
+      operationId: getAgent
+      tags: [agents]
+      summary: Get a single agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Agent details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateAgent
+      tags: [agents]
+      summary: Update an agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentUpdate"
+      responses:
+        "200":
+          description: Updated agent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteAgent
+      tags: [agents]
+      summary: Delete an agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  /agents/{id}/toggle:
+    patch:
+      operationId: toggleAgent
+      tags: [agents]
+      summary: Toggle agent active status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Toggled agent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+        "404":
+          description: Not found
+
+  # ── Calls ───────────────────────────────────────────────────────────────────
+  /calls:
+    get:
+      operationId: listCalls
+      tags: [calls]
+      summary: List calls with optional agent filter
+      parameters:
+        - name: agentId
+          in: query
+          required: false
+          schema:
+            type: ["integer", "null"]
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: ["string", "null"]
+      responses:
+        "200":
+          description: List of calls
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Call"
+    post:
+      operationId: initiateCall
+      tags: [calls]
+      summary: Initiate a new call
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CallInput"
+      responses:
+        "201":
+          description: Call initiated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Call"
+        "400":
+          description: Validation error
+
+  /calls/{id}:
+    get:
+      operationId: getCall
+      tags: [calls]
+      summary: Get call details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Call details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Call"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateCall
+      tags: [calls]
+      summary: Update call record (status, transcript, etc.)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CallUpdate"
+      responses:
+        "200":
+          description: Updated call
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Call"
+        "404":
+          description: Not found
+
+  /calls/{id}/end:
+    patch:
+      operationId: endCall
+      tags: [calls]
+      summary: End an active call
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Call ended
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Call"
+        "404":
+          description: Not found
+
+  # ── Provider Keys ────────────────────────────────────────────────────────────
+  /providers:
+    get:
+      operationId: listProviders
+      tags: [providers]
+      summary: List configured provider keys
+      responses:
+        "200":
+          description: List of provider configs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProviderConfig"
+    post:
+      operationId: createProvider
+      tags: [providers]
+      summary: Add a provider key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProviderInput"
+      responses:
+        "201":
+          description: Provider config created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderConfig"
+        "400":
+          description: Validation error
+
+  /providers/{id}:
+    patch:
+      operationId: updateProvider
+      tags: [providers]
+      summary: Update a provider key
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProviderUpdate"
+      responses:
+        "200":
+          description: Updated provider
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderConfig"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteProvider
+      tags: [providers]
+      summary: Delete a provider key
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  # ── Analytics (wow endpoints) ────────────────────────────────────────────────
+  /analytics/dashboard:
+    get:
+      operationId: getDashboardStats
+      tags: [analytics]
+      summary: Get dashboard summary statistics
+      responses:
+        "200":
+          description: Dashboard stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
+  /analytics/calls/recent:
+    get:
+      operationId: getRecentCalls
+      tags: [analytics]
+      summary: Get recent call activity feed (last 20)
+      responses:
+        "200":
+          description: Recent calls
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Call"
+
+  /analytics/calls/by-status:
+    get:
+      operationId: getCallsByStatus
+      tags: [analytics]
+      summary: Get call counts grouped by status
+      responses:
+        "200":
+          description: Calls by status
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CallStatusCount"
+
+  /analytics/calls/daily:
+    get:
+      operationId: getDailyCallVolume
+      tags: [analytics]
+      summary: Get daily call volume for the last 7 days
+      responses:
+        "200":
+          description: Daily call volume
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DailyCallVolume"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +409,272 @@ components:
       required:
         - status
 
+    # ── Agent ──────────────────────────────────────────────────────────────────
+    Agent:
+      type: object
+      required: [id, name, status, asrProvider, llmProvider, ttsProvider, telephonyProvider, systemPrompt, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [active, inactive, draft]
+        asrProvider:
+          type: string
+          description: "ASR provider: deepgram, azure, whisper"
+        asrModel:
+          type: ["string", "null"]
+        llmProvider:
+          type: string
+          description: "LLM provider: openai, deepseek, anthropic, mistral, cohere"
+        llmModel:
+          type: ["string", "null"]
+        ttsProvider:
+          type: string
+          description: "TTS provider: elevenlabs, openai, aws_polly, azure, cartesia, deepgram"
+        ttsVoice:
+          type: ["string", "null"]
+        telephonyProvider:
+          type: string
+          description: "Telephony: twilio, plivo, vonage"
+        systemPrompt:
+          type: string
+        temperature:
+          type: ["number", "null"]
+        maxDuration:
+          type: ["integer", "null"]
+          description: Max call duration in seconds
+        totalCalls:
+          type: integer
+        successfulCalls:
+          type: integer
+        avgDurationSeconds:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AgentInput:
+      type: object
+      required: [name, asrProvider, llmProvider, ttsProvider, telephonyProvider, systemPrompt]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        asrProvider:
+          type: string
+        asrModel:
+          type: string
+        llmProvider:
+          type: string
+        llmModel:
+          type: string
+        ttsProvider:
+          type: string
+        ttsVoice:
+          type: string
+        telephonyProvider:
+          type: string
+        systemPrompt:
+          type: string
+        temperature:
+          type: number
+        maxDuration:
+          type: integer
+
+    AgentUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        asrProvider:
+          type: string
+        asrModel:
+          type: string
+        llmProvider:
+          type: string
+        llmModel:
+          type: string
+        ttsProvider:
+          type: string
+        ttsVoice:
+          type: string
+        telephonyProvider:
+          type: string
+        systemPrompt:
+          type: string
+        temperature:
+          type: number
+        maxDuration:
+          type: integer
+        status:
+          type: string
+
+    # ── Call ───────────────────────────────────────────────────────────────────
+    Call:
+      type: object
+      required: [id, agentId, agentName, status, toNumber, fromNumber, createdAt]
+      properties:
+        id:
+          type: integer
+        agentId:
+          type: integer
+        agentName:
+          type: string
+        status:
+          type: string
+          enum: [pending, in_progress, completed, failed, cancelled]
+        toNumber:
+          type: string
+        fromNumber:
+          type: string
+        durationSeconds:
+          type: ["integer", "null"]
+        transcript:
+          type: ["string", "null"]
+        recordingUrl:
+          type: ["string", "null"]
+        errorMessage:
+          type: ["string", "null"]
+        metadata:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        endedAt:
+          type: ["string", "null"]
+          format: date-time
+
+    CallInput:
+      type: object
+      required: [agentId, toNumber, fromNumber]
+      properties:
+        agentId:
+          type: integer
+        toNumber:
+          type: string
+        fromNumber:
+          type: string
+        metadata:
+          type: string
+
+    CallUpdate:
+      type: object
+      properties:
+        status:
+          type: string
+        durationSeconds:
+          type: integer
+        transcript:
+          type: string
+        recordingUrl:
+          type: string
+        errorMessage:
+          type: string
+        endedAt:
+          type: string
+          format: date-time
+
+    # ── Provider ───────────────────────────────────────────────────────────────
+    ProviderConfig:
+      type: object
+      required: [id, providerType, providerName, isActive, createdAt]
+      properties:
+        id:
+          type: integer
+        providerType:
+          type: string
+          enum: [asr, llm, tts, telephony]
+        providerName:
+          type: string
+        apiKeyHint:
+          type: ["string", "null"]
+          description: Last 4 chars of the API key (masked)
+        isActive:
+          type: boolean
+        extraConfig:
+          type: ["string", "null"]
+          description: JSON string of extra config fields
+        createdAt:
+          type: string
+          format: date-time
+
+    ProviderInput:
+      type: object
+      required: [providerType, providerName, apiKey]
+      properties:
+        providerType:
+          type: string
+          enum: [asr, llm, tts, telephony]
+        providerName:
+          type: string
+        apiKey:
+          type: string
+        extraConfig:
+          type: string
+
+    ProviderUpdate:
+      type: object
+      properties:
+        apiKey:
+          type: string
+        isActive:
+          type: boolean
+        extraConfig:
+          type: string
+
+    # ── Analytics ──────────────────────────────────────────────────────────────
+    DashboardStats:
+      type: object
+      required: [totalAgents, activeAgents, totalCalls, callsToday, successRate, avgDurationSeconds]
+      properties:
+        totalAgents:
+          type: integer
+        activeAgents:
+          type: integer
+        totalCalls:
+          type: integer
+        callsToday:
+          type: integer
+        successRate:
+          type: number
+          description: Percentage of successful calls (0-100)
+        avgDurationSeconds:
+          type: integer
+        callsThisWeek:
+          type: integer
+        totalProviders:
+          type: integer
+
+    CallStatusCount:
+      type: object
+      required: [status, count]
+      properties:
+        status:
+          type: string
+        count:
+          type: integer
+
+    DailyCallVolume:
+      type: object
+      required: [date, total, completed, failed]
+      properties:
+        date:
+          type: string
+        total:
+          type: integer
+        completed:
+          type: integer
+        failed:
+          type: integer

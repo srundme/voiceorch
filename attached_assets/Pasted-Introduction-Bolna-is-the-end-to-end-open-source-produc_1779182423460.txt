@@ -1,0 +1,213 @@
+Introduction
+Bolna is the end-to-end open source production ready framework for quickly building LLM based voice driven conversational applications.
+
+Demo
+ demo-create-agent-and-make-calls.mp4 
+What is this repository?
+This repository contains the entire orchestration platform to build voice AI applications. It technically orchestrates voice conversations using combination of different ASR+LLM+TTS providers and models over websockets.
+
+Components
+Bolna helps you create AI Voice Agents which can be instructed to do tasks beginning with:
+
+Orchestration platform (this open source repository)
+Hosted APIs (https://docs.bolna.ai/api-reference/introduction) built on top of this orchestration platform [currently closed source]
+No-code UI playground at https://platform.bolna.ai/ using the hosted APIs + tailwind CSS [currently closed source]
+Development philosophy
+Any integration, enhancement or feature initially lands on this open source package since it forms the backbone of our Hosted APIs and dashboard
+Post that we expose APIs or make changes to existing APIs as required for the same
+Thirdly, we push it to the UI dashboard
+
+Supported providers and models
+Initiating a phone call using telephony providers like Twilio, Plivo, Exotel (coming soon), Vonage (coming soon) etc.
+Transcribing the conversations using Deepgram, Azure etc.
+Using LLMs like OpenAI, DeepSeek, Llama, Cohere, Mistral, etc to handle conversations
+Synthesizing LLM responses back to telephony using AWS Polly, ElevenLabs, Deepgram, OpenAI, Azure, Cartesia, Smallest etc.
+Refer to the docs for a deepdive into all supported providers.
+
+Local example setup [will be moved to a different repository]
+A basic local setup includes usage of Twilio or Plivo for telephony. We have dockerized the setup in local_setup/. One will need to populate an environment .env file from .env.sample.
+
+The setup consists of four containers:
+
+Telephony web server:
+Choosing Twilio: for initiating the calls one will need to set up a Twilio account
+Choosing Plivo: for initiating the calls one will need to set up a Plivo account
+Bolna server: for creating and handling agents
+ngrok: for tunneling. One will need to add the authtoken to ngrok-config.yml
+redis: for persisting agents & prompt data
+Quick Start
+The easiest way to get started is to use the provided script:
+
+cd local_setup
+chmod +x start.sh
+./start.sh
+This script will check for Docker dependencies, build all services with BuildKit enabled, and start them in detached mode.
+
+Manual Setup
+Alternatively, you can manually build and run the services:
+
+Make sure you have Docker with Docker Compose V2 installed
+Enable BuildKit for faster builds:
+export DOCKER_BUILDKIT=1
+export COMPOSE_DOCKER_CLI_BUILD=1
+Build the images:
+docker compose build
+Run the services:
+docker compose up -d
+To run specific services only:
+
+docker compose up -d bolna-app twilio-app
+# or
+docker compose up -d bolna-app plivo-app
+Once the docker containers are up, you can now start to create your agents and instruct them to initiate calls.
+
+Example agents to create, use and start making calls
+You may try out different agents from example.bolna.dev.
+
+Programmatic usage (minimal example)
+You can also build and run an agent directly in Python without the local telephony setup.
+
+Example script: examples/simple_assistant.py
+
+import asyncio
+from bolna.assistant import Assistant
+from bolna.models import (
+    Transcriber,
+    Synthesizer,
+    ElevenLabsConfig,
+    LlmAgent,
+    SimpleLlmAgent,
+)
+
+
+async def main():
+    assistant = Assistant(name="demo_agent")
+
+    # Configure audio input (ASR)
+    transcriber = Transcriber(provider="deepgram", model="nova-2", stream=True, language="en")
+
+    # Configure LLM
+    llm_agent = LlmAgent(
+        agent_type="simple_llm_agent",
+        agent_flow_type="streaming",
+        llm_config=SimpleLlmAgent(
+            provider="openai",
+            model="gpt-4o-mini",
+            temperature=0.3,
+        ),
+    )
+
+    # Configure audio output (TTS)
+    synthesizer = Synthesizer(
+        provider="elevenlabs",
+        provider_config=ElevenLabsConfig(
+            voice="George", voice_id="JBFqnCBsd6RMkjVDRZzb", model="eleven_turbo_v2_5"
+        ),
+        stream=True,
+        audio_format="wav",
+    )
+
+    # Build a single coherent pipeline: transcriber -> llm -> synthesizer
+    assistant.add_task(
+        task_type="conversation",
+        llm_agent=llm_agent,
+        transcriber=transcriber,
+        synthesizer=synthesizer,
+        enable_textual_input=False,
+    )
+
+    # Stream results
+    async for chunk in assistant.execute():
+        print(chunk)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+How to run:
+
+export OPENAI_API_KEY=...
+export DEEPGRAM_AUTH_TOKEN=...
+export ELEVENLABS_API_KEY=...
+python examples/simple_assistant.py
+This demonstrates orchestration and streaming output. For telephony, use the services in local_setup/.
+
+Note: For REST-based usage (Agent CRUD over HTTP), see API.md in the repo root.
+
+Expected output shape: assistant.execute() is an async generator yielding per-task result dicts (event-like chunks). The exact keys depend on configured tools/providers; treat it as a stream and process incrementally.
+
+Text-only pipeline example
+If you want a text-only flow (no transcriber/synthesizer), you can enable a text-only pipeline:
+
+Example script: examples/text_only_assistant.py
+
+import asyncio
+from bolna.assistant import Assistant
+from bolna.models import LlmAgent, SimpleLlmAgent
+
+
+async def main():
+    assistant = Assistant(name="text_only_agent")
+
+    llm_agent = LlmAgent(
+        agent_type="simple_llm_agent",
+        agent_flow_type="streaming",
+        llm_config=SimpleLlmAgent(
+            provider="openai",
+            model="gpt-4o-mini",
+            temperature=0.2,
+        ),
+    )
+
+    # No transcriber/synthesizer; enable a text-only pipeline
+    assistant.add_task(
+        task_type="conversation",
+        llm_agent=llm_agent,
+        enable_textual_input=True,
+    )
+
+    async for chunk in assistant.execute():
+        print(chunk)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+How to run (text-only):
+
+export OPENAI_API_KEY=...
+python examples/text_only_assistant.py
+Expected output shape: assistant.execute() yields streaming dicts per task step; fields vary by configuration. Handle chunk-by-chunk.
+
+Using your own providers
+You can populate the .env file to use your own keys for providers.
+
+ASR Providers
+ 
+LLM Providers
+ 
+TTS Providers
+ 
+Telephony Providers
+Open-source v/s Hosted APIs
+We have in the past tried to maintain both the open source and the hosted solution (via APIs and a UI dashboard).
+
+We have fluctuated b/w maintaining this repository purely from a point of time crunch and not interest.
+
+Currently, we are continuing to maintain it for the community and improving the adoption of Voice AI.
+
+Though the repository is completely open source, you can connect with us if interested in managed hosted offerings or more customized solutions. Schedule a meeting
+
+Extending with other Telephony Providers
+In case you wish to extend and add some other Telephony like Vonage, Telnyx, etc. following the guidelines below:
+
+Make sure bi-directional streaming is supported by the Telephony provider
+Add the telephony-specific input handler file in input_handlers/telephony_providers writing custom functions extending from the telephony.py class
+This file will mainly contain how different types of event packets are being ingested from the telephony provider
+Add telephony-specific output handler file in output_handlers/telephony_providers writing custom functions extending from the telephony.py class
+This mainly concerns converting audio from the synthesizer class to a supported audio format and streaming it over the websocket provided by the telephony provider
+Lastly, you'll have to write a dedicated server like the example twilio_api_server.py provided in local_setup to initiate calls over websockets.
+Contributing
+We love all types of contributions: whether big or small helping in improving this community resource.
+
+There are a number of open issues present which can be good ones to start with
+If you have suggestions for enhancements, wish to contribute a simple fix such as correcting a typo, or want to address an apparent bug, please feel free to initiate a new issue or submit a pull request
+If you're contemplating a larger change or addition to this repository, be it in terms of its structure or the features, kindly begin by creating a new issue open a new issue :octocat: and outline your proposed changes. This will allow us to engage in a discussion before you dedicate a significant amount of time or effort. Your cooperation and understanding are appreciated

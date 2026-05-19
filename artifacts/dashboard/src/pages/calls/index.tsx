@@ -1,0 +1,188 @@
+import React, { useState } from "react";
+import { Link } from "wouter";
+import { format, parseISO } from "date-fns";
+import { Search, Filter, Phone } from "lucide-react";
+import { 
+  useListCalls, 
+  getListCallsQueryKey,
+  useListAgents,
+  getListAgentsQueryKey
+} from "@workspace/api-client-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+
+export default function CallsList() {
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [agentFilter, setAgentFilter] = useState<string>("all");
+  
+  const { data: calls, isLoading: callsLoading } = useListCalls(
+    { 
+      status: statusFilter !== "all" ? statusFilter : undefined,
+      agentId: agentFilter !== "all" ? parseInt(agentFilter) : undefined
+    }, 
+    {
+      query: { 
+        queryKey: getListCallsQueryKey({ 
+          status: statusFilter !== "all" ? statusFilter : undefined,
+          agentId: agentFilter !== "all" ? parseInt(agentFilter) : undefined
+        })
+      }
+    }
+  );
+
+  const { data: agents } = useListAgents({
+    query: { queryKey: getListAgentsQueryKey() }
+  });
+
+  const formatDuration = (seconds?: number | null) => {
+    if (!seconds) return "-";
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch(status) {
+      case "completed": return <Badge variant="default" className="bg-primary/20 text-primary hover:bg-primary/30 border-transparent">Completed</Badge>;
+      case "failed": return <Badge variant="destructive" className="bg-destructive/20 text-destructive hover:bg-destructive/30 border-transparent">Failed</Badge>;
+      case "in_progress": return <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-500/30 border-transparent">In Progress</Badge>;
+      case "pending": return <Badge variant="outline" className="text-muted-foreground">Pending</Badge>;
+      case "cancelled": return <Badge variant="outline" className="bg-muted text-muted-foreground border-transparent">Cancelled</Badge>;
+      default: return <Badge variant="outline">{status}</Badge>;
+    }
+  };
+
+  return (
+    <div className="flex-1 space-y-6 p-6 md:p-8 pt-6 h-full flex flex-col">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">Call Log</h2>
+          <p className="text-muted-foreground">
+            Complete history of all voice interactions across agents.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="relative flex-1 max-w-sm min-w-[200px]">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            type="search"
+            placeholder="Search phone numbers..."
+            className="pl-8 bg-card"
+          />
+        </div>
+        
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-[180px] bg-card">
+            <SelectValue placeholder="Filter by Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Statuses</SelectItem>
+            <SelectItem value="completed">Completed</SelectItem>
+            <SelectItem value="failed">Failed</SelectItem>
+            <SelectItem value="in_progress">In Progress</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select value={agentFilter} onValueChange={setAgentFilter}>
+          <SelectTrigger className="w-[200px] bg-card">
+            <SelectValue placeholder="Filter by Agent" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Agents</SelectItem>
+            {agents?.map(agent => (
+              <SelectItem key={agent.id} value={agent.id.toString()}>{agent.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <Card className="flex-1 flex flex-col overflow-hidden border-border/50">
+        <CardContent className="p-0 flex-1 overflow-auto">
+          <Table>
+            <TableHeader className="bg-muted/50 sticky top-0 z-10 backdrop-blur-sm">
+              <TableRow className="border-border/50 hover:bg-transparent">
+                <TableHead className="w-[150px]">Date</TableHead>
+                <TableHead>Agent</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>To / From</TableHead>
+                <TableHead>Duration</TableHead>
+                <TableHead className="text-right">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {callsLoading ? (
+                Array.from({ length: 8 }).map((_, i) => (
+                  <TableRow key={i} className="border-border/50">
+                    <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                    <TableCell><Skeleton className="h-6 w-20 rounded-full" /></TableCell>
+                    <TableCell><Skeleton className="h-8 w-32" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-12" /></TableCell>
+                    <TableCell className="text-right"><Skeleton className="h-8 w-16 ml-auto" /></TableCell>
+                  </TableRow>
+                ))
+              ) : calls && calls.length > 0 ? (
+                calls.map((call) => (
+                  <TableRow key={call.id} className="cursor-pointer hover:bg-muted/50 transition-colors border-border/50">
+                    <TableCell className="whitespace-nowrap text-muted-foreground font-medium text-xs">
+                      {format(parseISO(call.createdAt), "MMM d, HH:mm:ss")}
+                    </TableCell>
+                    <TableCell>
+                       <Link href={`/agents/${call.agentId}`}>
+                         <span className="font-medium text-primary hover:underline">{call.agentName}</span>
+                       </Link>
+                    </TableCell>
+                    <TableCell>
+                      {getStatusBadge(call.status)}
+                    </TableCell>
+                    <TableCell>
+                      <div className="text-sm font-medium">{call.toNumber}</div>
+                      <div className="text-xs text-muted-foreground">{call.fromNumber}</div>
+                    </TableCell>
+                    <TableCell className="font-mono text-sm text-muted-foreground">
+                      {formatDuration(call.durationSeconds)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                        <Link href={`/calls/${call.id}`}>
+                        <Button variant="secondary" size="sm" className="h-8 text-xs font-semibold">View Log</Button>
+                      </Link>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={6} className="h-64 text-center text-muted-foreground border-0">
+                    <div className="flex flex-col items-center justify-center">
+                      <Phone className="h-10 w-10 opacity-20 mb-3" />
+                      <p>No calls found matching your filters.</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
