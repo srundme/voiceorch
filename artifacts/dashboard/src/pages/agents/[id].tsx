@@ -1,16 +1,12 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Link, useParams } from "wouter";
 import { format, parseISO } from "date-fns";
-import { 
-  ArrowLeft, 
-  Settings2, 
-  Activity, 
-  Phone,
-  BarChart2,
-  Clock
+import {
+  ArrowLeft, Settings2, Activity, Phone, BarChart2, Clock,
+  Mic, MicOff, PhoneOff, Copy, Check, Loader2, Volume2
 } from "lucide-react";
-import { 
-  useGetAgent, 
+import {
+  useGetAgent,
   getGetAgentQueryKey,
   useListCalls,
   getListCallsQueryKey
@@ -21,25 +17,307 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ScrollArea } from "@/components/ui/scroll-area";
+
+/* ── Web Call Panel ───────────────────────────────────────────────────────── */
+
+type CallStatus = "idle" | "connecting" | "listening" | "thinking" | "speaking" | "ended";
+
+interface Msg { speaker: "user" | "agent"; text: string }
+
+function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: string }) {
+  const [status, setStatus]     = useState<CallStatus>("idle");
+  const [msgs, setMsgs]         = useState<Msg[]>([]);
+  const [error, setError]       = useState<string | null>(null);
+  const [duration, setDuration] = useState<number | null>(null);
+  const [copied, setCopied]     = useState(false);
+
+  const wsRef        = useRef<WebSocket | null>(null);
+  const audioCtxRef  = useRef<AudioContext | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const streamRef    = useRef<MediaStream | null>(null);
+  const nextPlayRef  = useRef(0);
+  const scrollRef    = useRef<HTMLDivElement>(null);
+
+  const transcriptRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (transcriptRef.current) {
+      transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
+    }
+  }, [msgs]);
+
+  // ── Audio helpers ──────────────────────────────────────────────────────────
+  function float32ToInt16(f32: Float32Array): Int16Array {
+    const int16 = new Int16Array(f32.length);
+    for (let i = 0; i < f32.length; i++) {
+      int16[i] = Math.max(-32768, Math.min(32767, f32[i] * 32768));
+    }
+    return int16;
+  }
+
+  function playPCM16(buf: ArrayBuffer) {
+    const ctx = audioCtxRef.current;
+    if (!ctx) return;
+    const int16  = new Int16Array(buf);
+    const f32    = new Float32Array(int16.length);
+    for (let i = 0; i < int16.length; i++) f32[i] = int16[i] / 32768;
+    const abuf   = ctx.createBuffer(1, f32.length, 16000);
+    abuf.getChannelData(0).set(f32);
+    const src    = ctx.createBufferSource();
+    src.buffer   = abuf;
+    src.connect(ctx.destination);
+    const now    = ctx.currentTime;
+    nextPlayRef.current = Math.max(now + 0.02, nextPlayRef.current);
+    src.start(nextPlayRef.current);
+    nextPlayRef.current += abuf.duration;
+  }
+
+  // ── Start call ─────────────────────────────────────────────────────────────
+  const startCall = useCallback(async () => {
+    setError(null);
+    setMsgs([]);
+    setDuration(null);
+    setStatus("connecting");
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, sampleRate: 16000 }
+      });
+      streamRef.current = stream;
+
+      const proto = location.protocol === "https:" ? "wss" : "ws";
+      const ws = new WebSocket(`${proto}://${location.host}/api/ws/webcall/${agentId}`);
+      ws.binaryType = "arraybuffer";
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
+        const ctx = new AudioCtx({ sampleRate: 16000 }) as AudioContext;
+        audioCtxRef.current = ctx;
+        nextPlayRef.current = 0;
+
+        const src       = ctx.createMediaStreamSource(stream);
+        const processor = ctx.createScriptProcessor(2048, 1, 1);
+        processorRef.current = processor;
+        src.connect(processor);
+        processor.connect(ctx.destination);
+
+        processor.onaudioprocess = (e) => {
+          if (ws.readyState !== WebSocket.OPEN) return;
+          const int16 = float32ToInt16(e.inputBuffer.getChannelData(0));
+          ws.send(int16.buffer);
+        };
+      };
+
+      ws.onmessage = (e) => {
+        if (e.data instanceof ArrayBuffer) {
+          playPCM16(e.data);
+          return;
+        }
+        try {
+          const msg = JSON.parse(e.data as string) as {
+            type: string; status?: CallStatus; speaker?: "user" | "agent";
+            text?: string; durationSeconds?: number; message?: string;
+          };
+          if (msg.type === "ready") {
+            setStatus("listening");
+          } else if (msg.type === "status" && msg.status) {
+            setStatus(msg.status);
+          } else if (msg.type === "transcript" && msg.speaker && msg.text) {
+            setMsgs(prev => [...prev, { speaker: msg.speaker!, text: msg.text! }]);
+          } else if (msg.type === "ended") {
+            setDuration(msg.durationSeconds ?? null);
+            setStatus("ended");
+            cleanup();
+          } else if (msg.type === "error") {
+            setError(msg.message ?? "An error occurred");
+            setStatus("idle");
+            cleanup();
+          }
+        } catch { /* ignore */ }
+      };
+
+      ws.onclose = () => {
+        if (status !== "ended" && status !== "idle") setStatus("idle");
+        cleanup();
+      };
+
+      ws.onerror = () => {
+        setError("WebSocket connection failed. Make sure your API keys are configured.");
+        setStatus("idle");
+        cleanup();
+      };
+
+    } catch {
+      setError("Microphone access was denied or is unavailable.");
+      setStatus("idle");
+    }
+  }, [agentId]);
+
+  // ── End call ───────────────────────────────────────────────────────────────
+  const endCall = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "end" }));
+    }
+    setStatus("idle");
+    cleanup();
+  }, []);
+
+  function cleanup() {
+    processorRef.current?.disconnect();
+    processorRef.current = null;
+    audioCtxRef.current?.close().catch(() => {});
+    audioCtxRef.current = null;
+    streamRef.current?.getTracks().forEach(t => t.stop());
+    streamRef.current = null;
+    if (wsRef.current && wsRef.current.readyState < 2) wsRef.current.close();
+    wsRef.current = null;
+  }
+
+  useEffect(() => () => { cleanup(); }, []);
+
+  // ── Widget embed code ──────────────────────────────────────────────────────
+  const embedCode = `<script src="${location.protocol}//${location.host}/api/widget.js"\n        data-agent-id="${agentId}"\n        data-name="${agentName}"\n        data-color="#0ea5e9">\n</script>`;
+
+  const copyEmbed = () => {
+    navigator.clipboard.writeText(embedCode);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  // ── Status display ─────────────────────────────────────────────────────────
+  const statusConfig: Record<CallStatus, { label: string; color: string; pulse: boolean }> = {
+    idle:       { label: "Ready to test",    color: "bg-zinc-500",   pulse: false },
+    connecting: { label: "Connecting…",      color: "bg-amber-400",  pulse: true  },
+    listening:  { label: "Listening…",       color: "bg-emerald-400",pulse: true  },
+    thinking:   { label: "Thinking…",        color: "bg-amber-400",  pulse: true  },
+    speaking:   { label: "Speaking…",        color: "bg-sky-400",    pulse: true  },
+    ended:      { label: "Call ended",       color: "bg-zinc-500",   pulse: false },
+  };
+  const sc = statusConfig[status];
+  const isActive = status !== "idle" && status !== "ended";
+
+  return (
+    <div className="space-y-5">
+      {/* Call interface */}
+      <Card className="overflow-hidden">
+        <CardHeader className="border-b border-border/50 pb-4">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Phone className="h-4 w-4 text-primary" />
+            Browser Test Call
+          </CardTitle>
+          <CardDescription>
+            Talk to <strong>{agentName}</strong> directly from your browser — no phone needed.
+            Your microphone audio is streamed live through the full STT → LLM → TTS pipeline.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pt-5 space-y-5">
+          {/* Status bar */}
+          <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-muted/40 border border-border/50">
+            <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${sc.color} ${sc.pulse ? "animate-pulse" : ""}`} />
+            <span className="text-sm font-medium">{sc.label}</span>
+            {status === "ended" && duration !== null && (
+              <span className="text-xs text-muted-foreground ml-auto">Duration: {Math.floor(duration / 60)}m {duration % 60}s</span>
+            )}
+          </div>
+
+          {/* Error */}
+          {error && (
+            <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-4 py-3">
+              {error}
+            </div>
+          )}
+
+          {/* Transcript */}
+          <div
+            ref={transcriptRef}
+            className="h-64 overflow-y-auto space-y-3 pr-1 scroll-smooth"
+          >
+            {msgs.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground gap-2">
+                <Volume2 className="h-8 w-8 opacity-20" />
+                <p className="text-sm">Transcript will appear here during the call.</p>
+              </div>
+            ) : (
+              msgs.map((m, i) => (
+                <div key={i} className={`flex ${m.speaker === "user" ? "justify-end" : "justify-start"}`}>
+                  <div className={`max-w-[80%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${
+                    m.speaker === "user"
+                      ? "bg-muted text-foreground rounded-br-sm"
+                      : "bg-primary/15 text-foreground border border-primary/20 rounded-bl-sm"
+                  }`}>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+                      {m.speaker === "user" ? "You" : agentName}
+                    </p>
+                    {m.text}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Call controls */}
+          <div className="flex gap-3">
+            {!isActive ? (
+              <Button
+                className="flex-1 gap-2"
+                onClick={() => void startCall()}
+              >
+                <Mic className="h-4 w-4" /> Start Call
+              </Button>
+            ) : (
+              <Button
+                variant="destructive"
+                className="flex-1 gap-2"
+                onClick={endCall}
+              >
+                <PhoneOff className="h-4 w-4" /> End Call
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Widget embed */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            Embed on Your Website
+          </CardTitle>
+          <CardDescription>
+            Drop this snippet into any webpage. A floating call button will appear — visitors can talk to this agent without installing anything.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <pre className="bg-muted/60 border border-border/60 rounded-lg px-4 py-3 text-xs font-mono overflow-x-auto text-foreground/80 whitespace-pre">
+            {embedCode}
+          </pre>
+          <Button variant="outline" size="sm" className="gap-2" onClick={copyEmbed}>
+            {copied ? <><Check className="h-3.5 w-3.5 text-emerald-400" /> Copied!</> : <><Copy className="h-3.5 w-3.5" /> Copy Embed Code</>}
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            You can customize <code className="font-mono bg-muted px-1 rounded">data-color</code>, <code className="font-mono bg-muted px-1 rounded">data-name</code>, and <code className="font-mono bg-muted px-1 rounded">data-position</code> (bottom-right, bottom-left, top-right, top-left).
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+/* ── Agent Detail Page ────────────────────────────────────────────────────── */
 
 export default function AgentDetail() {
   const params = useParams();
   const id = parseInt(params.id || "0", 10);
-  
   const [activeTab, setActiveTab] = useState("overview");
 
   const { data: agent, isLoading: agentLoading } = useGetAgent(id, {
-    query: { 
-      enabled: !!id,
-      queryKey: getGetAgentQueryKey(id) 
-    }
+    query: { enabled: !!id, queryKey: getGetAgentQueryKey(id) }
   });
 
   const { data: calls, isLoading: callsLoading } = useListCalls({ agentId: id }, {
-    query: {
-      enabled: !!id && activeTab === "calls",
-      queryKey: getListCallsQueryKey({ agentId: id })
-    }
+    query: { enabled: !!id && activeTab === "calls", queryKey: getListCallsQueryKey({ agentId: id }) }
   });
 
   const formatDuration = (seconds?: number | null) => {
@@ -50,15 +328,16 @@ export default function AgentDetail() {
   };
 
   const getStatusBadge = (status: string) => {
-    switch(status) {
-      case "completed": return <Badge variant="default" className="bg-primary/20 text-primary hover:bg-primary/30 border-transparent">Completed</Badge>;
-      case "failed": return <Badge variant="destructive" className="bg-destructive/20 text-destructive hover:bg-destructive/30 border-transparent">Failed</Badge>;
-      case "in_progress": return <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-500/30 border-transparent">In Progress</Badge>;
-      case "pending": return <Badge variant="outline" className="text-muted-foreground">Pending</Badge>;
-      case "cancelled": return <Badge variant="outline" className="bg-muted text-muted-foreground border-transparent">Cancelled</Badge>;
-      default: return <Badge variant="outline">{status}</Badge>;
+    switch (status) {
+      case "completed":  return <Badge className="bg-primary/20 text-primary border-transparent">Completed</Badge>;
+      case "failed":     return <Badge className="bg-destructive/20 text-destructive border-transparent">Failed</Badge>;
+      case "in_progress":return <Badge className="bg-yellow-500/20 text-yellow-400 border-transparent">In Progress</Badge>;
+      case "pending":    return <Badge variant="outline" className="text-muted-foreground">Pending</Badge>;
+      default:           return <Badge variant="outline">{status}</Badge>;
     }
   };
+
+  const tabClass = "relative h-10 rounded-none border-b-2 border-transparent bg-transparent px-4 pb-3 pt-2 font-medium text-muted-foreground shadow-none transition-none data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none";
 
   if (agentLoading) {
     return (
@@ -70,11 +349,7 @@ export default function AgentDetail() {
   }
 
   if (!agent) {
-    return (
-      <div className="p-8 text-center text-muted-foreground">
-        Agent not found.
-      </div>
-    );
+    return <div className="p-8 text-center text-muted-foreground">Agent not found.</div>;
   }
 
   return (
@@ -87,99 +362,96 @@ export default function AgentDetail() {
         </Link>
         <div className="flex items-center gap-3">
           <h2 className="text-3xl font-bold tracking-tight">{agent.name}</h2>
-          {agent.status === 'active' ? (
-            <Badge className="bg-green-500 hover:bg-green-600">Active</Badge>
-          ) : agent.status === 'inactive' ? (
-            <Badge variant="secondary">Inactive</Badge>
-          ) : (
-            <Badge variant="outline" className="text-yellow-500 border-yellow-500">Draft</Badge>
-          )}
+          {agent.status === "active"   && <Badge className="bg-green-500 hover:bg-green-600">Active</Badge>}
+          {agent.status === "inactive" && <Badge variant="secondary">Inactive</Badge>}
+          {agent.status === "draft"    && <Badge variant="outline" className="text-yellow-500 border-yellow-500">Draft</Badge>}
         </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
         <TabsList className="w-full justify-start rounded-none border-b bg-transparent p-0">
-          <TabsTrigger value="overview" className="relative h-10 rounded-none border-b-2 border-transparent bg-transparent px-4 pb-3 pt-2 font-medium text-muted-foreground shadow-none transition-none data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none">
-            Overview
+          <TabsTrigger value="overview"      className={tabClass}>Overview</TabsTrigger>
+          <TabsTrigger value="test"          className={tabClass}>
+            <Mic className="h-3.5 w-3.5 mr-1.5" />Test Call
           </TabsTrigger>
-          <TabsTrigger value="configuration" className="relative h-10 rounded-none border-b-2 border-transparent bg-transparent px-4 pb-3 pt-2 font-medium text-muted-foreground shadow-none transition-none data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none">
-            Configuration
-          </TabsTrigger>
-          <TabsTrigger value="calls" className="relative h-10 rounded-none border-b-2 border-transparent bg-transparent px-4 pb-3 pt-2 font-medium text-muted-foreground shadow-none transition-none data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none">
-            Call History
-          </TabsTrigger>
+          <TabsTrigger value="configuration" className={tabClass}>Configuration</TabsTrigger>
+          <TabsTrigger value="calls"         className={tabClass}>Call History</TabsTrigger>
         </TabsList>
-        
-        <div className="mt-6 flex-1 overflow-auto">
-          <TabsContent value="overview" className="m-0 h-full">
-             <div className="grid gap-4 md:grid-cols-3 mb-6">
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Total Calls</CardTitle>
-                    <Phone className="h-4 w-4 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{agent.totalCalls || 0}</div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Success Rate</CardTitle>
-                    <BarChart2 className="h-4 w-4 text-primary" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">
-                      {agent.totalCalls ? Math.round(((agent.successfulCalls || 0) / agent.totalCalls) * 100) : 0}%
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Avg Duration</CardTitle>
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{formatDuration(agent.avgDurationSeconds)}</div>
-                  </CardContent>
-                </Card>
-              </div>
 
+        <div className="mt-6 flex-1 overflow-auto">
+          {/* ── Overview ── */}
+          <TabsContent value="overview" className="m-0 h-full">
+            <div className="grid gap-4 md:grid-cols-3 mb-6">
               <Card>
-                <CardHeader>
-                  <CardTitle>Pipeline Map</CardTitle>
-                  <CardDescription>Current orchestration configuration for this agent</CardDescription>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Calls</CardTitle>
+                  <Phone className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="flex flex-col md:flex-row items-center justify-between gap-4 py-8">
-                     <div className="flex flex-col items-center gap-2 p-4 border rounded-lg bg-card w-full text-center">
-                        <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Telephony In</span>
-                        <span className="font-medium text-primary">{agent.telephonyProvider}</span>
-                     </div>
-                     <ArrowLeft className="rotate-90 md:rotate-0 text-muted-foreground" />
-                     <div className="flex flex-col items-center gap-2 p-4 border rounded-lg bg-card w-full text-center">
-                        <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">ASR</span>
-                        <span className="font-medium">{agent.asrProvider}</span>
-                        <span className="text-xs text-muted-foreground">{agent.asrModel || "default"}</span>
-                     </div>
-                     <ArrowLeft className="rotate-90 md:rotate-180 text-muted-foreground" />
-                     <div className="flex flex-col items-center gap-2 p-4 border rounded-lg bg-primary/10 border-primary/30 w-full text-center">
-                        <span className="text-xs text-primary uppercase tracking-wider font-semibold">LLM Core</span>
-                        <span className="font-medium">{agent.llmProvider}</span>
-                        <span className="text-xs text-muted-foreground">{agent.llmModel || "default"}</span>
-                     </div>
-                     <ArrowLeft className="rotate-90 md:rotate-0 text-muted-foreground" />
-                     <div className="flex flex-col items-center gap-2 p-4 border rounded-lg bg-card w-full text-center">
-                        <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">TTS</span>
-                        <span className="font-medium">{agent.ttsProvider}</span>
-                        <span className="text-xs text-muted-foreground">{agent.ttsVoice || "default"}</span>
-                     </div>
+                  <div className="text-2xl font-bold">{agent.totalCalls || 0}</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Success Rate</CardTitle>
+                  <BarChart2 className="h-4 w-4 text-primary" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {agent.totalCalls ? Math.round(((agent.successfulCalls || 0) / agent.totalCalls) * 100) : 0}%
                   </div>
                 </CardContent>
               </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Avg Duration</CardTitle>
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{formatDuration(agent.avgDurationSeconds)}</div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Pipeline Map</CardTitle>
+                <CardDescription>Current orchestration configuration for this agent</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-col md:flex-row items-center justify-between gap-4 py-8">
+                  {[
+                    { label: "Telephony In", value: agent.telephonyProvider, sub: null, highlight: false },
+                    { label: "ASR",          value: agent.asrProvider,       sub: agent.asrModel || "default", highlight: false },
+                    { label: "LLM Core",     value: agent.llmProvider,       sub: agent.llmModel || "default", highlight: true  },
+                    { label: "TTS",          value: agent.ttsProvider,       sub: agent.ttsVoice || "default", highlight: false },
+                  ].map((stage, i) => (
+                    <React.Fragment key={stage.label}>
+                      <div className={`flex flex-col items-center gap-2 p-4 border rounded-lg w-full text-center ${
+                        stage.highlight ? "bg-primary/10 border-primary/30" : "bg-card"
+                      }`}>
+                        <span className={`text-xs uppercase tracking-wider font-semibold ${stage.highlight ? "text-primary" : "text-muted-foreground"}`}>
+                          {stage.label}
+                        </span>
+                        <span className="font-medium capitalize">{stage.value}</span>
+                        {stage.sub && <span className="text-xs text-muted-foreground">{stage.sub}</span>}
+                      </div>
+                      {i < 3 && <ArrowLeft className="rotate-90 md:rotate-180 text-muted-foreground shrink-0" />}
+                    </React.Fragment>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
+          {/* ── Test Call ── */}
+          <TabsContent value="test" className="m-0">
+            <WebCallPanel agentId={agent.id} agentName={agent.name} />
+          </TabsContent>
+
+          {/* ── Configuration ── */}
           <TabsContent value="configuration" className="m-0">
-             <Card>
+            <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Settings2 className="h-5 w-5 text-primary" />
@@ -194,6 +466,7 @@ export default function AgentDetail() {
             </Card>
           </TabsContent>
 
+          {/* ── Call History ── */}
           <TabsContent value="calls" className="m-0 h-full flex flex-col">
             <Card className="flex-1 flex flex-col overflow-hidden">
               <CardContent className="p-0 flex-1 overflow-auto">
@@ -211,31 +484,25 @@ export default function AgentDetail() {
                     {callsLoading ? (
                       Array.from({ length: 5 }).map((_, i) => (
                         <TableRow key={i}>
-                          <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                          <TableCell><Skeleton className="h-6 w-20" /></TableCell>
-                          <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-                          <TableCell><Skeleton className="h-4 w-12" /></TableCell>
-                          <TableCell className="text-right"><Skeleton className="h-8 w-16 ml-auto" /></TableCell>
+                          {Array.from({ length: 5 }).map((_, j) => (
+                            <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
+                          ))}
                         </TableRow>
                       ))
                     ) : calls && calls.length > 0 ? (
                       calls.map((call) => (
-                        <TableRow key={call.id} className="cursor-pointer hover:bg-muted/50 transition-colors">
+                        <TableRow key={call.id} className="hover:bg-muted/50 transition-colors">
                           <TableCell className="whitespace-nowrap">
                             {format(parseISO(call.createdAt), "MMM d, HH:mm")}
                           </TableCell>
-                          <TableCell>
-                            {getStatusBadge(call.status)}
-                          </TableCell>
+                          <TableCell>{getStatusBadge(call.status)}</TableCell>
                           <TableCell>
                             <div className="text-sm font-medium">{call.toNumber}</div>
                             <div className="text-xs text-muted-foreground">{call.fromNumber}</div>
                           </TableCell>
-                          <TableCell className="font-mono text-sm">
-                            {formatDuration(call.durationSeconds)}
-                          </TableCell>
+                          <TableCell className="font-mono text-sm">{formatDuration(call.durationSeconds)}</TableCell>
                           <TableCell className="text-right">
-                             <Link href={`/calls/${call.id}`}>
+                            <Link href={`/calls/${call.id}`}>
                               <Button variant="ghost" size="sm" className="h-8 text-xs">Details</Button>
                             </Link>
                           </TableCell>
