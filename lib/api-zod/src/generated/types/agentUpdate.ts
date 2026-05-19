@@ -42,4 +42,6 @@ export interface AgentUpdate {
   /** List of tools (functions) the LLM can invoke during a call */
   tools?: AgentTool[];
   status?: string;
+  maxConcurrentCalls?: number;
+  monthlySpendLimitCents?: number;
 }

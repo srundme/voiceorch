@@ -19,6 +19,7 @@ export const callsTable = pgTable("calls", {
   sttLatencyMs: integer("stt_latency_ms"),
   llmLatencyMs: integer("llm_latency_ms"),
   ttsFirstChunkMs: integer("tts_first_chunk_ms"),
+  costCents: integer("cost_cents"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   endedAt: timestamp("ended_at", { withTimezone: true }),
 });

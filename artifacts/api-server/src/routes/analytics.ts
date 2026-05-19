@@ -1,12 +1,15 @@
 import { Router, type IRouter } from "express";
-import { desc, sql, eq, gte } from "drizzle-orm";
+import { desc, sql, eq, gte, and } from "drizzle-orm";
 import { db, callsTable, agentsTable, providersTable } from "@workspace/db";
 import {
   GetDashboardStatsResponse,
   GetRecentCallsResponse,
   GetCallsByStatusResponse,
   GetDailyCallVolumeResponse,
+  GetAgentStatsParams,
+  GetAgentStatsResponse,
 } from "@workspace/api-zod";
+import { requireAuth } from "../middlewares/requireAuth.js";
 
 const router: IRouter = Router();
 
@@ -124,6 +127,75 @@ router.get("/analytics/calls/daily", async (req, res): Promise<void> => {
     .orderBy(sql`to_char(created_at at time zone 'UTC', 'YYYY-MM-DD')`);
 
   res.json(GetDailyCallVolumeResponse.parse(rows));
+});
+
+/* ── GET /analytics/agents/:id ─────────────────────────────────────────── */
+
+router.get("/analytics/agents/:id", requireAuth, async (req, res): Promise<void> => {
+  const params = GetAgentStatsParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+
+  const clerkId = (req as any).clerkUserId as string;
+  const agentId = params.data.id;
+
+  const [agent] = await db.select().from(agentsTable)
+    .where(and(eq(agentsTable.id, agentId), eq(agentsTable.userId, clerkId)));
+  if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+
+  const [totals] = await db.select({
+    totalCalls:     sql<number>`count(*)::int`,
+    successfulCalls: sql<number>`count(*) filter (where status = 'completed')::int`,
+    failedCalls:    sql<number>`count(*) filter (where status = 'failed')::int`,
+    avgDuration:    sql<number>`avg(duration_seconds) filter (where duration_seconds is not null)::int`,
+    avgStt:         sql<number>`avg(stt_latency_ms) filter (where stt_latency_ms is not null)::int`,
+    avgLlm:         sql<number>`avg(llm_latency_ms) filter (where llm_latency_ms is not null)::int`,
+    avgTts:         sql<number>`avg(tts_first_chunk_ms) filter (where tts_first_chunk_ms is not null)::int`,
+    totalSpend:     sql<number>`coalesce(sum(cost_cents), 0)::int`,
+  }).from(callsTable).where(eq(callsTable.agentId, agentId));
+
+  const weekStart = new Date();
+  weekStart.setDate(weekStart.getDate() - 7);
+  const [{ weekCount }] = await db.select({ weekCount: sql<number>`count(*)::int` })
+    .from(callsTable).where(and(eq(callsTable.agentId, agentId), gte(callsTable.createdAt, weekStart)));
+
+  const monthStart = new Date();
+  monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+  const [{ monthCount }] = await db.select({ monthCount: sql<number>`count(*)::int` })
+    .from(callsTable).where(and(eq(callsTable.agentId, agentId), gte(callsTable.createdAt, monthStart)));
+
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
+  thirtyDaysAgo.setHours(0, 0, 0, 0);
+  const daily = await db.select({
+    date:      sql<string>`to_char(created_at at time zone 'UTC', 'YYYY-MM-DD')`,
+    total:     sql<number>`count(*)::int`,
+    completed: sql<number>`count(*) filter (where status = 'completed')::int`,
+    failed:    sql<number>`count(*) filter (where status = 'failed')::int`,
+  }).from(callsTable)
+    .where(and(eq(callsTable.agentId, agentId), gte(callsTable.createdAt, thirtyDaysAgo)))
+    .groupBy(sql`to_char(created_at at time zone 'UTC', 'YYYY-MM-DD')`)
+    .orderBy(sql`to_char(created_at at time zone 'UTC', 'YYYY-MM-DD')`);
+
+  const total = totals?.totalCalls ?? 0;
+  const successful = totals?.successfulCalls ?? 0;
+  const successRate = total > 0 ? Math.round((successful / total) * 100) : 0;
+
+  res.json(GetAgentStatsResponse.parse({
+    agentId,
+    name: agent.name,
+    totalCalls: total,
+    successfulCalls: successful,
+    failedCalls: totals?.failedCalls ?? 0,
+    successRate,
+    avgDurationSeconds: totals?.avgDuration ?? null,
+    avgSttLatencyMs: totals?.avgStt ?? null,
+    avgLlmLatencyMs: totals?.avgLlm ?? null,
+    avgTtsFirstChunkMs: totals?.avgTts ?? null,
+    callsThisWeek: weekCount ?? 0,
+    callsThisMonth: monthCount ?? 0,
+    totalSpendCents: totals?.totalSpend ?? 0,
+    dailyVolume: daily,
+  }));
 });
 
 export default router;

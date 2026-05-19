@@ -28,6 +28,10 @@ tags:
     description: Audit log of all platform events
   - name: phone-numbers
     description: Managed phone number provisioning (platform Vobiz account)
+  - name: webhook-endpoints
+    description: User-configured webhook endpoints for call event delivery
+  - name: monitor
+    description: Real-time active call monitoring
 
 paths:
   /healthz:
@@ -941,6 +945,149 @@ paths:
         "404":
           description: Phone number not found
 
+  # ── Active Call Monitor ───────────────────────────────────────────────────
+  /calls/active:
+    get:
+      operationId: listActiveCalls
+      tags: [monitor]
+      summary: List currently active (in-progress) calls for the authenticated user
+      responses:
+        "200":
+          description: Active calls
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActiveCall"
+        "401":
+          description: Unauthorized
+
+  # ── Per-Agent Analytics ───────────────────────────────────────────────────
+  /analytics/agents/{id}:
+    get:
+      operationId: getAgentStats
+      tags: [analytics]
+      summary: Get detailed analytics for a single agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Agent analytics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentStats"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Agent not found
+
+  # ── Agent Templates ───────────────────────────────────────────────────────
+  /agents/templates:
+    get:
+      operationId: listAgentTemplates
+      tags: [agents]
+      summary: List pre-built agent templates
+      responses:
+        "200":
+          description: List of templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgentTemplate"
+
+  # ── Webhook Endpoints ─────────────────────────────────────────────────────
+  /webhook-endpoints:
+    get:
+      operationId: listWebhookEndpoints
+      tags: [webhook-endpoints]
+      summary: List all webhook endpoints for the authenticated user
+      responses:
+        "200":
+          description: List of webhook endpoints
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WebhookEndpoint"
+        "401":
+          description: Unauthorized
+    post:
+      operationId: createWebhookEndpoint
+      tags: [webhook-endpoints]
+      summary: Create a new webhook endpoint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookEndpointInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookEndpoint"
+        "400":
+          description: Validation error
+        "401":
+          description: Unauthorized
+
+  /webhook-endpoints/{id}:
+    patch:
+      operationId: updateWebhookEndpoint
+      tags: [webhook-endpoints]
+      summary: Update a webhook endpoint
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookEndpointUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookEndpoint"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteWebhookEndpoint
+      tags: [webhook-endpoints]
+      summary: Delete a webhook endpoint
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+
 components:
   schemas:
     HealthStatus:
@@ -1071,6 +1218,12 @@ components:
           items:
             $ref: "#/components/schemas/AgentTool"
           description: List of tools (functions) the LLM can invoke during a call
+        maxConcurrentCalls:
+          type: ["integer", "null"]
+          description: Per-agent concurrent call cap (null = use account limit)
+        monthlySpendLimitCents:
+          type: ["integer", "null"]
+          description: Monthly spend cap in cents (null = no limit)
         totalCalls:
           type: integer
         successfulCalls:
@@ -1233,6 +1386,10 @@ components:
           description: List of tools (functions) the LLM can invoke during a call
         status:
           type: string
+        maxConcurrentCalls:
+          type: integer
+        monthlySpendLimitCents:
+          type: integer
 
     # ── Call ───────────────────────────────────────────────────────────────────
     Call:
@@ -1280,6 +1437,9 @@ components:
         executionId:
           type: ["string", "null"]
           description: Unique execution identifier for this call (exec_xxxxxxxx)
+        costCents:
+          type: ["integer", "null"]
+          description: Platform orchestration fee charged for this call in cents
 
     CallEndPayload:
       type: object
@@ -1805,3 +1965,164 @@ components:
         agentId:
           type: ["integer", "null"]
           description: Agent to route inbound calls to. Null to clear assignment.
+
+    # ── Active Call Monitor ──────────────────────────────────────────────────
+    ActiveCall:
+      type: object
+      required: [id, agentId, agentName, toNumber, fromNumber, status, createdAt, runningSeconds]
+      properties:
+        id:
+          type: integer
+        agentId:
+          type: integer
+        agentName:
+          type: string
+        toNumber:
+          type: string
+        fromNumber:
+          type: string
+        status:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        runningSeconds:
+          type: integer
+          description: Elapsed seconds since call started
+        executionId:
+          type: ["string", "null"]
+        metadata:
+          type: ["string", "null"]
+
+    # ── Agent Stats ──────────────────────────────────────────────────────────
+    AgentStats:
+      type: object
+      required: [agentId, name, totalCalls, successfulCalls, successRate, avgDurationSeconds, callsThisWeek, callsThisMonth, totalSpendCents]
+      properties:
+        agentId:
+          type: integer
+        name:
+          type: string
+        totalCalls:
+          type: integer
+        successfulCalls:
+          type: integer
+        failedCalls:
+          type: integer
+        successRate:
+          type: number
+          description: Percentage 0-100
+        avgDurationSeconds:
+          type: ["integer", "null"]
+        avgSttLatencyMs:
+          type: ["integer", "null"]
+        avgLlmLatencyMs:
+          type: ["integer", "null"]
+        avgTtsFirstChunkMs:
+          type: ["integer", "null"]
+        callsThisWeek:
+          type: integer
+        callsThisMonth:
+          type: integer
+        totalSpendCents:
+          type: integer
+          description: Total platform fees charged for this agent's calls
+        dailyVolume:
+          type: array
+          items:
+            $ref: "#/components/schemas/DailyCallVolume"
+
+    # ── Agent Template ───────────────────────────────────────────────────────
+    AgentTemplate:
+      type: object
+      required: [id, name, description, category]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+          enum: [support, sales, booking, survey, general]
+        asrProvider:
+          type: string
+        llmProvider:
+          type: string
+        ttsProvider:
+          type: string
+        telephonyProvider:
+          type: string
+        systemPrompt:
+          type: string
+        greetingMessage:
+          type: ["string", "null"]
+        temperature:
+          type: ["number", "null"]
+
+    # ── Webhook Endpoints ────────────────────────────────────────────────────
+    WebhookEndpoint:
+      type: object
+      required: [id, url, events, enabled, createdAt]
+      properties:
+        id:
+          type: integer
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            type: string
+            enum: [call.started, call.ended, call.failed]
+          description: Event types that trigger this webhook
+        secretHint:
+          type: ["string", "null"]
+          description: Last 6 chars of the signing secret (masked)
+        enabled:
+          type: boolean
+        description:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    WebhookEndpointInput:
+      type: object
+      required: [url, events]
+      properties:
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            type: string
+            enum: [call.started, call.ended, call.failed]
+          minItems: 1
+        secret:
+          type: string
+          description: HMAC signing secret (auto-generated if omitted)
+        description:
+          type: string
+        enabled:
+          type: boolean
+          default: true
+
+    WebhookEndpointUpdate:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            type: string
+        secret:
+          type: string
+        description:
+          type: string
+        enabled:
+          type: boolean

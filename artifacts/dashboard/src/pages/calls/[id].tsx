@@ -1,7 +1,7 @@
 import React from "react";
 import { Link, useParams } from "wouter";
-import { format, parseISO, differenceInSeconds } from "date-fns";
-import { ArrowLeft, PlayCircle, Download, FileText, AlertTriangle, Info, Bot, User } from "lucide-react";
+import { format, parseISO } from "date-fns";
+import { ArrowLeft, PlayCircle, Download, FileText, AlertTriangle, Info, Bot, User, Receipt } from "lucide-react";
 import { 
   useGetCall, 
   getGetCallQueryKey
@@ -193,6 +193,16 @@ export default function CallDetail() {
                     {call.endedAt ? format(parseISO(call.endedAt), "HH:mm:ss") : "-"}
                   </dd>
                 </div>
+                {(call.costCents != null && call.costCents > 0) && (
+                  <div className="grid grid-cols-3 p-4 bg-muted/20">
+                    <dt className="text-muted-foreground font-medium flex items-center gap-1.5">
+                      <Receipt className="h-3.5 w-3.5" /> Platform fee
+                    </dt>
+                    <dd className="col-span-2 text-right font-mono font-medium text-amber-500">
+                      ${(call.costCents / 100).toFixed(3)}
+                    </dd>
+                  </div>
+                )}
               </dl>
             </CardContent>
           </Card>

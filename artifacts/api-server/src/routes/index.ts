@@ -11,6 +11,8 @@ import walletRouter from "./wallet.js";
 import accountRouter from "./account.js";
 import activityLogsRouter from "./activity-logs.js";
 import phoneNumbersRouter from "./phone-numbers.js";
+import webhookEndpointsRouter from "./webhook-endpoints.js";
+import agentTemplatesRouter from "./agent-templates.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
 const router: IRouter = Router();
@@ -28,5 +30,7 @@ router.use(walletRouter);
 router.use(accountRouter);
 router.use(activityLogsRouter);
 router.use(phoneNumbersRouter);
+router.use(webhookEndpointsRouter);
+router.use(agentTemplatesRouter);
 
 export default router;

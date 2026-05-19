@@ -47,4 +47,9 @@ export interface Call {
      * @nullable
      */
   executionId?: string | null;
+  /**
+     * Platform orchestration fee charged for this call in cents
+     * @nullable
+     */
+  costCents?: number | null;
 }

@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import {
   Users, Phone, Key, Settings, Mic, Menu,
   LayoutDashboard, BarChart3, ChevronRight, BookOpen,
-  Wallet, LogOut, ChevronDown, AlertCircle,
+  Wallet, LogOut, ChevronDown, AlertCircle, Radio, Webhook,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,7 @@ const NAV_SECTIONS = [
     label: "OBSERVE",
     items: [
       { name: "Analytics",     href: "/app/analytics",      icon: BarChart3 },
+      { name: "Live Monitor",  href: "/app/monitor",        icon: Radio },
       { name: "Logs",          href: "/app/calls",           icon: Phone },
       { name: "Activity",      href: "/app/activity",        icon: LayoutDashboard },
     ],
@@ -36,6 +37,7 @@ const NAV_SECTIONS = [
   {
     label: "MANAGE",
     items: [
+      { name: "Webhooks",  href: "/app/webhooks", icon: Webhook },
       { name: "Wallet",    href: "/app/wallet",   icon: Wallet },
       { name: "Settings",  href: "/app/settings", icon: Settings },
     ],

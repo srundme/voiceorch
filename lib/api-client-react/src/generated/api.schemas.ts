@@ -174,6 +174,16 @@ export interface Agent {
      * @nullable
      */
   tools?: AgentTool[] | null;
+  /**
+     * Per-agent concurrent call cap (null = use account limit)
+     * @nullable
+     */
+  maxConcurrentCalls?: number | null;
+  /**
+     * Monthly spend cap in cents (null = no limit)
+     * @nullable
+     */
+  monthlySpendLimitCents?: number | null;
   totalCalls?: number;
   successfulCalls?: number;
   /** @nullable */
@@ -267,6 +277,8 @@ export interface AgentUpdate {
   /** List of tools (functions) the LLM can invoke during a call */
   tools?: AgentTool[];
   status?: string;
+  maxConcurrentCalls?: number;
+  monthlySpendLimitCents?: number;
 }
 
 export type CallStatus = typeof CallStatus[keyof typeof CallStatus];
@@ -321,6 +333,11 @@ export interface Call {
      * @nullable
      */
   executionId?: string | null;
+  /**
+     * Platform orchestration fee charged for this call in cents
+     * @nullable
+     */
+  costCents?: number | null;
 }
 
 export interface CallEndPayload {
@@ -736,6 +753,124 @@ export interface AssignPhoneNumberInput {
      * @nullable
      */
   agentId?: number | null;
+}
+
+export interface ActiveCall {
+  id: number;
+  agentId: number;
+  agentName: string;
+  toNumber: string;
+  fromNumber: string;
+  status: string;
+  createdAt: string;
+  /** Elapsed seconds since call started */
+  runningSeconds: number;
+  /** @nullable */
+  executionId?: string | null;
+  /** @nullable */
+  metadata?: string | null;
+}
+
+export interface AgentStats {
+  agentId: number;
+  name: string;
+  totalCalls: number;
+  successfulCalls: number;
+  failedCalls?: number;
+  /** Percentage 0-100 */
+  successRate: number;
+  /** @nullable */
+  avgDurationSeconds: number | null;
+  /** @nullable */
+  avgSttLatencyMs?: number | null;
+  /** @nullable */
+  avgLlmLatencyMs?: number | null;
+  /** @nullable */
+  avgTtsFirstChunkMs?: number | null;
+  callsThisWeek: number;
+  callsThisMonth: number;
+  /** Total platform fees charged for this agent's calls */
+  totalSpendCents: number;
+  dailyVolume?: DailyCallVolume[];
+}
+
+export type AgentTemplateCategory = typeof AgentTemplateCategory[keyof typeof AgentTemplateCategory];
+
+
+export const AgentTemplateCategory = {
+  support: 'support',
+  sales: 'sales',
+  booking: 'booking',
+  survey: 'survey',
+  general: 'general',
+} as const;
+
+export interface AgentTemplate {
+  id: string;
+  name: string;
+  description: string;
+  category: AgentTemplateCategory;
+  asrProvider?: string;
+  llmProvider?: string;
+  ttsProvider?: string;
+  telephonyProvider?: string;
+  systemPrompt?: string;
+  /** @nullable */
+  greetingMessage?: string | null;
+  /** @nullable */
+  temperature?: number | null;
+}
+
+export type WebhookEndpointEventsItem = typeof WebhookEndpointEventsItem[keyof typeof WebhookEndpointEventsItem];
+
+
+export const WebhookEndpointEventsItem = {
+  callstarted: 'call.started',
+  callended: 'call.ended',
+  callfailed: 'call.failed',
+} as const;
+
+export interface WebhookEndpoint {
+  id: number;
+  url: string;
+  /** Event types that trigger this webhook */
+  events: WebhookEndpointEventsItem[];
+  /**
+     * Last 6 chars of the signing secret (masked)
+     * @nullable
+     */
+  secretHint?: string | null;
+  enabled: boolean;
+  /** @nullable */
+  description?: string | null;
+  createdAt: string;
+}
+
+export type WebhookEndpointInputEventsItem = typeof WebhookEndpointInputEventsItem[keyof typeof WebhookEndpointInputEventsItem];
+
+
+export const WebhookEndpointInputEventsItem = {
+  callstarted: 'call.started',
+  callended: 'call.ended',
+  callfailed: 'call.failed',
+} as const;
+
+export interface WebhookEndpointInput {
+  url: string;
+  /** @minItems 1 */
+  events: WebhookEndpointInputEventsItem[];
+  /** HMAC signing secret (auto-generated if omitted) */
+  secret?: string;
+  description?: string;
+  enabled?: boolean;
+}
+
+export interface WebhookEndpointUpdate {
+  url?: string;
+  events?: string[];
+  secret?: string;
+  description?: string;
+  enabled?: boolean;
 }
 
 export type ListCallsParams = {

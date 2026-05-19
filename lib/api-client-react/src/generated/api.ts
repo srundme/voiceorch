@@ -21,9 +21,12 @@ import type {
 
 import type {
   AccountInfo,
+  ActiveCall,
   ActivityLog,
   Agent,
   AgentInput,
+  AgentStats,
+  AgentTemplate,
   AgentUpdate,
   AssignPhoneNumberInput,
   AutoPaySettings,
@@ -58,7 +61,10 @@ import type {
   TopupOrder,
   VerifyPaymentInput,
   WalletInfo,
-  WalletTransaction
+  WalletTransaction,
+  WebhookEndpoint,
+  WebhookEndpointInput,
+  WebhookEndpointUpdate
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -3339,5 +3345,526 @@ export const useReleasePhoneNumber = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getReleasePhoneNumberMutationOptions(options));
+    }
+
+export const getListActiveCallsUrl = () => {
+
+
+
+
+  return `/api/calls/active`
+}
+
+/**
+ * @summary List currently active (in-progress) calls for the authenticated user
+ */
+export const listActiveCalls = async ( options?: RequestInit): Promise<ActiveCall[]> => {
+
+  return customFetch<ActiveCall[]>(getListActiveCallsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListActiveCallsQueryKey = () => {
+    return [
+    `/api/calls/active`
+    ] as const;
+    }
+
+
+export const getListActiveCallsQueryOptions = <TData = Awaited<ReturnType<typeof listActiveCalls>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listActiveCalls>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListActiveCallsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listActiveCalls>>> = ({ signal }) => listActiveCalls({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listActiveCalls>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListActiveCallsQueryResult = NonNullable<Awaited<ReturnType<typeof listActiveCalls>>>
+export type ListActiveCallsQueryError = ErrorType<void>
+
+
+/**
+ * @summary List currently active (in-progress) calls for the authenticated user
+ */
+
+export function useListActiveCalls<TData = Awaited<ReturnType<typeof listActiveCalls>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listActiveCalls>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListActiveCallsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetAgentStatsUrl = (id: number,) => {
+
+
+
+
+  return `/api/analytics/agents/${id}`
+}
+
+/**
+ * @summary Get detailed analytics for a single agent
+ */
+export const getAgentStats = async (id: number, options?: RequestInit): Promise<AgentStats> => {
+
+  return customFetch<AgentStats>(getGetAgentStatsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAgentStatsQueryKey = (id: number,) => {
+    return [
+    `/api/analytics/agents/${id}`
+    ] as const;
+    }
+
+
+export const getGetAgentStatsQueryOptions = <TData = Awaited<ReturnType<typeof getAgentStats>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAgentStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAgentStatsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAgentStats>>> = ({ signal }) => getAgentStats(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAgentStats>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAgentStatsQueryResult = NonNullable<Awaited<ReturnType<typeof getAgentStats>>>
+export type GetAgentStatsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get detailed analytics for a single agent
+ */
+
+export function useGetAgentStats<TData = Awaited<ReturnType<typeof getAgentStats>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAgentStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAgentStatsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListAgentTemplatesUrl = () => {
+
+
+
+
+  return `/api/agents/templates`
+}
+
+/**
+ * @summary List pre-built agent templates
+ */
+export const listAgentTemplates = async ( options?: RequestInit): Promise<AgentTemplate[]> => {
+
+  return customFetch<AgentTemplate[]>(getListAgentTemplatesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAgentTemplatesQueryKey = () => {
+    return [
+    `/api/agents/templates`
+    ] as const;
+    }
+
+
+export const getListAgentTemplatesQueryOptions = <TData = Awaited<ReturnType<typeof listAgentTemplates>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAgentTemplates>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAgentTemplatesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAgentTemplates>>> = ({ signal }) => listAgentTemplates({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAgentTemplates>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAgentTemplatesQueryResult = NonNullable<Awaited<ReturnType<typeof listAgentTemplates>>>
+export type ListAgentTemplatesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List pre-built agent templates
+ */
+
+export function useListAgentTemplates<TData = Awaited<ReturnType<typeof listAgentTemplates>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAgentTemplates>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAgentTemplatesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListWebhookEndpointsUrl = () => {
+
+
+
+
+  return `/api/webhook-endpoints`
+}
+
+/**
+ * @summary List all webhook endpoints for the authenticated user
+ */
+export const listWebhookEndpoints = async ( options?: RequestInit): Promise<WebhookEndpoint[]> => {
+
+  return customFetch<WebhookEndpoint[]>(getListWebhookEndpointsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListWebhookEndpointsQueryKey = () => {
+    return [
+    `/api/webhook-endpoints`
+    ] as const;
+    }
+
+
+export const getListWebhookEndpointsQueryOptions = <TData = Awaited<ReturnType<typeof listWebhookEndpoints>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWebhookEndpoints>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListWebhookEndpointsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listWebhookEndpoints>>> = ({ signal }) => listWebhookEndpoints({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listWebhookEndpoints>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListWebhookEndpointsQueryResult = NonNullable<Awaited<ReturnType<typeof listWebhookEndpoints>>>
+export type ListWebhookEndpointsQueryError = ErrorType<void>
+
+
+/**
+ * @summary List all webhook endpoints for the authenticated user
+ */
+
+export function useListWebhookEndpoints<TData = Awaited<ReturnType<typeof listWebhookEndpoints>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWebhookEndpoints>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListWebhookEndpointsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateWebhookEndpointUrl = () => {
+
+
+
+
+  return `/api/webhook-endpoints`
+}
+
+/**
+ * @summary Create a new webhook endpoint
+ */
+export const createWebhookEndpoint = async (webhookEndpointInput: WebhookEndpointInput, options?: RequestInit): Promise<WebhookEndpoint> => {
+
+  return customFetch<WebhookEndpoint>(getCreateWebhookEndpointUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      webhookEndpointInput,)
+  }
+);}
+
+
+
+
+export const getCreateWebhookEndpointMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createWebhookEndpoint>>, TError,{data: BodyType<WebhookEndpointInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createWebhookEndpoint>>, TError,{data: BodyType<WebhookEndpointInput>}, TContext> => {
+
+const mutationKey = ['createWebhookEndpoint'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createWebhookEndpoint>>, {data: BodyType<WebhookEndpointInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createWebhookEndpoint(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateWebhookEndpointMutationResult = NonNullable<Awaited<ReturnType<typeof createWebhookEndpoint>>>
+    export type CreateWebhookEndpointMutationBody = BodyType<WebhookEndpointInput>
+    export type CreateWebhookEndpointMutationError = ErrorType<void>
+
+    /**
+ * @summary Create a new webhook endpoint
+ */
+export const useCreateWebhookEndpoint = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createWebhookEndpoint>>, TError,{data: BodyType<WebhookEndpointInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createWebhookEndpoint>>,
+        TError,
+        {data: BodyType<WebhookEndpointInput>},
+        TContext
+      > => {
+      return useMutation(getCreateWebhookEndpointMutationOptions(options));
+    }
+
+export const getUpdateWebhookEndpointUrl = (id: number,) => {
+
+
+
+
+  return `/api/webhook-endpoints/${id}`
+}
+
+/**
+ * @summary Update a webhook endpoint
+ */
+export const updateWebhookEndpoint = async (id: number,
+    webhookEndpointUpdate: WebhookEndpointUpdate, options?: RequestInit): Promise<WebhookEndpoint> => {
+
+  return customFetch<WebhookEndpoint>(getUpdateWebhookEndpointUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      webhookEndpointUpdate,)
+  }
+);}
+
+
+
+
+export const getUpdateWebhookEndpointMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateWebhookEndpoint>>, TError,{id: number;data: BodyType<WebhookEndpointUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateWebhookEndpoint>>, TError,{id: number;data: BodyType<WebhookEndpointUpdate>}, TContext> => {
+
+const mutationKey = ['updateWebhookEndpoint'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateWebhookEndpoint>>, {id: number;data: BodyType<WebhookEndpointUpdate>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateWebhookEndpoint(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateWebhookEndpointMutationResult = NonNullable<Awaited<ReturnType<typeof updateWebhookEndpoint>>>
+    export type UpdateWebhookEndpointMutationBody = BodyType<WebhookEndpointUpdate>
+    export type UpdateWebhookEndpointMutationError = ErrorType<void>
+
+    /**
+ * @summary Update a webhook endpoint
+ */
+export const useUpdateWebhookEndpoint = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateWebhookEndpoint>>, TError,{id: number;data: BodyType<WebhookEndpointUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateWebhookEndpoint>>,
+        TError,
+        {id: number;data: BodyType<WebhookEndpointUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateWebhookEndpointMutationOptions(options));
+    }
+
+export const getDeleteWebhookEndpointUrl = (id: number,) => {
+
+
+
+
+  return `/api/webhook-endpoints/${id}`
+}
+
+/**
+ * @summary Delete a webhook endpoint
+ */
+export const deleteWebhookEndpoint = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteWebhookEndpointUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteWebhookEndpointMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteWebhookEndpoint>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteWebhookEndpoint>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteWebhookEndpoint'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteWebhookEndpoint>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteWebhookEndpoint(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteWebhookEndpointMutationResult = NonNullable<Awaited<ReturnType<typeof deleteWebhookEndpoint>>>
+
+    export type DeleteWebhookEndpointMutationError = ErrorType<void>
+
+    /**
+ * @summary Delete a webhook endpoint
+ */
+export const useDeleteWebhookEndpoint = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteWebhookEndpoint>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteWebhookEndpoint>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteWebhookEndpointMutationOptions(options));
     }
 

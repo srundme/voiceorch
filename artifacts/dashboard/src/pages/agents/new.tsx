@@ -1,7 +1,7 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { ArrowLeft, Save, Bot, Plus, Trash2, PhoneForwarded } from "lucide-react";
-import { useCreateAgent, getListAgentsQueryKey } from "@workspace/api-client-react";
+import { ArrowLeft, Save, Bot, Plus, Trash2, PhoneForwarded, Sparkles, X } from "lucide-react";
+import { useCreateAgent, useListAgentTemplates, getListAgentsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { useForm, useWatch, useFieldArray } from "react-hook-form";
@@ -27,6 +27,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 
 /* ── Provider → model/voice catalogue ────────────────────────────────────── */
@@ -140,7 +144,6 @@ const agentFormSchema = z.object({
   systemPrompt:      z.string().min(1, "System prompt is required"),
   temperature:       z.number().min(0).max(2).optional(),
   maxDuration:       z.number().min(10).max(3600).optional(),
-  // Conversation Behavior
   greetingMessage:          z.string().optional(),
   endCallPhrases:           z.string().optional(),
   silenceTimeoutSeconds:    z.number().min(5).max(300).optional(),
@@ -149,6 +152,8 @@ const agentFormSchema = z.object({
   backchannelingFrequency:  z.number().min(0).max(1).optional(),
   webhookUrl:               z.string().optional(),
   noiseCancellationEnabled: z.boolean().optional(),
+  maxConcurrentCalls:       z.number().min(1).max(100).optional(),
+  monthlySpendLimitCents:   z.number().min(100).optional(),
   tools: z.array(z.object({
     type: z.literal("call_transfer"),
     name: z.string().min(1, "Function name required"),
@@ -184,11 +189,21 @@ function ModelSelect({
 
 /* ── Page ─────────────────────────────────────────────────────────────────── */
 
+const CATEGORY_COLORS: Record<string, string> = {
+  support:  "bg-blue-500/15 text-blue-400 border-blue-500/30",
+  sales:    "bg-amber-500/15 text-amber-400 border-amber-500/30",
+  booking:  "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+  survey:   "bg-purple-500/15 text-purple-400 border-purple-500/30",
+  general:  "bg-zinc-500/15 text-zinc-400 border-zinc-500/30",
+};
+
 export default function AgentNew() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const createAgent = useCreateAgent();
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const { data: templates } = useListAgentTemplates();
 
   const form = useForm<AgentFormValues>({
     resolver: zodResolver(agentFormSchema),
@@ -234,6 +249,20 @@ export default function AgentNew() {
   useEffect(() => { form.setValue("ttsVoice", DEFAULT_TTS_VOICE(ttsProvider)); }, [ttsProvider]);
   useEffect(() => { form.setValue("ttsModel", TTS_MODELS[ttsProvider]?.[0]?.value ?? ""); }, [ttsProvider]);
 
+  const applyTemplate = (tpl: any) => {
+    form.setValue("name", tpl.name);
+    form.setValue("description", tpl.description);
+    if (tpl.asrProvider) form.setValue("asrProvider", tpl.asrProvider);
+    if (tpl.llmProvider) form.setValue("llmProvider", tpl.llmProvider);
+    if (tpl.ttsProvider) form.setValue("ttsProvider", tpl.ttsProvider);
+    if (tpl.telephonyProvider) form.setValue("telephonyProvider", tpl.telephonyProvider);
+    if (tpl.systemPrompt) form.setValue("systemPrompt", tpl.systemPrompt);
+    if (tpl.greetingMessage) form.setValue("greetingMessage", tpl.greetingMessage);
+    if (tpl.temperature != null) form.setValue("temperature", tpl.temperature);
+    setTemplatesOpen(false);
+    toast({ title: `Template applied: ${tpl.name}`, description: "Form prefilled — adjust any fields then save." });
+  };
+
   const onSubmit = (data: AgentFormValues) => {
     createAgent.mutate({ data }, {
       onSuccess: (agent) => {
@@ -255,14 +284,54 @@ export default function AgentNew() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>
-        <div>
+        <div className="flex-1">
           <h2 className="text-3xl font-bold tracking-tight flex items-center gap-2">
             <Bot className="h-6 w-6 text-primary" />
             Create Agent
           </h2>
           <p className="text-muted-foreground">Configure a new AI voice agent pipeline.</p>
         </div>
+        <Button type="button" variant="outline" onClick={() => setTemplatesOpen(true)} className="gap-2">
+          <Sparkles className="h-4 w-4 text-amber-400" />
+          Use Template
+        </Button>
       </div>
+
+      {/* Templates picker dialog */}
+      <Dialog open={templatesOpen} onOpenChange={setTemplatesOpen}>
+        <DialogContent className="bg-zinc-900 border-zinc-700 max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-amber-400" /> Start from a template
+            </DialogTitle>
+            <DialogDescription className="text-zinc-500">
+              Pick a template to prefill the form. You can customise everything afterwards.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-1 gap-3 mt-2">
+            {(templates ?? []).map((tpl) => (
+              <button
+                key={tpl.id}
+                onClick={() => applyTemplate(tpl)}
+                className="text-left p-4 rounded-lg bg-zinc-800/60 border border-zinc-700 hover:border-emerald-500/50 hover:bg-zinc-800 transition-colors"
+              >
+                <div className="flex items-start justify-between gap-3 mb-1">
+                  <p className="text-sm font-semibold text-white">{tpl.name}</p>
+                  <Badge className={`text-[10px] shrink-0 ${CATEGORY_COLORS[tpl.category] ?? CATEGORY_COLORS.general}`}>
+                    {tpl.category}
+                  </Badge>
+                </div>
+                <p className="text-xs text-zinc-400 leading-relaxed">{tpl.description}</p>
+                {tpl.llmProvider && (
+                  <p className="text-[11px] text-zinc-600 mt-2 font-mono">
+                    {tpl.asrProvider} · {tpl.llmProvider} · {tpl.ttsProvider}
+                  </p>
+                )}
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 pb-20">
@@ -683,6 +752,68 @@ export default function AgentNew() {
                 ))}
               </CardContent>
             )}
+          </Card>
+
+          {/* Usage Limits */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Usage Limits <span className="text-muted-foreground font-normal text-sm ml-1">(optional)</span></CardTitle>
+              <CardDescription>Cap concurrent calls and monthly spend for this agent.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="maxConcurrentCalls"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Max concurrent calls</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          placeholder="No limit"
+                          min={1}
+                          max={100}
+                          value={field.value ?? ""}
+                          onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
+                        />
+                      </FormControl>
+                      <FormDescription className="text-[11px]">
+                        Maximum number of simultaneous active calls for this agent. Leave blank for no limit.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="monthlySpendLimitCents"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Monthly spend limit (USD)</FormLabel>
+                      <FormControl>
+                        <div className="relative">
+                          <span className="absolute left-3 top-2.5 text-muted-foreground text-sm">$</span>
+                          <Input
+                            type="number"
+                            placeholder="No limit"
+                            min={1}
+                            step={1}
+                            className="pl-6"
+                            value={field.value != null ? (field.value / 100).toFixed(2) : ""}
+                            onChange={(e) => field.onChange(e.target.value === "" ? undefined : Math.round(Number(e.target.value) * 100))}
+                          />
+                        </div>
+                      </FormControl>
+                      <FormDescription className="text-[11px]">
+                        Stop new calls when platform fees for this agent exceed this amount in a calendar month.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </CardContent>
           </Card>
 
           <div className="fixed bottom-0 left-0 md:left-64 right-0 p-4 bg-background/80 backdrop-blur-sm border-t border-border flex justify-end z-10">

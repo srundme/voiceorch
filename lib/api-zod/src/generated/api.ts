@@ -59,6 +59,8 @@ export const ListAgentsResponseItem = zod.object({
   "transferTo": zod.string().describe('E.164 phone number to transfer the call to (e.g. +12125551234)'),
   "warmHandoffMessage": zod.string().optional().describe('Optional message the agent speaks to the caller before transferring')
 })).nullish().describe('List of tools (functions) the LLM can invoke during a call'),
+  "maxConcurrentCalls": zod.number().nullish().describe('Per-agent concurrent call cap (null = use account limit)'),
+  "monthlySpendLimitCents": zod.number().nullish().describe('Monthly spend cap in cents (null = no limit)'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -164,6 +166,8 @@ export const GetAgentResponse = zod.object({
   "transferTo": zod.string().describe('E.164 phone number to transfer the call to (e.g. +12125551234)'),
   "warmHandoffMessage": zod.string().optional().describe('Optional message the agent speaks to the caller before transferring')
 })).nullish().describe('List of tools (functions) the LLM can invoke during a call'),
+  "maxConcurrentCalls": zod.number().nullish().describe('Per-agent concurrent call cap (null = use account limit)'),
+  "monthlySpendLimitCents": zod.number().nullish().describe('Monthly spend cap in cents (null = no limit)'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -220,7 +224,9 @@ export const UpdateAgentBody = zod.object({
   "transferTo": zod.string().describe('E.164 phone number to transfer the call to (e.g. +12125551234)'),
   "warmHandoffMessage": zod.string().optional().describe('Optional message the agent speaks to the caller before transferring')
 })).optional().describe('List of tools (functions) the LLM can invoke during a call'),
-  "status": zod.string().optional()
+  "status": zod.string().optional(),
+  "maxConcurrentCalls": zod.number().optional(),
+  "monthlySpendLimitCents": zod.number().optional()
 })
 
 export const UpdateAgentResponse = zod.object({
@@ -263,6 +269,8 @@ export const UpdateAgentResponse = zod.object({
   "transferTo": zod.string().describe('E.164 phone number to transfer the call to (e.g. +12125551234)'),
   "warmHandoffMessage": zod.string().optional().describe('Optional message the agent speaks to the caller before transferring')
 })).nullish().describe('List of tools (functions) the LLM can invoke during a call'),
+  "maxConcurrentCalls": zod.number().nullish().describe('Per-agent concurrent call cap (null = use account limit)'),
+  "monthlySpendLimitCents": zod.number().nullish().describe('Monthly spend cap in cents (null = no limit)'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -329,6 +337,8 @@ export const ToggleAgentResponse = zod.object({
   "transferTo": zod.string().describe('E.164 phone number to transfer the call to (e.g. +12125551234)'),
   "warmHandoffMessage": zod.string().optional().describe('Optional message the agent speaks to the caller before transferring')
 })).nullish().describe('List of tools (functions) the LLM can invoke during a call'),
+  "maxConcurrentCalls": zod.number().nullish().describe('Per-agent concurrent call cap (null = use account limit)'),
+  "monthlySpendLimitCents": zod.number().nullish().describe('Monthly spend cap in cents (null = no limit)'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -365,7 +375,8 @@ export const ListCallsResponseItem = zod.object({
   "sttLatencyMs": zod.number().nullish().describe('Average STT round-trip latency across all turns (ms)'),
   "llmLatencyMs": zod.number().nullish().describe('Average LLM time-to-first-token across all turns (ms)'),
   "ttsFirstChunkMs": zod.number().nullish().describe('Average TTS time-to-first-audio-chunk across all turns (ms)'),
-  "executionId": zod.string().nullish().describe('Unique execution identifier for this call (exec_xxxxxxxx)')
+  "executionId": zod.string().nullish().describe('Unique execution identifier for this call (exec_xxxxxxxx)'),
+  "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents')
 })
 export const ListCallsResponse = zod.array(ListCallsResponseItem)
 
@@ -405,7 +416,8 @@ export const GetCallResponse = zod.object({
   "sttLatencyMs": zod.number().nullish().describe('Average STT round-trip latency across all turns (ms)'),
   "llmLatencyMs": zod.number().nullish().describe('Average LLM time-to-first-token across all turns (ms)'),
   "ttsFirstChunkMs": zod.number().nullish().describe('Average TTS time-to-first-audio-chunk across all turns (ms)'),
-  "executionId": zod.string().nullish().describe('Unique execution identifier for this call (exec_xxxxxxxx)')
+  "executionId": zod.string().nullish().describe('Unique execution identifier for this call (exec_xxxxxxxx)'),
+  "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents')
 })
 
 
@@ -442,7 +454,8 @@ export const UpdateCallResponse = zod.object({
   "sttLatencyMs": zod.number().nullish().describe('Average STT round-trip latency across all turns (ms)'),
   "llmLatencyMs": zod.number().nullish().describe('Average LLM time-to-first-token across all turns (ms)'),
   "ttsFirstChunkMs": zod.number().nullish().describe('Average TTS time-to-first-audio-chunk across all turns (ms)'),
-  "executionId": zod.string().nullish().describe('Unique execution identifier for this call (exec_xxxxxxxx)')
+  "executionId": zod.string().nullish().describe('Unique execution identifier for this call (exec_xxxxxxxx)'),
+  "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents')
 })
 
 
@@ -486,7 +499,8 @@ export const EndCallResponse = zod.object({
   "sttLatencyMs": zod.number().nullish().describe('Average STT round-trip latency across all turns (ms)'),
   "llmLatencyMs": zod.number().nullish().describe('Average LLM time-to-first-token across all turns (ms)'),
   "ttsFirstChunkMs": zod.number().nullish().describe('Average TTS time-to-first-audio-chunk across all turns (ms)'),
-  "executionId": zod.string().nullish().describe('Unique execution identifier for this call (exec_xxxxxxxx)')
+  "executionId": zod.string().nullish().describe('Unique execution identifier for this call (exec_xxxxxxxx)'),
+  "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents')
 })
 
 
@@ -583,7 +597,8 @@ export const GetRecentCallsResponseItem = zod.object({
   "sttLatencyMs": zod.number().nullish().describe('Average STT round-trip latency across all turns (ms)'),
   "llmLatencyMs": zod.number().nullish().describe('Average LLM time-to-first-token across all turns (ms)'),
   "ttsFirstChunkMs": zod.number().nullish().describe('Average TTS time-to-first-audio-chunk across all turns (ms)'),
-  "executionId": zod.string().nullish().describe('Unique execution identifier for this call (exec_xxxxxxxx)')
+  "executionId": zod.string().nullish().describe('Unique execution identifier for this call (exec_xxxxxxxx)'),
+  "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents')
 })
 export const GetRecentCallsResponse = zod.array(GetRecentCallsResponseItem)
 
@@ -1029,6 +1044,137 @@ export const AssignPhoneNumberResponse = zod.object({
  * @summary Release a phone number back to Vobiz
  */
 export const ReleasePhoneNumberParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary List currently active (in-progress) calls for the authenticated user
+ */
+export const ListActiveCallsResponseItem = zod.object({
+  "id": zod.number(),
+  "agentId": zod.number(),
+  "agentName": zod.string(),
+  "toNumber": zod.string(),
+  "fromNumber": zod.string(),
+  "status": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "runningSeconds": zod.number().describe('Elapsed seconds since call started'),
+  "executionId": zod.string().nullish(),
+  "metadata": zod.string().nullish()
+})
+export const ListActiveCallsResponse = zod.array(ListActiveCallsResponseItem)
+
+
+/**
+ * @summary Get detailed analytics for a single agent
+ */
+export const GetAgentStatsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetAgentStatsResponse = zod.object({
+  "agentId": zod.number(),
+  "name": zod.string(),
+  "totalCalls": zod.number(),
+  "successfulCalls": zod.number(),
+  "failedCalls": zod.number().optional(),
+  "successRate": zod.number().describe('Percentage 0-100'),
+  "avgDurationSeconds": zod.number().nullable(),
+  "avgSttLatencyMs": zod.number().nullish(),
+  "avgLlmLatencyMs": zod.number().nullish(),
+  "avgTtsFirstChunkMs": zod.number().nullish(),
+  "callsThisWeek": zod.number(),
+  "callsThisMonth": zod.number(),
+  "totalSpendCents": zod.number().describe('Total platform fees charged for this agent\'s calls'),
+  "dailyVolume": zod.array(zod.object({
+  "date": zod.string(),
+  "total": zod.number(),
+  "completed": zod.number(),
+  "failed": zod.number()
+})).optional()
+})
+
+
+/**
+ * @summary List pre-built agent templates
+ */
+export const ListAgentTemplatesResponseItem = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "description": zod.string(),
+  "category": zod.enum(['support', 'sales', 'booking', 'survey', 'general']),
+  "asrProvider": zod.string().optional(),
+  "llmProvider": zod.string().optional(),
+  "ttsProvider": zod.string().optional(),
+  "telephonyProvider": zod.string().optional(),
+  "systemPrompt": zod.string().optional(),
+  "greetingMessage": zod.string().nullish(),
+  "temperature": zod.number().nullish()
+})
+export const ListAgentTemplatesResponse = zod.array(ListAgentTemplatesResponseItem)
+
+
+/**
+ * @summary List all webhook endpoints for the authenticated user
+ */
+export const ListWebhookEndpointsResponseItem = zod.object({
+  "id": zod.number(),
+  "url": zod.string().url(),
+  "events": zod.array(zod.enum(['call.started', 'call.ended', 'call.failed'])).describe('Event types that trigger this webhook'),
+  "secretHint": zod.string().nullish().describe('Last 6 chars of the signing secret (masked)'),
+  "enabled": zod.boolean(),
+  "description": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const ListWebhookEndpointsResponse = zod.array(ListWebhookEndpointsResponseItem)
+
+
+/**
+ * @summary Create a new webhook endpoint
+ */
+
+export const createWebhookEndpointBodyEnabledDefault = true;
+
+export const CreateWebhookEndpointBody = zod.object({
+  "url": zod.string().url(),
+  "events": zod.array(zod.enum(['call.started', 'call.ended', 'call.failed'])).min(1),
+  "secret": zod.string().optional().describe('HMAC signing secret (auto-generated if omitted)'),
+  "description": zod.string().optional(),
+  "enabled": zod.boolean().default(createWebhookEndpointBodyEnabledDefault)
+})
+
+
+/**
+ * @summary Update a webhook endpoint
+ */
+export const UpdateWebhookEndpointParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateWebhookEndpointBody = zod.object({
+  "url": zod.string().url().optional(),
+  "events": zod.array(zod.string()).optional(),
+  "secret": zod.string().optional(),
+  "description": zod.string().optional(),
+  "enabled": zod.boolean().optional()
+})
+
+export const UpdateWebhookEndpointResponse = zod.object({
+  "id": zod.number(),
+  "url": zod.string().url(),
+  "events": zod.array(zod.enum(['call.started', 'call.ended', 'call.failed'])).describe('Event types that trigger this webhook'),
+  "secretHint": zod.string().nullish().describe('Last 6 chars of the signing secret (masked)'),
+  "enabled": zod.boolean(),
+  "description": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a webhook endpoint
+ */
+export const DeleteWebhookEndpointParams = zod.object({
   "id": zod.coerce.number()
 })
 

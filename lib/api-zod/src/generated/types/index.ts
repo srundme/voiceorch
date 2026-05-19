@@ -7,11 +7,15 @@
  */
 
 export * from './accountInfo';
+export * from './activeCall';
 export * from './activityLog';
 export * from './agent';
 export * from './agentAsrSmartEndpointing';
 export * from './agentInput';
+export * from './agentStats';
 export * from './agentStatus';
+export * from './agentTemplate';
+export * from './agentTemplateCategory';
 export * from './agentTool';
 export * from './agentToolType';
 export * from './agentUpdate';
@@ -62,3 +66,8 @@ export * from './walletInfo';
 export * from './walletTransaction';
 export * from './walletTransactionStatus';
 export * from './walletTransactionType';
+export * from './webhookEndpoint';
+export * from './webhookEndpointEventsItem';
+export * from './webhookEndpointInput';
+export * from './webhookEndpointInputEventsItem';
+export * from './webhookEndpointUpdate';

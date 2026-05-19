@@ -129,6 +129,16 @@ export interface Agent {
      * @nullable
      */
   tools?: AgentTool[] | null;
+  /**
+     * Per-agent concurrent call cap (null = use account limit)
+     * @nullable
+     */
+  maxConcurrentCalls?: number | null;
+  /**
+     * Monthly spend cap in cents (null = no limit)
+     * @nullable
+     */
+  monthlySpendLimitCents?: number | null;
   totalCalls?: number;
   successfulCalls?: number;
   /** @nullable */

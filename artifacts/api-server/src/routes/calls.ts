@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { randomBytes } from "crypto";
-import { eq, desc, and } from "drizzle-orm";
-import { db, callsTable, agentsTable, providersTable, usersTable, walletTransactionsTable } from "@workspace/db";
+import { eq, desc, and, sql, gte } from "drizzle-orm";
+import { db, callsTable, agentsTable, providersTable, usersTable, walletTransactionsTable, activityLogsTable } from "@workspace/db";
 import {
   InitiateCallBody,
   InitiateOutboundCallBody,
@@ -11,10 +11,13 @@ import {
   EndCallParams,
   ListCallsQueryParams,
   ListCallsResponse,
+  ListActiveCallsResponse,
   GetCallResponse,
   UpdateCallResponse,
   EndCallResponse,
 } from "@workspace/api-zod";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { dispatchWebhooks } from "./webhook-endpoints.js";
 
 function parseLatencyBody(body: unknown): { sttLatencyMs?: number; llmLatencyMs?: number; ttsFirstChunkMs?: number } {
   if (!body || typeof body !== "object") return {};
@@ -37,6 +40,30 @@ async function enrichCall(call: typeof callsTable.$inferSelect) {
     endedAt: call.endedAt?.toISOString() ?? null,
     createdAt: call.createdAt.toISOString(),
   };
+}
+
+async function checkUsageLimits(agent: typeof agentsTable.$inferSelect): Promise<string | null> {
+  if (agent.maxConcurrentCalls != null) {
+    const [{ activeCount }] = await db
+      .select({ activeCount: sql<number>`count(*)::int` })
+      .from(callsTable)
+      .where(and(eq(callsTable.agentId, agent.id), eq(callsTable.status, "in_progress")));
+    if ((activeCount ?? 0) >= agent.maxConcurrentCalls) {
+      return `Agent has reached its concurrent call limit (${agent.maxConcurrentCalls}).`;
+    }
+  }
+  if (agent.monthlySpendLimitCents != null) {
+    const monthStart = new Date();
+    monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+    const [{ spent }] = await db
+      .select({ spent: sql<number>`coalesce(sum(cost_cents), 0)::int` })
+      .from(callsTable)
+      .where(and(eq(callsTable.agentId, agent.id), gte(callsTable.createdAt, monthStart)));
+    if ((spent ?? 0) >= agent.monthlySpendLimitCents) {
+      return `Agent has reached its monthly spend limit ($${(agent.monthlySpendLimitCents / 100).toFixed(2)}).`;
+    }
+  }
+  return null;
 }
 
 /* ── Outbound call helpers ────────────────────────────────────────────────── */
@@ -115,6 +142,10 @@ router.post("/calls/outbound", async (req, res): Promise<void> => {
       return;
     }
   }
+
+  // Usage limit checks
+  const limitError = await checkUsageLimits(agent);
+  if (limitError) { res.status(429).json({ error: limitError }); return; }
 
   const provider = agent.telephonyProvider.toLowerCase();
   const [providerRow] = await db
@@ -198,6 +229,37 @@ router.post("/calls/outbound", async (req, res): Promise<void> => {
   res.status(201).json(GetCallResponse.parse(await enrichCall(call)));
 });
 
+/* ── GET /calls/active ────────────────────────────────────────────────────── */
+
+router.get("/calls/active", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const activeCalls = await db
+    .select({
+      id: callsTable.id,
+      agentId: callsTable.agentId,
+      agentName: agentsTable.name,
+      toNumber: callsTable.toNumber,
+      fromNumber: callsTable.fromNumber,
+      status: callsTable.status,
+      createdAt: callsTable.createdAt,
+      executionId: callsTable.executionId,
+      metadata: callsTable.metadata,
+    })
+    .from(callsTable)
+    .leftJoin(agentsTable, eq(callsTable.agentId, agentsTable.id))
+    .where(and(eq(callsTable.userId, clerkId), eq(callsTable.status, "in_progress")))
+    .orderBy(desc(callsTable.createdAt));
+
+  const now = Date.now();
+  const result = activeCalls.map((c) => ({
+    ...c,
+    agentName: c.agentName ?? "Unknown Agent",
+    createdAt: c.createdAt.toISOString(),
+    runningSeconds: Math.floor((now - c.createdAt.getTime()) / 1000),
+  }));
+  res.json(ListActiveCallsResponse.parse(result));
+});
+
 router.get("/calls", async (req, res): Promise<void> => {
   const query = ListCallsQueryParams.safeParse(req.query);
   if (!query.success) {
@@ -245,6 +307,10 @@ router.post("/calls", async (req, res): Promise<void> => {
       return;
     }
   }
+
+  // Usage limit checks
+  const limitErr = await checkUsageLimits(agent);
+  if (limitErr) { res.status(429).json({ error: limitErr }); return; }
 
   const executionId = `exec_${randomBytes(4).toString("hex")}`;
   const [call] = await db
@@ -326,10 +392,20 @@ router.patch("/calls/:id/end", async (req, res): Promise<void> => {
   // Parse optional latency payload
   const latency = parseLatencyBody(req.body);
 
+  // Pre-compute billing cost so we can store costCents on the call record in one update
+  let callMeta: Record<string, unknown> = {};
+  try { callMeta = JSON.parse(existing.metadata ?? "{}"); } catch { /* ok */ }
+  const isPlatformTelephony = callMeta["platformTelephony"] === true;
+  const rateCentsPerMin = isPlatformTelephony ? 3.5 : 3;
+  const rateLabel       = isPlatformTelephony ? "$0.035" : "$0.030";
+  const billableMinutes = durationSeconds > 0 ? Math.ceil(durationSeconds / 60) : 0;
+  const debitCents      = billableMinutes > 0 ? Math.round(billableMinutes * rateCentsPerMin) : 0;
+
   const callUpdateSet: Partial<typeof callsTable.$inferInsert> = {
     status: "completed",
     endedAt,
     durationSeconds,
+    ...(debitCents > 0 ? { costCents: debitCents } : {}),
   };
   if (latency.sttLatencyMs != null) callUpdateSet.sttLatencyMs = latency.sttLatencyMs;
   if (latency.llmLatencyMs != null) callUpdateSet.llmLatencyMs = latency.llmLatencyMs;
@@ -362,34 +438,18 @@ router.patch("/calls/:id/end", async (req, res): Promise<void> => {
       ? Math.floor((agent.avgDurationSeconds * prevCount + durationSeconds) / newSuccessful)
       : durationSeconds;
 
-    const agentStatUpdate: Record<string, number | undefined> = {
-      successfulCalls: newSuccessful,
+    await db.update(agentsTable).set({
+      successfulCalls:  newSuccessful,
       avgDurationSeconds: newAvgDuration,
-      avgSttLatencyMs: rollingAvg(agent.avgSttLatencyMs, prevCount, latency.sttLatencyMs),
-      avgLlmLatencyMs: rollingAvg(agent.avgLlmLatencyMs, prevCount, latency.llmLatencyMs),
+      avgSttLatencyMs:  rollingAvg(agent.avgSttLatencyMs, prevCount, latency.sttLatencyMs),
+      avgLlmLatencyMs:  rollingAvg(agent.avgLlmLatencyMs, prevCount, latency.llmLatencyMs),
       avgTtsFirstChunkMs: rollingAvg(agent.avgTtsFirstChunkMs, prevCount, latency.ttsFirstChunkMs),
-    };
-
-    await db
-      .update(agentsTable)
-      .set(agentStatUpdate)
-      .where(eq(agentsTable.id, agent.id));
+    }).where(eq(agentsTable.id, agent.id));
   }
 
-  // Deduct platform fee from wallet (if call has a userId)
-  // Rate: $0.03/min base + $0.005/min if using platform-managed telephony (Vobiz managed number)
+  // Deduct platform fee and check autopay trigger
   const callUserId = call.userId ?? agent?.userId ?? null;
-  if (callUserId && durationSeconds > 0) {
-    let callMeta: Record<string, unknown> = {};
-    try { callMeta = JSON.parse(existing.metadata ?? "{}"); } catch { /* ok */ }
-    const isPlatformTelephony = callMeta["platformTelephony"] === true;
-
-    // 3 cents/min base; +0.5 cents/min for platform telephony = 3.5 cents/min total
-    const rateCentsPerMin = isPlatformTelephony ? 3.5 : 3;
-    const billableMinutes = Math.ceil(durationSeconds / 60);
-    const debitCents      = Math.round(billableMinutes * rateCentsPerMin);
-    const rateLabel       = isPlatformTelephony ? "$0.035" : "$0.030";
-
+  if (callUserId && debitCents > 0) {
     const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, callUserId));
     if (user) {
       const newBalance = Math.max(0, user.walletBalanceCents - debitCents);
@@ -402,7 +462,27 @@ router.patch("/calls/:id/end", async (req, res): Promise<void> => {
         status:      "completed",
         callId:      call.id,
       });
+
+      // Autopay trigger: balance dropped below threshold
+      if (user.autoPayEnabled && newBalance < user.autoPayThresholdCents) {
+        await db.insert(activityLogsTable).values({
+          userId:      callUserId,
+          eventType:   "wallet.low_balance",
+          description: `Balance dropped to $${(newBalance / 100).toFixed(2)} — autopay top-up of $${(user.autoPayAmountCents / 100).toFixed(2)} queued.`,
+        });
+        req.log.info(
+          { userId: callUserId, newBalance, threshold: user.autoPayThresholdCents, topUpAmount: user.autoPayAmountCents },
+          "Autopay threshold triggered",
+        );
+      }
     }
+  }
+
+  // Fire call.ended webhook (fire-and-forget)
+  if (callUserId) {
+    dispatchWebhooks(callUserId, "call.ended", {
+      callId: call.id, agentId: call.agentId, durationSeconds, costCents: debitCents,
+    }).catch(() => {});
   }
 
   const enriched = await enrichCall(call);
