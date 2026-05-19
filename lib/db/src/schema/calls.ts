@@ -5,6 +5,7 @@ import { agentsTable } from "./agents";
 
 export const callsTable = pgTable("calls", {
   id: serial("id").primaryKey(),
+  userId: text("user_id"),
   agentId: integer("agent_id").notNull().references(() => agentsTable.id, { onDelete: "cascade" }),
   status: text("status").notNull().default("pending"),
   toNumber: text("to_number").notNull(),

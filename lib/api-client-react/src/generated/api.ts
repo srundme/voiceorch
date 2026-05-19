@@ -23,6 +23,7 @@ import type {
   Agent,
   AgentInput,
   AgentUpdate,
+  AutoPaySettings,
   Call,
   CallInput,
   CallStatusCount,
@@ -39,10 +40,16 @@ import type {
   KnowledgeBaseInput,
   KnowledgeBaseUpdate,
   ListCallsParams,
+  ListTransactionsParams,
   OutboundCallBody,
   ProviderConfig,
   ProviderInput,
-  ProviderUpdate
+  ProviderUpdate,
+  TopupInput,
+  TopupOrder,
+  VerifyPaymentInput,
+  WalletInfo,
+  WalletTransaction
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -2272,5 +2279,379 @@ export const useQueryKnowledgeBase = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getQueryKnowledgeBaseMutationOptions(options));
+    }
+
+export const getGetWalletUrl = () => {
+
+
+
+
+  return `/api/wallet`
+}
+
+/**
+ * @summary Get current user wallet balance and settings
+ */
+export const getWallet = async ( options?: RequestInit): Promise<WalletInfo> => {
+
+  return customFetch<WalletInfo>(getGetWalletUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetWalletQueryKey = () => {
+    return [
+    `/api/wallet`
+    ] as const;
+    }
+
+
+export const getGetWalletQueryOptions = <TData = Awaited<ReturnType<typeof getWallet>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWallet>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWalletQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWallet>>> = ({ signal }) => getWallet({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWallet>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetWalletQueryResult = NonNullable<Awaited<ReturnType<typeof getWallet>>>
+export type GetWalletQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get current user wallet balance and settings
+ */
+
+export function useGetWallet<TData = Awaited<ReturnType<typeof getWallet>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWallet>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetWalletQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateTopupUrl = () => {
+
+
+
+
+  return `/api/wallet/topup`
+}
+
+/**
+ * @summary Create a Razorpay order for wallet top-up
+ */
+export const createTopup = async (topupInput: TopupInput, options?: RequestInit): Promise<TopupOrder> => {
+
+  return customFetch<TopupOrder>(getCreateTopupUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      topupInput,)
+  }
+);}
+
+
+
+
+export const getCreateTopupMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTopup>>, TError,{data: BodyType<TopupInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createTopup>>, TError,{data: BodyType<TopupInput>}, TContext> => {
+
+const mutationKey = ['createTopup'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createTopup>>, {data: BodyType<TopupInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createTopup(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateTopupMutationResult = NonNullable<Awaited<ReturnType<typeof createTopup>>>
+    export type CreateTopupMutationBody = BodyType<TopupInput>
+    export type CreateTopupMutationError = ErrorType<void>
+
+    /**
+ * @summary Create a Razorpay order for wallet top-up
+ */
+export const useCreateTopup = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTopup>>, TError,{data: BodyType<TopupInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createTopup>>,
+        TError,
+        {data: BodyType<TopupInput>},
+        TContext
+      > => {
+      return useMutation(getCreateTopupMutationOptions(options));
+    }
+
+export const getVerifyPaymentUrl = () => {
+
+
+
+
+  return `/api/wallet/verify-payment`
+}
+
+/**
+ * @summary Verify Razorpay payment and credit wallet
+ */
+export const verifyPayment = async (verifyPaymentInput: VerifyPaymentInput, options?: RequestInit): Promise<WalletInfo> => {
+
+  return customFetch<WalletInfo>(getVerifyPaymentUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      verifyPaymentInput,)
+  }
+);}
+
+
+
+
+export const getVerifyPaymentMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyPayment>>, TError,{data: BodyType<VerifyPaymentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof verifyPayment>>, TError,{data: BodyType<VerifyPaymentInput>}, TContext> => {
+
+const mutationKey = ['verifyPayment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof verifyPayment>>, {data: BodyType<VerifyPaymentInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  verifyPayment(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type VerifyPaymentMutationResult = NonNullable<Awaited<ReturnType<typeof verifyPayment>>>
+    export type VerifyPaymentMutationBody = BodyType<VerifyPaymentInput>
+    export type VerifyPaymentMutationError = ErrorType<void>
+
+    /**
+ * @summary Verify Razorpay payment and credit wallet
+ */
+export const useVerifyPayment = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyPayment>>, TError,{data: BodyType<VerifyPaymentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof verifyPayment>>,
+        TError,
+        {data: BodyType<VerifyPaymentInput>},
+        TContext
+      > => {
+      return useMutation(getVerifyPaymentMutationOptions(options));
+    }
+
+export const getListTransactionsUrl = (params?: ListTransactionsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/wallet/transactions?${stringifiedParams}` : `/api/wallet/transactions`
+}
+
+/**
+ * @summary List wallet transactions
+ */
+export const listTransactions = async (params?: ListTransactionsParams, options?: RequestInit): Promise<WalletTransaction[]> => {
+
+  return customFetch<WalletTransaction[]>(getListTransactionsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListTransactionsQueryKey = (params?: ListTransactionsParams,) => {
+    return [
+    `/api/wallet/transactions`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListTransactionsQueryOptions = <TData = Awaited<ReturnType<typeof listTransactions>>, TError = ErrorType<void>>(params?: ListTransactionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTransactions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListTransactionsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listTransactions>>> = ({ signal }) => listTransactions(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listTransactions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListTransactionsQueryResult = NonNullable<Awaited<ReturnType<typeof listTransactions>>>
+export type ListTransactionsQueryError = ErrorType<void>
+
+
+/**
+ * @summary List wallet transactions
+ */
+
+export function useListTransactions<TData = Awaited<ReturnType<typeof listTransactions>>, TError = ErrorType<void>>(
+ params?: ListTransactionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTransactions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListTransactionsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getUpdateAutopayUrl = () => {
+
+
+
+
+  return `/api/wallet/autopay`
+}
+
+/**
+ * @summary Update auto-pay settings
+ */
+export const updateAutopay = async (autoPaySettings: AutoPaySettings, options?: RequestInit): Promise<WalletInfo> => {
+
+  return customFetch<WalletInfo>(getUpdateAutopayUrl(),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      autoPaySettings,)
+  }
+);}
+
+
+
+
+export const getUpdateAutopayMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAutopay>>, TError,{data: BodyType<AutoPaySettings>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateAutopay>>, TError,{data: BodyType<AutoPaySettings>}, TContext> => {
+
+const mutationKey = ['updateAutopay'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateAutopay>>, {data: BodyType<AutoPaySettings>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateAutopay(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateAutopayMutationResult = NonNullable<Awaited<ReturnType<typeof updateAutopay>>>
+    export type UpdateAutopayMutationBody = BodyType<AutoPaySettings>
+    export type UpdateAutopayMutationError = ErrorType<void>
+
+    /**
+ * @summary Update auto-pay settings
+ */
+export const useUpdateAutopay = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAutopay>>, TError,{data: BodyType<AutoPaySettings>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateAutopay>>,
+        TError,
+        {data: BodyType<AutoPaySettings>},
+        TContext
+      > => {
+      return useMutation(getUpdateAutopayMutationOptions(options));
     }
 

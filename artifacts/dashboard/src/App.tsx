@@ -1,14 +1,15 @@
-import { Switch, Route, Router as WouterRouter } from "wouter";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
+import { Switch, Route, Router as WouterRouter, useLocation, Redirect } from "wouter";
+import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
+import { ClerkProvider, SignIn, SignUp, Show, useClerk } from "@clerk/react";
+import { publishableKeyFromHost } from "@clerk/react/internal";
+import { shadcn } from "@clerk/themes";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
-import NotFound from "@/pages/not-found";
 
-// Components
 import { Layout } from "@/components/layout";
-
-// Pages
+import LandingPage from "@/pages/landing";
 import AssistantsPage from "@/pages/assistants";
 import Dashboard from "@/pages/dashboard";
 import AgentsList from "@/pages/agents/index";
@@ -20,49 +21,196 @@ import CallDetail from "@/pages/calls/[id]";
 import ProvidersList from "@/pages/providers/index";
 import Settings from "@/pages/settings/index";
 import KnowledgeBasePage from "@/pages/knowledge-base";
+import WalletPage from "@/pages/wallet";
+import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: {
-      retry: false,
-      refetchOnWindowFocus: false,
-    },
+    queries: { retry: false, refetchOnWindowFocus: false },
   },
 });
 
-function Router() {
+const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+const clerkPubKey = publishableKeyFromHost(
+  window.location.hostname,
+  import.meta.env.VITE_CLERK_PUBLISHABLE_KEY,
+);
+
+const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
+
+function stripBase(path: string): string {
+  return basePath && path.startsWith(basePath)
+    ? path.slice(basePath.length) || "/"
+    : path;
+}
+
+const clerkAppearance = {
+  theme: shadcn,
+  cssLayerName: "clerk" as const,
+  options: {
+    logoPlacement: "inside" as const,
+    logoLinkUrl: basePath || "/",
+    logoImageUrl: `${window.location.origin}${basePath}/logo.svg`,
+  },
+  variables: {
+    colorPrimary: "#10b981",
+    colorForeground: "#f4f4f5",
+    colorMutedForeground: "#71717a",
+    colorDanger: "#ef4444",
+    colorBackground: "#18181b",
+    colorInput: "#27272a",
+    colorInputForeground: "#f4f4f5",
+    colorNeutral: "#3f3f46",
+    fontFamily: "inherit",
+    borderRadius: "0.5rem",
+  },
+  elements: {
+    rootBox: "w-full flex justify-center",
+    cardBox: "bg-zinc-900 rounded-2xl w-[440px] max-w-full overflow-hidden border border-zinc-800",
+    card: "!shadow-none !border-0 !bg-transparent !rounded-none",
+    footer: "!shadow-none !border-0 !bg-transparent !rounded-none",
+    headerTitle: "text-white font-semibold",
+    headerSubtitle: "text-zinc-400",
+    socialButtonsBlockButtonText: "text-zinc-300",
+    formFieldLabel: "text-zinc-300",
+    footerActionLink: "text-emerald-400 hover:text-emerald-300",
+    footerActionText: "text-zinc-500",
+    dividerText: "text-zinc-600",
+    identityPreviewEditButton: "text-emerald-400",
+    formFieldSuccessText: "text-emerald-400",
+    alertText: "text-zinc-300",
+    logoBox: "",
+    logoImage: "w-8 h-8",
+    socialButtonsBlockButton: "border-zinc-700 hover:bg-zinc-800",
+    formButtonPrimary: "bg-emerald-500 hover:bg-emerald-600 text-black font-semibold",
+    formFieldInput: "bg-zinc-800 border-zinc-700 text-white placeholder-zinc-500",
+    footerAction: "",
+    dividerLine: "bg-zinc-700",
+    alert: "bg-zinc-800 border-zinc-700",
+    otpCodeFieldInput: "bg-zinc-800 border-zinc-700 text-white",
+    formFieldRow: "",
+    main: "",
+  },
+};
+
+function ClerkQueryClientCacheInvalidator() {
+  const { addListener } = useClerk();
+  const qc = useQueryClient();
+  const prevUserIdRef = useRef<string | null | undefined>(undefined);
+
+  useEffect(() => {
+    const unsub = addListener(({ user }) => {
+      const userId = user?.id ?? null;
+      if (prevUserIdRef.current !== undefined && prevUserIdRef.current !== userId) {
+        qc.clear();
+      }
+      prevUserIdRef.current = userId;
+    });
+    return unsub;
+  }, [addListener, qc]);
+
+  return null;
+}
+
+function SignInPage() {
   return (
-    <Layout>
-      <Switch>
-        <Route path="/" component={AssistantsPage} />
-        <Route path="/analytics" component={Dashboard} />
-        <Route path="/agents" component={AgentsList} />
-        <Route path="/agents/new" component={AgentNew} />
-        <Route path="/agents/:id/edit" component={AgentEdit} />
-        <Route path="/agents/:id" component={AgentDetail} />
-        <Route path="/calls" component={CallsList} />
-        <Route path="/calls/:id" component={CallDetail} />
-        <Route path="/knowledge-bases" component={KnowledgeBasePage} />
-        <Route path="/providers" component={ProvidersList} />
-        <Route path="/settings" component={Settings} />
-        <Route component={NotFound} />
-      </Switch>
-    </Layout>
+    <div className="flex min-h-screen items-center justify-center bg-[#0a0a0a] px-4">
+      <SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} />
+    </div>
+  );
+}
+
+function SignUpPage() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[#0a0a0a] px-4">
+      <SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} />
+    </div>
+  );
+}
+
+function HomeRedirect() {
+  return (
+    <>
+      <Show when="signed-in">
+        <Redirect to="/app" />
+      </Show>
+      <Show when="signed-out">
+        <LandingPage />
+      </Show>
+    </>
+  );
+}
+
+function ProtectedApp() {
+  return (
+    <>
+      <Show when="signed-in">
+        <Layout>
+          <Switch>
+            <Route path="/app" component={AssistantsPage} />
+            <Route path="/app/analytics" component={Dashboard} />
+            <Route path="/app/agents" component={AgentsList} />
+            <Route path="/app/agents/new" component={AgentNew} />
+            <Route path="/app/agents/:id/edit" component={AgentEdit} />
+            <Route path="/app/agents/:id" component={AgentDetail} />
+            <Route path="/app/calls" component={CallsList} />
+            <Route path="/app/calls/:id" component={CallDetail} />
+            <Route path="/app/knowledge-bases" component={KnowledgeBasePage} />
+            <Route path="/app/providers" component={ProvidersList} />
+            <Route path="/app/wallet" component={WalletPage} />
+            <Route path="/app/settings" component={Settings} />
+            <Route component={NotFound} />
+          </Switch>
+        </Layout>
+      </Show>
+      <Show when="signed-out">
+        <Redirect to="/" />
+      </Show>
+    </>
+  );
+}
+
+function Router() {
+  const [, setLocation] = useLocation();
+  return (
+    <ClerkProvider
+      publishableKey={clerkPubKey}
+      proxyUrl={clerkProxyUrl}
+      appearance={clerkAppearance}
+      signInUrl={`${basePath}/sign-in`}
+      signUpUrl={`${basePath}/sign-up`}
+      localization={{
+        signIn: { start: { title: "Welcome back to VoiceOrch", subtitle: "Sign in to manage your voice agents" } },
+        signUp: { start: { title: "Create your VoiceOrch account", subtitle: "Get $5 free credit to start building" } },
+      }}
+      routerPush={(to) => setLocation(stripBase(to))}
+      routerReplace={(to) => setLocation(stripBase(to), { replace: true })}
+    >
+      <QueryClientProvider client={queryClient}>
+        <ClerkQueryClientCacheInvalidator />
+        <Switch>
+          <Route path="/" component={HomeRedirect} />
+          <Route path="/sign-in/*?" component={SignInPage} />
+          <Route path="/sign-up/*?" component={SignUpPage} />
+          <Route path="/app/*?" component={ProtectedApp} />
+          <Route component={NotFound} />
+        </Switch>
+      </QueryClientProvider>
+    </ClerkProvider>
   );
 }
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider defaultTheme="dark">
-        <TooltipProvider>
-          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <Router />
-          </WouterRouter>
-          <Toaster />
-        </TooltipProvider>
-      </ThemeProvider>
-    </QueryClientProvider>
+    <ThemeProvider defaultTheme="dark">
+      <TooltipProvider>
+        <WouterRouter base={basePath}>
+          <Router />
+        </WouterRouter>
+        <Toaster />
+      </TooltipProvider>
+    </ThemeProvider>
   );
 }
 

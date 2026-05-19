@@ -446,6 +446,84 @@ export interface KbChunkResult {
   chunkIndex: number;
 }
 
+export interface WalletInfo {
+  /** Current balance in cents */
+  balanceCents: number;
+  /** Current balance in USD */
+  balanceUsd: number;
+  freeCreditsGranted: boolean;
+  autoPayEnabled: boolean;
+  autoPayThresholdCents: number;
+  autoPayAmountCents: number;
+}
+
+export type WalletTransactionType = typeof WalletTransactionType[keyof typeof WalletTransactionType];
+
+
+export const WalletTransactionType = {
+  free_credit: 'free_credit',
+  topup: 'topup',
+  call_debit: 'call_debit',
+  auto_topup: 'auto_topup',
+} as const;
+
+export type WalletTransactionStatus = typeof WalletTransactionStatus[keyof typeof WalletTransactionStatus];
+
+
+export const WalletTransactionStatus = {
+  pending: 'pending',
+  completed: 'completed',
+  failed: 'failed',
+} as const;
+
+export interface WalletTransaction {
+  id: number;
+  type: WalletTransactionType;
+  amountCents: number;
+  amountUsd: number;
+  description: string;
+  status: WalletTransactionStatus;
+  /** @nullable */
+  razorpayOrderId?: string | null;
+  /** @nullable */
+  razorpayPaymentId?: string | null;
+  /** @nullable */
+  callId?: number | null;
+  createdAt: string;
+}
+
+export interface TopupInput {
+  /**
+     * Amount in cents (minimum 1000 = $10)
+     * @minimum 1000
+     */
+  amountCents: number;
+}
+
+export interface TopupOrder {
+  orderId: string;
+  amountCents: number;
+  currency: string;
+  keyId: string;
+}
+
+export interface VerifyPaymentInput {
+  razorpayOrderId: string;
+  razorpayPaymentId: string;
+  razorpaySignature: string;
+}
+
+export interface AutoPaySettings {
+  autoPayEnabled?: boolean;
+  /** Trigger auto-pay when balance drops below this (cents) */
+  autoPayThresholdCents?: number;
+  /**
+     * Amount to auto-charge (cents, minimum 1000 = $10)
+     * @minimum 1000
+     */
+  autoPayAmountCents?: number;
+}
+
 export type ListCallsParams = {
 /**
  * @nullable
@@ -455,5 +533,10 @@ agentId?: number | null;
  * @nullable
  */
 status?: string | null;
+};
+
+export type ListTransactionsParams = {
+limit?: number;
+offset?: number;
 };
 

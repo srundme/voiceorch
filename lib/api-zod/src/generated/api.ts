@@ -717,3 +717,103 @@ export const QueryKnowledgeBaseResponseItem = zod.object({
 export const QueryKnowledgeBaseResponse = zod.array(QueryKnowledgeBaseResponseItem)
 
 
+/**
+ * @summary Get current user wallet balance and settings
+ */
+export const GetWalletResponse = zod.object({
+  "balanceCents": zod.number().describe('Current balance in cents'),
+  "balanceUsd": zod.number().describe('Current balance in USD'),
+  "freeCreditsGranted": zod.boolean(),
+  "autoPayEnabled": zod.boolean(),
+  "autoPayThresholdCents": zod.number(),
+  "autoPayAmountCents": zod.number()
+})
+
+
+/**
+ * @summary Create a Razorpay order for wallet top-up
+ */
+export const createTopupBodyAmountCentsMin = 1000;
+
+
+
+export const CreateTopupBody = zod.object({
+  "amountCents": zod.number().min(createTopupBodyAmountCentsMin).describe('Amount in cents (minimum 1000 = $10)')
+})
+
+export const CreateTopupResponse = zod.object({
+  "orderId": zod.string(),
+  "amountCents": zod.number(),
+  "currency": zod.string(),
+  "keyId": zod.string()
+})
+
+
+/**
+ * @summary Verify Razorpay payment and credit wallet
+ */
+export const VerifyPaymentBody = zod.object({
+  "razorpayOrderId": zod.string(),
+  "razorpayPaymentId": zod.string(),
+  "razorpaySignature": zod.string()
+})
+
+export const VerifyPaymentResponse = zod.object({
+  "balanceCents": zod.number().describe('Current balance in cents'),
+  "balanceUsd": zod.number().describe('Current balance in USD'),
+  "freeCreditsGranted": zod.boolean(),
+  "autoPayEnabled": zod.boolean(),
+  "autoPayThresholdCents": zod.number(),
+  "autoPayAmountCents": zod.number()
+})
+
+
+/**
+ * @summary List wallet transactions
+ */
+export const listTransactionsQueryLimitDefault = 20;
+export const listTransactionsQueryOffsetDefault = 0;
+
+export const ListTransactionsQueryParams = zod.object({
+  "limit": zod.coerce.number().default(listTransactionsQueryLimitDefault),
+  "offset": zod.coerce.number().default(listTransactionsQueryOffsetDefault)
+})
+
+export const ListTransactionsResponseItem = zod.object({
+  "id": zod.number(),
+  "type": zod.enum(['free_credit', 'topup', 'call_debit', 'auto_topup']),
+  "amountCents": zod.number(),
+  "amountUsd": zod.number(),
+  "description": zod.string(),
+  "status": zod.enum(['pending', 'completed', 'failed']),
+  "razorpayOrderId": zod.string().nullish(),
+  "razorpayPaymentId": zod.string().nullish(),
+  "callId": zod.number().nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const ListTransactionsResponse = zod.array(ListTransactionsResponseItem)
+
+
+/**
+ * @summary Update auto-pay settings
+ */
+export const updateAutopayBodyAutoPayAmountCentsMin = 1000;
+
+
+
+export const UpdateAutopayBody = zod.object({
+  "autoPayEnabled": zod.boolean().optional(),
+  "autoPayThresholdCents": zod.number().optional().describe('Trigger auto-pay when balance drops below this (cents)'),
+  "autoPayAmountCents": zod.number().min(updateAutopayBodyAutoPayAmountCentsMin).optional().describe('Amount to auto-charge (cents, minimum 1000 = $10)')
+})
+
+export const UpdateAutopayResponse = zod.object({
+  "balanceCents": zod.number().describe('Current balance in cents'),
+  "balanceUsd": zod.number().describe('Current balance in USD'),
+  "freeCreditsGranted": zod.boolean(),
+  "autoPayEnabled": zod.boolean(),
+  "autoPayThresholdCents": zod.number(),
+  "autoPayAmountCents": zod.number()
+})
+
+

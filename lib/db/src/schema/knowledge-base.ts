@@ -28,6 +28,7 @@ export const embedding = customType<{
 
 export const knowledgeBasesTable = pgTable("knowledge_bases", {
   id: serial("id").primaryKey(),
+  userId: text("user_id"),
   name: text("name").notNull(),
   description: text("description"),
   embeddingModel: text("embedding_model").notNull().default("text-embedding-3-small"),

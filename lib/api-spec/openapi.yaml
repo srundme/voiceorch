@@ -20,6 +20,8 @@ tags:
     description: Dashboard analytics
   - name: knowledge-base
     description: Knowledge base and RAG document management
+  - name: wallet
+    description: Wallet balance, top-up, and billing
 
 paths:
   /healthz:
@@ -621,6 +623,117 @@ paths:
         "404":
           description: Not found
 
+  # ── Wallet ──────────────────────────────────────────────────────────────────
+  /wallet:
+    get:
+      operationId: getWallet
+      tags: [wallet]
+      summary: Get current user wallet balance and settings
+      responses:
+        "200":
+          description: Wallet info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WalletInfo"
+        "401":
+          description: Unauthorized
+
+  /wallet/topup:
+    post:
+      operationId: createTopup
+      tags: [wallet]
+      summary: Create a Razorpay order for wallet top-up
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TopupInput"
+      responses:
+        "200":
+          description: Razorpay order created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TopupOrder"
+        "400":
+          description: Validation error
+        "401":
+          description: Unauthorized
+
+  /wallet/verify-payment:
+    post:
+      operationId: verifyPayment
+      tags: [wallet]
+      summary: Verify Razorpay payment and credit wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyPaymentInput"
+      responses:
+        "200":
+          description: Payment verified and wallet credited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WalletInfo"
+        "400":
+          description: Payment verification failed
+        "401":
+          description: Unauthorized
+
+  /wallet/transactions:
+    get:
+      operationId: listTransactions
+      tags: [wallet]
+      summary: List wallet transactions
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: List of transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WalletTransaction"
+        "401":
+          description: Unauthorized
+
+  /wallet/autopay:
+    patch:
+      operationId: updateAutopay
+      tags: [wallet]
+      summary: Update auto-pay settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutoPaySettings"
+      responses:
+        "200":
+          description: Updated wallet info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WalletInfo"
+        "401":
+          description: Unauthorized
+
 components:
   schemas:
     HealthStatus:
@@ -1189,3 +1302,97 @@ components:
           type: string
         chunkIndex:
           type: integer
+
+    # ── Wallet ─────────────────────────────────────────────────────────────────
+    WalletInfo:
+      type: object
+      required: [balanceCents, balanceUsd, freeCreditsGranted, autoPayEnabled, autoPayThresholdCents, autoPayAmountCents]
+      properties:
+        balanceCents:
+          type: integer
+          description: Current balance in cents
+        balanceUsd:
+          type: number
+          description: Current balance in USD
+        freeCreditsGranted:
+          type: boolean
+        autoPayEnabled:
+          type: boolean
+        autoPayThresholdCents:
+          type: integer
+        autoPayAmountCents:
+          type: integer
+
+    WalletTransaction:
+      type: object
+      required: [id, type, amountCents, amountUsd, description, status, createdAt]
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+          enum: [free_credit, topup, call_debit, auto_topup]
+        amountCents:
+          type: integer
+        amountUsd:
+          type: number
+        description:
+          type: string
+        status:
+          type: string
+          enum: [pending, completed, failed]
+        razorpayOrderId:
+          type: ["string", "null"]
+        razorpayPaymentId:
+          type: ["string", "null"]
+        callId:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    TopupInput:
+      type: object
+      required: [amountCents]
+      properties:
+        amountCents:
+          type: integer
+          minimum: 1000
+          description: Amount in cents (minimum 1000 = $10)
+
+    TopupOrder:
+      type: object
+      required: [orderId, amountCents, currency, keyId]
+      properties:
+        orderId:
+          type: string
+        amountCents:
+          type: integer
+        currency:
+          type: string
+        keyId:
+          type: string
+
+    VerifyPaymentInput:
+      type: object
+      required: [razorpayOrderId, razorpayPaymentId, razorpaySignature]
+      properties:
+        razorpayOrderId:
+          type: string
+        razorpayPaymentId:
+          type: string
+        razorpaySignature:
+          type: string
+
+    AutoPaySettings:
+      type: object
+      properties:
+        autoPayEnabled:
+          type: boolean
+        autoPayThresholdCents:
+          type: integer
+          description: Trigger auto-pay when balance drops below this (cents)
+        autoPayAmountCents:
+          type: integer
+          minimum: 1000
+          description: Amount to auto-charge (cents, minimum 1000 = $10)
