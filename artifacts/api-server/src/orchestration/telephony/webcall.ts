@@ -117,15 +117,17 @@ export async function handleWebCallWebSocket(
       // LLM
       let reply = "";
       await llm.chat(history, agent.systemPrompt, (tok) => { reply += tok; }, async (full) => { reply = full; });
-
-      send({ type: "transcript", speaker: "agent", text: reply });
       history.push({ role: "assistant", content: reply });
 
-      // TTS
+      // TTS — synthesize fully before showing transcript so text and audio
+      // arrive at the client at the same time (no "text before voice" gap)
       sendStatus("speaking");
       const pcmOut = await tts.synthesize(reply);
 
-      // Send in 640-byte chunks (20ms of Int16 at 16kHz)
+      // Send transcript and first audio chunk together
+      send({ type: "transcript", speaker: "agent", text: reply });
+
+      // Stream in 640-byte chunks (20ms of Int16 at 16kHz)
       const CHUNK = 640;
       for (let i = 0; i < pcmOut.length; i += CHUNK) {
         if (closed) break;
