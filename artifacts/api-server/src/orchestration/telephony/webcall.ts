@@ -76,7 +76,7 @@ export async function handleWebCallWebSocket(
 
   const stt = createSTTAdapter(agent.asrProvider, sttKey, agent.asrModel, null);
   const llm = createLLMAdapter(agent.llmProvider, llmKey, agent.llmModel);
-  const tts = createTTSAdapter(agent.ttsProvider, ttsKey, agent.ttsVoice);
+  const tts = createTTSAdapter(agent.ttsProvider, ttsKey, agent.ttsVoice, agent.ttsModel);
 
   // ── Create call DB record ─────────────────────────────────────────────────
   const [callRecord] = await db.insert(callsTable).values({

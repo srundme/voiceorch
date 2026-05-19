@@ -10,10 +10,10 @@ export class CartesiaTTS implements TTSAdapter {
   private voiceId: string;
   private modelId: string;
 
-  constructor(apiKey: string, voice: string | null) {
+  constructor(apiKey: string, voice: string | null, model: string | null) {
     this.key = apiKey;
     this.voiceId = voice ?? "a0e99841-438c-4a64-b679-ae501e7d6091"; // British Reading Lady
-    this.modelId = "sonic-2";
+    this.modelId = model ?? "sonic-2";
   }
 
   async synthesize(text: string): Promise<Buffer> {

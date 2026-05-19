@@ -25,6 +25,8 @@ export interface Agent {
   ttsProvider: string;
   /** @nullable */
   ttsVoice?: string | null;
+  /** @nullable */
+  ttsModel?: string | null;
   /** Telephony: twilio, plivo, vonage */
   telephonyProvider: string;
   systemPrompt: string;

@@ -53,7 +53,8 @@ export class OrchestrationPipeline {
     this.tts = createTTSAdapter(
       this.agent.ttsProvider,
       ttsKey,
-      this.agent.ttsVoice
+      this.agent.ttsVoice,
+      this.agent.ttsModel
     );
 
     logger.info(

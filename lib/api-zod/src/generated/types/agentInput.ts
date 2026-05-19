@@ -16,6 +16,7 @@ export interface AgentInput {
   llmModel?: string;
   ttsProvider: string;
   ttsVoice?: string;
+  ttsModel?: string;
   telephonyProvider: string;
   systemPrompt: string;
   temperature?: number;

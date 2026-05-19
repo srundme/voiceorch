@@ -438,6 +438,8 @@ components:
           description: "TTS provider: elevenlabs, openai, aws_polly, azure, cartesia, deepgram"
         ttsVoice:
           type: ["string", "null"]
+        ttsModel:
+          type: ["string", "null"]
         telephonyProvider:
           type: string
           description: "Telephony: twilio, plivo, vonage"
@@ -482,6 +484,8 @@ components:
           type: string
         ttsVoice:
           type: string
+        ttsModel:
+          type: string
         telephonyProvider:
           type: string
         systemPrompt:
@@ -509,6 +513,8 @@ components:
         ttsProvider:
           type: string
         ttsVoice:
+          type: string
+        ttsModel:
           type: string
         telephonyProvider:
           type: string

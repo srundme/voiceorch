@@ -36,6 +36,8 @@ export interface Agent {
   ttsProvider: string;
   /** @nullable */
   ttsVoice?: string | null;
+  /** @nullable */
+  ttsModel?: string | null;
   /** Telephony: twilio, plivo, vonage */
   telephonyProvider: string;
   systemPrompt: string;
@@ -64,6 +66,7 @@ export interface AgentInput {
   llmModel?: string;
   ttsProvider: string;
   ttsVoice?: string;
+  ttsModel?: string;
   telephonyProvider: string;
   systemPrompt: string;
   temperature?: number;
@@ -79,6 +82,7 @@ export interface AgentUpdate {
   llmModel?: string;
   ttsProvider?: string;
   ttsVoice?: string;
+  ttsModel?: string;
   telephonyProvider?: string;
   systemPrompt?: string;
   temperature?: number;

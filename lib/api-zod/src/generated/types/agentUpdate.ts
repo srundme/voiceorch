@@ -15,6 +15,7 @@ export interface AgentUpdate {
   llmModel?: string;
   ttsProvider?: string;
   ttsVoice?: string;
+  ttsModel?: string;
   telephonyProvider?: string;
   systemPrompt?: string;
   temperature?: number;

@@ -10,6 +10,7 @@ export interface AgentConfig {
   llmModel: string | null;
   ttsProvider: string;
   ttsVoice: string | null;
+  ttsModel: string | null;
   telephonyProvider: string;
 }
 

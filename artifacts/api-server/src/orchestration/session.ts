@@ -40,6 +40,7 @@ export async function createSession(params: {
     llmModel: agent.llmModel,
     ttsProvider: agent.ttsProvider,
     ttsVoice: agent.ttsVoice,
+    ttsModel: agent.ttsModel,
     telephonyProvider: agent.telephonyProvider,
   };
 

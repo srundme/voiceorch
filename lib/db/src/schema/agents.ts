@@ -13,6 +13,7 @@ export const agentsTable = pgTable("agents", {
   llmModel: text("llm_model"),
   ttsProvider: text("tts_provider").notNull(),
   ttsVoice: text("tts_voice"),
+  ttsModel: text("tts_model"),
   telephonyProvider: text("telephony_provider").notNull(),
   systemPrompt: text("system_prompt").notNull(),
   temperature: real("temperature"),

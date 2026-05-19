@@ -78,6 +78,13 @@ const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
   sarvam:  [{ value: "sarvam-2b-v0.5", label: "Sarvam 2B v0.5" }],
 };
 
+const TTS_MODELS: Record<string, { value: string; label: string }[]> = {
+  cartesia: [
+    { value: "sonic-2",          label: "Sonic 2 (standard)" },
+    { value: "sonic-2024-10-02", label: "Sonic 3.5 (latest)" },
+  ],
+};
+
 // ElevenLabs and Cartesia use free-text voice IDs; Sarvam has fixed voices
 const TTS_VOICES: Record<string, { value: string; label: string }[] | null> = {
   elevenlabs: null, // free text
@@ -111,6 +118,7 @@ const agentFormSchema = z.object({
   llmModel:          z.string().optional(),
   ttsProvider:       z.string().min(1, "TTS Provider is required"),
   ttsVoice:          z.string().optional(),
+  ttsModel:          z.string().optional(),
   telephonyProvider: z.string().min(1, "Telephony Provider is required"),
   systemPrompt:      z.string().min(1, "System prompt is required"),
   temperature:       z.number().min(0).max(2).optional(),
@@ -163,6 +171,7 @@ export default function AgentNew() {
       llmModel:          "gpt-4o-mini",
       ttsProvider:       "elevenlabs",
       ttsVoice:          "",
+      ttsModel:          "",
       telephonyProvider: "twilio",
       systemPrompt:      "You are a helpful AI voice assistant.",
       temperature:       0.7,
@@ -178,6 +187,7 @@ export default function AgentNew() {
   useEffect(() => { form.setValue("asrModel", DEFAULT_ASR_MODEL(asrProvider)); }, [asrProvider]);
   useEffect(() => { form.setValue("llmModel", DEFAULT_LLM_MODEL(llmProvider)); }, [llmProvider]);
   useEffect(() => { form.setValue("ttsVoice", DEFAULT_TTS_VOICE(ttsProvider)); }, [ttsProvider]);
+  useEffect(() => { form.setValue("ttsModel", TTS_MODELS[ttsProvider]?.[0]?.value ?? ""); }, [ttsProvider]);
 
   const onSubmit = (data: AgentFormValues) => {
     createAgent.mutate({ data }, {
@@ -371,6 +381,23 @@ export default function AgentNew() {
                         <FormMessage />
                       </FormItem>
                     )} />
+
+                    {TTS_MODELS[ttsProvider] && (
+                      <FormField control={form.control} name="ttsModel" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs">Model</FormLabel>
+                          <FormControl>
+                            <ModelSelect
+                              options={TTS_MODELS[ttsProvider]!}
+                              value={field.value}
+                              onChange={field.onChange}
+                              placeholder="Select model"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    )}
 
                     <FormField control={form.control} name="ttsVoice" render={({ field }) => (
                       <FormItem>
