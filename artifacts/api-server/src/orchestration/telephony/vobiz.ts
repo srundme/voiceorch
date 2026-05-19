@@ -55,20 +55,23 @@ export async function handleVobizWebSocket(
   let streamId: string | null = null;
 
   /**
-   * Send audio to Vobiz caller.
-   * Pipeline delivers mulaw-encoded chunks; we decode them back to LINEAR16 PCM
-   * because Vobiz uses audio/x-l16 (not mulaw like Twilio).
+   * Send audio to Vobiz caller via the playAudio WebSocket event.
+   * Vobiz uses event:"playAudio" (NOT "media" like Twilio) with contentType/sampleRate.
+   * Pipeline delivers mulaw chunks; we decode them back to LINEAR16 PCM (audio/x-l16).
+   * https://docs.vobiz.ai/xml/stream/play-audio
    */
   function sendAudioToVobiz(mulawChunk: Buffer): void {
     if (ws.readyState !== ws.OPEN) return;
     // Vobiz expects LINEAR16 PCM — decode the mulaw the pipeline produced
     const pcm = decodeMulaw(mulawChunk);
-    const msg: Record<string, unknown> = {
-      event: "media",
-      media: { payload: pcm.toString("base64") },
-    };
-    if (streamId) msg["streamId"] = streamId;
-    ws.send(JSON.stringify(msg));
+    ws.send(JSON.stringify({
+      event: "playAudio",
+      media: {
+        contentType: "audio/x-l16",
+        sampleRate: 8000,
+        payload: pcm.toString("base64"),
+      },
+    }));
   }
 
   ws.on("message", async (raw: Buffer | string) => {
