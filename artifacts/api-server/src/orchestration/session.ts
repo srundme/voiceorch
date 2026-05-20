@@ -53,6 +53,9 @@ export async function createSession(params: {
   // Parse tools JSON column (null-safe, type-cast to AgentTool[])
   const tools = Array.isArray(agent.tools) ? (agent.tools as unknown as AgentTool[]) : [];
 
+  // Read agentConfig JSONB for advanced settings
+  const agentCfg = (agent.agentConfig ?? {}) as Record<string, unknown>;
+
   const agentConfig: AgentConfig = {
     id: agent.id,
     name: agent.name,
@@ -89,19 +92,38 @@ export async function createSession(params: {
       autoFallback: agent.asrAutoFallback ?? false,
     },
     tools,
+    // Gender Detection (from agentConfig JSONB)
+    genderDetectionEnabled:          (agentCfg["genderDetectionEnabled"]          as boolean | undefined) ?? false,
+    genderDetectionProvider:         (agentCfg["genderDetectionProvider"]         as string  | undefined) ?? "internal",
+    genderDetectionMaleSalutation:   (agentCfg["genderDetectionMaleSalutation"]   as string  | undefined) ?? "sir",
+    genderDetectionFemaleSalutation: (agentCfg["genderDetectionFemaleSalutation"] as string  | undefined) ?? "ma'am",
+    genderDetectionNeutralSalutation:(agentCfg["genderDetectionNeutralSalutation"] as string  | undefined) ?? "",
   };
 
   // ── Resolve dynamic variables in system prompt ─────────────────────────────
-  // Supports {{to_number}}, {{from_number}}, {{agent_name}} in system prompt
+  // Supports both {{var}} and {var} syntax.
+  // {caller_salutation} is intentionally left unresolved here — the pipeline
+  // resolves it at runtime after detecting the caller's gender from audio.
+  const now = new Date();
   const dynVars: Record<string, string> = {
+    // double-brace legacy names
     to_number:   params.toNumber,
     from_number: params.fromNumber,
     agent_name:  agent.name,
+    // single-brace chip names
+    caller_number: params.fromNumber,
+    date: now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" }),
   };
-  agentConfig.systemPrompt = agentConfig.systemPrompt.replace(
-    /\{\{(\w+)\}\}/g,
-    (_, key) => (key in dynVars ? dynVars[key as keyof typeof dynVars] : `{{${key as string}}}`)
-  );
+
+  // Replace both {{var}} and {var} — but skip {caller_salutation} (runtime only)
+  const resolveVar = (key: string, fullMatch: string): string => {
+    if (key === "caller_salutation") return fullMatch;   // deferred to pipeline
+    return key in dynVars ? dynVars[key]! : fullMatch;
+  };
+
+  agentConfig.systemPrompt = agentConfig.systemPrompt
+    .replace(/\{\{(\w+)\}\}/g, (m, k: string) => resolveVar(k, m))
+    .replace(/\{(\w+)\}/g,     (m, k: string) => resolveVar(k, m));
 
   // Scope provider keys to this agent's owner; fall back to all active if agent has no userId
   const providerRows = agent.userId

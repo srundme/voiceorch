@@ -67,6 +67,13 @@ export interface AgentConfig {
 
   // Tools
   tools: AgentTool[];
+
+  // Gender Detection
+  genderDetectionEnabled: boolean;
+  genderDetectionProvider: string;
+  genderDetectionMaleSalutation: string;
+  genderDetectionFemaleSalutation: string;
+  genderDetectionNeutralSalutation: string;
 }
 
 export interface ProviderKey {

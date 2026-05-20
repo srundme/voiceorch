@@ -5,6 +5,7 @@ import { encodeMulaw, upsample8to16, downsample16to8 } from "./audio.js";
 import { processAudioIn, processRawPcm8kIn, destroyAudioSession } from "./audioPool.js";
 import type { AudioProcessResult } from "./audioPool.js";
 import type { AgentConfig, AgentTool, ConversationTurn, SessionConfig, StreamSTT, ToolDefinition } from "./types.js";
+import { detectCallerGender } from "./genderDetection.js";
 import { logger } from "../lib/logger.js";
 
 const VAD_SILENCE_MS   = 250;    // silence window before STT flush
@@ -43,6 +44,15 @@ export class OrchestrationPipeline {
 
   private conversationHistory: ConversationTurn[] = [];
   private closed = false;
+
+  // Gender detection
+  // We accumulate the first ~1 s of caller PCM (16 000 bytes @ 8 kHz 16-bit),
+  // detect once, then resolve {caller_salutation} in the system prompt.
+  private readonly GENDER_MIN_BYTES = 16000;
+  private genderDetected = false;
+  private genderAudioAccum: Buffer[] = [];
+  private genderAudioBytes = 0;
+  private genderDetectPromise: Promise<void> | null = null;
 
   constructor(config: SessionConfig) {
     this.config = config;
@@ -153,9 +163,58 @@ export class OrchestrationPipeline {
       .catch((err) => logger.error({ callId: this.config.callId, err }, "Audio worker error (pcm8k)"));
   }
 
+  // ── Gender detection ────────────────────────────────────────────────────────
+
+  /**
+   * Accumulate caller PCM audio until we have enough to estimate pitch (~1 s),
+   * then trigger an async detection.  Safe to call on every audio chunk.
+   */
+  private accumulateGenderAudio(pcm8k: Buffer): void {
+    if (!this.agent.genderDetectionEnabled || this.genderDetected) return;
+    this.genderAudioAccum.push(pcm8k);
+    this.genderAudioBytes += pcm8k.length;
+    if (this.genderAudioBytes >= this.GENDER_MIN_BYTES && !this.genderDetectPromise) {
+      const combined = Buffer.concat(this.genderAudioAccum);
+      this.genderAudioAccum = [];   // free memory
+      this.genderDetectPromise = this.detectGenderAsync(combined).finally(() => {
+        this.genderDetectPromise = null;
+      });
+    }
+  }
+
+  /** Run the detection, resolve the system prompt, log the result. */
+  private async detectGenderAsync(pcm8k: Buffer): Promise<void> {
+    try {
+      const salutation = await detectCallerGender(pcm8k, {
+        provider: this.agent.genderDetectionProvider,
+        maleSalutation: this.agent.genderDetectionMaleSalutation,
+        femaleSalutation: this.agent.genderDetectionFemaleSalutation,
+        neutralSalutation: this.agent.genderDetectionNeutralSalutation,
+        providerKeys: this.config.providerKeys,
+        callId: this.config.callId,
+      });
+
+      // Patch the live system prompt — replace every occurrence of the placeholder
+      this.agent.systemPrompt = this.agent.systemPrompt.replace(
+        /\{caller_salutation\}/g,
+        salutation
+      );
+      this.genderDetected = true;
+      logger.info(
+        { callId: this.config.callId, salutation },
+        "Gender detection complete — system prompt updated"
+      );
+    } catch (err) {
+      logger.warn({ callId: this.config.callId, err }, "detectGenderAsync failed");
+    }
+  }
+
   /** Handles pre-processed audio returned by the audio worker pool. */
   private handleProcessedAudio({ pcm8k, pcm16k, hasSpeech }: AudioProcessResult): void {
     if (this.closed) return;
+
+    // Accumulate speech audio for gender detection (fires once, async, non-blocking)
+    if (hasSpeech) this.accumulateGenderAudio(pcm8k);
 
     // Streaming STT path: feed all audio directly to Deepgram — no local VAD needed
     if (this.streamSTT) {
@@ -354,6 +413,12 @@ export class OrchestrationPipeline {
   private async processTurn(transcript: string, sttLatencyMs: number): Promise<void> {
     this.bargeInRequested = false;
     this.firstAudioSentAt = null;
+
+    // If gender detection is running concurrently, wait for it to finish so the
+    // system prompt is fully resolved before the LLM receives the first turn.
+    if (this.genderDetectPromise) {
+      await this.genderDetectPromise;
+    }
 
     logger.info({ callId: this.config.callId, transcript, sttLatencyMs }, "Processing turn");
     this.config.onTranscript("user", transcript);

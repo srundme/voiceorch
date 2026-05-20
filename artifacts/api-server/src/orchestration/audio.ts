@@ -171,6 +171,67 @@ export class NoiseCanceller {
   }
 }
 
+// ── Pitch estimation (autocorrelation) ───────────────────────────────────────
+//
+// Estimates the fundamental frequency (F0) of 8 kHz LINEAR16 PCM audio.
+// Searches the human voiced-speech range 60–400 Hz (lags 20–133 @ 8 kHz).
+// Returns frequency in Hz, or 0 when no clear pitch is detected.
+
+function autocorrSum(x: Float32Array, analysisLen: number, lag: number): number {
+  let sum = 0;
+  const n = Math.min(analysisLen - lag, analysisLen);
+  for (let i = 0; i < n; i++) sum += x[i]! * x[i + lag]!;
+  return sum;
+}
+
+export function estimatePitch(pcm8k: Buffer): number {
+  const samples = pcm8k.length / 2;
+  if (samples < 800) return 0;   // need at least 100 ms @ 8 kHz
+
+  const x = new Float32Array(samples);
+  for (let i = 0; i < samples; i++) x[i] = pcm8k.readInt16LE(i * 2) / 32768;
+
+  const analysisLen = Math.min(samples, 2048);
+  const FS = 8000;
+  const minLag = Math.floor(FS / 400);   // 20  — 400 Hz ceiling
+  const maxLag = Math.min(Math.floor(FS / 60), analysisLen - 1);  // 133 — 60 Hz floor
+
+  const r0 = autocorrSum(x, analysisLen, 0);
+  if (r0 === 0) return 0;
+
+  let bestLag = 0;
+  let bestNorm = 0;
+
+  for (let lag = minLag; lag <= maxLag; lag++) {
+    const norm = autocorrSum(x, analysisLen, lag) / r0;
+    if (norm > bestNorm) { bestNorm = norm; bestLag = lag; }
+  }
+
+  if (bestNorm < 0.25) return 0;   // insufficient periodicity — unvoiced frame
+  return FS / bestLag;
+}
+
+// ── Gender classification from pitch ─────────────────────────────────────────
+//
+// Vocal F0 ranges (typical):
+//   Male:   85 – 180 Hz   (median ~120 Hz)
+//   Female: 165 – 255 Hz  (median ~210 Hz)
+//   Overlap 165–180 Hz → classified by midpoint 172.5 Hz
+
+export type VoiceGender = "male" | "female" | "unknown";
+
+/**
+ * Classify the speaker's gender from raw 8 kHz LINEAR16 PCM.
+ * Uses pitch autocorrelation — no external API required.
+ */
+export function detectGenderFromPcm(pcm8k: Buffer): VoiceGender {
+  const f0 = estimatePitch(pcm8k);
+  if (f0 === 0) return "unknown";
+  if (f0 < 165) return "male";
+  if (f0 > 180) return "female";
+  return f0 < 172.5 ? "male" : "female";
+}
+
 // ── Energy-based voice activity detection: returns true if audio contains speech
 export function hasSpeechEnergy(pcmBuffer: Buffer, threshold = 300): boolean {
   if (pcmBuffer.length < 2) return false;
