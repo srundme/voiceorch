@@ -24,7 +24,7 @@ export const DispositionFieldType = {
 
 export interface DispositionField {
   /** Snake-case field key (e.g. outcome, lead_score) */
-  name: string;
+  key: string;
   /** Human-readable label shown in the UI (e.g. "Call Outcome") */
   label: string;
   /** Data type of the field */

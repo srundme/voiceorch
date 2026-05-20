@@ -15,6 +15,8 @@ import {
   GetCallResponse,
   UpdateCallResponse,
   EndCallResponse,
+  UpdateCallDispositionBody,
+  UpdateCallDispositionParams,
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { dispatchWebhooks } from "./webhook-endpoints.js";
@@ -487,6 +489,31 @@ router.patch("/calls/:id/end", async (req, res): Promise<void> => {
 
   const enriched = await enrichCall(call);
   res.json(EndCallResponse.parse(enriched));
+});
+
+/* ── PATCH /calls/:id/disposition ────────────────────────────────────────── */
+
+router.patch("/calls/:id/disposition", requireAuth, async (req, res): Promise<void> => {
+  const params = UpdateCallDispositionParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const parsed = UpdateCallDispositionBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const [call] = await db
+    .update(callsTable)
+    .set({ dispositionResult: parsed.data.dispositionResult ?? null })
+    .where(eq(callsTable.id, params.data.id))
+    .returning();
+  if (!call) {
+    res.status(404).json({ error: "Call not found" });
+    return;
+  }
+  res.json(await enrichCall(call));
 });
 
 export default router;

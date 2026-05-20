@@ -1,27 +1,79 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link, useParams } from "wouter";
 import { format, parseISO } from "date-fns";
-import { ArrowLeft, PlayCircle, Download, FileText, AlertTriangle, Info, Bot, User, Receipt } from "lucide-react";
-import { 
-  useGetCall, 
-  getGetCallQueryKey
+import { ArrowLeft, PlayCircle, Download, FileText, AlertTriangle, Info, Bot, User, Receipt, Sparkles, ClipboardList, Pencil, Check, X } from "lucide-react";
+import {
+  useGetCall,
+  useGetAgent,
+  useUpdateCallDisposition,
+  getGetCallQueryKey,
+  getGetAgentQueryKey,
 } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
+import { useToast } from "@/hooks/use-toast";
 
 export default function CallDetail() {
   const params = useParams();
   const id = parseInt(params.id || "0", 10);
-  
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
   const { data: call, isLoading } = useGetCall(id, {
-    query: { 
-      enabled: !!id,
-      queryKey: getGetCallQueryKey(id) 
-    }
+    query: { enabled: !!id, queryKey: getGetCallQueryKey(id) }
   });
+
+  const agentId = call?.agentId;
+  const { data: agent } = useGetAgent(agentId!, {
+    query: { enabled: !!agentId, queryKey: getGetAgentQueryKey(agentId!) }
+  });
+
+  const updateDisposition = useUpdateCallDisposition();
+  const [editing, setEditing] = useState(false);
+  const [edits, setEdits] = useState<Record<string, string>>({});
+
+  const dispositionSchema = Array.isArray((agent as any)?.dispositionSchema)
+    ? (agent as any).dispositionSchema as Array<{ key: string; label: string; type: string; options?: string[] }>
+    : [];
+
+  const dispositionResult = (call as any)?.dispositionResult as Record<string, string | number | boolean | null> | null | undefined;
+
+  const startEditing = () => {
+    const initial: Record<string, string> = {};
+    dispositionSchema.forEach(f => {
+      const v = dispositionResult?.[f.key];
+      initial[f.key] = v != null ? String(v) : "";
+    });
+    setEdits(initial);
+    setEditing(true);
+  };
+
+  const saveDisposition = () => {
+    const result: Record<string, string | number | boolean> = {};
+    dispositionSchema.forEach(f => {
+      const v = edits[f.key];
+      if (v !== "" && v != null) {
+        if (f.type === "number") result[f.key] = parseFloat(v) || 0;
+        else if (f.type === "boolean") result[f.key] = v === "true";
+        else result[f.key] = v;
+      }
+    });
+    updateDisposition.mutate(
+      { id, data: { dispositionResult: result } },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getGetCallQueryKey(id) });
+          setEditing(false);
+          toast({ title: "Disposition saved" });
+        },
+        onError: () => toast({ title: "Failed to save", variant: "destructive" }),
+      }
+    );
+  };
 
   const formatDuration = (seconds?: number | null) => {
     if (!seconds) return "0s";
@@ -61,11 +113,8 @@ export default function CallDetail() {
     );
   }
 
-  // Parse transcript if it exists (assuming it's stored as JSON array of messages or similar structure)
-  // Fallback to simple string display if not parseable
   let transcriptLines: any[] = [];
   let isJsonTranscript = false;
-  
   if (call.transcript) {
     try {
       transcriptLines = JSON.parse(call.transcript);
@@ -75,11 +124,13 @@ export default function CallDetail() {
     }
   }
 
+  const callSummary = (call as any).callSummary as string | null | undefined;
+
   return (
     <div className="flex-1 space-y-6 p-6 md:p-8 pt-6 h-full flex flex-col">
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <Link href="/calls">
+          <Link href="/app/calls">
             <Button variant="outline" size="icon" className="h-8 w-8">
               <ArrowLeft className="h-4 w-4" />
             </Button>
@@ -92,7 +143,7 @@ export default function CallDetail() {
             <p className="text-muted-foreground text-sm flex items-center gap-2 mt-1">
               {format(parseISO(call.createdAt), "MMM d, yyyy 'at' h:mm:ss a")}
               <span>•</span>
-              Agent: <Link href={`/agents/${call.agentId}`}><span className="text-primary hover:underline font-medium cursor-pointer">{call.agentName}</span></Link>
+              Agent: <Link href={`/app/agents/${call.agentId}`}><span className="text-primary hover:underline font-medium cursor-pointer">{call.agentName}</span></Link>
             </p>
           </div>
         </div>
@@ -127,7 +178,19 @@ export default function CallDetail() {
                 </div>
               </div>
             )}
-            
+
+            {/* AI Summary */}
+            {callSummary && (
+              <div className="mx-4 mt-4 p-4 bg-primary/5 border border-primary/20 rounded-lg">
+                <div className="flex items-center gap-2 mb-2 text-primary text-sm font-semibold">
+                  <Sparkles className="h-4 w-4" /> AI Summary
+                </div>
+                <div className="text-sm text-muted-foreground whitespace-pre-line leading-relaxed">
+                  {callSummary}
+                </div>
+              </div>
+            )}
+
             <div className="p-6 space-y-6">
               {!call.transcript ? (
                 <div className="text-center text-muted-foreground py-10 italic">
@@ -159,7 +222,8 @@ export default function CallDetail() {
         </Card>
 
         {/* Right Column: Metadata */}
-        <div className="space-y-6">
+        <div className="space-y-4 overflow-auto h-[calc(100vh-140px)]">
+          {/* Call Details */}
           <Card>
             <CardHeader className="py-4 border-b">
               <CardTitle className="text-lg flex items-center gap-2">
@@ -207,6 +271,97 @@ export default function CallDetail() {
             </CardContent>
           </Card>
 
+          {/* Disposition */}
+          {dispositionSchema.length > 0 && (
+            <Card>
+              <CardHeader className="py-3 border-b">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <ClipboardList className="h-4 w-4 text-primary" />
+                    Disposition
+                  </CardTitle>
+                  {!editing ? (
+                    <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={startEditing}>
+                      <Pencil className="h-3 w-3" /> Override
+                    </Button>
+                  ) : (
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditing(false)}>
+                        <X className="h-3 w-3" />
+                      </Button>
+                      <Button size="sm" className="h-7 text-xs gap-1" onClick={saveDisposition} disabled={updateDisposition.isPending}>
+                        <Check className="h-3 w-3" /> Save
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                {!dispositionResult && !editing && (
+                  <CardDescription className="text-xs mt-1">
+                    Extracted automatically after the call ends.
+                  </CardDescription>
+                )}
+              </CardHeader>
+              <CardContent className="p-0">
+                <dl className="divide-y divide-border text-sm">
+                  {dispositionSchema.map((field, i) => {
+                    const value = dispositionResult?.[field.key];
+                    return (
+                      <div key={field.key} className={`p-3 ${i % 2 === 1 ? "bg-muted/20" : ""}`}>
+                        <dt className="text-xs text-muted-foreground font-medium mb-1">{field.label}</dt>
+                        {editing ? (
+                          field.type === "boolean" ? (
+                            <select
+                              className="w-full text-xs border rounded px-2 py-1 bg-background"
+                              value={edits[field.key] ?? ""}
+                              onChange={e => setEdits(prev => ({ ...prev, [field.key]: e.target.value }))}
+                            >
+                              <option value="">—</option>
+                              <option value="true">Yes</option>
+                              <option value="false">No</option>
+                            </select>
+                          ) : field.type === "choice" && field.options?.length ? (
+                            <select
+                              className="w-full text-xs border rounded px-2 py-1 bg-background"
+                              value={edits[field.key] ?? ""}
+                              onChange={e => setEdits(prev => ({ ...prev, [field.key]: e.target.value }))}
+                            >
+                              <option value="">—</option>
+                              {field.options.map(opt => (
+                                <option key={opt} value={opt}>{opt}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <Input
+                              className="h-7 text-xs"
+                              type={field.type === "number" ? "number" : "text"}
+                              value={edits[field.key] ?? ""}
+                              onChange={e => setEdits(prev => ({ ...prev, [field.key]: e.target.value }))}
+                            />
+                          )
+                        ) : (
+                          <dd className="font-medium text-sm">
+                            {value != null ? (
+                              field.type === "boolean" ? (
+                                <Badge variant={value ? "default" : "secondary"} className="text-xs">
+                                  {value ? "Yes" : "No"}
+                                </Badge>
+                              ) : (
+                                String(value)
+                              )
+                            ) : (
+                              <span className="text-muted-foreground/50 text-xs italic">Not captured</span>
+                            )}
+                          </dd>
+                        )}
+                      </div>
+                    );
+                  })}
+                </dl>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Metadata */}
           {call.metadata && (
             <Card>
               <CardHeader className="py-4 border-b">

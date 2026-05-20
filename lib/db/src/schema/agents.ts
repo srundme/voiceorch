@@ -48,7 +48,7 @@ export const agentsTable = pgTable("agents", {
 
   // ── Disposition Schema ────────────────────────────────────────────────────────
   dispositionSchema: json("disposition_schema").$type<Array<{
-    name: string;
+    key: string;
     label: string;
     type: "text" | "number" | "choice" | "boolean";
     options?: string[];

@@ -258,7 +258,7 @@ export default function CallsList() {
                         )}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Link href={`/calls/${call.id}`}>
+                        <Link href={`/app/calls/${call.id}`}>
                           <Button variant="secondary" size="sm" className="h-8 text-xs font-semibold">View Log</Button>
                         </Link>
                       </TableCell>

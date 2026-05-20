@@ -295,6 +295,51 @@ export async function endSession(sessionId: string): Promise<void> {
           })();
         }
 
+        // ── Post-call disposition extraction ─────────────────────────────────
+        const dispositionSchema = Array.isArray(ag.dispositionSchema)
+          ? (ag.dispositionSchema as Array<{ key: string; label: string; type: string; required?: boolean; options?: string[] }>)
+          : [];
+        if (dispositionSchema.length > 0 && transcript && transcript.length > 50 && ag.userId) {
+          void (async () => {
+            try {
+              const llmProvs = await db.select().from(providersTable).where(
+                and(
+                  eq(providersTable.isActive, true),
+                  eq(providersTable.userId, ag.userId!),
+                  eq(providersTable.providerName, ag.llmProvider)
+                )
+              );
+              const llmKey = llmProvs[0]?.apiKey;
+              if (llmKey) {
+                const llm = createLLMAdapter(ag.llmProvider, llmKey, ag.llmModel);
+                const fieldList = dispositionSchema
+                  .map(f => `- "${f.key}" (${f.label}, type: ${f.type}${f.options?.length ? `, options: [${f.options.join(", ")}]` : ""})`)
+                  .join("\n");
+                let raw = "";
+                await llm.chat(
+                  [{ role: "user", content: `Based on this call transcript, extract the following disposition fields and return valid JSON only (no markdown, no commentary):\n\nFields:\n${fieldList}\n\nTranscript:\n${transcript.slice(0, 8000)}` }],
+                  "You extract structured data from call transcripts. Return only a flat JSON object with the specified keys. For boolean fields use true/false. For number fields use numbers. For choice fields use only the specified option values. If a field cannot be determined, use null.",
+                  () => {},
+                  (full) => { raw = full; }
+                );
+                if (raw) {
+                  try {
+                    const jsonStr = raw.replace(/```(?:json)?\s*/gi, "").replace(/```\s*/g, "").trim();
+                    const result = JSON.parse(jsonStr);
+                    if (result && typeof result === "object" && !Array.isArray(result)) {
+                      await db.update(callsTable).set({ dispositionResult: result }).where(eq(callsTable.id, session.callId));
+                    }
+                  } catch {
+                    logger.warn({ sessionId }, "Disposition JSON parse failed");
+                  }
+                }
+              }
+            } catch (dispErr) {
+              logger.warn({ sessionId, dispErr }, "Post-call disposition extraction failed");
+            }
+          })();
+        }
+
         // ── Post-call webhook ─────────────────────────────────────────────────
         if (ag.webhookUrl) {
           fetch(ag.webhookUrl, {

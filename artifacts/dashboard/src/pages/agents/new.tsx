@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { ArrowLeft, Save, Bot, Plus, Trash2, PhoneForwarded, Sparkles, X, ChevronDown, ChevronUp, Database } from "lucide-react";
+import { ArrowLeft, Save, Bot, Plus, Trash2, PhoneForwarded, Sparkles, X, ChevronDown, ChevronUp, Database, ClipboardList } from "lucide-react";
 import { useCreateAgent, useListAgentTemplates, useListKnowledgeBases, getListAgentsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
@@ -204,6 +204,13 @@ const agentFormSchema = z.object({
     transferTo: z.string().min(1, "Phone number required"),
     warmHandoffMessage: z.string().optional(),
   })).optional(),
+  dispositionSchema: z.array(z.object({
+    key: z.string().min(1, "Key required"),
+    label: z.string().min(1, "Label required"),
+    type: z.enum(["text", "number", "boolean", "choice"]),
+    required: z.boolean().optional(),
+    options: z.string().optional(),
+  })).optional(),
 });
 
 type AgentFormValues = z.infer<typeof agentFormSchema>;
@@ -284,12 +291,18 @@ export default function AgentNew() {
       asrSmartEndpointing:      "off" as const,
       asrAutoFallback:          false,
       tools: [],
+      dispositionSchema: [],
     },
   });
 
   const { fields: toolFields, append: appendTool, remove: removeTool } = useFieldArray({
     control: form.control,
     name: "tools",
+  });
+
+  const { fields: dispositionFields, append: appendDisposition, remove: removeDisposition } = useFieldArray({
+    control: form.control,
+    name: "dispositionSchema",
   });
 
   const asrProvider = useWatch({ control: form.control, name: "asrProvider" });
@@ -318,7 +331,14 @@ export default function AgentNew() {
   };
 
   const onSubmit = (data: AgentFormValues) => {
-    createAgent.mutate({ data }, {
+    const submitData = {
+      ...data,
+      dispositionSchema: (data.dispositionSchema ?? []).map(f => ({
+        ...f,
+        options: f.options ? f.options.split(",").map(s => s.trim()).filter(Boolean) : undefined,
+      })),
+    };
+    createAgent.mutate({ data: submitData as any }, {
       onSuccess: (agent) => {
         queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
         toast({ title: "Agent Created", description: "Your new voice agent has been created." });
@@ -979,6 +999,83 @@ export default function AgentNew() {
                     )} />
                   </div>
                 ))}
+              </CardContent>
+            )}
+          </Card>
+
+          {/* ── Disposition Schema ── */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2"><ClipboardList className="h-4 w-4" /> Disposition Fields</CardTitle>
+                  <CardDescription>Define fields the AI will automatically extract from each call transcript after the call ends.</CardDescription>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => appendDisposition({ type: "text", key: "", label: "", required: false, options: "" })}
+                >
+                  <Plus className="h-4 w-4 mr-1" /> Add Field
+                </Button>
+              </div>
+            </CardHeader>
+            {dispositionFields.length > 0 && (
+              <CardContent className="space-y-3">
+                {dispositionFields.map((field, index) => {
+                  const watchedType = form.watch(`dispositionSchema.${index}.type`);
+                  return (
+                    <div key={field.id} className="border rounded-md p-4 bg-muted/20 space-y-3 relative">
+                      <Button type="button" variant="ghost" size="icon" className="absolute top-2 right-2 h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => removeDisposition(index)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <FormField control={form.control} name={`dispositionSchema.${index}.key`} render={({ field: f }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs">Key</FormLabel>
+                            <FormControl><Input placeholder="e.g. call_outcome" {...f} /></FormControl>
+                            <FormDescription className="text-[10px]">snake_case identifier</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                        <FormField control={form.control} name={`dispositionSchema.${index}.label`} render={({ field: f }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs">Label</FormLabel>
+                            <FormControl><Input placeholder="e.g. Call Outcome" {...f} /></FormControl>
+                            <FormDescription className="text-[10px]">Display name shown in the UI</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                        <FormField control={form.control} name={`dispositionSchema.${index}.type`} render={({ field: f }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs">Type</FormLabel>
+                            <Select onValueChange={f.onChange} value={f.value}>
+                              <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                              <SelectContent>
+                                <SelectItem value="text">Text</SelectItem>
+                                <SelectItem value="number">Number</SelectItem>
+                                <SelectItem value="boolean">Yes / No</SelectItem>
+                                <SelectItem value="choice">Choice</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                      </div>
+                      {watchedType === "choice" && (
+                        <FormField control={form.control} name={`dispositionSchema.${index}.options`} render={({ field: f }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs">Options</FormLabel>
+                            <FormControl><Input placeholder="e.g. resolved, escalated, callback" {...f} /></FormControl>
+                            <FormDescription className="text-[10px]">Comma-separated list of allowed values</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                      )}
+                    </div>
+                  );
+                })}
               </CardContent>
             )}
           </Card>

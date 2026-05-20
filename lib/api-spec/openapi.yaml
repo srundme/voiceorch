@@ -1136,9 +1136,9 @@ components:
     # ── Agent Tool ──────────────────────────────────────────────────────────────
     DispositionField:
       type: object
-      required: [name, label, type]
+      required: [key, label, type]
       properties:
-        name:
+        key:
           type: string
           description: Snake-case field key (e.g. outcome, lead_score)
         label:

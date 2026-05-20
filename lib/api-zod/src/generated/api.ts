@@ -63,7 +63,7 @@ export const ListAgentsResponseItem = zod.object({
   "maxConcurrentCalls": zod.number().nullish().describe('Per-agent concurrent call cap (null = use account limit)'),
   "monthlySpendLimitCents": zod.number().nullish().describe('Monthly spend cap in cents (null = no limit)'),
   "dispositionSchema": zod.array(zod.object({
-  "name": zod.string().describe('Snake-case field key (e.g. outcome, lead_score)'),
+  "key": zod.string().describe('Snake-case field key (e.g. outcome, lead_score)'),
   "label": zod.string().describe('Human-readable label shown in the UI (e.g. \"Call Outcome\")'),
   "type": zod.enum(['text', 'number', 'choice', 'boolean']).describe('Data type of the field'),
   "options": zod.array(zod.string()).optional().describe('Allowed values for choice fields (e.g. [\"Interested\",\"Not Interested\"])'),
@@ -179,7 +179,7 @@ export const GetAgentResponse = zod.object({
   "maxConcurrentCalls": zod.number().nullish().describe('Per-agent concurrent call cap (null = use account limit)'),
   "monthlySpendLimitCents": zod.number().nullish().describe('Monthly spend cap in cents (null = no limit)'),
   "dispositionSchema": zod.array(zod.object({
-  "name": zod.string().describe('Snake-case field key (e.g. outcome, lead_score)'),
+  "key": zod.string().describe('Snake-case field key (e.g. outcome, lead_score)'),
   "label": zod.string().describe('Human-readable label shown in the UI (e.g. \"Call Outcome\")'),
   "type": zod.enum(['text', 'number', 'choice', 'boolean']).describe('Data type of the field'),
   "options": zod.array(zod.string()).optional().describe('Allowed values for choice fields (e.g. [\"Interested\",\"Not Interested\"])'),
@@ -246,7 +246,7 @@ export const UpdateAgentBody = zod.object({
   "maxConcurrentCalls": zod.number().optional(),
   "monthlySpendLimitCents": zod.number().optional(),
   "dispositionSchema": zod.array(zod.object({
-  "name": zod.string().describe('Snake-case field key (e.g. outcome, lead_score)'),
+  "key": zod.string().describe('Snake-case field key (e.g. outcome, lead_score)'),
   "label": zod.string().describe('Human-readable label shown in the UI (e.g. \"Call Outcome\")'),
   "type": zod.enum(['text', 'number', 'choice', 'boolean']).describe('Data type of the field'),
   "options": zod.array(zod.string()).optional().describe('Allowed values for choice fields (e.g. [\"Interested\",\"Not Interested\"])'),
@@ -298,7 +298,7 @@ export const UpdateAgentResponse = zod.object({
   "maxConcurrentCalls": zod.number().nullish().describe('Per-agent concurrent call cap (null = use account limit)'),
   "monthlySpendLimitCents": zod.number().nullish().describe('Monthly spend cap in cents (null = no limit)'),
   "dispositionSchema": zod.array(zod.object({
-  "name": zod.string().describe('Snake-case field key (e.g. outcome, lead_score)'),
+  "key": zod.string().describe('Snake-case field key (e.g. outcome, lead_score)'),
   "label": zod.string().describe('Human-readable label shown in the UI (e.g. \"Call Outcome\")'),
   "type": zod.enum(['text', 'number', 'choice', 'boolean']).describe('Data type of the field'),
   "options": zod.array(zod.string()).optional().describe('Allowed values for choice fields (e.g. [\"Interested\",\"Not Interested\"])'),
@@ -374,7 +374,7 @@ export const ToggleAgentResponse = zod.object({
   "maxConcurrentCalls": zod.number().nullish().describe('Per-agent concurrent call cap (null = use account limit)'),
   "monthlySpendLimitCents": zod.number().nullish().describe('Monthly spend cap in cents (null = no limit)'),
   "dispositionSchema": zod.array(zod.object({
-  "name": zod.string().describe('Snake-case field key (e.g. outcome, lead_score)'),
+  "key": zod.string().describe('Snake-case field key (e.g. outcome, lead_score)'),
   "label": zod.string().describe('Human-readable label shown in the UI (e.g. \"Call Outcome\")'),
   "type": zod.enum(['text', 'number', 'choice', 'boolean']).describe('Data type of the field'),
   "options": zod.array(zod.string()).optional().describe('Allowed values for choice fields (e.g. [\"Interested\",\"Not Interested\"])'),

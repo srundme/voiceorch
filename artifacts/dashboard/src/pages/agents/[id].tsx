@@ -618,7 +618,7 @@ export default function AgentDetail() {
                           </TableCell>
                           <TableCell className="font-mono text-sm">{formatDuration(call.durationSeconds)}</TableCell>
                           <TableCell className="text-right">
-                            <Link href={`/calls/${call.id}`}>
+                            <Link href={`/app/calls/${call.id}`}>
                               <Button variant="ghost" size="sm" className="h-8 text-xs">Details</Button>
                             </Link>
                           </TableCell>
