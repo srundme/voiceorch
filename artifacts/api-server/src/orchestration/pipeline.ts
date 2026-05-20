@@ -5,7 +5,7 @@ import { encodeMulaw, upsample8to16, downsample16to8 } from "./audio.js";
 import { processAudioIn, processRawPcm8kIn, destroyAudioSession } from "./audioPool.js";
 import type { AudioProcessResult } from "./audioPool.js";
 import type { AgentConfig, AgentTool, ConversationTurn, SessionConfig, StreamSTT, ToolDefinition } from "./types.js";
-import { detectCallerGender } from "./genderDetection.js";
+import { detectCallerGender, applyCallerSalutation } from "./genderDetection.js";
 import { logger } from "../lib/logger.js";
 
 const VAD_SILENCE_MS   = 250;    // silence window before STT flush
@@ -191,8 +191,7 @@ export class OrchestrationPipeline {
    */
   private resolvedSystemPrompt(): string {
     if (!this.genderDetected) {
-      const neutral = this.agent.genderDetectionNeutralSalutation || "";
-      return this.agent.systemPrompt.replace(/\{caller_salutation\}/g, neutral);
+      return applyCallerSalutation(this.agent.systemPrompt, this.agent.genderDetectionNeutralSalutation || "");
     }
     return this.agent.systemPrompt;
   }
@@ -210,10 +209,7 @@ export class OrchestrationPipeline {
       });
 
       // Patch the live system prompt — replace every occurrence of the placeholder
-      this.agent.systemPrompt = this.agent.systemPrompt.replace(
-        /\{caller_salutation\}/g,
-        salutation
-      );
+      this.agent.systemPrompt = applyCallerSalutation(this.agent.systemPrompt, salutation);
       this.genderDetected = true;
       logger.info(
         { callId: this.config.callId, salutation },
@@ -280,8 +276,7 @@ export class OrchestrationPipeline {
       // {caller_salutation} in the greeting fires before any caller audio arrives,
       // so gender detection hasn't run yet. Use the neutral salutation as fallback.
       // The system prompt placeholder is handled separately once audio is heard.
-      const neutralSalutation = this.agent.genderDetectionNeutralSalutation || "";
-      greeting = greeting.replace(/\{caller_salutation\}/g, neutralSalutation);
+      greeting = applyCallerSalutation(greeting, this.agent.genderDetectionNeutralSalutation || "");
 
       if (!greeting.trim() || this.closed) return;
       logger.info({ callId: this.config.callId, greeting: greeting.slice(0, 80) }, "Sending greeting");

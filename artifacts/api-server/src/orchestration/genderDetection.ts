@@ -65,9 +65,32 @@ export async function detectCallerGender(
     "Caller gender classified"
   );
 
-  if (gender === "male")   return cfg.maleSalutation   || "sir";
-  if (gender === "female") return cfg.femaleSalutation || "ma'am";
-  return cfg.neutralSalutation ?? "";
+  if (gender === "male")   return sanitiseSalutation(cfg.maleSalutation)   || "sir";
+  if (gender === "female") return sanitiseSalutation(cfg.femaleSalutation) || "ma'am";
+  return sanitiseSalutation(cfg.neutralSalutation ?? "");
+}
+
+/**
+ * Treat "skip" (any case) as an empty string — users type it as a UI hint
+ * meaning "don't use a salutation", not as a word to inject into the prompt.
+ */
+export function sanitiseSalutation(s: string): string {
+  return s.trim().toLowerCase() === "skip" ? "" : s.trim();
+}
+
+/**
+ * Replace every {caller_salutation} in `prompt` with `salutation`.
+ * When the resolved salutation is empty, also strips any immediately following
+ * comma+space (e.g. "{caller_salutation}, welcome" → "welcome") to avoid
+ * orphaned punctuation.
+ */
+export function applyCallerSalutation(prompt: string, salutation: string): string {
+  const safe = sanitiseSalutation(salutation);
+  if (!safe) {
+    // Remove placeholder + optional trailing ", " or leading whitespace
+    return prompt.replace(/\{caller_salutation\}(?:,\s*|\s+)?/g, "");
+  }
+  return prompt.replace(/\{caller_salutation\}/g, safe);
 }
 
 // ── Provider implementations ──────────────────────────────────────────────────

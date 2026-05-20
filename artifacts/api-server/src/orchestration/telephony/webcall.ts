@@ -5,7 +5,7 @@ import { createSTTAdapter } from "../adapters/stt/index.js";
 import { createLLMAdapter } from "../adapters/llm/index.js";
 import { createTTSAdapter } from "../adapters/tts/index.js";
 import { downsample16to8 } from "../audio.js";
-import { detectCallerGender } from "../genderDetection.js";
+import { detectCallerGender, applyCallerSalutation } from "../genderDetection.js";
 import { logger } from "../../lib/logger.js";
 import type { ConversationTurn, STTConfig } from "../types.js";
 
@@ -143,7 +143,7 @@ export async function handleWebCallWebSocket(
    */
   function resolvedSystemPrompt(): string {
     if (!genderDetected) {
-      return systemPrompt.replace(/\{caller_salutation\}/g, neutralSalutation);
+      return applyCallerSalutation(systemPrompt, neutralSalutation);
     }
     return systemPrompt;
   }
@@ -165,7 +165,7 @@ export async function handleWebCallWebSocket(
         providerKeys,
         callId,
       }).then((salutation) => {
-        systemPrompt  = systemPrompt.replace(/\{caller_salutation\}/g, salutation);
+        systemPrompt  = applyCallerSalutation(systemPrompt, salutation);
         genderDetected = true;
         logger.info({ callId, salutation }, "WebCall gender detection complete");
       }).catch((err: unknown) => {
