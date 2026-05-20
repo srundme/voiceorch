@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation } from "wouter";
 import { useCompleteOnboarding, useGetOnboardingStatus } from "@workspace/api-client-react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, ArrowRight, ChevronRight } from "lucide-react";
+import { Check, ArrowRight } from "lucide-react";
 
 /* ── Types ─────────────────────────────────────────────────────────────── */
 
@@ -125,7 +125,16 @@ function NameStep({ value, onChange, onNext }: { value: string; onChange: (v: st
   );
 }
 
-function RoleStep({ value, onChange, onNext }: { value: Role | null; onChange: (v: Role) => void; onNext: () => void }) {
+/* Role step — auto-advances on click; onSelect receives the chosen value */
+function RoleStep({
+  value,
+  onSelect,
+  onNext,
+}: {
+  value: Role | null;
+  onSelect: (v: Role) => void;
+  onNext: () => void;
+}) {
   const options: { id: Role; label: string; emoji: string; desc: string }[] = [
     { id: "student",      label: "Student",      emoji: "🎓", desc: "Exploring AI as part of my studies" },
     { id: "professional", label: "Professional",  emoji: "💼", desc: "Building voice agents for work" },
@@ -133,13 +142,13 @@ function RoleStep({ value, onChange, onNext }: { value: Role | null; onChange: (
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "1") onChange("student");
-      if (e.key === "2") onChange("professional");
+      if (e.key === "1") onSelect("student");
+      if (e.key === "2") onSelect("professional");
       if (e.key === "Enter" && value) onNext();
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [value, onChange, onNext]);
+  }, [value, onSelect, onNext]);
 
   return (
     <div className="w-full max-w-xl">
@@ -154,7 +163,7 @@ function RoleStep({ value, onChange, onNext }: { value: Role | null; onChange: (
             key={opt.id}
             whileHover={{ x: 4 }}
             whileTap={{ scale: 0.98 }}
-            onClick={() => { onChange(opt.id); setTimeout(onNext, 180); }}
+            onClick={() => onSelect(opt.id)}
             className={`
               flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all duration-150 cursor-pointer
               ${value === opt.id
@@ -179,26 +188,35 @@ function RoleStep({ value, onChange, onNext }: { value: Role | null; onChange: (
   );
 }
 
-function ReferralStep({ value, onChange, onNext }: { value: ReferralSource | null; onChange: (v: ReferralSource) => void; onNext: () => void }) {
+/* Referral step — auto-advances on click */
+function ReferralStep({
+  value,
+  onSelect,
+  onNext,
+}: {
+  value: ReferralSource | null;
+  onSelect: (v: ReferralSource) => void;
+  onNext: () => void;
+}) {
   const options: { id: ReferralSource; label: string; emoji: string }[] = [
-    { id: "instagram",  label: "Instagram",        emoji: "📸" },
-    { id: "youtube",    label: "YouTube",           emoji: "▶️" },
+    { id: "instagram",  label: "Instagram",          emoji: "📸" },
+    { id: "youtube",    label: "YouTube",             emoji: "▶️" },
     { id: "reference",  label: "Someone referred me", emoji: "🤝" },
-    { id: "google",     label: "Google Search",    emoji: "🔍" },
-    { id: "ai_search",  label: "AI Search Results", emoji: "🤖" },
+    { id: "google",     label: "Google Search",       emoji: "🔍" },
+    { id: "ai_search",  label: "AI Search Results",   emoji: "🤖" },
   ];
 
   useEffect(() => {
     const keys: Record<string, ReferralSource> = {
-      "1": "instagram", "2": "youtube", "3": "reference", "4": "google", "5": "ai_search"
+      "1": "instagram", "2": "youtube", "3": "reference", "4": "google", "5": "ai_search",
     };
     const handler = (e: KeyboardEvent) => {
-      if (keys[e.key]) onChange(keys[e.key]!);
+      if (keys[e.key]) onSelect(keys[e.key]!);
       if (e.key === "Enter" && value) onNext();
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [value, onChange, onNext]);
+  }, [value, onSelect, onNext]);
 
   return (
     <div className="w-full max-w-xl">
@@ -213,7 +231,7 @@ function ReferralStep({ value, onChange, onNext }: { value: ReferralSource | nul
             key={opt.id}
             whileHover={{ x: 4 }}
             whileTap={{ scale: 0.98 }}
-            onClick={() => { onChange(opt.id); setTimeout(onNext, 180); }}
+            onClick={() => onSelect(opt.id)}
             className={`
               flex items-center gap-3.5 px-4 py-3.5 rounded-xl border-2 text-left transition-all duration-150 cursor-pointer
               ${value === opt.id
@@ -235,16 +253,25 @@ function ReferralStep({ value, onChange, onNext }: { value: ReferralSource | nul
   );
 }
 
-function VoiceAgentStep({ value, onChange, onNext }: { value: boolean | null; onChange: (v: boolean) => void; onNext: () => void }) {
+/* VoiceAgent step — auto-advances on click; onSelect receives the value */
+function VoiceAgentStep({
+  value,
+  onSelect,
+  onNext,
+}: {
+  value: boolean | null;
+  onSelect: (v: boolean) => void;
+  onNext: () => void;
+}) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "y" || e.key === "Y" || e.key === "1") onChange(true);
-      if (e.key === "n" || e.key === "N" || e.key === "2") onChange(false);
+      if (e.key === "y" || e.key === "Y" || e.key === "1") onSelect(true);
+      if (e.key === "n" || e.key === "N" || e.key === "2") onSelect(false);
       if (e.key === "Enter" && value !== null) onNext();
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [value, onChange, onNext]);
+  }, [value, onSelect, onNext]);
 
   return (
     <div className="w-full max-w-xl">
@@ -255,14 +282,14 @@ function VoiceAgentStep({ value, onChange, onNext }: { value: boolean | null; on
       <p className="text-gray-400 text-base mb-8">No wrong answer — we just want to set the right starting point.</p>
       <div className="flex gap-3">
         {[
-          { v: true,  label: "Yes",  emoji: "👍", key: "Y" },
-          { v: false, label: "No",   emoji: "👋", key: "N" },
+          { v: true,  label: "Yes", emoji: "👍", key: "Y" },
+          { v: false, label: "No",  emoji: "👋", key: "N" },
         ].map(opt => (
           <motion.button
             key={String(opt.v)}
             whileHover={{ y: -2 }}
             whileTap={{ scale: 0.96 }}
-            onClick={() => { onChange(opt.v); setTimeout(onNext, opt.v ? 80 : 180); }}
+            onClick={() => onSelect(opt.v)}
             className={`
               flex-1 flex flex-col items-center gap-2 py-6 rounded-2xl border-2 font-semibold text-base transition-all cursor-pointer
               ${value === opt.v
@@ -356,6 +383,21 @@ function PlatformsStep({ value, onChange, onNext, loading }: {
 /* ── Done screen ────────────────────────────────────────────────────────── */
 
 function DoneScreen({ name }: { name: string }) {
+  const [, setLocation] = useLocation();
+
+  const goToDashboard = useCallback(() => {
+    // Use Wouter navigation; the AppRoutes gate re-checks status from server
+    setLocation("/app");
+  }, [setLocation]);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Enter") goToDashboard();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [goToDashboard]);
+
   return (
     <div className="flex flex-col items-center text-center max-w-md">
       <motion.div
@@ -371,15 +413,15 @@ function DoneScreen({ name }: { name: string }) {
       <p className="text-gray-400 text-lg mb-10 leading-relaxed">
         Welcome to VoiceOrch. Let's build your first AI voice agent.
       </p>
-      <motion.a
+      <motion.button
         whileHover={{ scale: 1.03 }}
         whileTap={{ scale: 0.97 }}
-        href={`${basePath}/app`}
-        className="flex items-center gap-2.5 px-8 py-4 bg-black text-white rounded-xl font-semibold text-base hover:bg-gray-800 transition-colors shadow-md"
+        onClick={goToDashboard}
+        className="flex items-center gap-2.5 px-8 py-4 bg-black text-white rounded-xl font-semibold text-base hover:bg-gray-800 transition-colors shadow-md cursor-pointer"
       >
         Go to Dashboard
         <ArrowRight className="h-5 w-5" />
-      </motion.a>
+      </motion.button>
     </div>
   );
 }
@@ -391,8 +433,7 @@ export default function OnboardingPage() {
   const { data: status, isLoading: statusLoading } = useGetOnboardingStatus();
   const { mutate: complete, isPending } = useCompleteOnboarding();
 
-  const [step, setStep] = useState(0);   // 0 = not started (loading), 1–5 = questions, 6 = done
-  const [direction] = useState(1);
+  const [step, setStep] = useState(0);   // 0 = loading, 1–5 = questions, 6 = done
   const [answers, setAnswers] = useState<Answers>({
     name: "",
     role: null,
@@ -401,7 +442,7 @@ export default function OnboardingPage() {
     priorPlatforms: [],
   });
 
-  // Redirect to app if already completed
+  // Redirect if already completed
   useEffect(() => {
     if (!statusLoading && status?.completed) {
       setLocation("/app");
@@ -412,37 +453,23 @@ export default function OnboardingPage() {
 
   const totalSteps = answers.usedVoiceAgents === true ? 5 : 4;
 
-  const next = useCallback(() => {
-    setStep(s => {
-      if (s === 4 && answers.usedVoiceAgents !== true) {
-        // skip platforms step — go straight to submit
-        submitOnboarding({ ...answers });
-        return 6;
-      }
-      return s + 1;
-    });
-  }, [answers]);
-
-  const submitOnboarding = (finalAnswers: Answers) => {
+  const submitOnboarding = useCallback((finalAnswers: Answers) => {
     complete(
       {
         data: {
-          name:           finalAnswers.name || undefined,
-          role:           finalAnswers.role ?? undefined,
-          referralSource: finalAnswers.referralSource ?? undefined,
+          name:            finalAnswers.name || undefined,
+          role:            finalAnswers.role ?? undefined,
+          referralSource:  finalAnswers.referralSource ?? undefined,
           usedVoiceAgents: finalAnswers.usedVoiceAgents ?? undefined,
-          priorPlatforms: finalAnswers.priorPlatforms.length > 0 ? finalAnswers.priorPlatforms : undefined,
+          priorPlatforms:  finalAnswers.priorPlatforms.length > 0 ? finalAnswers.priorPlatforms : undefined,
         },
       },
       {
         onSuccess: () => setStep(6),
-        onError: () => setStep(6),  // still proceed on error — non-blocking
+        onError:   () => setStep(6),   // non-blocking — still show done screen
       }
     );
-  };
-
-  const set = <K extends keyof Answers>(key: K) => (val: Answers[K]) =>
-    setAnswers(a => ({ ...a, [key]: val }));
+  }, [complete]);
 
   if (statusLoading || step === 0) {
     return (
@@ -452,14 +479,13 @@ export default function OnboardingPage() {
     );
   }
 
-  const stepNum = step > 5 ? 5 : step;
+  const stepNum = Math.min(step, totalSteps);
 
   return (
     <div className="min-h-screen bg-white flex flex-col select-none">
       {step < 6 && (
         <>
           <ProgressBar current={stepNum - 1} total={totalSteps} />
-          {/* Top bar */}
           <header className="flex items-center justify-between px-6 pt-6 pb-2">
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 rounded-lg bg-black flex items-center justify-center">
@@ -472,62 +498,87 @@ export default function OnboardingPage() {
         </>
       )}
 
-      {/* Content area */}
       <main className="flex-1 flex items-center justify-center px-6 py-12">
         <AnimatePresence mode="wait" initial={false}>
           {step === 6 ? (
             <motion.div key="done" {...SLIDE_IN}>
               <DoneScreen name={answers.name} />
             </motion.div>
+
           ) : step === 1 ? (
             <motion.div key="q1" {...SLIDE_IN} className="w-full flex justify-center">
               <NameStep
                 value={answers.name}
-                onChange={set("name")}
-                onNext={() => { if (answers.name.trim()) next(); }}
+                onChange={(v) => setAnswers(a => ({ ...a, name: v }))}
+                onNext={() => { if (answers.name.trim()) setStep(2); }}
               />
             </motion.div>
+
           ) : step === 2 ? (
             <motion.div key="q2" {...SLIDE_IN} className="w-full flex justify-center">
               <RoleStep
                 value={answers.role}
-                onChange={(v) => setAnswers(a => ({ ...a, role: v }))}
-                onNext={() => { if (answers.role) next(); }}
+                onSelect={(v) => {
+                  // Update state + advance immediately with the fresh value — no stale closure
+                  setAnswers(a => ({ ...a, role: v }));
+                  setTimeout(() => setStep(3), 180);
+                }}
+                onNext={() => { if (answers.role) setStep(3); }}
               />
             </motion.div>
+
           ) : step === 3 ? (
             <motion.div key="q3" {...SLIDE_IN} className="w-full flex justify-center">
               <ReferralStep
                 value={answers.referralSource}
-                onChange={(v) => setAnswers(a => ({ ...a, referralSource: v }))}
-                onNext={() => { if (answers.referralSource) next(); }}
+                onSelect={(v) => {
+                  setAnswers(a => ({ ...a, referralSource: v }));
+                  setTimeout(() => setStep(4), 180);
+                }}
+                onNext={() => { if (answers.referralSource) setStep(4); }}
               />
             </motion.div>
+
           ) : step === 4 ? (
             <motion.div key="q4" {...SLIDE_IN} className="w-full flex justify-center">
               <VoiceAgentStep
                 value={answers.usedVoiceAgents}
-                onChange={(v) => setAnswers(a => ({ ...a, usedVoiceAgents: v }))}
-                onNext={() => { if (answers.usedVoiceAgents !== null) next(); }}
+                onSelect={(v) => {
+                  // Capture the full updated answers synchronously with the new value
+                  const updated: Answers = { ...answers, usedVoiceAgents: v };
+                  setAnswers(updated);
+                  if (v === true) {
+                    // Has prior experience → ask which platforms
+                    setTimeout(() => setStep(5), 80);
+                  } else {
+                    // No prior experience → skip Q5, submit now
+                    setTimeout(() => {
+                      submitOnboarding(updated);
+                      setStep(6);
+                    }, 180);
+                  }
+                }}
+                onNext={() => {
+                  if (answers.usedVoiceAgents === true) setStep(5);
+                  else if (answers.usedVoiceAgents === false) { submitOnboarding(answers); setStep(6); }
+                }}
               />
             </motion.div>
+
           ) : step === 5 ? (
             <motion.div key="q5" {...SLIDE_IN} className="w-full flex justify-center">
               <PlatformsStep
                 value={answers.priorPlatforms}
-                onChange={set("priorPlatforms")}
-                onNext={() => {
-                  submitOnboarding(answers);
-                  setStep(6);
-                }}
+                onChange={(v) => setAnswers(a => ({ ...a, priorPlatforms: v }))}
+                onNext={() => { submitOnboarding(answers); setStep(6); }}
                 loading={isPending}
               />
             </motion.div>
+
           ) : null}
         </AnimatePresence>
       </main>
 
-      {/* Keyboard hint */}
       {step < 6 && (
         <footer className="flex items-center justify-center gap-4 pb-6 text-[12px] text-gray-300">
           <span className="flex items-center gap-1">
