@@ -510,6 +510,11 @@ type AgentCfg = {
     outcome: string; templateName: string; language: string;
     parameters?: string[]; mediaUrl?: string; mediaFilename?: string; mediaType?: string;
   }>;
+  genderDetectionEnabled?: boolean;
+  genderDetectionProvider?: string;
+  genderDetectionMaleSalutation?: string;
+  genderDetectionFemaleSalutation?: string;
+  genderDetectionNeutralSalutation?: string;
 };
 
 function SliderRow({ label, desc, value, onChange, min, max, step, unit = "" }: {
@@ -895,6 +900,31 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
               <Textarea value={systemPrompt} onChange={e => { setSystemPrompt(e.target.value); setDirty(true); }}
                 placeholder="You are a helpful AI voice assistant…"
                 className="bg-zinc-800/60 border-zinc-700 text-zinc-200 text-sm resize-none min-h-[200px] placeholder:text-zinc-600" />
+              {/* Variable chips */}
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                <p className="text-[10px] text-zinc-600 mr-1 self-center">Insert variable:</p>
+                {[
+                  { var: "{caller_salutation}", tip: "sir / ma'am — requires Gender Detection in Engine tab", color: "violet" },
+                  { var: "{caller_number}",     tip: "Caller's phone number",                                color: "sky"    },
+                  { var: "{agent_name}",         tip: "This agent's name",                                   color: "emerald"},
+                  { var: "{date}",               tip: "Current date",                                        color: "amber"  },
+                ].map(chip => (
+                  <button
+                    key={chip.var}
+                    type="button"
+                    title={chip.tip}
+                    onClick={() => { setSystemPrompt(p => p + " " + chip.var); setDirty(true); }}
+                    className={`text-[11px] rounded-md border px-2 py-0.5 font-mono transition-colors ${
+                      chip.color === "violet" ? "bg-violet-950/40 border-violet-800/50 text-violet-400 hover:bg-violet-900/50" :
+                      chip.color === "sky"    ? "bg-sky-950/40 border-sky-800/50 text-sky-400 hover:bg-sky-900/50" :
+                      chip.color === "emerald"? "bg-emerald-950/40 border-emerald-800/50 text-emerald-400 hover:bg-emerald-900/50" :
+                                                "bg-amber-950/40 border-amber-800/50 text-amber-400 hover:bg-amber-900/50"
+                    }`}
+                  >
+                    {chip.var}
+                  </button>
+                ))}
+              </div>
             </div>
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 mb-1.5">Webhook URL <span className="normal-case text-zinc-600 font-normal">(optional)</span></p>
@@ -1231,6 +1261,73 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
               <ToggleRow label="Noise Cancellation" desc="Filter background noise from caller audio"
                 checked={noiseCancellationEnabled} onChange={v => { setNoiseCancellationEnabled(v); setDirty(true); }} />
             </div>
+            {/* ── Gender Detection ── */}
+            <div className="bg-zinc-800/40 border border-zinc-700/40 rounded-xl p-4 space-y-4">
+              <div className="flex items-start gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-violet-950/60 border border-violet-800/40 flex items-center justify-center shrink-0">
+                  <span className="text-sm">🎙</span>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-zinc-300">Caller Gender Detection</p>
+                  <p className="text-[10px] text-zinc-600 mt-0.5 leading-relaxed">
+                    Analyse the caller's voice within the first few seconds and inject <code className="bg-zinc-800 text-violet-400 rounded px-1 py-px">{"{caller_salutation}"}</code> into your agent prompt — automatically addressing them as <em>sir</em> or <em>ma'am</em>.
+                  </p>
+                </div>
+              </div>
+              <ToggleRow
+                label="Enable Gender Detection"
+                desc="Detects vocal pitch/formants from the first speech turn and sets the salutation variable"
+                checked={cfg.genderDetectionEnabled ?? false}
+                onChange={v => setCfg({ genderDetectionEnabled: v })}
+              />
+              {cfg.genderDetectionEnabled && (
+                <>
+                  <div>
+                    <p className="text-xs text-zinc-400 mb-1">Detection Provider</p>
+                    <Select value={cfg.genderDetectionProvider ?? "deepgram"} onValueChange={v => setCfg({ genderDetectionProvider: v })}>
+                      <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200"><SelectValue /></SelectTrigger>
+                      <SelectContent className="bg-zinc-900 border-zinc-700">
+                        <SelectItem value="deepgram" className="text-zinc-300 text-xs">Deepgram (voice type signal)</SelectItem>
+                        <SelectItem value="assemblyai" className="text-zinc-300 text-xs">AssemblyAI (speaker analysis)</SelectItem>
+                        <SelectItem value="azure" className="text-zinc-300 text-xs">Azure Speaker Recognition</SelectItem>
+                        <SelectItem value="internal" className="text-zinc-300 text-xs">VoiceOrch built-in (pitch analysis)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <p className="text-xs text-zinc-400 mb-1">Male salutation</p>
+                      <Input value={cfg.genderDetectionMaleSalutation ?? "sir"}
+                        onChange={e => setCfg({ genderDetectionMaleSalutation: e.target.value })}
+                        className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-zinc-400 mb-1">Female salutation</p>
+                      <Input value={cfg.genderDetectionFemaleSalutation ?? "ma'am"}
+                        onChange={e => setCfg({ genderDetectionFemaleSalutation: e.target.value })}
+                        className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-zinc-400 mb-1">Neutral / unknown</p>
+                      <Input value={cfg.genderDetectionNeutralSalutation ?? ""}
+                        onChange={e => setCfg({ genderDetectionNeutralSalutation: e.target.value })}
+                        placeholder="(skip)"
+                        className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200 placeholder:text-zinc-600" />
+                    </div>
+                  </div>
+                  <div className="rounded-lg bg-violet-950/30 border border-violet-800/40 px-3 py-2.5 space-y-1">
+                    <p className="text-[10px] font-semibold text-violet-400 uppercase tracking-widest">How to use in your prompt</p>
+                    <p className="text-[11px] text-zinc-400 leading-relaxed">
+                      Add <code className="bg-zinc-800 text-violet-300 rounded px-1">{"{caller_salutation}"}</code> anywhere in your Agent Prompt. At call start it will be replaced with the detected value.
+                    </p>
+                    <p className="text-[11px] text-zinc-600 italic mt-1">
+                      Example: <span className="not-italic text-zinc-500">"Good morning, {"{caller_salutation}"}! How can I help you today?"</span>
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+
             <div className="bg-zinc-800/40 border border-zinc-700/40 rounded-xl p-4 space-y-3">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">End Call Phrases</p>
               <Textarea value={endCallPhrases} onChange={e => { setEndCallPhrases(e.target.value); setDirty(true); }}
