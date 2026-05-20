@@ -5,7 +5,7 @@ import {
   Settings2, MoreHorizontal, Pencil, Trash2, PlayCircle,
   Check, Copy, Loader2, ChevronDown, Sparkles, PhoneOutgoing,
   BarChart2, Clock, CheckCircle2, XCircle, BookOpen,
-  AlertTriangle, Target, AlignLeft, Zap, RefreshCw,
+  AlertTriangle, Target, AlignLeft, Zap, RefreshCw, ClipboardList, X,
 } from "lucide-react";
 import {
   useListAgents,
@@ -490,6 +490,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
   const [ttsModel, setTtsModel]                             = useState("");
   const [telephony, setTelephony]                           = useState("");
   const [knowledgeBaseId, setKnowledgeBaseId]               = useState<number | null>(null);
+  const [dispositionSchema, setDispositionSchema]           = useState<Array<{ key: string; label: string; type: string; required?: boolean; options?: string }>>([]);
   const [dirty, setDirty]                                   = useState(false);
 
   const { data: kbs } = useListKnowledgeBases();
@@ -514,6 +515,10 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
     setTtsModel(agent.ttsModel ?? "");
     setTelephony(agent.telephonyProvider ?? "");
     setKnowledgeBaseId(agent.knowledgeBaseId ?? null);
+    setDispositionSchema(
+      ((agent as unknown as Record<string, unknown>).dispositionSchema as Array<{ key: string; label: string; type: string; required?: boolean; options?: string[] }> | undefined ?? [])
+        .map(f => ({ ...f, options: f.options?.join(", ") ?? "" }))
+    );
     setDirty(false);
   }, [agent?.id]);
 
@@ -542,6 +547,15 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
           ttsProvider, ttsModel: ttsModel || undefined,
           telephonyProvider: telephony,
           knowledgeBaseId: knowledgeBaseId ?? undefined,
+          dispositionSchema: dispositionSchema
+            .filter(f => f.key.trim() && f.label.trim())
+            .map(f => ({
+              key: f.key.trim(),
+              label: f.label.trim(),
+              type: f.type,
+              required: f.required,
+              options: f.type === "choice" && f.options ? f.options.split(",").map(s => s.trim()).filter(Boolean) : undefined,
+            })),
         } as Parameters<typeof update.mutate>[0]["data"],
       },
       {
@@ -1069,6 +1083,103 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                 </SelectContent>
               </Select>
               <p className="text-[10px] text-zinc-600">Relevant chunks are injected into the system prompt on every call.</p>
+            </div>
+
+            {/* ── Disposition Fields ─────────────────────────────────────── */}
+            <div className="bg-zinc-800/40 border border-zinc-700/40 rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-700/40">
+                <div className="flex items-center gap-2">
+                  <ClipboardList className="h-3.5 w-3.5 text-emerald-400" />
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Disposition Fields</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDispositionSchema(prev => [...prev, { key: "", label: "", type: "text", required: false, options: "" }]);
+                    setDirty(true);
+                  }}
+                  className="text-[11px] text-emerald-400 hover:text-emerald-300 font-medium flex items-center gap-1"
+                >
+                  <Plus className="h-3 w-3" /> Add Field
+                </button>
+              </div>
+              {dispositionSchema.length === 0 ? (
+                <p className="text-[11px] text-zinc-600 px-4 py-3">
+                  No fields defined. Fields are extracted automatically from call transcripts by the LLM after each call.
+                </p>
+              ) : (
+                <div className="divide-y divide-zinc-700/40">
+                  {dispositionSchema.map((field, i) => (
+                    <div key={i} className="px-4 py-3 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={field.key}
+                          onChange={e => {
+                            const next = [...dispositionSchema];
+                            next[i] = { ...next[i], key: e.target.value };
+                            setDispositionSchema(next); setDirty(true);
+                          }}
+                          placeholder="key (snake_case)"
+                          className="flex-1 h-7 rounded-md bg-zinc-900/60 border border-zinc-700 text-zinc-200 text-xs px-2.5 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
+                        />
+                        <input
+                          type="text"
+                          value={field.label}
+                          onChange={e => {
+                            const next = [...dispositionSchema];
+                            next[i] = { ...next[i], label: e.target.value };
+                            setDispositionSchema(next); setDirty(true);
+                          }}
+                          placeholder="Label"
+                          className="flex-1 h-7 rounded-md bg-zinc-900/60 border border-zinc-700 text-zinc-200 text-xs px-2.5 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
+                        />
+                        <Select
+                          value={field.type}
+                          onValueChange={v => {
+                            const next = [...dispositionSchema];
+                            next[i] = { ...next[i], type: v };
+                            setDispositionSchema(next); setDirty(true);
+                          }}
+                        >
+                          <SelectTrigger className="h-7 w-28 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="bg-zinc-900 border-zinc-700">
+                            <SelectItem value="text"    className="text-zinc-300 text-xs">Text</SelectItem>
+                            <SelectItem value="number"  className="text-zinc-300 text-xs">Number</SelectItem>
+                            <SelectItem value="boolean" className="text-zinc-300 text-xs">Yes / No</SelectItem>
+                            <SelectItem value="choice"  className="text-zinc-300 text-xs">Choice</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDispositionSchema(prev => prev.filter((_, j) => j !== i));
+                            setDirty(true);
+                          }}
+                          className="text-zinc-600 hover:text-red-400 transition-colors shrink-0"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      {field.type === "choice" && (
+                        <input
+                          type="text"
+                          value={field.options ?? ""}
+                          onChange={e => {
+                            const next = [...dispositionSchema];
+                            next[i] = { ...next[i], options: e.target.value };
+                            setDispositionSchema(next); setDirty(true);
+                          }}
+                          placeholder="Options: resolved, escalated, callback"
+                          className="w-full h-7 rounded-md bg-zinc-900/60 border border-zinc-700 text-zinc-200 text-xs px-2.5 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Description */}
