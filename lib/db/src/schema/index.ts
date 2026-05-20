@@ -7,3 +7,4 @@ export * from "./activity-logs";
 export * from "./phone-numbers";
 export * from "./webhook-endpoints";
 export * from "./callerProfiles";
+export * from "./scheduledCallbacks";

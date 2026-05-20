@@ -1,0 +1,14 @@
+import { pgTable, serial, integer, text, timestamp } from "drizzle-orm/pg-core";
+import { agentsTable } from "./agents";
+import { callsTable } from "./calls";
+
+export const scheduledCallbacksTable = pgTable("scheduled_callbacks", {
+  id:                serial("id").primaryKey(),
+  agentId:           integer("agent_id").references(() => agentsTable.id, { onDelete: "cascade" }).notNull(),
+  toNumber:          text("to_number").notNull(),
+  scheduledAt:       timestamp("scheduled_at").notNull(),
+  createdFromCallId: integer("created_from_call_id").references(() => callsTable.id, { onDelete: "set null" }),
+  status:            text("status").notNull().default("pending"),  // pending | triggering | triggered | failed
+  triggeredAt:       timestamp("triggered_at"),
+  createdAt:         timestamp("created_at").defaultNow().notNull(),
+});

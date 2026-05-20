@@ -16,6 +16,7 @@ import {
   loadCallerProfile,
   injectCallerMemory,
   updateCallerProfile,
+  detectCallbackRequest,
   type CallerProfile,
 } from "./callerMemory.js";
 
@@ -39,6 +40,9 @@ interface ActiveSession {
   agentUserId: string | null;           // needed to scope LLM key in endSession
   agentLlmProvider: string;
   agentLlmModel: string;
+  // Dropped-call detection: true when pipeline triggered the end (phrase/timeout/tool)
+  // false means WS just closed — i.e. call was likely dropped mid-conversation
+  naturalEndTriggered: boolean;
 }
 
 const sessions = new Map<string, ActiveSession>();
@@ -183,6 +187,9 @@ export async function createSession(params: {
   const metricsAcc: MetricsAcc = { sttTotal: 0, llmTotal: 0, ttsTotal: 0, count: 0 };
   let wasTransferred = false;
   let transferredTo: string | null = null;
+  // Becomes true when the pipeline deliberately ends the call (phrase/silence/tool/max-duration)
+  // Remains false if the WS just closes unexpectedly → dropped call
+  let naturalEndTriggered = false;
 
   const sessionId = `${params.telephonyProvider}-${callRecord.id}-${Date.now()}`;
   const redisTtl = (agentConfig.maxDuration ?? 600) + 600; // maxDuration + 10 min buffer
@@ -196,7 +203,10 @@ export async function createSession(params: {
     onTranscript: (speaker, text) => {
       logger.debug({ callId: callRecord.id, speaker, text: text.slice(0, 80) }, "Transcript");
     },
-    onCallEnd: params.onCallEnd,
+    onCallEnd: () => {
+      naturalEndTriggered = true;
+      params.onCallEnd();
+    },
     onCallTransfer: (to) => {
       wasTransferred = true;
       transferredTo = to;
@@ -232,6 +242,7 @@ export async function createSession(params: {
     metricsAcc,
     get wasTransferred() { return wasTransferred; },
     get transferredTo() { return transferredTo; },
+    get naturalEndTriggered() { return naturalEndTriggered; },
     callerPhone,
     callerProfileSnapshot,
     agentUserId:      agent.userId ?? null,
@@ -353,8 +364,18 @@ export async function endSession(sessionId: string): Promise<void> {
           })();
         }
 
-        // ── Post-call caller memory update ───────────────────────────────────
+        // ── Post-call caller memory update + callback detection ──────────────
         if (session.callerPhone && transcript && transcript.length > 50) {
+          // A call is "dropped" if the WS just closed without the pipeline
+          // deliberately ending it (end-call phrase, silence timeout, tool, max-duration).
+          // Only flag it for short-ish calls (< 20 min) — very long calls
+          // that max out aren't really "dropped".
+          const wasDropped =
+            !session.naturalEndTriggered &&
+            !session.wasTransferred &&
+            durationSeconds > 15 &&
+            durationSeconds < 1200;
+
           void (async () => {
             try {
               const memLlmProvs = await db.select().from(providersTable).where(
@@ -369,14 +390,27 @@ export async function endSession(sessionId: string): Promise<void> {
               const memLlmKey = memLlmProvs[0]?.apiKey;
               if (memLlmKey) {
                 const memLlm = createLLMAdapter(session.agentLlmProvider, memLlmKey, session.agentLlmModel);
+                const history = session.pipeline.getHistory();
+                // Update caller profile (with dropped-call flag)
                 await updateCallerProfile({
-                  agentId:    call.agentId,
+                  agentId:     call.agentId,
                   phoneNumber: session.callerPhone!,
-                  history:    session.pipeline.getHistory(),
-                  llm:        memLlm,
-                  existing:   session.callerProfileSnapshot,
-                  callId:     session.callId,
+                  history,
+                  llm:         memLlm,
+                  existing:    session.callerProfileSnapshot,
+                  callId:      session.callId,
+                  wasDropped,
                 });
+                // Detect "call me back in X min" and schedule callback if found
+                if (!wasDropped) {
+                  await detectCallbackRequest({
+                    agentId:  call.agentId,
+                    toNumber: session.callerPhone!,
+                    history,
+                    llm:      memLlm,
+                    callId:   session.callId,
+                  });
+                }
               }
             } catch (memErr) {
               logger.warn({ sessionId, memErr }, "Post-call caller memory update failed");

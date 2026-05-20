@@ -79,48 +79,7 @@ function resolveWebhookBase(req: Parameters<Parameters<IRouter["post"]>[1]>[0], 
   return `${proto}://${host}`;
 }
 
-async function dialTwilio(opts: {
-  accountSid: string; authToken: string; fromNumber: string;
-  toNumber: string; webhookUrl: string; statusCallbackUrl: string;
-}): Promise<string> {
-  const url = `https://api.twilio.com/2010-04-01/Accounts/${opts.accountSid}/Calls.json`;
-  const creds = Buffer.from(`${opts.accountSid}:${opts.authToken}`).toString("base64");
-  const body = new URLSearchParams({
-    To: opts.toNumber, From: opts.fromNumber,
-    Url: opts.webhookUrl, StatusCallback: opts.statusCallbackUrl,
-    StatusCallbackMethod: "POST",
-  });
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { Authorization: `Basic ${creds}`, "Content-Type": "application/x-www-form-urlencoded" },
-    body: body.toString(),
-  });
-  if (!resp.ok) {
-    const err = await resp.text();
-    throw new Error(`Twilio API error ${resp.status}: ${err}`);
-  }
-  const data = await resp.json() as { sid: string };
-  return data.sid;
-}
-
-async function dialPlivo(opts: {
-  authId: string; authToken: string; fromNumber: string;
-  toNumber: string; answerUrl: string;
-}): Promise<string> {
-  const url = `https://api.plivo.com/v1/Account/${opts.authId}/Call/`;
-  const creds = Buffer.from(`${opts.authId}:${opts.authToken}`).toString("base64");
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { Authorization: `Basic ${creds}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ to: opts.toNumber, from: opts.fromNumber, answer_url: opts.answerUrl, answer_method: "POST" }),
-  });
-  if (!resp.ok) {
-    const err = await resp.text();
-    throw new Error(`Plivo API error ${resp.status}: ${err}`);
-  }
-  const data = await resp.json() as { request_uuid: string };
-  return data.request_uuid;
-}
+import { dialTwilio, dialPlivo, dialVobiz } from "../orchestration/telephony/dial.js";
 
 /* ── POST /calls/outbound ─────────────────────────────────────────────────── */
 
@@ -188,25 +147,12 @@ router.post("/calls/outbound", async (req, res): Promise<void> => {
       const cfg = providerRow.extraConfig ? JSON.parse(providerRow.extraConfig) as Record<string, string> : {};
       if (!cfg["authId"]) { res.status(400).json({ error: 'Vobiz provider is missing "authId" in Extra Config. Edit the provider and add: {"authId":"MA_XXXXXXXX","fromNumber":"+1xxx"}' }); return; }
       if (!cfg["fromNumber"]) { res.status(400).json({ error: 'Vobiz provider is missing "fromNumber" in Extra Config.' }); return; }
-      const url = `https://api.vobiz.ai/api/v1/Account/${cfg["authId"]}/Call/`;
-      const resp = await fetch(url, {
-        method: "POST",
-        headers: {
-          "X-Auth-ID": cfg["authId"]!, "X-Auth-Token": providerRow.apiKey,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          to: toNumber, from: cfg["fromNumber"]!,
-          answer_url: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${agentId}`,
-          hangup_url:  `${baseUrl}/api/webhooks/vobiz/status`,
-        }),
+      providerCallId = await dialVobiz({
+        authId: cfg["authId"]!, authToken: providerRow.apiKey,
+        fromNumber: cfg["fromNumber"]!, toNumber,
+        answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${agentId}`,
+        hangupUrl:  `${baseUrl}/api/webhooks/vobiz/status`,
       });
-      if (!resp.ok) {
-        const err = await resp.text();
-        throw new Error(`Vobiz API error ${resp.status}: ${err}`);
-      }
-      const data = await resp.json() as { call_uuid?: string; request_uuid?: string };
-      providerCallId = data.call_uuid ?? data.request_uuid ?? "unknown";
     } else {
       res.status(400).json({ error: `Outbound calling is not yet supported for provider: ${provider}` });
       return;

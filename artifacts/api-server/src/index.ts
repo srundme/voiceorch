@@ -5,6 +5,7 @@ import { WebSocketServer } from "ws";
 import app from "./app.js";
 import { logger } from "./lib/logger.js";
 import { initAudioPool } from "./orchestration/audioPool.js";
+import { startCallbackPoller } from "./orchestration/callbackScheduler.js";
 import { handleTwilioWebSocket } from "./orchestration/telephony/twilio.js";
 import { handlePlivoWebSocket } from "./orchestration/telephony/plivo.js";
 import { handleVobizWebSocket } from "./orchestration/telephony/vobiz.js";
@@ -53,4 +54,5 @@ server.on("upgrade", (request, socket, head) => {
 
 server.listen(port, () => {
   logger.info({ port }, "Server listening");
+  startCallbackPoller();
 });
