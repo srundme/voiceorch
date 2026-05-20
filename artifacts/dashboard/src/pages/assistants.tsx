@@ -80,6 +80,15 @@ const TELEPHONY_PROVIDERS = [
   { value: "vonage",  label: "Vonage" },
   { value: "vobiz",   label: "Vobiz" },
 ];
+
+const TELEPHONY_AUDIO_DEFAULTS: Record<string, {
+  encoding: string; samplingRate: number; format: string; stream: boolean; label: string; note: string;
+}> = {
+  twilio:  { encoding: "mulaw", samplingRate: 8000,  format: "wav",  stream: true,  label: "μ-law · 8 kHz · WAV", note: "PSTN standard for Twilio (North America & global)" },
+  plivo:   { encoding: "mulaw", samplingRate: 8000,  format: "wav",  stream: true,  label: "μ-law · 8 kHz · WAV", note: "PSTN standard for Plivo" },
+  vonage:  { encoding: "mulaw", samplingRate: 8000,  format: "wav",  stream: true,  label: "μ-law · 8 kHz · WAV", note: "PCMU (μ-law) used by Vonage WebSockets" },
+  vobiz:   { encoding: "alaw",  samplingRate: 8000,  format: "wav",  stream: true,  label: "A-law · 8 kHz · WAV", note: "A-law standard for Vobiz (India/Asia telephony)" },
+};
 const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
   openai:    [{ value: "gpt-4o-mini", label: "GPT-4o Mini" }, { value: "gpt-4o", label: "GPT-4o" }, { value: "gpt-4-turbo", label: "GPT-4 Turbo" }, { value: "gpt-3.5-turbo", label: "GPT-3.5 Turbo" }],
   anthropic: [{ value: "claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet" }, { value: "claude-3-5-haiku-20241022", label: "Claude 3.5 Haiku" }, { value: "claude-3-opus-20240229", label: "Claude 3 Opus" }],
@@ -597,6 +606,8 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
   const [endCallPhrases, setEndCallPhrases]                 = useState("");
   const [inactivityMessage, setInactivityMessage]           = useState("");
 
+  const [audioAdvanced, setAudioAdvanced]                   = useState(false);
+
   // ── Tab 5 — Call ────────────────────────────────────────────────
   const [maxDuration, setMaxDuration]                       = useState(300);
   const [silenceTimeout, setSilenceTimeout]                 = useState(30);
@@ -1081,45 +1092,93 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                   }
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <p className="text-xs text-zinc-400 mb-1">Sampling Rate</p>
-                  <Input type="number" value={cfg.ttsSamplingRate ?? ""} onChange={e => setCfg({ ttsSamplingRate: parseInt(e.target.value) || undefined })}
-                    placeholder="e.g. 24000" className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200 placeholder:text-zinc-600" />
+              {/* ── Auto-config banner ── */}
+              {telephony && TELEPHONY_AUDIO_DEFAULTS[telephony] ? (
+                <div className="rounded-lg bg-emerald-950/40 border border-emerald-800/50 px-3 py-2.5 flex items-start gap-2.5">
+                  <Check className="h-3.5 w-3.5 text-emerald-400 mt-0.5 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-emerald-300 font-medium">
+                      Auto-configured for {TELEPHONY_PROVIDERS.find(p => p.value === telephony)?.label}
+                    </p>
+                    <p className="text-[11px] text-emerald-600 mt-0.5">
+                      {TELEPHONY_AUDIO_DEFAULTS[telephony]!.label} · {TELEPHONY_AUDIO_DEFAULTS[telephony]!.note}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAudioAdvanced(v => !v)}
+                    className="text-[11px] text-zinc-500 hover:text-zinc-300 whitespace-nowrap shrink-0 mt-0.5"
+                  >
+                    {audioAdvanced ? "Hide advanced" : "Advanced"}
+                  </button>
                 </div>
-                <div>
-                  <p className="text-xs text-zinc-400 mb-1">Encoding</p>
-                  <Select value={cfg.ttsEncoding ?? "none"} onValueChange={v => setCfg({ ttsEncoding: v === "none" ? undefined : v })}>
-                    <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200"><SelectValue placeholder="Default" /></SelectTrigger>
-                    <SelectContent className="bg-zinc-900 border-zinc-700">
-                      <SelectItem value="none" className="text-zinc-400 text-xs">Default</SelectItem>
-                      <SelectItem value="pcm_s16le" className="text-zinc-300 text-xs">PCM 16-bit LE</SelectItem>
-                      <SelectItem value="mulaw" className="text-zinc-300 text-xs">μ-law</SelectItem>
-                      <SelectItem value="alaw" className="text-zinc-300 text-xs">A-law</SelectItem>
-                      <SelectItem value="mp3" className="text-zinc-300 text-xs">MP3</SelectItem>
-                      <SelectItem value="opus" className="text-zinc-300 text-xs">Opus</SelectItem>
-                    </SelectContent>
-                  </Select>
+              ) : (
+                <div className="rounded-lg bg-zinc-900/60 border border-zinc-700/50 px-3 py-2.5 flex items-center justify-between">
+                  <p className="text-[11px] text-zinc-500">Select a telephony provider above to auto-configure audio.</p>
+                  <button
+                    type="button"
+                    onClick={() => setAudioAdvanced(v => !v)}
+                    className="text-[11px] text-zinc-500 hover:text-zinc-300"
+                  >
+                    {audioAdvanced ? "Hide" : "Manual setup"}
+                  </button>
                 </div>
-                <div>
-                  <p className="text-xs text-zinc-400 mb-1">Format</p>
-                  <Select value={cfg.ttsAudioFormat ?? "none"} onValueChange={v => setCfg({ ttsAudioFormat: v === "none" ? undefined : v })}>
-                    <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200"><SelectValue placeholder="Default" /></SelectTrigger>
-                    <SelectContent className="bg-zinc-900 border-zinc-700">
-                      <SelectItem value="none" className="text-zinc-400 text-xs">Default</SelectItem>
-                      <SelectItem value="wav" className="text-zinc-300 text-xs">WAV</SelectItem>
-                      <SelectItem value="mp3" className="text-zinc-300 text-xs">MP3</SelectItem>
-                      <SelectItem value="ogg" className="text-zinc-300 text-xs">OGG</SelectItem>
-                      <SelectItem value="flac" className="text-zinc-300 text-xs">FLAC</SelectItem>
-                    </SelectContent>
-                  </Select>
+              )}
+
+              {/* ── Advanced knobs (hidden by default) ── */}
+              {audioAdvanced && (
+                <div className="space-y-3 pt-1 border-t border-zinc-700/40">
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <p className="text-xs text-zinc-400 mb-1">Sampling Rate</p>
+                      <Input type="number" value={cfg.ttsSamplingRate ?? ""} onChange={e => setCfg({ ttsSamplingRate: parseInt(e.target.value) || undefined })}
+                        placeholder="e.g. 8000" className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200 placeholder:text-zinc-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-zinc-400 mb-1">Encoding</p>
+                      <Select value={cfg.ttsEncoding ?? "none"} onValueChange={v => setCfg({ ttsEncoding: v === "none" ? undefined : v })}>
+                        <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200"><SelectValue placeholder="Default" /></SelectTrigger>
+                        <SelectContent className="bg-zinc-900 border-zinc-700">
+                          <SelectItem value="none" className="text-zinc-400 text-xs">Default</SelectItem>
+                          <SelectItem value="pcm_s16le" className="text-zinc-300 text-xs">PCM 16-bit LE</SelectItem>
+                          <SelectItem value="mulaw" className="text-zinc-300 text-xs">μ-law</SelectItem>
+                          <SelectItem value="alaw" className="text-zinc-300 text-xs">A-law</SelectItem>
+                          <SelectItem value="mp3" className="text-zinc-300 text-xs">MP3</SelectItem>
+                          <SelectItem value="opus" className="text-zinc-300 text-xs">Opus</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <p className="text-xs text-zinc-400 mb-1">Format</p>
+                      <Select value={cfg.ttsAudioFormat ?? "none"} onValueChange={v => setCfg({ ttsAudioFormat: v === "none" ? undefined : v })}>
+                        <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200"><SelectValue placeholder="Default" /></SelectTrigger>
+                        <SelectContent className="bg-zinc-900 border-zinc-700">
+                          <SelectItem value="none" className="text-zinc-400 text-xs">Default</SelectItem>
+                          <SelectItem value="wav" className="text-zinc-300 text-xs">WAV</SelectItem>
+                          <SelectItem value="mp3" className="text-zinc-300 text-xs">MP3</SelectItem>
+                          <SelectItem value="ogg" className="text-zinc-300 text-xs">OGG</SelectItem>
+                          <SelectItem value="flac" className="text-zinc-300 text-xs">FLAC</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <ToggleRow label="Stream Audio" desc="Enable streaming output for lower latency" checked={cfg.ttsStream ?? false} onChange={v => setCfg({ ttsStream: v })} />
                 </div>
-              </div>
-              <ToggleRow label="Stream Audio" desc="Enable streaming output for lower latency" checked={cfg.ttsStream ?? false} onChange={v => setCfg({ ttsStream: v })} />
+              )}
             </div>
             <div className="bg-zinc-800/40 border border-zinc-700/40 rounded-xl p-4 space-y-3">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Telephony</p>
-              <Select value={telephony} onValueChange={mark(setTelephony)}>
+              <Select
+                value={telephony}
+                onValueChange={v => {
+                  mark(setTelephony)(v);
+                  const d = TELEPHONY_AUDIO_DEFAULTS[v];
+                  if (d) {
+                    setCfg({ ttsEncoding: d.encoding, ttsSamplingRate: d.samplingRate, ttsAudioFormat: d.format, ttsStream: d.stream });
+                    setAudioAdvanced(false);
+                  }
+                }}
+              >
                 <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200"><SelectValue /></SelectTrigger>
                 <SelectContent className="bg-zinc-900 border-zinc-700">
                   {TELEPHONY_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-zinc-300 text-xs">{p.label}</SelectItem>)}
