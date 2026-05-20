@@ -12,16 +12,43 @@ const VALID_SARVAM_STT_MODELS = new Set([
 ]);
 const DEFAULT_SARVAM_STT_MODEL = "saarika:v2";
 
+/** All language codes Sarvam accepts (BCP 47 with -IN region). */
+const VALID_SARVAM_LANG = new Set([
+  "unknown",
+  "hi-IN", "bn-IN", "kn-IN", "ml-IN", "mr-IN", "od-IN",
+  "pa-IN", "ta-IN", "te-IN", "en-IN", "gu-IN", "as-IN",
+  "ur-IN", "ne-IN", "kok-IN", "ks-IN", "sd-IN", "sa-IN",
+  "sat-IN", "mni-IN", "brx-IN", "mai-IN", "doi-IN",
+]);
+
+/** Map bare ISO-639-1 codes → Sarvam BCP 47 equivalents. */
+const LANG_REMAP: Record<string, string> = {
+  en: "en-IN", hi: "hi-IN", bn: "bn-IN", kn: "kn-IN",
+  ml: "ml-IN", mr: "mr-IN", pa: "pa-IN", ta: "ta-IN",
+  te: "te-IN", gu: "gu-IN", ur: "ur-IN",
+};
+
+function normaliseSarvamLang(code: string | null): string {
+  if (!code) return "en-IN";
+  if (VALID_SARVAM_LANG.has(code)) return code;
+  const remapped = LANG_REMAP[code.toLowerCase()];
+  if (remapped) return remapped;
+  // Try appending -IN (e.g. "od" → "od-IN")
+  const withIN = `${code}-IN`;
+  if (VALID_SARVAM_LANG.has(withIN)) return withIN;
+  return "en-IN";   // safe fallback
+}
+
 export class SarvamSTT implements STTAdapter {
   private key: string;
   private model: string;
-  private cfg: STTConfig;
+  private langCode: string;
 
   constructor(apiKey: string, model: string | null, cfg: STTConfig) {
     this.key = apiKey;
     const candidate = model ?? "";
     this.model = VALID_SARVAM_STT_MODELS.has(candidate) ? candidate : DEFAULT_SARVAM_STT_MODEL;
-    this.cfg = cfg;
+    this.langCode = normaliseSarvamLang(cfg.language);
   }
 
   async transcribe(audioBuffer: Buffer, sampleRate = 16000): Promise<string> {
@@ -32,8 +59,7 @@ export class SarvamSTT implements STTAdapter {
     new Uint8Array(wavAb).set(wav);
     formData.append("file", new Blob([wavAb], { type: "audio/wav" }), "audio.wav");
     formData.append("model", this.model);
-    // Use configured language; Sarvam uses IETF BCP 47 codes (e.g. hi-IN, en-IN)
-    formData.append("language_code", this.cfg.language ?? "en-IN");
+    formData.append("language_code", this.langCode);
 
     const resp = await fetch("https://api.sarvam.ai/speech-to-text", {
       method: "POST",
