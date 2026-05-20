@@ -59,6 +59,7 @@ import type {
   PurchasePhoneNumberInput,
   TopupInput,
   TopupOrder,
+  UpdateCallDispositionBody,
   VerifyPaymentInput,
   WalletInfo,
   WalletTransaction,
@@ -1038,6 +1039,78 @@ export const useEndCall = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getEndCallMutationOptions(options));
+    }
+
+export const getUpdateCallDispositionUrl = (id: number,) => {
+
+
+
+
+  return `/api/calls/${id}/disposition`
+}
+
+/**
+ * @summary Manually set or override disposition fields for a call
+ */
+export const updateCallDisposition = async (id: number,
+    updateCallDispositionBody: UpdateCallDispositionBody, options?: RequestInit): Promise<Call> => {
+
+  return customFetch<Call>(getUpdateCallDispositionUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateCallDispositionBody,)
+  }
+);}
+
+
+
+
+export const getUpdateCallDispositionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCallDisposition>>, TError,{id: number;data: BodyType<UpdateCallDispositionBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateCallDisposition>>, TError,{id: number;data: BodyType<UpdateCallDispositionBody>}, TContext> => {
+
+const mutationKey = ['updateCallDisposition'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateCallDisposition>>, {id: number;data: BodyType<UpdateCallDispositionBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateCallDisposition(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateCallDispositionMutationResult = NonNullable<Awaited<ReturnType<typeof updateCallDisposition>>>
+    export type UpdateCallDispositionMutationBody = BodyType<UpdateCallDispositionBody>
+    export type UpdateCallDispositionMutationError = ErrorType<void>
+
+    /**
+ * @summary Manually set or override disposition fields for a call
+ */
+export const useUpdateCallDisposition = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCallDisposition>>, TError,{id: number;data: BodyType<UpdateCallDispositionBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateCallDisposition>>,
+        TError,
+        {id: number;data: BodyType<UpdateCallDispositionBody>},
+        TContext
+      > => {
+      return useMutation(getUpdateCallDispositionMutationOptions(options));
     }
 
 export const getListProvidersUrl = () => {

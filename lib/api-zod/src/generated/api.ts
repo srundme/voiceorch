@@ -62,6 +62,13 @@ export const ListAgentsResponseItem = zod.object({
 })).nullish().describe('List of tools (functions) the LLM can invoke during a call'),
   "maxConcurrentCalls": zod.number().nullish().describe('Per-agent concurrent call cap (null = use account limit)'),
   "monthlySpendLimitCents": zod.number().nullish().describe('Monthly spend cap in cents (null = no limit)'),
+  "dispositionSchema": zod.array(zod.object({
+  "name": zod.string().describe('Snake-case field key (e.g. outcome, lead_score)'),
+  "label": zod.string().describe('Human-readable label shown in the UI (e.g. \"Call Outcome\")'),
+  "type": zod.enum(['text', 'number', 'choice', 'boolean']).describe('Data type of the field'),
+  "options": zod.array(zod.string()).optional().describe('Allowed values for choice fields (e.g. [\"Interested\",\"Not Interested\"])'),
+  "required": zod.boolean().optional().describe('Whether this field must always be filled')
+})).nullish().describe('User-defined fields to extract from each call via LLM'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -171,6 +178,13 @@ export const GetAgentResponse = zod.object({
 })).nullish().describe('List of tools (functions) the LLM can invoke during a call'),
   "maxConcurrentCalls": zod.number().nullish().describe('Per-agent concurrent call cap (null = use account limit)'),
   "monthlySpendLimitCents": zod.number().nullish().describe('Monthly spend cap in cents (null = no limit)'),
+  "dispositionSchema": zod.array(zod.object({
+  "name": zod.string().describe('Snake-case field key (e.g. outcome, lead_score)'),
+  "label": zod.string().describe('Human-readable label shown in the UI (e.g. \"Call Outcome\")'),
+  "type": zod.enum(['text', 'number', 'choice', 'boolean']).describe('Data type of the field'),
+  "options": zod.array(zod.string()).optional().describe('Allowed values for choice fields (e.g. [\"Interested\",\"Not Interested\"])'),
+  "required": zod.boolean().optional().describe('Whether this field must always be filled')
+})).nullish().describe('User-defined fields to extract from each call via LLM'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -230,7 +244,14 @@ export const UpdateAgentBody = zod.object({
 })).optional().describe('List of tools (functions) the LLM can invoke during a call'),
   "status": zod.string().optional(),
   "maxConcurrentCalls": zod.number().optional(),
-  "monthlySpendLimitCents": zod.number().optional()
+  "monthlySpendLimitCents": zod.number().optional(),
+  "dispositionSchema": zod.array(zod.object({
+  "name": zod.string().describe('Snake-case field key (e.g. outcome, lead_score)'),
+  "label": zod.string().describe('Human-readable label shown in the UI (e.g. \"Call Outcome\")'),
+  "type": zod.enum(['text', 'number', 'choice', 'boolean']).describe('Data type of the field'),
+  "options": zod.array(zod.string()).optional().describe('Allowed values for choice fields (e.g. [\"Interested\",\"Not Interested\"])'),
+  "required": zod.boolean().optional().describe('Whether this field must always be filled')
+})).optional()
 })
 
 export const UpdateAgentResponse = zod.object({
@@ -276,6 +297,13 @@ export const UpdateAgentResponse = zod.object({
 })).nullish().describe('List of tools (functions) the LLM can invoke during a call'),
   "maxConcurrentCalls": zod.number().nullish().describe('Per-agent concurrent call cap (null = use account limit)'),
   "monthlySpendLimitCents": zod.number().nullish().describe('Monthly spend cap in cents (null = no limit)'),
+  "dispositionSchema": zod.array(zod.object({
+  "name": zod.string().describe('Snake-case field key (e.g. outcome, lead_score)'),
+  "label": zod.string().describe('Human-readable label shown in the UI (e.g. \"Call Outcome\")'),
+  "type": zod.enum(['text', 'number', 'choice', 'boolean']).describe('Data type of the field'),
+  "options": zod.array(zod.string()).optional().describe('Allowed values for choice fields (e.g. [\"Interested\",\"Not Interested\"])'),
+  "required": zod.boolean().optional().describe('Whether this field must always be filled')
+})).nullish().describe('User-defined fields to extract from each call via LLM'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -345,6 +373,13 @@ export const ToggleAgentResponse = zod.object({
 })).nullish().describe('List of tools (functions) the LLM can invoke during a call'),
   "maxConcurrentCalls": zod.number().nullish().describe('Per-agent concurrent call cap (null = use account limit)'),
   "monthlySpendLimitCents": zod.number().nullish().describe('Monthly spend cap in cents (null = no limit)'),
+  "dispositionSchema": zod.array(zod.object({
+  "name": zod.string().describe('Snake-case field key (e.g. outcome, lead_score)'),
+  "label": zod.string().describe('Human-readable label shown in the UI (e.g. \"Call Outcome\")'),
+  "type": zod.enum(['text', 'number', 'choice', 'boolean']).describe('Data type of the field'),
+  "options": zod.array(zod.string()).optional().describe('Allowed values for choice fields (e.g. [\"Interested\",\"Not Interested\"])'),
+  "required": zod.boolean().optional().describe('Whether this field must always be filled')
+})).nullish().describe('User-defined fields to extract from each call via LLM'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -383,7 +418,8 @@ export const ListCallsResponseItem = zod.object({
   "ttsFirstChunkMs": zod.number().nullish().describe('Average TTS time-to-first-audio-chunk across all turns (ms)'),
   "executionId": zod.string().nullish().describe('Unique execution identifier for this call (exec_xxxxxxxx)'),
   "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents'),
-  "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary')
+  "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary'),
+  "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name')
 })
 export const ListCallsResponse = zod.array(ListCallsResponseItem)
 
@@ -425,7 +461,8 @@ export const GetCallResponse = zod.object({
   "ttsFirstChunkMs": zod.number().nullish().describe('Average TTS time-to-first-audio-chunk across all turns (ms)'),
   "executionId": zod.string().nullish().describe('Unique execution identifier for this call (exec_xxxxxxxx)'),
   "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents'),
-  "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary')
+  "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary'),
+  "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name')
 })
 
 
@@ -464,7 +501,8 @@ export const UpdateCallResponse = zod.object({
   "ttsFirstChunkMs": zod.number().nullish().describe('Average TTS time-to-first-audio-chunk across all turns (ms)'),
   "executionId": zod.string().nullish().describe('Unique execution identifier for this call (exec_xxxxxxxx)'),
   "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents'),
-  "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary')
+  "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary'),
+  "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name')
 })
 
 
@@ -510,7 +548,43 @@ export const EndCallResponse = zod.object({
   "ttsFirstChunkMs": zod.number().nullish().describe('Average TTS time-to-first-audio-chunk across all turns (ms)'),
   "executionId": zod.string().nullish().describe('Unique execution identifier for this call (exec_xxxxxxxx)'),
   "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents'),
-  "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary')
+  "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary'),
+  "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name')
+})
+
+
+/**
+ * @summary Manually set or override disposition fields for a call
+ */
+export const UpdateCallDispositionParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateCallDispositionBody = zod.object({
+  "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).optional()
+})
+
+export const UpdateCallDispositionResponse = zod.object({
+  "id": zod.number(),
+  "agentId": zod.number(),
+  "agentName": zod.string(),
+  "status": zod.enum(['pending', 'in_progress', 'completed', 'failed', 'cancelled', 'transferred']),
+  "toNumber": zod.string(),
+  "fromNumber": zod.string(),
+  "durationSeconds": zod.number().nullish(),
+  "transcript": zod.string().nullish(),
+  "recordingUrl": zod.string().nullish(),
+  "errorMessage": zod.string().nullish(),
+  "metadata": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "endedAt": zod.coerce.date().nullish(),
+  "sttLatencyMs": zod.number().nullish().describe('Average STT round-trip latency across all turns (ms)'),
+  "llmLatencyMs": zod.number().nullish().describe('Average LLM time-to-first-token across all turns (ms)'),
+  "ttsFirstChunkMs": zod.number().nullish().describe('Average TTS time-to-first-audio-chunk across all turns (ms)'),
+  "executionId": zod.string().nullish().describe('Unique execution identifier for this call (exec_xxxxxxxx)'),
+  "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents'),
+  "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary'),
+  "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name')
 })
 
 
@@ -609,7 +683,8 @@ export const GetRecentCallsResponseItem = zod.object({
   "ttsFirstChunkMs": zod.number().nullish().describe('Average TTS time-to-first-audio-chunk across all turns (ms)'),
   "executionId": zod.string().nullish().describe('Unique execution identifier for this call (exec_xxxxxxxx)'),
   "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents'),
-  "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary')
+  "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary'),
+  "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name')
 })
 export const GetRecentCallsResponse = zod.array(GetRecentCallsResponseItem)
 

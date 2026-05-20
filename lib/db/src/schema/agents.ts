@@ -46,6 +46,15 @@ export const agentsTable = pgTable("agents", {
   // ── Tools ─────────────────────────────────────────────────────────────────────
   tools: json("tools").$type<Record<string, unknown>[]>(),
 
+  // ── Disposition Schema ────────────────────────────────────────────────────────
+  dispositionSchema: json("disposition_schema").$type<Array<{
+    name: string;
+    label: string;
+    type: "text" | "number" | "choice" | "boolean";
+    options?: string[];
+    required?: boolean;
+  }>>(),
+
   // ── Usage Limits ─────────────────────────────────────────────────────────────
   maxConcurrentCalls: integer("max_concurrent_calls"),
   monthlySpendLimitCents: integer("monthly_spend_limit_cents"),

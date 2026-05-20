@@ -10,6 +10,32 @@ export interface HealthStatus {
 }
 
 /**
+ * Data type of the field
+ */
+export type DispositionFieldType = typeof DispositionFieldType[keyof typeof DispositionFieldType];
+
+
+export const DispositionFieldType = {
+  text: 'text',
+  number: 'number',
+  choice: 'choice',
+  boolean: 'boolean',
+} as const;
+
+export interface DispositionField {
+  /** Snake-case field key (e.g. outcome, lead_score) */
+  name: string;
+  /** Human-readable label shown in the UI (e.g. "Call Outcome") */
+  label: string;
+  /** Data type of the field */
+  type: DispositionFieldType;
+  /** Allowed values for choice fields (e.g. ["Interested","Not Interested"]) */
+  options?: string[];
+  /** Whether this field must always be filled */
+  required?: boolean;
+}
+
+/**
  * Tool type — currently only call_transfer is supported
  */
 export type AgentToolType = typeof AgentToolType[keyof typeof AgentToolType];
@@ -189,6 +215,11 @@ export interface Agent {
      * @nullable
      */
   monthlySpendLimitCents?: number | null;
+  /**
+     * User-defined fields to extract from each call via LLM
+     * @nullable
+     */
+  dispositionSchema?: DispositionField[] | null;
   totalCalls?: number;
   successfulCalls?: number;
   /** @nullable */
@@ -286,6 +317,7 @@ export interface AgentUpdate {
   status?: string;
   maxConcurrentCalls?: number;
   monthlySpendLimitCents?: number;
+  dispositionSchema?: DispositionField[];
 }
 
 export type CallStatus = typeof CallStatus[keyof typeof CallStatus];
@@ -299,6 +331,12 @@ export const CallStatus = {
   cancelled: 'cancelled',
   transferred: 'transferred',
 } as const;
+
+/**
+ * Extracted disposition values keyed by field name
+ * @nullable
+ */
+export type CallDispositionResult = {[key: string]: string | number | boolean} | null;
 
 export interface Call {
   id: number;
@@ -350,6 +388,11 @@ export interface Call {
      * @nullable
      */
   callSummary?: string | null;
+  /**
+     * Extracted disposition values keyed by field name
+     * @nullable
+     */
+  dispositionResult?: CallDispositionResult;
 }
 
 export interface CallEndPayload {
@@ -894,6 +937,12 @@ agentId?: number | null;
  * @nullable
  */
 status?: string | null;
+};
+
+export type UpdateCallDispositionBodyDispositionResult = {[key: string]: string | number | boolean};
+
+export type UpdateCallDispositionBody = {
+  dispositionResult?: UpdateCallDispositionBodyDispositionResult;
 };
 
 export type ListTransactionsParams = {

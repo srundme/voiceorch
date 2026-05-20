@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, json } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { agentsTable } from "./agents";
@@ -21,6 +21,7 @@ export const callsTable = pgTable("calls", {
   llmLatencyMs: integer("llm_latency_ms"),
   ttsFirstChunkMs: integer("tts_first_chunk_ms"),
   costCents: integer("cost_cents"),
+  dispositionResult: json("disposition_result").$type<Record<string, string | number | boolean>>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   endedAt: timestamp("ended_at", { withTimezone: true }),
 });

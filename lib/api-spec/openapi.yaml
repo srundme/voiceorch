@@ -305,6 +305,41 @@ paths:
         "404":
           description: Not found
 
+  /calls/{id}/disposition:
+    patch:
+      operationId: updateCallDisposition
+      tags: [calls]
+      summary: Manually set or override disposition fields for a call
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                dispositionResult:
+                  type: object
+                  additionalProperties:
+                    oneOf:
+                      - type: string
+                      - type: number
+                      - type: boolean
+      responses:
+        "200":
+          description: Disposition updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Call"
+        "404":
+          description: Not found
+
   # ── Provider Keys ────────────────────────────────────────────────────────────
   /providers:
     get:
@@ -1099,6 +1134,29 @@ components:
         - status
 
     # ── Agent Tool ──────────────────────────────────────────────────────────────
+    DispositionField:
+      type: object
+      required: [name, label, type]
+      properties:
+        name:
+          type: string
+          description: Snake-case field key (e.g. outcome, lead_score)
+        label:
+          type: string
+          description: Human-readable label shown in the UI (e.g. "Call Outcome")
+        type:
+          type: string
+          enum: [text, number, choice, boolean]
+          description: Data type of the field
+        options:
+          type: array
+          items:
+            type: string
+          description: Allowed values for choice fields (e.g. ["Interested","Not Interested"])
+        required:
+          type: boolean
+          description: Whether this field must always be filled
+
     AgentTool:
       type: object
       required: [type, name, description, transferTo]
@@ -1227,6 +1285,11 @@ components:
         monthlySpendLimitCents:
           type: ["integer", "null"]
           description: Monthly spend cap in cents (null = no limit)
+        dispositionSchema:
+          type: ["array", "null"]
+          description: User-defined fields to extract from each call via LLM
+          items:
+            $ref: "#/components/schemas/DispositionField"
         totalCalls:
           type: integer
         successfulCalls:
@@ -1397,6 +1460,10 @@ components:
           type: integer
         monthlySpendLimitCents:
           type: integer
+        dispositionSchema:
+          type: array
+          items:
+            $ref: "#/components/schemas/DispositionField"
 
     # ── Call ───────────────────────────────────────────────────────────────────
     Call:
@@ -1450,6 +1517,14 @@ components:
         callSummary:
           type: ["string", "null"]
           description: AI-generated 3-line post-call summary
+        dispositionResult:
+          type: ["object", "null"]
+          description: Extracted disposition values keyed by field name
+          additionalProperties:
+            oneOf:
+              - type: string
+              - type: number
+              - type: boolean
 
     CallEndPayload:
       type: object
