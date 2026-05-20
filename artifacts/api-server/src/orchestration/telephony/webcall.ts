@@ -4,6 +4,8 @@ import { eq } from "drizzle-orm";
 import { createSTTAdapter } from "../adapters/stt/index.js";
 import { createLLMAdapter } from "../adapters/llm/index.js";
 import { createTTSAdapter } from "../adapters/tts/index.js";
+import { downsample16to8 } from "../audio.js";
+import { detectCallerGender } from "../genderDetection.js";
 import { logger } from "../../lib/logger.js";
 import type { ConversationTurn, STTConfig } from "../types.js";
 
@@ -119,6 +121,59 @@ export async function handleWebCallWebSocket(
   const history: ConversationTurn[] = [];
   let closed      = false;
 
+  // ── Gender detection state ────────────────────────────────────────────────
+  // Extract config from agent.agentConfig JSONB (same defaults as session.ts)
+  const agentCfg = (agent.agentConfig as Record<string, unknown> | null) ?? {};
+  const genderEnabled       = (agentCfg["genderDetectionEnabled"]          as boolean | undefined) ?? false;
+  const genderProvider      = (agentCfg["genderDetectionProvider"]         as string  | undefined) ?? "internal";
+  const maleSalutation      = (agentCfg["genderDetectionMaleSalutation"]   as string  | undefined) ?? "sir";
+  const femaleSalutation    = (agentCfg["genderDetectionFemaleSalutation"] as string  | undefined) ?? "ma'am";
+  const neutralSalutation   = (agentCfg["genderDetectionNeutralSalutation"] as string | undefined) ?? "";
+
+  // We keep a mutable copy of the system prompt so gender detection can patch it in-place.
+  let systemPrompt          = agent.systemPrompt ?? "";
+  let genderDetected        = false;
+  const genderAccum16k: Buffer[] = [];   // raw 16kHz from browser
+  let genderAccumBytes      = 0;
+  const GENDER_MIN_BYTES_16K = 32000;    // ~1 s @ 16kHz 16-bit
+
+  /**
+   * Returns the system prompt with any unresolved {caller_salutation} replaced
+   * by the neutral salutation. Safe to call before gender detection completes.
+   */
+  function resolvedSystemPrompt(): string {
+    if (!genderDetected) {
+      return systemPrompt.replace(/\{caller_salutation\}/g, neutralSalutation);
+    }
+    return systemPrompt;
+  }
+
+  /** Accumulate caller audio; trigger detection once we have ~1 s of speech. */
+  function accumulateGenderAudio(pcm16k: Buffer): void {
+    if (!genderEnabled || genderDetected || genderAccumBytes >= GENDER_MIN_BYTES_16K) return;
+    genderAccum16k.push(pcm16k);
+    genderAccumBytes += pcm16k.length;
+    if (genderAccumBytes >= GENDER_MIN_BYTES_16K) {
+      const combined16k = Buffer.concat(genderAccum16k);
+      genderAccum16k.length = 0;   // free memory
+      const pcm8k = downsample16to8(combined16k);
+      detectCallerGender(pcm8k, {
+        provider: genderProvider,
+        maleSalutation,
+        femaleSalutation,
+        neutralSalutation,
+        providerKeys,
+        callId,
+      }).then((salutation) => {
+        systemPrompt  = systemPrompt.replace(/\{caller_salutation\}/g, salutation);
+        genderDetected = true;
+        logger.info({ callId, salutation }, "WebCall gender detection complete");
+      }).catch((err: unknown) => {
+        logger.warn({ callId, err }, "WebCall gender detection failed");
+      });
+    }
+  }
+
   // ── State ─────────────────────────────────────────────────────────────────
   const audioChunks: Buffer[] = [];
   let silenceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -162,7 +217,7 @@ export async function handleWebCallWebSocket(
 
       await llm.chat(
         history,
-        agent.systemPrompt,
+        resolvedSystemPrompt(),
         (token) => {
           tokenBuf  += token;
           fullReply += token;
@@ -326,7 +381,9 @@ export async function handleWebCallWebSocket(
 
     // Normal VAD (agent silent)
     if (rms > SPEECH_RMS_THRESHOLD) {
-      audioChunks.push(Buffer.from(data));
+      const chunk = Buffer.from(data);
+      audioChunks.push(chunk);
+      accumulateGenderAudio(chunk);   // feed speech audio to gender detector
       clearSilenceTimer();
       if (!processing) sendStatus("listening");
     } else if (audioChunks.length > 0) {
