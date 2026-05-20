@@ -286,6 +286,14 @@ export function getSessionByCallId(callDbId: number): ActiveSession | undefined 
   return undefined;
 }
 
+export function getAllSessions(): Array<{ sessionId: string; callId: number; startedAt: Date }> {
+  return Array.from(sessions.entries()).map(([sessionId, session]) => ({
+    sessionId,
+    callId: session.callId,
+    startedAt: session.startedAt,
+  }));
+}
+
 export async function endSession(sessionId: string): Promise<void> {
   const session = sessions.get(sessionId);
   if (!session) return;

@@ -14,9 +14,13 @@ import phoneNumbersRouter from "./phone-numbers.js";
 import webhookEndpointsRouter from "./webhook-endpoints.js";
 import agentTemplatesRouter from "./agent-templates.js";
 import onboardingRouter from "./onboarding.js";
+import adminRouter from "./admin.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
 const router: IRouter = Router();
+
+// Admin routes bypass user provisioning middleware
+router.use(adminRouter);
 
 router.use(provisionUser);
 router.use(healthRouter);

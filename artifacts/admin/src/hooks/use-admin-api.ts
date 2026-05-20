@@ -1,0 +1,103 @@
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { adminFetch } from "@/lib/api";
+
+// Overview
+export function useOverview() {
+  return useQuery({
+    queryKey: ["admin", "overview"],
+    queryFn: () => adminFetch<any>("/overview"),
+    refetchInterval: 30000,
+  });
+}
+
+// Users
+export function useUsers() {
+  return useQuery({
+    queryKey: ["admin", "users"],
+    queryFn: () => adminFetch<any[]>("/users"),
+  });
+}
+
+export function useUserDetail(clerkId: string) {
+  return useQuery({
+    queryKey: ["admin", "users", clerkId],
+    queryFn: () => adminFetch<any>(`/users/${clerkId}`),
+    enabled: !!clerkId,
+  });
+}
+
+export function useAdjustWallet(clerkId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { adjustmentCents: number; description: string }) => 
+      adminFetch<{ newBalanceCents: number }>(`/users/${clerkId}/wallet`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "users", clerkId] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+    },
+  });
+}
+
+// Finance
+export function useFinanceSummary() {
+  return useQuery({
+    queryKey: ["admin", "finance", "summary"],
+    queryFn: () => adminFetch<any>("/finance/summary"),
+  });
+}
+
+export function useFinanceTransactions() {
+  return useQuery({
+    queryKey: ["admin", "finance", "transactions"],
+    queryFn: () => adminFetch<any[]>("/finance/transactions"),
+  });
+}
+
+// Platform
+export function usePlatformActive() {
+  return useQuery({
+    queryKey: ["admin", "platform", "active"],
+    queryFn: () => adminFetch<any>("/platform/active"),
+    refetchInterval: 10000,
+  });
+}
+
+export function usePlatformCallbacks() {
+  return useQuery({
+    queryKey: ["admin", "platform", "callbacks"],
+    queryFn: () => adminFetch<any[]>("/platform/callbacks"),
+    refetchInterval: 10000,
+  });
+}
+
+export function usePlatformFailedCalls() {
+  return useQuery({
+    queryKey: ["admin", "platform", "failed-calls"],
+    queryFn: () => adminFetch<any[]>("/platform/failed-calls"),
+  });
+}
+
+// Growth
+export function useGrowthFunnel() {
+  return useQuery({
+    queryKey: ["admin", "growth", "funnel"],
+    queryFn: () => adminFetch<any>("/growth/funnel"),
+  });
+}
+
+export function useGrowthTopUsers() {
+  return useQuery({
+    queryKey: ["admin", "growth", "top-users"],
+    queryFn: () => adminFetch<any[]>("/growth/top-users"),
+  });
+}
+
+export function useGrowthInactive() {
+  return useQuery({
+    queryKey: ["admin", "growth", "inactive"],
+    queryFn: () => adminFetch<any[]>("/growth/inactive"),
+  });
+}
