@@ -1,6 +1,7 @@
 import { db, agentsTable, callsTable, providersTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { OrchestrationPipeline } from "./pipeline.js";
+import { createLLMAdapter } from "./adapters/llm/index.js";
 import type { AgentConfig, AgentTool, TelephonyProvider, PipelineMetrics } from "./types.js";
 import { logger } from "../lib/logger.js";
 import {
@@ -74,6 +75,7 @@ export async function createSession(params: {
     backchannelingFrequency: agent.backchannelingFrequency ?? null,
     webhookUrl: agent.webhookUrl ?? null,
     noiseCancellationEnabled: agent.noiseCancellationEnabled ?? false,
+    inactivityMessage: agent.inactivityMessage ?? null,
     sttConfig: {
       language: agent.asrLanguage ?? null,
       backgroundDenoising: agent.asrBackgroundDenoising ?? false,
@@ -88,6 +90,18 @@ export async function createSession(params: {
     },
     tools,
   };
+
+  // ── Resolve dynamic variables in system prompt ─────────────────────────────
+  // Supports {{to_number}}, {{from_number}}, {{agent_name}} in system prompt
+  const dynVars: Record<string, string> = {
+    to_number:   params.toNumber,
+    from_number: params.fromNumber,
+    agent_name:  agent.name,
+  };
+  agentConfig.systemPrompt = agentConfig.systemPrompt.replace(
+    /\{\{(\w+)\}\}/g,
+    (_, key) => (key in dynVars ? dynVars[key as keyof typeof dynVars] : `{{${key as string}}}`)
+  );
 
   // Scope provider keys to this agent's owner; fall back to all active if agent has no userId
   const providerRows = agent.userId
@@ -249,6 +263,37 @@ export async function endSession(sessionId: string): Promise<void> {
           successfulCalls: newSuccessful,
           avgDurationSeconds: newAvg,
         }).where(eq(agentsTable.id, ag.id));
+
+        // ── Post-call AI summary ──────────────────────────────────────────────
+        if (transcript && transcript.length > 100 && ag.userId) {
+          void (async () => {
+            try {
+              const llmProvs = await db.select().from(providersTable).where(
+                and(
+                  eq(providersTable.isActive, true),
+                  eq(providersTable.userId, ag.userId!),
+                  eq(providersTable.providerName, ag.llmProvider)
+                )
+              );
+              const llmKey = llmProvs[0]?.apiKey;
+              if (llmKey) {
+                const llm = createLLMAdapter(ag.llmProvider, llmKey, ag.llmModel);
+                let summary = "";
+                await llm.chat(
+                  [{ role: "user", content: `Summarize this call transcript in exactly 3 concise bullet points:\n\n${transcript.slice(0, 6000)}` }],
+                  "You are a call analyst. Summarize the call in exactly 3 bullet points covering: main topic, key outcomes, and action items. Be brief and factual. Start each bullet with '•'.",
+                  () => {},
+                  (full) => { summary = full; }
+                );
+                if (summary) {
+                  await db.update(callsTable).set({ callSummary: summary }).where(eq(callsTable.id, session.callId));
+                }
+              }
+            } catch (summaryErr) {
+              logger.warn({ sessionId, summaryErr }, "Post-call summary generation failed");
+            }
+          })();
+        }
 
         // ── Post-call webhook ─────────────────────────────────────────────────
         if (ag.webhookUrl) {

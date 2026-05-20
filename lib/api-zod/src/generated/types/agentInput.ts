@@ -38,6 +38,7 @@ export interface AgentInput {
   backchannelingFrequency?: number;
   webhookUrl?: string;
   noiseCancellationEnabled?: boolean;
+  inactivityMessage?: string;
   /** List of tools (functions) the LLM can invoke during a call */
   tools?: AgentTool[];
 }

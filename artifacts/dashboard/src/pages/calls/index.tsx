@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Link } from "wouter";
 import { format, parseISO } from "date-fns";
-import { Search, Phone, Mic, Cpu, Volume2 } from "lucide-react";
+import { Search, Phone, Mic, Cpu, Volume2, DollarSign } from "lucide-react";
 import { 
   useListCalls, 
   getListCallsQueryKey,
@@ -157,6 +157,7 @@ export default function CallsList() {
                     </TooltipContent>
                   </Tooltip>
                 </TableHead>
+                <TableHead>Cost</TableHead>
                 <TableHead className="text-right">Action</TableHead>
               </TableRow>
             </TableHeader>
@@ -171,6 +172,7 @@ export default function CallsList() {
                     <TableCell><Skeleton className="h-8 w-32" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-12" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-12" /></TableCell>
                     <TableCell className="text-right"><Skeleton className="h-8 w-16 ml-auto" /></TableCell>
                   </TableRow>
                 ))
@@ -245,6 +247,16 @@ export default function CallsList() {
                           <span className="text-xs text-muted-foreground/50">—</span>
                         )}
                       </TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {(call as any).costCents != null && (call as any).costCents > 0 ? (
+                          <span className="flex items-center gap-0.5 text-amber-500 dark:text-amber-400">
+                            <DollarSign className="h-3 w-3" />
+                            {((call as any).costCents / 100).toFixed(3)}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground/40">—</span>
+                        )}
+                      </TableCell>
                       <TableCell className="text-right">
                         <Link href={`/calls/${call.id}`}>
                           <Button variant="secondary" size="sm" className="h-8 text-xs font-semibold">View Log</Button>
@@ -255,7 +267,7 @@ export default function CallsList() {
                 })
               ) : (
                 <TableRow>
-                  <TableCell colSpan={8} className="h-64 text-center text-muted-foreground border-0">
+                  <TableCell colSpan={9} className="h-64 text-center text-muted-foreground border-0">
                     <div className="flex flex-col items-center justify-center">
                       <Phone className="h-10 w-10 opacity-20 mb-3" />
                       <p>No calls found matching your filters.</p>

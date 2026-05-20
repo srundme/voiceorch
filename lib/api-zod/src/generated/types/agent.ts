@@ -120,6 +120,11 @@ export interface Agent {
      */
   noiseCancellationEnabled?: boolean | null;
   /**
+     * Message spoken to the caller before hanging up due to silence timeout
+     * @nullable
+     */
+  inactivityMessage?: string | null;
+  /**
      * ID of an attached knowledge base for RAG context injection
      * @nullable
      */

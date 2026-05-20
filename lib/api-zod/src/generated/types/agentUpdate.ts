@@ -37,6 +37,7 @@ export interface AgentUpdate {
   backchannelingFrequency?: number;
   webhookUrl?: string;
   noiseCancellationEnabled?: boolean;
+  inactivityMessage?: string;
   /** ID of an attached knowledge base for RAG context injection */
   knowledgeBaseId?: number;
   /** List of tools (functions) the LLM can invoke during a call */

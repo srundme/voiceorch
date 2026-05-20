@@ -1210,6 +1210,9 @@ components:
         noiseCancellationEnabled:
           type: ["boolean", "null"]
           description: Request noise reduction from the ASR provider on every transcription call
+        inactivityMessage:
+          type: ["string", "null"]
+          description: Message spoken to the caller before hanging up due to silence timeout
         knowledgeBaseId:
           type: ["integer", "null"]
           description: ID of an attached knowledge base for RAG context injection
@@ -1309,6 +1312,8 @@ components:
           type: string
         noiseCancellationEnabled:
           type: boolean
+        inactivityMessage:
+          type: string
         tools:
           type: array
           items:
@@ -1376,6 +1381,8 @@ components:
           type: string
         noiseCancellationEnabled:
           type: boolean
+        inactivityMessage:
+          type: string
         knowledgeBaseId:
           type: integer
           description: ID of an attached knowledge base for RAG context injection
@@ -1440,6 +1447,9 @@ components:
         costCents:
           type: ["integer", "null"]
           description: Platform orchestration fee charged for this call in cents
+        callSummary:
+          type: ["string", "null"]
+          description: AI-generated 3-line post-call summary
 
     CallEndPayload:
       type: object

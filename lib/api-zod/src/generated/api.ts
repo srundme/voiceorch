@@ -51,6 +51,7 @@ export const ListAgentsResponseItem = zod.object({
   "backchannelingFrequency": zod.number().nullish().describe('Probability (0–1) of backchanneling on each turn'),
   "webhookUrl": zod.string().nullish().describe('URL to POST a call summary JSON to when the call ends'),
   "noiseCancellationEnabled": zod.boolean().nullish().describe('Request noise reduction from the ASR provider on every transcription call'),
+  "inactivityMessage": zod.string().nullish().describe('Message spoken to the caller before hanging up due to silence timeout'),
   "knowledgeBaseId": zod.number().nullish().describe('ID of an attached knowledge base for RAG context injection'),
   "tools": zod.array(zod.object({
   "type": zod.enum(['call_transfer']).describe('Tool type — currently only call_transfer is supported'),
@@ -109,6 +110,7 @@ export const CreateAgentBody = zod.object({
   "backchannelingFrequency": zod.number().optional(),
   "webhookUrl": zod.string().optional(),
   "noiseCancellationEnabled": zod.boolean().optional(),
+  "inactivityMessage": zod.string().optional(),
   "tools": zod.array(zod.object({
   "type": zod.enum(['call_transfer']).describe('Tool type — currently only call_transfer is supported'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
@@ -158,6 +160,7 @@ export const GetAgentResponse = zod.object({
   "backchannelingFrequency": zod.number().nullish().describe('Probability (0–1) of backchanneling on each turn'),
   "webhookUrl": zod.string().nullish().describe('URL to POST a call summary JSON to when the call ends'),
   "noiseCancellationEnabled": zod.boolean().nullish().describe('Request noise reduction from the ASR provider on every transcription call'),
+  "inactivityMessage": zod.string().nullish().describe('Message spoken to the caller before hanging up due to silence timeout'),
   "knowledgeBaseId": zod.number().nullish().describe('ID of an attached knowledge base for RAG context injection'),
   "tools": zod.array(zod.object({
   "type": zod.enum(['call_transfer']).describe('Tool type — currently only call_transfer is supported'),
@@ -216,6 +219,7 @@ export const UpdateAgentBody = zod.object({
   "backchannelingFrequency": zod.number().optional(),
   "webhookUrl": zod.string().optional(),
   "noiseCancellationEnabled": zod.boolean().optional(),
+  "inactivityMessage": zod.string().optional(),
   "knowledgeBaseId": zod.number().optional().describe('ID of an attached knowledge base for RAG context injection'),
   "tools": zod.array(zod.object({
   "type": zod.enum(['call_transfer']).describe('Tool type — currently only call_transfer is supported'),
@@ -261,6 +265,7 @@ export const UpdateAgentResponse = zod.object({
   "backchannelingFrequency": zod.number().nullish().describe('Probability (0–1) of backchanneling on each turn'),
   "webhookUrl": zod.string().nullish().describe('URL to POST a call summary JSON to when the call ends'),
   "noiseCancellationEnabled": zod.boolean().nullish().describe('Request noise reduction from the ASR provider on every transcription call'),
+  "inactivityMessage": zod.string().nullish().describe('Message spoken to the caller before hanging up due to silence timeout'),
   "knowledgeBaseId": zod.number().nullish().describe('ID of an attached knowledge base for RAG context injection'),
   "tools": zod.array(zod.object({
   "type": zod.enum(['call_transfer']).describe('Tool type — currently only call_transfer is supported'),
@@ -329,6 +334,7 @@ export const ToggleAgentResponse = zod.object({
   "backchannelingFrequency": zod.number().nullish().describe('Probability (0–1) of backchanneling on each turn'),
   "webhookUrl": zod.string().nullish().describe('URL to POST a call summary JSON to when the call ends'),
   "noiseCancellationEnabled": zod.boolean().nullish().describe('Request noise reduction from the ASR provider on every transcription call'),
+  "inactivityMessage": zod.string().nullish().describe('Message spoken to the caller before hanging up due to silence timeout'),
   "knowledgeBaseId": zod.number().nullish().describe('ID of an attached knowledge base for RAG context injection'),
   "tools": zod.array(zod.object({
   "type": zod.enum(['call_transfer']).describe('Tool type — currently only call_transfer is supported'),
@@ -376,7 +382,8 @@ export const ListCallsResponseItem = zod.object({
   "llmLatencyMs": zod.number().nullish().describe('Average LLM time-to-first-token across all turns (ms)'),
   "ttsFirstChunkMs": zod.number().nullish().describe('Average TTS time-to-first-audio-chunk across all turns (ms)'),
   "executionId": zod.string().nullish().describe('Unique execution identifier for this call (exec_xxxxxxxx)'),
-  "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents')
+  "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents'),
+  "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary')
 })
 export const ListCallsResponse = zod.array(ListCallsResponseItem)
 
@@ -417,7 +424,8 @@ export const GetCallResponse = zod.object({
   "llmLatencyMs": zod.number().nullish().describe('Average LLM time-to-first-token across all turns (ms)'),
   "ttsFirstChunkMs": zod.number().nullish().describe('Average TTS time-to-first-audio-chunk across all turns (ms)'),
   "executionId": zod.string().nullish().describe('Unique execution identifier for this call (exec_xxxxxxxx)'),
-  "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents')
+  "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents'),
+  "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary')
 })
 
 
@@ -455,7 +463,8 @@ export const UpdateCallResponse = zod.object({
   "llmLatencyMs": zod.number().nullish().describe('Average LLM time-to-first-token across all turns (ms)'),
   "ttsFirstChunkMs": zod.number().nullish().describe('Average TTS time-to-first-audio-chunk across all turns (ms)'),
   "executionId": zod.string().nullish().describe('Unique execution identifier for this call (exec_xxxxxxxx)'),
-  "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents')
+  "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents'),
+  "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary')
 })
 
 
@@ -500,7 +509,8 @@ export const EndCallResponse = zod.object({
   "llmLatencyMs": zod.number().nullish().describe('Average LLM time-to-first-token across all turns (ms)'),
   "ttsFirstChunkMs": zod.number().nullish().describe('Average TTS time-to-first-audio-chunk across all turns (ms)'),
   "executionId": zod.string().nullish().describe('Unique execution identifier for this call (exec_xxxxxxxx)'),
-  "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents')
+  "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents'),
+  "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary')
 })
 
 
@@ -598,7 +608,8 @@ export const GetRecentCallsResponseItem = zod.object({
   "llmLatencyMs": zod.number().nullish().describe('Average LLM time-to-first-token across all turns (ms)'),
   "ttsFirstChunkMs": zod.number().nullish().describe('Average TTS time-to-first-audio-chunk across all turns (ms)'),
   "executionId": zod.string().nullish().describe('Unique execution identifier for this call (exec_xxxxxxxx)'),
-  "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents')
+  "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents'),
+  "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary')
 })
 export const GetRecentCallsResponse = zod.array(GetRecentCallsResponseItem)
 

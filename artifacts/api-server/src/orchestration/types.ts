@@ -60,6 +60,7 @@ export interface AgentConfig {
   backchannelingFrequency: number | null;
   webhookUrl: string | null;
   noiseCancellationEnabled: boolean;
+  inactivityMessage: string | null;
 
   // Tier 2 — Transcriber Settings
   sttConfig: STTConfig;

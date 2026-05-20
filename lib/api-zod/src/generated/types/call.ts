@@ -52,4 +52,9 @@ export interface Call {
      * @nullable
      */
   costCents?: number | null;
+  /**
+     * AI-generated 3-line post-call summary
+     * @nullable
+     */
+  callSummary?: string | null;
 }

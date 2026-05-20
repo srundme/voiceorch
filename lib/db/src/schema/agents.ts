@@ -38,6 +38,7 @@ export const agentsTable = pgTable("agents", {
   backchannelingFrequency: real("backchanneling_frequency"),
   webhookUrl: text("webhook_url"),
   noiseCancellationEnabled: boolean("noise_cancellation_enabled").default(false),
+  inactivityMessage: text("inactivity_message"),
 
   // ── Knowledge Base ────────────────────────────────────────────────────────────
   knowledgeBaseId: integer("knowledge_base_id").references(() => knowledgeBasesTable.id, { onDelete: "set null" }),

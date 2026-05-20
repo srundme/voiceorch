@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { ArrowLeft, Save, Bot, Plus, Trash2, PhoneForwarded, Sparkles, X } from "lucide-react";
-import { useCreateAgent, useListAgentTemplates, getListAgentsQueryKey } from "@workspace/api-client-react";
+import { ArrowLeft, Save, Bot, Plus, Trash2, PhoneForwarded, Sparkles, X, ChevronDown, ChevronUp, Database } from "lucide-react";
+import { useCreateAgent, useListAgentTemplates, useListKnowledgeBases, getListAgentsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { useForm, useWatch, useFieldArray } from "react-hook-form";
@@ -36,6 +36,7 @@ import { useToast } from "@/hooks/use-toast";
 /* ── Provider → model/voice catalogue ────────────────────────────────────── */
 
 const ASR_PROVIDERS = [
+  { value: "deepgram",   label: "Deepgram Nova" },
   { value: "azure",      label: "Azure Speech" },
   { value: "assemblyai", label: "AssemblyAI" },
   { value: "sarvam",     label: "Sarvam (Saarika)" },
@@ -43,16 +44,23 @@ const ASR_PROVIDERS = [
 ];
 
 const LLM_PROVIDERS = [
-  { value: "openai",  label: "OpenAI" },
-  { value: "google",  label: "Google Gemini" },
-  { value: "groq",    label: "Groq" },
-  { value: "sarvam",  label: "Sarvam" },
+  { value: "openai",    label: "OpenAI" },
+  { value: "anthropic", label: "Anthropic Claude" },
+  { value: "deepseek",  label: "DeepSeek" },
+  { value: "mistral",   label: "Mistral AI" },
+  { value: "cohere",    label: "Cohere" },
+  { value: "google",    label: "Google Gemini" },
+  { value: "groq",      label: "Groq" },
+  { value: "sarvam",    label: "Sarvam" },
 ];
 
 const TTS_PROVIDERS = [
-  { value: "elevenlabs", label: "ElevenLabs" },
-  { value: "cartesia",   label: "Cartesia (Sonic)" },
-  { value: "sarvam",     label: "Sarvam (Bulbul)" },
+  { value: "elevenlabs",    label: "ElevenLabs" },
+  { value: "openai_tts",    label: "OpenAI TTS" },
+  { value: "cartesia",      label: "Cartesia (Sonic)" },
+  { value: "deepgram_aura", label: "Deepgram Aura" },
+  { value: "azure_tts",     label: "Azure TTS" },
+  { value: "sarvam",        label: "Sarvam (Bulbul)" },
 ];
 
 const TELEPHONY_PROVIDERS = [
@@ -79,6 +87,7 @@ const LANGUAGES = [
 ];
 
 const ASR_MODELS: Record<string, { value: string; label: string }[]> = {
+  deepgram:   [{ value: "nova-2", label: "Nova-2 (recommended)" }, { value: "nova-2-phonecall", label: "Nova-2 Phone Call" }, { value: "nova-2-meeting", label: "Nova-2 Meeting" }, { value: "whisper-large", label: "Whisper Large" }],
   azure:      [{ value: "en-US-standard", label: "en-US-standard" }, { value: "en-US-enhanced", label: "en-US-enhanced" }, { value: "en-IN-standard", label: "en-IN-standard" }],
   assemblyai: [{ value: "best", label: "Best (default)" }, { value: "nano", label: "Nano (fast)" }],
   sarvam:     [
@@ -93,10 +102,14 @@ const ASR_MODELS: Record<string, { value: string; label: string }[]> = {
 };
 
 const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
-  openai:  [{ value: "gpt-4o-mini", label: "GPT-4o Mini" }, { value: "gpt-4o", label: "GPT-4o" }, { value: "gpt-4-turbo", label: "GPT-4 Turbo" }, { value: "gpt-3.5-turbo", label: "GPT-3.5 Turbo" }],
-  google:  [{ value: "gemini-2.0-flash", label: "Gemini 2.0 Flash" }, { value: "gemini-1.5-pro", label: "Gemini 1.5 Pro" }, { value: "gemini-1.5-flash", label: "Gemini 1.5 Flash" }],
-  groq:    [{ value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B (recommended)" }, { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B (fast)" }, { value: "gemma2-9b-it", label: "Gemma 2 9B" }],
-  sarvam:  [{ value: "sarvam-2b-v0.5", label: "Sarvam 2B v0.5" }],
+  openai:    [{ value: "gpt-4o-mini", label: "GPT-4o Mini" }, { value: "gpt-4o", label: "GPT-4o" }, { value: "gpt-4-turbo", label: "GPT-4 Turbo" }, { value: "gpt-3.5-turbo", label: "GPT-3.5 Turbo" }],
+  anthropic: [{ value: "claude-opus-4-5", label: "Claude Opus 4 (best)" }, { value: "claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet" }, { value: "claude-3-5-haiku-20241022", label: "Claude 3.5 Haiku (fast)" }],
+  deepseek:  [{ value: "deepseek-chat", label: "DeepSeek V3 (chat)" }, { value: "deepseek-reasoner", label: "DeepSeek R1 (reasoner)" }],
+  mistral:   [{ value: "mistral-large-latest", label: "Mistral Large (best)" }, { value: "mistral-small-latest", label: "Mistral Small (fast)" }, { value: "open-mixtral-8x7b", label: "Mixtral 8x7B" }],
+  cohere:    [{ value: "command-r-plus-08-2024", label: "Command R+ (best)" }, { value: "command-r-08-2024", label: "Command R" }],
+  google:    [{ value: "gemini-2.0-flash", label: "Gemini 2.0 Flash" }, { value: "gemini-1.5-pro", label: "Gemini 1.5 Pro" }, { value: "gemini-1.5-flash", label: "Gemini 1.5 Flash" }],
+  groq:      [{ value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B (recommended)" }, { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B (fast)" }, { value: "gemma2-9b-it", label: "Gemma 2 9B" }],
+  sarvam:    [{ value: "sarvam-2b-v0.5", label: "Sarvam 2B v0.5" }],
 };
 
 const TTS_MODELS: Record<string, { value: string; label: string }[]> = {
@@ -108,8 +121,28 @@ const TTS_MODELS: Record<string, { value: string; label: string }[]> = {
 };
 
 const TTS_VOICES: Record<string, { value: string; label: string }[] | null> = {
-  elevenlabs: null,
-  cartesia:   null,
+  elevenlabs:    null,
+  cartesia:      null,
+  azure_tts:     null,
+  openai_tts: [
+    { value: "alloy",   label: "Alloy (neutral)" },
+    { value: "ash",     label: "Ash (warm)" },
+    { value: "coral",   label: "Coral (friendly)" },
+    { value: "echo",    label: "Echo (deep)" },
+    { value: "fable",   label: "Fable (expressive)" },
+    { value: "onyx",    label: "Onyx (authoritative)" },
+    { value: "nova",    label: "Nova (energetic)" },
+    { value: "sage",    label: "Sage (calm)" },
+    { value: "shimmer", label: "Shimmer (clear)" },
+  ],
+  deepgram_aura: [
+    { value: "aura-2-en",      label: "Aura 2 (default)" },
+    { value: "aura-asteria-en",label: "Asteria (warm female)" },
+    { value: "aura-luna-en",   label: "Luna (soft female)" },
+    { value: "aura-stella-en", label: "Stella (bright female)" },
+    { value: "aura-zeus-en",   label: "Zeus (deep male)" },
+    { value: "aura-orion-en",  label: "Orion (male)" },
+  ],
   sarvam: [
     { value: "meera",    label: "Meera (female)" },
     { value: "pavithra", label: "Pavithra (female)" },
@@ -151,9 +184,19 @@ const agentFormSchema = z.object({
   backchannelingEnabled:    z.boolean().optional(),
   backchannelingFrequency:  z.number().min(0).max(1).optional(),
   webhookUrl:               z.string().optional(),
-  noiseCancellationEnabled: z.boolean().optional(),
-  maxConcurrentCalls:       z.number().min(1).max(100).optional(),
-  monthlySpendLimitCents:   z.number().min(100).optional(),
+  noiseCancellationEnabled:  z.boolean().optional(),
+  inactivityMessage:         z.string().optional(),
+  asrLanguage:               z.string().optional(),
+  asrBackgroundDenoising:    z.boolean().optional(),
+  asrConfidenceThreshold:    z.number().min(0).max(1).optional(),
+  asrEndOfTurnConfidence:    z.number().min(0.3).max(1).optional(),
+  asrEndOfTurnTimeout:       z.number().min(100).max(30000).optional(),
+  asrKeyterms:               z.string().optional(),
+  asrSmartEndpointing:       z.enum(["off", "vapi", "livekit"]).optional(),
+  asrAutoFallback:           z.boolean().optional(),
+  knowledgeBaseId:           z.number().optional(),
+  maxConcurrentCalls:        z.number().min(1).max(100).optional(),
+  monthlySpendLimitCents:    z.number().min(100).optional(),
   tools: z.array(z.object({
     type: z.literal("call_transfer"),
     name: z.string().min(1, "Function name required"),
@@ -203,7 +246,9 @@ export default function AgentNew() {
   const { toast } = useToast();
   const createAgent = useCreateAgent();
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [showAdvancedSTT, setShowAdvancedSTT] = useState(false);
   const { data: templates } = useListAgentTemplates();
+  const { data: knowledgeBases } = useListKnowledgeBases();
 
   const form = useForm<AgentFormValues>({
     resolver: zodResolver(agentFormSchema),
@@ -229,6 +274,15 @@ export default function AgentNew() {
       backchannelingFrequency:  0.5,
       webhookUrl:               "",
       noiseCancellationEnabled: false,
+      inactivityMessage:        "",
+      asrLanguage:              "",
+      asrBackgroundDenoising:   false,
+      asrConfidenceThreshold:   0.40,
+      asrEndOfTurnConfidence:   0.70,
+      asrEndOfTurnTimeout:      5000,
+      asrKeyterms:              "",
+      asrSmartEndpointing:      "off" as const,
+      asrAutoFallback:          false,
       tools: [],
     },
   });
@@ -520,6 +574,17 @@ export default function AgentNew() {
                         <FormMessage />
                       </FormItem>
                     )} />
+
+                    <FormField control={form.control} name="inactivityMessage" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Inactivity Message</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g. I haven't heard from you, so I'll let you go. Goodbye!" {...field} />
+                        </FormControl>
+                        <FormDescription>Spoken to the caller right before silence-timeout hangup. Leave blank for silent hangup.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
                   </div>
                 </div>
               </CardContent>
@@ -686,6 +751,170 @@ export default function AgentNew() {
               </CardContent>
             </Card>
           </div>
+
+          {/* ── Advanced STT Settings ── */}
+          <Card>
+            <CardHeader className="pb-3">
+              <button
+                type="button"
+                className="flex items-center justify-between w-full text-left"
+                onClick={() => setShowAdvancedSTT(v => !v)}
+              >
+                <div>
+                  <CardTitle className="text-base">Advanced Transcription Settings</CardTitle>
+                  <CardDescription className="mt-0.5">Fine-tune VAD, confidence, keyterms and smart endpointing.</CardDescription>
+                </div>
+                {showAdvancedSTT ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+              </button>
+            </CardHeader>
+            {showAdvancedSTT && (
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+
+                  <FormField control={form.control} name="asrLanguage" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>ASR Language Override</FormLabel>
+                      <FormControl><Input placeholder="e.g. en-US, es, hi-IN" {...field} /></FormControl>
+                      <FormDescription className="text-[11px]">Overrides the general language for ASR only.</FormDescription>
+                    </FormItem>
+                  )} />
+
+                  <FormField control={form.control} name="asrKeyterms" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Boosted Keyterms</FormLabel>
+                      <FormControl><Input placeholder="e.g. VoiceOrch, Razorpay, BYOK" {...field} /></FormControl>
+                      <FormDescription className="text-[11px]">Comma-separated words to boost accuracy in transcription.</FormDescription>
+                    </FormItem>
+                  )} />
+
+                  <FormField control={form.control} name="asrSmartEndpointing" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Smart Endpointing</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value ?? "off"}>
+                        <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="off">Off (timer-based)</SelectItem>
+                          <SelectItem value="vapi">Vapi-style (utterance VAD)</SelectItem>
+                          <SelectItem value="livekit">LiveKit-style (deep VAD)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormDescription className="text-[11px]">ML-based end-of-turn detection. Deepgram only.</FormDescription>
+                    </FormItem>
+                  )} />
+
+                  <FormField control={form.control} name="asrConfidenceThreshold" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Confidence Threshold: {field.value?.toFixed(2)}</FormLabel>
+                      <FormControl>
+                        <Slider min={0} max={1} step={0.05} value={[field.value ?? 0.40]}
+                          onValueChange={vals => field.onChange(vals[0])} />
+                      </FormControl>
+                      <FormDescription className="text-[11px]">Transcripts below this confidence are discarded.</FormDescription>
+                    </FormItem>
+                  )} />
+
+                  <FormField control={form.control} name="asrEndOfTurnConfidence" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>End-of-Turn Confidence: {field.value?.toFixed(2)}</FormLabel>
+                      <FormControl>
+                        <Slider min={0.3} max={1} step={0.05} value={[field.value ?? 0.70]}
+                          onValueChange={vals => field.onChange(vals[0])} />
+                      </FormControl>
+                      <FormDescription className="text-[11px]">How sure ASR must be the user stopped speaking.</FormDescription>
+                    </FormItem>
+                  )} />
+
+                  <FormField control={form.control} name="asrEndOfTurnTimeout" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>End-of-Turn Timeout (ms)</FormLabel>
+                      <FormControl>
+                        <Input type="number" min={100} max={30000} placeholder="5000" {...field}
+                          onChange={e => field.onChange(parseInt(e.target.value, 10))} />
+                      </FormControl>
+                      <FormDescription className="text-[11px]">Silence window (ms) before ASR finalizes a turn.</FormDescription>
+                    </FormItem>
+                  )} />
+
+                  <div className="space-y-3 p-3 border rounded-md bg-muted/20">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium">Background Denoising</p>
+                        <p className="text-xs text-muted-foreground">Filter background noise during transcription</p>
+                      </div>
+                      <FormField control={form.control} name="asrBackgroundDenoising" render={({ field }) => (
+                        <FormItem>
+                          <Select onValueChange={v => field.onChange(v === "true")} value={field.value ? "true" : "false"}>
+                            <FormControl><SelectTrigger className="w-[80px]"><SelectValue /></SelectTrigger></FormControl>
+                            <SelectContent>
+                              <SelectItem value="false">Off</SelectItem>
+                              <SelectItem value="true">On</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </FormItem>
+                      )} />
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 p-3 border rounded-md bg-muted/20">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium">Auto Fallback</p>
+                        <p className="text-xs text-muted-foreground">Switch to batch STT if streaming fails</p>
+                      </div>
+                      <FormField control={form.control} name="asrAutoFallback" render={({ field }) => (
+                        <FormItem>
+                          <Select onValueChange={v => field.onChange(v === "true")} value={field.value ? "true" : "false"}>
+                            <FormControl><SelectTrigger className="w-[80px]"><SelectValue /></SelectTrigger></FormControl>
+                            <SelectContent>
+                              <SelectItem value="false">Off</SelectItem>
+                              <SelectItem value="true">On</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </FormItem>
+                      )} />
+                    </div>
+                  </div>
+
+                </div>
+              </CardContent>
+            )}
+          </Card>
+
+          {/* ── Knowledge Base ── */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Database className="h-4 w-4 text-primary" />
+                Knowledge Base <span className="text-muted-foreground font-normal text-sm ml-1">(optional)</span>
+              </CardTitle>
+              <CardDescription>Attach a knowledge base so the agent can retrieve relevant context during calls (RAG).</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <FormField control={form.control} name="knowledgeBaseId" render={({ field }) => (
+                <FormItem className="max-w-sm">
+                  <FormLabel>Knowledge Base</FormLabel>
+                  <Select
+                    onValueChange={v => field.onChange(v === "none" ? undefined : parseInt(v, 10))}
+                    value={field.value != null ? String(field.value) : "none"}
+                  >
+                    <FormControl><SelectTrigger><SelectValue placeholder="No knowledge base" /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      <SelectItem value="none">None (no RAG)</SelectItem>
+                      {(knowledgeBases ?? []).map(kb => (
+                        <SelectItem key={kb.id} value={String(kb.id)}>{kb.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormDescription className="text-[11px]">
+                    {(knowledgeBases ?? []).length === 0
+                      ? "No knowledge bases yet — create one on the Knowledge Bases page first."
+                      : "The agent will search this knowledge base on every turn before calling the LLM."}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )} />
+            </CardContent>
+          </Card>
 
           {/* ── Tools ── */}
           <Card>

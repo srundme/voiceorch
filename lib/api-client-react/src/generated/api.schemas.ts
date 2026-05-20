@@ -165,6 +165,11 @@ export interface Agent {
      */
   noiseCancellationEnabled?: boolean | null;
   /**
+     * Message spoken to the caller before hanging up due to silence timeout
+     * @nullable
+     */
+  inactivityMessage?: string | null;
+  /**
      * ID of an attached knowledge base for RAG context injection
      * @nullable
      */
@@ -238,6 +243,7 @@ export interface AgentInput {
   backchannelingFrequency?: number;
   webhookUrl?: string;
   noiseCancellationEnabled?: boolean;
+  inactivityMessage?: string;
   /** List of tools (functions) the LLM can invoke during a call */
   tools?: AgentTool[];
 }
@@ -272,6 +278,7 @@ export interface AgentUpdate {
   backchannelingFrequency?: number;
   webhookUrl?: string;
   noiseCancellationEnabled?: boolean;
+  inactivityMessage?: string;
   /** ID of an attached knowledge base for RAG context injection */
   knowledgeBaseId?: number;
   /** List of tools (functions) the LLM can invoke during a call */
@@ -338,6 +345,11 @@ export interface Call {
      * @nullable
      */
   costCents?: number | null;
+  /**
+     * AI-generated 3-line post-call summary
+     * @nullable
+     */
+  callSummary?: string | null;
 }
 
 export interface CallEndPayload {

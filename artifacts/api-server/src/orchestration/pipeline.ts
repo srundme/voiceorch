@@ -67,7 +67,8 @@ export class OrchestrationPipeline {
     );
     this.llm = createLLMAdapter(this.agent.llmProvider, llmKey, this.agent.llmModel);
     this.tts = createTTSAdapter(
-      this.agent.ttsProvider, ttsKey, this.agent.ttsVoice, this.agent.ttsModel
+      this.agent.ttsProvider, ttsKey, this.agent.ttsVoice, this.agent.ttsModel,
+      keys.get(`${this.agent.ttsProvider}:extraConfig`) ?? null
     );
 
     if (this.agent.noiseCancellationEnabled) {
@@ -246,9 +247,17 @@ export class OrchestrationPipeline {
       this.silenceHangupTimer = null;
       if (!this.closed) {
         logger.info({ callId: this.config.callId }, "Silence timeout — ending call");
-        this.config.onCallEnd();
+        void this.playInactivityMessageAndEnd();
       }
     }, this.agent.silenceTimeoutSeconds * 1000);
+  }
+
+  /** Speak the inactivity farewell message (if configured) before triggering call end. */
+  private async playInactivityMessageAndEnd(): Promise<void> {
+    if (this.agent.inactivityMessage && !this.closed) {
+      try { await this.playSentence(this.agent.inactivityMessage); } catch { /* ignore */ }
+    }
+    if (!this.closed) this.config.onCallEnd();
   }
 
   // ── TTS playback ─────────────────────────────────────────────────────────────
