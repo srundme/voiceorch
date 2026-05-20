@@ -13,6 +13,7 @@ import activityLogsRouter from "./activity-logs.js";
 import phoneNumbersRouter from "./phone-numbers.js";
 import webhookEndpointsRouter from "./webhook-endpoints.js";
 import agentTemplatesRouter from "./agent-templates.js";
+import onboardingRouter from "./onboarding.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
 const router: IRouter = Router();
@@ -32,5 +33,6 @@ router.use(activityLogsRouter);
 router.use(phoneNumbersRouter);
 router.use(webhookEndpointsRouter);
 router.use(agentTemplatesRouter);
+router.use(onboardingRouter);
 
 export default router;

@@ -1277,3 +1277,41 @@ export const DeleteWebhookEndpointParams = zod.object({
 })
 
 
+/**
+ * @summary Get the current user's onboarding status
+ */
+export const GetOnboardingStatusResponse = zod.object({
+  "completed": zod.boolean(),
+  "data": zod.object({
+  "name": zod.string().optional(),
+  "role": zod.enum(['student', 'professional']).optional(),
+  "referralSource": zod.enum(['instagram', 'youtube', 'reference', 'google', 'ai_search']).optional(),
+  "usedVoiceAgents": zod.boolean().optional(),
+  "priorPlatforms": zod.array(zod.enum(['vapi', 'retell', 'bolna', 'other'])).optional()
+}).optional()
+})
+
+
+/**
+ * @summary Save onboarding answers and mark onboarding as completed
+ */
+export const CompleteOnboardingBody = zod.object({
+  "name": zod.string().optional(),
+  "role": zod.enum(['student', 'professional']).optional(),
+  "referralSource": zod.enum(['instagram', 'youtube', 'reference', 'google', 'ai_search']).optional(),
+  "usedVoiceAgents": zod.boolean().optional(),
+  "priorPlatforms": zod.array(zod.enum(['vapi', 'retell', 'bolna', 'other'])).optional()
+})
+
+export const CompleteOnboardingResponse = zod.object({
+  "completed": zod.boolean(),
+  "data": zod.object({
+  "name": zod.string().optional(),
+  "role": zod.enum(['student', 'professional']).optional(),
+  "referralSource": zod.enum(['instagram', 'youtube', 'reference', 'google', 'ai_search']).optional(),
+  "usedVoiceAgents": zod.boolean().optional(),
+  "priorPlatforms": zod.array(zod.enum(['vapi', 'retell', 'bolna', 'other'])).optional()
+}).optional()
+})
+
+

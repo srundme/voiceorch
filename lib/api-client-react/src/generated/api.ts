@@ -51,6 +51,8 @@ import type {
   ListAvailablePhoneNumbersParams,
   ListCallsParams,
   ListTransactionsParams,
+  OnboardingData,
+  OnboardingStatus,
   OutboundCallBody,
   PhoneNumber,
   ProviderConfig,
@@ -3939,5 +3941,153 @@ export const useDeleteWebhookEndpoint = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getDeleteWebhookEndpointMutationOptions(options));
+    }
+
+export const getGetOnboardingStatusUrl = () => {
+
+
+
+
+  return `/api/onboarding/status`
+}
+
+/**
+ * @summary Get the current user's onboarding status
+ */
+export const getOnboardingStatus = async ( options?: RequestInit): Promise<OnboardingStatus> => {
+
+  return customFetch<OnboardingStatus>(getGetOnboardingStatusUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOnboardingStatusQueryKey = () => {
+    return [
+    `/api/onboarding/status`
+    ] as const;
+    }
+
+
+export const getGetOnboardingStatusQueryOptions = <TData = Awaited<ReturnType<typeof getOnboardingStatus>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOnboardingStatusQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOnboardingStatus>>> = ({ signal }) => getOnboardingStatus({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOnboardingStatus>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOnboardingStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getOnboardingStatus>>>
+export type GetOnboardingStatusQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get the current user's onboarding status
+ */
+
+export function useGetOnboardingStatus<TData = Awaited<ReturnType<typeof getOnboardingStatus>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOnboardingStatusQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCompleteOnboardingUrl = () => {
+
+
+
+
+  return `/api/onboarding/complete`
+}
+
+/**
+ * @summary Save onboarding answers and mark onboarding as completed
+ */
+export const completeOnboarding = async (onboardingData: OnboardingData, options?: RequestInit): Promise<OnboardingStatus> => {
+
+  return customFetch<OnboardingStatus>(getCompleteOnboardingUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      onboardingData,)
+  }
+);}
+
+
+
+
+export const getCompleteOnboardingMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeOnboarding>>, TError,{data: BodyType<OnboardingData>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof completeOnboarding>>, TError,{data: BodyType<OnboardingData>}, TContext> => {
+
+const mutationKey = ['completeOnboarding'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof completeOnboarding>>, {data: BodyType<OnboardingData>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  completeOnboarding(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CompleteOnboardingMutationResult = NonNullable<Awaited<ReturnType<typeof completeOnboarding>>>
+    export type CompleteOnboardingMutationBody = BodyType<OnboardingData>
+    export type CompleteOnboardingMutationError = ErrorType<void>
+
+    /**
+ * @summary Save onboarding answers and mark onboarding as completed
+ */
+export const useCompleteOnboarding = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeOnboarding>>, TError,{data: BodyType<OnboardingData>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof completeOnboarding>>,
+        TError,
+        {data: BodyType<OnboardingData>},
+        TContext
+      > => {
+      return useMutation(getCompleteOnboardingMutationOptions(options));
     }
 

@@ -32,6 +32,8 @@ tags:
     description: User-configured webhook endpoints for call event delivery
   - name: monitor
     description: Real-time active call monitoring
+  - name: onboarding
+    description: User onboarding flow
 
 paths:
   /healthz:
@@ -1122,6 +1124,45 @@ paths:
           description: Unauthorized
         "404":
           description: Not found
+
+  # ── Onboarding ───────────────────────────────────────────────────────────────
+  /onboarding/status:
+    get:
+      operationId: getOnboardingStatus
+      tags: [onboarding]
+      summary: Get the current user's onboarding status
+      responses:
+        "200":
+          description: Onboarding status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnboardingStatus"
+        "401":
+          description: Unauthorized
+
+  /onboarding/complete:
+    post:
+      operationId: completeOnboarding
+      tags: [onboarding]
+      summary: Save onboarding answers and mark onboarding as completed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OnboardingData"
+      responses:
+        "200":
+          description: Onboarding completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnboardingStatus"
+        "400":
+          description: Invalid data
+        "401":
+          description: Unauthorized
 
 components:
   schemas:
@@ -2230,3 +2271,31 @@ components:
           type: string
         enabled:
           type: boolean
+
+    OnboardingStatus:
+      type: object
+      required: [completed]
+      properties:
+        completed:
+          type: boolean
+        data:
+          $ref: "#/components/schemas/OnboardingData"
+
+    OnboardingData:
+      type: object
+      properties:
+        name:
+          type: string
+        role:
+          type: string
+          enum: [student, professional]
+        referralSource:
+          type: string
+          enum: [instagram, youtube, reference, google, ai_search]
+        usedVoiceAgents:
+          type: boolean
+        priorPlatforms:
+          type: array
+          items:
+            type: string
+            enum: [vapi, retell, bolna, other]

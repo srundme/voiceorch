@@ -971,6 +971,48 @@ export interface WebhookEndpointUpdate {
   enabled?: boolean;
 }
 
+export type OnboardingDataRole = typeof OnboardingDataRole[keyof typeof OnboardingDataRole];
+
+
+export const OnboardingDataRole = {
+  student: 'student',
+  professional: 'professional',
+} as const;
+
+export type OnboardingDataReferralSource = typeof OnboardingDataReferralSource[keyof typeof OnboardingDataReferralSource];
+
+
+export const OnboardingDataReferralSource = {
+  instagram: 'instagram',
+  youtube: 'youtube',
+  reference: 'reference',
+  google: 'google',
+  ai_search: 'ai_search',
+} as const;
+
+export type OnboardingDataPriorPlatformsItem = typeof OnboardingDataPriorPlatformsItem[keyof typeof OnboardingDataPriorPlatformsItem];
+
+
+export const OnboardingDataPriorPlatformsItem = {
+  vapi: 'vapi',
+  retell: 'retell',
+  bolna: 'bolna',
+  other: 'other',
+} as const;
+
+export interface OnboardingData {
+  name?: string;
+  role?: OnboardingDataRole;
+  referralSource?: OnboardingDataReferralSource;
+  usedVoiceAgents?: boolean;
+  priorPlatforms?: OnboardingDataPriorPlatformsItem[];
+}
+
+export interface OnboardingStatus {
+  completed: boolean;
+  data?: OnboardingData;
+}
+
 export type ListCallsParams = {
 /**
  * @nullable

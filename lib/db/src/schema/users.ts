@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, boolean, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -15,6 +15,8 @@ export const usersTable = pgTable("users", {
   apiKey: text("api_key").unique(),
   orgKey: text("org_key").unique(),
   concurrentLimit: integer("concurrent_limit").notNull().default(2),
+  onboardingCompleted: boolean("onboarding_completed").notNull().default(false),
+  onboardingData: jsonb("onboarding_data"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

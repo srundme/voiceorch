@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/reac
 import { ClerkProvider, SignIn, SignUp, Show, useClerk, useAuth } from "@clerk/react";
 import { publishableKeyFromHost } from "@clerk/react/internal";
 import { shadcn } from "@clerk/themes";
-import { setAuthTokenGetter } from "@workspace/api-client-react";
+import { setAuthTokenGetter, useGetOnboardingStatus } from "@workspace/api-client-react";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -29,6 +29,7 @@ import MonitorPage from "@/pages/monitor";
 import WebhooksPage from "@/pages/webhooks";
 import AgentAnalyticsPage from "@/pages/agent-analytics";
 import NotFound from "@/pages/not-found";
+import OnboardingPage from "@/pages/onboarding";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -157,32 +158,61 @@ function HomeRedirect() {
   );
 }
 
+function AppRoutes() {
+  const [location] = useLocation();
+  const { data: onboardingStatus, isLoading: onboardingLoading } = useGetOnboardingStatus();
+
+  // Don't gate until we know the status
+  if (onboardingLoading) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="h-8 w-8 rounded-full border-2 border-gray-200 border-t-black animate-spin" />
+      </div>
+    );
+  }
+
+  // Redirect new users to onboarding (except if they're already there)
+  const onOnboardingPage = location.startsWith("/app/onboarding");
+  if (!onboardingStatus?.completed && !onOnboardingPage) {
+    return <Redirect to="/app/onboarding" />;
+  }
+
+  return (
+    <Layout>
+      <Switch>
+        <Route path="/app" component={AssistantsPage} />
+        <Route path="/app/analytics" component={Dashboard} />
+        <Route path="/app/agents" component={AgentsList} />
+        <Route path="/app/agents/new" component={AgentNew} />
+        <Route path="/app/agents/:id/edit" component={AgentEdit} />
+        <Route path="/app/agents/:id" component={AgentDetail} />
+        <Route path="/app/calls" component={CallsList} />
+        <Route path="/app/calls/:id" component={CallDetail} />
+        <Route path="/app/knowledge-bases" component={KnowledgeBasePage} />
+        <Route path="/app/providers" component={ProvidersList} />
+        <Route path="/app/wallet" component={WalletPage} />
+        <Route path="/app/activity" component={ActivityPage} />
+        <Route path="/app/phone-numbers" component={PhoneNumbersPage} />
+        <Route path="/app/monitor" component={MonitorPage} />
+        <Route path="/app/webhooks" component={WebhooksPage} />
+        <Route path="/app/analytics/agents/:id" component={AgentAnalyticsPage} />
+        <Route path="/app/settings" component={Settings} />
+        <Route component={NotFound} />
+      </Switch>
+    </Layout>
+  );
+}
+
 function ProtectedApp() {
   return (
     <>
       <Show when="signed-in">
-        <Layout>
-          <Switch>
-            <Route path="/app" component={AssistantsPage} />
-            <Route path="/app/analytics" component={Dashboard} />
-            <Route path="/app/agents" component={AgentsList} />
-            <Route path="/app/agents/new" component={AgentNew} />
-            <Route path="/app/agents/:id/edit" component={AgentEdit} />
-            <Route path="/app/agents/:id" component={AgentDetail} />
-            <Route path="/app/calls" component={CallsList} />
-            <Route path="/app/calls/:id" component={CallDetail} />
-            <Route path="/app/knowledge-bases" component={KnowledgeBasePage} />
-            <Route path="/app/providers" component={ProvidersList} />
-            <Route path="/app/wallet" component={WalletPage} />
-            <Route path="/app/activity" component={ActivityPage} />
-            <Route path="/app/phone-numbers" component={PhoneNumbersPage} />
-            <Route path="/app/monitor" component={MonitorPage} />
-            <Route path="/app/webhooks" component={WebhooksPage} />
-            <Route path="/app/analytics/agents/:id" component={AgentAnalyticsPage} />
-            <Route path="/app/settings" component={Settings} />
-            <Route component={NotFound} />
-          </Switch>
-        </Layout>
+        <Switch>
+          {/* Onboarding is full-screen — no sidebar layout */}
+          <Route path="/app/onboarding" component={OnboardingPage} />
+          {/* All other /app/* routes go through the onboarding gate + Layout */}
+          <Route path="/app/*?" component={AppRoutes} />
+        </Switch>
       </Show>
       <Show when="signed-out">
         <Redirect to="/" />
