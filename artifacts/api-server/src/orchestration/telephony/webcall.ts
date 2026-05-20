@@ -363,7 +363,7 @@ export async function handleWebCallWebSocket(
 
     try {
       await db.update(callsTable).set({
-        status: reason === "timeout" || reason === "normal" ? "completed" : "failed",
+        status: reason === "error" ? "failed" : "completed",
         endedAt,
         durationSeconds,
         transcript: transcript || null,
@@ -379,11 +379,16 @@ export async function handleWebCallWebSocket(
           .where(eq(agentsTable.id, agentId));
       }
 
-      // Deduct platform fee: $0.03/min from wallet
+      // Deduct platform fee from wallet.
+      // Pricing: < 30 s → $0.015 (half rate); ≥ 30 s → ceil(seconds/60) × $0.03/min.
       const callUserId = agent.userId ?? null;
       if (callUserId && durationSeconds > 0) {
-        const billableMinutes = Math.ceil(durationSeconds / 60);
-        const debitCents = billableMinutes * 3;
+        const debitCents = durationSeconds < 30
+          ? 1.5                                         // $0.015 flat for short calls
+          : Math.ceil(durationSeconds / 60) * 3;        // $0.03 per started minute
+        const billableLabel = durationSeconds < 30
+          ? "< 30 s flat"
+          : `${Math.ceil(durationSeconds / 60)} min × $0.03`;
         const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, callUserId));
         if (user) {
           const newBalance = Math.max(0, user.walletBalanceCents - debitCents);
@@ -392,7 +397,7 @@ export async function handleWebCallWebSocket(
             userId: user.id,
             type: "call_debit",
             amountCents: -debitCents,
-            description: `WebCall #${callId} — ${billableMinutes} min × $0.03`,
+            description: `WebCall #${callId} — ${billableLabel}`,
             status: "completed",
             callId,
           });

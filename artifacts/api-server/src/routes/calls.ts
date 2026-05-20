@@ -400,8 +400,13 @@ router.patch("/calls/:id/end", async (req, res): Promise<void> => {
   const isPlatformTelephony = callMeta["platformTelephony"] === true;
   const rateCentsPerMin = isPlatformTelephony ? 3.5 : 3;
   const rateLabel       = isPlatformTelephony ? "$0.035" : "$0.030";
-  const billableMinutes = durationSeconds > 0 ? Math.ceil(durationSeconds / 60) : 0;
-  const debitCents      = billableMinutes > 0 ? Math.round(billableMinutes * rateCentsPerMin) : 0;
+  // Pricing: < 30 s → half the per-minute rate flat; ≥ 30 s → ceil(seconds/60) × full rate.
+  const debitCents = durationSeconds <= 0
+    ? 0
+    : durationSeconds < 30
+      ? Math.round(rateCentsPerMin / 2)                           // flat half-rate for short calls
+      : Math.round(Math.ceil(durationSeconds / 60) * rateCentsPerMin);
+  const billableMinutes = durationSeconds < 30 ? 0 : Math.ceil(durationSeconds / 60);
 
   const callUpdateSet: Partial<typeof callsTable.$inferInsert> = {
     status: "completed",
