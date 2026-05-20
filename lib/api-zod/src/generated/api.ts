@@ -22,6 +22,7 @@ export const HealthCheckResponse = zod.object({
 export const ListAgentsResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
+  "agentType": zod.union([zod.literal('general'),zod.literal('lead_qualification'),zod.literal('customer_support'),zod.literal('appointment_booking'),zod.literal('survey'),zod.literal(null)]).nullish(),
   "description": zod.string().nullish(),
   "status": zod.enum(['active', 'inactive', 'draft']),
   "asrProvider": zod.string().describe('ASR provider: deepgram, azure, whisper'),
@@ -69,6 +70,7 @@ export const ListAgentsResponseItem = zod.object({
   "options": zod.array(zod.string()).optional().describe('Allowed values for choice fields (e.g. [\"Interested\",\"Not Interested\"])'),
   "required": zod.boolean().optional().describe('Whether this field must always be filled')
 })).nullish().describe('User-defined fields to extract from each call via LLM'),
+  "agentConfig": zod.record(zod.string(), zod.unknown()).nullish().describe('Advanced per-tab configuration (LLM params, engine, call, inbound, WhatsApp, analytics)'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -89,6 +91,7 @@ export const ListAgentsResponse = zod.array(ListAgentsResponseItem)
 
 export const CreateAgentBody = zod.object({
   "name": zod.string().min(1),
+  "agentType": zod.string().optional(),
   "description": zod.string().optional(),
   "asrProvider": zod.string(),
   "asrModel": zod.string().optional(),
@@ -124,7 +127,8 @@ export const CreateAgentBody = zod.object({
   "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
   "transferTo": zod.string().describe('E.164 phone number to transfer the call to (e.g. +12125551234)'),
   "warmHandoffMessage": zod.string().optional().describe('Optional message the agent speaks to the caller before transferring')
-})).optional().describe('List of tools (functions) the LLM can invoke during a call')
+})).optional().describe('List of tools (functions) the LLM can invoke during a call'),
+  "agentConfig": zod.record(zod.string(), zod.unknown()).optional().describe('Advanced per-tab configuration')
 })
 
 
@@ -138,6 +142,7 @@ export const GetAgentParams = zod.object({
 export const GetAgentResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
+  "agentType": zod.union([zod.literal('general'),zod.literal('lead_qualification'),zod.literal('customer_support'),zod.literal('appointment_booking'),zod.literal('survey'),zod.literal(null)]).nullish(),
   "description": zod.string().nullish(),
   "status": zod.enum(['active', 'inactive', 'draft']),
   "asrProvider": zod.string().describe('ASR provider: deepgram, azure, whisper'),
@@ -185,6 +190,7 @@ export const GetAgentResponse = zod.object({
   "options": zod.array(zod.string()).optional().describe('Allowed values for choice fields (e.g. [\"Interested\",\"Not Interested\"])'),
   "required": zod.boolean().optional().describe('Whether this field must always be filled')
 })).nullish().describe('User-defined fields to extract from each call via LLM'),
+  "agentConfig": zod.record(zod.string(), zod.unknown()).nullish().describe('Advanced per-tab configuration (LLM params, engine, call, inbound, WhatsApp, analytics)'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -205,6 +211,7 @@ export const UpdateAgentParams = zod.object({
 
 export const UpdateAgentBody = zod.object({
   "name": zod.string().optional(),
+  "agentType": zod.string().optional(),
   "description": zod.string().optional(),
   "asrProvider": zod.string().optional(),
   "asrModel": zod.string().optional(),
@@ -251,12 +258,14 @@ export const UpdateAgentBody = zod.object({
   "type": zod.enum(['text', 'number', 'choice', 'boolean']).describe('Data type of the field'),
   "options": zod.array(zod.string()).optional().describe('Allowed values for choice fields (e.g. [\"Interested\",\"Not Interested\"])'),
   "required": zod.boolean().optional().describe('Whether this field must always be filled')
-})).optional()
+})).optional(),
+  "agentConfig": zod.record(zod.string(), zod.unknown()).optional().describe('Advanced per-tab configuration')
 })
 
 export const UpdateAgentResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
+  "agentType": zod.union([zod.literal('general'),zod.literal('lead_qualification'),zod.literal('customer_support'),zod.literal('appointment_booking'),zod.literal('survey'),zod.literal(null)]).nullish(),
   "description": zod.string().nullish(),
   "status": zod.enum(['active', 'inactive', 'draft']),
   "asrProvider": zod.string().describe('ASR provider: deepgram, azure, whisper'),
@@ -304,6 +313,7 @@ export const UpdateAgentResponse = zod.object({
   "options": zod.array(zod.string()).optional().describe('Allowed values for choice fields (e.g. [\"Interested\",\"Not Interested\"])'),
   "required": zod.boolean().optional().describe('Whether this field must always be filled')
 })).nullish().describe('User-defined fields to extract from each call via LLM'),
+  "agentConfig": zod.record(zod.string(), zod.unknown()).nullish().describe('Advanced per-tab configuration (LLM params, engine, call, inbound, WhatsApp, analytics)'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -333,6 +343,7 @@ export const ToggleAgentParams = zod.object({
 export const ToggleAgentResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
+  "agentType": zod.union([zod.literal('general'),zod.literal('lead_qualification'),zod.literal('customer_support'),zod.literal('appointment_booking'),zod.literal('survey'),zod.literal(null)]).nullish(),
   "description": zod.string().nullish(),
   "status": zod.enum(['active', 'inactive', 'draft']),
   "asrProvider": zod.string().describe('ASR provider: deepgram, azure, whisper'),
@@ -380,6 +391,7 @@ export const ToggleAgentResponse = zod.object({
   "options": zod.array(zod.string()).optional().describe('Allowed values for choice fields (e.g. [\"Interested\",\"Not Interested\"])'),
   "required": zod.boolean().optional().describe('Whether this field must always be filled')
 })).nullish().describe('User-defined fields to extract from each call via LLM'),
+  "agentConfig": zod.record(zod.string(), zod.unknown()).nullish().describe('Advanced per-tab configuration (LLM params, engine, call, inbound, WhatsApp, analytics)'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),

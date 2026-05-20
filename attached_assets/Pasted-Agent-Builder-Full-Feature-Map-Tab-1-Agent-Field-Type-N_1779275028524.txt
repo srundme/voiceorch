@@ -1,0 +1,79 @@
+Agent Builder — Full Feature Map
+Tab 1 — Agent
+Field	Type	Notes
+Agent Name	Text input	Required
+Agent Type	Dropdown	General Purpose, Lead Qualification, Customer Support, Appointment Booking, Survey
+Welcome Message	Textarea	First spoken line by the agent
+Webhook URL	Text input	Optional — fires on call events
+Agent Prompt	Large textarea	Required — the full system prompt / instruction
+Tab 2 — LLM
+Field	Type	Notes
+Provider	Dropdown	OpenAI, Azure OpenAI, OpenRouter, Anthropic, Groq, DeepInfra, Aitel/Google, Sarvam
+Model	Dropdown	Changes based on provider (GPT-4o, Claude 3.5 Sonnet, etc.)
+Max Tokens	Slider	50–1000
+Temperature	Slider	0–2
+Top P	Slider	0–1
+Min P	Slider	0–1
+Top K	Slider	0–100
+Presence Penalty	Slider	−2 to +2
+Frequency Penalty	Slider	−2 to +2
+Request JSON Response	Toggle	Forces structured JSON output
+Guardrail Routes	Section	Embedding model + list of routes, each with: Name, Score Threshold (slider), Utterances (multiline), Response text
+Tab 3 — Audio
+Field	Type	Notes
+Primary Language	Dropdown with search	
+Secondary Language	Dropdown with search	
+Transcriber Provider	Dropdown	Deepgram, Azure, etc.
+Transcriber Model	Dropdown	Based on provider
+Synthesizer Provider	Dropdown	ElevenLabs, Cartesia, etc.
+Voice	Dropdown	Specific voice per provider (e.g. "Nila") with preview playback
+Stream	Toggle	Advanced
+Sampling Rate	Input	Advanced
+Encoding	Select	Advanced
+Audio Format	Select	Advanced
+Tab 4 — Engine
+Field	Type	Notes
+Words for Interruption	Slider	How many user words trigger an interruption
+Incremental Delay	Slider	Milliseconds of delay between LLM chunks
+Backchanneling	Toggle	Enables "mm-hmm / I see" responses
+Backchanneling Frequency	Slider	When backchanneling is on
+Backchanneling Start Delay	Slider	When backchanneling is on
+Ambient Noise	Toggle	Plays background audio
+Ambient Noise Track	Dropdown	e.g. "office-ambience" (when enabled)
+Noise Cancellation	Toggle	
+Tab 5 — Call
+Field	Type	Notes
+Max Call Duration	Slider	When to auto-terminate
+Hangup After Silence	Slider	Seconds of silence before hanging up
+Hangup After LLM Call	Toggle	End call when LLM finishes
+Call Cancellation Prompt	Textarea	What to say when cancelling
+Voicemail Detection	Toggle	
+Scheduling Guardrails	Toggle	Enables call window hours
+Call Start Hour	Select (0–23)	When scheduling is on
+Call End Hour	Select (0–23)	When scheduling is on
+Tab 6 — Tools
+Currently a placeholder — calendar booking / CRM integrations listed as coming soon.
+
+Tab 7 — Analytics
+Field	Type	Notes
+Summarization	Toggle	Auto-summarize each call
+Summarization Prompt	Textarea	Instructions for the summary (when enabled)
+Dispositions (edit mode only)	Section	Post-call classifiers: each has Name, Question, Category, Model, System Prompt. Two types: Free Text (Subjective) and Predefined Options (Objective). Includes a test sidebar to run a transcript against configured dispositions.
+Tab 8 — Inbound
+Field	Type	Notes
+Inbound Limit	Slider	Max concurrent inbound calls; −1 = unlimited
+Disallow Unknown Numbers	Toggle	Blocks numbers not on whitelist
+Whitelist Numbers	Text input	Comma-separated allowed numbers
+Call Memory / Ingest	Toggle	Enables RAG memory for the agent
+Source Type	Select	When memory is on
+Source URL	Text input	When memory is on
+Auth Token	Text input	When memory is on
+Tab 9 — WhatsApp
+Field	Type	Notes
+Provider	Dropdown	AiSensy, Meta, etc.
+Credentials	Inputs	Provider-specific keys
+Outcome Messages	Section	One configurable template per outcome: Interested, Callback, No Answer
+Template Name	Text input	Per outcome
+Language	Select	Per outcome
+Parameters	Dynamic list	Per outcome
+Media Attachments	Inputs	URL, Filename, Type — per outcome

@@ -58,6 +58,20 @@ export interface AgentTool {
   warmHandoffMessage?: string;
 }
 
+/**
+ * @nullable
+ */
+export type AgentAgentType = typeof AgentAgentType[keyof typeof AgentAgentType] | null;
+
+
+export const AgentAgentType = {
+  general: 'general',
+  lead_qualification: 'lead_qualification',
+  customer_support: 'customer_support',
+  appointment_booking: 'appointment_booking',
+  survey: 'survey',
+} as const;
+
 export type AgentStatus = typeof AgentStatus[keyof typeof AgentStatus];
 
 
@@ -80,9 +94,17 @@ export const AgentAsrSmartEndpointing = {
   livekit: 'livekit',
 } as const;
 
+/**
+ * Advanced per-tab configuration (LLM params, engine, call, inbound, WhatsApp, analytics)
+ * @nullable
+ */
+export type AgentAgentConfig = { [key: string]: unknown } | null;
+
 export interface Agent {
   id: number;
   name: string;
+  /** @nullable */
+  agentType?: AgentAgentType;
   /** @nullable */
   description?: string | null;
   status: AgentStatus;
@@ -220,6 +242,11 @@ export interface Agent {
      * @nullable
      */
   dispositionSchema?: DispositionField[] | null;
+  /**
+     * Advanced per-tab configuration (LLM params, engine, call, inbound, WhatsApp, analytics)
+     * @nullable
+     */
+  agentConfig?: AgentAgentConfig;
   totalCalls?: number;
   successfulCalls?: number;
   /** @nullable */
@@ -243,9 +270,15 @@ export interface Agent {
   updatedAt: string;
 }
 
+/**
+ * Advanced per-tab configuration
+ */
+export type AgentInputAgentConfig = { [key: string]: unknown };
+
 export interface AgentInput {
   /** @minLength 1 */
   name: string;
+  agentType?: string;
   description?: string;
   asrProvider: string;
   asrModel?: string;
@@ -277,10 +310,18 @@ export interface AgentInput {
   inactivityMessage?: string;
   /** List of tools (functions) the LLM can invoke during a call */
   tools?: AgentTool[];
+  /** Advanced per-tab configuration */
+  agentConfig?: AgentInputAgentConfig;
 }
+
+/**
+ * Advanced per-tab configuration
+ */
+export type AgentUpdateAgentConfig = { [key: string]: unknown };
 
 export interface AgentUpdate {
   name?: string;
+  agentType?: string;
   description?: string;
   asrProvider?: string;
   asrModel?: string;
@@ -318,6 +359,8 @@ export interface AgentUpdate {
   maxConcurrentCalls?: number;
   monthlySpendLimitCents?: number;
   dispositionSchema?: DispositionField[];
+  /** Advanced per-tab configuration */
+  agentConfig?: AgentUpdateAgentConfig;
 }
 
 export type CallStatus = typeof CallStatus[keyof typeof CallStatus];

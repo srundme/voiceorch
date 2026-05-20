@@ -1187,6 +1187,9 @@ components:
           type: integer
         name:
           type: string
+        agentType:
+          type: ["string", "null"]
+          enum: [general, lead_qualification, customer_support, appointment_booking, survey, null]
         description:
           type: ["string", "null"]
         status:
@@ -1290,6 +1293,10 @@ components:
           description: User-defined fields to extract from each call via LLM
           items:
             $ref: "#/components/schemas/DispositionField"
+        agentConfig:
+          type: ["object", "null"]
+          description: Advanced per-tab configuration (LLM params, engine, call, inbound, WhatsApp, analytics)
+          additionalProperties: true
         totalCalls:
           type: integer
         successfulCalls:
@@ -1319,6 +1326,8 @@ components:
         name:
           type: string
           minLength: 1
+        agentType:
+          type: string
         description:
           type: string
         asrProvider:
@@ -1382,11 +1391,17 @@ components:
           items:
             $ref: "#/components/schemas/AgentTool"
           description: List of tools (functions) the LLM can invoke during a call
+        agentConfig:
+          type: object
+          description: Advanced per-tab configuration
+          additionalProperties: true
 
     AgentUpdate:
       type: object
       properties:
         name:
+          type: string
+        agentType:
           type: string
         description:
           type: string
@@ -1464,6 +1479,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/DispositionField"
+        agentConfig:
+          type: object
+          description: Advanced per-tab configuration
+          additionalProperties: true
 
     # ── Call ───────────────────────────────────────────────────────────────────
     Call:

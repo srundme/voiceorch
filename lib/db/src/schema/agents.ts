@@ -3,10 +3,74 @@ import { knowledgeBasesTable } from "./knowledge-base";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
+export type AgentConfig = {
+  // Tab 2 — LLM
+  maxTokens?: number;
+  topP?: number;
+  minP?: number;
+  topK?: number;
+  presencePenalty?: number;
+  frequencyPenalty?: number;
+  requestJsonResponse?: boolean;
+  guardrailRoutes?: Array<{ name: string; scoreThreshold: number; utterances: string; response: string }>;
+  // Tab 3 — Audio
+  secondaryLanguage?: string;
+  ttsStream?: boolean;
+  ttsSamplingRate?: number;
+  ttsEncoding?: string;
+  ttsAudioFormat?: string;
+  // Tab 4 — Engine
+  wordsForInterruption?: number;
+  incrementalDelay?: number;
+  backchannelingStartDelay?: number;
+  ambientNoiseEnabled?: boolean;
+  ambientNoiseTrack?: string;
+  // Tab 5 — Call
+  hangupAfterLlmCall?: boolean;
+  callCancellationPrompt?: string;
+  voicemailDetection?: boolean;
+  schedulingGuardrails?: boolean;
+  callStartHour?: number;
+  callEndHour?: number;
+  // Tab 7 — Analytics
+  summarizationEnabled?: boolean;
+  summarizationPrompt?: string;
+  dispositionsV2?: Array<{
+    name: string;
+    question: string;
+    category: string;
+    model: string;
+    systemPrompt: string;
+    type: "free_text" | "predefined";
+    options?: string[];
+  }>;
+  // Tab 8 — Inbound
+  inboundLimit?: number;
+  disallowUnknownNumbers?: boolean;
+  whitelistNumbers?: string;
+  callMemoryEnabled?: boolean;
+  callMemorySourceType?: string;
+  callMemorySourceUrl?: string;
+  callMemoryAuthToken?: string;
+  // Tab 9 — WhatsApp
+  whatsappProvider?: string;
+  whatsappCredentials?: Record<string, string>;
+  whatsappOutcomeMessages?: Array<{
+    outcome: string;
+    templateName: string;
+    language: string;
+    parameters?: string[];
+    mediaUrl?: string;
+    mediaFilename?: string;
+    mediaType?: string;
+  }>;
+};
+
 export const agentsTable = pgTable("agents", {
   id: serial("id").primaryKey(),
   userId: text("user_id"),
   name: text("name").notNull(),
+  agentType: text("agent_type").default("general"),
   description: text("description"),
   status: text("status").notNull().default("draft"),
   asrProvider: text("asr_provider").notNull(),
@@ -45,6 +109,9 @@ export const agentsTable = pgTable("agents", {
 
   // ── Tools ─────────────────────────────────────────────────────────────────────
   tools: json("tools").$type<Record<string, unknown>[]>(),
+
+  // ── Advanced Config (all tab settings stored here) ───────────────────────────
+  agentConfig: json("agent_config").$type<AgentConfig>(),
 
   // ── Disposition Schema ────────────────────────────────────────────────────────
   dispositionSchema: json("disposition_schema").$type<Array<{

@@ -451,10 +451,100 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
 
 /* ── Agent Config Panel ───────────────────────────────────────────────────── */
 
+const LANGUAGES = [
+  { value: "en",    label: "English" },
+  { value: "es",    label: "Spanish" },
+  { value: "fr",    label: "French" },
+  { value: "de",    label: "German" },
+  { value: "hi",    label: "Hindi" },
+  { value: "pt",    label: "Portuguese" },
+  { value: "ja",    label: "Japanese" },
+  { value: "ko",    label: "Korean" },
+  { value: "zh",    label: "Chinese (Mandarin)" },
+  { value: "ru",    label: "Russian" },
+  { value: "ar",    label: "Arabic" },
+  { value: "it",    label: "Italian" },
+  { value: "nl",    label: "Dutch" },
+  { value: "pl",    label: "Polish" },
+  { value: "sv",    label: "Swedish" },
+  { value: "tr",    label: "Turkish" },
+  { value: "id",    label: "Indonesian" },
+  { value: "bn-IN", label: "Bengali (India)" },
+  { value: "ta-IN", label: "Tamil" },
+  { value: "te-IN", label: "Telugu" },
+  { value: "mr-IN", label: "Marathi" },
+  { value: "kn-IN", label: "Kannada" },
+  { value: "gu-IN", label: "Gujarati" },
+  { value: "pa-IN", label: "Punjabi" },
+  { value: "uk",    label: "Ukrainian" },
+  { value: "fi",    label: "Finnish" },
+];
+
+type AgentCfg = {
+  maxTokens?: number; topP?: number; minP?: number; topK?: number;
+  presencePenalty?: number; frequencyPenalty?: number;
+  requestJsonResponse?: boolean;
+  guardrailRoutes?: Array<{ name: string; scoreThreshold: number; utterances: string; response: string }>;
+  secondaryLanguage?: string; ttsStream?: boolean; ttsSamplingRate?: number;
+  ttsEncoding?: string; ttsAudioFormat?: string;
+  wordsForInterruption?: number; incrementalDelay?: number;
+  backchannelingStartDelay?: number; ambientNoiseEnabled?: boolean; ambientNoiseTrack?: string;
+  hangupAfterLlmCall?: boolean; callCancellationPrompt?: string;
+  voicemailDetection?: boolean; schedulingGuardrails?: boolean;
+  callStartHour?: number; callEndHour?: number;
+  summarizationEnabled?: boolean; summarizationPrompt?: string;
+  inboundLimit?: number; disallowUnknownNumbers?: boolean; whitelistNumbers?: string;
+  callMemoryEnabled?: boolean; callMemorySourceType?: string;
+  callMemorySourceUrl?: string; callMemoryAuthToken?: string;
+  whatsappProvider?: string; whatsappCredentials?: Record<string, string>;
+  whatsappOutcomeMessages?: Array<{
+    outcome: string; templateName: string; language: string;
+    parameters?: string[]; mediaUrl?: string; mediaFilename?: string; mediaType?: string;
+  }>;
+};
+
+function SliderRow({ label, desc, value, onChange, min, max, step, unit = "" }: {
+  label: string; desc?: string; value: number; onChange: (v: number) => void;
+  min: number; max: number; step: number; unit?: string;
+}) {
+  const display = step < 1 ? value.toFixed(2) : String(Math.round(value));
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-xs font-medium text-zinc-300">{label}</p>
+          {desc && <p className="text-[10px] text-zinc-600 mt-0.5">{desc}</p>}
+        </div>
+        <span className="text-xs font-mono bg-zinc-800 border border-zinc-700 rounded px-1.5 py-0.5 text-zinc-300 min-w-[52px] text-center shrink-0 ml-3">
+          {display}{unit}
+        </span>
+      </div>
+      <Slider min={min} max={max} step={step} value={[value]} onValueChange={([v]) => onChange(v!)} />
+      <div className="flex justify-between text-[10px] text-zinc-600">
+        <span>{min}{unit}</span><span>{max}{unit}</span>
+      </div>
+    </div>
+  );
+}
+
+function ToggleRow({ label, desc, checked, onChange }: {
+  label: string; desc?: string; checked: boolean; onChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div className="min-w-0">
+        <p className="text-xs font-medium text-zinc-300">{label}</p>
+        {desc && <p className="text-[10px] text-zinc-600 mt-0.5">{desc}</p>}
+      </div>
+      <Switch checked={checked} onCheckedChange={onChange} className="shrink-0 data-[state=checked]:bg-emerald-500" />
+    </div>
+  );
+}
+
 function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: () => void }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState("assistant");
+  const [activeTab, setActiveTab] = useState("agent");
   const [outboundDialogOpen, setOutboundDialogOpen] = useState(false);
   const [toNumber, setToNumber] = useState("");
 
@@ -467,13 +557,25 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
     { query: { enabled: activeTab === "logs", queryKey: getListCallsQueryKey({ agentId }) } }
   );
 
-  const update = useUpdateAgent();
-  const toggleAgent = useToggleAgent();
-  const deleteAgent = useDeleteAgent();
+  const update       = useUpdateAgent();
+  const toggleAgent  = useToggleAgent();
+  const deleteAgent  = useDeleteAgent();
+  const { data: kbs } = useListKnowledgeBases();
 
-  // Local editable state for inline editing
+  // ── Tab 1 — Agent ───────────────────────────────────────────────
+  const [agentName, setAgentName]                           = useState("");
+  const [agentType, setAgentType]                           = useState("general");
   const [systemPrompt, setSystemPrompt]                     = useState("");
   const [greetingMessage, setGreetingMessage]               = useState("");
+  const [webhookUrl, setWebhookUrl]                         = useState("");
+  const [knowledgeBaseId, setKnowledgeBaseId]               = useState<number | null>(null);
+
+  // ── Tab 2 — LLM ─────────────────────────────────────────────────
+  const [llmProvider, setLlmProvider]                       = useState("");
+  const [llmModel, setLlmModel]                             = useState("");
+  const [temperature, setTemperature]                       = useState(0.7);
+
+  // ── Tab 3 — Audio ───────────────────────────────────────────────
   const [asrProvider, setAsrProvider]                       = useState("");
   const [asrModel, setAsrModel]                             = useState("");
   const [asrLanguage, setAsrLanguage]                       = useState("en");
@@ -484,55 +586,91 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
   const [asrKeyterms, setAsrKeyterms]                       = useState("");
   const [asrSmartEndpointing, setAsrSmartEndpointing]       = useState("off");
   const [asrAutoFallback, setAsrAutoFallback]               = useState(false);
-  const [llmProvider, setLlmProvider]                       = useState("");
-  const [llmModel, setLlmModel]                             = useState("");
   const [ttsProvider, setTtsProvider]                       = useState("");
   const [ttsModel, setTtsModel]                             = useState("");
   const [telephony, setTelephony]                           = useState("");
-  const [knowledgeBaseId, setKnowledgeBaseId]               = useState<number | null>(null);
+
+  // ── Tab 4 — Engine ──────────────────────────────────────────────
+  const [backchannelingEnabled, setBackchannelingEnabled]   = useState(false);
+  const [backchannelingFrequency, setBackchannelingFrequency] = useState(0.3);
+  const [noiseCancellationEnabled, setNoiseCancellationEnabled] = useState(false);
+  const [endCallPhrases, setEndCallPhrases]                 = useState("");
+  const [inactivityMessage, setInactivityMessage]           = useState("");
+
+  // ── Tab 5 — Call ────────────────────────────────────────────────
+  const [maxDuration, setMaxDuration]                       = useState(300);
+  const [silenceTimeout, setSilenceTimeout]                 = useState(30);
+
+  // ── Tab 7 — Analytics ───────────────────────────────────────────
   const [dispositionSchema, setDispositionSchema]           = useState<Array<{ key: string; label: string; type: string; required?: boolean; options?: string }>>([]);
+
+  // ── Advanced (agentConfig JSONB) covers LLM/Audio/Engine/Call/Analytics/Inbound/WhatsApp advanced fields
+  const [agentConfig, setAgentConfig]                       = useState<AgentCfg>({});
+
   const [dirty, setDirty]                                   = useState(false);
-
-  const { data: kbs } = useListKnowledgeBases();
-
-  useEffect(() => {
-    if (!agent) return;
-    setSystemPrompt(agent.systemPrompt ?? "");
-    setGreetingMessage(agent.greetingMessage ?? "");
-    setAsrProvider(agent.asrProvider ?? "");
-    setAsrModel(agent.asrModel ?? "");
-    setAsrLanguage(agent.asrLanguage ?? "en");
-    setAsrBackgroundDenoising(agent.asrBackgroundDenoising ?? false);
-    setAsrConfidenceThreshold(agent.asrConfidenceThreshold ?? 0.40);
-    setAsrEndOfTurnConfidence(agent.asrEndOfTurnConfidence ?? 0.70);
-    setAsrEndOfTurnTimeout(agent.asrEndOfTurnTimeout ?? 5000);
-    setAsrKeyterms(agent.asrKeyterms ?? "");
-    setAsrSmartEndpointing(agent.asrSmartEndpointing ?? "off");
-    setAsrAutoFallback(agent.asrAutoFallback ?? false);
-    setLlmProvider(agent.llmProvider ?? "");
-    setLlmModel(agent.llmModel ?? "");
-    setTtsProvider(agent.ttsProvider ?? "");
-    setTtsModel(agent.ttsModel ?? "");
-    setTelephony(agent.telephonyProvider ?? "");
-    setKnowledgeBaseId(agent.knowledgeBaseId ?? null);
-    setDispositionSchema(
-      ((agent as unknown as Record<string, unknown>).dispositionSchema as Array<{ key: string; label: string; type: string; required?: boolean; options?: string[] }> | undefined ?? [])
-        .map(f => ({ ...f, options: f.options?.join(", ") ?? "" }))
-    );
-    setDirty(false);
-  }, [agent?.id]);
 
   function mark<T>(setter: (v: T) => void) {
     return (v: T) => { setter(v); setDirty(true); };
   }
+
+  function setCfg(updates: Partial<AgentCfg>) {
+    setAgentConfig(prev => ({ ...prev, ...updates }));
+    setDirty(true);
+  }
+
+  useEffect(() => {
+    if (!agent) return;
+    const a = agent as unknown as Record<string, unknown>;
+    setAgentName(agent.name ?? "");
+    setAgentType((a.agentType as string) ?? "general");
+    setSystemPrompt(agent.systemPrompt ?? "");
+    setGreetingMessage(agent.greetingMessage ?? "");
+    setWebhookUrl((agent.webhookUrl ?? "") as string);
+    setKnowledgeBaseId(agent.knowledgeBaseId ?? null);
+    setLlmProvider(agent.llmProvider ?? "");
+    setLlmModel(agent.llmModel ?? "");
+    setTemperature((agent.temperature ?? 0.7) as number);
+    setAsrProvider(agent.asrProvider ?? "");
+    setAsrModel(agent.asrModel ?? "");
+    setAsrLanguage(agent.asrLanguage ?? "en");
+    setAsrBackgroundDenoising(agent.asrBackgroundDenoising ?? false);
+    setAsrConfidenceThreshold((agent.asrConfidenceThreshold ?? 0.40) as number);
+    setAsrEndOfTurnConfidence((agent.asrEndOfTurnConfidence ?? 0.70) as number);
+    setAsrEndOfTurnTimeout((agent.asrEndOfTurnTimeout ?? 5000) as number);
+    setAsrKeyterms(agent.asrKeyterms ?? "");
+    setAsrSmartEndpointing(agent.asrSmartEndpointing ?? "off");
+    setAsrAutoFallback(agent.asrAutoFallback ?? false);
+    setTtsProvider(agent.ttsProvider ?? "");
+    setTtsModel(agent.ttsModel ?? "");
+    setTelephony(agent.telephonyProvider ?? "");
+    setBackchannelingEnabled(agent.backchannelingEnabled ?? false);
+    setBackchannelingFrequency((agent.backchannelingFrequency ?? 0.3) as number);
+    setNoiseCancellationEnabled(agent.noiseCancellationEnabled ?? false);
+    setEndCallPhrases(agent.endCallPhrases ?? "");
+    setInactivityMessage(agent.inactivityMessage ?? "");
+    setMaxDuration((agent.maxDuration ?? 300) as number);
+    setSilenceTimeout((agent.silenceTimeoutSeconds ?? 30) as number);
+    setDispositionSchema(
+      ((a.dispositionSchema as Array<{ key: string; label: string; type: string; required?: boolean; options?: string[] }> | undefined) ?? [])
+        .map(f => ({ ...f, options: f.options?.join(", ") ?? "" }))
+    );
+    setAgentConfig(((a.agentConfig as AgentCfg) ?? {}) as AgentCfg);
+    setDirty(false);
+  }, [agent?.id]);
 
   function handleSave() {
     update.mutate(
       {
         id: agentId,
         data: {
+          name: agentName,
+          agentType: agentType || undefined,
           systemPrompt,
           greetingMessage: greetingMessage || undefined,
+          webhookUrl: webhookUrl || undefined,
+          knowledgeBaseId: knowledgeBaseId ?? undefined,
+          llmProvider, llmModel: llmModel || undefined,
+          temperature,
           asrProvider,
           asrModel: asrModel || undefined,
           asrLanguage: asrLanguage || undefined,
@@ -543,19 +681,21 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
           asrKeyterms: asrKeyterms || undefined,
           asrSmartEndpointing,
           asrAutoFallback,
-          llmProvider, llmModel: llmModel || undefined,
           ttsProvider, ttsModel: ttsModel || undefined,
           telephonyProvider: telephony,
-          knowledgeBaseId: knowledgeBaseId ?? undefined,
+          backchannelingEnabled, backchannelingFrequency,
+          noiseCancellationEnabled,
+          endCallPhrases: endCallPhrases || undefined,
+          inactivityMessage: inactivityMessage || undefined,
+          maxDuration, silenceTimeoutSeconds: silenceTimeout,
           dispositionSchema: dispositionSchema
             .filter(f => f.key.trim() && f.label.trim())
             .map(f => ({
-              key: f.key.trim(),
-              label: f.label.trim(),
-              type: f.type,
+              key: f.key.trim(), label: f.label.trim(), type: f.type as "text" | "number" | "boolean" | "choice",
               required: f.required,
               options: f.type === "choice" && f.options ? f.options.split(",").map(s => s.trim()).filter(Boolean) : undefined,
             })),
+          agentConfig,
         } as Parameters<typeof update.mutate>[0]["data"],
       },
       {
@@ -592,6 +732,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
 
   const llmModelOptions = LLM_MODELS[llmProvider] ?? [];
   const asrModelOptions = ASR_MODELS[asrProvider] ?? [];
+  const cfg = agentConfig;
 
   if (isLoading) {
     return (
@@ -609,43 +750,36 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
     ? Math.round(((agent.successfulCalls ?? 0) / agent.totalCalls) * 100)
     : 0;
 
-  const callStatusBadge = (s: string) => {
-    if (s === "completed")   return <span className="text-emerald-400 text-xs">completed</span>;
-    if (s === "failed")      return <span className="text-red-400 text-xs">failed</span>;
-    if (s === "in_progress") return <span className="text-amber-400 text-xs">in progress</span>;
-    return <span className="text-zinc-500 text-xs">{s}</span>;
-  };
+  const TABS = [
+    { value: "agent",     label: "Agent" },
+    { value: "llm",       label: "LLM" },
+    { value: "audio",     label: "Audio" },
+    { value: "engine",    label: "Engine" },
+    { value: "call",      label: "Call" },
+    { value: "tools",     label: "Tools" },
+    { value: "analytics", label: "Analytics" },
+    { value: "inbound",   label: "Inbound" },
+    { value: "whatsapp",  label: "WhatsApp" },
+    { value: "logs",      label: "Logs" },
+    { value: "test",      label: "Test" },
+  ];
 
   return (
     <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-      {/* Top bar */}
+      {/* ── Top bar ── */}
       <div className="flex items-center gap-3 px-5 h-12 border-b border-zinc-800 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="font-semibold text-sm text-white truncate">{agent.name}</span>
-          <span className="text-[10px] text-zinc-600 font-mono hidden sm:block">
-            #{String(agent.id).padStart(4, "0")}
-          </span>
+          <span className="font-semibold text-sm text-white truncate">{agentName || agent.name}</span>
+          <span className="text-[10px] text-zinc-600 font-mono hidden sm:block">#{String(agent.id).padStart(4, "0")}</span>
           {statusDot(agent.status)}
         </div>
-
         <div className="ml-auto flex items-center gap-2">
           {dirty && (
-            <Button
-              size="sm"
-              className="h-7 text-xs bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5"
-              onClick={handleSave}
-              disabled={update.isPending}
-            >
-              {update.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
-              Save
+            <Button size="sm" className="h-7 text-xs bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5" onClick={handleSave} disabled={update.isPending}>
+              {update.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} Save
             </Button>
           )}
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 text-xs border-zinc-700 text-zinc-300 hover:bg-zinc-800 gap-1.5"
-            onClick={() => setOutboundDialogOpen(true)}
-          >
+          <Button size="sm" variant="outline" className="h-7 text-xs border-zinc-700 text-zinc-300 hover:bg-zinc-800 gap-1.5" onClick={() => setOutboundDialogOpen(true)}>
             <PhoneOutgoing className="h-3 w-3" /> Call
           </Button>
           <DropdownMenu>
@@ -656,8 +790,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="bg-zinc-900 border-zinc-700 w-44">
               <DropdownMenuItem className="text-zinc-300 hover:bg-zinc-800 cursor-pointer text-xs" onClick={handleToggle}>
-                <PlayCircle className="mr-2 h-3.5 w-3.5" />
-                {agent.status === "active" ? "Deactivate" : "Activate"}
+                <PlayCircle className="mr-2 h-3.5 w-3.5" /> {agent.status === "active" ? "Deactivate" : "Activate"}
               </DropdownMenuItem>
               <DropdownMenuSeparator className="bg-zinc-800" />
               <DropdownMenuItem className="text-red-400 hover:bg-zinc-800 cursor-pointer text-xs" onClick={handleDelete}>
@@ -668,28 +801,25 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
         </div>
       </div>
 
-      {/* Stats row */}
-      <div className="flex items-center gap-4 px-5 py-2.5 border-b border-zinc-800 bg-zinc-900/40 shrink-0">
+      {/* ── Stats row ── */}
+      <div className="flex items-center gap-4 px-5 py-2 border-b border-zinc-800 bg-zinc-900/40 shrink-0">
         <div className="flex items-center gap-1.5 text-xs text-zinc-400">
           <Phone className="h-3 w-3 text-zinc-500" />
-          <span className="font-semibold text-white">{agent.totalCalls ?? 0}</span>
-          <span>calls</span>
+          <span className="font-semibold text-white">{agent.totalCalls ?? 0}</span> calls
         </div>
         <div className="flex items-center gap-1.5 text-xs text-zinc-400">
           <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-          <span className="font-semibold text-white">{successRate}%</span>
-          <span>success</span>
+          <span className="font-semibold text-white">{successRate}%</span> success
         </div>
         {agent.avgDurationSeconds != null && (
           <div className="flex items-center gap-1.5 text-xs text-zinc-400">
             <Clock className="h-3 w-3 text-zinc-500" />
-            <span className="font-semibold text-white">{agent.avgDurationSeconds}s</span>
-            <span>avg duration</span>
+            <span className="font-semibold text-white">~{agent.avgDurationSeconds}s</span> avg
           </div>
         )}
       </div>
 
-      {/* VAPI-style cost + latency bar */}
+      {/* ── Latency bar ── */}
       <AgentMetricsBar
         asrProvider={agent.asrProvider}
         llmProvider={agent.llmProvider}
@@ -703,534 +833,693 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-        <TabsList className="w-full justify-start rounded-none border-b border-zinc-800 bg-transparent px-5 h-9 shrink-0 gap-0">
-          {["assistant", "logs", "test"].map((t) => (
-            <TabsTrigger
-              key={t}
-              value={t}
-              className="capitalize h-9 rounded-none border-b-2 border-transparent bg-transparent px-4 text-xs text-zinc-500 data-[state=active]:border-emerald-500 data-[state=active]:text-white data-[state=active]:bg-transparent font-medium"
-            >
-              {t === "test" ? "Test Call" : t.charAt(0).toUpperCase() + t.slice(1)}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+        <div className="border-b border-zinc-800 shrink-0 overflow-x-auto">
+          <TabsList className="w-max min-w-full justify-start rounded-none bg-transparent px-3 h-9 gap-0">
+            {TABS.map(t => (
+              <TabsTrigger key={t.value} value={t.value}
+                className="h-9 rounded-none border-b-2 border-transparent bg-transparent px-3 text-[11px] font-medium text-zinc-500 shadow-none transition-none data-[state=active]:border-emerald-500 data-[state=active]:text-white data-[state=active]:shadow-none whitespace-nowrap">
+                {t.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </div>
 
-        {/* ── Assistant tab ── */}
-        <TabsContent value="assistant" className="flex-1 overflow-y-auto m-0 px-5 py-4">
-          <div className="max-w-2xl space-y-6">
-            {/* Provider cards — 2×2 grid */}
-            <div className="grid grid-cols-2 gap-3">
-              {/* Transcriber */}
-              <div className="bg-zinc-800/60 border border-zinc-700/50 rounded-xl p-3.5 space-y-2">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Transcriber</p>
-                <Select value={asrProvider} onValueChange={(v) => { mark(setAsrProvider)(v); setAsrModel(ASR_MODELS[v]?.[0]?.value ?? ""); setAsrLanguage(ASR_LANGUAGES[v]?.[0]?.value ?? "en"); }}>
-                  <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-zinc-900 border-zinc-700">
-                    {ASR_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-zinc-300 text-xs">{p.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                {asrModelOptions.length > 0 && (
-                  <Select value={asrModel || asrModelOptions[0]?.value} onValueChange={mark(setAsrModel)}>
-                    <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-400">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-zinc-900 border-zinc-700">
-                      {asrModelOptions.map(m => <SelectItem key={m.value} value={m.value} className="text-zinc-300 text-xs">{m.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                )}
+        {/* ═══════════ TAB CONTENTS ═══════════ */}
+
+        {/* ── Tab 1: Agent ── */}
+        <TabsContent value="agent" className="flex-1 overflow-y-auto m-0 px-5 py-4">
+          <div className="max-w-2xl space-y-4">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 mb-1.5">Agent Name</p>
+              <Input value={agentName} onChange={e => { setAgentName(e.target.value); setDirty(true); }}
+                className="bg-zinc-800/60 border-zinc-700 text-zinc-200" />
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 mb-1.5">Agent Type</p>
+              <Select value={agentType} onValueChange={mark(setAgentType)}>
+                <SelectTrigger className="h-9 text-sm bg-zinc-800/60 border-zinc-700 text-zinc-200"><SelectValue /></SelectTrigger>
+                <SelectContent className="bg-zinc-900 border-zinc-700">
+                  <SelectItem value="general" className="text-zinc-300">General Purpose</SelectItem>
+                  <SelectItem value="lead_qualification" className="text-zinc-300">Lead Qualification</SelectItem>
+                  <SelectItem value="customer_support" className="text-zinc-300">Customer Support</SelectItem>
+                  <SelectItem value="appointment_booking" className="text-zinc-300">Appointment Booking</SelectItem>
+                  <SelectItem value="survey" className="text-zinc-300">Survey</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 mb-1.5">Welcome Message</p>
+              <Textarea value={greetingMessage} onChange={e => { setGreetingMessage(e.target.value); setDirty(true); }}
+                placeholder="First thing the agent says when a call connects"
+                className="bg-zinc-800/60 border-zinc-700 text-zinc-200 text-sm resize-none min-h-[72px] placeholder:text-zinc-600" />
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Agent Prompt</p>
+                <button type="button" className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-300"
+                  onClick={() => { setSystemPrompt("You are a helpful and professional AI voice assistant. Be concise, clear, and friendly in all responses."); setDirty(true); }}>
+                  <Sparkles className="h-3 w-3" /> Generate
+                </button>
               </div>
+              <Textarea value={systemPrompt} onChange={e => { setSystemPrompt(e.target.value); setDirty(true); }}
+                placeholder="You are a helpful AI voice assistant…"
+                className="bg-zinc-800/60 border-zinc-700 text-zinc-200 text-sm resize-none min-h-[200px] placeholder:text-zinc-600" />
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 mb-1.5">Webhook URL <span className="normal-case text-zinc-600 font-normal">(optional)</span></p>
+              <Input value={webhookUrl} onChange={e => { setWebhookUrl(e.target.value); setDirty(true); }}
+                placeholder="https://your-server.com/webhook"
+                className="bg-zinc-800/60 border-zinc-700 text-zinc-200 text-sm placeholder:text-zinc-600" />
+              <p className="text-[10px] text-zinc-600 mt-1">Fires a POST with call summary JSON after each call ends.</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 mb-1.5">Knowledge Base</p>
+              <Select value={knowledgeBaseId?.toString() ?? "none"} onValueChange={v => { setKnowledgeBaseId(v === "none" ? null : parseInt(v)); setDirty(true); }}>
+                <SelectTrigger className="h-8 text-xs bg-zinc-800/60 border-zinc-700 text-zinc-200"><SelectValue /></SelectTrigger>
+                <SelectContent className="bg-zinc-900 border-zinc-700">
+                  <SelectItem value="none" className="text-zinc-400 text-xs">— None —</SelectItem>
+                  {(kbs ?? []).map(kb => <SelectItem key={kb.id} value={kb.id.toString()} className="text-zinc-300 text-xs">{kb.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] text-zinc-600 mt-1">Relevant chunks are injected into the system prompt on every call.</p>
+            </div>
+          </div>
+        </TabsContent>
 
-              {/* Model */}
+        {/* ── Tab 2: LLM ── */}
+        <TabsContent value="llm" className="flex-1 overflow-y-auto m-0 px-5 py-4">
+          <div className="max-w-2xl space-y-5">
+            <div className="grid grid-cols-2 gap-3">
               <div className="bg-zinc-800/60 border border-zinc-700/50 rounded-xl p-3.5 space-y-2">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Model</p>
-                <Select value={llmProvider} onValueChange={(v) => { mark(setLlmProvider)(v); setLlmModel(LLM_MODELS[v]?.[0]?.value ?? ""); }}>
-                  <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200">
-                    <SelectValue />
-                  </SelectTrigger>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Provider</p>
+                <Select value={llmProvider} onValueChange={v => { mark(setLlmProvider)(v); setLlmModel(LLM_MODELS[v]?.[0]?.value ?? ""); }}>
+                  <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200"><SelectValue /></SelectTrigger>
                   <SelectContent className="bg-zinc-900 border-zinc-700">
                     {LLM_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-zinc-300 text-xs">{p.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                {llmModelOptions.length > 0 && (
-                  <Select value={llmModel} onValueChange={mark(setLlmModel)}>
-                    <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-400">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-zinc-900 border-zinc-700">
-                      {llmModelOptions.map(m => <SelectItem key={m.value} value={m.value} className="text-zinc-300 text-xs">{m.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                )}
               </div>
-
-              {/* Voice */}
               <div className="bg-zinc-800/60 border border-zinc-700/50 rounded-xl p-3.5 space-y-2">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Voice</p>
-                <Select
-                  value={ttsProvider}
-                  onValueChange={(v) => {
-                    mark(setTtsProvider)(v);
-                    setTtsModel(TTS_MODELS[v]?.[0]?.value ?? "");
-                  }}
-                >
-                  <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-zinc-900 border-zinc-700">
-                    {TTS_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-zinc-300 text-xs">{p.label}</SelectItem>)}
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Model</p>
+                {llmModelOptions.length > 0
+                  ? <Select value={llmModel} onValueChange={mark(setLlmModel)}>
+                      <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200"><SelectValue /></SelectTrigger>
+                      <SelectContent className="bg-zinc-900 border-zinc-700">
+                        {llmModelOptions.map(m => <SelectItem key={m.value} value={m.value} className="text-zinc-300 text-xs">{m.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  : <Input value={llmModel} onChange={e => { setLlmModel(e.target.value); setDirty(true); }} placeholder="Model name"
+                      className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200" />
+                }
+              </div>
+            </div>
+            <div className="bg-zinc-800/40 border border-zinc-700/40 rounded-xl p-4 space-y-5">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Sampling Parameters</p>
+              <SliderRow label="Temperature" desc="Randomness — higher = more creative" value={temperature} onChange={v => { setTemperature(v); setDirty(true); }} min={0} max={2} step={0.01} />
+              <SliderRow label="Max Tokens" desc="Maximum tokens in the LLM response" value={cfg.maxTokens ?? 200} onChange={v => setCfg({ maxTokens: v })} min={50} max={2000} step={10} />
+              <SliderRow label="Top P" desc="Nucleus sampling — lower = more focused" value={cfg.topP ?? 1} onChange={v => setCfg({ topP: v })} min={0} max={1} step={0.01} />
+              <SliderRow label="Min P" desc="Minimum token probability" value={cfg.minP ?? 0} onChange={v => setCfg({ minP: v })} min={0} max={1} step={0.01} />
+              <SliderRow label="Top K" desc="Only sample from top K tokens (0 = disabled)" value={cfg.topK ?? 0} onChange={v => setCfg({ topK: v })} min={0} max={200} step={1} />
+              <SliderRow label="Presence Penalty" desc="Penalises repeated topics" value={cfg.presencePenalty ?? 0} onChange={v => setCfg({ presencePenalty: v })} min={-2} max={2} step={0.01} />
+              <SliderRow label="Frequency Penalty" desc="Penalises repeated words" value={cfg.frequencyPenalty ?? 0} onChange={v => setCfg({ frequencyPenalty: v })} min={-2} max={2} step={0.01} />
+              <ToggleRow label="Request JSON Response" desc="Force model to output structured JSON" checked={cfg.requestJsonResponse ?? false} onChange={v => setCfg({ requestJsonResponse: v })} />
+            </div>
+            <div className="bg-zinc-800/40 border border-zinc-700/40 rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-700/40">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Guardrail Routes</p>
+                <button type="button" onClick={() => setCfg({ guardrailRoutes: [...(cfg.guardrailRoutes ?? []), { name: "", scoreThreshold: 0.8, utterances: "", response: "" }] })}
+                  className="text-[11px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1">
+                  <Plus className="h-3 w-3" /> Add Route
+                </button>
+              </div>
+              {!(cfg.guardrailRoutes?.length) ? (
+                <p className="text-[11px] text-zinc-600 px-4 py-3">No guardrail routes. Add routes to intercept specific user intents.</p>
+              ) : (
+                <div className="divide-y divide-zinc-700/40">
+                  {cfg.guardrailRoutes!.map((route, i) => (
+                    <div key={i} className="px-4 py-3 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <input value={route.name} onChange={e => { const r = [...cfg.guardrailRoutes!]; r[i] = { ...r[i]!, name: e.target.value }; setCfg({ guardrailRoutes: r }); }}
+                          placeholder="Route name" className="flex-1 h-7 rounded-md bg-zinc-900/60 border border-zinc-700 text-zinc-200 text-xs px-2.5 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500" />
+                        <button type="button" onClick={() => setCfg({ guardrailRoutes: cfg.guardrailRoutes!.filter((_, j) => j !== i) })} className="text-zinc-600 hover:text-red-400"><X className="h-3.5 w-3.5" /></button>
+                      </div>
+                      <SliderRow label={`Score threshold: ${route.scoreThreshold.toFixed(2)}`} value={route.scoreThreshold}
+                        onChange={v => { const r = [...cfg.guardrailRoutes!]; r[i] = { ...r[i]!, scoreThreshold: v }; setCfg({ guardrailRoutes: r }); }} min={0} max={1} step={0.01} />
+                      <textarea value={route.utterances} onChange={e => { const r = [...cfg.guardrailRoutes!]; r[i] = { ...r[i]!, utterances: e.target.value }; setCfg({ guardrailRoutes: r }); }}
+                        placeholder="Sample utterances (one per line)" rows={2}
+                        className="w-full rounded-md bg-zinc-900/60 border border-zinc-700 text-zinc-200 text-xs px-2.5 py-1.5 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500 resize-none" />
+                      <input value={route.response} onChange={e => { const r = [...cfg.guardrailRoutes!]; r[i] = { ...r[i]!, response: e.target.value }; setCfg({ guardrailRoutes: r }); }}
+                        placeholder="Response to send when triggered"
+                        className="w-full h-7 rounded-md bg-zinc-900/60 border border-zinc-700 text-zinc-200 text-xs px-2.5 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500" />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* ── Tab 3: Audio ── */}
+        <TabsContent value="audio" className="flex-1 overflow-y-auto m-0 px-5 py-4">
+          <div className="max-w-2xl space-y-5">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-zinc-800/60 border border-zinc-700/50 rounded-xl p-3.5 space-y-2">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Primary Language</p>
+                <Select value={asrLanguage} onValueChange={mark(setAsrLanguage)}>
+                  <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200"><SelectValue /></SelectTrigger>
+                  <SelectContent className="bg-zinc-900 border-zinc-700 max-h-60">
+                    {LANGUAGES.map(l => <SelectItem key={l.value} value={l.value} className="text-zinc-300 text-xs">{l.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                {TTS_MODELS[ttsProvider] && (
-                  <Select value={ttsModel} onValueChange={mark(setTtsModel)}>
-                    <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-400">
-                      <SelectValue placeholder="Select model / voice" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-zinc-900 border-zinc-700">
-                      {TTS_MODELS[ttsProvider]!.map(m => (
-                        <SelectItem key={m.value} value={m.value} className="text-zinc-300 text-xs">{m.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
               </div>
-
-              {/* Telephony */}
               <div className="bg-zinc-800/60 border border-zinc-700/50 rounded-xl p-3.5 space-y-2">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Telephony</p>
-                <Select value={telephony} onValueChange={mark(setTelephony)}>
-                  <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-zinc-900 border-zinc-700">
-                    {TELEPHONY_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-zinc-300 text-xs">{p.label}</SelectItem>)}
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Secondary Language</p>
+                <Select value={cfg.secondaryLanguage ?? "none"} onValueChange={v => setCfg({ secondaryLanguage: v === "none" ? undefined : v })}>
+                  <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200"><SelectValue /></SelectTrigger>
+                  <SelectContent className="bg-zinc-900 border-zinc-700 max-h-60">
+                    <SelectItem value="none" className="text-zinc-400 text-xs">— None —</SelectItem>
+                    {LANGUAGES.map(l => <SelectItem key={l.value} value={l.value} className="text-zinc-300 text-xs">{l.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
             </div>
-
-            {/* ── Transcriber Settings ─────────────────────────────────────── */}
-            <div className="bg-zinc-800/40 border border-zinc-700/40 rounded-xl overflow-hidden">
-              {/* Header */}
-              <div className="flex items-start gap-2.5 px-4 py-3 border-b border-zinc-700/40">
-                <Mic className="h-3.5 w-3.5 text-sky-400 mt-0.5 shrink-0" />
+            <div className="bg-zinc-800/40 border border-zinc-700/40 rounded-xl p-4 space-y-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Transcriber</p>
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <p className="text-xs font-semibold text-zinc-300">Transcriber Settings</p>
-                  <p className="text-[10px] text-zinc-600 mt-0.5">Configure the speech-to-text transcriber that converts caller speech into text for the LLM.</p>
+                  <p className="text-xs text-zinc-400 mb-1">Provider</p>
+                  <Select value={asrProvider} onValueChange={v => { mark(setAsrProvider)(v); setAsrModel(ASR_MODELS[v]?.[0]?.value ?? ""); }}>
+                    <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-zinc-900 border-zinc-700">
+                      {ASR_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-zinc-300 text-xs">{p.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <p className="text-xs text-zinc-400 mb-1">Model</p>
+                  {asrModelOptions.length > 0
+                    ? <Select value={asrModel} onValueChange={mark(setAsrModel)}>
+                        <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200"><SelectValue /></SelectTrigger>
+                        <SelectContent className="bg-zinc-900 border-zinc-700">
+                          {asrModelOptions.map(m => <SelectItem key={m.value} value={m.value} className="text-zinc-300 text-xs">{m.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    : <Input value={asrModel} onChange={e => { setAsrModel(e.target.value); setDirty(true); }} placeholder="Model name"
+                        className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200" />
+                  }
                 </div>
               </div>
+              <SliderRow label="Confidence Threshold" desc="Discard transcripts below this score" value={asrConfidenceThreshold}
+                onChange={v => { setAsrConfidenceThreshold(v); setDirty(true); }} min={0} max={1} step={0.01} />
+              <SliderRow label="End-of-Turn Timeout" desc="Max wait after speech before finishing a turn" value={asrEndOfTurnTimeout}
+                onChange={v => { setAsrEndOfTurnTimeout(v); setDirty(true); }} min={500} max={10000} step={100} unit="ms" />
+              <ToggleRow label="Background Denoising" desc="Filter background noise from the caller's audio" checked={asrBackgroundDenoising}
+                onChange={v => { setAsrBackgroundDenoising(v); setDirty(true); }} />
+              <ToggleRow label="Auto Fallback" desc="Automatically pick a backup STT provider if primary fails" checked={asrAutoFallback}
+                onChange={v => { setAsrAutoFallback(v); setDirty(true); }} />
+              <div>
+                <p className="text-xs text-zinc-400 mb-1.5">Smart Endpointing</p>
+                <div className="flex border border-zinc-700 rounded-lg p-0.5 bg-zinc-900/60 w-fit">
+                  {(["off", "vapi", "livekit"] as const).map(opt => (
+                    <button key={opt} type="button" onClick={() => { setAsrSmartEndpointing(opt); setDirty(true); }}
+                      className={`text-xs h-7 px-4 rounded-md transition-colors ${asrSmartEndpointing === opt ? "bg-zinc-700 text-white font-semibold" : "text-zinc-500 hover:text-zinc-300"}`}>
+                      {opt === "off" ? "Off" : opt === "vapi" ? "VAPI" : "LiveKit"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-zinc-400 mb-1">Keyterms</p>
+                <Textarea value={asrKeyterms} onChange={e => { setAsrKeyterms(e.target.value); setDirty(true); }}
+                  placeholder="e.g. VoiceOrch, API, webhook" rows={2}
+                  className="bg-zinc-900/60 border-zinc-700 text-zinc-200 text-xs resize-none placeholder:text-zinc-600" />
+              </div>
+            </div>
+            <div className="bg-zinc-800/40 border border-zinc-700/40 rounded-xl p-4 space-y-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Synthesizer</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-xs text-zinc-400 mb-1">Provider</p>
+                  <Select value={ttsProvider} onValueChange={v => { mark(setTtsProvider)(v); setTtsModel(TTS_MODELS[v]?.[0]?.value ?? ""); }}>
+                    <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-zinc-900 border-zinc-700">
+                      {TTS_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-zinc-300 text-xs">{p.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <p className="text-xs text-zinc-400 mb-1">Voice</p>
+                  {TTS_MODELS[ttsProvider]
+                    ? <Select value={ttsModel} onValueChange={mark(setTtsModel)}>
+                        <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200"><SelectValue placeholder="Select voice" /></SelectTrigger>
+                        <SelectContent className="bg-zinc-900 border-zinc-700 max-h-60">
+                          {TTS_MODELS[ttsProvider]!.map(m => <SelectItem key={m.value} value={m.value} className="text-zinc-300 text-xs">{m.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    : <Input value={ttsModel} onChange={e => { setTtsModel(e.target.value); setDirty(true); }} placeholder="Voice / model name"
+                        className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200" />
+                  }
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <p className="text-xs text-zinc-400 mb-1">Sampling Rate</p>
+                  <Input type="number" value={cfg.ttsSamplingRate ?? ""} onChange={e => setCfg({ ttsSamplingRate: parseInt(e.target.value) || undefined })}
+                    placeholder="e.g. 24000" className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200 placeholder:text-zinc-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-zinc-400 mb-1">Encoding</p>
+                  <Select value={cfg.ttsEncoding ?? "none"} onValueChange={v => setCfg({ ttsEncoding: v === "none" ? undefined : v })}>
+                    <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200"><SelectValue placeholder="Default" /></SelectTrigger>
+                    <SelectContent className="bg-zinc-900 border-zinc-700">
+                      <SelectItem value="none" className="text-zinc-400 text-xs">Default</SelectItem>
+                      <SelectItem value="pcm_s16le" className="text-zinc-300 text-xs">PCM 16-bit LE</SelectItem>
+                      <SelectItem value="mulaw" className="text-zinc-300 text-xs">μ-law</SelectItem>
+                      <SelectItem value="alaw" className="text-zinc-300 text-xs">A-law</SelectItem>
+                      <SelectItem value="mp3" className="text-zinc-300 text-xs">MP3</SelectItem>
+                      <SelectItem value="opus" className="text-zinc-300 text-xs">Opus</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <p className="text-xs text-zinc-400 mb-1">Format</p>
+                  <Select value={cfg.ttsAudioFormat ?? "none"} onValueChange={v => setCfg({ ttsAudioFormat: v === "none" ? undefined : v })}>
+                    <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200"><SelectValue placeholder="Default" /></SelectTrigger>
+                    <SelectContent className="bg-zinc-900 border-zinc-700">
+                      <SelectItem value="none" className="text-zinc-400 text-xs">Default</SelectItem>
+                      <SelectItem value="wav" className="text-zinc-300 text-xs">WAV</SelectItem>
+                      <SelectItem value="mp3" className="text-zinc-300 text-xs">MP3</SelectItem>
+                      <SelectItem value="ogg" className="text-zinc-300 text-xs">OGG</SelectItem>
+                      <SelectItem value="flac" className="text-zinc-300 text-xs">FLAC</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <ToggleRow label="Stream Audio" desc="Enable streaming output for lower latency" checked={cfg.ttsStream ?? false} onChange={v => setCfg({ ttsStream: v })} />
+            </div>
+            <div className="bg-zinc-800/40 border border-zinc-700/40 rounded-xl p-4 space-y-3">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Telephony</p>
+              <Select value={telephony} onValueChange={mark(setTelephony)}>
+                <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200"><SelectValue /></SelectTrigger>
+                <SelectContent className="bg-zinc-900 border-zinc-700">
+                  {TELEPHONY_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-zinc-300 text-xs">{p.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </TabsContent>
 
-              <div className="px-4 py-4 space-y-5">
-                {/* Language */}
-                {(ASR_LANGUAGES[asrProvider] ?? []).length > 0 && (
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">Language</Label>
-                    <Select value={asrLanguage} onValueChange={mark(setAsrLanguage)}>
-                      <SelectTrigger className="h-8 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200">
-                        <SelectValue placeholder="Select language" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-zinc-900 border-zinc-700">
-                        {(ASR_LANGUAGES[asrProvider] ?? []).map(l => (
-                          <SelectItem key={l.value} value={l.value} className="text-zinc-300 text-xs">{l.label}</SelectItem>
-                        ))}
+        {/* ── Tab 4: Engine ── */}
+        <TabsContent value="engine" className="flex-1 overflow-y-auto m-0 px-5 py-4">
+          <div className="max-w-2xl space-y-5">
+            <div className="bg-zinc-800/40 border border-zinc-700/40 rounded-xl p-4 space-y-5">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Interruption</p>
+              <SliderRow label="Words for Interruption" desc="How many user words trigger an interruption" value={cfg.wordsForInterruption ?? 2}
+                onChange={v => setCfg({ wordsForInterruption: v })} min={1} max={10} step={1} />
+              <SliderRow label="Incremental Delay" desc="Delay between LLM streaming chunks" value={cfg.incrementalDelay ?? 100}
+                onChange={v => setCfg({ incrementalDelay: v })} min={0} max={2000} step={10} unit="ms" />
+            </div>
+            <div className="bg-zinc-800/40 border border-zinc-700/40 rounded-xl p-4 space-y-5">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Backchanneling</p>
+              <ToggleRow label="Backchanneling" desc={'Short acknowledgements ("mm-hmm", "I see") while the LLM is thinking'}
+                checked={backchannelingEnabled} onChange={v => { setBackchannelingEnabled(v); setDirty(true); }} />
+              {backchannelingEnabled && (
+                <>
+                  <SliderRow label="Frequency" desc="Probability of backchanneling on each turn"
+                    value={backchannelingFrequency} onChange={v => { setBackchannelingFrequency(v); setDirty(true); }} min={0} max={1} step={0.01} />
+                  <SliderRow label="Start Delay" desc="Wait before injecting backchannel audio"
+                    value={cfg.backchannelingStartDelay ?? 1.5} onChange={v => setCfg({ backchannelingStartDelay: v })} min={0} max={5} step={0.1} unit="s" />
+                </>
+              )}
+            </div>
+            <div className="bg-zinc-800/40 border border-zinc-700/40 rounded-xl p-4 space-y-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Ambient &amp; Noise</p>
+              <ToggleRow label="Ambient Noise" desc="Play background audio to make the call feel natural"
+                checked={cfg.ambientNoiseEnabled ?? false} onChange={v => setCfg({ ambientNoiseEnabled: v })} />
+              {cfg.ambientNoiseEnabled && (
+                <div>
+                  <p className="text-xs text-zinc-400 mb-1">Track</p>
+                  <Select value={cfg.ambientNoiseTrack ?? "office-ambience"} onValueChange={v => setCfg({ ambientNoiseTrack: v })}>
+                    <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-zinc-900 border-zinc-700">
+                      {["office-ambience","cafe","coffee-shop","convention-hall","home","outdoor","restaurant"].map(t => (
+                        <SelectItem key={t} value={t} className="text-zinc-300 text-xs capitalize">{t.replace(/-/g, " ")}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <ToggleRow label="Noise Cancellation" desc="Filter background noise from caller audio"
+                checked={noiseCancellationEnabled} onChange={v => { setNoiseCancellationEnabled(v); setDirty(true); }} />
+            </div>
+            <div className="bg-zinc-800/40 border border-zinc-700/40 rounded-xl p-4 space-y-3">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">End Call Phrases</p>
+              <Textarea value={endCallPhrases} onChange={e => { setEndCallPhrases(e.target.value); setDirty(true); }}
+                placeholder="goodbye, bye, thanks for calling" rows={2}
+                className="bg-zinc-900/60 border-zinc-700 text-zinc-200 text-xs resize-none placeholder:text-zinc-600" />
+              <p className="text-[10px] text-zinc-600">Comma-separated phrases that trigger hangup when detected.</p>
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* ── Tab 5: Call ── */}
+        <TabsContent value="call" className="flex-1 overflow-y-auto m-0 px-5 py-4">
+          <div className="max-w-2xl space-y-5">
+            <div className="bg-zinc-800/40 border border-zinc-700/40 rounded-xl p-4 space-y-5">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Duration &amp; Silence</p>
+              <SliderRow label="Max Call Duration" desc="Auto-terminate after this duration" value={maxDuration}
+                onChange={v => { setMaxDuration(v); setDirty(true); }} min={30} max={3600} step={30} unit="s" />
+              <SliderRow label="Hangup After Silence" desc="End call if caller is silent this long" value={silenceTimeout}
+                onChange={v => { setSilenceTimeout(v); setDirty(true); }} min={5} max={120} step={5} unit="s" />
+              <ToggleRow label="Hangup After LLM Call" desc="Hang up automatically when the LLM finishes its response"
+                checked={cfg.hangupAfterLlmCall ?? false} onChange={v => setCfg({ hangupAfterLlmCall: v })} />
+            </div>
+            <div className="bg-zinc-800/40 border border-zinc-700/40 rounded-xl p-4 space-y-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Messages</p>
+              <div>
+                <p className="text-xs text-zinc-400 mb-1">Cancellation Prompt</p>
+                <Textarea value={cfg.callCancellationPrompt ?? ""} onChange={e => setCfg({ callCancellationPrompt: e.target.value })}
+                  placeholder="What to say when cancelling the call…" rows={2}
+                  className="bg-zinc-900/60 border-zinc-700 text-zinc-200 text-xs resize-none placeholder:text-zinc-600" />
+              </div>
+              <div>
+                <p className="text-xs text-zinc-400 mb-1">Inactivity Message</p>
+                <Input value={inactivityMessage} onChange={e => { setInactivityMessage(e.target.value); setDirty(true); }}
+                  placeholder="Are you still there?" className="h-8 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200 placeholder:text-zinc-600" />
+              </div>
+            </div>
+            <div className="bg-zinc-800/40 border border-zinc-700/40 rounded-xl p-4 space-y-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Detection</p>
+              <ToggleRow label="Voicemail Detection" desc="Detect voicemail and respond accordingly"
+                checked={cfg.voicemailDetection ?? false} onChange={v => setCfg({ voicemailDetection: v })} />
+            </div>
+            <div className="bg-zinc-800/40 border border-zinc-700/40 rounded-xl p-4 space-y-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Scheduling</p>
+              <ToggleRow label="Scheduling Guardrails" desc="Restrict when this agent can make outbound calls"
+                checked={cfg.schedulingGuardrails ?? false} onChange={v => setCfg({ schedulingGuardrails: v })} />
+              {cfg.schedulingGuardrails && (
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <p className="text-xs text-zinc-400 mb-1">Call Start (hour 0–23)</p>
+                    <Select value={String(cfg.callStartHour ?? 8)} onValueChange={v => setCfg({ callStartHour: parseInt(v) })}>
+                      <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200"><SelectValue /></SelectTrigger>
+                      <SelectContent className="bg-zinc-900 border-zinc-700 max-h-48">
+                        {Array.from({ length: 24 }, (_, i) => <SelectItem key={i} value={String(i)} className="text-zinc-300 text-xs">{String(i).padStart(2, "0")}:00</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
-                )}
-
-                {/* Flux model hint */}
-                {asrProvider === "deepgram" && (asrModel || "") === "flux" && (
-                  <div className="flex items-start gap-2 bg-amber-950/30 border border-amber-800/40 rounded-lg px-3 py-2">
-                    <AlertTriangle className="h-3.5 w-3.5 text-amber-500 mt-0.5 shrink-0" />
-                    <p className="text-[11px] text-amber-400/90 leading-relaxed">
-                      Make sure your Smart Endpointing Plan in Advanced &gt; Start Speaking Plan is disabled to leverage Flux end-of-turn detection.
-                    </p>
-                  </div>
-                )}
-
-                {/* Background Denoising */}
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center shrink-0">
-                    <Volume2 className="h-3.5 w-3.5 text-zinc-400" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-xs font-medium text-zinc-300">Background Denoising</p>
-                    <p className="text-[10px] text-zinc-600">Filter background noise while the user is talking.</p>
-                  </div>
-                  <Switch
-                    checked={asrBackgroundDenoising}
-                    onCheckedChange={mark(setAsrBackgroundDenoising)}
-                    className="data-[state=checked]:bg-emerald-500"
-                  />
-                </div>
-
-                {/* Confidence Threshold */}
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center shrink-0 mt-0.5">
-                    <Target className="h-3.5 w-3.5 text-zinc-400" />
-                  </div>
-                  <div className="flex-1 space-y-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-xs font-medium text-zinc-300">Confidence Threshold</p>
-                        <p className="text-[10px] text-zinc-600">Transcripts below this confidence score will be filtered out.</p>
-                      </div>
-                      <span className="text-xs font-mono bg-zinc-800 border border-zinc-700 rounded px-1.5 py-0.5 text-zinc-300 min-w-[42px] text-center shrink-0">
-                        {asrConfidenceThreshold.toFixed(2)}
-                      </span>
-                    </div>
-                    <Slider
-                      min={0} max={1} step={0.01}
-                      value={[asrConfidenceThreshold]}
-                      onValueChange={([v]) => { setAsrConfidenceThreshold(v); setDirty(true); }}
-                    />
-                    <div className="flex justify-between text-[10px] text-zinc-600">
-                      <span>0</span><span>1.0</span>
-                    </div>
+                  <div>
+                    <p className="text-xs text-zinc-400 mb-1">Call End (hour 0–23)</p>
+                    <Select value={String(cfg.callEndHour ?? 20)} onValueChange={v => setCfg({ callEndHour: parseInt(v) })}>
+                      <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200"><SelectValue /></SelectTrigger>
+                      <SelectContent className="bg-zinc-900 border-zinc-700 max-h-48">
+                        {Array.from({ length: 24 }, (_, i) => <SelectItem key={i} value={String(i)} className="text-zinc-300 text-xs">{String(i).padStart(2, "0")}:00</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
+              )}
+            </div>
+          </div>
+        </TabsContent>
 
-                {/* End of Turn Confidence — Deepgram only */}
-                {asrProvider === "deepgram" && (
-                  <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center shrink-0 mt-0.5">
-                      <Target className="h-3.5 w-3.5 text-zinc-400" />
-                    </div>
-                    <div className="flex-1 space-y-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="text-xs font-medium text-zinc-300">End of Turn Confidence</p>
-                          <p className="text-[10px] text-zinc-600">Confidence threshold required to finish a turn.</p>
-                        </div>
-                        <span className="text-xs font-mono bg-zinc-800 border border-zinc-700 rounded px-1.5 py-0.5 text-zinc-300 min-w-[42px] text-center shrink-0">
-                          {asrEndOfTurnConfidence.toFixed(2)}
-                        </span>
-                      </div>
-                      <Slider
-                        min={0.5} max={0.9} step={0.01}
-                        value={[asrEndOfTurnConfidence]}
-                        onValueChange={([v]) => { setAsrEndOfTurnConfidence(v); setDirty(true); }}
-                      />
-                      <div className="flex justify-between text-[10px] text-zinc-600">
-                        <span>0.5</span><span>0.9</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* End of Turn Timeout */}
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center shrink-0 mt-0.5">
-                    <Clock className="h-3.5 w-3.5 text-zinc-400" />
-                  </div>
-                  <div className="flex-1 space-y-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-xs font-medium text-zinc-300">End of Turn Timeout</p>
-                        <p className="text-[10px] text-zinc-600">Maximum time to wait after speech before finishing a turn.</p>
-                      </div>
-                      <span className="text-xs font-mono bg-zinc-800 border border-zinc-700 rounded px-1.5 py-0.5 text-zinc-300 min-w-[48px] text-center shrink-0">
-                        {asrEndOfTurnTimeout}
-                      </span>
-                    </div>
-                    <Slider
-                      min={500} max={10000} step={100}
-                      value={[asrEndOfTurnTimeout]}
-                      onValueChange={([v]) => { setAsrEndOfTurnTimeout(v); setDirty(true); }}
-                    />
-                    <div className="flex justify-between text-[10px] text-zinc-600">
-                      <span>500ms</span><span>10s</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Keyterms */}
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center shrink-0 mt-0.5">
-                    <AlignLeft className="h-3.5 w-3.5 text-zinc-400" />
-                  </div>
-                  <div className="flex-1 space-y-1.5">
-                    <p className="text-xs font-medium text-zinc-300">Keyterms</p>
-                    <p className="text-[10px] text-zinc-600">Enter keywords separated by commas for transcription.</p>
-                    <Textarea
-                      value={asrKeyterms}
-                      onChange={(e) => { setAsrKeyterms(e.target.value); setDirty(true); }}
-                      placeholder="e.g. VoiceOrch, API, webhook"
-                      className="bg-zinc-900/60 border-zinc-700 text-zinc-200 text-xs resize-none min-h-[68px] placeholder:text-zinc-600 focus:border-zinc-600"
-                    />
-                    <p className="text-[10px] text-zinc-600">
-                      Currently ~{asrKeyterms.split(",").filter(t => t.trim()).length} tokens used.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Smart Endpointing */}
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center shrink-0 mt-0.5">
-                    <Zap className="h-3.5 w-3.5 text-zinc-400" />
-                  </div>
-                  <div className="flex-1 space-y-2">
-                    <p className="text-xs font-medium text-zinc-300">Smart Endpointing</p>
-                    <p className="text-[10px] text-zinc-600">Enable for more accurate speech endpoint detection.</p>
-                    <div className="flex border border-zinc-700 rounded-lg p-0.5 bg-zinc-900/60 w-fit gap-0">
-                      {(["off", "vapi", "livekit"] as const).map((opt) => (
-                        <button
-                          key={opt}
-                          type="button"
-                          onClick={() => { setAsrSmartEndpointing(opt); setDirty(true); }}
-                          className={[
-                            "text-xs h-7 px-4 rounded-md transition-colors",
-                            asrSmartEndpointing === opt
-                              ? "bg-zinc-700 text-white font-semibold shadow-sm"
-                              : "text-zinc-500 hover:text-zinc-300 font-medium",
-                          ].join(" ")}
-                        >
-                          {opt === "off" ? "Off" : opt === "vapi" ? "VAPI" : "LiveKit"}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Transcriber Fallback */}
-                <div className="space-y-3 pt-1 border-t border-zinc-700/40">
-                  <div className="flex items-start gap-3 pt-3">
-                    <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center shrink-0">
-                      <RefreshCw className="h-3.5 w-3.5 text-zinc-400" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium text-zinc-300">Transcriber Fallback</p>
-                      <p className="text-[10px] text-zinc-600 mt-0.5 leading-relaxed">
-                        Protect your calls from STT failures. Auto fallback is recommended for most users. If you also add manual fallbacks, those are tried first before auto fallback kicks in.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between pl-11">
-                    <div>
-                      <p className="text-xs text-zinc-400 font-medium">Auto Fallback</p>
-                      <p className="text-[10px] text-zinc-600">Let VoiceOrch automatically pick a backup STT provider.</p>
-                    </div>
-                    <Switch
-                      checked={asrAutoFallback}
-                      onCheckedChange={mark(setAsrAutoFallback)}
-                      className="data-[state=checked]:bg-emerald-500"
-                    />
-                  </div>
-                </div>
+        {/* ── Tab 6: Tools ── */}
+        <TabsContent value="tools" className="flex-1 overflow-y-auto m-0 px-5 py-4">
+          <div className="max-w-2xl">
+            <div className="bg-zinc-800/40 border border-zinc-700/40 rounded-xl p-8 flex flex-col items-center text-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-zinc-800 flex items-center justify-center">
+                <Settings2 className="h-5 w-5 text-zinc-500" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-zinc-300">Tools — Coming Soon</p>
+                <p className="text-xs text-zinc-600 mt-1 max-w-sm">Connect calendar booking, CRM integrations, and custom function calls. Tools let your agent take actions during a call.</p>
+              </div>
+              <div className="flex flex-wrap gap-2 mt-2 justify-center">
+                {["Google Calendar","HubSpot CRM","Salesforce","Custom Webhook"].map(t => (
+                  <span key={t} className="text-xs bg-zinc-800 border border-zinc-700 text-zinc-500 rounded-md px-2.5 py-1">{t}</span>
+                ))}
               </div>
             </div>
+          </div>
+        </TabsContent>
 
-            {/* First message */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wide">First Message</p>
-                <span className="text-[10px] text-zinc-600">Agent speaks first</span>
-              </div>
-              <Textarea
-                value={greetingMessage}
-                onChange={(e) => { setGreetingMessage(e.target.value); setDirty(true); }}
-                placeholder="Hello! How can I help you today?"
-                className="bg-zinc-800/60 border-zinc-700 text-zinc-200 text-sm resize-none min-h-[72px] placeholder:text-zinc-600 focus:border-zinc-600"
-              />
+        {/* ── Tab 7: Analytics ── */}
+        <TabsContent value="analytics" className="flex-1 overflow-y-auto m-0 px-5 py-4">
+          <div className="max-w-2xl space-y-5">
+            <div className="bg-zinc-800/40 border border-zinc-700/40 rounded-xl p-4 space-y-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Summarization</p>
+              <ToggleRow label="Auto-Summarize Calls" desc="Generate a summary of each call transcript after the call ends"
+                checked={cfg.summarizationEnabled ?? false} onChange={v => setCfg({ summarizationEnabled: v })} />
+              {cfg.summarizationEnabled && (
+                <div>
+                  <p className="text-xs text-zinc-400 mb-1">Summarization Prompt</p>
+                  <Textarea value={cfg.summarizationPrompt ?? ""} onChange={e => setCfg({ summarizationPrompt: e.target.value })}
+                    placeholder="Summarize the key points, next steps, and any issues raised…" rows={4}
+                    className="bg-zinc-900/60 border-zinc-700 text-zinc-200 text-xs resize-none placeholder:text-zinc-600" />
+                </div>
+              )}
             </div>
-
-            {/* System prompt */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wide">System Prompt</p>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 text-[11px] text-zinc-500 hover:text-zinc-300 gap-1 px-2"
-                  onClick={() => {
-                    setSystemPrompt("You are a helpful and professional AI voice assistant. Be concise, clear, and friendly in all responses.");
-                    setDirty(true);
-                  }}
-                >
-                  <Sparkles className="h-3 w-3" /> Generate
-                </Button>
-              </div>
-              <Textarea
-                value={systemPrompt}
-                onChange={(e) => { setSystemPrompt(e.target.value); setDirty(true); }}
-                placeholder="This is a blank template. You can change the model, temperature, and messages."
-                className="bg-zinc-800/60 border-zinc-700 text-zinc-200 text-sm resize-none min-h-[160px] placeholder:text-zinc-600 focus:border-zinc-600"
-              />
-            </div>
-
-            {/* Knowledge Base */}
-            <div className="bg-zinc-800/40 border border-zinc-700/40 rounded-xl p-3.5 space-y-2">
-              <div className="flex items-center gap-1.5 mb-0.5">
-                <BookOpen className="w-3 h-3 text-emerald-400" />
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Knowledge Base</p>
-              </div>
-              <Select
-                value={knowledgeBaseId?.toString() ?? "none"}
-                onValueChange={(v) => { setKnowledgeBaseId(v === "none" ? null : parseInt(v)); setDirty(true); }}
-              >
-                <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200">
-                  <SelectValue placeholder="No knowledge base attached" />
-                </SelectTrigger>
-                <SelectContent className="bg-zinc-900 border-zinc-700">
-                  <SelectItem value="none" className="text-zinc-400 text-xs">— None —</SelectItem>
-                  {(kbs ?? []).map(kb => (
-                    <SelectItem key={kb.id} value={kb.id.toString()} className="text-zinc-300 text-xs">
-                      {kb.name} <span className="text-zinc-500 ml-1">({kb.chunkCount} chunks)</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-[10px] text-zinc-600">Relevant chunks are injected into the system prompt on every call.</p>
-            </div>
-
-            {/* ── Disposition Fields ─────────────────────────────────────── */}
             <div className="bg-zinc-800/40 border border-zinc-700/40 rounded-xl overflow-hidden">
               <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-700/40">
                 <div className="flex items-center gap-2">
                   <ClipboardList className="h-3.5 w-3.5 text-emerald-400" />
                   <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Disposition Fields</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDispositionSchema(prev => [...prev, { key: "", label: "", type: "text", required: false, options: "" }]);
-                    setDirty(true);
-                  }}
-                  className="text-[11px] text-emerald-400 hover:text-emerald-300 font-medium flex items-center gap-1"
-                >
+                <button type="button" onClick={() => { setDispositionSchema(prev => [...prev, { key: "", label: "", type: "text", required: false, options: "" }]); setDirty(true); }}
+                  className="text-[11px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1">
                   <Plus className="h-3 w-3" /> Add Field
                 </button>
               </div>
               {dispositionSchema.length === 0 ? (
-                <p className="text-[11px] text-zinc-600 px-4 py-3">
-                  No fields defined. Fields are extracted automatically from call transcripts by the LLM after each call.
-                </p>
+                <p className="text-[11px] text-zinc-600 px-4 py-3">No fields defined. Fields are extracted from call transcripts by the LLM after each call.</p>
               ) : (
                 <div className="divide-y divide-zinc-700/40">
                   {dispositionSchema.map((field, i) => (
                     <div key={i} className="px-4 py-3 space-y-2">
                       <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={field.key}
-                          onChange={e => {
-                            const next = [...dispositionSchema];
-                            next[i] = { ...next[i], key: e.target.value };
-                            setDispositionSchema(next); setDirty(true);
-                          }}
-                          placeholder="key (snake_case)"
-                          className="flex-1 h-7 rounded-md bg-zinc-900/60 border border-zinc-700 text-zinc-200 text-xs px-2.5 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
-                        />
-                        <input
-                          type="text"
-                          value={field.label}
-                          onChange={e => {
-                            const next = [...dispositionSchema];
-                            next[i] = { ...next[i], label: e.target.value };
-                            setDispositionSchema(next); setDirty(true);
-                          }}
-                          placeholder="Label"
-                          className="flex-1 h-7 rounded-md bg-zinc-900/60 border border-zinc-700 text-zinc-200 text-xs px-2.5 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
-                        />
-                        <Select
-                          value={field.type}
-                          onValueChange={v => {
-                            const next = [...dispositionSchema];
-                            next[i] = { ...next[i], type: v };
-                            setDispositionSchema(next); setDirty(true);
-                          }}
-                        >
-                          <SelectTrigger className="h-7 w-28 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200">
-                            <SelectValue />
-                          </SelectTrigger>
+                        <input value={field.key} onChange={e => { const n = [...dispositionSchema]; n[i] = { ...n[i]!, key: e.target.value }; setDispositionSchema(n); setDirty(true); }}
+                          placeholder="key_name" className="flex-1 h-7 rounded-md bg-zinc-900/60 border border-zinc-700 text-zinc-200 text-xs px-2.5 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500" />
+                        <input value={field.label} onChange={e => { const n = [...dispositionSchema]; n[i] = { ...n[i]!, label: e.target.value }; setDispositionSchema(n); setDirty(true); }}
+                          placeholder="Display Label" className="flex-1 h-7 rounded-md bg-zinc-900/60 border border-zinc-700 text-zinc-200 text-xs px-2.5 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500" />
+                        <Select value={field.type} onValueChange={v => { const n = [...dispositionSchema]; n[i] = { ...n[i]!, type: v }; setDispositionSchema(n); setDirty(true); }}>
+                          <SelectTrigger className="h-7 w-24 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200"><SelectValue /></SelectTrigger>
                           <SelectContent className="bg-zinc-900 border-zinc-700">
-                            <SelectItem value="text"    className="text-zinc-300 text-xs">Text</SelectItem>
-                            <SelectItem value="number"  className="text-zinc-300 text-xs">Number</SelectItem>
+                            <SelectItem value="text" className="text-zinc-300 text-xs">Text</SelectItem>
+                            <SelectItem value="number" className="text-zinc-300 text-xs">Number</SelectItem>
                             <SelectItem value="boolean" className="text-zinc-300 text-xs">Yes / No</SelectItem>
-                            <SelectItem value="choice"  className="text-zinc-300 text-xs">Choice</SelectItem>
+                            <SelectItem value="choice" className="text-zinc-300 text-xs">Choice</SelectItem>
                           </SelectContent>
                         </Select>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setDispositionSchema(prev => prev.filter((_, j) => j !== i));
-                            setDirty(true);
-                          }}
-                          className="text-zinc-600 hover:text-red-400 transition-colors shrink-0"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
+                        <button type="button" onClick={() => { setDispositionSchema(prev => prev.filter((_, j) => j !== i)); setDirty(true); }} className="text-zinc-600 hover:text-red-400"><X className="h-3.5 w-3.5" /></button>
                       </div>
                       {field.type === "choice" && (
-                        <input
-                          type="text"
-                          value={field.options ?? ""}
-                          onChange={e => {
-                            const next = [...dispositionSchema];
-                            next[i] = { ...next[i], options: e.target.value };
-                            setDispositionSchema(next); setDirty(true);
-                          }}
+                        <input value={field.options ?? ""} onChange={e => { const n = [...dispositionSchema]; n[i] = { ...n[i]!, options: e.target.value }; setDispositionSchema(n); setDirty(true); }}
                           placeholder="Options: resolved, escalated, callback"
-                          className="w-full h-7 rounded-md bg-zinc-900/60 border border-zinc-700 text-zinc-200 text-xs px-2.5 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
-                        />
+                          className="w-full h-7 rounded-md bg-zinc-900/60 border border-zinc-700 text-zinc-200 text-xs px-2.5 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500" />
                       )}
                     </div>
                   ))}
                 </div>
               )}
             </div>
+          </div>
+        </TabsContent>
 
-            {/* Description */}
-            {agent.description && (
-              <div className="text-xs text-zinc-600 italic border-t border-zinc-800 pt-3">
-                {agent.description}
+        {/* ── Tab 8: Inbound ── */}
+        <TabsContent value="inbound" className="flex-1 overflow-y-auto m-0 px-5 py-4">
+          <div className="max-w-2xl space-y-5">
+            <div className="bg-zinc-800/40 border border-zinc-700/40 rounded-xl p-4 space-y-5">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Call Limits</p>
+              <SliderRow label="Inbound Limit" desc="Max concurrent inbound calls (−1 = unlimited)" value={cfg.inboundLimit ?? -1}
+                onChange={v => setCfg({ inboundLimit: v })} min={-1} max={50} step={1} />
+              <ToggleRow label="Disallow Unknown Numbers" desc="Reject calls from numbers not on the whitelist"
+                checked={cfg.disallowUnknownNumbers ?? false} onChange={v => setCfg({ disallowUnknownNumbers: v })} />
+              {cfg.disallowUnknownNumbers && (
+                <div>
+                  <p className="text-xs text-zinc-400 mb-1">Whitelist Numbers</p>
+                  <Textarea value={cfg.whitelistNumbers ?? ""} onChange={e => setCfg({ whitelistNumbers: e.target.value })}
+                    placeholder="+1234567890, +0987654321" rows={2}
+                    className="bg-zinc-900/60 border-zinc-700 text-zinc-200 text-xs resize-none placeholder:text-zinc-600" />
+                  <p className="text-[10px] text-zinc-600 mt-1">Comma-separated E.164 numbers.</p>
+                </div>
+              )}
+            </div>
+            <div className="bg-zinc-800/40 border border-zinc-700/40 rounded-xl p-4 space-y-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Call Memory / RAG</p>
+              <ToggleRow label="Enable Call Memory" desc="Ingest call data into a RAG source for context-aware responses"
+                checked={cfg.callMemoryEnabled ?? false} onChange={v => setCfg({ callMemoryEnabled: v })} />
+              {cfg.callMemoryEnabled && (
+                <>
+                  <div>
+                    <p className="text-xs text-zinc-400 mb-1">Source Type</p>
+                    <Select value={cfg.callMemorySourceType ?? "api"} onValueChange={v => setCfg({ callMemorySourceType: v })}>
+                      <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200"><SelectValue /></SelectTrigger>
+                      <SelectContent className="bg-zinc-900 border-zinc-700">
+                        <SelectItem value="api" className="text-zinc-300 text-xs">REST API</SelectItem>
+                        <SelectItem value="s3" className="text-zinc-300 text-xs">Amazon S3</SelectItem>
+                        <SelectItem value="gcs" className="text-zinc-300 text-xs">Google Cloud Storage</SelectItem>
+                        <SelectItem value="database" className="text-zinc-300 text-xs">Database</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <p className="text-xs text-zinc-400 mb-1">Source URL</p>
+                    <Input value={cfg.callMemorySourceUrl ?? ""} onChange={e => setCfg({ callMemorySourceUrl: e.target.value })}
+                      placeholder="https://api.your-rag.com/ingest" className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200 placeholder:text-zinc-600" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-zinc-400 mb-1">Auth Token</p>
+                    <Input type="password" value={cfg.callMemoryAuthToken ?? ""} onChange={e => setCfg({ callMemoryAuthToken: e.target.value })}
+                      placeholder="Bearer token or API key" className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200 placeholder:text-zinc-600" />
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* ── Tab 9: WhatsApp ── */}
+        <TabsContent value="whatsapp" className="flex-1 overflow-y-auto m-0 px-5 py-4">
+          <div className="max-w-2xl space-y-5">
+            <div className="bg-zinc-800/40 border border-zinc-700/40 rounded-xl p-4 space-y-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Provider</p>
+              <Select value={cfg.whatsappProvider ?? "none"} onValueChange={v => setCfg({ whatsappProvider: v === "none" ? undefined : v })}>
+                <SelectTrigger className="h-8 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200"><SelectValue placeholder="Select provider" /></SelectTrigger>
+                <SelectContent className="bg-zinc-900 border-zinc-700">
+                  <SelectItem value="none" className="text-zinc-400 text-xs">— Not configured —</SelectItem>
+                  <SelectItem value="aisensy" className="text-zinc-300 text-xs">AiSensy</SelectItem>
+                  <SelectItem value="meta" className="text-zinc-300 text-xs">Meta (Business API)</SelectItem>
+                  <SelectItem value="twilio" className="text-zinc-300 text-xs">Twilio WhatsApp</SelectItem>
+                  <SelectItem value="360dialog" className="text-zinc-300 text-xs">360dialog</SelectItem>
+                  <SelectItem value="wati" className="text-zinc-300 text-xs">WATI</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {cfg.whatsappProvider && cfg.whatsappProvider !== "none" && (
+              <div className="bg-zinc-800/40 border border-zinc-700/40 rounded-xl p-4 space-y-3">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Credentials</p>
+                {(cfg.whatsappProvider === "aisensy") && (
+                  <>
+                    <div><p className="text-xs text-zinc-400 mb-1">API Key</p>
+                      <Input type="password" value={cfg.whatsappCredentials?.["apiKey"] ?? ""} onChange={e => setCfg({ whatsappCredentials: { ...cfg.whatsappCredentials, apiKey: e.target.value } })}
+                        placeholder="AiSensy API key" className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200" />
+                    </div>
+                    <div><p className="text-xs text-zinc-400 mb-1">Campaign Name</p>
+                      <Input value={cfg.whatsappCredentials?.["campaignName"] ?? ""} onChange={e => setCfg({ whatsappCredentials: { ...cfg.whatsappCredentials, campaignName: e.target.value } })}
+                        placeholder="Campaign name" className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200" />
+                    </div>
+                  </>
+                )}
+                {cfg.whatsappProvider === "meta" && (
+                  <>
+                    <div><p className="text-xs text-zinc-400 mb-1">Access Token</p>
+                      <Input type="password" value={cfg.whatsappCredentials?.["accessToken"] ?? ""} onChange={e => setCfg({ whatsappCredentials: { ...cfg.whatsappCredentials, accessToken: e.target.value } })}
+                        placeholder="Meta API access token" className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200" />
+                    </div>
+                    <div><p className="text-xs text-zinc-400 mb-1">Phone Number ID</p>
+                      <Input value={cfg.whatsappCredentials?.["phoneNumberId"] ?? ""} onChange={e => setCfg({ whatsappCredentials: { ...cfg.whatsappCredentials, phoneNumberId: e.target.value } })}
+                        placeholder="e.g. 123456789012345" className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200" />
+                    </div>
+                  </>
+                )}
+                {["twilio","360dialog","wati"].includes(cfg.whatsappProvider) && (
+                  <>
+                    <div><p className="text-xs text-zinc-400 mb-1">API Key / SID</p>
+                      <Input type="password" value={cfg.whatsappCredentials?.["apiKey"] ?? ""} onChange={e => setCfg({ whatsappCredentials: { ...cfg.whatsappCredentials, apiKey: e.target.value } })}
+                        placeholder="API key or account SID" className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200" />
+                    </div>
+                    <div><p className="text-xs text-zinc-400 mb-1">API Secret / Auth Token</p>
+                      <Input type="password" value={cfg.whatsappCredentials?.["apiSecret"] ?? ""} onChange={e => setCfg({ whatsappCredentials: { ...cfg.whatsappCredentials, apiSecret: e.target.value } })}
+                        placeholder="API secret or auth token" className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200" />
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+            {cfg.whatsappProvider && cfg.whatsappProvider !== "none" && (
+              <div className="bg-zinc-800/40 border border-zinc-700/40 rounded-xl overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-700/40">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Outcome Messages</p>
+                  <button type="button" onClick={() => setCfg({ whatsappOutcomeMessages: [...(cfg.whatsappOutcomeMessages ?? []), { outcome: "interested", templateName: "", language: "en" }] })}
+                    className="text-[11px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1"><Plus className="h-3 w-3" /> Add</button>
+                </div>
+                {!(cfg.whatsappOutcomeMessages?.length) ? (
+                  <p className="text-[11px] text-zinc-600 px-4 py-3">No outcome messages configured.</p>
+                ) : (
+                  <div className="divide-y divide-zinc-700/40">
+                    {cfg.whatsappOutcomeMessages!.map((msg, i) => (
+                      <div key={i} className="px-4 py-3 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Select value={msg.outcome} onValueChange={v => { const m = [...cfg.whatsappOutcomeMessages!]; m[i] = { ...m[i]!, outcome: v }; setCfg({ whatsappOutcomeMessages: m }); }}>
+                            <SelectTrigger className="h-7 text-xs bg-zinc-900/60 border-zinc-700 text-zinc-200 w-36"><SelectValue /></SelectTrigger>
+                            <SelectContent className="bg-zinc-900 border-zinc-700">
+                              <SelectItem value="interested" className="text-zinc-300 text-xs">Interested</SelectItem>
+                              <SelectItem value="callback" className="text-zinc-300 text-xs">Callback</SelectItem>
+                              <SelectItem value="no_answer" className="text-zinc-300 text-xs">No Answer</SelectItem>
+                              <SelectItem value="not_interested" className="text-zinc-300 text-xs">Not Interested</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <input value={msg.templateName} onChange={e => { const m = [...cfg.whatsappOutcomeMessages!]; m[i] = { ...m[i]!, templateName: e.target.value }; setCfg({ whatsappOutcomeMessages: m }); }}
+                            placeholder="Template name" className="flex-1 h-7 rounded-md bg-zinc-900/60 border border-zinc-700 text-zinc-200 text-xs px-2.5 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500" />
+                          <button type="button" onClick={() => setCfg({ whatsappOutcomeMessages: cfg.whatsappOutcomeMessages!.filter((_, j) => j !== i) })} className="text-zinc-600 hover:text-red-400"><X className="h-3.5 w-3.5" /></button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <input value={msg.mediaUrl ?? ""} onChange={e => { const m = [...cfg.whatsappOutcomeMessages!]; m[i] = { ...m[i]!, mediaUrl: e.target.value }; setCfg({ whatsappOutcomeMessages: m }); }}
+                            placeholder="Media URL (optional)" className="h-7 rounded-md bg-zinc-900/60 border border-zinc-700 text-zinc-200 text-xs px-2.5 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500" />
+                          <input value={msg.mediaFilename ?? ""} onChange={e => { const m = [...cfg.whatsappOutcomeMessages!]; m[i] = { ...m[i]!, mediaFilename: e.target.value }; setCfg({ whatsappOutcomeMessages: m }); }}
+                            placeholder="Filename (optional)" className="h-7 rounded-md bg-zinc-900/60 border border-zinc-700 text-zinc-200 text-xs px-2.5 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
         </TabsContent>
 
-        {/* ── Logs tab ── */}
+        {/* ── Logs ── */}
         <TabsContent value="logs" className="flex-1 overflow-y-auto m-0">
-          {callsLoading ? (
-            <div className="p-5 space-y-2">
-              {[1, 2, 3].map(i => <Skeleton key={i} className="h-10 w-full bg-zinc-800" />)}
-            </div>
-          ) : !calls?.length ? (
-            <div className="flex flex-col items-center justify-center h-full text-center text-zinc-600 gap-2 p-8">
-              <Phone className="h-8 w-8 opacity-20" />
-              <p className="text-sm">No calls yet for this assistant.</p>
-            </div>
-          ) : (
-            <div className="divide-y divide-zinc-800">
-              {calls.map((call) => (
-                <div key={call.id} className="flex items-center gap-4 px-5 py-3 hover:bg-zinc-800/30 transition-colors">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      {callStatusBadge(call.status)}
-                      <span className="text-xs text-zinc-500">
-                        {format(new Date(call.createdAt), "MMM d, HH:mm")}
-                      </span>
-                    </div>
-                    <p className="text-xs text-zinc-500 truncate">
-                      {call.fromNumber || "—"} → {call.toNumber || "—"}
-                    </p>
-                  </div>
-                  {call.durationSeconds != null && (
-                    <span className="text-xs text-zinc-500 shrink-0">
-                      {Math.floor(call.durationSeconds / 60)}m {call.durationSeconds % 60}s
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-zinc-900/60 sticky top-0">
+                <tr>
+                  <th className="text-left px-4 py-2.5 text-zinc-500 font-medium">Date</th>
+                  <th className="text-left px-4 py-2.5 text-zinc-500 font-medium">Status</th>
+                  <th className="text-left px-4 py-2.5 text-zinc-500 font-medium">To / From</th>
+                  <th className="text-left px-4 py-2.5 text-zinc-500 font-medium">Duration</th>
+                </tr>
+              </thead>
+              <tbody>
+                {callsLoading ? (
+                  [1,2,3].map(i => (
+                    <tr key={i}>{[1,2,3,4].map(j => <td key={j} className="px-4 py-2.5"><Skeleton className="h-4 w-full bg-zinc-800" /></td>)}</tr>
+                  ))
+                ) : (calls ?? []).length === 0 ? (
+                  <tr><td colSpan={4} className="text-center text-zinc-600 py-10">No calls yet for this assistant.</td></tr>
+                ) : (calls ?? []).map(call => (
+                  <tr key={call.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
+                    <td className="px-4 py-2.5 text-zinc-400 whitespace-nowrap">{format(new Date(call.createdAt), "MMM d, HH:mm")}</td>
+                    <td className="px-4 py-2.5">
+                      {call.status === "completed"   && <span className="text-emerald-400">completed</span>}
+                      {call.status === "failed"      && <span className="text-red-400">failed</span>}
+                      {call.status === "in_progress" && <span className="text-amber-400">in progress</span>}
+                      {!["completed","failed","in_progress"].includes(call.status) && <span className="text-zinc-500">{call.status}</span>}
+                    </td>
+                    <td className="px-4 py-2.5 text-zinc-400 font-mono text-[11px]">{call.toNumber || "—"}</td>
+                    <td className="px-4 py-2.5 text-zinc-400">{call.durationSeconds != null ? `${call.durationSeconds}s` : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </TabsContent>
 
-        {/* ── Test tab ── */}
+        {/* ── Test ── */}
         <TabsContent value="test" className="flex-1 overflow-y-auto m-0 px-5 py-4">
-          <WebCallPanel agentId={agentId} agentName={agent.name} />
+          <div className="max-w-lg">
+            <WebCallPanel agentId={agent.id} agentName={agent.name} />
+          </div>
         </TabsContent>
       </Tabs>
 
@@ -1247,12 +1536,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
           </DialogHeader>
           <div className="space-y-3 py-2">
             <Label className="text-zinc-400 text-xs">Destination number (E.164)</Label>
-            <Input
-              placeholder="+1234567890"
-              value={toNumber}
-              onChange={e => setToNumber(e.target.value)}
-              className="bg-zinc-800 border-zinc-700 text-zinc-200"
-            />
+            <Input placeholder="+1234567890" value={toNumber} onChange={e => setToNumber(e.target.value)} className="bg-zinc-800 border-zinc-700 text-zinc-200" />
           </div>
           <DialogFooter>
             <Button variant="outline" className="border-zinc-700 text-zinc-400" onClick={() => setOutboundDialogOpen(false)}>Cancel</Button>
