@@ -15,6 +15,19 @@ const SPEECH_RMS_THRESHOLD = 400;   // normal VAD threshold
 const BARGE_IN_RMS         = 600;   // higher threshold while agent is speaking (avoids echo false-positives)
 const MIN_PCM_BYTES        = 6400;  // ~200ms at 16kHz Int16
 const AUDIO_CHUNK_BYTES    = 1280;  // 40ms per WS frame
+const HANDOFF_SILENCE_MS   = 3000;  // sustained silence that may indicate a phone handoff
+
+/** Transcript phrases that strongly suggest the caller is handing the phone to someone else. */
+const HANDOFF_PHRASES = [
+  // English
+  "talk to her", "talk to my wife", "talk to my sister", "talk to my mother",
+  "here she is", "pass the phone", "give the phone to", "let her talk",
+  "let her speak", "she will talk", "she wants to talk",
+  "i'll pass", "passing you", "passing the phone",
+  // Hindi-romanized
+  "baat karo", "usse baat", "use de do", "phone de do",
+  "le lo phone", "in se baat",
+];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -131,11 +144,42 @@ export async function handleWebCallWebSocket(
   const neutralSalutation   = (agentCfg["genderDetectionNeutralSalutation"] as string | undefined) ?? "";
 
   // We keep a mutable copy of the system prompt so gender detection can patch it in-place.
-  let systemPrompt          = agent.systemPrompt ?? "";
+  // The original is preserved separately so we can restore it if a handoff is detected.
+  const originalSystemPrompt = agent.systemPrompt ?? "";
+  let systemPrompt          = originalSystemPrompt;
   let genderDetected        = false;
   const genderAccum16k: Buffer[] = [];   // raw 16kHz from browser
   let genderAccumBytes      = 0;
   const GENDER_MIN_BYTES_16K = 32000;    // ~1 s @ 16kHz 16-bit
+
+  /**
+   * Reset gender detection so the next chunk of caller audio re-runs the detector.
+   * Restores the original system prompt template so the placeholder can be re-patched.
+   */
+  function resetGenderDetection(): void {
+    genderDetected   = false;
+    genderAccum16k.length = 0;
+    genderAccumBytes = 0;
+    systemPrompt     = originalSystemPrompt;
+    logger.info({ callId }, "WebCall gender detection reset — possible phone handoff");
+  }
+
+  let handoffSilenceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Arm (or re-arm) the handoff-silence timer. Fires after HANDOFF_SILENCE_MS of quiet. */
+  function resetHandoffSilenceTimer(): void {
+    if (!genderEnabled) return;
+    if (handoffSilenceTimer) clearTimeout(handoffSilenceTimer);
+    handoffSilenceTimer = setTimeout(() => {
+      handoffSilenceTimer = null;
+      if (!closed && genderDetected) resetGenderDetection();
+    }, HANDOFF_SILENCE_MS);
+  }
+
+  /** Cancel the handoff-silence timer on any incoming speech. */
+  function clearHandoffSilenceTimer(): void {
+    if (handoffSilenceTimer) { clearTimeout(handoffSilenceTimer); handoffSilenceTimer = null; }
+  }
 
   /**
    * Returns the system prompt with any unresolved {caller_salutation} replaced
@@ -198,6 +242,15 @@ export async function handleWebCallWebSocket(
 
       send({ type: "transcript", speaker: "user", text: userText });
       history.push({ role: "user", content: userText });
+
+      // ── Phone-handoff phrase detection (Signal 1: transcript keyword) ──
+      if (genderEnabled && genderDetected) {
+        const lower = userText.toLowerCase();
+        if (HANDOFF_PHRASES.some(p => lower.includes(p))) {
+          logger.info({ callId, transcript: userText }, "WebCall handoff phrase — resetting gender detection");
+          resetGenderDetection();
+        }
+      }
 
       // 2. LLM — stream tokens, queue TTS per sentence
       const sentenceJobs: Promise<Buffer>[] = [];
@@ -302,6 +355,7 @@ export async function handleWebCallWebSocket(
     closed = true;
     clearTimeout(maxTimer);
     clearSilenceTimer();
+    clearHandoffSilenceTimer();
 
     const endedAt         = new Date();
     const durationSeconds = Math.floor((endedAt.getTime() - startedAt.getTime()) / 1000);
@@ -384,11 +438,15 @@ export async function handleWebCallWebSocket(
       const chunk = Buffer.from(data);
       audioChunks.push(chunk);
       accumulateGenderAudio(chunk);   // feed speech audio to gender detector
+      clearHandoffSilenceTimer();     // speech arrived — cancel handoff timer
       clearSilenceTimer();
       if (!processing) sendStatus("listening");
     } else if (audioChunks.length > 0) {
       audioChunks.push(Buffer.from(data));
       scheduleSilenceFlush();
+    } else {
+      // Pure silence with no buffered speech — start handoff timer (Signal 2)
+      resetHandoffSilenceTimer();
     }
   });
 

@@ -8,11 +8,24 @@ import type { AgentConfig, AgentTool, ConversationTurn, SessionConfig, StreamSTT
 import { detectCallerGender, applyCallerSalutation } from "./genderDetection.js";
 import { logger } from "../lib/logger.js";
 
-const VAD_SILENCE_MS   = 250;    // silence window before STT flush
-const MIN_SPEECH_BYTES = 3200;   // ~200ms @ 8kHz PCM — skip noise bursts shorter than this
-const CHUNK_SIZE_MULAW = 160;    // 20ms @ 8kHz mulaw for paced batch playback
-const VAD_THRESHOLD    = 100;    // RMS threshold for speech detection
-const STREAM_ACCUM_BYTES = 640;  // 20ms of 16kHz PCM before forwarding a TTS stream chunk
+const VAD_SILENCE_MS     = 250;    // silence window before STT flush
+const MIN_SPEECH_BYTES   = 3200;   // ~200ms @ 8kHz PCM — skip noise bursts shorter than this
+const CHUNK_SIZE_MULAW   = 160;    // 20ms @ 8kHz mulaw for paced batch playback
+const VAD_THRESHOLD      = 100;    // RMS threshold for speech detection
+const STREAM_ACCUM_BYTES = 640;    // 20ms of 16kHz PCM before forwarding a TTS stream chunk
+const HANDOFF_SILENCE_MS = 3000;   // sustained silence that may indicate a phone handoff
+
+/** Transcript phrases that strongly suggest the caller is handing the phone to someone else. */
+const HANDOFF_PHRASES = [
+  // English
+  "talk to her", "talk to my wife", "talk to my sister", "talk to my mother",
+  "here she is", "pass the phone", "give the phone to", "let her talk",
+  "let her speak", "she will talk", "she wants to talk",
+  "i'll pass", "passing you", "passing the phone",
+  // Hindi-romanized
+  "baat karo", "usse baat", "use de do", "phone de do",
+  "le lo phone", "in se baat",
+];
 
 const BACKCHANNEL_PHRASES = [
   "I see.", "Got it.", "Okay.", "Mm-hmm.", "Sure.", "I understand.", "Go on.",
@@ -28,6 +41,7 @@ export class OrchestrationPipeline {
   private audioBuffer: Buffer[] = [];
   private silenceTimer: ReturnType<typeof setTimeout> | null = null;
   private silenceHangupTimer: ReturnType<typeof setTimeout> | null = null;
+  private handoffSilenceTimer: ReturnType<typeof setTimeout> | null = null;
   private isProcessing = false;
 
   // Barge-in state
@@ -49,6 +63,7 @@ export class OrchestrationPipeline {
   // We accumulate the first ~1 s of caller PCM (16 000 bytes @ 8 kHz 16-bit),
   // detect once, then resolve {caller_salutation} in the system prompt.
   private readonly GENDER_MIN_BYTES = 16000;
+  private readonly originalSystemPrompt: string;   // never mutated — used to restore on handoff
   private genderDetected = false;
   private genderAudioAccum: Buffer[] = [];
   private genderAudioBytes = 0;
@@ -57,6 +72,7 @@ export class OrchestrationPipeline {
   constructor(config: SessionConfig) {
     this.config = config;
     this.agent = config.agentConfig;
+    this.originalSystemPrompt = config.agentConfig.systemPrompt ?? "";
     this.bargeInCallback = config.onBargeIn ?? null;
 
     const keys = config.providerKeys;
@@ -182,6 +198,47 @@ export class OrchestrationPipeline {
     }
   }
 
+  // ── Gender handoff detection ─────────────────────────────────────────────
+
+  /**
+   * Reset gender detection state so the next speech chunk re-runs the detector.
+   * Restores the system prompt to the original template (with {caller_salutation}
+   * placeholder intact) so the new detection can patch it again.
+   */
+  private resetGenderDetection(): void {
+    this.genderDetected       = false;
+    this.genderAudioAccum     = [];
+    this.genderAudioBytes     = 0;
+    this.genderDetectPromise  = null;
+    this.agent.systemPrompt   = this.originalSystemPrompt;
+    logger.info({ callId: this.config.callId }, "Gender detection reset — possible phone handoff");
+  }
+
+  /**
+   * Start (or restart) a timer that resets gender detection after HANDOFF_SILENCE_MS
+   * of continuous silence — a long quiet gap strongly suggests a phone was passed.
+   * Only arms itself when gender detection has already fired (no point resetting
+   * before we ever detected anything).
+   */
+  private resetHandoffSilenceTimer(): void {
+    if (!this.agent.genderDetectionEnabled) return;
+    if (this.handoffSilenceTimer) clearTimeout(this.handoffSilenceTimer);
+    this.handoffSilenceTimer = setTimeout(() => {
+      this.handoffSilenceTimer = null;
+      if (!this.closed && this.genderDetected) {
+        this.resetGenderDetection();
+      }
+    }, HANDOFF_SILENCE_MS);
+  }
+
+  /** Cancel the handoff silence timer (called on any incoming speech). */
+  private stopHandoffSilenceTimer(): void {
+    if (this.handoffSilenceTimer) {
+      clearTimeout(this.handoffSilenceTimer);
+      this.handoffSilenceTimer = null;
+    }
+  }
+
   /**
    * Returns the system prompt with any remaining {caller_salutation} placeholders
    * replaced by the neutral salutation. This is the safe fallback for LLM calls
@@ -224,8 +281,15 @@ export class OrchestrationPipeline {
   private handleProcessedAudio({ pcm8k, pcm16k, hasSpeech }: AudioProcessResult): void {
     if (this.closed) return;
 
-    // Accumulate speech audio for gender detection (fires once, async, non-blocking)
-    if (hasSpeech) this.accumulateGenderAudio(pcm8k);
+    // Accumulate speech audio for gender detection (fires once, async, non-blocking).
+    // On speech → cancel any in-progress handoff-silence timer.
+    // On silence → arm the handoff-silence timer (if gender was already detected).
+    if (hasSpeech) {
+      this.stopHandoffSilenceTimer();
+      this.accumulateGenderAudio(pcm8k);
+    } else {
+      this.resetHandoffSilenceTimer();
+    }
 
     // Streaming STT path: feed all audio directly to Deepgram — no local VAD needed
     if (this.streamSTT) {
@@ -450,6 +514,15 @@ export class OrchestrationPipeline {
       }
     }
 
+    // ── Phone-handoff phrase detection (Signal 1: transcript keyword) ──
+    if (this.agent.genderDetectionEnabled && this.genderDetected) {
+      const lower = transcript.toLowerCase();
+      if (HANDOFF_PHRASES.some(p => lower.includes(p))) {
+        logger.info({ callId: this.config.callId, transcript }, "Handoff phrase detected — resetting gender detection");
+        this.resetGenderDetection();
+      }
+    }
+
     // ── Backchanneling: short acknowledgement while LLM thinks ──
     if (this.agent.backchannelingEnabled && !this.closed && !this.bargeInRequested) {
       const freq = this.agent.backchannelingFrequency ?? 0.5;
@@ -635,6 +708,7 @@ export class OrchestrationPipeline {
       clearTimeout(this.silenceHangupTimer);
       this.silenceHangupTimer = null;
     }
+    this.stopHandoffSilenceTimer();
     this.streamSTT?.close();
     this.streamSTT = null;
     logger.info({ callId: this.config.callId }, "Pipeline closed");
