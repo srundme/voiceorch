@@ -692,6 +692,10 @@ export class OrchestrationPipeline {
     }
   }
 
+  getHistory(): ConversationTurn[] {
+    return this.conversationHistory;
+  }
+
   getTranscript(): string {
     return this.conversationHistory
       .map((t) => `${t.role === "user" ? "Caller" : "Agent"}: ${t.content}`)

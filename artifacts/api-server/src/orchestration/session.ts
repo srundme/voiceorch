@@ -11,6 +11,13 @@ import {
   removeSession,
 } from "./sessionStore.js";
 import { destroyAudioSession } from "./audioPool.js";
+import {
+  humanPhone,
+  loadCallerProfile,
+  injectCallerMemory,
+  updateCallerProfile,
+  type CallerProfile,
+} from "./callerMemory.js";
 
 interface MetricsAcc {
   sttTotal: number;
@@ -26,6 +33,12 @@ interface ActiveSession {
   metricsAcc: MetricsAcc;
   wasTransferred: boolean;
   transferredTo: string | null;
+  // Cross-call memory
+  callerPhone: string | null;           // human's phone number (null for webcall/unknown)
+  callerProfileSnapshot: CallerProfile | null;  // profile at call start (for callCount delta)
+  agentUserId: string | null;           // needed to scope LLM key in endSession
+  agentLlmProvider: string;
+  agentLlmModel: string;
 }
 
 const sessions = new Map<string, ActiveSession>();
@@ -99,6 +112,24 @@ export async function createSession(params: {
     genderDetectionFemaleSalutation: (agentCfg["genderDetectionFemaleSalutation"] as string  | undefined) ?? "ma'am",
     genderDetectionNeutralSalutation:(agentCfg["genderDetectionNeutralSalutation"] as string  | undefined) ?? "",
   };
+
+  // ── Cross-call caller memory ────────────────────────────────────────────────
+  const callerPhone = humanPhone(params.fromNumber, params.toNumber);
+  let callerProfileSnapshot: CallerProfile | null = null;
+  if (callerPhone) {
+    try {
+      callerProfileSnapshot = await loadCallerProfile(params.agentId, callerPhone);
+      if (callerProfileSnapshot) {
+        agentConfig.systemPrompt = injectCallerMemory(agentConfig.systemPrompt, callerProfileSnapshot);
+        logger.info(
+          { agentId: params.agentId, callerPhone, callCount: callerProfileSnapshot.callCount },
+          "Caller memory injected into system prompt"
+        );
+      }
+    } catch (memErr) {
+      logger.warn({ agentId: params.agentId, callerPhone, memErr }, "Failed to load caller profile — continuing without memory");
+    }
+  }
 
   // ── Resolve dynamic variables in system prompt ─────────────────────────────
   // Supports both {{var}} and {var} syntax.
@@ -201,6 +232,11 @@ export async function createSession(params: {
     metricsAcc,
     get wasTransferred() { return wasTransferred; },
     get transferredTo() { return transferredTo; },
+    callerPhone,
+    callerProfileSnapshot,
+    agentUserId:      agent.userId ?? null,
+    agentLlmProvider: agent.llmProvider,
+    agentLlmModel:    agent.llmModel ?? "",
   });
 
   // Persist initial session metadata to Redis
@@ -313,6 +349,37 @@ export async function endSession(sessionId: string): Promise<void> {
               }
             } catch (summaryErr) {
               logger.warn({ sessionId, summaryErr }, "Post-call summary generation failed");
+            }
+          })();
+        }
+
+        // ── Post-call caller memory update ───────────────────────────────────
+        if (session.callerPhone && transcript && transcript.length > 50) {
+          void (async () => {
+            try {
+              const memLlmProvs = await db.select().from(providersTable).where(
+                and(
+                  eq(providersTable.isActive, true),
+                  ...(session.agentUserId
+                    ? [eq(providersTable.userId, session.agentUserId)]
+                    : []),
+                  eq(providersTable.providerName, session.agentLlmProvider),
+                ),
+              );
+              const memLlmKey = memLlmProvs[0]?.apiKey;
+              if (memLlmKey) {
+                const memLlm = createLLMAdapter(session.agentLlmProvider, memLlmKey, session.agentLlmModel);
+                await updateCallerProfile({
+                  agentId:    call.agentId,
+                  phoneNumber: session.callerPhone!,
+                  history:    session.pipeline.getHistory(),
+                  llm:        memLlm,
+                  existing:   session.callerProfileSnapshot,
+                  callId:     session.callId,
+                });
+              }
+            } catch (memErr) {
+              logger.warn({ sessionId, memErr }, "Post-call caller memory update failed");
             }
           })();
         }
