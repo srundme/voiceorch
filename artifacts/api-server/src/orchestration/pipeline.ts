@@ -182,6 +182,21 @@ export class OrchestrationPipeline {
     }
   }
 
+  /**
+   * Returns the system prompt with any remaining {caller_salutation} placeholders
+   * replaced by the neutral salutation. This is the safe fallback for LLM calls
+   * that happen before gender detection has completed (e.g. short first utterances).
+   * Once gender detection runs, it mutates this.agent.systemPrompt directly so the
+   * placeholder is already gone and this becomes a no-op.
+   */
+  private resolvedSystemPrompt(): string {
+    if (!this.genderDetected) {
+      const neutral = this.agent.genderDetectionNeutralSalutation || "";
+      return this.agent.systemPrompt.replace(/\{caller_salutation\}/g, neutral);
+    }
+    return this.agent.systemPrompt;
+  }
+
   /** Run the detection, resolve the system prompt, log the result. */
   private async detectGenderAsync(pcm8k: Buffer): Promise<void> {
     try {
@@ -256,11 +271,17 @@ export class OrchestrationPipeline {
       if (!greeting.trim()) {
         // Fallback: ask the LLM to generate an opener
         await this.llm.chat(
-          [], this.agent.systemPrompt,
+          [], this.resolvedSystemPrompt(),
           (token) => { greeting += token; },
           (full)  => { greeting = full; }
         );
       }
+
+      // {caller_salutation} in the greeting fires before any caller audio arrives,
+      // so gender detection hasn't run yet. Use the neutral salutation as fallback.
+      // The system prompt placeholder is handled separately once audio is heard.
+      const neutralSalutation = this.agent.genderDetectionNeutralSalutation || "";
+      greeting = greeting.replace(/\{caller_salutation\}/g, neutralSalutation);
 
       if (!greeting.trim() || this.closed) return;
       logger.info({ callId: this.config.callId, greeting: greeting.slice(0, 80) }, "Sending greeting");
@@ -512,7 +533,7 @@ export class OrchestrationPipeline {
 
     await this.llm.chat(
       this.conversationHistory,
-      this.agent.systemPrompt,
+      this.resolvedSystemPrompt(),
       (token) => {
         if (!llmFirstTokenAt) llmFirstTokenAt = Date.now();
         llmResponse += token;
