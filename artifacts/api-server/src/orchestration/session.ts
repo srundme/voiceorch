@@ -332,13 +332,29 @@ export async function endSession(sessionId: string): Promise<void> {
     if (call) {
       const [ag] = await db.select().from(agentsTable).where(eq(agentsTable.id, call.agentId));
       if (ag) {
-        const newSuccessful = ag.successfulCalls + 1;
+        const prevCount    = ag.successfulCalls;
+        const newSuccessful = prevCount + 1;
+
+        // Rolling average for duration
         const newAvg = ag.avgDurationSeconds
-          ? Math.floor((ag.avgDurationSeconds * ag.successfulCalls + durationSeconds) / newSuccessful)
+          ? Math.floor((ag.avgDurationSeconds * prevCount + durationSeconds) / newSuccessful)
           : durationSeconds;
+
+        // Rolling averages for per-turn latency (only update when this call
+        // had at least one metered turn, i.e. avgSttMs / avgLlmMs / avgTtsMs
+        // are not null)
+        const rollingLatency = (oldVal: number | null, newVal: number | null): number | null => {
+          if (newVal == null) return oldVal;          // no data this call — keep existing avg
+          if (oldVal == null) return newVal;          // first data point
+          return Math.round((oldVal * prevCount + newVal) / newSuccessful);
+        };
+
         await db.update(agentsTable).set({
-          successfulCalls: newSuccessful,
+          successfulCalls:    newSuccessful,
           avgDurationSeconds: newAvg,
+          avgSttLatencyMs:    rollingLatency(ag.avgSttLatencyMs,     avgSttMs),
+          avgLlmLatencyMs:    rollingLatency(ag.avgLlmLatencyMs,     avgLlmMs),
+          avgTtsFirstChunkMs: rollingLatency(ag.avgTtsFirstChunkMs,  avgTtsMs),
         }).where(eq(agentsTable.id, ag.id));
 
         // ── Post-call AI summary ──────────────────────────────────────────────
