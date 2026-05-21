@@ -8,12 +8,19 @@ import type { AgentConfig, AgentTool, ConversationTurn, SessionConfig, StreamSTT
 import { detectCallerGender, applyCallerSalutation, buildGenderInstruction } from "./genderDetection.js";
 import { logger } from "../lib/logger.js";
 
-const VAD_SILENCE_MS     = 250;    // silence window before STT flush
-const MIN_SPEECH_BYTES   = 3200;   // ~200ms @ 8kHz PCM — skip noise bursts shorter than this
-const CHUNK_SIZE_MULAW   = 160;    // 20ms @ 8kHz mulaw for paced batch playback
-const VAD_THRESHOLD      = 100;    // RMS threshold for speech detection
-const STREAM_ACCUM_BYTES = 640;    // 20ms of 16kHz PCM before forwarding a TTS stream chunk
-const HANDOFF_SILENCE_MS = 3000;   // sustained silence that may indicate a phone handoff
+const VAD_SILENCE_MS          = 250;    // silence window before STT flush
+const MIN_SPEECH_BYTES        = 3200;   // ~200ms @ 8kHz PCM — skip noise bursts shorter than this
+const CHUNK_SIZE_MULAW        = 160;    // 20ms @ 8kHz mulaw for paced batch playback
+const VAD_THRESHOLD           = 100;    // RMS threshold for speech detection
+const STREAM_ACCUM_BYTES      = 640;    // 20ms of 16kHz PCM before forwarding a TTS stream chunk
+const HANDOFF_SILENCE_MS      = 3000;   // sustained silence that may indicate a phone handoff
+const BARGE_IN_ENERGY_THRESHOLD = 1200; // Much higher than normal VAD (300) — only intentional,
+                                         // loud caller speech should interrupt the agent.
+                                         // Prevents phone echo, background TV, or ambient
+                                         // conversation from cutting the AI off mid-sentence.
+const BARGE_IN_ECHO_GRACE_MS  = 600;    // Suppress barge-in for 600 ms after playback starts —
+                                         // gives audio time to reach the caller before we start
+                                         // counting any returning echo as a real interruption.
 
 /** Transcript phrases that strongly suggest the caller is handing the phone to someone else. */
 const HANDOFF_PHRASES = [
@@ -52,6 +59,11 @@ export class OrchestrationPipeline {
   // ambient noise / single-word false positives stopping the agent mid-sentence.
   private bargeInSpeechFrames = 0;
   private static readonly BARGE_IN_MIN_FRAMES = 4; // ~80ms at 8kHz 20ms frames
+  // Echo grace period: timestamp (ms) until which barge-in is suppressed after
+  // playback starts.  Vobiz / Twilio route a small amount of our own TTS audio
+  // back to us as "caller audio" (sidetone / echo).  Without this hold, the
+  // echo triggers barge-in within 200 ms and the caller never hears anything.
+  private bargeInHoldUntil = 0;
 
   // Streaming STT (Deepgram live transcription)
   private streamSTT: StreamSTT | null = null;
@@ -324,15 +336,24 @@ export class OrchestrationPipeline {
       this.resetHangupTimer();
 
       if (this.isPlaying && !this.bargeInRequested) {
-        this.bargeInSpeechFrames++;
-        // Require sustained speech (BARGE_IN_MIN_FRAMES consecutive frames) before
-        // interrupting the agent — prevents ambient noise or a single word from cutting
-        // the agent off mid-sentence.
-        if (this.bargeInSpeechFrames >= OrchestrationPipeline.BARGE_IN_MIN_FRAMES) {
-          this.bargeInRequested = true;
-          this.bargeInCallback?.();
-          this.audioBuffer = [];
-          logger.info({ callId: this.config.callId, frames: this.bargeInSpeechFrames }, "Barge-in detected (batch STT)");
+        const now = Date.now();
+        if (now < this.bargeInHoldUntil) {
+          // Echo grace period: suppress barge-in for the first BARGE_IN_ECHO_GRACE_MS
+          // after playback starts to ignore phone sidetone / echo returning from Vobiz.
+          this.bargeInSpeechFrames = 0;
+        } else if (hasSpeechEnergy(pcm8k, BARGE_IN_ENERGY_THRESHOLD)) {
+          // Only count frames that exceed the much-higher barge-in energy threshold
+          // (4× the normal VAD level) — intentional caller speech will clear this bar,
+          // but ambient noise, echo bleed, or background conversation won't.
+          this.bargeInSpeechFrames++;
+          if (this.bargeInSpeechFrames >= OrchestrationPipeline.BARGE_IN_MIN_FRAMES) {
+            this.bargeInRequested = true;
+            this.bargeInCallback?.();
+            this.audioBuffer = [];
+            logger.info({ callId: this.config.callId, frames: this.bargeInSpeechFrames }, "Barge-in detected (batch STT)");
+          }
+        } else {
+          this.bargeInSpeechFrames = 0; // dropped below barge-in threshold — reset
         }
       }
     } else {
@@ -378,6 +399,7 @@ export class OrchestrationPipeline {
       this.config.onTranscript("agent", greeting);
       this.config.onConversationUpdate?.(this.conversationHistory);
       this.firstAudioSentAt = null;
+      this.bargeInHoldUntil = Date.now() + BARGE_IN_ECHO_GRACE_MS;
       this.isPlaying = true;
       try {
         await this.playSentence(greeting);
@@ -532,6 +554,7 @@ export class OrchestrationPipeline {
     // Speak the warm handoff message (if configured) before transferring
     if (tool.warmHandoffMessage?.trim()) {
       this.config.onTranscript("agent", tool.warmHandoffMessage);
+      this.bargeInHoldUntil = Date.now() + BARGE_IN_ECHO_GRACE_MS;
       this.isPlaying = true;
       try {
         await this.playSentence(tool.warmHandoffMessage);
@@ -588,7 +611,8 @@ export class OrchestrationPipeline {
       const freq = this.agent.backchannelingFrequency ?? 0.5;
       if (Math.random() < freq) {
         const phrase = BACKCHANNEL_PHRASES[Math.floor(Math.random() * BACKCHANNEL_PHRASES.length)]!;
-        this.isPlaying = true;
+        this.bargeInHoldUntil = Date.now() + BARGE_IN_ECHO_GRACE_MS;
+      this.isPlaying = true;
         try {
           await this.playSentence(phrase);
         } catch (err) {
@@ -641,7 +665,8 @@ export class OrchestrationPipeline {
       while (true) {
         if (idx < sentenceQueue.length) {
           const text = sentenceQueue[idx++];
-          this.isPlaying = true;
+          this.bargeInHoldUntil = Date.now() + BARGE_IN_ECHO_GRACE_MS;
+      this.isPlaying = true;
           try {
             await this.playSentence(text);
           } catch (err) {
