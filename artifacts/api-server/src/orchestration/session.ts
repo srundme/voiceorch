@@ -315,6 +315,15 @@ export async function endSession(sessionId: string): Promise<void> {
 
   try {
     const callStatus = session.wasTransferred ? "transferred" : "completed";
+
+    // ── Upload call recording (async, non-blocking) ──────────────────────────
+    // Finalize happens concurrently; we await the URL before writing to DB.
+    const recordingUrl = await session.pipeline.getRecording().finalize(session.callId)
+      .catch((err) => {
+        logger.warn({ sessionId, err }, "Recording finalization failed");
+        return null;
+      });
+
     await db.update(callsTable).set({
       status: callStatus,
       endedAt,
@@ -323,6 +332,7 @@ export async function endSession(sessionId: string): Promise<void> {
       sttLatencyMs: avgSttMs,
       llmLatencyMs: avgLlmMs,
       ttsFirstChunkMs: avgTtsMs,
+      ...(recordingUrl ? { recordingUrl } : {}),
       ...(session.wasTransferred && session.transferredTo
         ? { metadata: JSON.stringify({ transferredTo: session.transferredTo }) }
         : {}),

@@ -3,6 +3,7 @@ import { createLLMAdapter } from "./adapters/llm/index.js";
 import { createTTSAdapter } from "./adapters/tts/index.js";
 import { encodeMulaw, upsample8to16, downsample16to8, decodeMulaw, hasSpeechEnergy } from "./audio.js";
 import { processAudioIn, processRawPcm8kIn, destroyAudioSession } from "./audioPool.js";
+import { RecordingBuffer } from "./recorder.js";
 import type { AudioProcessResult } from "./audioPool.js";
 import type { AgentConfig, AgentTool, ConversationTurn, SessionConfig, StreamSTT, ToolDefinition } from "./types.js";
 import { detectCallerGender, applyCallerSalutation, buildGenderInstruction } from "./genderDetection.js";
@@ -74,6 +75,9 @@ export class OrchestrationPipeline {
 
   // Metrics
   private firstAudioSentAt: number | null = null;
+
+  // Recording — stereo WAV of both sides (caller=L, agent=R)
+  private recording = new RecordingBuffer(8000);
 
   private conversationHistory: ConversationTurn[] = [];
   private closed = false;
@@ -184,12 +188,15 @@ export class OrchestrationPipeline {
   onAudioIn(mulawChunk: Buffer): void {
     if (this.closed) return;
     const callId = String(this.config.callId);
+    const pcm8k = decodeMulaw(mulawChunk);
+    // Record raw caller audio (before noise cancellation)
+    this.recording.addCallerChunk(pcm8k);
     // Accumulate raw (pre-noise-cancellation) PCM for gender detection so the
     // 300 Hz bandpass highpass in NoiseCanceller does not strip female
     // fundamentals (165–255 Hz).  Skip while the agent is playing TTS to
     // avoid mis-classifying echo of the agent's own voice.
     if (this.agent.genderDetectionEnabled && !this.genderDetected && !this.isPlaying) {
-      this.accumulateGenderAudio(decodeMulaw(mulawChunk));
+      this.accumulateGenderAudio(pcm8k);
     }
     processAudioIn(callId, mulawChunk, this.agent.noiseCancellationEnabled)
       .then((result) => this.handleProcessedAudio(result))
@@ -200,6 +207,8 @@ export class OrchestrationPipeline {
   onRawPcm8kIn(pcm8k: Buffer): void {
     if (this.closed) return;
     const callId = String(this.config.callId);
+    // Record raw caller audio (before noise cancellation)
+    this.recording.addCallerChunk(pcm8k);
     // Same as onAudioIn: accumulate raw PCM before noise-cancellation and
     // skip while the agent is speaking to prevent echo misclassification.
     if (this.agent.genderDetectionEnabled && !this.genderDetected && !this.isPlaying) {
@@ -208,6 +217,11 @@ export class OrchestrationPipeline {
     processRawPcm8kIn(callId, pcm8k, this.agent.noiseCancellationEnabled)
       .then((result) => this.handleProcessedAudio(result))
       .catch((err) => logger.error({ callId: this.config.callId, err }, "Audio worker error (pcm8k)"));
+  }
+
+  /** Returns the recording buffer so the caller (session.ts) can finalize it at call end. */
+  getRecording(): RecordingBuffer {
+    return this.recording;
   }
 
   // ── Gender detection ────────────────────────────────────────────────────────
@@ -498,6 +512,8 @@ export class OrchestrationPipeline {
         accum = [];
         accumSize = 0;
         const pcm8k = downsample16to8(pcm16k);
+        // Record agent audio (downsampled to match recording sample rate)
+        this.recording.addAgentChunk(pcm8k);
         const mulaw = encodeMulaw(pcm8k);
         for (let i = 0; i < mulaw.length; i += CHUNK_SIZE_MULAW) {
           queue.push(mulaw.slice(i, i + CHUNK_SIZE_MULAW));
@@ -555,6 +571,8 @@ export class OrchestrationPipeline {
       const ttsPcm16k = await this.tts.synthesize(text);
       if (this.bargeInRequested) return;
       const ttsPcm8k  = downsample16to8(ttsPcm16k);
+      // Record agent audio
+      this.recording.addAgentChunk(ttsPcm8k);
       const ttsMusaw  = encodeMulaw(ttsPcm8k);
       for (let i = 0; i < ttsMusaw.length; i += CHUNK_SIZE_MULAW) {
         if (this.closed || this.bargeInRequested) break;

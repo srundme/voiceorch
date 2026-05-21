@@ -7,6 +7,7 @@ import { createTTSAdapter } from "../adapters/tts/index.js";
 import { downsample16to8 } from "../audio.js";
 import { detectCallerGender, applyCallerSalutation, buildGenderInstruction } from "../genderDetection.js";
 import { logger } from "../../lib/logger.js";
+import { RecordingBuffer } from "../recorder.js";
 import type { ConversationTurn, STTConfig } from "../types.js";
 
 // ── Tuning constants ─────────────────────────────────────────────────────────
@@ -258,6 +259,10 @@ export async function handleWebCallWebSocket(
   let interrupted = false;        // barge-in flag; checked inside audio loop
   let bargeInFrames = 0;         // consecutive high-RMS frames counted while agent is speaking
 
+  // ── Recording ─────────────────────────────────────────────────────────────
+  // Stereo WAV: L=caller (16 kHz from browser), R=agent (TTS pre-amplification)
+  const recording = new RecordingBuffer(16000);
+
   // ── Pipeline ─────────────────────────────────────────────────────────────
   async function process() {
     if (processing || audioChunks.length === 0) return;
@@ -350,7 +355,9 @@ export async function handleWebCallWebSocket(
 
         for (let j = 0; j < pcmOut.length; j += AUDIO_CHUNK_BYTES) {
           if (closed || interrupted) break;
-          sendAudio(amplifyPcm(pcmOut.slice(j, j + AUDIO_CHUNK_BYTES), TTS_VOLUME_GAIN));
+          const chunk = pcmOut.slice(j, j + AUDIO_CHUNK_BYTES);
+          recording.addAgentChunk(chunk);  // record pre-amplification for natural levels
+          sendAudio(amplifyPcm(chunk, TTS_VOLUME_GAIN));
           await new Promise(r => setTimeout(r, 40));
         }
       }
@@ -405,11 +412,18 @@ export async function handleWebCallWebSocket(
     const transcript      = history.map(t => `${t.role === "user" ? "Caller" : "Agent"}: ${t.content}`).join("\n");
 
     try {
+      // Finalize recording — upload to GCS then save the serving URL
+      const recordingUrl = await recording.finalize(callId).catch((err) => {
+        logger.warn({ callId, err }, "WebCall recording upload failed");
+        return null;
+      });
+
       await db.update(callsTable).set({
         status: reason === "error" ? "failed" : "completed",
         endedAt,
         durationSeconds,
         transcript: transcript || null,
+        ...(recordingUrl ? { recordingUrl } : {}),
       }).where(eq(callsTable.id, callId));
 
       const [ag] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId));
@@ -464,6 +478,10 @@ export async function handleWebCallWebSocket(
       catch { /* ignore */ }
       return;
     }
+
+    // Record every frame from the caller's microphone (captures full timeline
+    // including silence, maintaining alignment with the agent track)
+    recording.addCallerChunk(data as Buffer);
 
     const rms = rmsEnergy(data);
 

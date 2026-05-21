@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health.js";
+import storageRouter from "./storage.js";
 import agentsRouter from "./agents.js";
 import callsRouter from "./calls.js";
 import providersRouter from "./providers.js";
@@ -22,6 +23,7 @@ const router: IRouter = Router();
 // Admin routes bypass user provisioning middleware
 router.use(adminRouter);
 
+router.use(storageRouter);
 router.use(provisionUser);
 router.use(healthRouter);
 router.use(agentsRouter);

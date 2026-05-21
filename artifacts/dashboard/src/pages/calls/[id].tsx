@@ -148,13 +148,21 @@ export default function CallDetail() {
           </div>
         </div>
         {call.recordingUrl && (
-          <div className="flex gap-2">
-            <Button variant="secondary" className="gap-2">
-              <PlayCircle className="h-4 w-4" /> Listen
-            </Button>
-            <Button variant="outline" size="icon" title="Download Recording">
+          <div className="flex items-center gap-2">
+            <audio
+              controls
+              src={call.recordingUrl}
+              className="h-8 max-w-xs rounded"
+              style={{ colorScheme: "dark" }}
+            />
+            <a
+              href={call.recordingUrl}
+              download={`call-${call.id}.wav`}
+              title="Download Recording"
+              className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+            >
               <Download className="h-4 w-4" />
-            </Button>
+            </a>
           </div>
         )}
       </div>
