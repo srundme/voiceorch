@@ -58,14 +58,23 @@ export function upsample8to16(buf8k: Buffer): Buffer {
   return out;
 }
 
-// Downsample from 16kHz to 8kHz (drop every other sample)
+/**
+ * Downsample from 16 kHz to 8 kHz with a simple 2-tap FIR anti-alias filter.
+ *
+ * Naive decimation (taking every other sample) folds frequencies above 4 kHz
+ * back into the 0–4 kHz band (Nyquist of 8 kHz output).  For pitch detection
+ * this creates aliasing artefacts that can shift the apparent fundamental.
+ * A basic average of adjacent pairs halves the aliasing amplitude while
+ * keeping the code dependency-free.
+ */
 export function downsample16to8(buf16k: Buffer): Buffer {
-  const samples    = Math.floor(buf16k.length / 2);
-  const outSamples = Math.floor(samples / 2);
+  const samples    = Math.floor(buf16k.length / 4) * 2; // must be even
+  const outSamples = samples / 2;
   const out        = Buffer.allocUnsafe(outSamples * 2);
   for (let i = 0; i < outSamples; i++) {
-    const s = buf16k.readInt16LE(i * 4);
-    out.writeInt16LE(s, i * 2);
+    const a = buf16k.readInt16LE(i * 4);
+    const b = buf16k.readInt16LE(i * 4 + 2);
+    out.writeInt16LE(Math.round((a + b) / 2), i * 2);
   }
   return out;
 }
@@ -208,7 +217,22 @@ export function estimatePitch(pcm8k: Buffer): number {
   }
 
   if (bestNorm < 0.35) return 0;   // insufficient periodicity — unvoiced frame
-  return FS / bestLag;
+
+  // ── Octave-error correction ────────────────────────────────────────────────
+  // Autocorrelation has a known failure mode: when the signal has a strong
+  // 2nd harmonic, the normalised correlation at lag T/2 (i.e. 2×F0) can
+  // exceed the correlation at lag T (F0 itself).  This makes a 130 Hz male
+  // voice appear as 260 Hz (female range).  Fix: if double the bestLag has
+  // correlation ≥ 75 % of bestNorm, the true fundamental is at that lower
+  // frequency.  Repeat until no further sub-harmonic is found.
+  let corrected = bestLag;
+  for (let candidate = corrected * 2; candidate <= maxLag; candidate = corrected * 2) {
+    const r = autocorrSum(x, analysisLen, candidate) / r0;
+    if (r >= 0.75 * bestNorm) { corrected = candidate; }
+    else break;
+  }
+
+  return FS / corrected;
 }
 
 // ── Gender classification from pitch ─────────────────────────────────────────
@@ -245,7 +269,10 @@ export function detectGenderFromPcm(pcm8k: Buffer): VoiceGender {
   }
 
   // Require at least 2 voiced frames — single-frame estimates are unreliable
-  if (pitches.length < 2) return "unknown";
+  if (pitches.length < 2) {
+    process.stderr.write(`[gender-dbg] frames=${pitches.length} (insufficient) → unknown\n`);
+    return "unknown";
+  }
 
   // Median is robust against outlier frames
   pitches.sort((a, b) => a - b);
@@ -253,6 +280,11 @@ export function detectGenderFromPcm(pcm8k: Buffer): VoiceGender {
   const medianF0 = pitches.length % 2 === 1
     ? pitches[mid]!
     : (pitches[mid - 1]! + pitches[mid]!) / 2;
+
+  const rounded = pitches.map(f => Math.round(f));
+  process.stderr.write(
+    `[gender-dbg] frames=[${rounded.join(",")}] median=${Math.round(medianF0)} Hz bufBytes=${pcm8k.length}\n`
+  );
 
   if (medianF0 < 165) return "male";
   if (medianF0 > 180) return "female";
