@@ -48,6 +48,10 @@ export class OrchestrationPipeline {
   private isPlaying = false;
   private bargeInRequested = false;
   private bargeInCallback: (() => void) | null;
+  // Require N consecutive speech frames before triggering barge-in to avoid
+  // ambient noise / single-word false positives stopping the agent mid-sentence.
+  private bargeInSpeechFrames = 0;
+  private static readonly BARGE_IN_MIN_FRAMES = 4; // ~80ms at 8kHz 20ms frames
 
   // Streaming STT (Deepgram live transcription)
   private streamSTT: StreamSTT | null = null;
@@ -320,11 +324,19 @@ export class OrchestrationPipeline {
       this.resetHangupTimer();
 
       if (this.isPlaying && !this.bargeInRequested) {
-        this.bargeInRequested = true;
-        this.bargeInCallback?.();
-        this.audioBuffer = [];
-        logger.info({ callId: this.config.callId }, "Barge-in detected (batch STT)");
+        this.bargeInSpeechFrames++;
+        // Require sustained speech (BARGE_IN_MIN_FRAMES consecutive frames) before
+        // interrupting the agent — prevents ambient noise or a single word from cutting
+        // the agent off mid-sentence.
+        if (this.bargeInSpeechFrames >= OrchestrationPipeline.BARGE_IN_MIN_FRAMES) {
+          this.bargeInRequested = true;
+          this.bargeInCallback?.();
+          this.audioBuffer = [];
+          logger.info({ callId: this.config.callId, frames: this.bargeInSpeechFrames }, "Barge-in detected (batch STT)");
+        }
       }
+    } else {
+      this.bargeInSpeechFrames = 0; // silence resets the run
     }
 
     if (this.isProcessing) return;
@@ -510,6 +522,7 @@ export class OrchestrationPipeline {
 
   private async processTurn(transcript: string, sttLatencyMs: number): Promise<void> {
     this.bargeInRequested = false;
+    this.bargeInSpeechFrames = 0;
     this.firstAudioSentAt = null;
 
     // If gender detection is running concurrently, wait for it to finish so the

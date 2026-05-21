@@ -10,12 +10,18 @@ import { logger } from "../../lib/logger.js";
 import type { ConversationTurn, STTConfig } from "../types.js";
 
 // ── Tuning constants ─────────────────────────────────────────────────────────
-const VAD_SILENCE_MS       = 300;
-const SPEECH_RMS_THRESHOLD = 400;   // normal VAD threshold
-const BARGE_IN_RMS         = 600;   // higher threshold while agent is speaking (avoids echo false-positives)
-const MIN_PCM_BYTES        = 6400;  // ~200ms at 16kHz Int16
-const AUDIO_CHUNK_BYTES    = 1280;  // 40ms per WS frame
-const HANDOFF_SILENCE_MS   = 3000;  // sustained silence that may indicate a phone handoff
+const VAD_SILENCE_MS        = 300;
+const SPEECH_RMS_THRESHOLD  = 400;    // normal VAD — user speaking (agent silent)
+const BARGE_IN_RMS          = 2000;   // much higher bar while agent is speaking to avoid false barge-ins from
+                                       // ambient noise, TV, nearby conversation, or mic echo bleed
+const BARGE_IN_MIN_FRAMES   = 4;      // require ~160ms of sustained speech before interrupting
+                                       // (4 × 40ms chunks) — prevents a single word/noise from cutting the agent
+const MIN_PCM_BYTES         = 6400;   // ~200ms at 16kHz Int16
+const AUDIO_CHUNK_BYTES     = 1280;   // 40ms per WS frame
+const HANDOFF_SILENCE_MS    = 3000;   // sustained silence that may indicate a phone handoff
+const TTS_VOLUME_GAIN       = 2.5;    // PCM amplitude multiplier for outbound TTS audio —
+                                       // most TTS providers output at ~40% of full scale; this brings
+                                       // the perceived loudness up to a comfortable level
 
 /** Transcript phrases that strongly suggest the caller is handing the phone to someone else. */
 const HANDOFF_PHRASES = [
@@ -61,6 +67,20 @@ type Status = "idle" | "listening" | "thinking" | "speaking";
  *   3. The client immediately stops all queued/playing audio on receipt of
  *      that message, and the server starts a new STT → LLM → TTS cycle.
  */
+/**
+ * Amplify a LINEAR16 PCM buffer by a fixed gain factor with hard-limiter
+ * clipping to prevent wrap-around distortion.
+ */
+function amplifyPcm(buf: Buffer, gain: number): Buffer {
+  const out = Buffer.allocUnsafe(buf.length);
+  for (let i = 0; i < buf.length - 1; i += 2) {
+    const s = buf.readInt16LE(i);
+    const amplified = Math.max(-32768, Math.min(32767, Math.round(s * gain)));
+    out.writeInt16LE(amplified, i);
+  }
+  return out;
+}
+
 export async function handleWebCallWebSocket(
   ws: WebSocket,
   agentId: number
@@ -235,7 +255,8 @@ export async function handleWebCallWebSocket(
   let speaking    = false;   // true while audio frames are being sent to client
   let speakingEndedAt = 0;  // timestamp (ms) when speaking last transitioned to false
   const SPEAKING_ECHO_GRACE_MS = 400; // skip gender accumulation for this long after agent stops
-  let interrupted = false;   // barge-in flag; checked inside audio loop
+  let interrupted = false;        // barge-in flag; checked inside audio loop
+  let bargeInFrames = 0;         // consecutive high-RMS frames counted while agent is speaking
 
   // ── Pipeline ─────────────────────────────────────────────────────────────
   async function process() {
@@ -329,7 +350,7 @@ export async function handleWebCallWebSocket(
 
         for (let j = 0; j < pcmOut.length; j += AUDIO_CHUNK_BYTES) {
           if (closed || interrupted) break;
-          sendAudio(pcmOut.slice(j, j + AUDIO_CHUNK_BYTES));
+          sendAudio(amplifyPcm(pcmOut.slice(j, j + AUDIO_CHUNK_BYTES), TTS_VOLUME_GAIN));
           await new Promise(r => setTimeout(r, 40));
         }
       }
@@ -447,18 +468,24 @@ export async function handleWebCallWebSocket(
     const rms = rmsEnergy(data);
 
     if (speaking) {
-      // Agent is speaking — use elevated threshold to ignore echo
+      // Agent is speaking — use elevated threshold to ignore echo / ambient noise.
+      // Require BARGE_IN_MIN_FRAMES consecutive loud frames before accepting a barge-in,
+      // so a single word, cough, or background voice doesn't stop the agent mid-sentence.
       if (rms > BARGE_IN_RMS) {
-        audioChunks.push(Buffer.from(data)); // buffer user speech for next turn
-        if (!interrupted) {
+        bargeInFrames++;
+        audioChunks.push(Buffer.from(data)); // accumulate speech for next turn
+        if (!interrupted && bargeInFrames >= BARGE_IN_MIN_FRAMES) {
           interrupted = true;
           send({ type: "interrupted" }); // tell client to stop playing
           sendStatus("thinking");
-          logger.info({ callId, rms }, "Barge-in triggered");
+          logger.info({ callId, rms, bargeInFrames }, "Barge-in triggered");
         }
+      } else {
+        bargeInFrames = 0; // frame dropped below threshold — reset the run
       }
       return; // don't touch silence timer while speaking
     }
+    bargeInFrames = 0; // agent not speaking — reset
 
     // Normal VAD (agent silent)
     if (rms > SPEECH_RMS_THRESHOLD) {
