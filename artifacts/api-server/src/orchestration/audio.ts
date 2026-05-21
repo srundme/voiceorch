@@ -207,7 +207,7 @@ export function estimatePitch(pcm8k: Buffer): number {
     if (norm > bestNorm) { bestNorm = norm; bestLag = lag; }
   }
 
-  if (bestNorm < 0.25) return 0;   // insufficient periodicity — unvoiced frame
+  if (bestNorm < 0.35) return 0;   // insufficient periodicity — unvoiced frame
   return FS / bestLag;
 }
 
@@ -222,14 +222,41 @@ export type VoiceGender = "male" | "female" | "unknown";
 
 /**
  * Classify the speaker's gender from raw 8 kHz LINEAR16 PCM.
- * Uses pitch autocorrelation — no external API required.
+ *
+ * Uses multi-frame median pitch estimation instead of a single-frame estimate.
+ * The buffer is split into non-overlapping 256 ms windows (2048 samples each —
+ * the same size estimatePitch analyses internally).  The median F0 across all
+ * voiced frames is used for classification, which is robust against:
+ *   - Short utterances starting with unvoiced consonants ("h" in "hello")
+ *   - Glottal stops, fricatives, and other transient artefacts
+ *   - Outlier frames caused by background noise
+ *
+ * At least 2 voiced frames must be found; otherwise "unknown" is returned so
+ * the system falls back to the neutral salutation rather than guessing wrong.
  */
 export function detectGenderFromPcm(pcm8k: Buffer): VoiceGender {
-  const f0 = estimatePitch(pcm8k);
-  if (f0 === 0) return "unknown";
-  if (f0 < 165) return "male";
-  if (f0 > 180) return "female";
-  return f0 < 172.5 ? "male" : "female";
+  const FRAME_SAMPLES = 2048;          // 256 ms @ 8 kHz
+  const FRAME_BYTES   = FRAME_SAMPLES * 2;
+  const pitches: number[] = [];
+
+  for (let offset = 0; offset + FRAME_BYTES <= pcm8k.length; offset += FRAME_BYTES) {
+    const f0 = estimatePitch(pcm8k.subarray(offset, offset + FRAME_BYTES));
+    if (f0 > 0) pitches.push(f0);
+  }
+
+  // Require at least 2 voiced frames — single-frame estimates are unreliable
+  if (pitches.length < 2) return "unknown";
+
+  // Median is robust against outlier frames
+  pitches.sort((a, b) => a - b);
+  const mid = Math.floor(pitches.length / 2);
+  const medianF0 = pitches.length % 2 === 1
+    ? pitches[mid]!
+    : (pitches[mid - 1]! + pitches[mid]!) / 2;
+
+  if (medianF0 < 165) return "male";
+  if (medianF0 > 180) return "female";
+  return medianF0 < 172.5 ? "male" : "female";
 }
 
 // ── Energy-based voice activity detection: returns true if audio contains speech
