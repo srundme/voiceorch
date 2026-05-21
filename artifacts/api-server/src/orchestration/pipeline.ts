@@ -5,7 +5,7 @@ import { encodeMulaw, upsample8to16, downsample16to8, decodeMulaw, hasSpeechEner
 import { processAudioIn, processRawPcm8kIn, destroyAudioSession } from "./audioPool.js";
 import type { AudioProcessResult } from "./audioPool.js";
 import type { AgentConfig, AgentTool, ConversationTurn, SessionConfig, StreamSTT, ToolDefinition } from "./types.js";
-import { detectCallerGender, applyCallerSalutation } from "./genderDetection.js";
+import { detectCallerGender, applyCallerSalutation, buildGenderInstruction } from "./genderDetection.js";
 import { logger } from "../lib/logger.js";
 
 const VAD_SILENCE_MS     = 250;    // silence window before STT flush
@@ -279,8 +279,13 @@ export class OrchestrationPipeline {
         callId: this.config.callId,
       });
 
-      // Patch the live system prompt — replace every occurrence of the placeholder
-      this.agent.systemPrompt = applyCallerSalutation(this.agent.systemPrompt, salutation);
+      // Patch the live system prompt:
+      // 1. Replace every {caller_salutation} placeholder with the resolved word.
+      // 2. Prepend a short, high-priority instruction block so the LLM actually
+      //    uses the salutation in spoken output (passive placeholder replacement
+      //    alone is often not enough to make the model say it out loud).
+      const patched = applyCallerSalutation(this.agent.systemPrompt, salutation);
+      this.agent.systemPrompt = buildGenderInstruction(salutation) + patched;
       this.genderDetected = true;
       logger.info(
         { callId: this.config.callId, salutation },

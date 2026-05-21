@@ -93,6 +93,28 @@ export function applyCallerSalutation(prompt: string, salutation: string): strin
   return prompt.replace(/\{caller_salutation\}/g, safe);
 }
 
+/**
+ * Build a short, high-priority instruction block to PREPEND to the system
+ * prompt once gender has been detected.  Placing it at the very top ensures
+ * the LLM sees and follows it — passive placeholder replacement alone is
+ * often not sufficient to make the model actually say the salutation.
+ *
+ * Returns an empty string when salutation is empty (gender unknown /
+ * detection disabled) so the caller can safely prepend without side-effects.
+ */
+export function buildGenderInstruction(salutation: string): string {
+  const safe = sanitiseSalutation(salutation);
+  if (!safe) return "";
+  return (
+    `[CALLER ADDRESS — MANDATORY]\n` +
+    `The caller's gender has been detected. Address them as "${safe}" throughout the entire conversation.\n` +
+    `- Use "${safe}" at least once per response when speaking to the caller directly.\n` +
+    `- Embed it naturally in Tamil sentences, e.g. "${safe}, இது பத்தி சொல்றேன்..." or "Seri ${safe}...".\n` +
+    `- Never use the wrong gender form. Never skip it.\n` +
+    `[END CALLER ADDRESS]\n\n`
+  );
+}
+
 // ── Provider implementations ──────────────────────────────────────────────────
 
 /**
