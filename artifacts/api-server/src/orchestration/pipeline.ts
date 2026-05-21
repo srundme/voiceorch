@@ -435,6 +435,31 @@ export class OrchestrationPipeline {
     if (this.bargeInRequested) return;
 
     if (this.tts.synthesizeStream) {
+      // Producer-consumer pacing: the TTS stream callback pushes mulaw chunks
+      // into a queue; a concurrent drain loop sends them at exactly real-time
+      // rate (20 ms per 160-byte chunk).  This prevents flooding Vobiz / Twilio
+      // with a burst of messages that overwhelms their playback buffer and causes
+      // glitches or stuttering.
+      const queue: Buffer[] = [];
+      let ttsDone = false;
+
+      const drainLoop = async (): Promise<void> => {
+        while (!this.closed && !this.bargeInRequested) {
+          if (queue.length > 0) {
+            const chunk = queue.shift()!;
+            if (!this.firstAudioSentAt) this.firstAudioSentAt = Date.now();
+            this.config.onAudioOut(chunk);
+            await new Promise<void>((r) => setTimeout(r, 20));
+          } else if (ttsDone) {
+            break; // queue drained and TTS finished — we're done
+          } else {
+            // Queue momentarily empty while TTS is still streaming —
+            // wait a short tick before checking again
+            await new Promise<void>((r) => setTimeout(r, 5));
+          }
+        }
+      };
+
       let accum: Buffer[] = [];
       let accumSize = 0;
 
@@ -447,15 +472,16 @@ export class OrchestrationPipeline {
         const pcm16k = Buffer.concat(accum);
         accum = [];
         accumSize = 0;
-        const pcm8k  = downsample16to8(pcm16k);
-        const mulaw  = encodeMulaw(pcm8k);
+        const pcm8k = downsample16to8(pcm16k);
+        const mulaw = encodeMulaw(pcm8k);
         for (let i = 0; i < mulaw.length; i += CHUNK_SIZE_MULAW) {
-          if (!this.closed && !this.bargeInRequested) {
-            if (!this.firstAudioSentAt) this.firstAudioSentAt = Date.now();
-            this.config.onAudioOut(mulaw.slice(i, i + CHUNK_SIZE_MULAW));
-          }
+          queue.push(mulaw.slice(i, i + CHUNK_SIZE_MULAW));
         }
       };
+
+      // Start drain loop concurrently with TTS streaming so playback begins
+      // as soon as the first chunk arrives (preserves low-latency streaming).
+      const drainPromise = drainLoop();
 
       await this.tts.synthesizeStream(
         text,
@@ -467,6 +493,9 @@ export class OrchestrationPipeline {
         },
         flush
       );
+
+      ttsDone = true;
+      await drainPromise;
     } else {
       const ttsPcm16k = await this.tts.synthesize(text);
       if (this.bargeInRequested) return;
