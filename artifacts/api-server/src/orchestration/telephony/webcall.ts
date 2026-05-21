@@ -148,6 +148,7 @@ export async function handleWebCallWebSocket(
   const originalSystemPrompt = agent.systemPrompt ?? "";
   let systemPrompt          = originalSystemPrompt;
   let genderDetected        = false;
+  let genderDetectPromise: Promise<void> | null = null;  // in-flight detection
   const genderAccum16k: Buffer[] = [];   // raw 16kHz from browser
   let genderAccumBytes      = 0;
   const GENDER_MIN_BYTES_16K = 32000;    // ~1 s @ 16kHz 16-bit
@@ -157,10 +158,11 @@ export async function handleWebCallWebSocket(
    * Restores the original system prompt template so the placeholder can be re-patched.
    */
   function resetGenderDetection(): void {
-    genderDetected   = false;
+    genderDetected       = false;
+    genderDetectPromise  = null;
     genderAccum16k.length = 0;
-    genderAccumBytes = 0;
-    systemPrompt     = originalSystemPrompt;
+    genderAccumBytes     = 0;
+    systemPrompt         = originalSystemPrompt;
     logger.info({ callId }, "WebCall gender detection reset — possible phone handoff");
   }
 
@@ -194,14 +196,15 @@ export async function handleWebCallWebSocket(
 
   /** Accumulate caller audio; trigger detection once we have ~1 s of speech. */
   function accumulateGenderAudio(pcm16k: Buffer): void {
-    if (!genderEnabled || genderDetected || genderAccumBytes >= GENDER_MIN_BYTES_16K) return;
+    if (!genderEnabled || genderDetected || genderDetectPromise || genderAccumBytes >= GENDER_MIN_BYTES_16K) return;
     genderAccum16k.push(pcm16k);
     genderAccumBytes += pcm16k.length;
     if (genderAccumBytes >= GENDER_MIN_BYTES_16K) {
       const combined16k = Buffer.concat(genderAccum16k);
       genderAccum16k.length = 0;   // free memory
       const pcm8k = downsample16to8(combined16k);
-      detectCallerGender(pcm8k, {
+      // Store the promise so process() can await it if it fires before detection completes
+      genderDetectPromise = detectCallerGender(pcm8k, {
         provider: genderProvider,
         maleSalutation,
         femaleSalutation,
@@ -214,6 +217,8 @@ export async function handleWebCallWebSocket(
         logger.info({ callId, salutation }, "WebCall gender detection complete");
       }).catch((err: unknown) => {
         logger.warn({ callId, err }, "WebCall gender detection failed");
+      }).finally(() => {
+        genderDetectPromise = null;
       });
     }
   }
@@ -252,7 +257,15 @@ export async function handleWebCallWebSocket(
         }
       }
 
-      // 2. LLM — stream tokens, queue TTS per sentence
+      // 2. Wait for any in-flight gender detection to finish before calling the LLM.
+      // Without this, a short first utterance (~0.5s) can trigger process() via the
+      // VAD silence timer before ~1s of audio has accumulated for detection, causing
+      // the LLM to receive the neutral (empty) salutation instead of the real one.
+      if (genderEnabled && !genderDetected && genderDetectPromise) {
+        await genderDetectPromise;
+      }
+
+      // 3. LLM — stream tokens, queue TTS per sentence
       const sentenceJobs: Promise<Buffer>[] = [];
       let tokenBuf  = "";
       let fullReply = "";
