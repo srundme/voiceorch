@@ -16,6 +16,7 @@ import {
   useListCalls,
   useCreateAgent,
   useListKnowledgeBases,
+  useInitiateOutboundCall,
   getListAgentsQueryKey,
   getGetAgentQueryKey,
   getListCallsQueryKey,
@@ -571,9 +572,10 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
     { query: { enabled: activeTab === "logs", queryKey: getListCallsQueryKey({ agentId }) } }
   );
 
-  const update       = useUpdateAgent();
-  const toggleAgent  = useToggleAgent();
-  const deleteAgent  = useDeleteAgent();
+  const update          = useUpdateAgent();
+  const toggleAgent     = useToggleAgent();
+  const deleteAgent     = useDeleteAgent();
+  const initiateOutbound = useInitiateOutboundCall();
   const { data: kbs } = useListKnowledgeBases();
 
   // ── Tab 1 — Agent ───────────────────────────────────────────────
@@ -1696,8 +1698,29 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
           </div>
           <DialogFooter>
             <Button variant="outline" className="border-zinc-700 text-zinc-400" onClick={() => setOutboundDialogOpen(false)}>Cancel</Button>
-            <Button className="bg-emerald-600 hover:bg-emerald-500 text-white" disabled={!toNumber.trim()}>
-              <PhoneOutgoing className="h-4 w-4 mr-2" /> Call Now
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-500 text-white"
+              disabled={!toNumber.trim() || initiateOutbound.isPending}
+              onClick={() => {
+                initiateOutbound.mutate(
+                  { data: { agentId: agent.id, toNumber: toNumber.trim(), webhookBaseUrl: window.location.origin } },
+                  {
+                    onSuccess: () => {
+                      toast({ title: "Call initiated", description: `Dialing ${toNumber} via ${agent.name}.` });
+                      setOutboundDialogOpen(false);
+                      setToNumber("");
+                    },
+                    onError: (err: unknown) => {
+                      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Failed to initiate call.";
+                      toast({ title: "Call failed", description: msg, variant: "destructive" });
+                    },
+                  }
+                );
+              }}
+            >
+              {initiateOutbound.isPending
+                ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Dialing…</>
+                : <><PhoneOutgoing className="h-4 w-4 mr-2" /> Call Now</>}
             </Button>
           </DialogFooter>
         </DialogContent>
