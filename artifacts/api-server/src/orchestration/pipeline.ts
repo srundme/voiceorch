@@ -1,7 +1,7 @@
 import { createSTTAdapter } from "./adapters/stt/index.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { createTTSAdapter } from "./adapters/tts/index.js";
-import { encodeMulaw, upsample8to16, downsample16to8 } from "./audio.js";
+import { encodeMulaw, upsample8to16, downsample16to8, decodeMulaw, hasSpeechEnergy } from "./audio.js";
 import { processAudioIn, processRawPcm8kIn, destroyAudioSession } from "./audioPool.js";
 import type { AudioProcessResult } from "./audioPool.js";
 import type { AgentConfig, AgentTool, ConversationTurn, SessionConfig, StreamSTT, ToolDefinition } from "./types.js";
@@ -165,6 +165,13 @@ export class OrchestrationPipeline {
   onAudioIn(mulawChunk: Buffer): void {
     if (this.closed) return;
     const callId = String(this.config.callId);
+    // Accumulate raw (pre-noise-cancellation) PCM for gender detection so the
+    // 300 Hz bandpass highpass in NoiseCanceller does not strip female
+    // fundamentals (165–255 Hz).  Skip while the agent is playing TTS to
+    // avoid mis-classifying echo of the agent's own voice.
+    if (this.agent.genderDetectionEnabled && !this.genderDetected && !this.isPlaying) {
+      this.accumulateGenderAudio(decodeMulaw(mulawChunk));
+    }
     processAudioIn(callId, mulawChunk, this.agent.noiseCancellationEnabled)
       .then((result) => this.handleProcessedAudio(result))
       .catch((err) => logger.error({ callId: this.config.callId, err }, "Audio worker error (mulaw)"));
@@ -174,6 +181,11 @@ export class OrchestrationPipeline {
   onRawPcm8kIn(pcm8k: Buffer): void {
     if (this.closed) return;
     const callId = String(this.config.callId);
+    // Same as onAudioIn: accumulate raw PCM before noise-cancellation and
+    // skip while the agent is speaking to prevent echo misclassification.
+    if (this.agent.genderDetectionEnabled && !this.genderDetected && !this.isPlaying) {
+      this.accumulateGenderAudio(pcm8k);
+    }
     processRawPcm8kIn(callId, pcm8k, this.agent.noiseCancellationEnabled)
       .then((result) => this.handleProcessedAudio(result))
       .catch((err) => logger.error({ callId: this.config.callId, err }, "Audio worker error (pcm8k)"));
@@ -187,6 +199,8 @@ export class OrchestrationPipeline {
    */
   private accumulateGenderAudio(pcm8k: Buffer): void {
     if (!this.agent.genderDetectionEnabled || this.genderDetected) return;
+    // Skip silent/background frames — only voiced speech carries pitch information.
+    if (!hasSpeechEnergy(pcm8k)) return;
     this.genderAudioAccum.push(pcm8k);
     this.genderAudioBytes += pcm8k.length;
     if (this.genderAudioBytes >= this.GENDER_MIN_BYTES && !this.genderDetectPromise) {
@@ -281,12 +295,11 @@ export class OrchestrationPipeline {
   private handleProcessedAudio({ pcm8k, pcm16k, hasSpeech }: AudioProcessResult): void {
     if (this.closed) return;
 
-    // Accumulate speech audio for gender detection (fires once, async, non-blocking).
-    // On speech → cancel any in-progress handoff-silence timer.
-    // On silence → arm the handoff-silence timer (if gender was already detected).
+    // Gender audio is now accumulated in onAudioIn / onRawPcm8kIn from raw
+    // (pre-noise-cancellation) PCM so the bandpass filter does not strip
+    // female fundamentals.  Here we only manage the handoff-silence timer.
     if (hasSpeech) {
       this.stopHandoffSilenceTimer();
-      this.accumulateGenderAudio(pcm8k);
     } else {
       this.resetHandoffSilenceTimer();
     }
