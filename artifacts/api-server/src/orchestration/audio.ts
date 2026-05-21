@@ -274,21 +274,41 @@ export function detectGenderFromPcm(pcm8k: Buffer): VoiceGender {
     return "unknown";
   }
 
-  // Median is robust against outlier frames
   pitches.sort((a, b) => a - b);
-  const mid = Math.floor(pitches.length / 2);
-  const medianF0 = pitches.length % 2 === 1
-    ? pitches[mid]!
-    : (pitches[mid - 1]! + pitches[mid]!) / 2;
+
+  // ── Wide-spread outlier suppression ────────────────────────────────────────
+  // When the pitch spread exceeds one octave (max/min > 2.0) AND the lowest
+  // frame is in the male range (< 165 Hz), the high-frequency frames are almost
+  // certainly TTS echo or acoustic artefacts (barge-in transition, residual
+  // speaker bleed) rather than the caller's true F0.
+  // In this case use the median of only the lower half of frames so outlier
+  // high frames don't pull the estimate into the female zone.
+  const minF0 = pitches[0]!;
+  const maxF0 = pitches[pitches.length - 1]!;
+  const spreadRatio = maxF0 / minF0;
+
+  let referenceF0: number;
+  if (spreadRatio > 2.0 && minF0 < 165) {
+    const lower = pitches.slice(0, Math.ceil(pitches.length / 2));
+    const midL  = Math.floor(lower.length / 2);
+    referenceF0  = lower.length % 2 === 1
+      ? lower[midL]!
+      : (lower[midL - 1]! + lower[midL]!) / 2;
+  } else {
+    const mid = Math.floor(pitches.length / 2);
+    referenceF0   = pitches.length % 2 === 1
+      ? pitches[mid]!
+      : (pitches[mid - 1]! + pitches[mid]!) / 2;
+  }
 
   const rounded = pitches.map(f => Math.round(f));
   process.stderr.write(
-    `[gender-dbg] frames=[${rounded.join(",")}] median=${Math.round(medianF0)} Hz bufBytes=${pcm8k.length}\n`
+    `[gender-dbg] frames=[${rounded.join(",")}] spread=${spreadRatio.toFixed(2)} ref=${Math.round(referenceF0)} Hz bufBytes=${pcm8k.length}\n`
   );
 
-  if (medianF0 < 165) return "male";
-  if (medianF0 > 180) return "female";
-  return medianF0 < 172.5 ? "male" : "female";
+  if (referenceF0 < 165) return "male";
+  if (referenceF0 > 180) return "female";
+  return referenceF0 < 172.5 ? "male" : "female";
 }
 
 // ── Energy-based voice activity detection: returns true if audio contains speech

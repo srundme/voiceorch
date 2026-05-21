@@ -233,6 +233,8 @@ export async function handleWebCallWebSocket(
   let silenceTimer: ReturnType<typeof setTimeout> | null = null;
   let processing  = false;
   let speaking    = false;   // true while audio frames are being sent to client
+  let speakingEndedAt = 0;  // timestamp (ms) when speaking last transitioned to false
+  const SPEAKING_ECHO_GRACE_MS = 400; // skip gender accumulation for this long after agent stops
   let interrupted = false;   // barge-in flag; checked inside audio loop
 
   // ── Pipeline ─────────────────────────────────────────────────────────────
@@ -333,6 +335,7 @@ export async function handleWebCallWebSocket(
       }
 
       speaking = false;
+      speakingEndedAt = Date.now();
 
       if (interrupted) {
         // Barge-in: immediately process whatever the user said
@@ -344,6 +347,7 @@ export async function handleWebCallWebSocket(
 
     } catch (err) {
       speaking = false;
+      speakingEndedAt = Date.now();
       logger.error({ callId, err }, "WebCall pipeline error");
       send({ type: "error", message: String(err) });
     } finally {
@@ -401,15 +405,15 @@ export async function handleWebCallWebSocket(
       // Pricing: < 30 s → $0.015 (half rate); ≥ 30 s → ceil(seconds/60) × $0.03/min.
       const callUserId = agent.userId ?? null;
       if (callUserId && durationSeconds > 0) {
-        const debitCents = durationSeconds < 30
-          ? 1.5                                         // $0.015 flat for short calls
-          : Math.ceil(durationSeconds / 60) * 3;        // $0.03 per started minute
+        const debitCents = Math.round(durationSeconds < 30
+          ? 2                                           // $0.02 flat for short calls (integer)
+          : Math.ceil(durationSeconds / 60) * 3);      // $0.03 per started minute
         const billableLabel = durationSeconds < 30
           ? "< 30 s flat"
           : `${Math.ceil(durationSeconds / 60)} min × $0.03`;
         const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, callUserId));
         if (user) {
-          const newBalance = Math.max(0, user.walletBalanceCents - debitCents);
+          const newBalance = Math.round(Math.max(0, user.walletBalanceCents - debitCents));
           await db.update(usersTable).set({ walletBalanceCents: newBalance }).where(eq(usersTable.id, user.id));
           await db.insert(walletTransactionsTable).values({
             userId: user.id,
@@ -460,7 +464,13 @@ export async function handleWebCallWebSocket(
     if (rms > SPEECH_RMS_THRESHOLD) {
       const chunk = Buffer.from(data);
       audioChunks.push(chunk);
-      accumulateGenderAudio(chunk);   // feed speech audio to gender detector
+      // Skip gender accumulation during the post-speaking echo grace period.
+      // When the agent stops speaking the browser may still be flushing buffered
+      // TTS audio; those ~400 ms contain TTS echo at female frequencies and must
+      // not contaminate the caller's pitch profile.
+      if (Date.now() - speakingEndedAt > SPEAKING_ECHO_GRACE_MS) {
+        accumulateGenderAudio(chunk);
+      }
       clearHandoffSilenceTimer();     // speech arrived — cancel handoff timer
       clearSilenceTimer();
       if (!processing) sendStatus("listening");
