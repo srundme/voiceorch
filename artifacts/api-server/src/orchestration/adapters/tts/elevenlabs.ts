@@ -56,7 +56,8 @@ export class ElevenLabsTTS implements TTSAdapter {
   async synthesizeStream(
     text: string,
     onChunk: (pcm16k: Buffer) => void,
-    onDone: () => void
+    onDone: () => void,
+    signal?: AbortSignal
   ): Promise<void> {
     const resp = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/stream`,
@@ -68,6 +69,7 @@ export class ElevenLabsTTS implements TTSAdapter {
           Accept: "audio/mpeg",
         },
         body: this.buildBody(text),
+        signal,
       }
     );
 

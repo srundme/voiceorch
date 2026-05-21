@@ -62,7 +62,8 @@ export class CartesiaTTS implements TTSAdapter {
   async synthesizeStream(
     text: string,
     onChunk: (pcm16k: Buffer) => void,
-    onDone: () => void
+    onDone: () => void,
+    signal?: AbortSignal
   ): Promise<void> {
     const resp = await fetch("https://api.cartesia.ai/tts/bytes", {
       method: "POST",
@@ -72,6 +73,7 @@ export class CartesiaTTS implements TTSAdapter {
         "Content-Type": "application/json",
       },
       body: this.buildRequestBody(text),
+      signal,
     });
 
     if (!resp.ok) {

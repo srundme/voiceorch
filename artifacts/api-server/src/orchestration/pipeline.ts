@@ -14,6 +14,9 @@ const CHUNK_SIZE_MULAW        = 160;    // 20ms @ 8kHz mulaw for paced batch pla
 const VAD_THRESHOLD           = 100;    // RMS threshold for speech detection
 const STREAM_ACCUM_BYTES      = 640;    // 20ms of 16kHz PCM before forwarding a TTS stream chunk
 const HANDOFF_SILENCE_MS      = 3000;   // sustained silence that may indicate a phone handoff
+const TTS_STREAM_TIMEOUT_MS   = 8000;   // abort TTS streaming fetch if no data within 8 s —
+                                         // prevents a hung Cartesia/ElevenLabs connection from
+                                         // silencing the call until Vobiz times out and drops it
 const BARGE_IN_ENERGY_THRESHOLD = 1200; // Much higher than normal VAD (300) — only intentional,
                                          // loud caller speech should interrupt the agent.
                                          // Prevents phone echo, background TV, or ambient
@@ -501,20 +504,50 @@ export class OrchestrationPipeline {
         }
       };
 
+      // AbortController lets us cancel the TTS HTTP connection when:
+      //   • the pipeline is closed (call ended / WebSocket dropped), or
+      //   • TTS hasn't produced any data within TTS_STREAM_TIMEOUT_MS (hung API).
+      // Without this, a hung Cartesia/ElevenLabs fetch blocks playSentence
+      // indefinitely and the caller hears complete silence until Vobiz drops.
+      const ttsAbort  = new AbortController();
+      const ttsTimerId = setTimeout(() => {
+        logger.warn({ callId: this.config.callId }, "TTS streaming timed out — aborting fetch");
+        ttsAbort.abort();
+      }, TTS_STREAM_TIMEOUT_MS);
+
+      // Also abort immediately when the call closes mid-sentence.
+      const closedWatcher = setInterval(() => {
+        if (this.closed || this.bargeInRequested) ttsAbort.abort();
+      }, 50);
+
       // Start drain loop concurrently with TTS streaming so playback begins
       // as soon as the first chunk arrives (preserves low-latency streaming).
       const drainPromise = drainLoop();
 
-      await this.tts.synthesizeStream(
-        text,
-        (chunk) => {
-          if (this.closed || this.bargeInRequested) return;
-          accum.push(chunk);
-          accumSize += chunk.length;
-          if (accumSize >= STREAM_ACCUM_BYTES) flush();
-        },
-        flush
-      );
+      try {
+        await this.tts.synthesizeStream(
+          text,
+          (chunk) => {
+            if (this.closed || this.bargeInRequested) return;
+            // Reset the timeout every time a chunk arrives — the connection is alive.
+            clearTimeout(ttsTimerId);
+            accum.push(chunk);
+            accumSize += chunk.length;
+            if (accumSize >= STREAM_ACCUM_BYTES) flush();
+          },
+          flush,
+          ttsAbort.signal
+        );
+      } catch (err) {
+        const isAbort = err instanceof Error && err.name === "AbortError";
+        if (!isAbort) throw err; // real TTS error — propagate up
+        logger.warn({ callId: this.config.callId }, "TTS stream aborted");
+      } finally {
+        clearTimeout(ttsTimerId);
+        clearInterval(closedWatcher);
+      }
+
+      flush(); // flush any leftover accumulator bytes after stream ends / aborts
 
       ttsDone = true;
       await drainPromise;

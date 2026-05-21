@@ -117,7 +117,8 @@ export interface TTSAdapter {
   synthesizeStream?(
     text: string,
     onChunk: (chunk: Buffer) => void,
-    onDone: () => void
+    onDone: () => void,
+    signal?: AbortSignal
   ): Promise<void>;
 }
 

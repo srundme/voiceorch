@@ -42,7 +42,8 @@ export class DeepgramTTS implements TTSAdapter {
   async synthesizeStream(
     text: string,
     onChunk: (chunk: Buffer) => void,
-    onDone: () => void
+    onDone: () => void,
+    signal?: AbortSignal
   ): Promise<void> {
     const url = new URL("https://api.deepgram.com/v1/speak");
     url.searchParams.set("model", this.model);
@@ -57,6 +58,7 @@ export class DeepgramTTS implements TTSAdapter {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ text }),
+      signal,
     });
 
     if (!resp.ok) throw new Error(`Deepgram TTS stream ${resp.status}: ${await resp.text()}`);
