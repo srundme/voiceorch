@@ -168,15 +168,15 @@ export async function handleWebCallWebSocket(
 
   let handoffSilenceTimer: ReturnType<typeof setTimeout> | null = null;
 
-  /** Arm (or re-arm) the handoff-silence timer. Fires after HANDOFF_SILENCE_MS of quiet. */
-  function resetHandoffSilenceTimer(): void {
-    if (!genderEnabled) return;
-    if (handoffSilenceTimer) clearTimeout(handoffSilenceTimer);
-    handoffSilenceTimer = setTimeout(() => {
-      handoffSilenceTimer = null;
-      if (!closed && genderDetected) resetGenderDetection();
-    }, HANDOFF_SILENCE_MS);
-  }
+  /** Arm (or re-arm) the handoff-silence timer. Fires after HANDOFF_SILENCE_MS of quiet.
+   *
+   * NOTE: intentionally a no-op for WebCalls.  Browser sessions have no concept
+   * of a mid-call phone handoff — once gender is detected for a WebCall caller
+   * it should stay locked.  Silence-based resets here were causing the agent to
+   * re-detect during normal post-response pauses and pick up the TTS voice instead.
+   * Phrase-based handoff detection (Signal 1) is preserved for IVR-style flows.
+   */
+  function resetHandoffSilenceTimer(): void { /* no-op for WebCall */ }
 
   /** Cancel the handoff-silence timer on any incoming speech. */
   function clearHandoffSilenceTimer(): void {
