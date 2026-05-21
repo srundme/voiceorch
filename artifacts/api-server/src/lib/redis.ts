@@ -19,7 +19,20 @@ export function getRedis(): Redis | null {
     return null;
   }
 
-  _redis = new Redis({ url, token });
-  logger.info({ url }, "Upstash Redis client initialised");
+  if (!url.startsWith("https://")) {
+    logger.warn(
+      { urlPrefix: url.slice(0, 12) },
+      "UPSTASH_REDIS_REST_URL does not start with https:// — check that URL and TOKEN env vars are not swapped. Redis session backing disabled."
+    );
+    return null;
+  }
+
+  try {
+    _redis = new Redis({ url, token });
+    logger.info({ url }, "Upstash Redis client initialised");
+  } catch (err) {
+    logger.warn({ err }, "Upstash Redis client failed to initialise — Redis session backing disabled");
+    return null;
+  }
   return _redis;
 }
