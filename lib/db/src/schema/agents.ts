@@ -31,8 +31,20 @@ export type AgentConfig = {
   voicemailDetection?: boolean;
   // P2-B: AMD action when machine is detected
   voicemailAction?: "hangup" | "leave_message" | "continue";
-  voicemailMessage?: string; // spoken to voicemail (leave_message mode)
-  machineDetectionMode?: "Enable" | "DetectMessageEnd"; // Enable=immediate, DetectMessageEnd=wait for beep
+  voicemailMessage?: string;
+  machineDetectionMode?: "Enable" | "DetectMessageEnd";
+  // P2-C: Call Recording
+  recordingEnabled?: boolean;
+  recordingFormat?: "mp3" | "wav";
+  // P2-D: IVR / DTMF pre-filter
+  ivrEnabled?: boolean;
+  ivrGreeting?: string;
+  ivrOptions?: Array<{ digit: string; label: string; targetAgentId?: number }>;
+  // P2-E: Call Queue
+  queueEnabled?: boolean;
+  queueMaxConcurrent?: number;
+  queueWaitSeconds?: number;
+  queueHoldMusicUrl?: string;
   schedulingGuardrails?: boolean;
   callStartHour?: number;
   callEndHour?: number;

@@ -504,6 +504,18 @@ type AgentCfg = {
   voicemailAction?: "hangup" | "leave_message" | "continue";
   voicemailMessage?: string;
   machineDetectionMode?: "Enable" | "DetectMessageEnd";
+  // P2-C: Call Recording
+  recordingEnabled?: boolean;
+  recordingFormat?: "mp3" | "wav";
+  // P2-D: IVR / DTMF pre-filter
+  ivrEnabled?: boolean;
+  ivrGreeting?: string;
+  ivrOptions?: Array<{ digit: string; label: string; targetAgentId?: number }>;
+  // P2-E: Call Queue
+  queueEnabled?: boolean;
+  queueMaxConcurrent?: number;
+  queueWaitSeconds?: number;
+  queueHoldMusicUrl?: string;
   schedulingGuardrails?: boolean;
   callStartHour?: number; callEndHour?: number;
   // P2-A: Call Transfer defaults
@@ -1501,6 +1513,110 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                 </>
               )}
             </div>
+            {/* P2-C: Call Recording */}
+            <div className="bg-black/[0.04] border border-black/[0.07]/40 rounded-xl p-4 space-y-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Recording (P2-C)</p>
+              <ToggleRow label="Record Calls" desc="Save an audio recording of every call for review and compliance"
+                checked={cfg.recordingEnabled ?? false} onChange={v => setCfg({ recordingEnabled: v })} />
+              {cfg.recordingEnabled && (
+                <div className="w-40">
+                  <p className="text-xs text-black/50 mb-1">Audio format</p>
+                  <Select value={cfg.recordingFormat ?? "mp3"} onValueChange={v => setCfg({ recordingFormat: v as "mp3" | "wav" })}>
+                    <SelectTrigger className="h-7 text-xs bg-white border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-white border-black/[0.07]">
+                      <SelectItem value="mp3" className="text-black/75 text-xs">MP3 (smaller)</SelectItem>
+                      <SelectItem value="wav" className="text-black/75 text-xs">WAV (lossless)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+
+            {/* P2-D: IVR / DTMF pre-filter */}
+            <div className="bg-black/[0.04] border border-black/[0.07]/40 rounded-xl p-4 space-y-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">IVR / DTMF Pre-filter (P2-D)</p>
+              <ToggleRow label="Enable IVR Menu" desc="Play a key-press menu before connecting the caller to this AI agent"
+                checked={cfg.ivrEnabled ?? false} onChange={v => setCfg({ ivrEnabled: v })} />
+              {cfg.ivrEnabled && (
+                <>
+                  <div>
+                    <p className="text-xs text-black/50 mb-1">Opening greeting</p>
+                    <Input value={cfg.ivrGreeting ?? ""}
+                      onChange={e => setCfg({ ivrGreeting: e.target.value })}
+                      placeholder="Welcome to SnapServe. Please choose from the following options."
+                      className="h-7 text-xs bg-white border-black/[0.07] text-black/75 placeholder:text-black/30" />
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs text-black/50">Menu options</p>
+                      <button
+                        type="button"
+                        onClick={() => setCfg({ ivrOptions: [...(cfg.ivrOptions ?? []), { digit: "", label: "" }] })}
+                        className="text-[10px] bg-black/[0.08] hover:bg-black/[0.12] text-black/50 px-2 py-1 rounded-md transition-colors">
+                        + Add option
+                      </button>
+                    </div>
+                    {(cfg.ivrOptions ?? []).map((opt, idx) => (
+                      <div key={idx} className="flex gap-2 mb-1.5 items-center">
+                        <Input value={opt.digit}
+                          onChange={e => { const opts = [...(cfg.ivrOptions ?? [])]; opts[idx] = { ...opts[idx], digit: e.target.value }; setCfg({ ivrOptions: opts }); }}
+                          placeholder="1" className="h-7 w-12 text-xs text-center bg-white border-black/[0.07] text-black/75 shrink-0" maxLength={1} />
+                        <Input value={opt.label}
+                          onChange={e => { const opts = [...(cfg.ivrOptions ?? [])]; opts[idx] = { ...opts[idx], label: e.target.value }; setCfg({ ivrOptions: opts }); }}
+                          placeholder="Sales" className="h-7 flex-1 text-xs bg-white border-black/[0.07] text-black/75 placeholder:text-black/30" />
+                        <button type="button"
+                          onClick={() => { const opts = (cfg.ivrOptions ?? []).filter((_, i) => i !== idx); setCfg({ ivrOptions: opts }); }}
+                          className="text-black/25 hover:text-red-500 transition-colors text-xs px-1">✕</button>
+                      </div>
+                    ))}
+                    {(cfg.ivrOptions ?? []).length === 0 && (
+                      <p className="text-[10px] text-black/25">No menu options yet — add at least one digit/label pair.</p>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-black/30 leading-relaxed">
+                    The caller hears the greeting, presses a digit, and is routed to the agent assigned to that option.
+                    Unmatched digits fall through to this agent.
+                  </p>
+                </>
+              )}
+            </div>
+
+            {/* P2-E: Call Queue */}
+            <div className="bg-black/[0.04] border border-black/[0.07]/40 rounded-xl p-4 space-y-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Call Queue (P2-E)</p>
+              <ToggleRow label="Enable Call Queue" desc="Hold new callers when agent is busy instead of dropping them"
+                checked={cfg.queueEnabled ?? false} onChange={v => setCfg({ queueEnabled: v })} />
+              {cfg.queueEnabled && (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-xs text-black/50 mb-1">Max concurrent calls</p>
+                      <Input type="number" min={1} max={20} value={cfg.queueMaxConcurrent ?? 1}
+                        onChange={e => setCfg({ queueMaxConcurrent: parseInt(e.target.value) || 1 })}
+                        className="h-7 text-xs bg-white border-black/[0.07] text-black/75" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-black/50 mb-1">Hold loop length (sec)</p>
+                      <Input type="number" min={10} max={120} value={cfg.queueWaitSeconds ?? 30}
+                        onChange={e => setCfg({ queueWaitSeconds: parseInt(e.target.value) || 30 })}
+                        className="h-7 text-xs bg-white border-black/[0.07] text-black/75" />
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs text-black/50 mb-1">Hold music URL <span className="text-black/25">(optional — MP3 stream)</span></p>
+                    <Input value={cfg.queueHoldMusicUrl ?? ""}
+                      onChange={e => setCfg({ queueHoldMusicUrl: e.target.value })}
+                      placeholder="https://…/hold-music.mp3"
+                      className="h-7 text-xs bg-white border-black/[0.07] text-black/75 placeholder:text-black/30" />
+                  </div>
+                  <p className="text-[10px] text-black/30 leading-relaxed">
+                    When all {cfg.queueMaxConcurrent ?? 1} slot{(cfg.queueMaxConcurrent ?? 1) > 1 ? "s are" : " is"} occupied,
+                    inbound callers hear hold music and are retried every {cfg.queueWaitSeconds ?? 30}s.
+                  </p>
+                </>
+              )}
+            </div>
+
             <div className="bg-black/[0.04] border border-black/[0.07]/40 rounded-xl p-4 space-y-4">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Scheduling</p>
               <ToggleRow label="Scheduling Guardrails" desc="Restrict when this agent can make outbound calls"

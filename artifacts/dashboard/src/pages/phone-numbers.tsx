@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Phone, Plus, Trash2, Link2, Link2Off, Search, Loader2, Globe, AlertCircle } from "lucide-react";
+import { Phone, Plus, Trash2, Link2, Link2Off, Search, Loader2, Globe, AlertCircle, GitFork } from "lucide-react";
 import {
   useListPhoneNumbers,
   useListAvailablePhoneNumbers,
@@ -318,6 +318,135 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
+// ── P2-F: Routing Rules Dialog ────────────────────────────────────────────────
+
+type RoutingRule = {
+  condition: "caller_prefix" | "time_range" | "always";
+  value?: string;
+  startHour?: number;
+  endHour?: number;
+  targetAgentId: number;
+};
+
+function RoutingRulesDialog({ number, onClose }: { number: PhoneNumber; onClose: () => void }) {
+  const { toast } = useToast();
+  const { data: agents } = useListAgents({ query: { queryKey: getListAgentsQueryKey() } });
+  const [rules, setRules] = useState<RoutingRule[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  React.useEffect(() => {
+    fetch(`/api/phone-numbers/${number.id}/routing-rules`)
+      .then(r => r.json() as Promise<{ routingRules: RoutingRule[] }>)
+      .then(d => { setRules(d.routingRules ?? []); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [number.id]);
+
+  function addRule() {
+    setRules(r => [...r, { condition: "always", targetAgentId: (agents?.[0]?.id ?? 0) }]);
+  }
+
+  function removeRule(i: number) {
+    setRules(r => r.filter((_, idx) => idx !== i));
+  }
+
+  function updateRule(i: number, patch: Partial<RoutingRule>) {
+    setRules(r => r.map((rule, idx) => idx === i ? { ...rule, ...patch } : rule));
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const resp = await fetch(`/api/phone-numbers/${number.id}/routing-rules`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ routingRules: rules }),
+      });
+      if (!resp.ok) throw new Error("Save failed");
+      toast({ title: "Routing rules saved" });
+      onClose();
+    } catch {
+      toast({ title: "Error", variant: "destructive", description: "Failed to save routing rules" });
+    } finally { setSaving(false); }
+  }
+
+  const agentList = agents ?? [];
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>Routing Rules — <span className="font-mono">{number.number}</span></DialogTitle>
+          <DialogDescription>
+            Rules are evaluated top-to-bottom; the first match routes the call to the target agent.
+          </DialogDescription>
+        </DialogHeader>
+        {loading ? (
+          <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-black/30" /></div>
+        ) : (
+          <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+            {rules.length === 0 && (
+              <p className="text-xs text-black/35 text-center py-4">No rules — all calls go to the assigned agent.</p>
+            )}
+            {rules.map((rule, i) => (
+              <div key={i} className="rounded-lg border border-black/[0.08] bg-black/[0.02] p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Select value={rule.condition} onValueChange={v => updateRule(i, { condition: v as RoutingRule["condition"] })}>
+                    <SelectTrigger className="h-7 text-xs flex-1 bg-white border-black/[0.07]"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-white border-black/[0.07]">
+                      <SelectItem value="caller_prefix" className="text-xs">Caller prefix matches</SelectItem>
+                      <SelectItem value="time_range" className="text-xs">Time of day (UTC)</SelectItem>
+                      <SelectItem value="always" className="text-xs">Always (catch-all)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <button type="button" onClick={() => removeRule(i)} className="text-black/25 hover:text-red-400 text-xs px-1 transition-colors">✕</button>
+                </div>
+                {rule.condition === "caller_prefix" && (
+                  <Input value={rule.value ?? ""} onChange={e => updateRule(i, { value: e.target.value })}
+                    placeholder="+1800 or +44" className="h-7 text-xs bg-white border-black/[0.07]" />
+                )}
+                {rule.condition === "time_range" && (
+                  <div className="flex gap-2 items-center">
+                    <Input type="number" min={0} max={23} value={rule.startHour ?? 9}
+                      onChange={e => updateRule(i, { startHour: parseInt(e.target.value) })}
+                      className="h-7 w-16 text-xs text-center bg-white border-black/[0.07]" />
+                    <span className="text-xs text-black/35">to</span>
+                    <Input type="number" min={0} max={23} value={rule.endHour ?? 17}
+                      onChange={e => updateRule(i, { endHour: parseInt(e.target.value) })}
+                      className="h-7 w-16 text-xs text-center bg-white border-black/[0.07]" />
+                    <span className="text-xs text-black/35">UTC</span>
+                  </div>
+                )}
+                <div>
+                  <p className="text-[10px] text-black/40 mb-1">Route to agent</p>
+                  <Select value={String(rule.targetAgentId)} onValueChange={v => updateRule(i, { targetAgentId: parseInt(v) })}>
+                    <SelectTrigger className="h-7 text-xs bg-white border-black/[0.07]"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-white border-black/[0.07]">
+                      {agentList.map(a => (
+                        <SelectItem key={a.id} value={String(a.id)} className="text-xs">{a.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            ))}
+            <button type="button" onClick={addRule}
+              className="w-full text-xs text-black/40 hover:text-black/70 border border-dashed border-black/[0.12] rounded-lg py-2 transition-colors">
+              + Add rule
+            </button>
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSave} disabled={saving} className="bg-black/85 hover:bg-black/90 text-white gap-1.5">
+            {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Save Rules
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function PhoneNumbersPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -326,6 +455,7 @@ export default function PhoneNumbersPage() {
   const [buyOpen, setBuyOpen] = useState(false);
   const [assignTarget, setAssignTarget] = useState<PhoneNumber | null>(null);
   const [releaseTarget, setReleaseTarget] = useState<PhoneNumber | null>(null);
+  const [routingTarget, setRoutingTarget] = useState<PhoneNumber | null>(null);
 
   function handleRelease(n: PhoneNumber) {
     release.mutate(
@@ -417,6 +547,17 @@ export default function PhoneNumbersPage() {
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
+                  {n.agentId && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs gap-1.5 text-black/50 hover:text-black/85"
+                      onClick={() => setRoutingTarget(n)}
+                    >
+                      <GitFork className="h-3 w-3" />
+                      Routing
+                    </Button>
+                  )}
                   <Button
                     variant="ghost"
                     size="sm"
@@ -444,6 +585,7 @@ export default function PhoneNumbersPage() {
 
       {buyOpen && <BuyNumberDialog onClose={() => setBuyOpen(false)} />}
       {assignTarget && <AssignDialog number={assignTarget} onClose={() => setAssignTarget(null)} />}
+      {routingTarget && <RoutingRulesDialog number={routingTarget} onClose={() => setRoutingTarget(null)} />}
 
       {/* Release confirm dialog */}
       {releaseTarget && (

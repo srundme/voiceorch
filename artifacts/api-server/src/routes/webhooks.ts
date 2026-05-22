@@ -63,42 +63,164 @@ router.post("/webhooks/plivo/voice", async (req, res): Promise<void> => {
 
 // ── Vobiz ────────────────────────────────────────────────────────────────────
 
+/** Resolve HTTP base URL (for VoiceXML action / redirect attributes) */
+function getHttpBaseUrl(req: Parameters<Parameters<IRouter["post"]>[1]>[0]): string {
+  const host  = req.headers["x-forwarded-host"] ?? req.hostname;
+  const proto = (req.headers["x-forwarded-proto"] ?? "https") as string;
+  return `${proto}://${host}`;
+}
+
+function escapeXml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
 /**
  * POST /api/webhooks/vobiz/voice
- * Vobiz calls this when a call arrives.
  * Resolution order:
- *   1. ?agentId= query param (legacy / outbound callback)
- *   2. `To` body field → look up managed phone number → get assigned agentId
+ *   1. ?agentId= query param (outbound / legacy)
+ *   2. `To` body → managed phone number → assigned agentId
+ * Then applies P2-F routing rules → P2-E queue → P2-D IVR → P2-C recording.
  */
 router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
   const wsBaseUrl = getWsBaseUrl(req);
+  const httpBase  = getHttpBaseUrl(req);
 
-  // 1. Explicit agentId param (outbound / legacy)
   let agentId = parseInt(String(req.query["agentId"] ?? "0"), 10);
-
   let platformTelephony = false;
+  type RoutingRule = {
+    condition: "caller_prefix" | "time_range" | "always";
+    value?: string; startHour?: number; endHour?: number; targetAgentId: number;
+  };
+  let routingRules: RoutingRule[] | null = null;
 
   if (!agentId) {
-    // 2. Managed number routing — look up the "To" number (platform telephony)
     const toNumber: string = String(req.body?.To ?? req.body?.to ?? "").trim();
     if (toNumber) {
       const [pn] = await db
-        .select({ agentId: phoneNumbersTable.agentId })
+        .select({ agentId: phoneNumbersTable.agentId, routingRules: phoneNumbersTable.routingRules })
         .from(phoneNumbersTable)
         .where(eq(phoneNumbersTable.number, toNumber));
       if (pn?.agentId) {
         agentId = pn.agentId;
-        platformTelephony = true; // using our carrier, charge $0.005/min surcharge
+        platformTelephony = true;
+        routingRules = (pn.routingRules as RoutingRule[] | null) ?? null;
       }
     }
   }
 
   if (!agentId) {
-    res.status(400).set("Content-Type", "text/xml").send("<Response><Speak>Agent not configured for this number.</Speak><Hangup/></Response>");
+    res.status(400).set("Content-Type", "text/xml")
+      .send("<Response><Speak>Agent not configured for this number.</Speak><Hangup/></Response>");
     return;
   }
 
-  res.set("Content-Type", "text/xml").send(getVobizAnswerXML(wsBaseUrl, agentId, platformTelephony));
+  // P2-F: Evaluate inbound routing rules (first match wins)
+  if (routingRules && routingRules.length > 0) {
+    const callerNumber = String(req.body?.From ?? req.body?.from ?? "");
+    const nowHour = new Date().getUTCHours();
+    for (const rule of routingRules) {
+      if (rule.condition === "caller_prefix" && rule.value && callerNumber.startsWith(rule.value)) {
+        agentId = rule.targetAgentId; break;
+      } else if (rule.condition === "time_range" && rule.startHour !== undefined && rule.endHour !== undefined) {
+        if (nowHour >= rule.startHour && nowHour < rule.endHour) { agentId = rule.targetAgentId; break; }
+      } else if (rule.condition === "always") {
+        agentId = rule.targetAgentId; break;
+      }
+    }
+  }
+
+  // Fetch agent config for P2-C/D/E features
+  const [agent] = await db
+    .select({ agentConfig: agentsTable.agentConfig })
+    .from(agentsTable)
+    .where(eq(agentsTable.id, agentId));
+  const cfg = (agent?.agentConfig ?? {}) as Record<string, unknown>;
+
+  // P2-E: Queue — check if agent is at capacity, hold caller if so
+  if (cfg["queueEnabled"] === true) {
+    const maxConcurrent = Number(cfg["queueMaxConcurrent"] ?? 1);
+    const waitSec       = Number(cfg["queueWaitSeconds"] ?? 30);
+    const holdUrl       = String(cfg["queueHoldMusicUrl"] ?? "");
+    const [countRow] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(callsTable)
+      .where(sql`agent_id = ${agentId} AND status = 'active'`);
+    if ((countRow?.n ?? 0) >= maxConcurrent) {
+      const holdPart = holdUrl
+        ? `\n  <Play loop="10">${escapeXml(holdUrl)}</Play>`
+        : `\n  <Speak>All agents are busy. Please hold.</Speak>\n  <Wait length="${waitSec}" />`;
+      const redirectUrl = `${httpBase}/api/webhooks/vobiz/voice?agentId=${agentId}`;
+      res.set("Content-Type", "text/xml").send(
+        `<?xml version="1.0" encoding="UTF-8"?>\n<Response>${holdPart}\n  <Redirect method="POST">${escapeXml(redirectUrl)}</Redirect>\n</Response>`
+      );
+      return;
+    }
+  }
+
+  // P2-D: IVR — play a DTMF menu before connecting to the AI session
+  if (cfg["ivrEnabled"] === true) {
+    const greeting = String(cfg["ivrGreeting"] ?? "Welcome. Please press a key to be connected.");
+    const ivrOpts  = (cfg["ivrOptions"] as Array<{ digit: string; label: string }> | undefined) ?? [];
+    const menuText = ivrOpts.map(o => `Press ${o.digit} for ${o.label}.`).join(" ");
+    const spoken   = escapeXml(`${greeting}${menuText ? " " + menuText : ""}`);
+    const ivrAction   = `${httpBase}/api/webhooks/vobiz/ivr?agentId=${agentId}`;
+    const fallbackUrl = `${httpBase}/api/webhooks/vobiz/voice?agentId=${agentId}`;
+    res.set("Content-Type", "text/xml").send(
+      `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <GetDigits action="${escapeXml(ivrAction)}" method="GET" timeout="5" numDigits="1" retries="2">\n    <Speak>${spoken}</Speak>\n  </GetDigits>\n  <Redirect method="POST">${escapeXml(fallbackUrl)}</Redirect>\n</Response>`
+    );
+    return;
+  }
+
+  // P2-C: Recording — prepend <Record> to answer XML if enabled
+  const recordingCallbackUrl = cfg["recordingEnabled"] === true
+    ? `${httpBase}/api/webhooks/vobiz/recording`
+    : undefined;
+
+  res.set("Content-Type", "text/xml").send(
+    getVobizAnswerXML(wsBaseUrl, agentId, platformTelephony, { recordingCallbackUrl })
+  );
+});
+
+// ── P2-C: Recording callback ──────────────────────────────────────────────────
+// VoBiz POSTs here when a recording completes; we save the URL to the call record.
+
+router.post("/webhooks/vobiz/recording", async (req, res): Promise<void> => {
+  const recordUrl = String(req.body?.RecordUrl ?? req.body?.record_url ?? "");
+  const callUuid  = String(req.body?.CallUUID  ?? req.body?.call_uuid  ?? "");
+  req.log.info({ recordUrl, callUuid }, "VoBiz recording callback");
+  if (recordUrl && callUuid) {
+    try {
+      await db.update(callsTable)
+        .set({ recordingUrl: recordUrl })
+        .where(sql`metadata::text like ${"%" + callUuid + "%"}`);
+    } catch (err) {
+      req.log.error({ err }, "Failed to save recording URL");
+    }
+  }
+  res.sendStatus(204);
+});
+
+// ── P2-D: IVR / DTMF callback ─────────────────────────────────────────────────
+// VoBiz calls this GET when the caller presses a digit after <GetDigits>.
+// We look up the IVR option and redirect to the matched agent's stream.
+
+router.get("/webhooks/vobiz/ivr", async (req, res): Promise<void> => {
+  const agentId = parseInt(String(req.query["agentId"] ?? "0"), 10);
+  const digits  = String(req.query["Digits"] ?? req.query["digits"] ?? "");
+  req.log.info({ agentId, digits }, "VoBiz IVR digit received");
+
+  let targetAgentId = agentId;
+  if (agentId && digits) {
+    const [ag] = await db.select({ agentConfig: agentsTable.agentConfig })
+      .from(agentsTable).where(eq(agentsTable.id, agentId));
+    const ivrOpts = ((ag?.agentConfig as Record<string, unknown> | null)?.["ivrOptions"] as
+      Array<{ digit: string; targetAgentId?: number }> | undefined) ?? [];
+    const match = ivrOpts.find(o => o.digit === digits);
+    if (match?.targetAgentId) targetAgentId = match.targetAgentId;
+  }
+
+  const wsBase = getWsBaseUrl(req);
+  res.set("Content-Type", "text/xml").send(getVobizAnswerXML(wsBase, targetAgentId));
 });
 
 // ── VoBiz status callbacks ───────────────────────────────────────────────────

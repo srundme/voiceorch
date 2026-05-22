@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, jsonb } from "drizzle-orm/pg-core";
 import { agentsTable } from "./agents";
 import { usersTable } from "./users";
 
@@ -16,6 +16,14 @@ export const phoneNumbersTable = pgTable("phone_numbers", {
   purchasedAt:   timestamp("purchased_at", { withTimezone: true }).notNull().defaultNow(),
   releasedAt:    timestamp("released_at", { withTimezone: true }),
   createdAt:     timestamp("created_at",  { withTimezone: true }).notNull().defaultNow(),
+  // P2-F: Inbound routing rules (evaluated top-to-bottom, first match wins)
+  routingRules:  jsonb("routing_rules").$type<Array<{
+    condition: "caller_prefix" | "time_range" | "always";
+    value?: string;
+    startHour?: number;
+    endHour?: number;
+    targetAgentId: number;
+  }>>(),
 });
 
 export type PhoneNumber = typeof phoneNumbersTable.$inferSelect;

@@ -159,13 +159,22 @@ export async function handleVobizWebSocket(
 
 /**
  * Return VoiceXML telling Vobiz to open a bidirectional WebSocket stream.
+ * P2-C: pass recordingCallbackUrl to prepend a <Record> element.
  */
-export function getVobizAnswerXML(wsBaseUrl: string, agentId: number, platformTelephony = false): string {
+export function getVobizAnswerXML(
+  wsBaseUrl: string,
+  agentId: number,
+  platformTelephony = false,
+  opts: { recordingCallbackUrl?: string } = {},
+): string {
   const wsUrl = platformTelephony
     ? `${wsBaseUrl}/api/ws/vobiz/${agentId}?pt=1`
     : `${wsBaseUrl}/api/ws/vobiz/${agentId}`;
+  const recordTag = opts.recordingCallbackUrl
+    ? `\n  <Record action="${opts.recordingCallbackUrl}" method="POST" maxLength="3600" redirect="false" />`
+    : "";
   return `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
+<Response>${recordTag}
   <Stream bidirectional="true" keepCallAlive="true">${wsUrl}</Stream>
 </Response>`;
 }

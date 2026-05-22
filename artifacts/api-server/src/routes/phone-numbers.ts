@@ -270,4 +270,45 @@ router.delete("/phone-numbers/:id", requireAuth, async (req, res): Promise<void>
   res.sendStatus(204);
 });
 
+// ── GET /phone-numbers/:id/routing-rules (P2-F) ───────────────────────────────
+
+router.get("/phone-numbers/:id/routing-rules", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const id = parseInt(String(req.params["id"] ?? "0"), 10);
+  if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [row] = await db
+    .select({ routingRules: phoneNumbersTable.routingRules })
+    .from(phoneNumbersTable)
+    .where(and(eq(phoneNumbersTable.id, id), eq(phoneNumbersTable.userId, clerkId)));
+  if (!row) { res.status(404).json({ error: "Not found" }); return; }
+  res.json({ routingRules: row.routingRules ?? [] });
+});
+
+// ── PATCH /phone-numbers/:id/routing-rules (P2-F) ─────────────────────────────
+// Update inbound routing rules for a managed phone number.
+// Rules are evaluated top-to-bottom; first match wins.
+// Pass routingRules: null to clear all rules.
+
+router.patch("/phone-numbers/:id/routing-rules", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const id = parseInt(String(req.params["id"] ?? "0"), 10);
+  if (!id) { res.status(400).json({ error: "Invalid phone number id" }); return; }
+
+  const rules = req.body?.routingRules as unknown;
+  if (rules !== null && rules !== undefined && !Array.isArray(rules)) {
+    res.status(400).json({ error: "routingRules must be an array or null" }); return;
+  }
+
+  const [row] = await db
+    .update(phoneNumbersTable)
+    .set({ routingRules: (rules as typeof phoneNumbersTable.$inferInsert["routingRules"]) ?? null })
+    .where(and(eq(phoneNumbersTable.id, id), eq(phoneNumbersTable.userId, clerkId)))
+    .returning({ id: phoneNumbersTable.id, number: phoneNumbersTable.number });
+
+  if (!row) { res.status(404).json({ error: "Phone number not found" }); return; }
+
+  req.log.info({ id, ruleCount: Array.isArray(rules) ? rules.length : 0 }, "Routing rules updated");
+  res.json({ ok: true });
+});
+
 export default router;
