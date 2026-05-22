@@ -952,7 +952,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
             </div>
 
             {/* ── Right: dark info panel ── */}
-            <div className="w-56 shrink-0 border-l border-black/[0.06] overflow-y-auto p-3 space-y-3 bg-[#F5F5F7]">
+            <div className="w-56 shrink-0 border-l border-black/[0.06] overflow-y-auto p-3 space-y-3 bg-white">
               {/* Agent Status */}
               <div className="bg-[#1C1C1E] rounded-xl p-3.5">
                 <div className="flex items-center justify-between mb-3">

@@ -94,7 +94,7 @@ export function AgentMetricsBar({
   }
 
   return (
-    <div className="flex gap-3 px-5 py-3 border-b border-black/[0.06] bg-[#F5F5F7] shrink-0">
+    <div className="flex gap-3 px-5 py-3 border-b border-black/[0.06] bg-white shrink-0">
       {/* Cost card */}
       <div className="flex-1 bg-[#1C1C1E] rounded-xl px-4 py-3 space-y-2">
         <div className="flex items-baseline gap-2">

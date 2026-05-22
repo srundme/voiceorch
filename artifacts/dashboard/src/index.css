@@ -69,18 +69,16 @@
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
-   Light + Dark Sidebar
-   Page:    #F5F5F7 (Apple page grey)
-   Sidebar: #1C1C1E (near-black charcoal)
-   Panels:  #FFFFFF white cards with subtle shadow
+   Reference design: light grey sidebar (#EBEBEB) + white content
+   Dark metric cards + dark right-panel cards  ·  VoiceOrch/SnapServe style
    ────────────────────────────────────────────────────────────────────────── */
 :root {
   --button-outline: rgba(0,0,0,.10);
   --badge-outline:  rgba(0,0,0,.06);
   --opaque-button-border-intensity: -8;
 
-  /* Page background — Apple's #F5F5F7 */
-  --background: 240 5% 96%;
+  /* Page/content background — white */
+  --background: 0 0% 100%;
   --foreground: 240 3% 12%;
   --border: 240 6% 89%;
 
@@ -89,15 +87,15 @@
   --card-foreground: 240 3% 12%;
   --card-border: 240 6% 90%;
 
-  /* Sidebar — dark charcoal #1C1C1E */
-  --sidebar: 240 4% 11%;
-  --sidebar-foreground: 0 0% 90%;
-  --sidebar-border: 240 4% 15%;
-  --sidebar-primary: 240 4% 18%;
-  --sidebar-primary-foreground: 0 0% 98%;
-  --sidebar-accent: 240 4% 15%;
-  --sidebar-accent-foreground: 0 0% 70%;
-  --sidebar-ring: 240 4% 40%;
+  /* Sidebar — light grey #EBEBEB */
+  --sidebar: 0 0% 92%;
+  --sidebar-foreground: 240 3% 18%;
+  --sidebar-border: 240 4% 85%;
+  --sidebar-primary: 0 0% 86%;
+  --sidebar-primary-foreground: 240 3% 12%;
+  --sidebar-accent: 0 0% 89%;
+  --sidebar-accent-foreground: 240 3% 15%;
+  --sidebar-ring: 240 4% 75%;
 
   --popover: 0 0% 100%;
   --popover-foreground: 240 3% 12%;
@@ -107,19 +105,19 @@
   --primary: 240 4% 14%;
   --primary-foreground: 0 0% 98%;
 
-  --secondary: 240 5% 93%;
+  --secondary: 0 0% 93%;
   --secondary-foreground: 240 3% 18%;
 
-  --muted: 240 5% 94%;
+  --muted: 0 0% 93%;
   --muted-foreground: 240 4% 46%;
 
-  --accent: 240 5% 93%;
+  --accent: 0 0% 94%;
   --accent-foreground: 240 3% 12%;
 
   --destructive: 0 72% 51%;
   --destructive-foreground: 0 0% 98%;
 
-  --input: 240 5% 91%;
+  --input: 0 0% 91%;
   --ring: 240 5% 20%;
 
   --chart-1: 240 5% 16%;
@@ -135,20 +133,20 @@
 
   --shadow-2xs: 0px 1px 2px 0px rgba(0,0,0,.04);
   --shadow-xs:  0px 1px 4px 0px rgba(0,0,0,.05);
-  --shadow-sm:  0px 1px 3px 0px rgba(0,0,0,.06), 0px 1px 2px -1px rgba(0,0,0,.04);
+  --shadow-sm:  0px 1px 3px 0px rgba(0,0,0,.05), 0px 1px 2px -1px rgba(0,0,0,.03);
   --shadow:     0px 2px 8px 0px rgba(0,0,0,.07), 0px 1px 2px -1px rgba(0,0,0,.04);
   --shadow-md:  0px 4px 16px -1px rgba(0,0,0,.09), 0px 2px 4px -2px rgba(0,0,0,.05);
-  --shadow-lg:  0px 10px 30px -3px rgba(0,0,0,.09), 0px 4px 8px -4px rgba(0,0,0,.05);
+  --shadow-lg:  0px 10px 30px -3px rgba(0,0,0,.09);
 
-  /* Glass — for popovers, dropdowns, dialogs */
-  --glass-bg:     rgba(255,255,255,0.94);
+  /* Glass — popovers, dropdowns */
+  --glass-bg:     rgba(255,255,255,0.96);
   --glass-border: rgba(0,0,0,0.07);
   --glass-blur:   16px;
   --glass-shadow: 0 4px 20px rgba(0,0,0,0.08);
 
-  /* Sidebar — solid dark */
-  --sidebar-glass-bg:     #1C1C1E;
-  --sidebar-glass-border: rgba(255,255,255,0.06);
+  /* Sidebar — kept for legacy .glass-sidebar usage */
+  --sidebar-glass-bg:     #EBEBEB;
+  --sidebar-glass-border: rgba(0,0,0,0.07);
 }
 
 .dark {
@@ -189,7 +187,7 @@
   --glass-bg:     rgba(30,32,48,0.85);
   --glass-border: rgba(255,255,255,0.08);
   --glass-shadow: 0 4px 24px rgba(0,0,0,0.25);
-  --sidebar-glass-bg:     #0F0F11;
+  --sidebar-glass-bg: #111113;
   --sidebar-glass-border: rgba(255,255,255,0.05);
 }
 
@@ -198,27 +196,24 @@
   html, body, #root { height: 100%; min-height: 100%; }
   body {
     @apply font-sans antialiased text-foreground selection:bg-primary/15;
-    background-color: #F5F5F7;
+    background: #ffffff;
   }
 }
 
 @layer components {
-  /* Glass — popovers, dropdowns, modals */
   .glass {
     background: var(--glass-bg);
-    backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
+    backdrop-filter: blur(var(--glass-blur)) saturate(1.3);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.3);
     border: 1px solid var(--glass-border);
     box-shadow: var(--glass-shadow);
   }
-  /* Sidebar — solid dark charcoal */
   .glass-sidebar {
     background: var(--sidebar-glass-bg);
     border-right: 1px solid var(--sidebar-glass-border);
   }
 }
 
-/* SnapServe loader bar animation */
 @keyframes ss-bar-pulse {
   0%, 100% { opacity: 0.15; transform: scaleY(0.7); }
   50%       { opacity: 1;    transform: scaleY(1);   }
