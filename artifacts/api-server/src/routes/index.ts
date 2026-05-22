@@ -16,6 +16,7 @@ import webhookEndpointsRouter from "./webhook-endpoints.js";
 import agentTemplatesRouter from "./agent-templates.js";
 import onboardingRouter from "./onboarding.js";
 import adminRouter from "./admin.js";
+import wizardRouter from "./wizard.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
 const router: IRouter = Router();
@@ -40,5 +41,6 @@ router.use(phoneNumbersRouter);
 router.use(webhookEndpointsRouter);
 router.use(agentTemplatesRouter);
 router.use(onboardingRouter);
+router.use(wizardRouter);
 
 export default router;

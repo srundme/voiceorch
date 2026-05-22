@@ -80,6 +80,28 @@ export function usePlatformFailedCalls() {
   });
 }
 
+// Managed Keys
+export function useManagedKeys() {
+  return useQuery({
+    queryKey: ["admin", "managed-keys"],
+    queryFn: () => adminFetch<Record<string, string>>("/managed-keys"),
+  });
+}
+
+export function useSaveManagedKeys() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Record<string, string>) =>
+      adminFetch<{ saved: number }>("/managed-keys", {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "managed-keys"] });
+    },
+  });
+}
+
 // Growth
 export function useGrowthFunnel() {
   return useQuery({

@@ -7,6 +7,7 @@ import {
   BarChart2, Clock, CheckCircle2, XCircle, BookOpen,
   AlertTriangle, Target, AlignLeft, Zap, RefreshCw, ClipboardList, X,
 } from "lucide-react";
+import { CreateAgentWizard } from "@/components/create-agent-wizard";
 import {
   useListAgents,
   useGetAgent,
@@ -2167,8 +2168,9 @@ function NewAgentPanel({ onCreated }: { onCreated: (id: number) => void }) {
 /* ── Main Page ───────────────────────────────────────────────────────────── */
 
 export default function AssistantsPage() {
-  const [selectedId, setSelectedId] = useState<number | "new" | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
   const [search, setSearch]         = useState("");
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   const { data: agents, isLoading } = useListAgents({
     query: { queryKey: getListAgentsQueryKey() },
@@ -2203,7 +2205,7 @@ export default function AssistantsPage() {
             size="icon"
             variant="ghost"
             className="h-6 w-6 text-black/50 hover:text-black/85 hover:bg-black/[0.08]"
-            onClick={() => setSelectedId("new")}
+            onClick={() => setWizardOpen(true)}
             title="Create assistant"
           >
             <Plus className="h-3.5 w-3.5" />
@@ -2216,7 +2218,7 @@ export default function AssistantsPage() {
             variant="outline"
             size="sm"
             className="w-full h-7 text-xs border-black/[0.07] text-black/50 hover:bg-black/[0.08] hover:text-black/75 gap-1.5 justify-start"
-            onClick={() => setSelectedId("new")}
+            onClick={() => setWizardOpen(true)}
           >
             <Plus className="h-3 w-3" /> Create Assistant
           </Button>
@@ -2281,9 +2283,7 @@ export default function AssistantsPage() {
 
       {/* ── Config / Editor Panel ─────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0 bg-transparent">
-        {selectedId === "new" ? (
-          <NewAgentPanel onCreated={(id) => setSelectedId(id)} />
-        ) : selectedId !== null ? (
+        {selectedId !== null ? (
           <AgentConfigPanel agentId={selectedId} onDeleted={() => setSelectedId(agents?.[0]?.id ?? null)} />
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-center text-black/35 gap-3">
@@ -2296,13 +2296,19 @@ export default function AssistantsPage() {
               variant="outline"
               size="sm"
               className="border-black/[0.07] text-black/50 hover:bg-black/[0.08] gap-1.5 mt-2"
-              onClick={() => setSelectedId("new")}
+              onClick={() => setWizardOpen(true)}
             >
               <Plus className="h-3.5 w-3.5" /> Create Assistant
             </Button>
           </div>
         )}
       </div>
+
+      <CreateAgentWizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        onCreated={(id) => { setWizardOpen(false); setSelectedId(id); }}
+      />
     </div>
   );
 }

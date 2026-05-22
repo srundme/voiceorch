@@ -8,3 +8,4 @@ export * from "./phone-numbers";
 export * from "./webhook-endpoints";
 export * from "./callerProfiles";
 export * from "./scheduledCallbacks";
+export * from "./platform-settings";
