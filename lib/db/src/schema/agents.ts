@@ -64,6 +64,16 @@ export type AgentConfig = {
     mediaFilename?: string;
     mediaType?: string;
   }>;
+  // P1-A: User-defined prompt variables (resolved at call start)
+  promptVariables?: Array<{ key: string; defaultValue: string; description?: string }>;
+  // P1-C: Webhook HMAC secret
+  webhookSecret?: string;
+  // P1-D: VAD / Barge-in tuning (defaults: 250ms silence, enabled, 1200 energy, 4 frames, 600ms echo grace)
+  vadSilenceMs?: number;
+  bargeInEnabled?: boolean;
+  bargeInEnergyThreshold?: number;
+  bargeInMinFrames?: number;
+  bargeInEchoGraceMs?: number;
 };
 
 export const agentsTable = pgTable("agents", {

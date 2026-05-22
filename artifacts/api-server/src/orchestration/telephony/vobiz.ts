@@ -115,6 +115,7 @@ export async function handleVobizWebSocket(
             fromNumber,
             externalCallId: callId ?? undefined,
             platformTelephony,
+            customParameters: params,
             onAudioOut: sendAudioToVobiz,
             onCallEnd: () => ws.close(),
             onBargeIn: sendBargeIn,

@@ -74,6 +74,22 @@ export interface AgentConfig {
   genderDetectionMaleSalutation: string;
   genderDetectionFemaleSalutation: string;
   genderDetectionNeutralSalutation: string;
+
+  // P1-A: User-defined prompt variables resolved at call start
+  promptVariables: Array<{ key: string; defaultValue: string; description?: string }>;
+
+  // P1-B: Knowledge Base RAG
+  knowledgeBaseId: number | null;
+
+  // P1-C: Webhook HMAC secret
+  webhookSecret: string | null;
+
+  // P1-D: VAD / Barge-in per-agent tuning
+  vadSilenceMs: number;
+  bargeInEnabled: boolean;
+  bargeInEnergyThreshold: number;
+  bargeInMinFrames: number;
+  bargeInEchoGraceMs: number;
 }
 
 export interface ProviderKey {

@@ -7,6 +7,7 @@ import { RecordingBuffer } from "./recorder.js";
 import type { AudioProcessResult } from "./audioPool.js";
 import type { AgentConfig, AgentTool, ConversationTurn, SessionConfig, StreamSTT, ToolDefinition } from "./types.js";
 import { detectCallerGender, applyCallerSalutation, buildGenderInstruction } from "./genderDetection.js";
+import { retrieveKbContext } from "./kb-retrieval.js";
 import { logger } from "../lib/logger.js";
 
 const VAD_SILENCE_MS          = 250;    // silence window before STT flush
@@ -62,12 +63,18 @@ export class OrchestrationPipeline {
   // Require N consecutive speech frames before triggering barge-in to avoid
   // ambient noise / single-word false positives stopping the agent mid-sentence.
   private bargeInSpeechFrames = 0;
-  private static readonly BARGE_IN_MIN_FRAMES = 4; // ~80ms at 8kHz 20ms frames
   // Echo grace period: timestamp (ms) until which barge-in is suppressed after
   // playback starts.  Vobiz / Twilio route a small amount of our own TTS audio
   // back to us as "caller audio" (sidetone / echo).  Without this hold, the
   // echo triggers barge-in within 200 ms and the caller never hears anything.
   private bargeInHoldUntil = 0;
+
+  // P1-D: Per-agent VAD / barge-in settings (set from agent config in constructor)
+  private readonly vadSilenceMs: number;
+  private readonly bargeInEnabled: boolean;
+  private readonly bargeInEnergyThreshold: number;
+  private readonly bargeInMinFrames: number;
+  private readonly bargeInEchoGraceMs: number;
 
   // Streaming STT (Deepgram live transcription)
   private streamSTT: StreamSTT | null = null;
@@ -97,6 +104,12 @@ export class OrchestrationPipeline {
     this.agent = config.agentConfig;
     this.originalSystemPrompt = config.agentConfig.systemPrompt ?? "";
     this.bargeInCallback = config.onBargeIn ?? null;
+    // P1-D: Per-agent VAD / barge-in tuning
+    this.vadSilenceMs           = config.agentConfig.vadSilenceMs;
+    this.bargeInEnabled         = config.agentConfig.bargeInEnabled;
+    this.bargeInEnergyThreshold = config.agentConfig.bargeInEnergyThreshold;
+    this.bargeInMinFrames       = config.agentConfig.bargeInMinFrames;
+    this.bargeInEchoGraceMs     = config.agentConfig.bargeInEchoGraceMs;
 
     const keys = config.providerKeys;
 
@@ -352,18 +365,18 @@ export class OrchestrationPipeline {
     if (hasSpeech) {
       this.resetHangupTimer();
 
-      if (this.isPlaying && !this.bargeInRequested) {
+      if (this.bargeInEnabled && this.isPlaying && !this.bargeInRequested) {
         const now = Date.now();
         if (now < this.bargeInHoldUntil) {
-          // Echo grace period: suppress barge-in for the first BARGE_IN_ECHO_GRACE_MS
+          // Echo grace period: suppress barge-in for the first bargeInEchoGraceMs
           // after playback starts to ignore phone sidetone / echo returning from Vobiz.
           this.bargeInSpeechFrames = 0;
-        } else if (hasSpeechEnergy(pcm8k, BARGE_IN_ENERGY_THRESHOLD)) {
+        } else if (hasSpeechEnergy(pcm8k, this.bargeInEnergyThreshold)) {
           // Only count frames that exceed the much-higher barge-in energy threshold
           // (4× the normal VAD level) — intentional caller speech will clear this bar,
           // but ambient noise, echo bleed, or background conversation won't.
           this.bargeInSpeechFrames++;
-          if (this.bargeInSpeechFrames >= OrchestrationPipeline.BARGE_IN_MIN_FRAMES) {
+          if (this.bargeInSpeechFrames >= this.bargeInMinFrames) {
             this.bargeInRequested = true;
             this.bargeInCallback?.();
             this.audioBuffer = [];
@@ -416,7 +429,7 @@ export class OrchestrationPipeline {
       this.config.onTranscript("agent", greeting);
       this.config.onConversationUpdate?.(this.conversationHistory);
       this.firstAudioSentAt = null;
-      this.bargeInHoldUntil = Date.now() + BARGE_IN_ECHO_GRACE_MS;
+      this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
       this.isPlaying = true;
       try {
         await this.playSentence(greeting);
@@ -444,7 +457,7 @@ export class OrchestrationPipeline {
     this.silenceTimer = setTimeout(() => {
       this.silenceTimer = null;
       void this.flushAndProcess();
-    }, VAD_SILENCE_MS);
+    }, this.vadSilenceMs);
   }
 
   /** Reset (or start) the silence-hangup countdown. Fires onCallEnd if no speech for silenceTimeoutSeconds. */
@@ -605,7 +618,7 @@ export class OrchestrationPipeline {
     // Speak the warm handoff message (if configured) before transferring
     if (tool.warmHandoffMessage?.trim()) {
       this.config.onTranscript("agent", tool.warmHandoffMessage);
-      this.bargeInHoldUntil = Date.now() + BARGE_IN_ECHO_GRACE_MS;
+      this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
       this.isPlaying = true;
       try {
         await this.playSentence(tool.warmHandoffMessage);
@@ -662,7 +675,7 @@ export class OrchestrationPipeline {
       const freq = this.agent.backchannelingFrequency ?? 0.5;
       if (Math.random() < freq) {
         const phrase = BACKCHANNEL_PHRASES[Math.floor(Math.random() * BACKCHANNEL_PHRASES.length)]!;
-        this.bargeInHoldUntil = Date.now() + BARGE_IN_ECHO_GRACE_MS;
+        this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
       this.isPlaying = true;
         try {
           await this.playSentence(phrase);
@@ -716,7 +729,7 @@ export class OrchestrationPipeline {
       while (true) {
         if (idx < sentenceQueue.length) {
           const text = sentenceQueue[idx++];
-          this.bargeInHoldUntil = Date.now() + BARGE_IN_ECHO_GRACE_MS;
+          this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
       this.isPlaying = true;
           try {
             await this.playSentence(text);
@@ -735,9 +748,26 @@ export class OrchestrationPipeline {
 
     const playPromise = playTask();
 
+    // P1-B: KB context injection — retrieve semantically relevant chunks before LLM call
+    let systemPromptForTurn = this.resolvedSystemPrompt();
+    if (this.agent.knowledgeBaseId) {
+      const openaiKey = this.config.providerKeys.get("openai");
+      if (openaiKey) {
+        try {
+          const kbContext = await retrieveKbContext(this.agent.knowledgeBaseId, transcript, openaiKey);
+          if (kbContext) {
+            systemPromptForTurn =
+              `${systemPromptForTurn}\n\n## Relevant Knowledge Base Context\n\n${kbContext}`;
+          }
+        } catch (err) {
+          logger.warn({ callId: this.config.callId, err }, "KB retrieval failed — continuing without context");
+        }
+      }
+    }
+
     await this.llm.chat(
       this.conversationHistory,
-      this.resolvedSystemPrompt(),
+      systemPromptForTurn,
       (token) => {
         if (!llmFirstTokenAt) llmFirstTokenAt = Date.now();
         llmResponse += token;

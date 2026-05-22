@@ -32,6 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 
@@ -149,7 +150,17 @@ const agentFormSchema = z.object({
   backchannelingEnabled:    z.boolean().optional(),
   backchannelingFrequency:  z.number().min(0).max(1).optional(),
   webhookUrl:               z.string().optional(),
+  webhookSecret:            z.string().optional(),
   noiseCancellationEnabled: z.boolean().optional(),
+  promptVariables: z.array(z.object({
+    key:          z.string().min(1, "Key required"),
+    defaultValue: z.string(),
+    description:  z.string().optional(),
+  })).optional(),
+  vadSilenceMs:           z.number().min(50).max(2000).optional(),
+  bargeInEnabled:         z.boolean().optional(),
+  bargeInEnergyThreshold: z.number().min(100).max(5000).optional(),
+  bargeInMinFrames:       z.number().min(1).max(20).optional(),
   tools: z.array(z.object({
     type: z.literal("call_transfer"),
     name: z.string().min(1, "Function name required"),
@@ -214,7 +225,8 @@ export default function AgentEdit() {
       systemPrompt: "", temperature: 0.7, maxDuration: 600,
       greetingMessage: "", endCallPhrases: "", silenceTimeoutSeconds: 30,
       language: "en-US", backchannelingEnabled: false, backchannelingFrequency: 0.5,
-      webhookUrl: "", noiseCancellationEnabled: false,
+      webhookUrl: "", webhookSecret: "", noiseCancellationEnabled: false,
+      promptVariables: [], vadSilenceMs: 250, bargeInEnabled: true, bargeInEnergyThreshold: 1200, bargeInMinFrames: 4,
       tools: [],
       dispositionSchema: [],
     },
@@ -228,6 +240,11 @@ export default function AgentEdit() {
   const { fields: dispositionFields, append: appendDisposition, remove: removeDisposition } = useFieldArray({
     control: form.control,
     name: "dispositionSchema",
+  });
+
+  const { fields: promptVarFields, append: appendPromptVar, remove: removePromptVar } = useFieldArray({
+    control: form.control,
+    name: "promptVariables",
   });
 
   useEffect(() => {
@@ -253,7 +270,13 @@ export default function AgentEdit() {
       backchannelingEnabled:    agent.backchannelingEnabled ?? false,
       backchannelingFrequency:  agent.backchannelingFrequency ?? 0.5,
       webhookUrl:               agent.webhookUrl ?? "",
+      webhookSecret:            ((agent as any).agentConfig?.webhookSecret as string | undefined) ?? "",
       noiseCancellationEnabled: agent.noiseCancellationEnabled ?? false,
+      promptVariables:          (((agent as any).agentConfig?.promptVariables ?? []) as AgentFormValues["promptVariables"]),
+      vadSilenceMs:             ((agent as any).agentConfig?.vadSilenceMs as number | undefined) ?? 250,
+      bargeInEnabled:           ((agent as any).agentConfig?.bargeInEnabled as boolean | undefined) ?? true,
+      bargeInEnergyThreshold:   ((agent as any).agentConfig?.bargeInEnergyThreshold as number | undefined) ?? 1200,
+      bargeInMinFrames:         ((agent as any).agentConfig?.bargeInMinFrames as number | undefined) ?? 4,
       tools: (agent.tools ?? []) as AgentFormValues["tools"],
       dispositionSchema: ((agent as any).dispositionSchema ?? []).map((f: any) => ({
         ...f,
@@ -269,9 +292,18 @@ export default function AgentEdit() {
   const backchannelingFrequency = useWatch({ control: form.control, name: "backchannelingFrequency" });
 
   const onSubmit = (data: AgentFormValues) => {
+    const { webhookSecret, promptVariables, vadSilenceMs, bargeInEnabled, bargeInEnergyThreshold, bargeInMinFrames, ...rest } = data;
+    const agentConfig: Record<string, unknown> = {};
+    if (webhookSecret) agentConfig["webhookSecret"] = webhookSecret;
+    if (promptVariables?.length) agentConfig["promptVariables"] = promptVariables;
+    if (vadSilenceMs != null && vadSilenceMs !== 250) agentConfig["vadSilenceMs"] = vadSilenceMs;
+    if (bargeInEnabled === false) agentConfig["bargeInEnabled"] = false;
+    if (bargeInEnergyThreshold != null && bargeInEnergyThreshold !== 1200) agentConfig["bargeInEnergyThreshold"] = bargeInEnergyThreshold;
+    if (bargeInMinFrames != null && bargeInMinFrames !== 4) agentConfig["bargeInMinFrames"] = bargeInMinFrames;
     const submitData = {
-      ...data,
-      dispositionSchema: (data.dispositionSchema ?? []).map(f => ({
+      ...rest,
+      ...(Object.keys(agentConfig).length > 0 ? { agentConfig } : {}),
+      dispositionSchema: (rest.dispositionSchema ?? []).map(f => ({
         ...f,
         options: f.options ? f.options.split(",").map(s => s.trim()).filter(Boolean) : undefined,
       })),
@@ -507,6 +539,18 @@ export default function AgentEdit() {
                         <FormMessage />
                       </FormItem>
                     )} />
+                    <FormField control={form.control} name="webhookSecret" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Webhook Signing Secret</FormLabel>
+                        <FormControl>
+                          <Input type="password" placeholder="Optional — enables HMAC signature header" {...field} />
+                        </FormControl>
+                        <FormDescription>
+                          When set, each webhook request includes an <code>X-VoiceOrch-Signature: sha256=…</code> header.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
                   </div>
                 </div>
               </CardContent>
@@ -664,6 +708,116 @@ export default function AgentEdit() {
               </CardContent>
             </Card>
           </div>
+
+          {/* ── Prompt Variables ── */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">Prompt Variables</CardTitle>
+                  <CardDescription>
+                    Define <code>{"{{key}}"}</code> placeholders for your system prompt. Defaults are used unless overridden by inbound call parameters.
+                  </CardDescription>
+                </div>
+                <Button type="button" variant="outline" size="sm" className="gap-1"
+                  onClick={() => appendPromptVar({ key: "", defaultValue: "", description: "" })}>
+                  <Plus className="h-3.5 w-3.5" /> Add Variable
+                </Button>
+              </div>
+            </CardHeader>
+            {promptVarFields.length > 0 && (
+              <CardContent className="space-y-3">
+                {promptVarFields.map((field, index) => (
+                  <div key={field.id} className="relative grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 border rounded-md bg-muted/20">
+                    <Button type="button" variant="ghost" size="icon"
+                      className="absolute top-2 right-2 h-7 w-7 text-muted-foreground hover:text-destructive"
+                      onClick={() => removePromptVar(index)}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                    <FormField control={form.control} name={`promptVariables.${index}.key`} render={({ field: f }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Key</FormLabel>
+                        <FormControl><Input placeholder="e.g. customer_name" className="h-8 text-sm" {...f} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name={`promptVariables.${index}.defaultValue`} render={({ field: f }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Default Value</FormLabel>
+                        <FormControl><Input placeholder="e.g. valued customer" className="h-8 text-sm" {...f} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name={`promptVariables.${index}.description`} render={({ field: f }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Description <span className="text-muted-foreground">(optional)</span></FormLabel>
+                        <FormControl><Input placeholder="e.g. The caller's first name" className="h-8 text-sm" {...f} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  </div>
+                ))}
+              </CardContent>
+            )}
+          </Card>
+
+          {/* ── Voice Activity Detection ── */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Voice Activity Detection &amp; Barge-in</CardTitle>
+              <CardDescription>Fine-tune how the agent detects speech and handles interruptions.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                <FormField control={form.control} name="vadSilenceMs" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>VAD Silence Window (ms)</FormLabel>
+                    <FormControl>
+                      <Input type="number" min={50} max={2000} step={50}
+                        value={field.value ?? 250}
+                        onChange={e => field.onChange(parseInt(e.target.value, 10))} />
+                    </FormControl>
+                    <FormDescription className="text-[11px]">Silence before STT flushes. Default: 250 ms</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="bargeInEnabled" render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>Allow Barge-in</FormLabel>
+                    <div className="flex items-center gap-3 pt-2">
+                      <Switch checked={field.value ?? true} onCheckedChange={field.onChange} />
+                      <span className="text-sm text-muted-foreground">{(field.value ?? true) ? "Enabled" : "Disabled"}</span>
+                    </div>
+                    <FormDescription className="text-[11px]">Caller can interrupt the agent while it's speaking.</FormDescription>
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="bargeInEnergyThreshold" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Barge-in Energy Threshold</FormLabel>
+                    <FormControl>
+                      <Input type="number" min={100} max={5000} step={100}
+                        value={field.value ?? 1200}
+                        onChange={e => field.onChange(parseInt(e.target.value, 10))} />
+                    </FormControl>
+                    <FormDescription className="text-[11px]">Min RMS energy to count as speech. Default: 1200</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="bargeInMinFrames" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Barge-in Min Frames</FormLabel>
+                    <FormControl>
+                      <Input type="number" min={1} max={20}
+                        value={field.value ?? 4}
+                        onChange={e => field.onChange(parseInt(e.target.value, 10))} />
+                    </FormControl>
+                    <FormDescription className="text-[11px]">Consecutive speech frames to trigger barge-in. Default: 4 (~80 ms)</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
+            </CardContent>
+          </Card>
 
           {/* ── Tools ── */}
           <Card>

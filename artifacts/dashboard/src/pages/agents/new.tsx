@@ -27,6 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -195,6 +196,16 @@ const agentFormSchema = z.object({
   asrSmartEndpointing:       z.enum(["off", "vapi", "livekit"]).optional(),
   asrAutoFallback:           z.boolean().optional(),
   knowledgeBaseId:           z.number().optional(),
+  webhookSecret:             z.string().optional(),
+  promptVariables: z.array(z.object({
+    key:          z.string().min(1, "Key required"),
+    defaultValue: z.string(),
+    description:  z.string().optional(),
+  })).optional(),
+  vadSilenceMs:           z.number().min(50).max(2000).optional(),
+  bargeInEnabled:         z.boolean().optional(),
+  bargeInEnergyThreshold: z.number().min(100).max(5000).optional(),
+  bargeInMinFrames:       z.number().min(1).max(20).optional(),
   maxConcurrentCalls:        z.number().min(1).max(100).optional(),
   monthlySpendLimitCents:    z.number().min(100).optional(),
   tools: z.array(z.object({
@@ -290,6 +301,12 @@ export default function AgentNew() {
       asrKeyterms:              "",
       asrSmartEndpointing:      "off" as const,
       asrAutoFallback:          false,
+      webhookSecret:            "",
+      promptVariables:          [],
+      vadSilenceMs:             250,
+      bargeInEnabled:           true,
+      bargeInEnergyThreshold:   1200,
+      bargeInMinFrames:         4,
       tools: [],
       dispositionSchema: [],
     },
@@ -303,6 +320,11 @@ export default function AgentNew() {
   const { fields: dispositionFields, append: appendDisposition, remove: removeDisposition } = useFieldArray({
     control: form.control,
     name: "dispositionSchema",
+  });
+
+  const { fields: promptVarFields, append: appendPromptVar, remove: removePromptVar } = useFieldArray({
+    control: form.control,
+    name: "promptVariables",
   });
 
   const asrProvider = useWatch({ control: form.control, name: "asrProvider" });
@@ -331,9 +353,18 @@ export default function AgentNew() {
   };
 
   const onSubmit = (data: AgentFormValues) => {
+    const { webhookSecret, promptVariables, vadSilenceMs, bargeInEnabled, bargeInEnergyThreshold, bargeInMinFrames, ...rest } = data;
+    const agentConfig: Record<string, unknown> = {};
+    if (webhookSecret) agentConfig["webhookSecret"] = webhookSecret;
+    if (promptVariables?.length) agentConfig["promptVariables"] = promptVariables;
+    if (vadSilenceMs != null && vadSilenceMs !== 250) agentConfig["vadSilenceMs"] = vadSilenceMs;
+    if (bargeInEnabled === false) agentConfig["bargeInEnabled"] = false;
+    if (bargeInEnergyThreshold != null && bargeInEnergyThreshold !== 1200) agentConfig["bargeInEnergyThreshold"] = bargeInEnergyThreshold;
+    if (bargeInMinFrames != null && bargeInMinFrames !== 4) agentConfig["bargeInMinFrames"] = bargeInMinFrames;
     const submitData = {
-      ...data,
-      dispositionSchema: (data.dispositionSchema ?? []).map(f => ({
+      ...rest,
+      ...(Object.keys(agentConfig).length > 0 ? { agentConfig } : {}),
+      dispositionSchema: (rest.dispositionSchema ?? []).map(f => ({
         ...f,
         options: f.options ? f.options.split(",").map(s => s.trim()).filter(Boolean) : undefined,
       })),
@@ -591,6 +622,19 @@ export default function AgentNew() {
                           <Input placeholder="https://your-server.com/webhook/calls" {...field} />
                         </FormControl>
                         <FormDescription>Receives a JSON summary when each call ends.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+
+                    <FormField control={form.control} name="webhookSecret" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Webhook Signing Secret</FormLabel>
+                        <FormControl>
+                          <Input type="password" placeholder="Optional — enables HMAC signature header" {...field} />
+                        </FormControl>
+                        <FormDescription>
+                          When set, each webhook request includes an <code>X-VoiceOrch-Signature: sha256=…</code> header so you can verify authenticity.
+                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )} />
@@ -933,6 +977,116 @@ export default function AgentNew() {
                   <FormMessage />
                 </FormItem>
               )} />
+            </CardContent>
+          </Card>
+
+          {/* ── Prompt Variables ── */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">Prompt Variables</CardTitle>
+                  <CardDescription>
+                    Define <code>{"{{key}}"}</code> placeholders for your system prompt. Defaults are used unless overridden by inbound call parameters.
+                  </CardDescription>
+                </div>
+                <Button type="button" variant="outline" size="sm" className="gap-1"
+                  onClick={() => appendPromptVar({ key: "", defaultValue: "", description: "" })}>
+                  <Plus className="h-3.5 w-3.5" /> Add Variable
+                </Button>
+              </div>
+            </CardHeader>
+            {promptVarFields.length > 0 && (
+              <CardContent className="space-y-3">
+                {promptVarFields.map((field, index) => (
+                  <div key={field.id} className="relative grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 border rounded-md bg-muted/20">
+                    <Button type="button" variant="ghost" size="icon"
+                      className="absolute top-2 right-2 h-7 w-7 text-muted-foreground hover:text-destructive"
+                      onClick={() => removePromptVar(index)}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                    <FormField control={form.control} name={`promptVariables.${index}.key`} render={({ field: f }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Key</FormLabel>
+                        <FormControl><Input placeholder="e.g. customer_name" className="h-8 text-sm" {...f} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name={`promptVariables.${index}.defaultValue`} render={({ field: f }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Default Value</FormLabel>
+                        <FormControl><Input placeholder="e.g. valued customer" className="h-8 text-sm" {...f} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name={`promptVariables.${index}.description`} render={({ field: f }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Description <span className="text-muted-foreground">(optional)</span></FormLabel>
+                        <FormControl><Input placeholder="e.g. The caller's first name" className="h-8 text-sm" {...f} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  </div>
+                ))}
+              </CardContent>
+            )}
+          </Card>
+
+          {/* ── Voice Activity Detection ── */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Voice Activity Detection &amp; Barge-in</CardTitle>
+              <CardDescription>Fine-tune how the agent detects speech and handles interruptions.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                <FormField control={form.control} name="vadSilenceMs" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>VAD Silence Window (ms)</FormLabel>
+                    <FormControl>
+                      <Input type="number" min={50} max={2000} step={50}
+                        value={field.value ?? 250}
+                        onChange={e => field.onChange(parseInt(e.target.value, 10))} />
+                    </FormControl>
+                    <FormDescription className="text-[11px]">Silence before STT flushes. Default: 250 ms</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="bargeInEnabled" render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>Allow Barge-in</FormLabel>
+                    <div className="flex items-center gap-3 pt-2">
+                      <Switch checked={field.value ?? true} onCheckedChange={field.onChange} />
+                      <span className="text-sm text-muted-foreground">{(field.value ?? true) ? "Enabled" : "Disabled"}</span>
+                    </div>
+                    <FormDescription className="text-[11px]">Caller can interrupt the agent while it's speaking.</FormDescription>
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="bargeInEnergyThreshold" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Barge-in Energy Threshold</FormLabel>
+                    <FormControl>
+                      <Input type="number" min={100} max={5000} step={100}
+                        value={field.value ?? 1200}
+                        onChange={e => field.onChange(parseInt(e.target.value, 10))} />
+                    </FormControl>
+                    <FormDescription className="text-[11px]">Min RMS energy to count as speech. Default: 1200</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="bargeInMinFrames" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Barge-in Min Frames</FormLabel>
+                    <FormControl>
+                      <Input type="number" min={1} max={20}
+                        value={field.value ?? 4}
+                        onChange={e => field.onChange(parseInt(e.target.value, 10))} />
+                    </FormControl>
+                    <FormDescription className="text-[11px]">Consecutive speech frames to trigger barge-in. Default: 4 (~80 ms)</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
             </CardContent>
           </Card>
 

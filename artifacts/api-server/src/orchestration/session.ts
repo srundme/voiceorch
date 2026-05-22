@@ -1,3 +1,4 @@
+import { createHmac } from "crypto";
 import { db, agentsTable, callsTable, providersTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { OrchestrationPipeline } from "./pipeline.js";
@@ -54,6 +55,8 @@ export async function createSession(params: {
   fromNumber: string;
   externalCallId?: string;
   platformTelephony?: boolean;
+  /** Inbound call parameters (e.g. Vobiz customParameters) merged into prompt variable resolution */
+  customParameters?: Record<string, string>;
   onAudioOut: (audio: Buffer) => void;
   onCallEnd: () => void;
   onBargeIn?: () => void;
@@ -115,6 +118,20 @@ export async function createSession(params: {
     genderDetectionMaleSalutation:   (agentCfg["genderDetectionMaleSalutation"]   as string  | undefined) ?? "sir",
     genderDetectionFemaleSalutation: (agentCfg["genderDetectionFemaleSalutation"] as string  | undefined) ?? "ma'am",
     genderDetectionNeutralSalutation:(agentCfg["genderDetectionNeutralSalutation"] as string  | undefined) ?? "",
+    // P1-A: User-defined prompt variables
+    promptVariables: Array.isArray(agentCfg["promptVariables"])
+      ? (agentCfg["promptVariables"] as Array<{ key: string; defaultValue: string; description?: string }>)
+      : [],
+    // P1-B: Knowledge Base RAG
+    knowledgeBaseId: agent.knowledgeBaseId ?? null,
+    // P1-C: Webhook HMAC secret
+    webhookSecret: (agentCfg["webhookSecret"] as string | undefined) ?? null,
+    // P1-D: VAD / Barge-in tuning (defaults match the hardcoded pipeline constants)
+    vadSilenceMs:           (agentCfg["vadSilenceMs"]           as number  | undefined) ?? 250,
+    bargeInEnabled:         (agentCfg["bargeInEnabled"]         as boolean | undefined) ?? true,
+    bargeInEnergyThreshold: (agentCfg["bargeInEnergyThreshold"] as number  | undefined) ?? 1200,
+    bargeInMinFrames:       (agentCfg["bargeInMinFrames"]       as number  | undefined) ?? 4,
+    bargeInEchoGraceMs:     (agentCfg["bargeInEchoGraceMs"]    as number  | undefined) ?? 600,
   };
 
   // ── Cross-call caller memory ────────────────────────────────────────────────
@@ -139,15 +156,19 @@ export async function createSession(params: {
   // Supports both {{var}} and {var} syntax.
   // {caller_salutation} is intentionally left unresolved here — the pipeline
   // resolves it at runtime after detecting the caller's gender from audio.
+  // Priority order (lowest → highest): system defaults < agent promptVariables < inbound customParameters
   const now = new Date();
   const dynVars: Record<string, string> = {
-    // double-brace legacy names
-    to_number:   params.toNumber,
-    from_number: params.fromNumber,
-    agent_name:  agent.name,
-    // single-brace chip names
+    // System-provided built-in variables
+    to_number:     params.toNumber,
+    from_number:   params.fromNumber,
+    agent_name:    agent.name,
     caller_number: params.fromNumber,
     date: now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" }),
+    // P1-A: Agent-level prompt variable defaults (user-defined in agent config)
+    ...Object.fromEntries(agentConfig.promptVariables.map(v => [v.key, v.defaultValue])),
+    // P1-A: Inbound call parameters override defaults (e.g. Vobiz customParameters)
+    ...Object.fromEntries(Object.entries(params.customParameters ?? {}).map(([k, v]) => [k, v])),
   };
 
   // Replace both {{var}} and {var} — but skip {caller_salutation} (runtime only)
@@ -367,9 +388,21 @@ export async function endSession(sessionId: string): Promise<void> {
           avgTtsFirstChunkMs: rollingLatency(ag.avgTtsFirstChunkMs,  avgTtsMs),
         }).where(eq(agentsTable.id, ag.id));
 
-        // ── Post-call AI summary ──────────────────────────────────────────────
-        if (transcript && transcript.length > 100 && ag.userId) {
-          void (async () => {
+        // ── Post-call AI summary + disposition + webhook (sequential, one async block) ──
+        // Running them in sequence ensures the webhook payload includes the final
+        // callSummary and dispositionResult produced by the LLM in this same block.
+        const dispositionSchema = Array.isArray(ag.dispositionSchema)
+          ? (ag.dispositionSchema as Array<{ key: string; label: string; type: string; required?: boolean; options?: string[] }>)
+          : [];
+        const agCfgForWebhook = (ag.agentConfig ?? {}) as Record<string, unknown>;
+        const webhookSecret = agCfgForWebhook["webhookSecret"] as string | undefined;
+
+        void (async () => {
+          let callSummary = "";
+          let dispositionResult: Record<string, unknown> | null = null;
+
+          // 1. Generate call summary
+          if (transcript && transcript.length > 100 && ag.userId) {
             try {
               const llmProvs = await db.select().from(providersTable).where(
                 and(
@@ -389,75 +422,17 @@ export async function endSession(sessionId: string): Promise<void> {
                   (full) => { summary = full; }
                 );
                 if (summary) {
+                  callSummary = summary;
                   await db.update(callsTable).set({ callSummary: summary }).where(eq(callsTable.id, session.callId));
                 }
               }
             } catch (summaryErr) {
               logger.warn({ sessionId, summaryErr }, "Post-call summary generation failed");
             }
-          })();
-        }
+          }
 
-        // ── Post-call caller memory update + callback detection ──────────────
-        if (session.callerPhone && transcript && transcript.length > 50) {
-          // A call is "dropped" if the WS just closed without the pipeline
-          // deliberately ending it (end-call phrase, silence timeout, tool, max-duration).
-          // Only flag it for short-ish calls (< 20 min) — very long calls
-          // that max out aren't really "dropped".
-          const wasDropped =
-            !session.naturalEndTriggered &&
-            !session.wasTransferred &&
-            durationSeconds > 15 &&
-            durationSeconds < 1200;
-
-          void (async () => {
-            try {
-              const memLlmProvs = await db.select().from(providersTable).where(
-                and(
-                  eq(providersTable.isActive, true),
-                  ...(session.agentUserId
-                    ? [eq(providersTable.userId, session.agentUserId)]
-                    : []),
-                  eq(providersTable.providerName, session.agentLlmProvider),
-                ),
-              );
-              const memLlmKey = memLlmProvs[0]?.apiKey;
-              if (memLlmKey) {
-                const memLlm = createLLMAdapter(session.agentLlmProvider, memLlmKey, session.agentLlmModel);
-                const history = session.pipeline.getHistory();
-                // Update caller profile (with dropped-call flag)
-                await updateCallerProfile({
-                  agentId:     call.agentId,
-                  phoneNumber: session.callerPhone!,
-                  history,
-                  llm:         memLlm,
-                  existing:    session.callerProfileSnapshot,
-                  callId:      session.callId,
-                  wasDropped,
-                });
-                // Detect "call me back in X min" and schedule callback if found
-                if (!wasDropped) {
-                  await detectCallbackRequest({
-                    agentId:  call.agentId,
-                    toNumber: session.callerPhone!,
-                    history,
-                    llm:      memLlm,
-                    callId:   session.callId,
-                  });
-                }
-              }
-            } catch (memErr) {
-              logger.warn({ sessionId, memErr }, "Post-call caller memory update failed");
-            }
-          })();
-        }
-
-        // ── Post-call disposition extraction ─────────────────────────────────
-        const dispositionSchema = Array.isArray(ag.dispositionSchema)
-          ? (ag.dispositionSchema as Array<{ key: string; label: string; type: string; required?: boolean; options?: string[] }>)
-          : [];
-        if (dispositionSchema.length > 0 && transcript && transcript.length > 50 && ag.userId) {
-          void (async () => {
+          // 2. Extract disposition
+          if (dispositionSchema.length > 0 && transcript && transcript.length > 50 && ag.userId) {
             try {
               const llmProvs = await db.select().from(providersTable).where(
                 and(
@@ -484,6 +459,7 @@ export async function endSession(sessionId: string): Promise<void> {
                     const jsonStr = raw.replace(/```(?:json)?\s*/gi, "").replace(/```\s*/g, "").trim();
                     const result = JSON.parse(jsonStr);
                     if (result && typeof result === "object" && !Array.isArray(result)) {
+                      dispositionResult = result as Record<string, unknown>;
                       await db.update(callsTable).set({ dispositionResult: result }).where(eq(callsTable.id, session.callId));
                     }
                   } catch {
@@ -494,29 +470,85 @@ export async function endSession(sessionId: string): Promise<void> {
             } catch (dispErr) {
               logger.warn({ sessionId, dispErr }, "Post-call disposition extraction failed");
             }
-          })();
-        }
+          }
 
-        // ── Post-call webhook ─────────────────────────────────────────────────
-        if (ag.webhookUrl) {
-          fetch(ag.webhookUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              callId: session.callId,
-              agentId: ag.id,
-              agentName: ag.name,
-              status: "completed",
+          // 3. Fire webhook with complete enriched payload
+          if (ag.webhookUrl) {
+            const webhookPayload = {
+              callId:           session.callId,
+              agentId:          ag.id,
+              agentName:        ag.name,
+              status:           callStatus,
+              fromNumber:       call.fromNumber,
+              toNumber:         call.toNumber,
               durationSeconds,
-              transcript,
-              avgSttLatencyMs: avgSttMs,
-              avgLlmLatencyMs: avgLlmMs,
-              avgTtsLatencyMs: avgTtsMs,
-              endedAt: endedAt.toISOString(),
-            }),
-          }).catch((err) => {
-            logger.error({ sessionId, webhookUrl: ag.webhookUrl, err }, "Webhook delivery failed");
-          });
+              transcript:       transcript || null,
+              callSummary:      callSummary || null,
+              dispositionResult,
+              recordingUrl:     recordingUrl ?? null,
+              avgSttLatencyMs:  avgSttMs,
+              avgLlmLatencyMs:  avgLlmMs,
+              avgTtsLatencyMs:  avgTtsMs,
+              endedAt:          endedAt.toISOString(),
+            };
+            const bodyStr = JSON.stringify(webhookPayload);
+            const headers: Record<string, string> = { "Content-Type": "application/json" };
+            if (webhookSecret) {
+              headers["X-VoiceOrch-Signature"] =
+                "sha256=" + createHmac("sha256", webhookSecret).update(bodyStr, "utf8").digest("hex");
+            }
+            fetch(ag.webhookUrl, { method: "POST", headers, body: bodyStr }).catch((err) => {
+              logger.error({ sessionId, webhookUrl: ag.webhookUrl, err }, "Webhook delivery failed");
+            });
+          }
+        })();
+
+        // ── Post-call caller memory update + callback detection (fire-and-forget) ──
+        if (session.callerPhone && transcript && transcript.length > 50) {
+          const wasDropped =
+            !session.naturalEndTriggered &&
+            !session.wasTransferred &&
+            durationSeconds > 15 &&
+            durationSeconds < 1200;
+
+          void (async () => {
+            try {
+              const memLlmProvs = await db.select().from(providersTable).where(
+                and(
+                  eq(providersTable.isActive, true),
+                  ...(session.agentUserId
+                    ? [eq(providersTable.userId, session.agentUserId)]
+                    : []),
+                  eq(providersTable.providerName, session.agentLlmProvider),
+                ),
+              );
+              const memLlmKey = memLlmProvs[0]?.apiKey;
+              if (memLlmKey) {
+                const memLlm = createLLMAdapter(session.agentLlmProvider, memLlmKey, session.agentLlmModel);
+                const history = session.pipeline.getHistory();
+                await updateCallerProfile({
+                  agentId:     call.agentId,
+                  phoneNumber: session.callerPhone!,
+                  history,
+                  llm:         memLlm,
+                  existing:    session.callerProfileSnapshot,
+                  callId:      session.callId,
+                  wasDropped,
+                });
+                if (!wasDropped) {
+                  await detectCallbackRequest({
+                    agentId:  call.agentId,
+                    toNumber: session.callerPhone!,
+                    history,
+                    llm:      memLlm,
+                    callId:   session.callId,
+                  });
+                }
+              }
+            } catch (memErr) {
+              logger.warn({ sessionId, memErr }, "Post-call caller memory update failed");
+            }
+          })();
         }
       }
     }
