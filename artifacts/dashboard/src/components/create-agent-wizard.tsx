@@ -1,905 +1,970 @@
-import React, { useState, useRef } from "react";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { useToast } from "@/hooks/use-toast";
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useCreateAgent, getListAgentsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 import {
-  ChevronRight, ChevronLeft, Loader2, Sparkles, Play, Pause,
-  Check, X, PhoneForwarded, Users, Target, Rocket, ShoppingCart,
-  Headphones, Bell, Megaphone, Building2, BarChart2, Package, Wand2,
-  Globe, Languages, Volume2,
+  Users, Target, Rocket, ShoppingCart, Headphones, Bell,
+  Megaphone, Building2, BarChart2, Package, Wand2, Globe,
+  ChevronLeft, ChevronRight, Check, X, Loader2, Sparkles,
+  Play, Pause, Volume2, Upload, FileText, PhoneForwarded,
+  Languages, SkipForward,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-/* ── Types ──────────────────────────────────────────────────────────────── */
-
-interface CartesiaVoice {
-  id: string;
-  name: string;
-  gender: string;
-  description: string;
-}
-
-type AgentDirection = "inbound" | "outbound" | "both";
-
-interface WizardState {
-  /* Step 0 */
-  mode: "byop" | "managed" | null;
-  /* Step 1 - use case */
-  useCase: string;
-  useCaseRole: string;
-  useCaseService: string;
-  /* Step 2 - language */
-  isMultilingual: boolean;
-  primaryLanguage: string;
-  additionalLanguages: string[];
-  /* Step 3 - requirements */
-  agentName: string;
-  companyName: string;
-  agentDirection: AgentDirection;
-  callFlowDescription: string;
-  generatedPrompt: string;
-  /* Step 4 - voice */
-  voices: CartesiaVoice[];
-  selectedVoiceId: string;
-  /* Step 5 - skills */
-  callTransferEnabled: boolean;
-  callTransferNumber: string;
-  /* BYOP */
-  byopAsr: string;
-  byopLlm: string;
-  byopTts: string;
-  byopTelephony: string;
-  byopPrompt: string;
-}
-
 /* ── Use-case catalogue ─────────────────────────────────────────────────── */
-
 const USE_CASES = [
-  { id: "recruitment", label: "Recruitment Agent", desc: "Screen, interview, and onboard candidates at scale", role: "recruitment specialist", service: "candidate screening and recruitment", icon: Users },
-  { id: "lead_qual", label: "Lead Qualification", desc: "Qualify leads and warmly introduce your business", role: "sales representative", service: "lead qualification and sales outreach", icon: Target },
-  { id: "onboarding", label: "Onboarding Agent", desc: "Conduct personalized onboarding guidance calls", role: "onboarding specialist", service: "customer onboarding and guidance", icon: Rocket },
-  { id: "cart_abandon", label: "Cart Abandonment", desc: "Recover abandoned carts by calling customers", role: "customer success representative", service: "cart recovery and sales", icon: ShoppingCart },
-  { id: "customer_support", label: "Customer Support", desc: "24/7 inbound call answering for FAQs and triage", role: "customer support agent", service: "customer support and issue resolution", icon: Headphones },
-  { id: "reminder", label: "Reminder Agent", desc: "Automate reminders for EMIs, collections, deadlines", role: "reminder and collections specialist", service: "payment reminders and collections follow-up", icon: Bell },
-  { id: "announcement", label: "Announcement Agent", desc: "Keep users engaged with feature upgrades and launches", role: "product announcements specialist", service: "product updates and feature announcements", icon: Megaphone },
-  { id: "front_desk", label: "Front Desk Agent", desc: "Answer calls for clinic, hotel, and office scheduling", role: "front desk receptionist", service: "scheduling and appointment management", icon: Building2 },
-  { id: "survey", label: "Survey Agent", desc: "Automated NPS, feedback and product surveys", role: "survey and feedback specialist", service: "customer feedback and NPS surveys", icon: BarChart2 },
-  { id: "cod_confirm", label: "COD Confirmation", desc: "Handle last-mile logistics and delivery confirmation", role: "logistics confirmation specialist", service: "COD order confirmation and last-mile logistics", icon: Package },
+  { id: "recruitment",      label: "Recruitment Agent",     desc: "Screen, interview, and onboard candidates",              role: "recruitment specialist",             service: "candidate screening and recruitment",                icon: Users },
+  { id: "lead_qual",        label: "Lead Qualification",    desc: "Qualify leads and warm-introduce your business",          role: "sales representative",               service: "lead qualification and sales outreach",              icon: Target },
+  { id: "onboarding",       label: "Onboarding Agent",      desc: "Conduct personalized onboarding calls",                   role: "onboarding specialist",              service: "customer onboarding and guidance",                   icon: Rocket },
+  { id: "cart_abandon",     label: "Cart Abandonment",      desc: "Recover abandoned carts with outbound calls",             role: "customer success representative",     service: "cart recovery and sales",                            icon: ShoppingCart },
+  { id: "customer_support", label: "Customer Support",      desc: "24/7 inbound call answering for FAQs",                    role: "customer support agent",             service: "customer support and issue resolution",              icon: Headphones },
+  { id: "reminder",         label: "Reminder Agent",        desc: "Automate EMI, collection, and deadline reminders",        role: "reminder and collections specialist", service: "payment reminders and collections follow-up",        icon: Bell },
+  { id: "announcement",     label: "Announcement Agent",    desc: "Engage users with product upgrades and launches",         role: "product announcements specialist",    service: "product updates and feature announcements",          icon: Megaphone },
+  { id: "front_desk",       label: "Front Desk Agent",      desc: "Handle clinic, hotel, and office scheduling",             role: "front desk receptionist",            service: "scheduling and appointment management",              icon: Building2 },
+  { id: "survey",           label: "Survey Agent",          desc: "Automated NPS, feedback and product surveys",             role: "survey and feedback specialist",      service: "customer feedback and NPS surveys",                  icon: BarChart2 },
+  { id: "cod_confirm",      label: "COD Confirmation",      desc: "Handle last-mile logistics and delivery confirmation",     role: "logistics confirmation specialist",   service: "COD order confirmation and last-mile logistics",     icon: Package },
 ];
 
 /* ── Language catalogue ─────────────────────────────────────────────────── */
-
 const LANGUAGES = [
-  { code: "english", label: "English", flag: "🇬🇧" },
-  { code: "hindi", label: "Hindi", flag: "🇮🇳" },
-  { code: "tamil", label: "Tamil", flag: "🇮🇳" },
-  { code: "telugu", label: "Telugu", flag: "🇮🇳" },
-  { code: "kannada", label: "Kannada", flag: "🇮🇳" },
-  { code: "marathi", label: "Marathi", flag: "🇮🇳" },
-  { code: "gujarati", label: "Gujarati", flag: "🇮🇳" },
-  { code: "bengali", label: "Bengali", flag: "🇮🇳" },
+  { code: "english",   label: "English",   flag: "🇬🇧" },
+  { code: "hindi",     label: "Hindi",     flag: "🇮🇳" },
+  { code: "tamil",     label: "Tamil",     flag: "🇮🇳" },
+  { code: "telugu",    label: "Telugu",    flag: "🇮🇳" },
+  { code: "kannada",   label: "Kannada",   flag: "🇮🇳" },
+  { code: "marathi",   label: "Marathi",   flag: "🇮🇳" },
+  { code: "gujarati",  label: "Gujarati",  flag: "🇮🇳" },
+  { code: "bengali",   label: "Bengali",   flag: "🇮🇳" },
   { code: "malayalam", label: "Malayalam", flag: "🇮🇳" },
 ];
 
-/* ── Managed stack rules ────────────────────────────────────────────────── */
-
+/* ── Managed stack ──────────────────────────────────────────────────────── */
 function getManagedStack(languages: string[]) {
   const hasTamil = languages.includes("tamil");
   return {
-    asrProvider: hasTamil ? "sarvam" : "deepgram",
-    llmProvider: "google",
-    llmModel: "gemini-2.0-flash",
-    ttsProvider: "cartesia",
+    asrProvider:       hasTamil ? "sarvam" : "deepgram",
+    llmProvider:       "sarvam",
+    llmModel:          "sarvam-m1",
+    ttsProvider:       "cartesia",
     telephonyProvider: "vobiz",
   };
 }
 
-/* ── Step indicator ─────────────────────────────────────────────────────── */
+/* ── Default Arushi voice ───────────────────────────────────────────────── */
+const ARUSHI_VOICE = {
+  id: "2ee87190-8f84-4925-97da-e52547f9462c",
+  name: "Arushi",
+  gender: "Female",
+  description: "Warm Indian English female — Cartesia",
+};
 
-const MANAGED_STEPS = ["Use Case", "Language", "Requirements", "Voice", "Skills"];
+const FALLBACK_VOICES = [
+  ARUSHI_VOICE,
+  { id: "a0e99841-438c-4a64-b679-ae501e7d6091", name: "Priya",  gender: "Female", description: "Friendly Indian English female" },
+  { id: "bf991597-6135-4d4d-a38c-2516e5d30000", name: "Rohan",  gender: "Male",   description: "Confident Indian English male" },
+  { id: "79a125e8-cd45-4c13-8a67-188112f4dd22", name: "Sarah",  gender: "Female", description: "Warm US English female" },
+  { id: "c45bc1d0-7a89-42de-b4b4-a7cbe5f4d4a1", name: "James",  gender: "Male",   description: "Professional US English male" },
+  { id: "b7d50908-b17c-442d-ad8d-810c63997ed9", name: "Emma",   gender: "Female", description: "Clear British English female" },
+  { id: "f9836c6e-a0bd-460e-9d3c-f7299fa60f94", name: "Oliver", gender: "Male",   description: "British English male" },
+  { id: "5c42302c-194b-4d0c-ba1a-8cb485c84ab9", name: "Kavya",  gender: "Female", description: "South Indian English female" },
+];
 
-function StepBar({ current, total }: { current: number; total: number }) {
-  return (
-    <div className="flex items-center gap-1.5 mb-6">
-      {Array.from({ length: total }).map((_, i) => (
-        <React.Fragment key={i}>
-          <div className={cn(
-            "h-1.5 rounded-full transition-all duration-300",
-            i < current ? "bg-black/85 flex-1" : i === current ? "bg-black/60 flex-1" : "bg-black/10 flex-1",
-          )} />
-        </React.Fragment>
-      ))}
-    </div>
-  );
+/* ── Types ──────────────────────────────────────────────────────────────── */
+interface CartesiaVoice { id: string; name: string; gender: string; description: string }
+type AgentDirection = "inbound" | "outbound" | "both";
+
+interface WizardState {
+  mode: "byop" | "managed" | null;
+  useCase: string; useCaseRole: string; useCaseService: string;
+  isMultilingual: boolean; primaryLanguage: string; additionalLanguages: string[];
+  agentName: string; companyName: string; agentDirection: AgentDirection;
+  callFlowDescription: string; generatedPrompt: string;
+  kbContent: string; kbFileName: string;
+  voices: CartesiaVoice[]; selectedVoiceId: string;
+  callTransferEnabled: boolean; callTransferNumber: string;
+  byopAsr: string; byopLlm: string; byopTts: string; byopTelephony: string; byopPrompt: string;
 }
 
-/* ── Voice preview hook ─────────────────────────────────────────────────── */
+const INITIAL: WizardState = {
+  mode: null, useCase: "", useCaseRole: "", useCaseService: "",
+  isMultilingual: false, primaryLanguage: "english", additionalLanguages: [],
+  agentName: "", companyName: "", agentDirection: "inbound",
+  callFlowDescription: "", generatedPrompt: "",
+  kbContent: "", kbFileName: "",
+  voices: FALLBACK_VOICES, selectedVoiceId: ARUSHI_VOICE.id,
+  callTransferEnabled: false, callTransferNumber: "",
+  byopAsr: "deepgram", byopLlm: "openai", byopTts: "elevenlabs", byopTelephony: "twilio",
+  byopPrompt: "You are a helpful AI voice assistant. Be concise and professional.",
+};
 
+/* ── Voice preview ──────────────────────────────────────────────────────── */
 function useVoicePreview() {
   const [playing, setPlaying] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   async function preview(voiceId: string) {
-    if (playing === voiceId) {
-      audioRef.current?.pause();
-      setPlaying(null);
-      return;
-    }
-
+    if (playing === voiceId) { audioRef.current?.pause(); setPlaying(null); return; }
     setPlaying(voiceId);
-
     try {
       const res = await fetch("/api/wizard/preview-voice", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ voiceId, text: "Hello! I am your AI voice assistant and I am here to help you today." }),
+        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+        body: JSON.stringify({ voiceId, text: "Hello! I am Arushi, your AI voice assistant. I am here to help you today. How can I assist?" }),
       });
-
-      if (!res.ok) {
-        setPlaying(null);
-        return;
-      }
-
+      if (!res.ok) { setPlaying(null); return; }
       const { audio, mimeType } = await res.json();
       const blob = new Blob([Uint8Array.from(atob(audio), c => c.charCodeAt(0))], { type: mimeType });
       const url = URL.createObjectURL(blob);
-
-      if (audioRef.current) {
-        audioRef.current.pause();
-        URL.revokeObjectURL(audioRef.current.src);
-      }
-
+      if (audioRef.current) { audioRef.current.pause(); URL.revokeObjectURL(audioRef.current.src); }
       const el = new Audio(url);
       audioRef.current = el;
       el.onended = () => setPlaying(null);
       el.onerror = () => setPlaying(null);
       void el.play();
-    } catch {
-      setPlaying(null);
-    }
+    } catch { setPlaying(null); }
   }
-
   return { playing, preview };
 }
 
-/* ── Main wizard ─────────────────────────────────────────────────────────── */
+/* ── Step definitions ───────────────────────────────────────────────────── */
+const MANAGED_STEPS = [
+  "use-case", "language", "details", "requirements", "knowledge", "voice", "skills",
+] as const;
+type ManagedStep = typeof MANAGED_STEPS[number];
 
-interface Props {
-  open: boolean;
-  onClose: () => void;
-  onCreated: (id: number) => void;
-}
-
-const INITIAL: WizardState = {
-  mode: null,
-  useCase: "",
-  useCaseRole: "",
-  useCaseService: "",
-  isMultilingual: false,
-  primaryLanguage: "english",
-  additionalLanguages: [],
-  agentName: "",
-  companyName: "",
-  agentDirection: "inbound",
-  callFlowDescription: "",
-  generatedPrompt: "",
-  voices: [],
-  selectedVoiceId: "",
-  callTransferEnabled: false,
-  callTransferNumber: "",
-  byopAsr: "deepgram",
-  byopLlm: "openai",
-  byopTts: "elevenlabs",
-  byopTelephony: "twilio",
-  byopPrompt: "You are a helpful AI voice assistant. Be concise and professional.",
+const STEP_LABELS: Record<ManagedStep, string> = {
+  "use-case": "Use Case", language: "Language", details: "Agent Details",
+  requirements: "Requirements", knowledge: "Knowledge Base", voice: "Voice", skills: "Skills & Finish",
 };
 
+/* ── Animated step wrapper ──────────────────────────────────────────────── */
+function SlideStep({ children, direction }: { children: React.ReactNode; direction: "forward" | "back" }) {
+  const cls = direction === "forward"
+    ? "animate-[slideInRight_0.35s_cubic-bezier(.22,1,.36,1)]"
+    : "animate-[slideInLeft_0.35s_cubic-bezier(.22,1,.36,1)]";
+  return <div className={cn("w-full", cls)}>{children}</div>;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MAIN WIZARD
+═══════════════════════════════════════════════════════════════════════════ */
+interface Props { open: boolean; onClose: () => void; onCreated: (id: number) => void }
+
 export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
-  const [state, setState] = useState<WizardState>(INITIAL);
-  const [managedStep, setManagedStep] = useState(0); // 0-4 within managed flow
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [isLoadingVoices, setIsLoadingVoices] = useState(false);
-  const [isCreating, setIsCreating] = useState(false);
-  const { playing, preview } = useVoicePreview();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const create = useCreateAgent();
+  const [state, setState]             = useState<WizardState>(INITIAL);
+  const [stepIdx, setStepIdx]         = useState(0);
+  const [direction, setDirection]     = useState<"forward" | "back">("forward");
+  const [isGenerating, setGenerating] = useState(false);
+  const [isCreating, setCreating]     = useState(false);
+  const [loadingVoices, setLoadVoices]= useState(false);
+  const [renderKey, setRenderKey]     = useState(0);
+  const fileInputRef                  = useRef<HTMLInputElement>(null);
+  const { playing, preview }          = useVoicePreview();
+  const { toast }                     = useToast();
+  const qc                            = useQueryClient();
+  const create                        = useCreateAgent();
 
-  function update(patch: Partial<WizardState>) {
-    setState(prev => ({ ...prev, ...patch }));
-  }
+  const update = useCallback((patch: Partial<WizardState>) => setState(p => ({ ...p, ...patch })), []);
 
-  function reset() {
-    setState(INITIAL);
-    setManagedStep(0);
-  }
+  /* close & reset */
+  function handleClose() { setState(INITIAL); setStepIdx(0); onClose(); }
 
-  function handleClose() {
-    reset();
-    onClose();
-  }
+  /* keyboard: Esc */
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") handleClose(); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [open]);
 
-  /* ── Fetch Cartesia voices when entering step 3 (index 3) ── */
+  /* fetch Cartesia voices once */
   async function loadVoices() {
-    if (state.voices.length > 0) return;
-    setIsLoadingVoices(true);
+    if (state.voices.length > FALLBACK_VOICES.length) return;
+    setLoadVoices(true);
     try {
       const res = await fetch("/api/wizard/voices", { credentials: "include" });
       if (res.ok) {
-        const { voices } = await res.json();
-        update({ voices, selectedVoiceId: voices[0]?.id ?? "" });
+        const { voices } = await res.json() as { voices: CartesiaVoice[] };
+        // put Arushi first if present, otherwise prepend fallback Arushi
+        const arushi = voices.find(v => v.name.toLowerCase().includes("arushi")) ?? ARUSHI_VOICE;
+        const rest   = voices.filter(v => v.id !== arushi.id);
+        const merged = [arushi, ...rest];
+        update({ voices: merged, selectedVoiceId: arushi.id });
       }
-    } catch {
-      // use fallback silently
-    } finally {
-      setIsLoadingVoices(false);
+    } finally { setLoadVoices(false); }
+  }
+
+  /* navigate */
+  function go(delta: 1 | -1) {
+    setDirection(delta === 1 ? "forward" : "back");
+    setStepIdx(i => i + delta);
+    setRenderKey(k => k + 1);
+    if (delta === 1 && state.mode === "managed" && MANAGED_STEPS[stepIdx + 1] === "voice") {
+      void loadVoices();
     }
   }
 
-  /* ── AI prompt generation ── */
+  /* AI prompt generation */
   async function generatePrompt() {
-    setIsGenerating(true);
+    setGenerating(true);
     try {
       const langs = [state.primaryLanguage, ...state.additionalLanguages];
       const res = await fetch("/api/wizard/generate-prompt", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
         body: JSON.stringify({
-          useCase: state.useCase,
-          role: state.useCaseRole,
-          companyName: state.companyName,
-          agentName: state.agentName,
-          serviceDescription: state.useCaseService,
-          agentDirection: state.agentDirection,
-          callFlowDescription: state.callFlowDescription,
+          useCase: state.useCase, role: state.useCaseRole, companyName: state.companyName,
+          agentName: state.agentName, serviceDescription: state.useCaseService,
+          agentDirection: state.agentDirection, callFlowDescription: state.callFlowDescription,
           languages: langs,
         }),
       });
-
-      if (!res.ok) throw new Error("Generation failed");
+      if (!res.ok) throw new Error();
       const { prompt } = await res.json();
       update({ generatedPrompt: prompt });
-      toast({ title: "Prompt generated", description: "Review and edit it below if needed." });
+      toast({ title: "Prompt generated ✨" });
     } catch {
-      toast({ title: "Generation failed", description: "Please check your requirements and try again.", variant: "destructive" });
-    } finally {
-      setIsGenerating(false);
-    }
+      toast({ title: "Generation failed", variant: "destructive" });
+    } finally { setGenerating(false); }
   }
 
-  /* ── Final create ── */
+  /* file read */
+  function handleFile(file: File) {
+    const reader = new FileReader();
+    reader.onload = e => update({ kbContent: e.target?.result as string, kbFileName: file.name });
+    reader.readAsText(file);
+  }
+
+  /* create agent */
   async function handleCreate() {
-    setIsCreating(true);
+    setCreating(true);
     const isManaged = state.mode === "managed";
-    const langs = [state.primaryLanguage, ...state.additionalLanguages];
-    const stack = getManagedStack(langs);
+    const langs  = [state.primaryLanguage, ...state.additionalLanguages];
+    const stack  = getManagedStack(langs);
 
-    const payload = isManaged
-      ? {
-          name: state.agentName || `${state.useCase} Agent`,
-          asrProvider: stack.asrProvider,
-          llmProvider: stack.llmProvider,
-          llmModel: stack.llmModel,
-          ttsProvider: stack.ttsProvider,
-          ttsVoice: state.selectedVoiceId || undefined,
-          telephonyProvider: stack.telephonyProvider,
-          systemPrompt: state.generatedPrompt || state.callFlowDescription,
-          maxDuration: 600,
-          agentConfig: {
-            summarizationEnabled: true,
-            summarizationPrompt: "Summarize this call in 3 bullet points covering: 1) caller intent, 2) key information exchanged, 3) outcome or next step.",
-            ...(state.callTransferEnabled && state.callTransferNumber
-              ? { hangupAfterLlmCall: false }
-              : {}),
-          } as any,
-        }
-      : {
-          name: state.agentName || "New Assistant",
-          asrProvider: state.byopAsr,
-          llmProvider: state.byopLlm,
-          ttsProvider: state.byopTts,
-          telephonyProvider: state.byopTelephony,
-          systemPrompt: state.byopPrompt,
-          maxDuration: 300,
-        };
+    const payload = isManaged ? {
+      name: state.agentName || `${STEP_LABELS["use-case"]} Agent`,
+      asrProvider: stack.asrProvider, llmProvider: stack.llmProvider, llmModel: stack.llmModel,
+      ttsProvider: stack.ttsProvider, ttsVoice: state.selectedVoiceId || ARUSHI_VOICE.id,
+      telephonyProvider: stack.telephonyProvider,
+      systemPrompt: state.generatedPrompt || state.callFlowDescription || "You are a helpful AI voice assistant.",
+      maxDuration: 600,
+      agentConfig: {
+        summarizationEnabled: true,
+        summarizationPrompt: "Summarize this call in 3 bullet points: 1) caller intent, 2) key information exchanged, 3) outcome or next step.",
+      } as any,
+    } : {
+      name: state.agentName || "New Assistant",
+      asrProvider: state.byopAsr, llmProvider: state.byopLlm,
+      ttsProvider: state.byopTts, telephonyProvider: state.byopTelephony,
+      systemPrompt: state.byopPrompt, maxDuration: 300,
+    };
 
-    create.mutate(
-      { data: payload as any },
-      {
-        onSuccess: (created) => {
-          queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
-          toast({ title: "Agent created!", description: `${created.name} is ready.` });
-          reset();
-          onCreated(created.id);
-        },
-        onError: () => {
-          toast({ title: "Create failed", variant: "destructive" });
-          setIsCreating(false);
-        },
+    create.mutate({ data: payload as any }, {
+      onSuccess: (created) => {
+        qc.invalidateQueries({ queryKey: getListAgentsQueryKey() });
+        toast({ title: `${created.name} is ready!` });
+        setState(INITIAL); setStepIdx(0);
+        onCreated(created.id);
       },
-    );
+      onError: () => { toast({ title: "Create failed", variant: "destructive" }); setCreating(false); },
+    });
   }
 
-  /* ────────────────────────────────────────────────────────────────────── */
-  /*  RENDER                                                                */
-  /* ────────────────────────────────────────────────────────────────────── */
+  if (!open) return null;
 
-  return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
-      <DialogContent className="max-w-3xl w-full p-0 overflow-hidden bg-white/95 backdrop-blur-xl border-black/[0.08] rounded-2xl shadow-2xl">
-        <DialogHeader className="sr-only">
-          <DialogTitle>Create Agent</DialogTitle>
-        </DialogHeader>
+  const currentStep: ManagedStep | null = state.mode === "managed" ? (MANAGED_STEPS[stepIdx] ?? null) : null;
+  const totalManagedSteps = MANAGED_STEPS.length;
+  const progress = state.mode === "managed"
+    ? ((stepIdx + 1) / totalManagedSteps) * 100
+    : state.mode === "byop" ? 100 : 0;
 
-        <div className="flex flex-col max-h-[85vh]">
-          {/* Top bar */}
-          <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-black/[0.06] shrink-0">
-            <div className="flex items-center gap-2">
-              {state.mode && (
-                <button
-                  onClick={() => {
-                    if (state.mode === "managed" && managedStep > 0) setManagedStep(s => s - 1);
-                    else { update({ mode: null }); setManagedStep(0); }
-                  }}
-                  className="p-1 rounded-md hover:bg-black/[0.06] text-black/40 hover:text-black/70 transition-colors"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </button>
-              )}
-              <span className="font-semibold text-sm text-black/85">
-                {state.mode === null ? "Create Agent" :
-                  state.mode === "byop" ? "BYOP — Bring Your Own Providers" :
-                  `Managed Agent — ${MANAGED_STEPS[managedStep]}`}
-              </span>
-            </div>
-            <button onClick={handleClose} className="p-1 rounded-md hover:bg-black/[0.06] text-black/40 hover:text-black/70">
-              <X className="h-4 w-4" />
+  /* ────────────────────────────────────────────────────────────────────── */
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] bg-[#0C0C0E] flex flex-col overflow-hidden">
+
+      {/* CSS keyframes injection */}
+      <style>{`
+        @keyframes slideInRight { from { opacity:0; transform:translateX(48px); } to { opacity:1; transform:translateX(0); } }
+        @keyframes slideInLeft  { from { opacity:0; transform:translateX(-48px); } to { opacity:1; transform:translateX(0); } }
+        @keyframes fadeUp       { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+      `}</style>
+
+      {/* Progress bar */}
+      <div className="h-0.5 bg-white/[0.06] shrink-0">
+        <div
+          className="h-full bg-gradient-to-r from-violet-500 to-indigo-400 transition-all duration-500 ease-out"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+
+      {/* Top bar */}
+      <div className="flex items-center justify-between px-8 pt-5 pb-3 shrink-0">
+        <div className="flex items-center gap-3">
+          {(state.mode !== null) && (
+            <button
+              onClick={() => {
+                if (state.mode === "managed" && stepIdx > 0) go(-1);
+                else { setState(INITIAL); setStepIdx(0); setRenderKey(k => k + 1); }
+              }}
+              className="flex items-center gap-1.5 text-white/40 hover:text-white/80 transition-colors text-sm"
+            >
+              <ChevronLeft className="h-4 w-4" /> Back
             </button>
-          </div>
+          )}
+        </div>
 
-          {/* Content */}
-          <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="flex items-center gap-4">
+          {state.mode === "managed" && currentStep && (
+            <span className="text-white/25 text-xs font-mono tracking-widest uppercase">
+              {String(stepIdx + 1).padStart(2, "0")} / {String(totalManagedSteps).padStart(2, "0")} — {STEP_LABELS[currentStep]}
+            </span>
+          )}
+          <button onClick={handleClose} className="h-8 w-8 rounded-full bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center text-white/50 hover:text-white/80 transition-all">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
 
-            {/* ── Step 0: Mode selection ── */}
+      {/* Main content area */}
+      <div className="flex-1 overflow-y-auto flex flex-col items-center justify-center px-6 py-8">
+        <div className="w-full max-w-2xl">
+          <SlideStep key={`${state.mode}-${stepIdx}-${renderKey}`} direction={direction}>
+
+            {/* ── Mode selection ── */}
             {state.mode === null && (
-              <div>
-                <p className="text-sm text-black/50 mb-6">How would you like to build your agent?</p>
+              <div className="animate-[fadeUp_0.4s_ease-out]">
+                <p className="text-white/40 text-xs uppercase tracking-[0.2em] mb-3">Get started</p>
+                <h1 className="text-4xl font-bold text-white mb-2 leading-tight">How do you want to<br />build your agent?</h1>
+                <p className="text-white/40 text-base mb-10">Choose your setup mode — you can always change provider settings later.</p>
+
                 <div className="grid grid-cols-2 gap-4">
                   <button
-                    onClick={() => update({ mode: "managed" })}
-                    className="group text-left p-5 rounded-2xl border-2 border-black/[0.07] hover:border-black/40 bg-gradient-to-br from-violet-50 to-indigo-50 hover:from-violet-100 hover:to-indigo-100 transition-all"
+                    onClick={() => { update({ mode: "managed" }); setDirection("forward"); setRenderKey(k => k + 1); }}
+                    className="group relative text-left p-6 rounded-2xl border border-white/[0.08] bg-white/[0.03] hover:bg-white/[0.07] hover:border-violet-500/60 transition-all duration-200"
                   >
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="h-9 w-9 rounded-xl bg-violet-500 flex items-center justify-center">
+                    <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-violet-500/10 to-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="relative">
+                      <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center mb-4 shadow-lg shadow-violet-500/30">
                         <Wand2 className="h-5 w-5 text-white" />
                       </div>
-                      <div>
-                        <div className="font-semibold text-sm text-black/85">Managed</div>
-                        <Badge className="text-[9px] bg-violet-100 text-violet-700 border-0 px-1.5 py-0 font-medium">Recommended</Badge>
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <span className="font-bold text-white text-lg">Managed</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-400 font-semibold border border-violet-500/30">Recommended</span>
                       </div>
-                    </div>
-                    <p className="text-xs text-black/55 leading-relaxed">
-                      We handle the AI stack — STT, LLM, TTS, telephony. You just describe what the agent should do and we build it.
-                    </p>
-                    <div className="mt-3 text-xs text-violet-600 font-medium flex items-center gap-1 group-hover:gap-2 transition-all">
-                      Get started <ChevronRight className="h-3.5 w-3.5" />
+                      <p className="text-white/45 text-sm leading-relaxed">We handle the full AI stack. Just describe what your agent should do.</p>
+                      <div className="mt-4 flex items-center gap-1.5 text-violet-400 text-sm font-medium group-hover:gap-2.5 transition-all">
+                        Get started <ChevronRight className="h-4 w-4" />
+                      </div>
                     </div>
                   </button>
 
                   <button
-                    onClick={() => update({ mode: "byop" })}
-                    className="group text-left p-5 rounded-2xl border-2 border-black/[0.07] hover:border-black/40 bg-gradient-to-br from-slate-50 to-zinc-50 hover:from-slate-100 hover:to-zinc-100 transition-all"
+                    onClick={() => { update({ mode: "byop" }); setDirection("forward"); setRenderKey(k => k + 1); }}
+                    className="group relative text-left p-6 rounded-2xl border border-white/[0.08] bg-white/[0.03] hover:bg-white/[0.07] hover:border-white/20 transition-all duration-200"
                   >
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="h-9 w-9 rounded-xl bg-zinc-700 flex items-center justify-center">
-                        <Globe className="h-5 w-5 text-white" />
+                    <div className="relative">
+                      <div className="h-11 w-11 rounded-xl bg-white/[0.08] flex items-center justify-center mb-4">
+                        <Globe className="h-5 w-5 text-white/70" />
                       </div>
-                      <div>
-                        <div className="font-semibold text-sm text-black/85">BYOP</div>
-                        <span className="text-[9px] text-black/40 font-medium">Bring Your Own Providers</span>
+                      <div className="mb-1.5">
+                        <span className="font-bold text-white text-lg">BYOP</span>
+                        <span className="ml-2 text-white/30 text-sm">Bring Your Own Providers</span>
                       </div>
-                    </div>
-                    <p className="text-xs text-black/55 leading-relaxed">
-                      Choose your own ASR, LLM, TTS and telephony providers. Full control over the AI stack.
-                    </p>
-                    <div className="mt-3 text-xs text-zinc-600 font-medium flex items-center gap-1 group-hover:gap-2 transition-all">
-                      Configure manually <ChevronRight className="h-3.5 w-3.5" />
+                      <p className="text-white/45 text-sm leading-relaxed">Choose your own ASR, LLM, TTS and telephony. Full control.</p>
+                      <div className="mt-4 flex items-center gap-1.5 text-white/40 text-sm font-medium group-hover:gap-2.5 transition-all">
+                        Configure manually <ChevronRight className="h-4 w-4" />
+                      </div>
                     </div>
                   </button>
                 </div>
               </div>
             )}
 
-            {/* ════════════════════════════════════════════════════════════ */}
-            {/* MANAGED FLOW                                                 */}
-            {/* ════════════════════════════════════════════════════════════ */}
+            {/* ════════════════════════════════════════════
+                MANAGED STEPS
+            ════════════════════════════════════════════ */}
 
-            {state.mode === "managed" && (
-              <>
-                <StepBar current={managedStep} total={MANAGED_STEPS.length} />
+            {/* Step 1: Use Case */}
+            {currentStep === "use-case" && (
+              <div>
+                <p className="text-white/40 text-xs uppercase tracking-[0.2em] mb-3">Step 1</p>
+                <h2 className="text-3xl font-bold text-white mb-2">What type of agent<br />do you need?</h2>
+                <p className="text-white/40 text-sm mb-8">Select the use case that best matches your goal.</p>
 
-                {/* Step 1: Use case */}
-                {managedStep === 0 && (
-                  <div>
-                    <p className="text-xs text-black/40 uppercase tracking-widest font-semibold mb-4">Select your agent type</p>
-                    <div className="grid grid-cols-2 gap-2.5">
-                      {USE_CASES.map(uc => {
-                        const Icon = uc.icon;
-                        const selected = state.useCase === uc.id;
+                <div className="grid grid-cols-2 gap-2.5">
+                  {USE_CASES.map(uc => {
+                    const Icon = uc.icon;
+                    const sel  = state.useCase === uc.id;
+                    return (
+                      <button
+                        key={uc.id}
+                        onClick={() => { update({ useCase: uc.id, useCaseRole: uc.role, useCaseService: uc.service }); }}
+                        className={cn(
+                          "text-left p-4 rounded-xl border transition-all duration-200 flex items-center gap-3 group",
+                          sel
+                            ? "border-violet-500/70 bg-violet-500/10 shadow-[0_0_0_1px_rgba(139,92,246,0.3)]"
+                            : "border-white/[0.06] bg-white/[0.02] hover:border-white/15 hover:bg-white/[0.04]",
+                        )}
+                      >
+                        <div className={cn(
+                          "h-9 w-9 rounded-lg flex items-center justify-center shrink-0 transition-colors",
+                          sel ? "bg-violet-500 text-white" : "bg-white/[0.07] text-white/50",
+                        )}>
+                          <Icon className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className={cn("font-semibold text-sm", sel ? "text-white" : "text-white/70")}>{uc.label}</div>
+                          <div className="text-xs text-white/35 mt-0.5 leading-tight truncate">{uc.desc}</div>
+                        </div>
+                        {sel && <Check className="h-4 w-4 text-violet-400 shrink-0 ml-auto" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Step 2: Language */}
+            {currentStep === "language" && (
+              <div>
+                <p className="text-white/40 text-xs uppercase tracking-[0.2em] mb-3">Step 2</p>
+                <h2 className="text-3xl font-bold text-white mb-2">What language will<br />your agent speak?</h2>
+                <p className="text-white/40 text-sm mb-8">English is always available. Add regional languages for Indian markets.</p>
+
+                <div className="flex gap-3 mb-6">
+                  {[
+                    { value: false, label: "Single language",  sub: "One language only" },
+                    { value: true,  label: "Multilingual",     sub: "English + up to 2 regional" },
+                  ].map(opt => {
+                    const sel = state.isMultilingual === opt.value;
+                    return (
+                      <button
+                        key={String(opt.value)}
+                        onClick={() => update({ isMultilingual: opt.value, additionalLanguages: [] })}
+                        className={cn(
+                          "flex-1 p-4 rounded-xl border transition-all flex items-start gap-3",
+                          sel ? "border-violet-500/70 bg-violet-500/10" : "border-white/[0.08] bg-white/[0.02] hover:border-white/15",
+                        )}
+                      >
+                        {opt.value ? <Languages className={cn("h-5 w-5 mt-0.5 shrink-0", sel ? "text-violet-400" : "text-white/40")} /> : <Volume2 className={cn("h-5 w-5 mt-0.5 shrink-0", sel ? "text-violet-400" : "text-white/40")} />}
+                        <div className="text-left">
+                          <div className={cn("font-semibold text-sm", sel ? "text-white" : "text-white/60")}>{opt.label}</div>
+                          <div className="text-xs text-white/35 mt-0.5">{opt.sub}</div>
+                        </div>
+                        {sel && <Check className="h-4 w-4 text-violet-400 ml-auto mt-0.5" />}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <p className="text-white/40 text-xs uppercase tracking-[0.15em] mb-3">{state.isMultilingual ? "Primary language" : "Select language"}</p>
+                <div className="grid grid-cols-3 gap-2 mb-4">
+                  {LANGUAGES.map(lang => {
+                    const sel = state.primaryLanguage === lang.code;
+                    return (
+                      <button
+                        key={lang.code}
+                        onClick={() => update({ primaryLanguage: lang.code })}
+                        className={cn(
+                          "p-3 rounded-xl border flex items-center gap-2.5 transition-all",
+                          sel ? "border-violet-500/70 bg-violet-500/10" : "border-white/[0.06] bg-white/[0.02] hover:border-white/15",
+                        )}
+                      >
+                        <span className="text-lg">{lang.flag}</span>
+                        <span className={cn("font-medium text-sm", sel ? "text-white" : "text-white/55")}>{lang.label}</span>
+                        {sel && <Check className="h-3.5 w-3.5 text-violet-400 ml-auto" />}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {state.isMultilingual && (
+                  <>
+                    <p className="text-white/40 text-xs uppercase tracking-[0.15em] mb-3">Additional regional languages <span className="text-white/20 normal-case">(up to 2)</span></p>
+                    <div className="grid grid-cols-3 gap-2 mb-4">
+                      {LANGUAGES.filter(l => l.code !== state.primaryLanguage && l.code !== "english").map(lang => {
+                        const sel   = state.additionalLanguages.includes(lang.code);
+                        const maxed = state.additionalLanguages.length >= 2 && !sel;
                         return (
                           <button
-                            key={uc.id}
-                            onClick={() => update({ useCase: uc.id, useCaseRole: uc.role, useCaseService: uc.service })}
+                            key={lang.code}
+                            disabled={maxed}
+                            onClick={() => {
+                              const next = sel
+                                ? state.additionalLanguages.filter(c => c !== lang.code)
+                                : [...state.additionalLanguages, lang.code];
+                              update({ additionalLanguages: next });
+                            }}
                             className={cn(
-                              "text-left p-4 rounded-xl border-2 transition-all flex items-start gap-3",
-                              selected
-                                ? "border-black/70 bg-black/[0.04]"
-                                : "border-black/[0.07] hover:border-black/25 hover:bg-black/[0.02]",
+                              "p-3 rounded-xl border flex items-center gap-2.5 transition-all",
+                              sel    ? "border-violet-500/70 bg-violet-500/10"
+                              : maxed ? "border-white/[0.03] opacity-30 cursor-not-allowed"
+                              : "border-white/[0.06] bg-white/[0.02] hover:border-white/15",
                             )}
                           >
-                            <div className={cn(
-                              "h-8 w-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5",
-                              selected ? "bg-black/85 text-white" : "bg-black/[0.07] text-black/50",
-                            )}>
-                              <Icon className="h-4 w-4" />
-                            </div>
-                            <div className="min-w-0">
-                              <div className={cn("font-semibold text-sm", selected ? "text-black/85" : "text-black/70")}>{uc.label}</div>
-                              <div className="text-xs text-black/40 mt-0.5 leading-tight">{uc.desc}</div>
-                            </div>
-                            {selected && <Check className="h-4 w-4 text-black/70 shrink-0 ml-auto mt-0.5" />}
+                            <span className="text-lg">{lang.flag}</span>
+                            <span className={cn("font-medium text-sm", sel ? "text-white" : "text-white/55")}>{lang.label}</span>
+                            {sel && <Check className="h-3.5 w-3.5 text-violet-400 ml-auto" />}
                           </button>
                         );
                       })}
                     </div>
-                  </div>
+                  </>
                 )}
 
-                {/* Step 2: Language */}
-                {managedStep === 1 && (
-                  <div className="space-y-5">
-                    <div>
-                      <p className="text-xs text-black/40 uppercase tracking-widest font-semibold mb-3">Language mode</p>
-                      <div className="flex gap-3">
+                {/* Stack info */}
+                {(() => {
+                  const langs = [state.primaryLanguage, ...state.additionalLanguages];
+                  const stack = getManagedStack(langs);
+                  const hasTamil = langs.includes("tamil");
+                  return (
+                    <div className="p-4 rounded-xl border border-white/[0.06] bg-white/[0.02]">
+                      <p className="text-white/30 text-xs uppercase tracking-[0.15em] mb-2">Auto-selected AI stack</p>
+                      <div className="grid grid-cols-4 gap-2">
                         {[
-                          { value: false, label: "Single language", icon: Volume2 },
-                          { value: true, label: "Multilingual", icon: Languages },
-                        ].map(opt => {
-                          const Icon = opt.icon;
-                          const sel = state.isMultilingual === opt.value;
-                          return (
-                            <button
-                              key={String(opt.value)}
-                              onClick={() => update({ isMultilingual: opt.value, additionalLanguages: [] })}
-                              className={cn(
-                                "flex-1 p-4 rounded-xl border-2 flex items-center gap-3 transition-all",
-                                sel ? "border-black/70 bg-black/[0.04]" : "border-black/[0.07] hover:border-black/25",
-                              )}
-                            >
-                              <Icon className={cn("h-5 w-5", sel ? "text-black/85" : "text-black/40")} />
-                              <div className="text-left">
-                                <div className={cn("text-sm font-semibold", sel ? "text-black/85" : "text-black/60")}>{opt.label}</div>
-                                {opt.value && <div className="text-xs text-black/35">English + up to 2 regional</div>}
-                              </div>
-                              {sel && <Check className="h-4 w-4 text-black/70 ml-auto" />}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="text-xs text-black/40 uppercase tracking-widest font-semibold mb-3">
-                        {state.isMultilingual ? "Primary language" : "Select language"}
-                      </p>
-                      <div className="grid grid-cols-3 gap-2">
-                        {LANGUAGES.map(lang => {
-                          const sel = state.primaryLanguage === lang.code;
-                          return (
-                            <button
-                              key={lang.code}
-                              onClick={() => update({ primaryLanguage: lang.code })}
-                              className={cn(
-                                "p-3 rounded-xl border-2 flex items-center gap-2 transition-all text-sm",
-                                sel ? "border-black/70 bg-black/[0.04]" : "border-black/[0.07] hover:border-black/25",
-                              )}
-                            >
-                              <span className="text-base">{lang.flag}</span>
-                              <span className={cn("font-medium", sel ? "text-black/85" : "text-black/55")}>{lang.label}</span>
-                              {sel && <Check className="h-3.5 w-3.5 text-black/70 ml-auto" />}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {state.isMultilingual && (
-                      <div>
-                        <p className="text-xs text-black/40 uppercase tracking-widest font-semibold mb-1">
-                          Additional regional languages <span className="text-black/25">(up to 2)</span>
-                        </p>
-                        <p className="text-xs text-black/35 mb-3">English is always included. Select 1–2 more regional languages.</p>
-                        <div className="grid grid-cols-3 gap-2">
-                          {LANGUAGES.filter(l => l.code !== state.primaryLanguage && l.code !== "english").map(lang => {
-                            const sel = state.additionalLanguages.includes(lang.code);
-                            const maxed = state.additionalLanguages.length >= 2 && !sel;
-                            return (
-                              <button
-                                key={lang.code}
-                                disabled={maxed}
-                                onClick={() => {
-                                  const next = sel
-                                    ? state.additionalLanguages.filter(c => c !== lang.code)
-                                    : [...state.additionalLanguages, lang.code];
-                                  update({ additionalLanguages: next });
-                                }}
-                                className={cn(
-                                  "p-3 rounded-xl border-2 flex items-center gap-2 transition-all text-sm",
-                                  sel ? "border-black/70 bg-black/[0.04]" : maxed ? "border-black/[0.04] opacity-40 cursor-not-allowed" : "border-black/[0.07] hover:border-black/25",
-                                )}
-                              >
-                                <span className="text-base">{lang.flag}</span>
-                                <span className={cn("font-medium", sel ? "text-black/85" : "text-black/55")}>{lang.label}</span>
-                                {sel && <Check className="h-3.5 w-3.5 text-black/70 ml-auto" />}
-                              </button>
-                            );
-                          })}
-                        </div>
-
-                        {/* Managed stack info for Tamil */}
-                        {([state.primaryLanguage, ...state.additionalLanguages].includes("tamil")) && (
-                          <div className="mt-3 p-3 rounded-xl bg-violet-50 border border-violet-100 text-xs text-violet-700">
-                            <strong>Tamil detected</strong> — AI stack auto-set: Sarvam STT · Gemini 2.5 Flash LLM · Cartesia TTS · VoBiz Telephony
+                          { l: "STT",  v: stack.asrProvider,       note: hasTamil ? "Tamil optimised" : "" },
+                          { l: "LLM",  v: "Sarvam M1",             note: "Indian language optimised" },
+                          { l: "TTS",  v: stack.ttsProvider,        note: "" },
+                          { l: "TEL",  v: stack.telephonyProvider,  note: "" },
+                        ].map(item => (
+                          <div key={item.l} className="text-center p-2.5 rounded-lg bg-white/[0.04] border border-white/[0.05]">
+                            <div className="text-white/25 text-[9px] uppercase tracking-widest">{item.l}</div>
+                            <div className="text-white/80 text-xs font-semibold capitalize mt-0.5">{item.v}</div>
+                            {item.note && <div className="text-violet-400/70 text-[9px] mt-0.5">{item.note}</div>}
                           </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Step 3: Requirements */}
-                {managedStep === 2 && (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <p className="text-xs text-black/40 uppercase tracking-widest font-semibold mb-1.5">Agent Name</p>
-                        <Input
-                          placeholder="e.g. Priya, Alex, Sarah"
-                          value={state.agentName}
-                          onChange={e => update({ agentName: e.target.value })}
-                          className="bg-black/[0.04] border-black/[0.07] text-black/75 text-sm"
-                        />
-                      </div>
-                      <div>
-                        <p className="text-xs text-black/40 uppercase tracking-widest font-semibold mb-1.5">Company Name</p>
-                        <Input
-                          placeholder="e.g. Acme Corp, QuickPay"
-                          value={state.companyName}
-                          onChange={e => update({ companyName: e.target.value })}
-                          className="bg-black/[0.04] border-black/[0.07] text-black/75 text-sm"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="text-xs text-black/40 uppercase tracking-widest font-semibold mb-2">Call Direction</p>
-                      <div className="flex gap-2">
-                        {(["inbound", "outbound", "both"] as AgentDirection[]).map(dir => (
-                          <button
-                            key={dir}
-                            onClick={() => update({ agentDirection: dir })}
-                            className={cn(
-                              "flex-1 py-2 px-3 rounded-lg border-2 text-sm font-medium capitalize transition-all",
-                              state.agentDirection === dir
-                                ? "border-black/70 bg-black/[0.06] text-black/85"
-                                : "border-black/[0.07] text-black/45 hover:border-black/25",
-                            )}
-                          >
-                            {dir}
-                          </button>
                         ))}
                       </div>
                     </div>
-
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <p className="text-xs text-black/40 uppercase tracking-widest font-semibold">What should the agent do?</p>
-                        <p className="text-xs text-black/30">Write in simple English — no grammar needed</p>
-                      </div>
-                      <Textarea
-                        placeholder={`Describe what the agent should say and do. For example:\n\n"Agent should call customers who missed EMI payment. First ask if they remember, then remind the due amount, ask when they will pay, if they say date note it down, if they refuse escalate."\n\nDon't worry about grammar — just explain clearly.`}
-                        value={state.callFlowDescription}
-                        onChange={e => update({ callFlowDescription: e.target.value })}
-                        className="bg-black/[0.04] border-black/[0.07] text-black/75 text-sm min-h-[140px] resize-none placeholder:text-black/25 leading-relaxed"
-                      />
-                    </div>
-
-                    <Button
-                      onClick={generatePrompt}
-                      disabled={!state.callFlowDescription.trim() || isGenerating}
-                      className="w-full gap-2 bg-violet-600 hover:bg-violet-700 text-white"
-                    >
-                      {isGenerating ? (
-                        <><Loader2 className="h-4 w-4 animate-spin" /> Generating prompt...</>
-                      ) : (
-                        <><Sparkles className="h-4 w-4" /> Generate AI Prompt</>
-                      )}
-                    </Button>
-
-                    {state.generatedPrompt && (
-                      <div>
-                        <p className="text-xs text-black/40 uppercase tracking-widest font-semibold mb-1.5">Generated Prompt <span className="text-black/25 normal-case tracking-normal">(you can edit this)</span></p>
-                        <Textarea
-                          value={state.generatedPrompt}
-                          onChange={e => update({ generatedPrompt: e.target.value })}
-                          className="bg-black/[0.04] border-black/[0.07] text-black/70 text-xs font-mono min-h-[200px] resize-none leading-relaxed"
-                        />
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Step 4: Voice */}
-                {managedStep === 3 && (
-                  <div>
-                    <p className="text-xs text-black/40 uppercase tracking-widest font-semibold mb-4">
-                      Choose a voice for your agent <span className="normal-case tracking-normal text-black/25">— powered by Cartesia</span>
-                    </p>
-
-                    {isLoadingVoices ? (
-                      <div className="flex items-center gap-2 py-12 justify-center text-black/40">
-                        <Loader2 className="h-5 w-5 animate-spin" />
-                        <span className="text-sm">Loading voices...</span>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-2 gap-2.5">
-                        {state.voices.map(voice => {
-                          const sel = state.selectedVoiceId === voice.id;
-                          const isPlaying = playing === voice.id;
-                          return (
-                            <div
-                              key={voice.id}
-                              onClick={() => update({ selectedVoiceId: voice.id })}
-                              className={cn(
-                                "p-4 rounded-xl border-2 cursor-pointer transition-all flex items-center gap-3",
-                                sel ? "border-black/70 bg-black/[0.04]" : "border-black/[0.07] hover:border-black/25",
-                              )}
-                            >
-                              <div className={cn(
-                                "h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0",
-                                voice.gender === "Female" ? "bg-rose-100 text-rose-600" : "bg-blue-100 text-blue-600",
-                              )}>
-                                {voice.name.charAt(0)}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className={cn("font-semibold text-sm", sel ? "text-black/85" : "text-black/70")}>{voice.name}</div>
-                                <div className="text-xs text-black/35 truncate">{voice.description || voice.gender}</div>
-                              </div>
-                              <button
-                                onClick={e => { e.stopPropagation(); void preview(voice.id); }}
-                                className={cn(
-                                  "h-7 w-7 rounded-full flex items-center justify-center shrink-0 transition-colors",
-                                  isPlaying
-                                    ? "bg-black/85 text-white"
-                                    : "bg-black/[0.07] text-black/50 hover:bg-black/15",
-                                )}
-                                title="Preview voice"
-                              >
-                                {isPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
-                              </button>
-                              {sel && <Check className="h-4 w-4 text-black/70 shrink-0" />}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {state.voices.length === 0 && !isLoadingVoices && (
-                      <div className="text-center py-12 text-black/35 text-sm">
-                        <Volume2 className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                        No voices available — Cartesia key not configured in admin
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Step 5: Skills */}
-                {managedStep === 4 && (
-                  <div className="space-y-5">
-                    <div>
-                      <p className="text-xs text-black/40 uppercase tracking-widest font-semibold mb-3">Agent Skills</p>
-                      <div
-                        className={cn(
-                          "p-4 rounded-xl border-2 transition-all",
-                          state.callTransferEnabled ? "border-black/40 bg-black/[0.03]" : "border-black/[0.07]",
-                        )}
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center gap-2">
-                            <PhoneForwarded className="h-4 w-4 text-black/50" />
-                            <span className="font-semibold text-sm text-black/75">Call Transfer</span>
-                          </div>
-                          <button
-                            onClick={() => update({ callTransferEnabled: !state.callTransferEnabled })}
-                            className={cn(
-                              "w-10 h-5.5 rounded-full transition-colors relative",
-                              state.callTransferEnabled ? "bg-black/85" : "bg-black/15",
-                            )}
-                          >
-                            <span className={cn(
-                              "absolute top-0.5 w-4.5 h-4.5 rounded-full bg-white shadow transition-transform",
-                              state.callTransferEnabled ? "translate-x-5" : "translate-x-0.5",
-                            )} />
-                          </button>
-                        </div>
-                        <p className="text-xs text-black/40 mb-3">Agent can transfer calls to a human agent when needed</p>
-                        {state.callTransferEnabled && (
-                          <div>
-                            <p className="text-xs text-black/40 mb-1.5">Transfer to number</p>
-                            <Input
-                              placeholder="+91 9876543210"
-                              value={state.callTransferNumber}
-                              onChange={e => update({ callTransferNumber: e.target.value })}
-                              className="bg-white border-black/[0.12] text-black/75 text-sm"
-                            />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="p-4 rounded-xl border-2 border-black/[0.07] bg-emerald-50/60">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Check className="h-4 w-4 text-emerald-600" />
-                        <span className="font-semibold text-sm text-black/75">Auto Summarize Calls</span>
-                        <Badge className="text-[9px] bg-emerald-100 text-emerald-700 border-0 px-1.5">Always On</Badge>
-                      </div>
-                      <p className="text-xs text-black/40">After each call, AI automatically generates a 3-bullet summary covering caller intent, key info, and outcome.</p>
-                    </div>
-
-                    <div className="p-4 rounded-xl border-2 border-black/[0.07] bg-black/[0.02]">
-                      <p className="text-xs text-black/35 uppercase tracking-widest font-semibold mb-2">AI Stack (auto-configured)</p>
-                      {(() => {
-                        const langs = [state.primaryLanguage, ...state.additionalLanguages];
-                        const stack = getManagedStack(langs);
-                        return (
-                          <div className="grid grid-cols-4 gap-2">
-                            {[
-                              { label: "STT", value: stack.asrProvider },
-                              { label: "LLM", value: `${stack.llmProvider} / ${stack.llmModel}` },
-                              { label: "TTS", value: stack.ttsProvider },
-                              { label: "TEL", value: stack.telephonyProvider },
-                            ].map(item => (
-                              <div key={item.label} className="text-center p-2 rounded-lg bg-white border border-black/[0.06]">
-                                <div className="text-[9px] text-black/30 uppercase tracking-widest">{item.label}</div>
-                                <div className="text-xs font-semibold text-black/65 capitalize mt-0.5">{item.value}</div>
-                              </div>
-                            ))}
-                          </div>
-                        );
-                      })()}
-                    </div>
-
-                    <div className="p-4 rounded-xl border-2 border-black/[0.07]">
-                      <p className="text-xs text-black/35 uppercase tracking-widest font-semibold mb-2">Connecting soon</p>
-                      <div className="flex flex-wrap gap-2">
-                        {["WhatsApp", "SMS", "CRM Integration", "Zapier", "Salesforce"].map(item => (
-                          <span key={item} className="px-2.5 py-1 rounded-full bg-black/[0.04] text-xs text-black/35 border border-black/[0.06]">
-                            {item} — coming soon
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </>
+                  );
+                })()}
+              </div>
             )}
 
-            {/* ════════════════════════════════════════════════════════════ */}
-            {/* BYOP FLOW                                                    */}
-            {/* ════════════════════════════════════════════════════════════ */}
+            {/* Step 3: Agent Details */}
+            {currentStep === "details" && (
+              <div>
+                <p className="text-white/40 text-xs uppercase tracking-[0.2em] mb-3">Step 3</p>
+                <h2 className="text-3xl font-bold text-white mb-2">Tell us about<br />your agent</h2>
+                <p className="text-white/40 text-sm mb-8">Basic details that personalise the agent's identity.</p>
 
-            {state.mode === "byop" && (
-              <div className="space-y-5">
-                <div>
-                  <p className="text-xs text-black/40 uppercase tracking-widest font-semibold mb-1.5">Agent Name</p>
-                  <Input
-                    placeholder="New Assistant"
-                    value={state.agentName}
-                    onChange={e => update({ agentName: e.target.value })}
-                    className="bg-black/[0.04] border-black/[0.07] text-black/75"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { label: "Transcriber (ASR)", key: "byopAsr", opts: ["deepgram", "assemblyai", "whisper", "azure", "sarvam"] },
-                    { label: "Language Model", key: "byopLlm", opts: ["openai", "anthropic", "google", "groq", "deepseek", "mistral"] },
-                    { label: "Voice (TTS)", key: "byopTts", opts: ["elevenlabs", "openai", "cartesia", "azure", "aws_polly", "deepgram"] },
-                    { label: "Telephony", key: "byopTelephony", opts: ["twilio", "plivo", "vonage", "vobiz"] },
-                  ].map(field => (
-                    <div key={field.key} className="bg-black/[0.04] border border-black/[0.04] rounded-xl p-3.5 space-y-2">
-                      <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">{field.label}</p>
-                      <select
-                        value={(state as any)[field.key]}
-                        onChange={e => update({ [field.key]: e.target.value } as any)}
-                        className="w-full bg-white/70 border border-black/[0.07] rounded-md text-xs text-black/70 py-1.5 px-2"
-                      >
-                        {field.opts.map(o => (
-                          <option key={o} value={o}>{o}</option>
-                        ))}
-                      </select>
+                <div className="space-y-5">
+                  <div>
+                    <label className="text-white/50 text-xs uppercase tracking-[0.15em] block mb-2">Agent's name</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Arushi, Priya, Alex"
+                      value={state.agentName}
+                      onChange={e => update({ agentName: e.target.value })}
+                      className="w-full bg-white/[0.05] border border-white/[0.1] rounded-xl px-4 py-3.5 text-white text-base placeholder:text-white/20 focus:outline-none focus:border-violet-500/60 focus:bg-white/[0.07] transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-white/50 text-xs uppercase tracking-[0.15em] block mb-2">Company name</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. QuickPay, Acme Corp"
+                      value={state.companyName}
+                      onChange={e => update({ companyName: e.target.value })}
+                      className="w-full bg-white/[0.05] border border-white/[0.1] rounded-xl px-4 py-3.5 text-white text-base placeholder:text-white/20 focus:outline-none focus:border-violet-500/60 focus:bg-white/[0.07] transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-white/50 text-xs uppercase tracking-[0.15em] block mb-3">Call direction</label>
+                    <div className="flex gap-3">
+                      {(["inbound", "outbound", "both"] as AgentDirection[]).map(dir => (
+                        <button
+                          key={dir}
+                          onClick={() => update({ agentDirection: dir })}
+                          className={cn(
+                            "flex-1 py-3 px-4 rounded-xl border font-medium text-sm capitalize transition-all",
+                            state.agentDirection === dir
+                              ? "border-violet-500/70 bg-violet-500/10 text-white"
+                              : "border-white/[0.08] bg-white/[0.02] text-white/40 hover:border-white/20",
+                          )}
+                        >
+                          {dir}
+                        </button>
+                      ))}
                     </div>
-                  ))}
-                </div>
-
-                <div>
-                  <p className="text-xs text-black/40 uppercase tracking-widest font-semibold mb-1.5">System Prompt</p>
-                  <Textarea
-                    value={state.byopPrompt}
-                    onChange={e => update({ byopPrompt: e.target.value })}
-                    className="bg-black/[0.04] border-black/[0.07] text-black/75 text-sm min-h-[120px] resize-none"
-                  />
+                  </div>
                 </div>
               </div>
             )}
+
+            {/* Step 4: Requirements */}
+            {currentStep === "requirements" && (
+              <div>
+                <p className="text-white/40 text-xs uppercase tracking-[0.2em] mb-3">Step 4</p>
+                <h2 className="text-3xl font-bold text-white mb-2">What should your<br />agent do?</h2>
+                <p className="text-white/40 text-sm mb-8">
+                  Describe the call flow in your own words — no grammar needed. Our AI will turn it into a professional prompt.
+                </p>
+
+                <textarea
+                  placeholder={`Just describe it naturally:\n\n"Agent should call customers who have unpaid EMI. First remind them politely, ask when they will pay, note the date, if they say they already paid ask for reference number, if they refuse escalate to human."\n\nDon't worry about grammar — just explain what the agent should do.`}
+                  value={state.callFlowDescription}
+                  onChange={e => update({ callFlowDescription: e.target.value })}
+                  rows={7}
+                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3.5 text-white text-sm placeholder:text-white/20 focus:outline-none focus:border-violet-500/60 transition-all resize-none leading-relaxed mb-4"
+                />
+
+                <button
+                  onClick={generatePrompt}
+                  disabled={!state.callFlowDescription.trim() || isGenerating}
+                  className={cn(
+                    "w-full flex items-center justify-center gap-2.5 py-3.5 rounded-xl font-semibold text-sm transition-all",
+                    !state.callFlowDescription.trim() || isGenerating
+                      ? "bg-white/[0.05] text-white/25 cursor-not-allowed"
+                      : "bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white shadow-lg shadow-violet-500/20",
+                  )}
+                >
+                  {isGenerating
+                    ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating your prompt...</>
+                    : <><Sparkles className="h-4 w-4" /> Generate AI Prompt</>
+                  }
+                </button>
+
+                {state.generatedPrompt && (
+                  <div className="mt-5">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Check className="h-4 w-4 text-emerald-400" />
+                      <p className="text-emerald-400 text-xs font-semibold uppercase tracking-widest">Prompt generated — review & edit below</p>
+                    </div>
+                    <textarea
+                      value={state.generatedPrompt}
+                      onChange={e => update({ generatedPrompt: e.target.value })}
+                      rows={10}
+                      className="w-full bg-white/[0.03] border border-white/[0.07] rounded-xl px-4 py-3.5 text-white/70 text-xs font-mono focus:outline-none focus:border-violet-500/40 transition-all resize-none leading-relaxed"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Step 5: Knowledge Base */}
+            {currentStep === "knowledge" && (
+              <div>
+                <p className="text-white/40 text-xs uppercase tracking-[0.2em] mb-3">Step 5</p>
+                <h2 className="text-3xl font-bold text-white mb-2">Add a knowledge<br />base <span className="text-white/30">(optional)</span></h2>
+                <p className="text-white/40 text-sm mb-8">
+                  Upload FAQs, product info, or any text your agent should know. The agent references this during calls. You can skip and add it later.
+                </p>
+
+                {!state.kbContent ? (
+                  <div
+                    className="border-2 border-dashed border-white/[0.1] rounded-2xl p-10 text-center hover:border-white/20 transition-colors cursor-pointer group"
+                    onClick={() => fileInputRef.current?.click()}
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
+                  >
+                    <div className="h-14 w-14 rounded-2xl bg-white/[0.05] group-hover:bg-white/[0.08] flex items-center justify-center mx-auto mb-4 transition-colors">
+                      <Upload className="h-7 w-7 text-white/40" />
+                    </div>
+                    <p className="text-white/60 font-semibold mb-1">Drop a file or click to upload</p>
+                    <p className="text-white/25 text-sm">TXT, PDF, DOCX — max 5 MB</p>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".txt,.pdf,.docx,.md,.csv"
+                      className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+                    />
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 flex items-center gap-3 mb-4">
+                    <FileText className="h-5 w-5 text-emerald-400 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white/80 text-sm font-semibold truncate">{state.kbFileName || "Pasted content"}</p>
+                      <p className="text-white/35 text-xs">{state.kbContent.length.toLocaleString()} characters</p>
+                    </div>
+                    <button onClick={() => update({ kbContent: "", kbFileName: "" })} className="text-white/30 hover:text-white/60 transition-colors">
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
+
+                <p className="text-white/25 text-xs text-center my-4">— or —</p>
+
+                <textarea
+                  placeholder="Paste your FAQs, product description, pricing, or any knowledge here..."
+                  value={state.kbContent && !state.kbFileName ? state.kbContent : ""}
+                  onChange={e => update({ kbContent: e.target.value, kbFileName: "" })}
+                  rows={5}
+                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3.5 text-white text-sm placeholder:text-white/20 focus:outline-none focus:border-violet-500/60 transition-all resize-none leading-relaxed"
+                />
+
+                <div className="mt-4 p-3.5 rounded-xl border border-white/[0.06] bg-white/[0.02] flex items-center gap-2.5">
+                  <SkipForward className="h-4 w-4 text-white/30 shrink-0" />
+                  <p className="text-white/35 text-xs">You can skip this step and add a knowledge base later from the agent settings.</p>
+                </div>
+              </div>
+            )}
+
+            {/* Step 6: Voice */}
+            {currentStep === "voice" && (
+              <div>
+                <p className="text-white/40 text-xs uppercase tracking-[0.2em] mb-3">Step 6</p>
+                <h2 className="text-3xl font-bold text-white mb-2">Choose your<br />agent's voice</h2>
+                <p className="text-white/40 text-sm mb-8">
+                  <span className="text-violet-400 font-medium">Arushi</span> is pre-selected — warm Indian English female. Press ▶ to hear any voice.
+                </p>
+
+                {loadingVoices ? (
+                  <div className="flex items-center justify-center py-16 text-white/30 gap-2">
+                    <Loader2 className="h-5 w-5 animate-spin" /> Loading voices...
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2.5">
+                    {state.voices.map(voice => {
+                      const sel      = state.selectedVoiceId === voice.id;
+                      const isPlay   = playing === voice.id;
+                      const isArushi = voice.name.toLowerCase().includes("arushi");
+                      return (
+                        <div
+                          key={voice.id}
+                          onClick={() => update({ selectedVoiceId: voice.id })}
+                          className={cn(
+                            "p-4 rounded-xl border cursor-pointer transition-all duration-200 flex items-center gap-3 group",
+                            sel
+                              ? "border-violet-500/70 bg-violet-500/10 shadow-[0_0_0_1px_rgba(139,92,246,0.25)]"
+                              : "border-white/[0.06] bg-white/[0.02] hover:border-white/15 hover:bg-white/[0.04]",
+                          )}
+                        >
+                          <div className={cn(
+                            "h-11 w-11 rounded-full flex items-center justify-center text-sm font-bold shrink-0",
+                            voice.gender === "Female" ? "bg-rose-500/20 text-rose-400" : "bg-blue-500/20 text-blue-400",
+                          )}>
+                            {voice.name.charAt(0)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className={cn("font-semibold text-sm", sel ? "text-white" : "text-white/70")}>{voice.name}</span>
+                              {isArushi && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-400 font-semibold">Default</span>}
+                            </div>
+                            <div className="text-xs text-white/30 mt-0.5 truncate">{voice.description}</div>
+                          </div>
+                          <button
+                            onClick={e => { e.stopPropagation(); void preview(voice.id); }}
+                            className={cn(
+                              "h-8 w-8 rounded-full flex items-center justify-center shrink-0 transition-all",
+                              isPlay ? "bg-violet-500 text-white" : "bg-white/[0.08] text-white/50 hover:bg-white/15 hover:text-white/80",
+                            )}
+                          >
+                            {isPlay ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+                          </button>
+                          {sel && <Check className="h-4 w-4 text-violet-400 shrink-0" />}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Step 7: Skills & Finish */}
+            {currentStep === "skills" && (
+              <div>
+                <p className="text-white/40 text-xs uppercase tracking-[0.2em] mb-3">Step 7 — Final step</p>
+                <h2 className="text-3xl font-bold text-white mb-2">Agent skills &<br />final setup</h2>
+                <p className="text-white/40 text-sm mb-8">Enable capabilities your agent needs. Auto-summarize is always on.</p>
+
+                <div className="space-y-4">
+                  {/* Call Transfer */}
+                  <div className={cn(
+                    "p-5 rounded-xl border transition-all",
+                    state.callTransferEnabled ? "border-violet-500/50 bg-violet-500/5" : "border-white/[0.07] bg-white/[0.02]",
+                  )}>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2.5">
+                        <PhoneForwarded className={cn("h-4.5 w-4.5", state.callTransferEnabled ? "text-violet-400" : "text-white/40")} />
+                        <span className="font-semibold text-white/80 text-sm">Call Transfer</span>
+                      </div>
+                      <button
+                        onClick={() => update({ callTransferEnabled: !state.callTransferEnabled })}
+                        className={cn(
+                          "relative w-11 h-6 rounded-full transition-colors",
+                          state.callTransferEnabled ? "bg-violet-500" : "bg-white/[0.12]",
+                        )}
+                      >
+                        <span className={cn(
+                          "absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform",
+                          state.callTransferEnabled ? "translate-x-5" : "translate-x-0.5",
+                        )} />
+                      </button>
+                    </div>
+                    <p className="text-white/35 text-xs mb-3">Agent can transfer calls to a human agent when needed</p>
+                    {state.callTransferEnabled && (
+                      <input
+                        type="tel"
+                        placeholder="+91 9876543210"
+                        value={state.callTransferNumber}
+                        onChange={e => update({ callTransferNumber: e.target.value })}
+                        className="w-full bg-white/[0.06] border border-white/[0.1] rounded-lg px-3 py-2.5 text-white text-sm placeholder:text-white/25 focus:outline-none focus:border-violet-500/60 transition-all"
+                      />
+                    )}
+                  </div>
+
+                  {/* Auto Summarize — always on */}
+                  <div className="p-5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 flex items-start gap-3">
+                    <div className="h-8 w-8 rounded-lg bg-emerald-500/15 flex items-center justify-center shrink-0 mt-0.5">
+                      <Check className="h-4 w-4 text-emerald-400" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="font-semibold text-white/80 text-sm">Auto-Summarize Calls</span>
+                        <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-semibold border border-emerald-500/20">Always On</span>
+                      </div>
+                      <p className="text-white/35 text-xs leading-relaxed">After each call, AI generates a 3-bullet summary — caller intent, key info exchanged, and outcome.</p>
+                    </div>
+                  </div>
+
+                  {/* Coming soon */}
+                  <div className="p-4 rounded-xl border border-white/[0.05] bg-white/[0.02]">
+                    <p className="text-white/25 text-xs uppercase tracking-widest mb-2">Coming soon</p>
+                    <div className="flex flex-wrap gap-2">
+                      {["WhatsApp Integration", "SMS Service", "CRM Sync", "Zapier", "Salesforce"].map(item => (
+                        <span key={item} className="px-2.5 py-1 rounded-full bg-white/[0.04] text-xs text-white/25 border border-white/[0.05]">{item}</span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Summary card */}
+                  <div className="p-5 rounded-xl border border-white/[0.07] bg-white/[0.02] mt-2">
+                    <p className="text-white/30 text-xs uppercase tracking-widest mb-3">Your agent summary</p>
+                    <div className="space-y-2">
+                      {[
+                        { k: "Name",      v: state.agentName || "—" },
+                        { k: "Company",   v: state.companyName || "—" },
+                        { k: "Use case",  v: USE_CASES.find(u => u.id === state.useCase)?.label || "—" },
+                        { k: "Language",  v: [LANGUAGES.find(l => l.code === state.primaryLanguage)?.label, ...state.additionalLanguages.map(c => LANGUAGES.find(l => l.code === c)?.label)].filter(Boolean).join(", ") },
+                        { k: "Voice",     v: state.voices.find(v => v.id === state.selectedVoiceId)?.name || "Arushi" },
+                        { k: "Direction", v: state.agentDirection },
+                      ].map(row => (
+                        <div key={row.k} className="flex items-center justify-between text-sm">
+                          <span className="text-white/30">{row.k}</span>
+                          <span className="text-white/70 font-medium capitalize">{row.v}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ════════════════════════════════════════════
+                BYOP FLOW
+            ════════════════════════════════════════════ */}
+            {state.mode === "byop" && (
+              <div>
+                <p className="text-white/40 text-xs uppercase tracking-[0.2em] mb-3">BYOP Configuration</p>
+                <h2 className="text-3xl font-bold text-white mb-2">Configure your<br />provider stack</h2>
+                <p className="text-white/40 text-sm mb-8">Choose your own providers and write a system prompt.</p>
+
+                <div className="space-y-5">
+                  <div>
+                    <label className="text-white/50 text-xs uppercase tracking-widest block mb-2">Agent Name</label>
+                    <input type="text" placeholder="My Assistant" value={state.agentName} onChange={e => update({ agentName: e.target.value })}
+                      className="w-full bg-white/[0.05] border border-white/[0.1] rounded-xl px-4 py-3 text-white placeholder:text-white/25 focus:outline-none focus:border-violet-500/60 transition-all" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { label: "Transcriber (ASR)", key: "byopAsr",       opts: ["deepgram","assemblyai","whisper","azure","sarvam"] },
+                      { label: "Language Model",    key: "byopLlm",       opts: ["openai","anthropic","google","sarvam","groq","deepseek","mistral"] },
+                      { label: "Voice (TTS)",       key: "byopTts",       opts: ["elevenlabs","openai","cartesia","azure","aws_polly","deepgram"] },
+                      { label: "Telephony",         key: "byopTelephony", opts: ["twilio","plivo","vonage","vobiz"] },
+                    ].map(field => (
+                      <div key={field.key} className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-3.5">
+                        <p className="text-white/30 text-[10px] font-semibold uppercase tracking-widest mb-2">{field.label}</p>
+                        <select
+                          value={(state as any)[field.key]}
+                          onChange={e => update({ [field.key]: e.target.value } as any)}
+                          className="w-full bg-white/[0.07] border border-white/[0.08] rounded-lg text-xs text-white/70 py-2 px-2.5 focus:outline-none focus:border-violet-500/60"
+                        >
+                          {field.opts.map(o => <option key={o} value={o} className="bg-zinc-900">{o}</option>)}
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                  <div>
+                    <label className="text-white/50 text-xs uppercase tracking-widest block mb-2">System Prompt</label>
+                    <textarea
+                      value={state.byopPrompt} onChange={e => update({ byopPrompt: e.target.value })} rows={6}
+                      className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-white/80 text-sm focus:outline-none focus:border-violet-500/60 transition-all resize-none"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+          </SlideStep>
+        </div>
+      </div>
+
+      {/* Bottom navigation */}
+      {state.mode !== null && (
+        <div className="px-8 py-5 border-t border-white/[0.06] shrink-0 flex items-center justify-between">
+          <div className="flex gap-1.5">
+            {state.mode === "managed" && MANAGED_STEPS.map((_, i) => (
+              <div
+                key={i}
+                className={cn(
+                  "h-1 rounded-full transition-all duration-300",
+                  i < stepIdx ? "w-5 bg-white/40"
+                  : i === stepIdx ? "w-5 bg-violet-400"
+                  : "w-2 bg-white/[0.12]",
+                )}
+              />
+            ))}
           </div>
 
-          {/* Footer actions */}
-          {state.mode !== null && (
-            <div className="px-6 py-4 border-t border-black/[0.06] shrink-0 flex items-center justify-between bg-black/[0.015]">
-              <span className="text-xs text-black/35">
-                {state.mode === "managed"
-                  ? `Step ${managedStep + 1} of ${MANAGED_STEPS.length}`
-                  : "BYOP configuration"}
-              </span>
+          <div className="flex items-center gap-3">
+            {state.mode === "managed" && currentStep === "knowledge" && (
+              <button
+                onClick={() => go(1)}
+                className="text-white/35 hover:text-white/60 text-sm flex items-center gap-1.5 transition-colors"
+              >
+                <SkipForward className="h-3.5 w-3.5" /> Skip for now
+              </button>
+            )}
 
-              {state.mode === "byop" ? (
-                <Button
-                  onClick={handleCreate}
-                  disabled={isCreating || create.isPending || !state.agentName.trim()}
-                  className="gap-2 bg-black/85 hover:bg-black/90 text-white"
-                >
-                  {(isCreating || create.isPending) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                  Create Agent
-                </Button>
-              ) : managedStep < MANAGED_STEPS.length - 1 ? (
-                <Button
-                  onClick={async () => {
-                    if (managedStep === 3) await loadVoices();
-                    setManagedStep(s => s + 1);
-                    if (managedStep === 2) await loadVoices();
-                  }}
-                  disabled={
-                    (managedStep === 0 && !state.useCase) ||
-                    (managedStep === 2 && !state.callFlowDescription.trim())
-                  }
-                  className="gap-2 bg-black/85 hover:bg-black/90 text-white"
-                >
-                  Next <ChevronRight className="h-4 w-4" />
-                </Button>
-              ) : (
-                <Button
-                  onClick={handleCreate}
-                  disabled={isCreating || create.isPending}
-                  className="gap-2 bg-black/85 hover:bg-black/90 text-white"
-                >
-                  {(isCreating || create.isPending) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                  Create Agent
-                </Button>
-              )}
-            </div>
-          )}
+            {state.mode === "byop" || currentStep === "skills" ? (
+              <button
+                onClick={handleCreate}
+                disabled={isCreating || create.isPending}
+                className={cn(
+                  "flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm transition-all",
+                  isCreating || create.isPending
+                    ? "bg-white/[0.08] text-white/30 cursor-not-allowed"
+                    : "bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white shadow-lg shadow-violet-500/25",
+                )}
+              >
+                {isCreating || create.isPending
+                  ? <><Loader2 className="h-4 w-4 animate-spin" /> Creating...</>
+                  : <><Check className="h-4 w-4" /> Create Agent</>
+                }
+              </button>
+            ) : (
+              <button
+                onClick={() => go(1)}
+                disabled={
+                  (currentStep === "use-case"    && !state.useCase) ||
+                  (currentStep === "requirements" && !state.callFlowDescription.trim())
+                }
+                className={cn(
+                  "flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm transition-all",
+                  (currentStep === "use-case"    && !state.useCase) ||
+                  (currentStep === "requirements" && !state.callFlowDescription.trim())
+                    ? "bg-white/[0.06] text-white/25 cursor-not-allowed"
+                    : "bg-white/[0.08] hover:bg-white/[0.13] text-white border border-white/[0.08]",
+                )}
+              >
+                Continue <ChevronRight className="h-4 w-4" />
+              </button>
+            )}
+          </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      )}
+    </div>,
+    document.body,
   );
 }
