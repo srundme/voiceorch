@@ -569,7 +569,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
 
   const { data: calls, isLoading: callsLoading } = useListCalls(
     { agentId },
-    { query: { enabled: activeTab === "logs", queryKey: getListCallsQueryKey({ agentId }) } }
+    { query: { enabled: activeTab === "logs" || activeTab === "agent", queryKey: getListCallsQueryKey({ agentId }) } }
   );
 
   const update          = useUpdateAgent();
@@ -865,86 +865,165 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
         {/* ═══════════ TAB CONTENTS ═══════════ */}
 
         {/* ── Tab 1: Agent ── */}
-        <TabsContent value="agent" className="flex-1 overflow-y-auto m-0 px-5 py-4">
-          <div className="max-w-2xl space-y-4">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35 mb-1.5">Agent Name</p>
-              <Input value={agentName} onChange={e => { setAgentName(e.target.value); setDirty(true); }}
-                className="bg-black/[0.06] border-black/[0.07] text-black/75" />
-            </div>
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35 mb-1.5">Agent Type</p>
-              <Select value={agentType} onValueChange={mark(setAgentType)}>
-                <SelectTrigger className="h-9 text-sm bg-black/[0.06] border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
-                <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07]">
-                  <SelectItem value="general" className="text-black/75">General Purpose</SelectItem>
-                  <SelectItem value="lead_qualification" className="text-black/75">Lead Qualification</SelectItem>
-                  <SelectItem value="customer_support" className="text-black/75">Customer Support</SelectItem>
-                  <SelectItem value="appointment_booking" className="text-black/75">Appointment Booking</SelectItem>
-                  <SelectItem value="survey" className="text-black/75">Survey</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35 mb-1.5">Welcome Message</p>
-              <Textarea value={greetingMessage} onChange={e => { setGreetingMessage(e.target.value); setDirty(true); }}
-                placeholder="First thing the agent says when a call connects"
-                className="bg-black/[0.06] border-black/[0.07] text-black/75 text-sm resize-none min-h-[72px] placeholder:text-black/35" />
-            </div>
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Agent Prompt</p>
-                <button type="button" className="flex items-center gap-1 text-[11px] text-black/35 hover:text-black/75"
-                  onClick={() => { setSystemPrompt("You are a helpful and professional AI voice assistant. Be concise, clear, and friendly in all responses."); setDirty(true); }}>
-                  <Sparkles className="h-3 w-3" /> Generate
-                </button>
+        <TabsContent value="agent" className="flex-1 overflow-hidden m-0">
+          <div className="flex h-full">
+            {/* ── Left: form ── */}
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+              <div className="max-w-xl space-y-4">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35 mb-1.5">Agent Name</p>
+                  <Input value={agentName} onChange={e => { setAgentName(e.target.value); setDirty(true); }}
+                    className="bg-black/[0.06] border-black/[0.07] text-black/75" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35 mb-1.5">Agent Type</p>
+                  <Select value={agentType} onValueChange={mark(setAgentType)}>
+                    <SelectTrigger className="h-9 text-sm bg-black/[0.06] border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-white border-black/[0.07]">
+                      <SelectItem value="general" className="text-black/75">General Purpose</SelectItem>
+                      <SelectItem value="lead_qualification" className="text-black/75">Lead Qualification</SelectItem>
+                      <SelectItem value="customer_support" className="text-black/75">Customer Support</SelectItem>
+                      <SelectItem value="appointment_booking" className="text-black/75">Appointment Booking</SelectItem>
+                      <SelectItem value="survey" className="text-black/75">Survey</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35 mb-1.5">Welcome Message</p>
+                  <Textarea value={greetingMessage} onChange={e => { setGreetingMessage(e.target.value); setDirty(true); }}
+                    placeholder="First thing the agent says when a call connects"
+                    className="bg-black/[0.06] border-black/[0.07] text-black/75 text-sm resize-none min-h-[72px] placeholder:text-black/35" />
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Agent Prompt</p>
+                    <button type="button" className="flex items-center gap-1 text-[11px] text-black/35 hover:text-black/75"
+                      onClick={() => { setSystemPrompt("You are a helpful and professional AI voice assistant. Be concise, clear, and friendly in all responses."); setDirty(true); }}>
+                      <Sparkles className="h-3 w-3" /> Generate
+                    </button>
+                  </div>
+                  <Textarea value={systemPrompt} onChange={e => { setSystemPrompt(e.target.value); setDirty(true); }}
+                    placeholder="You are a helpful AI voice assistant…"
+                    className="bg-black/[0.06] border-black/[0.07] text-black/75 text-sm resize-none min-h-[200px] placeholder:text-black/35" />
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    <p className="text-[10px] text-black/35 mr-1 self-center">Insert variable:</p>
+                    {[
+                      { var: "{caller_salutation}", tip: "sir / ma'am — requires Gender Detection in Engine tab", color: "violet" },
+                      { var: "{caller_number}",     tip: "Caller's phone number",                                color: "sky"    },
+                      { var: "{agent_name}",         tip: "This agent's name",                                   color: "emerald"},
+                      { var: "{date}",               tip: "Current date",                                        color: "amber"  },
+                    ].map(chip => (
+                      <button
+                        key={chip.var}
+                        type="button"
+                        title={chip.tip}
+                        onClick={() => { setSystemPrompt(p => p + " " + chip.var); setDirty(true); }}
+                        className={`text-[11px] rounded-md border px-2 py-0.5 font-mono transition-colors ${
+                          chip.color === "violet" ? "bg-violet-950/40 border-violet-800/50 text-violet-400 hover:bg-violet-900/50" :
+                          chip.color === "sky"    ? "bg-sky-950/40 border-sky-800/50 text-sky-400 hover:bg-sky-900/50" :
+                          chip.color === "emerald"? "bg-black/[0.06] border-black/[0.10] text-black/75 hover:bg-black/[0.10]" :
+                                                    "bg-amber-950/40 border-amber-800/50 text-amber-400 hover:bg-amber-900/50"
+                        }`}
+                      >
+                        {chip.var}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35 mb-1.5">Webhook URL <span className="normal-case text-black/35 font-normal">(optional)</span></p>
+                  <Input value={webhookUrl} onChange={e => { setWebhookUrl(e.target.value); setDirty(true); }}
+                    placeholder="https://your-server.com/webhook"
+                    className="bg-black/[0.06] border-black/[0.07] text-black/75 text-sm placeholder:text-black/35" />
+                  <p className="text-[10px] text-black/35 mt-1">Fires a POST with call summary JSON after each call ends.</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35 mb-1.5">Knowledge Base</p>
+                  <Select value={knowledgeBaseId?.toString() ?? "none"} onValueChange={v => { setKnowledgeBaseId(v === "none" ? null : parseInt(v)); setDirty(true); }}>
+                    <SelectTrigger className="h-8 text-xs bg-black/[0.06] border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-white border-black/[0.07]">
+                      <SelectItem value="none" className="text-black/50 text-xs">— None —</SelectItem>
+                      {(kbs ?? []).map(kb => <SelectItem key={kb.id} value={kb.id.toString()} className="text-black/75 text-xs">{kb.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[10px] text-black/35 mt-1">Relevant chunks are injected into the system prompt on every call.</p>
+                </div>
               </div>
-              <Textarea value={systemPrompt} onChange={e => { setSystemPrompt(e.target.value); setDirty(true); }}
-                placeholder="You are a helpful AI voice assistant…"
-                className="bg-black/[0.06] border-black/[0.07] text-black/75 text-sm resize-none min-h-[200px] placeholder:text-black/35" />
-              {/* Variable chips */}
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                <p className="text-[10px] text-black/35 mr-1 self-center">Insert variable:</p>
-                {[
-                  { var: "{caller_salutation}", tip: "sir / ma'am — requires Gender Detection in Engine tab", color: "violet" },
-                  { var: "{caller_number}",     tip: "Caller's phone number",                                color: "sky"    },
-                  { var: "{agent_name}",         tip: "This agent's name",                                   color: "emerald"},
-                  { var: "{date}",               tip: "Current date",                                        color: "amber"  },
-                ].map(chip => (
-                  <button
-                    key={chip.var}
-                    type="button"
-                    title={chip.tip}
-                    onClick={() => { setSystemPrompt(p => p + " " + chip.var); setDirty(true); }}
-                    className={`text-[11px] rounded-md border px-2 py-0.5 font-mono transition-colors ${
-                      chip.color === "violet" ? "bg-violet-950/40 border-violet-800/50 text-violet-400 hover:bg-violet-900/50" :
-                      chip.color === "sky"    ? "bg-sky-950/40 border-sky-800/50 text-sky-400 hover:bg-sky-900/50" :
-                      chip.color === "emerald"? "bg-black/[0.06] border-black/[0.10] text-black/75 hover:bg-black/[0.10]" :
-                                                "bg-amber-950/40 border-amber-800/50 text-amber-400 hover:bg-amber-900/50"
-                    }`}
-                  >
-                    {chip.var}
-                  </button>
-                ))}
+            </div>
+
+            {/* ── Right: dark info panel ── */}
+            <div className="w-56 shrink-0 border-l border-black/[0.06] overflow-y-auto p-3 space-y-3 bg-[#F5F5F7]">
+              {/* Agent Status */}
+              <div className="bg-[#1C1C1E] rounded-xl p-3.5">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-[11px] font-semibold text-white/50">Agent Status</p>
+                  <span className={`flex items-center gap-1 text-[10px] font-semibold ${agent.status === "active" ? "text-emerald-400" : "text-white/30"}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${agent.status === "active" ? "bg-emerald-400" : "bg-white/20"}`} />
+                    {agent.status === "active" ? "Active" : "Inactive"}
+                  </span>
+                </div>
+                <div className="space-y-2.5">
+                  {[
+                    { label: "Total calls",   value: String(agent.totalCalls ?? 0) },
+                    { label: "Success rate",  value: `${successRate}%` },
+                    { label: "Avg duration",  value: agent.avgDurationSeconds != null ? `~${agent.avgDurationSeconds}s` : "—" },
+                  ].map(row => (
+                    <div key={row.label} className="flex items-center justify-between">
+                      <span className="text-[11px] text-white/35">{row.label}</span>
+                      <span className="text-[11px] font-semibold text-white/80 tabular-nums">{row.value}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35 mb-1.5">Webhook URL <span className="normal-case text-black/35 font-normal">(optional)</span></p>
-              <Input value={webhookUrl} onChange={e => { setWebhookUrl(e.target.value); setDirty(true); }}
-                placeholder="https://your-server.com/webhook"
-                className="bg-black/[0.06] border-black/[0.07] text-black/75 text-sm placeholder:text-black/35" />
-              <p className="text-[10px] text-black/35 mt-1">Fires a POST with call summary JSON after each call ends.</p>
-            </div>
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35 mb-1.5">Knowledge Base</p>
-              <Select value={knowledgeBaseId?.toString() ?? "none"} onValueChange={v => { setKnowledgeBaseId(v === "none" ? null : parseInt(v)); setDirty(true); }}>
-                <SelectTrigger className="h-8 text-xs bg-black/[0.06] border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
-                <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07]">
-                  <SelectItem value="none" className="text-black/50 text-xs">— None —</SelectItem>
-                  {(kbs ?? []).map(kb => <SelectItem key={kb.id} value={kb.id.toString()} className="text-black/75 text-xs">{kb.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <p className="text-[10px] text-black/35 mt-1">Relevant chunks are injected into the system prompt on every call.</p>
+
+              {/* Recent Activity */}
+              <div className="bg-[#1C1C1E] rounded-xl p-3.5">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-[11px] font-semibold text-white/50">Recent Activity</p>
+                </div>
+                {callsLoading ? (
+                  <div className="space-y-2">
+                    {[1,2,3].map(i => <div key={i} className="h-8 bg-white/5 rounded-lg animate-pulse" />)}
+                  </div>
+                ) : !calls?.length ? (
+                  <p className="text-[11px] text-white/25 italic">No calls yet</p>
+                ) : (
+                  <div className="space-y-2">
+                    {calls.slice(0, 5).map(call => (
+                      <div key={call.id} className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] text-white/50 font-mono truncate flex-1">
+                          {call.fromNumber ?? `#${call.id}`}
+                        </span>
+                        <span className={`text-[10px] font-semibold shrink-0 ${
+                          call.status === "completed" ? "text-emerald-400" :
+                          call.status === "failed"    ? "text-red-400" :
+                                                        "text-white/30"
+                        }`}>
+                          {call.status === "completed" ? "✓" : call.status === "failed" ? "✗" : "·"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Provider Stack */}
+              <div className="bg-[#1C1C1E] rounded-xl p-3.5">
+                <p className="text-[11px] font-semibold text-white/50 mb-3">Provider Stack</p>
+                <div className="space-y-2">
+                  {[
+                    { label: "ASR",       value: agent.asrProvider },
+                    { label: "LLM",       value: agent.llmProvider },
+                    { label: "TTS",       value: agent.ttsProvider },
+                    { label: "Telephony", value: agent.telephonyProvider },
+                  ].map(row => (
+                    <div key={row.label} className="flex items-center justify-between">
+                      <span className="text-[10px] text-white/30 uppercase tracking-wide">{row.label}</span>
+                      <span className="text-[11px] font-medium text-white/65 capitalize">{row.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </TabsContent>

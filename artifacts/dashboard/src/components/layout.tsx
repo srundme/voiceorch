@@ -52,7 +52,7 @@ function NavItems({ onClick }: { onClick?: () => void }) {
     <div className="flex flex-col gap-5">
       {NAV_SECTIONS.map((section) => (
         <div key={section.label}>
-          <p className="px-2 mb-1 text-[10px] font-semibold tracking-widest text-black/30 uppercase select-none">
+          <p className="px-2 mb-1 text-[10px] font-semibold tracking-widest text-white/25 uppercase select-none">
             {section.label}
           </p>
           <div className="flex flex-col gap-0.5">
@@ -65,13 +65,13 @@ function NavItems({ onClick }: { onClick?: () => void }) {
                   <div
                     className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-[13px] transition-colors cursor-pointer ${
                       isActive
-                        ? "bg-black/[0.06] text-black/85 font-medium"
-                        : "text-black/45 hover:bg-black/[0.04] hover:text-black/70"
+                        ? "bg-white/10 text-white font-medium"
+                        : "text-white/45 hover:bg-white/[0.06] hover:text-white/75"
                     }`}
                   >
                     <item.icon className="w-3.5 h-3.5 shrink-0" />
                     {item.name}
-                    {isActive && <ChevronRight className="w-3 h-3 ml-auto text-black/20" />}
+                    {isActive && <ChevronRight className="w-3 h-3 ml-auto text-white/20" />}
                   </div>
                 </Link>
               );
@@ -91,20 +91,20 @@ function WalletBadge() {
   return (
     <Link href="/app/wallet">
       <div className={`flex items-center gap-2 px-2.5 py-2 rounded-md cursor-pointer transition-colors ${
-        location.startsWith("/app/wallet") ? "bg-black/[0.06]" : "hover:bg-black/[0.04]"
+        location.startsWith("/app/wallet") ? "bg-white/10" : "hover:bg-white/[0.06]"
       }`}>
-        <Wallet className="w-3.5 h-3.5 text-black/35 shrink-0" />
+        <Wallet className="w-3.5 h-3.5 text-white/30 shrink-0" />
         <div className="flex-1 min-w-0">
-          <p className="text-[10px] text-black/30 uppercase tracking-widest">Balance</p>
+          <p className="text-[10px] text-white/25 uppercase tracking-widest">Balance</p>
           {wallet ? (
-            <p className={`text-sm font-semibold tabular-nums ${isLow ? "text-amber-600" : "text-black/70"}`}>
+            <p className={`text-sm font-semibold tabular-nums ${isLow ? "text-amber-400" : "text-white/70"}`}>
               ${(wallet.balanceCents / 100).toFixed(2)}
             </p>
           ) : (
-            <div className="h-4 w-12 bg-black/08 rounded animate-pulse" />
+            <div className="h-4 w-12 bg-white/10 rounded animate-pulse" />
           )}
         </div>
-        {isLow && <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
+        {isLow && <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
       </div>
     </Link>
   );
@@ -122,19 +122,19 @@ function UserMenu() {
     <div className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-black/[0.04] transition-colors w-full text-left"
+        className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-white/[0.06] transition-colors w-full text-left"
       >
-        <div className="h-6 w-6 rounded-full bg-black/08 flex items-center justify-center shrink-0 ring-1 ring-black/[0.08]">
-          <span className="text-[9px] font-bold text-black/50">{initials}</span>
+        <div className="h-6 w-6 rounded-full bg-white/10 flex items-center justify-center shrink-0 ring-1 ring-white/10">
+          <span className="text-[9px] font-bold text-white/60">{initials}</span>
         </div>
-        <span className="text-[13px] text-black/55 truncate flex-1 min-w-0">{name}</span>
-        <ChevronDown className="w-3 h-3 text-black/25 shrink-0" />
+        <span className="text-[13px] text-white/50 truncate flex-1 min-w-0">{name}</span>
+        <ChevronDown className="w-3 h-3 text-white/25 shrink-0" />
       </button>
       {open && (
-        <div className="absolute bottom-full left-0 right-0 mb-1 bg-white border border-black/[0.07] rounded-xl shadow-lg overflow-hidden z-50">
+        <div className="absolute bottom-full left-0 right-0 mb-1 bg-[#2C2C2E] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50">
           <button
             onClick={() => { signOut(); setOpen(false); }}
-            className="flex items-center gap-2 px-3 py-2 text-[13px] text-black/50 hover:bg-black/[0.04] hover:text-black/70 w-full transition-colors"
+            className="flex items-center gap-2 px-3 py-2 text-[13px] text-white/50 hover:bg-white/[0.06] hover:text-white/75 w-full transition-colors"
           >
             <LogOut className="w-3.5 h-3.5" />
             Sign out
@@ -149,11 +149,11 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   return (
     <div className="flex flex-col h-full glass-sidebar">
       {/* Logo */}
-      <div className="flex items-center gap-2.5 px-4 h-12 border-b border-black/[0.06] shrink-0">
-        <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-black/[0.06] ring-1 ring-black/[0.06]">
-          <SnapServeIcon size={14} className="text-black/60" />
+      <div className="flex items-center gap-2.5 px-4 h-12 border-b border-white/[0.06] shrink-0">
+        <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-white/10 ring-1 ring-white/10">
+          <SnapServeIcon size={14} className="text-white/70" />
         </div>
-        <SnapServeLogo size="sm" className="text-black/70" />
+        <SnapServeLogo size="sm" className="text-white/75" />
       </div>
 
       {/* Nav */}
@@ -162,16 +162,16 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
       </nav>
 
       {/* Wallet */}
-      <div className="px-2 pb-2 border-t border-black/[0.06] pt-2 shrink-0">
+      <div className="px-2 pb-2 border-t border-white/[0.06] pt-2 shrink-0">
         <WalletBadge />
       </div>
 
       {/* User + status */}
-      <div className="px-2 py-2 border-t border-black/[0.06] shrink-0 space-y-2">
+      <div className="px-2 py-2 border-t border-white/[0.06] shrink-0 space-y-2">
         <UserMenu />
         <div className="flex items-center gap-2 px-1">
           <div className="h-2 w-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50" />
-          <span className="text-[11px] text-black/30">System Online</span>
+          <span className="text-[11px] text-white/25">System Online</span>
         </div>
       </div>
     </div>
@@ -182,7 +182,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-[#F5F5F7]">
+    <div className="flex h-screen w-full overflow-hidden">
       {/* Desktop sidebar */}
       <aside className="hidden md:block w-48 shrink-0">
         <SidebarContent />
@@ -194,7 +194,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <Button
             variant="ghost"
             size="icon"
-            className="md:hidden fixed top-3 left-3 z-50 h-8 w-8 text-black/50"
+            className="md:hidden fixed top-3 left-3 z-50 h-8 w-8 text-white/50"
           >
             <Menu className="h-4 w-4" />
           </Button>
@@ -205,7 +205,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </Sheet>
 
       {/* Page content */}
-      <main className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
+      <main className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden bg-[#F5F5F7]">
         {children}
       </main>
     </div>

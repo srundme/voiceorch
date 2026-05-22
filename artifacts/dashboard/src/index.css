@@ -69,43 +69,41 @@
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
-   Light — Clean modern SaaS (Apple/Linear/Stripe inspired)
-   Page: #F5F5F7 grey  ·  Sidebar: #FFFFFF  ·  Panels: #FFFFFF + shadow
+   Light + Dark Sidebar
+   Page:    #F5F5F7 (Apple page grey)
+   Sidebar: #1C1C1E (near-black charcoal)
+   Panels:  #FFFFFF white cards with subtle shadow
    ────────────────────────────────────────────────────────────────────────── */
 :root {
   --button-outline: rgba(0,0,0,.10);
   --badge-outline:  rgba(0,0,0,.06);
   --opaque-button-border-intensity: -8;
-  --elevate-1: rgba(255,255,255,.70);
-  --elevate-2: rgba(255,255,255,.95);
 
   /* Page background — Apple's #F5F5F7 */
   --background: 240 5% 96%;
   --foreground: 240 3% 12%;
-
-  /* Dividers / borders */
   --border: 240 6% 89%;
 
-  /* White cards with very slight shadow */
+  /* White cards */
   --card: 0 0% 100%;
   --card-foreground: 240 3% 12%;
   --card-border: 240 6% 90%;
 
-  /* Sidebar — pure white, separated by border */
-  --sidebar: 0 0% 100%;
-  --sidebar-foreground: 240 3% 18%;
-  --sidebar-border: 240 6% 90%;
-  --sidebar-primary: 240 5% 93%;
-  --sidebar-primary-foreground: 240 3% 12%;
-  --sidebar-accent: 240 5% 95%;
-  --sidebar-accent-foreground: 240 3% 15%;
-  --sidebar-ring: 240 5% 75%;
+  /* Sidebar — dark charcoal #1C1C1E */
+  --sidebar: 240 4% 11%;
+  --sidebar-foreground: 0 0% 90%;
+  --sidebar-border: 240 4% 15%;
+  --sidebar-primary: 240 4% 18%;
+  --sidebar-primary-foreground: 0 0% 98%;
+  --sidebar-accent: 240 4% 15%;
+  --sidebar-accent-foreground: 0 0% 70%;
+  --sidebar-ring: 240 4% 40%;
 
   --popover: 0 0% 100%;
   --popover-foreground: 240 3% 12%;
   --popover-border: 240 6% 88%;
 
-  /* Primary = near-black for contrast */
+  /* Primary = near-black */
   --primary: 240 4% 14%;
   --primary-foreground: 0 0% 98%;
 
@@ -141,35 +139,25 @@
   --shadow:     0px 2px 8px 0px rgba(0,0,0,.07), 0px 1px 2px -1px rgba(0,0,0,.04);
   --shadow-md:  0px 4px 16px -1px rgba(0,0,0,.09), 0px 2px 4px -2px rgba(0,0,0,.05);
   --shadow-lg:  0px 10px 30px -3px rgba(0,0,0,.09), 0px 4px 8px -4px rgba(0,0,0,.05);
-  --shadow-xl:  0px 20px 40px -5px rgba(0,0,0,.11), 0px 8px 16px -6px rgba(0,0,0,.05);
-  --shadow-2xl: 0px 30px 60px -12px rgba(0,0,0,.15);
 
-  /* Glass — used only for popovers / dropdowns / modals */
+  /* Glass — for popovers, dropdowns, dialogs */
   --glass-bg:     rgba(255,255,255,0.94);
   --glass-border: rgba(0,0,0,0.07);
   --glass-blur:   16px;
-  --glass-shadow: 0 4px 20px rgba(0,0,0,0.08), 0 1px 0 rgba(255,255,255,1) inset;
+  --glass-shadow: 0 4px 20px rgba(0,0,0,0.08);
 
-  /* Sidebar — solid white */
-  --sidebar-glass-bg:     #ffffff;
-  --sidebar-glass-border: rgba(0,0,0,0.07);
+  /* Sidebar — solid dark */
+  --sidebar-glass-bg:     #1C1C1E;
+  --sidebar-glass-border: rgba(255,255,255,0.06);
 }
 
 .dark {
-  --button-outline: rgba(235,237,241,.09);
-  --badge-outline:  rgba(235,237,241,.05);
-  --opaque-button-border-intensity: 9;
-  --elevate-1: rgba(255,255,255,.04);
-  --elevate-2: rgba(255,255,255,.08);
-
   --background: 235 15% 8%;
   --foreground: 220 17% 93%;
   --border: 240 5% 22%;
-
   --card: 235 12% 12%;
   --card-foreground: 220 17% 93%;
   --card-border: 240 5% 22%;
-
   --sidebar: 235 15% 6%;
   --sidebar-foreground: 220 17% 93%;
   --sidebar-border: 240 5% 18%;
@@ -178,49 +166,36 @@
   --sidebar-accent: 240 5% 17%;
   --sidebar-accent-foreground: 220 17% 93%;
   --sidebar-ring: 220 15% 55%;
-
   --popover: 235 12% 10%;
   --popover-foreground: 220 17% 93%;
   --popover-border: 240 5% 22%;
-
   --primary: 220 15% 85%;
   --primary-foreground: 235 15% 8%;
-
   --secondary: 240 5% 22%;
   --secondary-foreground: 220 17% 93%;
   --muted: 240 5% 17%;
   --muted-foreground: 228 5% 60%;
   --accent: 240 5% 19%;
   --accent-foreground: 220 17% 93%;
-
   --destructive: 0 62.8% 45%;
   --destructive-foreground: 0 0% 98%;
-
   --input: 240 5% 19%;
   --ring: 220 15% 70%;
-
   --chart-1: 220 17% 90%;
   --chart-2: 217 80% 65%;
   --chart-3: 280 60% 65%;
   --chart-4: 160 60% 50%;
   --chart-5: 35 85% 60%;
-
   --glass-bg:     rgba(30,32,48,0.85);
   --glass-border: rgba(255,255,255,0.08);
-  --glass-shadow: 0 4px 24px rgba(0,0,0,0.25), 0 1px 0 rgba(255,255,255,0.06) inset;
-
-  --sidebar-glass-bg:     rgba(20,22,35,0.95);
-  --sidebar-glass-border: rgba(255,255,255,0.06);
+  --glass-shadow: 0 4px 24px rgba(0,0,0,0.25);
+  --sidebar-glass-bg:     #0F0F11;
+  --sidebar-glass-border: rgba(255,255,255,0.05);
 }
 
 @layer base {
-  * {
-    @apply border-border;
-  }
-  html, body, #root {
-    height: 100%;
-    min-height: 100%;
-  }
+  * { @apply border-border; }
+  html, body, #root { height: 100%; min-height: 100%; }
   body {
     @apply font-sans antialiased text-foreground selection:bg-primary/15;
     background-color: #F5F5F7;
@@ -228,7 +203,7 @@
 }
 
 @layer components {
-  /* Glass — for popovers, dropdowns, modals, tooltips */
+  /* Glass — popovers, dropdowns, modals */
   .glass {
     background: var(--glass-bg);
     backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
@@ -236,7 +211,7 @@
     border: 1px solid var(--glass-border);
     box-shadow: var(--glass-shadow);
   }
-  /* Sidebar — solid white with right border */
+  /* Sidebar — solid dark charcoal */
   .glass-sidebar {
     background: var(--sidebar-glass-bg);
     border-right: 1px solid var(--sidebar-glass-border);
