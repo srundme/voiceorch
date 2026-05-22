@@ -76,7 +76,7 @@ function ContinueButton({
         transition-all duration-150 select-none
         ${disabled
           ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-          : "bg-black text-white hover:bg-gray-800 cursor-pointer shadow-sm"
+          : "bg-black text-[#080808] hover:bg-gray-800 cursor-pointer shadow-sm"
         }
       `}
     >
@@ -109,7 +109,7 @@ function NameStep({ value, onChange, onNext }: { value: string; onChange: (v: st
     <div className="w-full max-w-xl">
       <p className="text-[13px] font-semibold text-emerald-600 tracking-widest uppercase mb-4">Question 1</p>
       <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 leading-tight mb-2">
-        What's your name? <span className="text-emerald-500">*</span>
+        What's your name? <span className="text-[#353536]">*</span>
       </h2>
       <p className="text-gray-400 text-base mb-8">We'll use this to personalise your experience.</p>
       <input
@@ -167,7 +167,7 @@ function RoleStep({
             className={`
               flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all duration-150 cursor-pointer
               ${value === opt.id
-                ? "border-black bg-black text-white"
+                ? "border-black bg-black text-[#080808]"
                 : "border-gray-200 hover:border-gray-400 text-gray-800"
               }
             `}
@@ -235,7 +235,7 @@ function ReferralStep({
             className={`
               flex items-center gap-3.5 px-4 py-3.5 rounded-xl border-2 text-left transition-all duration-150 cursor-pointer
               ${value === opt.id
-                ? "border-black bg-black text-white"
+                ? "border-black bg-black text-[#080808]"
                 : "border-gray-200 hover:border-gray-400 text-gray-800"
               }
             `}
@@ -293,7 +293,7 @@ function VoiceAgentStep({
             className={`
               flex-1 flex flex-col items-center gap-2 py-6 rounded-2xl border-2 font-semibold text-base transition-all cursor-pointer
               ${value === opt.v
-                ? "border-black bg-black text-white"
+                ? "border-black bg-black text-[#080808]"
                 : "border-gray-200 hover:border-gray-400 text-gray-800"
               }
             `}
@@ -357,7 +357,7 @@ function PlatformsStep({ value, onChange, onNext, loading }: {
               className={`
                 relative flex flex-col items-start p-4 rounded-xl border-2 text-left transition-all cursor-pointer
                 ${selected
-                  ? "border-black bg-black text-white"
+                  ? "border-black bg-black text-[#080808]"
                   : `border-gray-200 hover:border-gray-400 text-gray-800 ${opt.color}`
                 }
               `}
@@ -405,7 +405,7 @@ function DoneScreen({ name }: { name: string }) {
         animate={{ scale: 1, rotate: 0, transition: { type: "spring", stiffness: 260, damping: 18 } }}
         className="w-20 h-20 rounded-full bg-black flex items-center justify-center mb-8 shadow-xl"
       >
-        <Check className="h-10 w-10 text-white" strokeWidth={2.5} />
+        <Check className="h-10 w-10 text-[#080808]" strokeWidth={2.5} />
       </motion.div>
       <h2 className="text-4xl font-bold text-gray-900 mb-3">
         You're all set{name ? `, ${name.split(" ")[0]}` : ""}! 🎉
@@ -417,7 +417,7 @@ function DoneScreen({ name }: { name: string }) {
         whileHover={{ scale: 1.03 }}
         whileTap={{ scale: 0.97 }}
         onClick={goToDashboard}
-        className="flex items-center gap-2.5 px-8 py-4 bg-black text-white rounded-xl font-semibold text-base hover:bg-gray-800 transition-colors shadow-md cursor-pointer"
+        className="flex items-center gap-2.5 px-8 py-4 bg-black text-[#080808] rounded-xl font-semibold text-base hover:bg-gray-800 transition-colors shadow-md cursor-pointer"
       >
         Go to Dashboard
         <ArrowRight className="h-5 w-5" />
@@ -489,7 +489,7 @@ export default function OnboardingPage() {
           <header className="flex items-center justify-between px-6 pt-6 pb-2">
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 rounded-lg bg-black flex items-center justify-center">
-                <span className="text-white text-xs font-bold">V</span>
+                <span className="text-[#080808] text-xs font-bold">V</span>
               </div>
               <span className="font-semibold text-sm text-gray-900 tracking-tight">VoiceOrch</span>
             </div>
