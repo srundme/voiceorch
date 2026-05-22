@@ -600,15 +600,8 @@ const ARUSHI_VOICE: CartesiaVoice = {
   language: "en",
 };
 
-const CARTESIA_FALLBACK_VOICES: CartesiaVoice[] = [
-  ARUSHI_VOICE,
-  { id: "a0e99841-438c-4a64-b679-ae501e7d6091", name: "Priya",  gender: "Female", language: "en", description: "Friendly Indian English female" },
-  { id: "bf991597-6135-4d4d-a38c-2516e5d30000", name: "Rohan",  gender: "Male",   language: "en", description: "Confident Indian English male" },
-  { id: "726d5ae5-055f-4c3d-8355-d9677de68937", name: "Maya",   gender: "Female", language: "en", description: "Soft South Indian English female" },
-  { id: "5c42302c-194b-4d0c-ba1a-8cb485c84ab9", name: "Kavya",  gender: "Female", language: "en", description: "Tamil/Telugu English female" },
-  { id: "f114a467-c40a-4db8-bc72-d64e2e69fbd1", name: "Ananya", gender: "Female", language: "hi", description: "Hindi female voice" },
-  { id: "83b36547-9e87-4d14-9f16-19437f4059a4", name: "Vikram", gender: "Male",   language: "hi", description: "Hindi male voice" },
-];
+// Only Arushi is a confirmed real Cartesia Indian voice — used until API fetch succeeds
+const CARTESIA_FALLBACK_VOICES: CartesiaVoice[] = [ARUSHI_VOICE];
 
 const PREVIEW_TEXT = "Hello! I'm your AI voice assistant. How can I help you today?";
 
@@ -664,6 +657,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
   const [ttsVoice, setTtsVoice]                             = useState("");
   const [cartesiaVoices, setCartesiaVoices]                 = useState<CartesiaVoice[]>(CARTESIA_FALLBACK_VOICES);
   const [loadingCartesiaVoices, setLoadingCartesiaVoices]   = useState(false);
+  const [cartesiaVoiceSource, setCartesiaVoiceSource]       = useState<"cartesia" | "fallback">("fallback");
   const [voicePlaying, setVoicePlaying]                     = useState<string | null>(null);
   const voiceAudioRef                                       = useRef<HTMLAudioElement | null>(null);
   const [telephony, setTelephony]                           = useState("");
@@ -689,15 +683,16 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
   // ── Cartesia voice loader ────────────────────────────────────────
   useEffect(() => {
     if (ttsProvider !== "cartesia") return;
-    if (cartesiaVoices.length > CARTESIA_FALLBACK_VOICES.length) return;
+    if (cartesiaVoiceSource === "cartesia") return; // already loaded from API
     setLoadingCartesiaVoices(true);
     apiFetch("/api/wizard/voices")
-      .then(r => r.ok ? r.json() as Promise<{ voices: CartesiaVoice[] }> : null)
+      .then(r => r.ok ? r.json() as Promise<{ voices: CartesiaVoice[]; source: string }> : null)
       .then(data => {
         if (!data?.voices?.length) return;
         const arushi = data.voices.find(v => v.name.toLowerCase().includes("arushi")) ?? ARUSHI_VOICE;
         const rest   = data.voices.filter(v => v.id !== arushi.id);
         setCartesiaVoices([arushi, ...rest]);
+        setCartesiaVoiceSource(data.source === "cartesia" ? "cartesia" : "fallback");
       })
       .catch(() => {})
       .finally(() => setLoadingCartesiaVoices(false));
@@ -1369,7 +1364,10 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                         }
                       </button>
                     </div>
-                    {ttsVoice && (
+                    {cartesiaVoiceSource === "fallback" && !loadingCartesiaVoices && (
+                      <p className="text-[10px] text-amber-600/70 mt-1">Configure Cartesia key in Admin → Managed Keys to see all Indian voices</p>
+                    )}
+                    {ttsVoice && cartesiaVoiceSource === "cartesia" && (
                       <p className="text-[10px] text-black/35 mt-1 font-mono truncate">{ttsVoice}</p>
                     )}
                   </div>

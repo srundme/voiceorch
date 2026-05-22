@@ -123,19 +123,11 @@ const LANGUAGE_VALUES: Record<string, {
   },
 };
 
-// ── Indian-language Cartesia voice fallback ───────────────────────────────────
+// ── Known-good Cartesia voice IDs (verified real) ────────────────────────────
+// Only Arushi is used as fallback — all others come from live Cartesia API.
+const ARUSHI_VOICE = { id: "2ee87190-8f84-4925-97da-e52547f9462c", name: "Arushi", gender: "Female", language: "en", description: "Warm Indian English female" };
 
-const FALLBACK_VOICES = [
-  { id: "2ee87190-8f84-4925-97da-e52547f9462c", name: "Arushi", gender: "Female", language: "en", description: "Warm Indian English female" },
-  { id: "a0e99841-438c-4a64-b679-ae501e7d6091", name: "Priya",  gender: "Female", language: "en", description: "Friendly Indian English female" },
-  { id: "bf991597-6135-4d4d-a38c-2516e5d30000", name: "Rohan",  gender: "Male",   language: "en", description: "Confident Indian English male" },
-  { id: "726d5ae5-055f-4c3d-8355-d9677de68937", name: "Maya",   gender: "Female", language: "en", description: "Soft South Indian English female" },
-  { id: "5c42302c-194b-4d0c-ba1a-8cb485c84ab9", name: "Kavya",  gender: "Female", language: "en", description: "Tamil/Telugu English female" },
-  { id: "f114a467-c40a-4db8-bc72-d64e2e69fbd1", name: "Ananya", gender: "Female", language: "hi", description: "Hindi female voice" },
-  { id: "83b36547-9e87-4d14-9f16-19437f4059a4", name: "Vikram", gender: "Male",   language: "hi", description: "Hindi male voice" },
-];
-
-// Indian language codes (ISO 639-1)
+// Indian language codes recognised by Cartesia
 const INDIAN_LANGS = new Set(["hi", "ta", "te", "kn", "ml", "bn", "mr", "gu", "pa", "or", "as", "en-IN"]);
 
 // ── Helper: get setting from DB ──────────────────────────────────────────────
@@ -151,7 +143,8 @@ router.get("/wizard/voices", requireDbUser, async (req, res): Promise<void> => {
   const cartesiaKey = await getSetting("managed_cartesia_key");
 
   if (!cartesiaKey) {
-    res.json({ voices: FALLBACK_VOICES, source: "fallback" });
+    // No key configured — only return the one verified Indian voice
+    res.json({ voices: [ARUSHI_VOICE], source: "fallback" });
     return;
   }
 
@@ -164,20 +157,32 @@ router.get("/wizard/voices", requireDbUser, async (req, res): Promise<void> => {
     });
 
     if (!response.ok) {
-      res.json({ voices: FALLBACK_VOICES, source: "fallback" });
+      res.json({ voices: [ARUSHI_VOICE], source: "fallback" });
       return;
     }
 
     const data = await response.json() as any[];
 
-    // Split into Indian-language voices and English voices
-    const indianLang = (data as any[]).filter((v: any) => v.language && INDIAN_LANGS.has(v.language as string));
-    const englishVoices = (data as any[]).filter((v: any) => !v.language || v.language === "en");
+    // Indian-language voices (native speakers)
+    const indianLang = data.filter((v: any) => v.language && INDIAN_LANGS.has(v.language as string));
 
-    // Use Indian-language voices first; pad with English if fewer than 5
-    const combined = indianLang.length >= 5
-      ? indianLang
-      : [...indianLang, ...englishVoices.slice(0, Math.max(5, 20 - indianLang.length))];
+    // English voices that are Arushi or named with common Indian names (accent-based)
+    const INDIAN_NAMES = new Set(["arushi","priya","ananya","kavya","maya","pooja","shruti","riya",
+      "neha","divya","meera","rani","aisha","rohan","arjun","vikram","raj","rahul","amit","nikhil"]);
+    const indianEnglish = data.filter((v: any) =>
+      (v.language === "en" || !v.language) &&
+      INDIAN_NAMES.has((v.name as string || "").toLowerCase().split(" ")[0]!)
+    );
+
+    // Combine: Indian-language first, then Indian-accented English, remove duplicates
+    const seen = new Set<string>();
+    const combined: any[] = [];
+    for (const v of [...indianLang, ...indianEnglish]) {
+      if (!seen.has(v.id)) { seen.add(v.id); combined.push(v); }
+    }
+
+    // Always make sure Arushi is present (it's a confirmed Indian voice)
+    if (!seen.has(ARUSHI_VOICE.id)) combined.unshift(ARUSHI_VOICE);
 
     const voices = combined.map((v: any) => ({
       id: v.id,
@@ -190,7 +195,7 @@ router.get("/wizard/voices", requireDbUser, async (req, res): Promise<void> => {
     res.json({ voices, source: "cartesia" });
   } catch (err) {
     logger.warn({ err }, "Cartesia voices fetch failed — returning fallback");
-    res.json({ voices: FALLBACK_VOICES, source: "fallback" });
+    res.json({ voices: [ARUSHI_VOICE], source: "fallback" });
   }
 });
 
