@@ -4,7 +4,7 @@ import type { ConversationTurn, LLMAdapter, ToolDefinition } from "../../types.j
 
 /**
  * Google Gemini — streaming generative AI with function calling
- * Models: gemini-2.0-flash, gemini-1.5-pro, gemini-1.5-flash
+ * Models: gemini-2.5-flash (recommended), gemini-2.0-flash, gemini-1.5-pro, gemini-1.5-flash
  *
  * Tool calling: supported on all Gemini 1.5+ and 2.x models.
  * Gemini uses its own FunctionDeclaration format (type values are uppercase).
@@ -18,7 +18,7 @@ export class GoogleLLM implements LLMAdapter {
 
   constructor(apiKey: string, model: string | null) {
     this.genAI = new GoogleGenerativeAI(apiKey);
-    this.model = model ?? "gemini-2.0-flash";
+    this.model = model ?? "gemini-2.5-flash";
   }
 
   async chat(
