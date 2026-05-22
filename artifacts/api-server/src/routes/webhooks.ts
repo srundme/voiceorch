@@ -101,12 +101,35 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
   res.set("Content-Type", "text/xml").send(getVobizAnswerXML(wsBaseUrl, agentId, platformTelephony));
 });
 
+// ── VoBiz status callbacks ───────────────────────────────────────────────────
+
+router.post("/webhooks/vobiz/status", (req, res): void => {
+  req.log.info({ body: req.body }, "VoBiz status callback");
+  res.sendStatus(204);
+});
+
 // ── Twilio status callbacks ──────────────────────────────────────────────────
 
 router.post("/webhooks/twilio/status", (req, res): void => {
   // Twilio posts call status updates here — log and acknowledge
   req.log.info({ body: req.body }, "Twilio status callback");
   res.sendStatus(204);
+});
+
+// ── P2-A: Transfer XML callback ───────────────────────────────────────────────
+// VoBiz fetches this URL after a transfer is initiated via the REST API.
+// Returns VoiceXML with a <Dial> to connect the caller to the target number.
+
+import { buildTransferXml } from "../orchestration/telephony/transfer.js";
+
+router.get("/webhooks/vobiz/transfer-xml", (req, res): void => {
+  const target = String(req.query["target"] ?? "").trim();
+  if (!target) {
+    res.status(400).set("Content-Type", "text/xml")
+      .send("<Response><Speak>Transfer target missing.</Speak><Hangup/></Response>");
+    return;
+  }
+  res.set("Content-Type", "text/xml").send(buildTransferXml(target));
 });
 
 export default router;

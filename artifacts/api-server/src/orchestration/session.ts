@@ -315,6 +315,80 @@ export function getAllSessions(): Array<{ sessionId: string; callId: number; sta
   }));
 }
 
+/**
+ * P2-A: Trigger a call transfer on an active session.
+ * - "cold": immediately redirects via VoBiz REST API
+ * - "warm": speaks a handoff message first, then redirects
+ * Returns true if transfer was initiated, false if session not found.
+ */
+export async function triggerTransfer(
+  callDbId: number,
+  type: "warm" | "cold",
+  target: string,
+  warmMessage: string,
+  xmlCallbackUrl: string,
+  vobizAuthId: string,
+  vobizAuthToken: string,
+): Promise<boolean> {
+  const { transferVobizCall } = await import("./telephony/transfer.js");
+
+  // Find the active session
+  let sessionId: string | null = null;
+  let externalCallId: string | null = null;
+  for (const [sid, s] of sessions.entries()) {
+    if (s.callId === callDbId) {
+      sessionId = sid;
+      break;
+    }
+  }
+
+  // Get the external call UUID from the call record metadata
+  const [callRow] = await db.select({ metadata: callsTable.metadata })
+    .from(callsTable).where(eq(callsTable.id, callDbId));
+  if (callRow?.metadata) {
+    try {
+      const meta = JSON.parse(callRow.metadata) as Record<string, unknown>;
+      externalCallId = (meta["externalCallId"] ?? meta["providerCallId"]) as string | null ?? null;
+    } catch { /* ok */ }
+  }
+
+  if (!externalCallId) {
+    logger.warn({ callDbId }, "Transfer: no external call ID found in call metadata");
+    return false;
+  }
+
+  // Warm transfer: speak handoff message via pipeline before redirecting
+  if (type === "warm" && sessionId) {
+    const session = sessions.get(sessionId);
+    if (session) {
+      try {
+        await session.pipeline.speakRaw(warmMessage);
+      } catch (err) {
+        logger.warn({ sessionId, err }, "Transfer: warm handoff TTS failed — proceeding with cold redirect");
+      }
+    }
+  }
+
+  // Execute VoBiz transfer
+  await transferVobizCall({
+    authId: vobizAuthId,
+    authToken: vobizAuthToken,
+    callUuid: externalCallId,
+    xmlUrl: xmlCallbackUrl,
+  });
+
+  // Mark session as transferred
+  if (sessionId) {
+    const session = sessions.get(sessionId);
+    if (session) {
+      void patchSessionMeta(sessionId, { wasTransferred: true, transferredTo: target },
+        (session.pipeline as any).config?.agentConfig?.maxDuration ?? 600 + 600);
+    }
+  }
+
+  return true;
+}
+
 export async function endSession(sessionId: string): Promise<void> {
   const session = sessions.get(sessionId);
   if (!session) return;

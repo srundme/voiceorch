@@ -868,6 +868,12 @@ export class OrchestrationPipeline {
       .join("\n");
   }
 
+  /** P2-A: Speak a raw message to the caller (used by warm transfer REST endpoint). */
+  async speakRaw(text: string): Promise<void> {
+    if (!text.trim() || this.closed) return;
+    await this.playSentence(text);
+  }
+
   close(): void {
     this.closed = true;
     if (this.silenceTimer) {

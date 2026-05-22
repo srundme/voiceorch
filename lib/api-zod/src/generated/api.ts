@@ -529,6 +529,44 @@ export const InitiateOutboundCallBody = zod.object({
 
 
 /**
+ * @summary Transfer an active call to another number or SIP URI
+ */
+export const TransferCallParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const TransferCallBody = zod.object({
+  "type": zod.enum(['warm', 'cold']).describe('warm = agent announces handoff before bridging; cold = immediate blind transfer'),
+  "target": zod.string().describe('E.164 phone number (e.g. +15551234567) or SIP URI to transfer to'),
+  "warmMessage": zod.string().optional().describe('Optional message spoken to caller before the transfer (warm only)'),
+  "webhookBaseUrl": zod.string().optional().describe('Override public base URL for the transfer XML callback (auto-detected if omitted)')
+})
+
+export const TransferCallResponse = zod.object({
+  "id": zod.number(),
+  "agentId": zod.number(),
+  "agentName": zod.string(),
+  "status": zod.enum(['pending', 'in_progress', 'completed', 'failed', 'cancelled', 'transferred']),
+  "toNumber": zod.string(),
+  "fromNumber": zod.string(),
+  "durationSeconds": zod.number().nullish(),
+  "transcript": zod.string().nullish(),
+  "recordingUrl": zod.string().nullish(),
+  "errorMessage": zod.string().nullish(),
+  "metadata": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "endedAt": zod.coerce.date().nullish(),
+  "sttLatencyMs": zod.number().nullish().describe('Average STT round-trip latency across all turns (ms)'),
+  "llmLatencyMs": zod.number().nullish().describe('Average LLM time-to-first-token across all turns (ms)'),
+  "ttsFirstChunkMs": zod.number().nullish().describe('Average TTS time-to-first-audio-chunk across all turns (ms)'),
+  "executionId": zod.string().nullish().describe('Unique execution identifier for this call (exec_xxxxxxxx)'),
+  "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents'),
+  "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary'),
+  "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name')
+})
+
+
+/**
  * @summary End an active call
  */
 export const EndCallParams = zod.object({

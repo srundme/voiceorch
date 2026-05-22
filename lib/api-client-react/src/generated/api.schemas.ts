@@ -462,6 +462,28 @@ export interface OutboundCallBody {
   webhookBaseUrl?: string;
 }
 
+/**
+ * warm = agent announces handoff before bridging; cold = immediate blind transfer
+ */
+export type TransferCallBodyType = typeof TransferCallBodyType[keyof typeof TransferCallBodyType];
+
+
+export const TransferCallBodyType = {
+  warm: 'warm',
+  cold: 'cold',
+} as const;
+
+export interface TransferCallBody {
+  /** warm = agent announces handoff before bridging; cold = immediate blind transfer */
+  type: TransferCallBodyType;
+  /** E.164 phone number (e.g. +15551234567) or SIP URI to transfer to */
+  target: string;
+  /** Optional message spoken to caller before the transfer (warm only) */
+  warmMessage?: string;
+  /** Override public base URL for the transfer XML callback (auto-detected if omitted) */
+  webhookBaseUrl?: string;
+}
+
 export interface CallUpdate {
   status?: string;
   durationSeconds?: number;

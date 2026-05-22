@@ -502,6 +502,11 @@ type AgentCfg = {
   hangupAfterLlmCall?: boolean; callCancellationPrompt?: string;
   voicemailDetection?: boolean; schedulingGuardrails?: boolean;
   callStartHour?: number; callEndHour?: number;
+  // P2-A: Call Transfer defaults
+  callTransferEnabled?: boolean;
+  callTransferType?: "warm" | "cold";
+  callTransferNumber?: string;
+  callTransferWarmMessage?: string;
   summarizationEnabled?: boolean; summarizationPrompt?: string;
   inboundLimit?: number; disallowUnknownNumbers?: boolean; whitelistNumbers?: string;
   callMemoryEnabled?: boolean; callMemorySourceType?: string;
@@ -1475,6 +1480,49 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                     </Select>
                   </div>
                 </div>
+              )}
+            </div>
+
+            {/* P2-A: Call Transfer */}
+            <div className="bg-black/[0.04] border border-black/[0.07]/40 rounded-xl p-4 space-y-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Call Transfer (P2-A)</p>
+              <ToggleRow label="Enable Call Transfer" desc="Allow this agent to transfer calls to a human or another number"
+                checked={cfg.callTransferEnabled ?? false} onChange={v => setCfg({ callTransferEnabled: v })} />
+              {cfg.callTransferEnabled && (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-xs text-black/50 mb-1">Transfer type</p>
+                      <Select value={cfg.callTransferType ?? "cold"} onValueChange={v => setCfg({ callTransferType: v as "warm" | "cold" })}>
+                        <SelectTrigger className="h-7 text-xs bg-white border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
+                        <SelectContent className="bg-white border-black/[0.07]">
+                          <SelectItem value="cold" className="text-black/75 text-xs">🔇 Cold — immediate blind transfer</SelectItem>
+                          <SelectItem value="warm" className="text-black/75 text-xs">🔊 Warm — announce then transfer</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <p className="text-xs text-black/50 mb-1">Default transfer number</p>
+                      <Input value={cfg.callTransferNumber ?? ""}
+                        onChange={e => setCfg({ callTransferNumber: e.target.value })}
+                        placeholder="+15551234567"
+                        className="h-7 text-xs bg-white border-black/[0.07] text-black/75 placeholder:text-black/30" />
+                    </div>
+                  </div>
+                  {cfg.callTransferType === "warm" && (
+                    <div>
+                      <p className="text-xs text-black/50 mb-1">Warm handoff message</p>
+                      <Input value={cfg.callTransferWarmMessage ?? ""}
+                        onChange={e => setCfg({ callTransferWarmMessage: e.target.value })}
+                        placeholder="Please hold while I connect you to an agent."
+                        className="h-7 text-xs bg-white border-black/[0.07] text-black/75 placeholder:text-black/30" />
+                    </div>
+                  )}
+                  <p className="text-[10px] text-black/30 leading-relaxed">
+                    The agent will transfer the call when it detects an escalation intent or when triggered from Live Monitor.
+                    The LLM tool call uses the default number above unless overridden.
+                  </p>
+                </>
               )}
             </div>
           </div>

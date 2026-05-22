@@ -22,6 +22,9 @@ export const callsTable = pgTable("calls", {
   ttsFirstChunkMs: integer("tts_first_chunk_ms"),
   costCents: integer("cost_cents"),
   dispositionResult: json("disposition_result").$type<Record<string, string | number | boolean>>(),
+  // P2-A: Call Transfer
+  transferType: text("transfer_type"),   // "warm" | "cold"
+  transferTarget: text("transfer_target"), // E.164 or SIP URI transferred to
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   endedAt: timestamp("ended_at", { withTimezone: true }),
 });

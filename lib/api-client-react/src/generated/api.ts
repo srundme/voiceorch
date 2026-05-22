@@ -61,6 +61,7 @@ import type {
   PurchasePhoneNumberInput,
   TopupInput,
   TopupOrder,
+  TransferCallBody,
   UpdateCallDispositionBody,
   VerifyPaymentInput,
   WalletInfo,
@@ -969,6 +970,78 @@ export const useInitiateOutboundCall = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getInitiateOutboundCallMutationOptions(options));
+    }
+
+export const getTransferCallUrl = (id: number,) => {
+
+
+
+
+  return `/api/calls/${id}/transfer`
+}
+
+/**
+ * @summary Transfer an active call to another number or SIP URI
+ */
+export const transferCall = async (id: number,
+    transferCallBody: TransferCallBody, options?: RequestInit): Promise<Call> => {
+
+  return customFetch<Call>(getTransferCallUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      transferCallBody,)
+  }
+);}
+
+
+
+
+export const getTransferCallMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof transferCall>>, TError,{id: number;data: BodyType<TransferCallBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof transferCall>>, TError,{id: number;data: BodyType<TransferCallBody>}, TContext> => {
+
+const mutationKey = ['transferCall'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof transferCall>>, {id: number;data: BodyType<TransferCallBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  transferCall(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TransferCallMutationResult = NonNullable<Awaited<ReturnType<typeof transferCall>>>
+    export type TransferCallMutationBody = BodyType<TransferCallBody>
+    export type TransferCallMutationError = ErrorType<void>
+
+    /**
+ * @summary Transfer an active call to another number or SIP URI
+ */
+export const useTransferCall = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof transferCall>>, TError,{id: number;data: BodyType<TransferCallBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof transferCall>>,
+        TError,
+        {id: number;data: BodyType<TransferCallBody>},
+        TContext
+      > => {
+      return useMutation(getTransferCallMutationOptions(options));
     }
 
 export const getEndCallUrl = (id: number,) => {

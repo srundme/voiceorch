@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
-import { useListActiveCalls } from "@workspace/api-client-react";
+import { useListActiveCalls, useTransferCall } from "@workspace/api-client-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Phone, RefreshCw, Radio, Clock } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Phone, RefreshCw, Radio, Clock, PhoneForwarded, X } from "lucide-react";
+import { toast } from "sonner";
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -10,40 +12,171 @@ function formatDuration(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+function TransferDialog({
+  callId,
+  onClose,
+}: {
+  callId: number;
+  onClose: () => void;
+}) {
+  const [type, setType] = useState<"cold" | "warm">("cold");
+  const [target, setTarget] = useState("");
+  const [warmMessage, setWarmMessage] = useState("Please hold while I connect you to an agent.");
+  const { mutate: transfer, isPending } = useTransferCall();
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!target.trim()) return;
+    transfer(
+      { id: callId, data: { type, target: target.trim(), warmMessage } },
+      {
+        onSuccess: () => {
+          toast.success(`Call #${callId} transferred to ${target}`);
+          onClose();
+        },
+        onError: (err: any) => {
+          toast.error(err?.message ?? "Transfer failed");
+        },
+      },
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-xl border border-black/[0.08] w-96 p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <PhoneForwarded className="w-4 h-4 text-black/50" />
+            <p className="text-sm font-semibold text-black/80">Transfer Call #{callId}</p>
+          </div>
+          <button onClick={onClose} className="text-black/30 hover:text-black/60 transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Transfer type */}
+          <div>
+            <p className="text-[11px] font-medium text-black/40 uppercase tracking-wider mb-2">Transfer type</p>
+            <div className="grid grid-cols-2 gap-2">
+              {(["cold", "warm"] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setType(t)}
+                  className={`py-2 px-3 rounded-lg text-[13px] font-medium border transition-all ${
+                    type === t
+                      ? "bg-black/[0.85] text-white border-black/[0.85]"
+                      : "bg-white text-black/50 border-black/[0.08] hover:border-black/20 hover:text-black/70"
+                  }`}
+                >
+                  {t === "cold" ? "🔇 Cold" : "🔊 Warm"}
+                </button>
+              ))}
+            </div>
+            <p className="text-[10px] text-black/30 mt-1.5">
+              {type === "cold"
+                ? "Immediately bridges caller to the target — no announcement."
+                : "Speaks a handoff message before connecting."}
+            </p>
+          </div>
+
+          {/* Target number */}
+          <div>
+            <label className="text-[11px] font-medium text-black/40 uppercase tracking-wider block mb-1.5">
+              Transfer to (E.164)
+            </label>
+            <Input
+              value={target}
+              onChange={(e) => setTarget(e.target.value)}
+              placeholder="+15551234567"
+              className="h-9 text-sm bg-black/[0.02] border-black/[0.08]"
+              required
+            />
+          </div>
+
+          {/* Warm message */}
+          {type === "warm" && (
+            <div>
+              <label className="text-[11px] font-medium text-black/40 uppercase tracking-wider block mb-1.5">
+                Handoff message
+              </label>
+              <Input
+                value={warmMessage}
+                onChange={(e) => setWarmMessage(e.target.value)}
+                className="h-9 text-sm bg-black/[0.02] border-black/[0.08]"
+              />
+            </div>
+          )}
+
+          <div className="flex gap-2 pt-1">
+            <Button type="button" variant="outline" className="flex-1 h-9 text-sm border-black/[0.08]" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={isPending || !target.trim()}
+              className="flex-1 h-9 text-sm bg-black/[0.85] text-white hover:bg-black/75"
+            >
+              {isPending ? "Transferring…" : "Transfer now"}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function ActiveCallRow({ call, now }: { call: any; now: number }) {
   const started = new Date(call.createdAt).getTime();
   const elapsed = Math.floor((now - started) / 1000);
+  const [showTransfer, setShowTransfer] = useState(false);
 
   return (
-    <div className="flex items-center gap-4 px-4 py-3 rounded-lg bg-white/70 backdrop-blur-lg border border-black/[0.07] hover:border-black/[0.07] transition-colors">
-      <div className="relative">
-        <div className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
-        <div className="absolute inset-0 h-2.5 w-2.5 rounded-full bg-emerald-400 animate-ping opacity-60" />
+    <>
+      <div className="flex items-center gap-4 px-4 py-3 rounded-xl bg-white border border-black/[0.07] hover:border-black/[0.12] transition-colors">
+        <div className="relative shrink-0">
+          <div className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
+          <div className="absolute inset-0 h-2.5 w-2.5 rounded-full bg-emerald-400 animate-ping opacity-60" />
+        </div>
+
+        <div className="flex-1 min-w-0 grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="min-w-0">
+            <p className="text-[10px] text-black/35 uppercase tracking-wider mb-0.5">Agent</p>
+            <p className="text-sm text-black/85 font-medium truncate">{call.agentName}</p>
+          </div>
+          <div className="min-w-0">
+            <p className="text-[10px] text-black/35 uppercase tracking-wider mb-0.5">Number</p>
+            <p className="text-sm text-black/75 font-mono truncate">{call.toNumber}</p>
+          </div>
+          <div>
+            <p className="text-[10px] text-black/35 uppercase tracking-wider mb-0.5">Duration</p>
+            <p className="text-sm text-black/75 font-mono tabular-nums">{formatDuration(elapsed)}</p>
+          </div>
+          <div>
+            <p className="text-[10px] text-black/35 uppercase tracking-wider mb-0.5">Call ID</p>
+            <p className="text-sm text-black/35 font-mono">#{call.id}</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <Badge className="bg-black/[0.04] text-black/75 border-black/[0.10] text-[10px]">Live</Badge>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setShowTransfer(true)}
+            className="h-7 px-2.5 text-xs border-black/[0.08] text-black/50 hover:text-black/80 hover:border-black/20 gap-1.5"
+          >
+            <PhoneForwarded className="w-3 h-3" />
+            Transfer
+          </Button>
+        </div>
       </div>
 
-      <div className="flex-1 min-w-0 grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="min-w-0">
-          <p className="text-[10px] text-black/35 uppercase tracking-wider mb-0.5">Agent</p>
-          <p className="text-sm text-black/85 font-medium truncate">{call.agentName}</p>
-        </div>
-        <div className="min-w-0">
-          <p className="text-[10px] text-black/35 uppercase tracking-wider mb-0.5">Number</p>
-          <p className="text-sm text-black/75 font-mono truncate">{call.toNumber}</p>
-        </div>
-        <div>
-          <p className="text-[10px] text-black/35 uppercase tracking-wider mb-0.5">Duration</p>
-          <p className="text-sm text-black/75 font-mono tabular-nums">{formatDuration(elapsed)}</p>
-        </div>
-        <div>
-          <p className="text-[10px] text-black/35 uppercase tracking-wider mb-0.5">Call ID</p>
-          <p className="text-sm text-black/35 font-mono">#{call.id}</p>
-        </div>
-      </div>
-
-      <Badge className="shrink-0 bg-black/[0.04] text-black/75 border-black/[0.10] text-[10px]">
-        Live
-      </Badge>
-    </div>
+      {showTransfer && (
+        <TransferDialog callId={call.id} onClose={() => setShowTransfer(false)} />
+      )}
+    </>
   );
 }
 
@@ -87,17 +220,17 @@ export default function MonitorPage() {
         {isLoading ? (
           <div className="space-y-3">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-16 rounded-lg bg-white/70 backdrop-blur-lg border border-black/[0.07] animate-pulse" />
+              <div key={i} className="h-16 rounded-xl bg-black/[0.03] border border-black/[0.06] animate-pulse" />
             ))}
           </div>
         ) : calls.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-center">
-            <div className="h-12 w-12 rounded-full bg-black/[0.08] flex items-center justify-center mb-4">
-              <Radio className="h-6 w-6 text-black/35" />
+            <div className="h-12 w-12 rounded-full bg-black/[0.04] flex items-center justify-center mb-4">
+              <Radio className="h-6 w-6 text-black/25" />
             </div>
             <p className="text-sm font-medium text-black/50">No active calls</p>
-            <p className="text-xs text-black/35 mt-1 max-w-xs">
-              When agents are handling calls, they'll appear here in real time. This page auto-refreshes every 5 seconds.
+            <p className="text-xs text-black/30 mt-1 max-w-xs">
+              When agents are handling calls, they'll appear here in real time. Auto-refreshes every 5 seconds.
             </p>
           </div>
         ) : (
@@ -109,9 +242,9 @@ export default function MonitorPage() {
         )}
 
         {calls.length > 0 && (
-          <div className="mt-6 p-4 rounded-lg bg-white/70 backdrop-blur-lg/50 border border-black/[0.07]">
+          <div className="mt-6 p-4 rounded-xl bg-black/[0.02] border border-black/[0.06]">
             <div className="flex items-center gap-2 mb-3">
-              <Clock className="w-3.5 h-3.5 text-black/35" />
+              <Clock className="w-3.5 h-3.5 text-black/30" />
               <p className="text-xs text-black/35 font-medium">Summary</p>
             </div>
             <div className="grid grid-cols-3 gap-4">

@@ -281,6 +281,37 @@ paths:
         "404":
           description: Agent or telephony provider not found
 
+  /calls/{id}/transfer:
+    post:
+      operationId: transferCall
+      tags: [calls]
+      summary: Transfer an active call to another number or SIP URI
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransferCallBody"
+      responses:
+        "200":
+          description: Transfer initiated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Call"
+        "400":
+          description: Validation error or provider misconfiguration
+        "404":
+          description: Call not found
+        "409":
+          description: Call is not active or already transferred
+
   /calls/{id}/end:
     patch:
       operationId: endCall
@@ -1624,6 +1655,24 @@ components:
         webhookBaseUrl:
           type: string
           description: "Override public base URL for webhooks (auto-detected if omitted)"
+
+    TransferCallBody:
+      type: object
+      required: [type, target]
+      properties:
+        type:
+          type: string
+          enum: [warm, cold]
+          description: "warm = agent announces handoff before bridging; cold = immediate blind transfer"
+        target:
+          type: string
+          description: "E.164 phone number (e.g. +15551234567) or SIP URI to transfer to"
+        warmMessage:
+          type: string
+          description: "Optional message spoken to caller before the transfer (warm only)"
+        webhookBaseUrl:
+          type: string
+          description: "Override public base URL for the transfer XML callback (auto-detected if omitted)"
 
     CallUpdate:
       type: object

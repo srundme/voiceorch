@@ -80,6 +80,7 @@ function resolveWebhookBase(req: Parameters<Parameters<IRouter["post"]>[1]>[0], 
 }
 
 import { dialTwilio, dialPlivo, dialVobiz } from "../orchestration/telephony/dial.js";
+import { triggerTransfer } from "../orchestration/session.js";
 
 /* ── POST /calls/outbound ─────────────────────────────────────────────────── */
 
@@ -319,6 +320,83 @@ router.patch("/calls/:id", async (req, res): Promise<void> => {
   }
   const enriched = await enrichCall(call);
   res.json(UpdateCallResponse.parse(enriched));
+});
+
+/* ── POST /calls/:id/transfer (P2-A) ─────────────────────────────────────── */
+
+router.post("/calls/:id/transfer", requireAuth, async (req, res): Promise<void> => {
+  const id = parseInt(String(req.params["id"] ?? ""), 10);
+  if (!id || isNaN(id)) { res.status(400).json({ error: "Invalid call id" }); return; }
+
+  const { type, target, warmMessage, webhookBaseUrl } = req.body as {
+    type?: unknown; target?: unknown; warmMessage?: unknown; webhookBaseUrl?: unknown;
+  };
+
+  if (type !== "warm" && type !== "cold") {
+    res.status(400).json({ error: 'type must be "warm" or "cold"' }); return;
+  }
+  if (typeof target !== "string" || !target.trim()) {
+    res.status(400).json({ error: "target is required" }); return;
+  }
+
+  const [call] = await db.select().from(callsTable).where(eq(callsTable.id, id));
+  if (!call) { res.status(404).json({ error: "Call not found" }); return; }
+  if (call.status !== "in_progress") {
+    res.status(409).json({ error: `Call is not active (status: ${call.status})` }); return;
+  }
+
+  // Resolve VoBiz credentials from the agent's telephony provider row
+  const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, call.agentId));
+  if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+
+  const telephonyProv = agent.telephonyProvider.toLowerCase();
+  if (telephonyProv !== "vobiz") {
+    res.status(400).json({ error: `Call transfer is currently supported for VoBiz only (agent uses: ${telephonyProv})` });
+    return;
+  }
+
+  const [provRow] = await db.select().from(providersTable)
+    .where(eq(providersTable.providerName, "vobiz")).limit(1);
+  if (!provRow) {
+    res.status(400).json({ error: 'No VoBiz provider configured. Add one on the Providers page.' });
+    return;
+  }
+  const cfg = provRow.extraConfig ? JSON.parse(provRow.extraConfig) as Record<string, string> : {};
+  const authId = cfg["authId"] ?? process.env["VOBIZ_AUTH_ID"] ?? "";
+  if (!authId) {
+    res.status(400).json({ error: 'VoBiz provider missing "authId" in Extra Config.' }); return;
+  }
+
+  const baseUrl = resolveWebhookBase(req, typeof webhookBaseUrl === "string" ? webhookBaseUrl : undefined);
+  const encodedTarget = encodeURIComponent(target.trim());
+  const xmlCallbackUrl = `${baseUrl}/api/webhooks/vobiz/transfer-xml?target=${encodedTarget}`;
+
+  const handoffMsg = typeof warmMessage === "string" && warmMessage.trim()
+    ? warmMessage.trim()
+    : "Please hold while I connect you to an agent.";
+
+  try {
+    const transferred = await triggerTransfer(
+      id, type, target.trim(), handoffMsg, xmlCallbackUrl, authId, provRow.apiKey,
+    );
+    if (!transferred) {
+      req.log.warn({ callId: id }, "Transfer: no external call ID — call may be inbound without externalCallId");
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    req.log.error({ err, callId: id }, "Transfer failed");
+    res.status(400).json({ error: msg }); return;
+  }
+
+  // Update call record
+  const [updated] = await db.update(callsTable).set({
+    transferType: type,
+    transferTarget: target.trim(),
+    status: "transferred",
+    endedAt: new Date(),
+  }).where(eq(callsTable.id, id)).returning();
+
+  res.json(await enrichCall(updated ?? call));
 });
 
 router.patch("/calls/:id/end", async (req, res): Promise<void> => {
