@@ -70,7 +70,7 @@ export default function WalletPage() {
         amount: order.amountCents,
         currency: order.currency,
         order_id: order.orderId,
-        name: "VoiceOrch",
+        name: "SnapServe",
         description: `Wallet top-up — ${centsToUsd(amountCents)}`,
         theme: { color: "#10b981" },
         handler: async (response: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => {

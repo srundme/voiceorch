@@ -9,6 +9,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { useClerk, useUser } from "@clerk/react";
 import { useGetWallet } from "@workspace/api-client-react";
+import { SnapServeLogo } from "@/components/logo";
 
 const NAV_SECTIONS = [
   {
@@ -152,7 +153,7 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
         <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-black/8 ring-1 ring-white/70">
           <Mic className="h-3.5 w-3.5 text-black/60" />
         </div>
-        <span className="font-semibold text-sm text-black/75 tracking-tight">VoiceOrch</span>
+        <SnapServeLogo size="sm" className="text-black/75" />
       </div>
 
       {/* Nav */}

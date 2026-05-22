@@ -108,7 +108,7 @@ export function computePipelineCost(
     llm:       { label: llmProvider,       costPerMin: llmCost },
     tts:       { label: ttsProvider,       costPerMin: ttsCost },
     telephony: { label: telephonyProvider, costPerMin: telCost },
-    platform:  { label: "VoiceOrch",       costPerMin: PLATFORM_FEE },
+    platform:  { label: "SnapServe",       costPerMin: PLATFORM_FEE },
     totalPerMin: asrCost + llmCost + ttsCost + telCost + PLATFORM_FEE,
   };
 }

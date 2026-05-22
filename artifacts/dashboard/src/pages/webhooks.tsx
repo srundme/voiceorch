@@ -282,7 +282,7 @@ export default function WebhooksPage() {
             <p className="font-medium text-black/50 mb-1">Payload format</p>
             <pre className="font-mono text-black/35 leading-relaxed whitespace-pre-wrap">{`POST https://your-endpoint.com/webhook
 Content-Type: application/json
-X-VoiceOrch-Signature: hmac-sha256 of body
+X-SnapServe-Signature: hmac-sha256 of body
 
 {
   "event": "call.ended",

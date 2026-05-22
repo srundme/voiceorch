@@ -231,8 +231,8 @@ function Router() {
       signInUrl={`${basePath}/sign-in`}
       signUpUrl={`${basePath}/sign-up`}
       localization={{
-        signIn: { start: { title: "Welcome back to VoiceOrch", subtitle: "Sign in to manage your voice agents" } },
-        signUp: { start: { title: "Create your VoiceOrch account", subtitle: "Get $5 free credit to start building" } },
+        signIn: { start: { title: "Welcome back to SnapServe", subtitle: "Sign in to manage your voice agents" } },
+        signUp: { start: { title: "Create your SnapServe account", subtitle: "Get $5 free credit to start building" } },
       }}
       routerPush={(to) => setLocation(stripBase(to))}
       routerReplace={(to) => setLocation(stripBase(to), { replace: true })}

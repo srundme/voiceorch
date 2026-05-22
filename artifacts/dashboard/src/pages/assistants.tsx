@@ -1094,7 +1094,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
               <div>
                 <p className="text-xs text-black/50 mb-1">Keyterms</p>
                 <Textarea value={asrKeyterms} onChange={e => { setAsrKeyterms(e.target.value); setDirty(true); }}
-                  placeholder="e.g. VoiceOrch, API, webhook" rows={2}
+                  placeholder="e.g. SnapServe, API, webhook" rows={2}
                   className="bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75 text-xs resize-none placeholder:text-black/35" />
               </div>
             </div>
@@ -1292,7 +1292,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                         <SelectItem value="deepgram" className="text-black/75 text-xs">Deepgram (voice type signal)</SelectItem>
                         <SelectItem value="assemblyai" className="text-black/75 text-xs">AssemblyAI (speaker analysis)</SelectItem>
                         <SelectItem value="azure" className="text-black/75 text-xs">Azure Speaker Recognition</SelectItem>
-                        <SelectItem value="internal" className="text-black/75 text-xs">VoiceOrch built-in (pitch analysis)</SelectItem>
+                        <SelectItem value="internal" className="text-black/75 text-xs">SnapServe built-in (pitch analysis)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

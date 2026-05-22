@@ -546,7 +546,7 @@ export default function AgentEdit() {
                           <Input type="password" placeholder="Optional — enables HMAC signature header" {...field} />
                         </FormControl>
                         <FormDescription>
-                          When set, each webhook request includes an <code>X-VoiceOrch-Signature: sha256=…</code> header.
+                          When set, each webhook request includes an <code>X-SnapServe-Signature: sha256=…</code> header.
                         </FormDescription>
                         <FormMessage />
                       </FormItem>

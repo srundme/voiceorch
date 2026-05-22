@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { SnapServeLogo } from "@/components/logo";
 import { useLocation } from "wouter";
 import { useCompleteOnboarding, useGetOnboardingStatus } from "@workspace/api-client-react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -411,7 +412,7 @@ function DoneScreen({ name }: { name: string }) {
         You're all set{name ? `, ${name.split(" ")[0]}` : ""}! 🎉
       </h2>
       <p className="text-gray-400 text-lg mb-10 leading-relaxed">
-        Welcome to VoiceOrch. Let's build your first AI voice agent.
+        Welcome to SnapServe. Let's build your first AI voice agent.
       </p>
       <motion.button
         whileHover={{ scale: 1.03 }}
@@ -491,7 +492,7 @@ export default function OnboardingPage() {
               <div className="w-7 h-7 rounded-lg bg-black flex items-center justify-center">
                 <span className="text-black/85 text-xs font-bold">V</span>
               </div>
-              <span className="font-semibold text-sm text-gray-900 tracking-tight">VoiceOrch</span>
+              <SnapServeLogo size="sm" className="text-gray-900" />
             </div>
             <StepCounter current={stepNum} total={totalSteps} />
           </header>

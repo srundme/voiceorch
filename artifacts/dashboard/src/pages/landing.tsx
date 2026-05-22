@@ -1,6 +1,7 @@
 import { Link } from "wouter";
 import { Mic, Zap, Shield, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SnapServeLogo } from "@/components/logo";
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -13,7 +14,7 @@ export default function LandingPage() {
           <div className="flex h-7 w-7 items-center justify-center rounded bg-[#353536]">
             <Mic className="h-4 w-4 text-[#EBEDF1]" />
           </div>
-          <span className="font-semibold text-sm tracking-wide text-[#353536]">VoiceOrch</span>
+          <SnapServeLogo size="sm" className="text-[#353536]" />
         </div>
         <div className="flex items-center gap-3">
           <Link href={`${basePath}/sign-in`}>

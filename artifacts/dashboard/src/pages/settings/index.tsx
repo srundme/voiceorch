@@ -155,7 +155,7 @@ export default function SettingsPage() {
     <div className="space-y-6 p-6 md:p-8 pt-6 max-w-5xl mx-auto">
       <div>
         <h2 className="text-3xl font-bold tracking-tight">Settings</h2>
-        <p className="text-muted-foreground">Configure your VoiceOrch integration and go live.</p>
+        <p className="text-muted-foreground">Configure your SnapServe integration and go live.</p>
       </div>
 
       {/* Readiness checklist */}
@@ -223,7 +223,7 @@ export default function SettingsPage() {
             Telephony Integration
           </CardTitle>
           <CardDescription>
-            Point your telephony number to these webhook URLs and VoiceOrch will handle the rest — STT → LLM → TTS in real time.
+            Point your telephony number to these webhook URLs and SnapServe will handle the rest — STT → LLM → TTS in real time.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
@@ -276,7 +276,7 @@ export default function SettingsPage() {
             API Keys & Account
           </CardTitle>
           <CardDescription>
-            Use these keys to call the VoiceOrch REST API from your own applications.
+            Use these keys to call the SnapServe REST API from your own applications.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
@@ -305,7 +305,7 @@ export default function SettingsPage() {
               <div className="space-y-1.5">
                 <p className="text-sm font-medium">Organisation Key <span className="text-[10px] text-black/35 font-mono ml-1">voo_…</span></p>
                 <MaskedKey value={account?.orgKey} />
-                <p className="text-[11px] text-black/35">Use to verify webhook signatures sent from VoiceOrch to your server.</p>
+                <p className="text-[11px] text-black/35">Use to verify webhook signatures sent from SnapServe to your server.</p>
               </div>
 
               <div className="flex items-center justify-between p-4 rounded-lg border border-border/60 bg-muted/20">
@@ -348,7 +348,7 @@ export default function SettingsPage() {
             <BookOpen className="h-5 w-5 text-primary" />
             API Endpoints
           </CardTitle>
-          <CardDescription>Key REST and WebSocket endpoints exposed by VoiceOrch.</CardDescription>
+          <CardDescription>Key REST and WebSocket endpoints exposed by SnapServe.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {[

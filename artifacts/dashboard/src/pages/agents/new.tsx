@@ -633,7 +633,7 @@ export default function AgentNew() {
                           <Input type="password" placeholder="Optional — enables HMAC signature header" {...field} />
                         </FormControl>
                         <FormDescription>
-                          When set, each webhook request includes an <code>X-VoiceOrch-Signature: sha256=…</code> header so you can verify authenticity.
+                          When set, each webhook request includes an <code>X-SnapServe-Signature: sha256=…</code> header so you can verify authenticity.
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -846,7 +846,7 @@ export default function AgentNew() {
                   <FormField control={form.control} name="asrKeyterms" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Boosted Keyterms</FormLabel>
-                      <FormControl><Input placeholder="e.g. VoiceOrch, Razorpay, BYOK" {...field} /></FormControl>
+                      <FormControl><Input placeholder="e.g. SnapServe, Razorpay, BYOK" {...field} /></FormControl>
                       <FormDescription className="text-[11px]">Comma-separated words to boost accuracy in transcription.</FormDescription>
                     </FormItem>
                   )} />
