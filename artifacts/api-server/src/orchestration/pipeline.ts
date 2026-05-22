@@ -416,6 +416,8 @@ export class OrchestrationPipeline {
           (token) => { greeting += token; },
           (full)  => { greeting = full; }
         );
+        // Strip any <think>…</think> reasoning blocks that reasoning models emit
+        greeting = greeting.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
       }
 
       // {caller_salutation} in the greeting fires before any caller audio arrives,
