@@ -100,31 +100,77 @@ const INITIAL: WizardState = {
 };
 
 /* ── Voice preview ──────────────────────────────────────────────────────── */
+const PREVIEW_TEXT = "Hello! I am your AI voice assistant. I am here to help you today. How can I assist you?";
+
+/** Browser speechSynthesis fallback — picks a voice that roughly matches gender */
+function speakWithBrowser(voiceName: string, gender: string, onEnd: () => void) {
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(PREVIEW_TEXT);
+  const voices = window.speechSynthesis.getVoices();
+  const femaleKeywords = ["female", "woman", "girl", "zira", "samantha", "victoria", "moira", "fiona", "veena"];
+  const maleKeywords   = ["male", "man", "daniel", "alex", "tom", "fred", "lee"];
+  const isFemale = gender.toLowerCase() === "female";
+  const match = voices.find(v => {
+    const n = v.name.toLowerCase();
+    return isFemale ? femaleKeywords.some(k => n.includes(k)) : maleKeywords.some(k => n.includes(k));
+  }) ?? voices[0];
+  if (match) utter.voice = match;
+  utter.rate  = 0.95;
+  utter.pitch = isFemale ? 1.1 : 0.9;
+  utter.onend = onEnd;
+  utter.onerror = onEnd;
+  window.speechSynthesis.speak(utter);
+}
+
 function useVoicePreview(apiFetch: (path: string, init?: RequestInit) => Promise<Response>) {
   const [playing, setPlaying] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const voicesRef = useRef<CartesiaVoice[]>([]);
+
+  // keep a ref of current voices so the closure can access gender
+  function setVoicesRef(voices: CartesiaVoice[]) { voicesRef.current = voices; }
 
   async function preview(voiceId: string) {
-    if (playing === voiceId) { audioRef.current?.pause(); setPlaying(null); return; }
+    // stop if already playing
+    if (playing === voiceId) {
+      audioRef.current?.pause();
+      window.speechSynthesis.cancel();
+      setPlaying(null);
+      return;
+    }
     setPlaying(voiceId);
+
     try {
       const res = await apiFetch("/api/wizard/preview-voice", {
         method: "POST",
-        body: JSON.stringify({ voiceId, text: "Hello! I am Arushi, your AI voice assistant. I am here to help you today. How can I assist?" }),
+        body: JSON.stringify({ voiceId, text: PREVIEW_TEXT }),
       });
-      if (!res.ok) { setPlaying(null); return; }
-      const { audio, mimeType } = await res.json();
-      const blob = new Blob([Uint8Array.from(atob(audio), c => c.charCodeAt(0))], { type: mimeType });
-      const url = URL.createObjectURL(blob);
-      if (audioRef.current) { audioRef.current.pause(); URL.revokeObjectURL(audioRef.current.src); }
-      const el = new Audio(url);
-      audioRef.current = el;
-      el.onended = () => setPlaying(null);
-      el.onerror = () => setPlaying(null);
-      void el.play();
-    } catch { setPlaying(null); }
+
+      if (res.ok) {
+        // Cartesia audio available
+        const { audio, mimeType } = await res.json();
+        const blob = new Blob([Uint8Array.from(atob(audio), c => c.charCodeAt(0))], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        if (audioRef.current) { audioRef.current.pause(); URL.revokeObjectURL(audioRef.current.src); }
+        const el = new Audio(url);
+        audioRef.current = el;
+        el.onended = () => setPlaying(null);
+        el.onerror = () => setPlaying(null);
+        void el.play();
+        return;
+      }
+
+      // 503 = Cartesia key not set → fall back to browser TTS
+      const voice = voicesRef.current.find(v => v.id === voiceId);
+      speakWithBrowser(voice?.name ?? "", voice?.gender ?? "Female", () => setPlaying(null));
+    } catch {
+      // network error → still try browser TTS
+      const voice = voicesRef.current.find(v => v.id === voiceId);
+      speakWithBrowser(voice?.name ?? "", voice?.gender ?? "Female", () => setPlaying(null));
+    }
   }
-  return { playing, preview };
+
+  return { playing, preview, setVoicesRef };
 }
 
 /* ── Step definitions ───────────────────────────────────────────────────── */
@@ -175,9 +221,12 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
     return fetch(path, { ...init, headers, credentials: "include" });
   }, [getToken]);
 
-  const { playing, preview } = useVoicePreview(apiFetch);
+  const { playing, preview, setVoicesRef } = useVoicePreview(apiFetch);
 
   const update = useCallback((patch: Partial<WizardState>) => setState(p => ({ ...p, ...patch })), []);
+
+  /* keep voicesRef in sync so the preview hook can look up gender */
+  useEffect(() => { setVoicesRef(state.voices); }, [state.voices]);
 
   /* close & reset */
   function handleClose() { setState(INITIAL); setStepIdx(0); onClose(); }
@@ -915,7 +964,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                           onChange={e => update({ [field.key]: e.target.value } as any)}
                           className="w-full bg-white/[0.07] border border-white/[0.08] rounded-lg text-xs text-white/70 py-2 px-2.5 focus:outline-none focus:border-violet-500/60"
                         >
-                          {field.opts.map(o => <option key={o} value={o} className="bg-zinc-900">{o}</option>)}
+                          {field.opts.map(o => <option key={`${field.key}-${o}`} value={o} className="bg-zinc-900">{o}</option>)}
                         </select>
                       </div>
                     ))}
