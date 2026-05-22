@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
-  Users, Phone, Key, Settings, Mic, Menu,
+  Users, Phone, Key, Settings, Menu,
   LayoutDashboard, BarChart3, ChevronRight, BookOpen,
   Wallet, LogOut, ChevronDown, AlertCircle, Radio, Webhook,
 } from "lucide-react";
@@ -9,7 +9,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { useClerk, useUser } from "@clerk/react";
 import { useGetWallet } from "@workspace/api-client-react";
-import { SnapServeLogo } from "@/components/logo";
+import { SnapServeLogo, SnapServeIcon } from "@/components/logo";
 
 const NAV_SECTIONS = [
   {
@@ -151,7 +151,7 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
       {/* Logo */}
       <div className="flex items-center gap-2.5 px-4 h-12 border-b border-black/[0.06] shrink-0">
         <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-black/8 ring-1 ring-white/70">
-          <Mic className="h-3.5 w-3.5 text-black/60" />
+          <SnapServeIcon size={14} className="text-black/65" />
         </div>
         <SnapServeLogo size="sm" className="text-black/75" />
       </div>

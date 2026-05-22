@@ -1,7 +1,7 @@
 import { Link } from "wouter";
-import { Mic, Zap, Shield, Globe } from "lucide-react";
+import { Zap, Shield, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { SnapServeLogo } from "@/components/logo";
+import { SnapServeLogo, SnapServeIcon } from "@/components/logo";
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -12,7 +12,7 @@ export default function LandingPage() {
       <header className="flex items-center justify-between px-8 h-16 border-b border-[#D4D8DF] bg-white/70/70 backdrop-blur-sm">
         <div className="flex items-center gap-2.5">
           <div className="flex h-7 w-7 items-center justify-center rounded bg-[#353536]">
-            <Mic className="h-4 w-4 text-[#EBEDF1]" />
+            <SnapServeIcon size={16} className="text-[#EBEDF1]" />
           </div>
           <SnapServeLogo size="sm" className="text-[#353536]" />
         </div>

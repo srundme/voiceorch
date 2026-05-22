@@ -10,6 +10,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
 
 import { Layout } from "@/components/layout";
+import { SnapServeLoader, SnapServeIcon } from "@/components/logo";
 import LandingPage from "@/pages/landing";
 import AssistantsPage from "@/pages/assistants";
 import Dashboard from "@/pages/dashboard";
@@ -131,7 +132,7 @@ function ClerkQueryClientCacheInvalidator() {
 
 function SignInPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#0a0a0a] px-4">
+    <div className="flex min-h-screen items-center justify-center px-4">
       <SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} />
     </div>
   );
@@ -139,7 +140,7 @@ function SignInPage() {
 
 function SignUpPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#0a0a0a] px-4">
+    <div className="flex min-h-screen items-center justify-center px-4">
       <SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} />
     </div>
   );
@@ -164,11 +165,7 @@ function AppRoutes() {
 
   // Don't gate until we know the status
   if (onboardingLoading) {
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="h-8 w-8 rounded-full border-2 border-gray-200 border-t-black animate-spin" />
-      </div>
-    );
+    return <SnapServeLoader />;
   }
 
   // Redirect new users to onboarding (except if they're already there)
