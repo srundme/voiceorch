@@ -29,6 +29,10 @@ export type AgentConfig = {
   hangupAfterLlmCall?: boolean;
   callCancellationPrompt?: string;
   voicemailDetection?: boolean;
+  // P2-B: AMD action when machine is detected
+  voicemailAction?: "hangup" | "leave_message" | "continue";
+  voicemailMessage?: string; // spoken to voicemail (leave_message mode)
+  machineDetectionMode?: "Enable" | "DetectMessageEnd"; // Enable=immediate, DetectMessageEnd=wait for beep
   schedulingGuardrails?: boolean;
   callStartHour?: number;
   callEndHour?: number;

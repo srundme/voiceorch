@@ -500,7 +500,11 @@ type AgentCfg = {
   wordsForInterruption?: number; incrementalDelay?: number;
   backchannelingStartDelay?: number; ambientNoiseEnabled?: boolean; ambientNoiseTrack?: string;
   hangupAfterLlmCall?: boolean; callCancellationPrompt?: string;
-  voicemailDetection?: boolean; schedulingGuardrails?: boolean;
+  voicemailDetection?: boolean;
+  voicemailAction?: "hangup" | "leave_message" | "continue";
+  voicemailMessage?: string;
+  machineDetectionMode?: "Enable" | "DetectMessageEnd";
+  schedulingGuardrails?: boolean;
   callStartHour?: number; callEndHour?: number;
   // P2-A: Call Transfer defaults
   callTransferEnabled?: boolean;
@@ -1451,9 +1455,51 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
               </div>
             </div>
             <div className="bg-black/[0.04] border border-black/[0.07]/40 rounded-xl p-4 space-y-4">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Detection</p>
-              <ToggleRow label="Voicemail Detection" desc="Detect voicemail and respond accordingly"
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Detection (P2-B)</p>
+              <ToggleRow label="Voicemail / AMD Detection" desc="Detect answering machines on outbound calls and respond appropriately"
                 checked={cfg.voicemailDetection ?? false} onChange={v => setCfg({ voicemailDetection: v })} />
+              {cfg.voicemailDetection && (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-xs text-black/50 mb-1">Detection mode</p>
+                      <Select value={cfg.machineDetectionMode ?? "DetectMessageEnd"}
+                        onValueChange={v => setCfg({ machineDetectionMode: v as "Enable" | "DetectMessageEnd" })}>
+                        <SelectTrigger className="h-7 text-xs bg-white border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
+                        <SelectContent className="bg-white border-black/[0.07]">
+                          <SelectItem value="DetectMessageEnd" className="text-black/75 text-xs">🔔 Wait for beep (recommended)</SelectItem>
+                          <SelectItem value="Enable" className="text-black/75 text-xs">⚡ Immediate detect</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <p className="text-xs text-black/50 mb-1">When machine detected</p>
+                      <Select value={cfg.voicemailAction ?? "hangup"}
+                        onValueChange={v => setCfg({ voicemailAction: v as "hangup" | "leave_message" | "continue" })}>
+                        <SelectTrigger className="h-7 text-xs bg-white border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
+                        <SelectContent className="bg-white border-black/[0.07]">
+                          <SelectItem value="hangup"       className="text-black/75 text-xs">📵 Hang up</SelectItem>
+                          <SelectItem value="leave_message" className="text-black/75 text-xs">💬 Leave a message</SelectItem>
+                          <SelectItem value="continue"     className="text-black/75 text-xs">▶️ Continue as human</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  {cfg.voicemailAction === "leave_message" && (
+                    <div>
+                      <p className="text-xs text-black/50 mb-1">Voicemail message</p>
+                      <Textarea value={cfg.voicemailMessage ?? ""}
+                        onChange={e => setCfg({ voicemailMessage: e.target.value })}
+                        placeholder="Hi, this is a message from [Company]. Please call us back at +1 555…"
+                        rows={2}
+                        className="bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75 text-xs resize-none placeholder:text-black/35" />
+                    </div>
+                  )}
+                  <p className="text-[10px] text-black/30 leading-relaxed">
+                    AMD runs on outbound calls only. "Wait for beep" gives a natural pause before leaving messages.
+                  </p>
+                </>
+              )}
             </div>
             <div className="bg-black/[0.04] border border-black/[0.07]/40 rounded-xl p-4 space-y-4">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Scheduling</p>

@@ -25,6 +25,8 @@ export const callsTable = pgTable("calls", {
   // P2-A: Call Transfer
   transferType: text("transfer_type"),   // "warm" | "cold"
   transferTarget: text("transfer_target"), // E.164 or SIP URI transferred to
+  // P2-B: AMD / Voicemail Detection
+  amdResult: text("amd_result"),         // "human" | "machine" | "unknown"
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   endedAt: timestamp("ended_at", { withTimezone: true }),
 });

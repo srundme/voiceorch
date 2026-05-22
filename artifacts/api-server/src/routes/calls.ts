@@ -148,11 +148,19 @@ router.post("/calls/outbound", async (req, res): Promise<void> => {
       const cfg = providerRow.extraConfig ? JSON.parse(providerRow.extraConfig) as Record<string, string> : {};
       if (!cfg["authId"]) { res.status(400).json({ error: 'Vobiz provider is missing "authId" in Extra Config. Edit the provider and add: {"authId":"MA_XXXXXXXX","fromNumber":"+1xxx"}' }); return; }
       if (!cfg["fromNumber"]) { res.status(400).json({ error: 'Vobiz provider is missing "fromNumber" in Extra Config.' }); return; }
+      const agentCfg2 = (agent.agentConfig ?? {}) as Record<string, unknown>;
+      const amdEnabled = agentCfg2["voicemailDetection"] === true;
+      const amdMode    = (agentCfg2["machineDetectionMode"] as "Enable" | "DetectMessageEnd" | undefined) ?? "DetectMessageEnd";
       providerCallId = await dialVobiz({
         authId: cfg["authId"]!, authToken: providerRow.apiKey,
         fromNumber: cfg["fromNumber"]!, toNumber,
         answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${agentId}`,
         hangupUrl:  `${baseUrl}/api/webhooks/vobiz/status`,
+        // P2-B: pass AMD config when voicemail detection is enabled
+        ...(amdEnabled && {
+          machineDetection:    amdMode,
+          machineDetectionUrl: `${baseUrl}/api/webhooks/vobiz/amd?agentId=${agentId}`,
+        }),
       });
     } else {
       res.status(400).json({ error: `Outbound calling is not yet supported for provider: ${provider}` });

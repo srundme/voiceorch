@@ -54,18 +54,29 @@ export async function dialVobiz(opts: {
   toNumber: string;
   answerUrl: string;
   hangupUrl: string;
+  /** P2-B: AMD options — omit to disable machine detection */
+  machineDetection?: "Enable" | "DetectMessageEnd";
+  machineDetectionUrl?: string;
 }): Promise<string> {
   const url  = `https://api.vobiz.ai/api/v1/Account/${opts.authId}/Call/`;
+  const body: Record<string, string> = {
+    to: opts.toNumber, from: opts.fromNumber,
+    answer_url: opts.answerUrl, hangup_url: opts.hangupUrl,
+  };
+  if (opts.machineDetection) {
+    body["machine_detection"]        = opts.machineDetection;
+    body["machine_detection_method"] = "POST";
+    if (opts.machineDetectionUrl) {
+      body["machine_detection_url"] = opts.machineDetectionUrl;
+    }
+  }
   const resp = await fetch(url, {
     method: "POST",
     headers: {
       "X-Auth-ID": opts.authId, "X-Auth-Token": opts.authToken,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      to: opts.toNumber, from: opts.fromNumber,
-      answer_url: opts.answerUrl, hangup_url: opts.hangupUrl,
-    }),
+    body: JSON.stringify(body),
   });
   if (!resp.ok) throw new Error(`Vobiz API error ${resp.status}: ${await resp.text()}`);
   const data = await resp.json() as { call_uuid?: string; request_uuid?: string };
