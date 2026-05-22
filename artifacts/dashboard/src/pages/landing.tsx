@@ -1,12 +1,12 @@
 import { Link } from "wouter";
 import { useEffect, useRef, useState } from "react";
 import { SnapServeLogo, SnapServeIcon } from "@/components/logo";
-import { ArrowRight, Check, ChevronDown } from "lucide-react";
+import { ArrowRight, Check } from "lucide-react";
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-/* ─── Animated waveform canvas ───────────────────────────────────────────── */
-function WaveformCanvas() {
+/* ─── 3D Perspective Pipeline Canvas ────────────────────────────────────── */
+function PipelineScene() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef    = useRef<number>(0);
 
@@ -21,74 +21,219 @@ function WaveformCanvas() {
     const resize = () => {
       canvas.width  = canvas.offsetWidth  * devicePixelRatio;
       canvas.height = canvas.offsetHeight * devicePixelRatio;
-      ctx.scale(devicePixelRatio, devicePixelRatio);
     };
     resize();
-    window.addEventListener("resize", resize);
+    const ro = new ResizeObserver(resize);
+    ro.observe(canvas);
 
     const draw = () => {
       const W = canvas.offsetWidth;
       const H = canvas.offsetHeight;
+      ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
       ctx.clearRect(0, 0, W, H);
 
-      // Three overlapping waves
-      const waves = [
-        { freq: 0.018, amp: 28, speed: 0.022, color: "rgba(124, 58, 237, 0.55)", width: 2 },
-        { freq: 0.028, amp: 18, speed: 0.034, color: "rgba(99, 102, 241, 0.40)", width: 1.5 },
-        { freq: 0.012, amp: 40, speed: 0.014, color: "rgba(139, 92, 246, 0.25)", width: 1 },
-      ];
+      const cx = W * 0.5;
+      const cy = H * 0.52;
+      const fov = 340;
 
-      waves.forEach(({ freq, amp, speed, color, width }) => {
+      /* ── Perspective grid ── */
+      const COLS = 14, ROWS = 22;
+      const GW = 420, GH = 420;
+      const tilt = Math.sin(t * 0.0004) * 0.018; // very subtle sway
+
+      function project(x: number, z: number): [number, number, number] {
+        const rx = x * Math.cos(tilt) - z * Math.sin(tilt);
+        const rz = x * Math.sin(tilt) + z * Math.cos(tilt);
+        const scale = fov / (fov + rz + 220);
+        return [cx + rx * scale, cy + rz * scale * 0.55, scale];
+      }
+
+      ctx.save();
+      // Fade grid at edges
+      const gridFade = ctx.createRadialGradient(cx, cy + 40, 10, cx, cy + 40, GW * 0.85);
+      gridFade.addColorStop(0,   "rgba(255,255,255,0.06)");
+      gridFade.addColorStop(0.7, "rgba(255,255,255,0.03)");
+      gridFade.addColorStop(1,   "rgba(255,255,255,0)");
+
+      // Grid columns
+      for (let i = 0; i <= COLS; i++) {
+        const gx = (i / COLS - 0.5) * GW;
         ctx.beginPath();
-        ctx.strokeStyle = color;
-        ctx.lineWidth   = width;
-        ctx.shadowColor = color;
-        ctx.shadowBlur  = 12;
-
-        for (let x = 0; x <= W; x += 1) {
-          const noise = Math.sin(x * 0.04 + t * 0.7) * 6;
-          const y = H / 2
-            + Math.sin(x * freq + t * speed) * amp
-            + Math.sin(x * freq * 2.3 + t * speed * 1.4) * (amp * 0.4)
-            + noise;
-          x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        ctx.strokeStyle = gridFade;
+        ctx.lineWidth = 0.5;
+        for (let j = 0; j <= ROWS; j++) {
+          const gz = (j / ROWS - 0.5) * GH + (t * 0.025 % (GH / ROWS));
+          const [px, py] = project(gx, gz);
+          j === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
         }
         ctx.stroke();
-        ctx.shadowBlur = 0;
+      }
+      // Grid rows
+      for (let j = 0; j <= ROWS; j++) {
+        const gz = (j / ROWS - 0.5) * GH + (t * 0.025 % (GH / ROWS));
+        ctx.beginPath();
+        ctx.strokeStyle = gridFade;
+        ctx.lineWidth = 0.5;
+        for (let i = 0; i <= COLS; i++) {
+          const gx = (i / COLS - 0.5) * GW;
+          const [px, py] = project(gx, gz);
+          i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      /* ── Pipeline nodes ── */
+      const nodes = [
+        { label: "ASR",      sub: "Deepgram Nova-3",  x: -130, z: -80,  col: [100, 200, 255] as [number,number,number], r: 28 },
+        { label: "LLM",      sub: "GPT-4o mini",      x:    0, z:  20,  col: [160, 100, 255] as [number,number,number], r: 34 },
+        { label: "TTS",      sub: "Cartesia Sonic-2", x:  130, z: -80,  col: [80,  220, 180] as [number,number,number], r: 28 },
+      ];
+
+      const floatY = Math.sin(t * 0.0012) * 6;
+
+      // Draw connection lines between nodes
+      const projected = nodes.map(n => project(n.x, n.z));
+      for (let i = 0; i < projected.length - 1; i++) {
+        const [x1, y1] = projected[i]!;
+        const [x2, y2] = projected[i + 1]!;
+        const grad = ctx.createLinearGradient(x1, y1, x2, y2);
+        const c1 = nodes[i]!.col;
+        const c2 = nodes[i + 1]!.col;
+        grad.addColorStop(0,   `rgba(${c1[0]},${c1[1]},${c1[2]},0.5)`);
+        grad.addColorStop(0.5, `rgba(200,160,255,0.3)`);
+        grad.addColorStop(1,   `rgba(${c2[0]},${c2[1]},${c2[2]},0.5)`);
+        ctx.beginPath();
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([6, 6]);
+        ctx.lineDashOffset = -(t * 0.12);
+        ctx.moveTo(x1, y1 + floatY);
+        ctx.lineTo(x2, y2 + floatY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // Caller node (top-left)
+      {
+        const [px, py, sc] = project(-210, -130);
+        ctx.save();
+        ctx.globalAlpha = 0.55;
+        ctx.beginPath();
+        ctx.arc(px, py + floatY, 18 * sc, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(80,80,120,0.3)";
+        ctx.strokeStyle = "rgba(150,150,200,0.3)";
+        ctx.lineWidth = 1;
+        ctx.fill(); ctx.stroke();
+        ctx.font = `${Math.round(8 * sc)}px monospace`;
+        ctx.fillStyle = "rgba(200,200,255,0.5)";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("IN", px, py + floatY);
+        ctx.restore();
+      }
+
+      // Response node (top-right)
+      {
+        const [px, py, sc] = project(210, -130);
+        ctx.save();
+        ctx.globalAlpha = 0.55;
+        ctx.beginPath();
+        ctx.arc(px, py + floatY, 18 * sc, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(30,100,70,0.3)";
+        ctx.strokeStyle = "rgba(80,220,160,0.3)";
+        ctx.lineWidth = 1;
+        ctx.fill(); ctx.stroke();
+        ctx.font = `${Math.round(8 * sc)}px monospace`;
+        ctx.fillStyle = "rgba(80,220,160,0.6)";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("OUT", px, py + floatY);
+        ctx.restore();
+      }
+
+      // Main pipeline nodes
+      nodes.forEach(({ label, sub, x, z, col, r }, idx) => {
+        const [px, py, sc] = project(x, z);
+        const fy = py + floatY + Math.sin(t * 0.0012 + idx * 1.2) * 4;
+        const [cr, cg, cb] = col;
+        const radius = r * sc;
+
+        // Outer glow ring
+        const glow = ctx.createRadialGradient(px, fy, 0, px, fy, radius * 3.2);
+        glow.addColorStop(0,   `rgba(${cr},${cg},${cb},0.18)`);
+        glow.addColorStop(0.4, `rgba(${cr},${cg},${cb},0.08)`);
+        glow.addColorStop(1,   `rgba(${cr},${cg},${cb},0)`);
+        ctx.beginPath();
+        ctx.arc(px, fy, radius * 3.2, 0, Math.PI * 2);
+        ctx.fillStyle = glow;
+        ctx.fill();
+
+        // Node body
+        const body = ctx.createRadialGradient(px - radius * 0.25, fy - radius * 0.25, 0, px, fy, radius);
+        body.addColorStop(0, `rgba(${cr},${cg},${cb},0.35)`);
+        body.addColorStop(1, `rgba(${Math.round(cr*0.3)},${Math.round(cg*0.3)},${Math.round(cb*0.3)},0.6)`);
+        ctx.beginPath();
+        ctx.arc(px, fy, radius, 0, Math.PI * 2);
+        ctx.fillStyle = body;
+        ctx.fill();
+
+        // Border
+        ctx.beginPath();
+        ctx.arc(px, fy, radius, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(${cr},${cg},${cb},0.55)`;
+        ctx.lineWidth = 1.5 * sc;
+        ctx.stroke();
+
+        // Label
+        ctx.font = `bold ${Math.round(10 * sc)}px ui-monospace, monospace`;
+        ctx.fillStyle = `rgba(${cr},${cg},${cb},0.95)`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(label, px, fy);
+
+        // Sub-label below node
+        ctx.font = `${Math.round(7.5 * sc)}px ui-sans-serif, sans-serif`;
+        ctx.fillStyle = "rgba(255,255,255,0.28)";
+        ctx.fillText(sub, px, fy + radius + 12 * sc);
       });
 
-      // Scanning dot
-      const dotX = ((t * 2.5) % W);
-      const dotY = H / 2 + Math.sin(dotX * 0.018 + t * 0.022) * 28;
-      const grd  = ctx.createRadialGradient(dotX, dotY, 0, dotX, dotY, 18);
-      grd.addColorStop(0, "rgba(167,139,250,0.9)");
-      grd.addColorStop(1, "rgba(124,58,237,0)");
-      ctx.beginPath();
-      ctx.arc(dotX, dotY, 5, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(200,180,255,0.95)";
-      ctx.shadowColor = "#a78bfa";
-      ctx.shadowBlur  = 24;
-      ctx.fill();
-      ctx.shadowBlur = 0;
+      /* ── Latency tags floating above center node ── */
+      const [cx2, cy2] = project(0, 20);
+      const tags = [
+        { label: "184ms total", col: [180, 130, 255] as [number,number,number] },
+      ];
+      tags.forEach(({ label, col }) => {
+        const tx = cx2, ty = cy2 + floatY - 60;
+        const [cr, cg, cb] = col;
+        ctx.save();
+        ctx.font = "bold 11px ui-monospace, monospace";
+        const tw = ctx.measureText(label).width;
+        ctx.beginPath();
+        ctx.roundRect(tx - tw / 2 - 8, ty - 10, tw + 16, 20, 10);
+        ctx.fillStyle = `rgba(${cr},${cg},${cb},0.12)`;
+        ctx.strokeStyle = `rgba(${cr},${cg},${cb},0.35)`;
+        ctx.lineWidth = 1;
+        ctx.fill(); ctx.stroke();
+        ctx.fillStyle = `rgba(${cr},${cg},${cb},0.9)`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(label, tx, ty);
+        ctx.restore();
+      });
 
-      t += 0.6;
+      t += 0.8;
       rafRef.current = requestAnimationFrame(draw);
     };
 
     rafRef.current = requestAnimationFrame(draw);
     return () => {
       cancelAnimationFrame(rafRef.current);
-      window.removeEventListener("resize", resize);
+      ro.disconnect();
     };
   }, []);
 
-  return (
-    <canvas
-      ref={canvasRef}
-      className="w-full h-full"
-      style={{ display: "block" }}
-    />
-  );
+  return <canvas ref={canvasRef} className="w-full h-full" />;
 }
 
 /* ─── Animated counter ───────────────────────────────────────────────────── */
@@ -109,93 +254,121 @@ function Counter({ to, suffix = "", prefix = "" }: { to: number; suffix?: string
         else setN(to);
       };
       requestAnimationFrame(tick);
-    }, { threshold: 0.6 });
+    }, { threshold: 0.5 });
     obs.observe(el);
     return () => obs.disconnect();
   }, [to]);
-  return <div ref={ref} className="tabular-nums">{prefix}{n.toLocaleString()}{suffix}</div>;
+  return <div ref={ref}>{prefix}{n.toLocaleString()}{suffix}</div>;
 }
 
-/* ─── Provider chip ──────────────────────────────────────────────────────── */
-function Chip({ name, tag }: { name: string; tag: string }) {
+/* ─── Reusable section label ─────────────────────────────────────────────── */
+function Label({ text }: { text: string }) {
   return (
-    <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border border-white/[0.07] bg-white/[0.03] hover:border-white/[0.13] hover:bg-white/[0.05] transition-all cursor-default">
-      <div className="h-5 w-5 rounded-md bg-white/10 flex items-center justify-center shrink-0">
-        <span className="text-[8px] font-black text-white/50 leading-none">{name.slice(0, 2).toUpperCase()}</span>
-      </div>
-      <div className="leading-none">
-        <div className="text-[11px] font-semibold text-white/70">{name}</div>
-        <div className="text-[9px] text-white/25 mt-0.5">{tag}</div>
-      </div>
-    </div>
+    <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-violet-400 mb-4">{text}</p>
   );
 }
 
-/* ─── Step card ──────────────────────────────────────────────────────────── */
-function Step({ n, title, body }: { n: string; title: string; body: string }) {
+/* ─── Feature row ────────────────────────────────────────────────────────── */
+function FeatureRow({ label, title, body, visual }: {
+  label: string; title: string; body: string; visual: React.ReactNode;
+}) {
   return (
-    <div className="group relative flex flex-col gap-4 p-6 rounded-2xl border border-white/[0.07] bg-white/[0.025] hover:border-white/[0.1] transition-all">
-      <span className="text-[10px] font-black tracking-[0.2em] text-white/15">{n}</span>
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center py-20 border-b border-white/[0.06]">
       <div>
-        <h3 className="text-[15px] font-bold text-white mb-2">{title}</h3>
-        <p className="text-[13px] text-white/38 leading-[1.7]">{body}</p>
+        <Label text={label} />
+        <h2 className="text-[40px] sm:text-[52px] font-black tracking-tight leading-[1.0] text-white mb-6">{title}</h2>
+        <p className="text-[15px] text-white/40 leading-[1.75] max-w-md">{body}</p>
+      </div>
+      <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] overflow-hidden aspect-[4/3] flex items-center justify-center">
+        {visual}
       </div>
     </div>
   );
 }
 
-/* ─── Feature card ───────────────────────────────────────────────────────── */
-function FCard({ title, body, tag }: { title: string; body: string; tag: string }) {
+/* ─── Code-block visual ──────────────────────────────────────────────────── */
+function CodeBlock({ lines }: { lines: { t: string; c: string }[] }) {
   return (
-    <div className="group relative flex flex-col gap-3 p-5 rounded-2xl border border-white/[0.07] bg-white/[0.02] hover:border-violet-500/25 hover:bg-violet-500/[0.04] transition-all duration-300 overflow-hidden">
-      <div className="absolute top-0 right-0 w-20 h-20 bg-violet-500/10 rounded-full blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-      <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-violet-400/70">{tag}</span>
-      <h3 className="text-[13px] font-semibold text-white/85">{title}</h3>
-      <p className="text-[12px] text-white/35 leading-[1.65]">{body}</p>
+    <div className="w-full h-full flex flex-col gap-0 p-6 font-mono text-[12px]">
+      <div className="flex items-center gap-1.5 mb-4">
+        {["#FF5F57","#FEBC2E","#28C840"].map(c => (
+          <div key={c} className="w-3 h-3 rounded-full" style={{ background: c }} />
+        ))}
+      </div>
+      {lines.map(({ t, c }, i) => (
+        <div key={i} className="flex gap-4 leading-6">
+          <span className="text-white/15 w-4 text-right shrink-0">{i + 1}</span>
+          <span style={{ color: c }}>{t}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ─── Use case card ──────────────────────────────────────────────────────── */
+function UCCard({ title, kpi, body }: { title: string; kpi: string; body: string }) {
+  return (
+    <div className="group flex flex-col gap-3 p-6 rounded-2xl border border-white/[0.06] hover:border-white/[0.1] bg-white/[0.01] hover:bg-white/[0.03] transition-all duration-300">
+      <div className="flex items-start justify-between gap-2">
+        <h3 className="text-[14px] font-bold text-white/80 group-hover:text-white transition-colors">{title}</h3>
+        <span className="shrink-0 text-[10px] font-black text-violet-300 bg-violet-500/10 border border-violet-500/20 px-2 py-0.5 rounded-full">{kpi}</span>
+      </div>
+      <p className="text-[12px] text-white/30 leading-[1.7]">{body}</p>
     </div>
   );
 }
 
 /* ─── Pricing card ───────────────────────────────────────────────────────── */
-function PCard({
-  plan, price, per, note, items, cta, hot,
-}: {
+function PCard({ plan, price, per, note, items, cta, hot }: {
   plan: string; price: string; per: string; note: string;
   items: string[]; cta: string; hot?: boolean;
 }) {
   return (
-    <div className={`relative rounded-2xl overflow-hidden ${hot ? "p-px bg-gradient-to-b from-violet-500/50 via-violet-500/20 to-transparent" : "border border-white/[0.07]"}`}>
+    <div className={`relative flex flex-col gap-6 p-6 rounded-2xl border transition-all ${hot ? "border-violet-500/40 bg-violet-500/5" : "border-white/[0.07] bg-white/[0.015]"}`}>
       {hot && (
-        <div className="absolute -top-px left-1/2 -translate-x-1/2 z-10">
-          <div className="bg-gradient-to-r from-violet-500 to-indigo-500 text-white text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-b-lg">
-            Most Popular
-          </div>
+        <div className="absolute -top-3 left-6">
+          <span className="text-[9px] font-black uppercase tracking-widest bg-violet-600 text-white px-3 py-1 rounded-full">
+            Most popular
+          </span>
         </div>
       )}
-      <div className={`h-full flex flex-col gap-6 p-6 rounded-2xl ${hot ? "bg-[#0C0C18]" : "bg-[#08080F]"}`}>
-        <div>
-          <p className="text-[10px] uppercase tracking-widest font-bold text-white/25 mb-4">{plan}</p>
-          <div className="flex items-end gap-1 mb-1.5">
-            <span className="text-[32px] font-black text-white leading-none">{price}</span>
-            {per && <span className="text-xs text-white/30 mb-1.5">{per}</span>}
-          </div>
-          <p className="text-[11px] text-white/25">{note}</p>
+      <div className="pt-1">
+        <p className="text-[10px] font-black uppercase tracking-widest text-white/25 mb-5">{plan}</p>
+        <div className="flex items-end gap-1.5 mb-1">
+          <span className="text-[36px] font-black text-white leading-none">{price}</span>
+          {per && <span className="text-[13px] text-white/30 mb-1.5">{per}</span>}
         </div>
-        <ul className="flex flex-col gap-2.5 flex-1">
-          {items.map(item => (
-            <li key={item} className="flex items-start gap-2 text-[12px] text-white/50 leading-snug">
-              <Check className="h-3.5 w-3.5 text-violet-400 mt-0.5 shrink-0" />
-              {item}
-            </li>
-          ))}
-        </ul>
-        <Link href={`${basePath}/sign-up`}>
-          <button className={`w-full py-2.5 rounded-xl text-[13px] font-bold transition-all duration-200 ${
-            hot
-              ? "bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:from-violet-500 hover:to-indigo-500 shadow-[0_8px_24px_-6px_rgba(124,58,237,0.5)]"
-              : "border border-white/[0.08] text-white/50 hover:border-white/[0.15] hover:text-white/70"
-          }`}>{cta}</button>
-        </Link>
+        <p className="text-[12px] text-white/25">{note}</p>
+      </div>
+      <div className="h-px bg-white/[0.06]" />
+      <ul className="flex flex-col gap-3 flex-1">
+        {items.map(item => (
+          <li key={item} className="flex items-start gap-2.5 text-[13px] text-white/50">
+            <Check className="h-3.5 w-3.5 text-violet-400 mt-0.5 shrink-0" />
+            {item}
+          </li>
+        ))}
+      </ul>
+      <Link href={`${basePath}/sign-up`}>
+        <button className={`w-full py-3 rounded-full text-[13px] font-bold transition-all duration-200 ${hot
+          ? "bg-white text-black hover:bg-white/90"
+          : "border border-white/[0.1] text-white/50 hover:border-white/[0.2] hover:text-white/70"
+        }`}>{cta}</button>
+      </Link>
+    </div>
+  );
+}
+
+/* ─── Provider chip ──────────────────────────────────────────────────────── */
+function Chip({ name, tag }: { name: string; tag: string }) {
+  return (
+    <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-white/[0.06] bg-white/[0.02] hover:border-white/[0.1] transition-colors cursor-default">
+      <div className="h-5 w-5 rounded-md bg-white/[0.07] flex items-center justify-center shrink-0">
+        <span className="text-[8px] font-black text-white/40">{name.slice(0, 2).toUpperCase()}</span>
+      </div>
+      <div>
+        <div className="text-[11px] font-semibold text-white/65 leading-none">{name}</div>
+        <div className="text-[9px] text-white/25 mt-0.5">{tag}</div>
       </div>
     </div>
   );
@@ -204,36 +377,21 @@ function PCard({
 /* ─── Main ───────────────────────────────────────────────────────────────── */
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-[#050508] text-white antialiased overflow-x-hidden">
-
-      {/* ── Background ────────────────────────────────────────────── */}
-      <div className="fixed inset-0 pointer-events-none select-none" aria-hidden>
-        <div className="absolute -top-[30%] left-[5%] w-[800px] h-[800px] rounded-full bg-violet-700/8 blur-[140px]" />
-        <div className="absolute top-[40%] right-[-15%] w-[600px] h-[600px] rounded-full bg-indigo-700/6 blur-[120px]" />
-        <div className="absolute bottom-0 left-[20%] w-[500px] h-[500px] rounded-full bg-violet-800/5 blur-[110px]" />
-        <div className="absolute inset-0" style={{
-          backgroundImage: `
-            linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px)
-          `,
-          backgroundSize: "72px 72px",
-          maskImage: "radial-gradient(ellipse 80% 60% at 50% 0%, black 40%, transparent 100%)",
-        }} />
-      </div>
+    <div className="min-h-screen bg-black text-white antialiased overflow-x-hidden">
 
       {/* ── Nav ───────────────────────────────────────────────────── */}
-      <header className="relative z-50 flex items-center justify-between max-w-6xl mx-auto px-8 h-16">
+      <header className="fixed top-0 inset-x-0 z-50 flex items-center justify-between px-8 h-14 border-b border-white/[0.05] bg-black/80 backdrop-blur-xl">
         <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-600 shadow-[0_0_16px_rgba(124,58,237,0.45)]">
-            <SnapServeIcon size={15} className="text-white" />
+          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-violet-600">
+            <SnapServeIcon size={13} className="text-white" />
           </div>
           <SnapServeLogo size="sm" className="text-white" />
         </div>
 
         <nav className="hidden md:flex items-center gap-7">
-          {["Product", "Use Cases", "Pricing", "Docs"].map(l => (
-            <a key={l} href={`#${l.toLowerCase().replace(" ", "-")}`}
-              className="text-[13px] font-medium text-white/35 hover:text-white/70 transition-colors">
+          {[["Product", "#product"], ["Use Cases", "#use-cases"], ["Pricing", "#pricing"], ["Docs", "#"]].map(([l, h]) => (
+            <a key={l} href={h}
+              className="text-[13px] font-medium text-white/40 hover:text-white/75 transition-colors">
               {l}
             </a>
           ))}
@@ -241,328 +399,281 @@ export default function LandingPage() {
 
         <div className="flex items-center gap-3">
           <Link href={`${basePath}/sign-in`}>
-            <button className="text-[13px] font-medium text-white/35 hover:text-white/65 transition-colors px-2">
+            <button className="text-[13px] font-medium text-white/40 hover:text-white/70 transition-colors px-3 py-1.5">
               Sign in
             </button>
           </Link>
           <Link href={`${basePath}/sign-up`}>
-            <button className="flex items-center gap-1.5 text-[13px] font-bold bg-white text-[#050508] px-4 py-1.5 rounded-lg hover:bg-white/90 transition-all">
-              Get started
-              <ArrowRight className="h-3.5 w-3.5" />
+            <button className="flex items-center gap-1.5 bg-white text-black text-[13px] font-bold px-4 py-1.5 rounded-full hover:bg-white/90 transition-all">
+              Get started <ArrowRight className="h-3.5 w-3.5" />
             </button>
           </Link>
         </div>
       </header>
 
       {/* ── Hero ──────────────────────────────────────────────────── */}
-      <section className="relative z-10 max-w-6xl mx-auto px-8 pt-20 pb-12 flex flex-col items-center text-center">
+      <section className="relative min-h-screen grid grid-cols-1 lg:grid-cols-2 pt-14">
 
-        {/* Badge */}
-        <div className="inline-flex items-center gap-2 mb-8 px-3 py-1 rounded-full border border-violet-500/25 bg-violet-500/8 text-[11px] font-semibold text-violet-300 tracking-wide">
-          <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />
-          From $0.03 / min — BYOK or Managed
+        {/* Left: text */}
+        <div className="flex flex-col justify-center px-10 lg:px-16 py-20 lg:py-0">
+          <div className="inline-flex items-center gap-2 mb-8 w-fit px-3 py-1 rounded-full border border-white/[0.1] text-[11px] font-semibold text-white/50">
+            <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />
+            From $0.03 / min &mdash; BYOK or Managed
+          </div>
+
+          <h1 className="text-[52px] sm:text-[64px] lg:text-[72px] font-black tracking-[-0.035em] leading-[0.95] mb-8 text-white">
+            AI voice<br />agents,<br />
+            <span className="text-white/35">built to</span><br />
+            <span style={{
+              background: "linear-gradient(90deg, #a78bfa 0%, #818cf8 40%, #60a5fa 100%)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+            }}>deploy.</span>
+          </h1>
+
+          <p className="text-[15px] text-white/40 leading-[1.75] max-w-sm mb-10">
+            Real-time orchestration infrastructure. Connect your ASR, LLM, and TTS providers — or use ours.
+            We handle the pipeline so you ship the agent.
+          </p>
+
+          <div className="flex items-center gap-3 flex-wrap">
+            <Link href={`${basePath}/sign-up`}>
+              <button className="flex items-center gap-2 bg-white text-black text-[14px] font-bold px-6 py-3 rounded-full hover:bg-white/90 transition-all">
+                Get started <ArrowRight className="h-4 w-4" />
+              </button>
+            </Link>
+            <a href="#product">
+              <button className="text-[14px] font-medium text-white/40 border border-white/[0.1] px-6 py-3 rounded-full hover:border-white/[0.2] hover:text-white/60 transition-all">
+                See how it works
+              </button>
+            </a>
+          </div>
+
+          <p className="text-[11px] text-white/20 mt-5">$5 credit on signup — no card required</p>
         </div>
 
-        {/* Headline */}
-        <h1 className="max-w-3xl text-[52px] sm:text-[68px] font-black tracking-[-0.03em] leading-[1.0] mb-6">
-          <span style={{
-            background: "linear-gradient(135deg, #ffffff 0%, rgba(255,255,255,0.75) 100%)",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-          }}>
-            Voice agents,
-            <br />
-            built to
-          </span>{" "}
-          <span style={{
-            background: "linear-gradient(135deg, #a78bfa 0%, #818cf8 50%, #60a5fa 100%)",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-          }}>
-            deploy
-          </span>
-        </h1>
+        {/* Right: 3D pipeline visual */}
+        <div className="relative hidden lg:flex items-center justify-center overflow-hidden">
+          {/* Radial fade from right edge */}
+          <div className="absolute inset-0 bg-gradient-to-l from-black/0 via-black/0 to-black/60 z-10 pointer-events-none" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/0 to-black/20 z-10 pointer-events-none" />
 
-        <p className="max-w-xl text-[15px] text-white/40 leading-[1.75] mb-10">
-          Infrastructure for real-time AI voice agents. Connect your ASR, LLM, and TTS
-          providers — or use ours. We handle the orchestration layer.
-        </p>
+          <PipelineScene />
 
-        {/* CTA row */}
-        <div className="flex items-center gap-3 mb-6">
-          <Link href={`${basePath}/sign-up`}>
-            <button className="flex items-center gap-2 px-6 py-3 rounded-xl text-[14px] font-bold bg-violet-600 hover:bg-violet-500 text-white shadow-[0_0_28px_-4px_rgba(124,58,237,0.7)] hover:shadow-[0_0_36px_-4px_rgba(124,58,237,0.85)] transition-all duration-200">
-              Start building free
-              <ArrowRight className="h-4 w-4" />
-            </button>
-          </Link>
-          <a href="#product">
-            <button className="flex items-center gap-2 px-6 py-3 rounded-xl text-[14px] font-medium text-white/40 border border-white/[0.08] hover:border-white/[0.15] hover:text-white/60 transition-all duration-200">
-              See how it works
-              <ChevronDown className="h-4 w-4" />
-            </button>
-          </a>
-        </div>
-        <p className="text-[11px] text-white/18">$5 credit on signup — no credit card required</p>
-
-        {/* Waveform card */}
-        <div className="relative w-full max-w-3xl mt-16">
-          {/* Glow */}
-          <div className="absolute inset-0 scale-[1.04] bg-violet-600/10 rounded-3xl blur-3xl" />
-
-          <div className="relative rounded-2xl border border-white/[0.07] bg-white/[0.025] backdrop-blur-sm overflow-hidden">
-            {/* Top bar */}
-            <div className="flex items-center justify-between px-5 py-3 border-b border-white/[0.06]">
-              <div className="flex items-center gap-2">
-                <div className="flex gap-1.5">
-                  <div className="w-2.5 h-2.5 rounded-full bg-white/10" />
-                  <div className="w-2.5 h-2.5 rounded-full bg-white/10" />
-                  <div className="w-2.5 h-2.5 rounded-full bg-white/10" />
-                </div>
-                <span className="text-[10px] font-mono text-white/20 ml-2">orchestration / live-session</span>
+          {/* Floating stat cards */}
+          <div className="absolute top-1/4 right-8 z-20 flex flex-col gap-2">
+            {[
+              { label: "ASR", value: "62ms",  col: "#67e8f9" },
+              { label: "LLM", value: "94ms",  col: "#c4b5fd" },
+              { label: "TTS", value: "28ms",  col: "#6ee7b7" },
+            ].map(({ label, value, col }) => (
+              <div key={label} className="flex items-center gap-2.5 bg-white/[0.04] border border-white/[0.08] backdrop-blur-sm px-3 py-2 rounded-xl">
+                <span className="text-[10px] font-bold" style={{ color: col }}>{label}</span>
+                <span className="text-[12px] font-black text-white font-mono">{value}</span>
               </div>
-              <div className="flex items-center gap-1.5 text-[10px] text-emerald-400 font-mono font-semibold">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                LIVE
-              </div>
-            </div>
+            ))}
+          </div>
 
-            {/* Pipeline labels */}
-            <div className="flex items-center justify-between px-8 pt-4 pb-0">
-              {[
-                { label: "CALLER",    sub: "inbound audio" },
-                { label: "ASR",       sub: "Deepgram Nova-3" },
-                { label: "LLM",       sub: "GPT-4o mini" },
-                { label: "TTS",       sub: "Cartesia Sonic-2" },
-                { label: "RESPONSE",  sub: "synthesized audio" },
-              ].map(({ label, sub }) => (
-                <div key={label} className="flex flex-col items-center gap-0.5">
-                  <span className="text-[9px] font-black tracking-widest text-white/25">{label}</span>
-                  <span className="text-[8px] text-white/15">{sub}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Canvas waveform */}
-            <div className="h-36 w-full px-2">
-              <WaveformCanvas />
-            </div>
-
-            {/* Bottom stats */}
-            <div className="flex items-center justify-between px-5 py-3 border-t border-white/[0.04]">
-              {[
-                { label: "ASR latency",   value: "62ms" },
-                { label: "LLM TTFT",      value: "94ms" },
-                { label: "TTS latency",   value: "28ms" },
-                { label: "Total",         value: "184ms" },
-              ].map(({ label, value }) => (
-                <div key={label} className="flex flex-col items-center gap-0.5">
-                  <span className="text-[10px] font-bold text-white/60 font-mono">{value}</span>
-                  <span className="text-[9px] text-white/20">{label}</span>
-                </div>
-              ))}
-            </div>
+          {/* Bottom live indicator */}
+          <div className="absolute bottom-8 right-8 z-20 flex items-center gap-2 bg-white/[0.03] border border-white/[0.07] px-3 py-1.5 rounded-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-[11px] font-semibold text-white/40">Live session active</span>
           </div>
         </div>
       </section>
 
       {/* ── Metrics ───────────────────────────────────────────────── */}
-      <section className="relative z-10 border-y border-white/[0.05] my-12">
-        <div className="max-w-4xl mx-auto grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-white/[0.05]">
+      <section className="border-y border-white/[0.06]">
+        <div className="max-w-5xl mx-auto grid grid-cols-2 md:grid-cols-4 divide-x divide-white/[0.06]">
           {[
-            { to: 10, suffix: "M+", pre: "", label: "Minutes processed" },
-            { to: 184, suffix: "ms", pre: "<", label: "Pipeline latency" },
-            { to: 15, suffix: "+", pre: "", label: "Providers supported" },
-            { to: 99, suffix: ".9%", pre: "", label: "Uptime SLA" },
-          ].map(({ to, suffix, pre, label }) => (
-            <div key={label} className="flex flex-col items-center py-8 gap-1">
-              <div className="text-[28px] font-black text-white">
-                <Counter to={to} suffix={suffix} prefix={pre} />
+            { to: 10,  s: "M+",   p: "",  l: "Minutes processed" },
+            { to: 184, s: "ms",   p: "<", l: "Pipeline latency" },
+            { to: 15,  s: "+",    p: "",  l: "Provider integrations" },
+            { to: 99,  s: ".9%",  p: "",  l: "Uptime SLA" },
+          ].map(({ to, s, p, l }) => (
+            <div key={l} className="flex flex-col items-center py-10 gap-1.5">
+              <div className="text-[30px] font-black text-white tabular-nums">
+                <Counter to={to} suffix={s} prefix={p} />
               </div>
-              <p className="text-[11px] text-white/30 font-medium">{label}</p>
+              <p className="text-[11px] text-white/25 font-medium">{l}</p>
             </div>
           ))}
         </div>
       </section>
 
-      {/* ── How it works ──────────────────────────────────────────── */}
-      <section id="product" className="relative z-10 max-w-5xl mx-auto px-8 py-20">
-        <div className="mb-12">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-violet-400 mb-3">How it works</p>
-          <h2 className="text-[32px] font-black tracking-tight text-white">Three steps to live</h2>
-        </div>
+      {/* ── Feature rows ──────────────────────────────────────────── */}
+      <section id="product" className="max-w-5xl mx-auto px-8 lg:px-10">
+        <FeatureRow
+          label="Pipeline"
+          title={"Sub-200ms,\nend-to-end."}
+          body="Streaming ASR with token-level LLM output and parallel TTS synthesis. Callers hear a response before generation finishes. Every millisecond instrumented."
+          visual={
+            <div className="w-full h-full p-6 flex flex-col gap-3 font-mono text-[12px]">
+              {[
+                { stage: "CALLER IN",  ms: "0ms",    bar: 2,   col: "#94a3b8" },
+                { stage: "ASR",        ms: "62ms",   bar: 33,  col: "#67e8f9" },
+                { stage: "LLM TTFT",   ms: "94ms",   bar: 50,  col: "#c4b5fd" },
+                { stage: "TTS",        ms: "28ms",   bar: 15,  col: "#6ee7b7" },
+                { stage: "TOTAL",      ms: "184ms",  bar: 100, col: "#a78bfa" },
+              ].map(({ stage, ms, bar, col }) => (
+                <div key={stage} className="flex items-center gap-3">
+                  <span className="w-20 text-right text-white/30 text-[10px]">{stage}</span>
+                  <div className="flex-1 h-1.5 bg-white/[0.05] rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all" style={{ width: `${bar}%`, background: col, boxShadow: `0 0 8px ${col}` }} />
+                  </div>
+                  <span className="w-10 text-[11px] font-bold" style={{ color: col }}>{ms}</span>
+                </div>
+              ))}
+            </div>
+          }
+        />
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Step n="01" title="Connect your providers"
-            body="Add API keys for Deepgram, OpenAI, ElevenLabs, Twilio — or use our managed stack. No vendor lock-in. Switch providers any time." />
-          <Step n="02" title="Configure your agent"
-            body="Set a system prompt, choose a voice, define call flow, escalation phrases, and silence handling. All from a single dashboard." />
-          <Step n="03" title="Deploy and monitor"
-            body="Get a phone number, connect via webhook, and go live. Every call logged with transcript, latency breakdown, and outcome tracking." />
-        </div>
+        <FeatureRow
+          label="Flexibility"
+          title={"BYOK or\nmanaged."}
+          body="Bring your own Deepgram, OpenAI, Twilio credentials for full cost control and zero lock-in. Or flip a switch and use our managed keys at $0.035/min — same API, zero setup."
+          visual={
+            <CodeBlock lines={[
+              { t: "# Use your own keys", c: "#6b7280" },
+              { t: 'asr_provider: "deepgram"', c: "#c4b5fd" },
+              { t: 'asr_key: "dg-xxxxxxxxxxxx"', c: "#f9a8d4" },
+              { t: "", c: "" },
+              { t: "# Or use managed", c: "#6b7280" },
+              { t: 'asr_provider: "deepgram"', c: "#c4b5fd" },
+              { t: 'asr_key: "managed"', c: "#6ee7b7" },
+              { t: "", c: "" },
+              { t: "# Same config. Zero setup.", c: "#6b7280" },
+            ]} />
+          }
+        />
+
+        <FeatureRow
+          label="Languages"
+          title={"Multilingual\nout of the box."}
+          body="Hindi, Tamil, Telugu, Malayalam, Bengali, English and more. Sarvam ASR for Indic languages, multilingual LLM routing, and Indian-accent TTS voices built in."
+          visual={
+            <div className="w-full h-full p-6 flex flex-col justify-center gap-3">
+              {[
+                { lang: "Hindi",     code: "hi-IN", active: true },
+                { lang: "Tamil",     code: "ta-IN", active: true },
+                { lang: "Telugu",    code: "te-IN", active: true },
+                { lang: "Malayalam", code: "ml-IN", active: false },
+                { lang: "English",   code: "en-IN", active: true },
+              ].map(({ lang, code, active }) => (
+                <div key={lang} className="flex items-center justify-between px-4 py-2.5 rounded-xl border border-white/[0.06] bg-white/[0.02]">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-2 h-2 rounded-full ${active ? "bg-emerald-400" : "bg-white/20"}`} />
+                    <span className="text-[13px] font-semibold text-white/70">{lang}</span>
+                  </div>
+                  <span className="text-[10px] font-mono text-white/25">{code}</span>
+                </div>
+              ))}
+            </div>
+          }
+        />
       </section>
 
-      {/* ── Capabilities ──────────────────────────────────────────── */}
-      <section className="relative z-10 max-w-5xl mx-auto px-8 py-10">
-        <div className="mb-12">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-violet-400 mb-3">Capabilities</p>
-          <h2 className="text-[32px] font-black tracking-tight text-white">The full pipeline, handled</h2>
-        </div>
+      {/* ── Provider grid ─────────────────────────────────────────── */}
+      <section className="border-y border-white/[0.06] py-16">
+        <div className="max-w-5xl mx-auto px-8 lg:px-10">
+          <Label text="Integrations" />
+          <h2 className="text-[36px] font-black tracking-tight text-white mb-2">Your stack. Your choice.</h2>
+          <p className="text-[13px] text-white/30 mb-10">Every major provider across the full pipeline.</p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          <FCard tag="Speed" title="Sub-200ms pipeline"
-            body="Streaming ASR, token-level LLM output, and parallel TTS synthesis. Callers hear a response before generation finishes." />
-          <FCard tag="Flexibility" title="BYOK or managed keys"
-            body="Bring your own Deepgram, OpenAI, and Twilio credentials for full cost control — or let us manage everything at $0.035/min." />
-          <FCard tag="Languages" title="Multilingual, built in"
-            body="Hindi, Tamil, Telugu, Malayalam, English and more. Sarvam ASR for Indic languages, multilingual LLM routing included." />
-          <FCard tag="Routing" title="Smart call handling"
-            body="Trigger transfers, detect intent, end on phrases, enforce max duration, handle silence — all configurable per agent." />
-          <FCard tag="Observability" title="Transcripts and analytics"
-            body="Every call logged with full transcript, per-leg latency, success tracking, and a filterable call history view." />
-          <FCard tag="Security" title="Encrypted, scoped keys"
-            body="Provider credentials scoped per user and encrypted at rest. Zero long-term audio retention. SOC 2 audit in progress." />
-        </div>
-      </section>
-
-      {/* ── Providers ─────────────────────────────────────────────── */}
-      <section className="relative z-10 max-w-5xl mx-auto px-8 py-20">
-        <div className="mb-10">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-violet-400 mb-3">Integrations</p>
-          <h2 className="text-[32px] font-black tracking-tight text-white">Your stack, your choice</h2>
-          <p className="text-[13px] text-white/30 mt-2">Plug in any combination across the full pipeline</p>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5">
-          <Chip name="Deepgram"      tag="ASR" />
-          <Chip name="Sarvam"        tag="ASR · LLM" />
-          <Chip name="Whisper"       tag="ASR" />
-          <Chip name="AssemblyAI"    tag="ASR" />
-          <Chip name="OpenAI"        tag="LLM · TTS" />
-          <Chip name="Anthropic"     tag="LLM" />
-          <Chip name="Google"        tag="LLM" />
-          <Chip name="Groq"          tag="LLM" />
-          <Chip name="DeepSeek"      tag="LLM" />
-          <Chip name="Mistral"       tag="LLM" />
-          <Chip name="ElevenLabs"    tag="TTS" />
-          <Chip name="Cartesia"      tag="TTS" />
-          <Chip name="AWS Polly"     tag="TTS" />
-          <Chip name="Twilio"        tag="Telephony" />
-          <Chip name="Plivo"         tag="Telephony" />
-          <Chip name="VoBiz"         tag="Telephony" />
-          <Chip name="Vonage"        tag="Telephony" />
-          <div className="flex items-center justify-center px-3 py-2.5 rounded-xl border border-dashed border-white/[0.06] text-[10px] text-white/18">
-            + more
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+            {[
+              { name: "Deepgram",   tag: "ASR" },
+              { name: "Sarvam",     tag: "ASR · LLM" },
+              { name: "Whisper",    tag: "ASR" },
+              { name: "OpenAI",     tag: "LLM · TTS" },
+              { name: "Anthropic",  tag: "LLM" },
+              { name: "Google",     tag: "LLM" },
+              { name: "Groq",       tag: "LLM" },
+              { name: "DeepSeek",   tag: "LLM" },
+              { name: "Mistral",    tag: "LLM" },
+              { name: "ElevenLabs", tag: "TTS" },
+              { name: "Cartesia",   tag: "TTS" },
+              { name: "AWS Polly",  tag: "TTS" },
+              { name: "Twilio",     tag: "Telephony" },
+              { name: "Plivo",      tag: "Telephony" },
+              { name: "VoBiz",      tag: "Telephony" },
+              { name: "Vonage",     tag: "Telephony" },
+            ].map(p => <Chip key={p.name} {...p} />)}
+            <div className="flex items-center justify-center px-3 py-2 rounded-xl border border-dashed border-white/[0.05] text-[10px] text-white/18">
+              + more
+            </div>
           </div>
         </div>
       </section>
 
       {/* ── Use cases ─────────────────────────────────────────────── */}
-      <section id="use-cases" className="relative z-10 max-w-5xl mx-auto px-8 py-10">
-        <div className="mb-10">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-violet-400 mb-3">Use cases</p>
-          <h2 className="text-[32px] font-black tracking-tight text-white">What teams deploy</h2>
-        </div>
+      <section id="use-cases" className="max-w-5xl mx-auto px-8 lg:px-10 py-20">
+        <Label text="Use cases" />
+        <h2 className="text-[36px] font-black tracking-tight text-white mb-10">What teams ship</h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {[
-            { title: "Customer Support",       kpi: "24 / 7",     body: "Handle FAQs, order status, and complaints without agent queues. Escalate to human only when needed." },
-            { title: "Sales Outreach",          kpi: "3x lift",    body: "Warm-qualify leads, introduce the product, and book demos at scale with zero SDR time wasted." },
-            { title: "Collections & Reminders", kpi: "40% recovery", body: "Automate EMI reminders, overdue nudges, and follow-up calls in any language." },
-            { title: "Appointment Scheduling",  kpi: "Zero no-shows", body: "Confirm, reschedule, and remind patients, clients, or candidates ahead of time." },
-            { title: "COD Confirmation",        kpi: "99% accuracy", body: "Confirm orders before dispatch, reduce RTO, and save last-mile logistics cost." },
-            { title: "Lead Qualification",      kpi: "5x pipeline", body: "Run qualification the moment a form is submitted. Score and route to the right rep instantly." },
-          ].map(({ title, kpi, body }) => (
-            <div key={title} className="group flex flex-col gap-3 p-5 rounded-2xl border border-white/[0.07] bg-white/[0.02] hover:border-violet-500/20 transition-all">
-              <div className="flex items-start justify-between gap-2">
-                <h3 className="text-[13px] font-bold text-white/80 group-hover:text-white transition-colors leading-snug">{title}</h3>
-                <span className="shrink-0 text-[10px] font-bold text-violet-300 bg-violet-500/10 border border-violet-500/20 px-2 py-0.5 rounded-full">{kpi}</span>
-              </div>
-              <p className="text-[12px] text-white/30 leading-[1.65]">{body}</p>
-            </div>
-          ))}
+          <UCCard title="Customer Support"        kpi="24/7"         body="Handle FAQs, status updates, complaints. Escalate to human only when needed." />
+          <UCCard title="Sales Outreach"           kpi="3× lift"      body="Qualify leads, pitch the product, book demos at scale — no SDR time wasted." />
+          <UCCard title="Collections & Reminders"  kpi="40% recovery" body="Automate EMI nudges, overdue follow-ups, and payment reminders in any language." />
+          <UCCard title="Appointment Scheduling"   kpi="Zero no-shows" body="Confirm, reschedule, remind patients, clients, or candidates ahead of time." />
+          <UCCard title="COD Confirmation"         kpi="99% accuracy"  body="Confirm orders before dispatch, reduce RTO, save last-mile cost." />
+          <UCCard title="Lead Qualification"       kpi="5× pipeline"  body="Run qualification instantly on form submit. Score and route to the right rep." />
         </div>
       </section>
 
       {/* ── Pricing ───────────────────────────────────────────────── */}
-      <section id="pricing" className="relative z-10 max-w-5xl mx-auto px-8 py-20">
-        <div className="mb-12 text-center">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-violet-400 mb-3">Pricing</p>
-          <h2 className="text-[32px] font-black tracking-tight text-white">Usage-based, no surprises</h2>
-          <p className="text-[13px] text-white/30 mt-2">No seat fees. No monthly minimums. Pay per minute.</p>
-        </div>
+      <section id="pricing" className="border-t border-white/[0.06] py-20">
+        <div className="max-w-5xl mx-auto px-8 lg:px-10">
+          <Label text="Pricing" />
+          <h2 className="text-[36px] font-black tracking-tight text-white mb-2">Usage-based. No surprises.</h2>
+          <p className="text-[13px] text-white/30 mb-12">No seats. No monthly minimums. Pay per minute.</p>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <PCard plan="Starter" price="$0.03" per="/ min" note="Bring your own provider keys"
-            items={[
-              "Full BYOK — total cost control",
-              "Unlimited agents",
-              "Call transcripts + analytics",
-              "Deepgram, OpenAI, Twilio",
-              "$5 credit on signup",
-            ]}
-            cta="Start free" />
-          <PCard plan="Managed" price="$0.035" per="/ min" note="We manage all provider keys"
-            items={[
-              "Zero setup — keys managed by us",
-              "Indian language support",
-              "Cartesia voices included",
-              "Priority routing",
-              "SLA-backed uptime",
-            ]}
-            cta="Get started" hot />
-          <PCard plan="Enterprise" price="Custom" per="" note="High-volume or on-premise"
-            items={[
-              "Dedicated infrastructure",
-              "Custom SLA + support",
-              "On-premise deployment",
-              "SSO + advanced security",
-              "Dedicated success engineer",
-            ]}
-            cta="Talk to us" />
-        </div>
-      </section>
-
-      {/* ── Final CTA ─────────────────────────────────────────────── */}
-      <section className="relative z-10 max-w-4xl mx-auto px-8 py-20">
-        <div className="relative rounded-3xl overflow-hidden border border-violet-500/15 p-12 text-center">
-          <div className="absolute inset-0 bg-gradient-to-br from-violet-900/20 via-transparent to-indigo-900/15" />
-          <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-violet-500/40 to-transparent" />
-          <div className="absolute bottom-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-indigo-500/20 to-transparent" />
-          <div className="relative">
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-violet-400 mb-4">Ready to ship</p>
-            <h2 className="text-[36px] font-black tracking-tight text-white mb-3 leading-tight">
-              First agent live<br />in under 10 minutes
-            </h2>
-            <p className="text-[13px] text-white/35 max-w-md mx-auto mb-8 leading-[1.7]">
-              No WebSocket code to write. No infra to manage. Connect your providers, write a prompt, get a number.
-            </p>
-            <div className="flex items-center justify-center gap-4 flex-wrap">
-              <Link href={`${basePath}/sign-up`}>
-                <button className="flex items-center gap-2 px-7 py-3 rounded-xl text-[14px] font-bold bg-violet-600 hover:bg-violet-500 text-white shadow-[0_0_32px_-4px_rgba(124,58,237,0.65)] hover:shadow-[0_0_40px_-4px_rgba(124,58,237,0.85)] transition-all duration-200">
-                  Start building free
-                  <ArrowRight className="h-4 w-4" />
-                </button>
-              </Link>
-            </div>
-            <p className="text-[11px] text-white/18 mt-4">$5 credit included — no card required</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <PCard plan="Starter" price="$0.03" per="/ min" note="Bring your own provider keys"
+              items={["Full BYOK — total cost control", "Unlimited agents", "Call transcripts + analytics", "Deepgram, OpenAI, Twilio", "$5 credit on signup"]}
+              cta="Start free" />
+            <PCard plan="Managed" price="$0.035" per="/ min" note="We manage all provider keys"
+              items={["Zero setup — keys managed by us", "Indian language support", "Cartesia voices included", "Priority routing + SLA uptime", "Real-time monitoring dashboard"]}
+              cta="Get started" hot />
+            <PCard plan="Enterprise" price="Custom" per="" note="High-volume or on-premise"
+              items={["Dedicated infrastructure", "Custom SLA + support tier", "On-premise deployment", "SSO + advanced security", "Dedicated success engineer"]}
+              cta="Talk to us" />
           </div>
         </div>
       </section>
 
+      {/* ── Final CTA ─────────────────────────────────────────────── */}
+      <section className="py-24 px-8">
+        <div className="max-w-3xl mx-auto text-center">
+          <h2 className="text-[48px] sm:text-[60px] font-black tracking-[-0.03em] leading-[1.0] text-white mb-5">
+            First agent live<br />
+            <span className="text-white/30">in under 10 minutes.</span>
+          </h2>
+          <p className="text-[14px] text-white/35 mb-8 max-w-md mx-auto leading-[1.75]">
+            No WebSocket code. No infra to manage. Write a prompt, pick a voice, connect a number.
+          </p>
+          <Link href={`${basePath}/sign-up`}>
+            <button className="inline-flex items-center gap-2 bg-white text-black text-[14px] font-bold px-8 py-3.5 rounded-full hover:bg-white/90 transition-all">
+              Start building free <ArrowRight className="h-4 w-4" />
+            </button>
+          </Link>
+          <p className="text-[11px] text-white/18 mt-4">$5 credit included — no card required</p>
+        </div>
+      </section>
+
       {/* ── Footer ────────────────────────────────────────────────── */}
-      <footer className="relative z-10 border-t border-white/[0.05] py-8 px-8">
+      <footer className="border-t border-white/[0.05] py-7 px-8">
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <div className="flex h-5 w-5 items-center justify-center rounded-md bg-violet-600/70">
               <SnapServeIcon size={11} className="text-white" />
             </div>
-            <span className="text-[12px] font-semibold text-white/30">SnapServe</span>
+            <span className="text-[12px] font-bold text-white/25">SnapServe</span>
           </div>
           <p className="text-[11px] text-white/15">AI Voice Agent Orchestration Platform</p>
           <div className="flex items-center gap-5">
             {["Privacy", "Terms", "Docs", "Status"].map(l => (
-              <a key={l} href="#" className="text-[11px] text-white/20 hover:text-white/40 transition-colors">{l}</a>
+              <a key={l} href="#" className="text-[11px] text-white/20 hover:text-white/45 transition-colors">{l}</a>
             ))}
           </div>
         </div>
