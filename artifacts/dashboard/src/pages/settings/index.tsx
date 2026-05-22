@@ -319,7 +319,7 @@ export default function SettingsPage() {
                 <div className="flex items-center gap-3 shrink-0">
                   <span className="text-2xl font-bold tabular-nums">{account?.concurrentLimit ?? "—"}</span>
                   <Button
-                    size="sm" className="h-8 text-xs gap-1.5 bg-black/80 hover:bg-black/80 text-black/85"
+                    size="sm" className="h-8 text-xs gap-1.5 bg-black/85 hover:bg-black/90 text-white"
                     disabled={addSlot.isPending}
                     onClick={() => addSlot.mutate(undefined, {
                       onSuccess: () => { queryClient.invalidateQueries({ queryKey: getGetAccountQueryKey() }); toast({ title: "Concurrent slot added", description: "Your limit has been increased by 1." }); },

@@ -186,7 +186,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirming(false)}>Back</Button>
             <Button
-              className="bg-black/80 hover:bg-black/80 text-black/85"
+              className="bg-black/85 hover:bg-black/90 text-white"
               onClick={handlePurchase}
               disabled={purchase.isPending}
             >
@@ -306,7 +306,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button
-            className="bg-black/80 hover:bg-black/80 text-black/85 gap-1.5"
+            className="bg-black/85 hover:bg-black/90 text-white gap-1.5"
             disabled={!selected}
             onClick={() => setConfirming(true)}
           >
@@ -350,7 +350,7 @@ export default function PhoneNumbersPage() {
         <span className="text-xs text-black/35 ml-auto">Platform-managed numbers · $5.00 / number</span>
         <Button
           size="sm"
-          className="h-8 gap-1.5 bg-black/80 hover:bg-black/80 text-black/85"
+          className="h-8 gap-1.5 bg-black/85 hover:bg-black/90 text-white"
           onClick={() => setBuyOpen(true)}
         >
           <Plus className="h-3.5 w-3.5" /> Buy Number
@@ -359,7 +359,7 @@ export default function PhoneNumbersPage() {
 
       <div className="p-6 max-w-4xl mx-auto space-y-4">
         {/* Info banner */}
-        <div className="flex items-start gap-3 p-4 rounded-xl border border-black/[0.07] bg-white/70 backdrop-blur-lg/65 backdrop-blur-xl">
+        <div className="flex items-start gap-3 p-4 rounded-xl border border-black/[0.07] bg-white">
           <Globe className="h-5 w-5 text-black/75 mt-0.5 shrink-0" />
           <div className="text-sm text-black/50 space-y-0.5">
             <p className="text-black/75 font-medium">Managed phone numbers</p>
@@ -371,7 +371,7 @@ export default function PhoneNumbersPage() {
         {isLoading ? (
           <div className="space-y-2">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-4 p-4 rounded-lg border border-black/[0.07] bg-white/70 backdrop-blur-lg/30">
+              <div key={i} className="flex items-center gap-4 p-4 rounded-lg border border-black/[0.07] bg-white">
                 <Skeleton className="h-5 w-36" />
                 <Skeleton className="h-5 w-20" />
                 <Skeleton className="h-5 w-28 ml-auto" />
@@ -382,7 +382,7 @@ export default function PhoneNumbersPage() {
           <div className="flex flex-col items-center justify-center py-24 text-black/35">
             <Phone className="w-12 h-12 mb-4 opacity-30" />
             <p className="text-sm mb-3">No phone numbers yet.</p>
-            <Button size="sm" className="gap-1.5 bg-black/80 hover:bg-black/80 text-black/85" onClick={() => setBuyOpen(true)}>
+            <Button size="sm" className="gap-1.5 bg-black/85 hover:bg-black/90 text-white" onClick={() => setBuyOpen(true)}>
               <Plus className="h-3.5 w-3.5" /> Buy your first number
             </Button>
           </div>
@@ -391,7 +391,7 @@ export default function PhoneNumbersPage() {
             {numbers.map(n => (
               <div
                 key={n.id}
-                className="flex items-center gap-4 px-4 py-3 rounded-lg border border-black/[0.07]/60 bg-white/70 backdrop-blur-lg/30 hover:bg-white/70 backdrop-blur-lg transition-colors"
+                className="flex items-center gap-4 px-4 py-3 rounded-lg border border-black/[0.07]/60 bg-white hover:bg-white/70 backdrop-blur-lg transition-colors"
               >
                 <div className="shrink-0">
                   <p className="font-mono font-semibold text-black/85 text-sm">{n.number}</p>

@@ -69,60 +69,62 @@
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
-   Light — Apple glassmorphism
-   Gradient: soft blue-lavender → warm grey, panels float as frosted glass
+   Light — Clean modern SaaS (Apple/Linear/Stripe inspired)
+   Page: #F5F5F7 grey  ·  Sidebar: #FFFFFF  ·  Panels: #FFFFFF + shadow
    ────────────────────────────────────────────────────────────────────────── */
 :root {
-  --button-outline: rgba(0,0,0,.1);
-  --badge-outline:  rgba(0,0,0,.05);
+  --button-outline: rgba(0,0,0,.10);
+  --badge-outline:  rgba(0,0,0,.06);
   --opaque-button-border-intensity: -8;
-  --elevate-1: rgba(255,255,255,.55);
-  --elevate-2: rgba(255,255,255,.80);
+  --elevate-1: rgba(255,255,255,.70);
+  --elevate-2: rgba(255,255,255,.95);
 
-  /* Page gradient shows through glass — not used as solid bg */
-  --background: 225 30% 94%;
-  --foreground: 240 3% 15%;
-  --border: 220 20% 88%;
+  /* Page background — Apple's #F5F5F7 */
+  --background: 240 5% 96%;
+  --foreground: 240 3% 12%;
 
-  /* Glass card — translucent white */
+  /* Dividers / borders */
+  --border: 240 6% 89%;
+
+  /* White cards with very slight shadow */
   --card: 0 0% 100%;
-  --card-foreground: 240 3% 15%;
-  --card-border: 220 30% 92%;
+  --card-foreground: 240 3% 12%;
+  --card-border: 240 6% 90%;
 
-  /* Frosted sidebar — slightly tinted white */
-  --sidebar: 225 20% 96%;
-  --sidebar-foreground: 240 3% 20%;
-  --sidebar-border: 220 20% 86%;
-  --sidebar-primary: 220 15% 88%;
-  --sidebar-primary-foreground: 240 3% 15%;
-  --sidebar-accent: 220 20% 91%;
+  /* Sidebar — pure white, separated by border */
+  --sidebar: 0 0% 100%;
+  --sidebar-foreground: 240 3% 18%;
+  --sidebar-border: 240 6% 90%;
+  --sidebar-primary: 240 5% 93%;
+  --sidebar-primary-foreground: 240 3% 12%;
+  --sidebar-accent: 240 5% 95%;
   --sidebar-accent-foreground: 240 3% 15%;
-  --sidebar-ring: 220 20% 80%;
+  --sidebar-ring: 240 5% 75%;
 
-  --popover: 0 0% 99%;
-  --popover-foreground: 240 3% 15%;
-  --popover-border: 220 20% 88%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 240 3% 12%;
+  --popover-border: 240 6% 88%;
 
-  /* Primary = rich dark for contrast on glass */
-  --primary: 240 5% 16%;
+  /* Primary = near-black for contrast */
+  --primary: 240 4% 14%;
   --primary-foreground: 0 0% 98%;
 
-  --secondary: 220 20% 91%;
-  --secondary-foreground: 240 3% 20%;
+  --secondary: 240 5% 93%;
+  --secondary-foreground: 240 3% 18%;
 
-  --muted: 220 20% 92%;
-  --muted-foreground: 240 3% 50%;
+  --muted: 240 5% 94%;
+  --muted-foreground: 240 4% 46%;
 
-  --accent: 220 25% 94%;
-  --accent-foreground: 240 3% 15%;
+  --accent: 240 5% 93%;
+  --accent-foreground: 240 3% 12%;
 
   --destructive: 0 72% 51%;
   --destructive-foreground: 0 0% 98%;
 
-  --input: 220 20% 90%;
+  --input: 240 5% 91%;
   --ring: 240 5% 20%;
 
-  --chart-1: 240 5% 18%;
+  --chart-1: 240 5% 16%;
   --chart-2: 217 80% 58%;
   --chart-3: 280 60% 60%;
   --chart-4: 160 60% 45%;
@@ -133,24 +135,24 @@
   --app-font-mono:  'SF Mono', 'JetBrains Mono', 'Menlo', monospace;
   --radius: 0.625rem;
 
-  --shadow-2xs: 0px 1px 2px 0px rgba(10,10,30,.04);
-  --shadow-xs:  0px 1px 4px 0px rgba(10,10,30,.06);
-  --shadow-sm:  0px 1px 3px 0px rgba(10,10,30,.06), 0px 1px 2px -1px rgba(10,10,30,.04);
-  --shadow:     0px 2px 8px 0px rgba(10,10,30,.08), 0px 1px 2px -1px rgba(10,10,30,.05);
-  --shadow-md:  0px 4px 16px -1px rgba(10,10,30,.10), 0px 2px 4px -2px rgba(10,10,30,.06);
-  --shadow-lg:  0px 10px 30px -3px rgba(10,10,30,.10), 0px 4px 8px -4px rgba(10,10,30,.06);
-  --shadow-xl:  0px 20px 40px -5px rgba(10,10,30,.12), 0px 8px 16px -6px rgba(10,10,30,.06);
-  --shadow-2xl: 0px 30px 60px -12px rgba(10,10,30,.18);
+  --shadow-2xs: 0px 1px 2px 0px rgba(0,0,0,.04);
+  --shadow-xs:  0px 1px 4px 0px rgba(0,0,0,.05);
+  --shadow-sm:  0px 1px 3px 0px rgba(0,0,0,.06), 0px 1px 2px -1px rgba(0,0,0,.04);
+  --shadow:     0px 2px 8px 0px rgba(0,0,0,.07), 0px 1px 2px -1px rgba(0,0,0,.04);
+  --shadow-md:  0px 4px 16px -1px rgba(0,0,0,.09), 0px 2px 4px -2px rgba(0,0,0,.05);
+  --shadow-lg:  0px 10px 30px -3px rgba(0,0,0,.09), 0px 4px 8px -4px rgba(0,0,0,.05);
+  --shadow-xl:  0px 20px 40px -5px rgba(0,0,0,.11), 0px 8px 16px -6px rgba(0,0,0,.05);
+  --shadow-2xl: 0px 30px 60px -12px rgba(0,0,0,.15);
 
-  /* Apple glass panel */
-  --glass-bg:     rgba(255,255,255,0.62);
-  --glass-border: rgba(255,255,255,0.55);
-  --glass-blur:   24px;
-  --glass-shadow: 0 4px 24px rgba(10,10,40,0.08), 0 1px 0 rgba(255,255,255,0.9) inset;
+  /* Glass — used only for popovers / dropdowns / modals */
+  --glass-bg:     rgba(255,255,255,0.94);
+  --glass-border: rgba(0,0,0,0.07);
+  --glass-blur:   16px;
+  --glass-shadow: 0 4px 20px rgba(0,0,0,0.08), 0 1px 0 rgba(255,255,255,1) inset;
 
-  /* Sidebar glass */
-  --sidebar-glass-bg:     rgba(255,255,255,0.50);
-  --sidebar-glass-border: rgba(255,255,255,0.40);
+  /* Sidebar — solid white */
+  --sidebar-glass-bg:     #ffffff;
+  --sidebar-glass-border: rgba(0,0,0,0.07);
 }
 
 .dark {
@@ -203,11 +205,11 @@
   --chart-4: 160 60% 50%;
   --chart-5: 35 85% 60%;
 
-  --glass-bg:     rgba(30,32,48,0.70);
+  --glass-bg:     rgba(30,32,48,0.85);
   --glass-border: rgba(255,255,255,0.08);
   --glass-shadow: 0 4px 24px rgba(0,0,0,0.25), 0 1px 0 rgba(255,255,255,0.06) inset;
 
-  --sidebar-glass-bg:     rgba(20,22,35,0.80);
+  --sidebar-glass-bg:     rgba(20,22,35,0.95);
   --sidebar-glass-border: rgba(255,255,255,0.06);
 }
 
@@ -221,46 +223,28 @@
   }
   body {
     @apply font-sans antialiased text-foreground selection:bg-primary/15;
-    background: linear-gradient(140deg,
-      #cfd8f0 0%,
-      #d8dcf0 18%,
-      #e0e4f4 35%,
-      #dde6f2 52%,
-      #d5dced 70%,
-      #cfd9ef 85%,
-      #d8dff2 100%
-    );
-    background-attachment: fixed;
+    background-color: #F5F5F7;
   }
 }
 
 @layer components {
-  /* Apple frosted glass panel */
+  /* Glass — for popovers, dropdowns, modals, tooltips */
   .glass {
     background: var(--glass-bg);
-    backdrop-filter: blur(var(--glass-blur)) saturate(1.8);
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.8);
+    backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
     border: 1px solid var(--glass-border);
     box-shadow: var(--glass-shadow);
   }
-  /* Sidebar frosted glass */
+  /* Sidebar — solid white with right border */
   .glass-sidebar {
     background: var(--sidebar-glass-bg);
-    backdrop-filter: blur(32px) saturate(2);
-    -webkit-backdrop-filter: blur(32px) saturate(2);
     border-right: 1px solid var(--sidebar-glass-border);
   }
-  /* Glossy button highlight */
-  .gloss {
-    position: relative;
-    overflow: hidden;
-  }
-  .gloss::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(180deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 60%);
-    border-radius: inherit;
-    pointer-events: none;
-  }
+}
+
+/* SnapServe loader bar animation */
+@keyframes ss-bar-pulse {
+  0%, 100% { opacity: 0.15; transform: scaleY(0.7); }
+  50%       { opacity: 1;    transform: scaleY(1);   }
 }

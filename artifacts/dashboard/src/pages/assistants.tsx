@@ -431,7 +431,7 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
 
       {/* Controls */}
       {!isActive ? (
-        <Button className="w-full gap-2 bg-black/80 hover:bg-black/80 text-black/85" onClick={() => void startCall()}>
+        <Button className="w-full gap-2 bg-black/85 hover:bg-black/90 text-white" onClick={() => void startCall()}>
           <Mic className="h-4 w-4" /> Start Test Call
         </Button>
       ) : (
@@ -793,7 +793,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
         </div>
         <div className="ml-auto flex items-center gap-2">
           {dirty && (
-            <Button size="sm" className="h-7 text-xs bg-black/80 hover:bg-black/80 text-black/85 gap-1.5" onClick={handleSave} disabled={update.isPending}>
+            <Button size="sm" className="h-7 text-xs bg-black/85 hover:bg-black/90 text-white gap-1.5" onClick={handleSave} disabled={update.isPending}>
               {update.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} Save
             </Button>
           )}
@@ -820,7 +820,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
       </div>
 
       {/* ── Stats row ── */}
-      <div className="flex items-center gap-4 px-5 py-2 border-b border-black/[0.06] bg-white/70 backdrop-blur-lg/65 backdrop-blur-xl shrink-0">
+      <div className="flex items-center gap-4 px-5 py-2 border-b border-black/[0.06] bg-white shrink-0">
         <div className="flex items-center gap-1.5 text-xs text-black/50">
           <Phone className="h-3 w-3 text-black/35" />
           <span className="font-semibold text-black/85">{agent.totalCalls ?? 0}</span> calls
@@ -1699,7 +1699,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
           <DialogFooter>
             <Button variant="outline" className="border-black/[0.07] text-black/50" onClick={() => setOutboundDialogOpen(false)}>Cancel</Button>
             <Button
-              className="bg-black/80 hover:bg-black/80 text-black/85"
+              className="bg-black/85 hover:bg-black/90 text-white"
               disabled={!toNumber.trim() || initiateOutbound.isPending}
               onClick={() => {
                 initiateOutbound.mutate(
@@ -1862,7 +1862,7 @@ function NewAgentPanel({ onCreated }: { onCreated: (id: number) => void }) {
           </div>
 
           <Button
-            className="w-full bg-black/80 hover:bg-black/80 text-black/85 gap-2"
+            className="w-full bg-black/85 hover:bg-black/90 text-white gap-2"
             onClick={handleCreate}
             disabled={!name.trim() || create.isPending}
           >

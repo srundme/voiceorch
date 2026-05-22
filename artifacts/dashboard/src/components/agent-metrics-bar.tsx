@@ -13,17 +13,17 @@ interface AgentMetricsBarProps {
 }
 
 const COST_COLORS = {
-  asr:       { bg: "bg-teal-500",    text: "text-teal-400",    label: "ASR" },
-  llm:       { bg: "bg-violet-500",  text: "text-violet-400",  label: "LLM" },
-  tts:       { bg: "bg-orange-500",  text: "text-orange-400",  label: "TTS" },
-  telephony: { bg: "bg-blue-500",    text: "text-blue-400",    label: "Tel" },
-  platform:  { bg: "bg-emerald-500", text: "text-emerald-400", label: "Fee" },
+  asr:       { bg: "bg-teal-500",    text: "text-teal-600",    label: "ASR" },
+  llm:       { bg: "bg-violet-500",  text: "text-violet-600",  label: "LLM" },
+  tts:       { bg: "bg-orange-500",  text: "text-orange-600",  label: "TTS" },
+  telephony: { bg: "bg-blue-500",    text: "text-blue-600",    label: "Tel" },
+  platform:  { bg: "bg-emerald-500", text: "text-emerald-600", label: "Fee" },
 };
 
 const LATENCY_COLORS = {
-  stt: { bg: "bg-sky-500",    text: "text-sky-400",    label: "STT" },
-  llm: { bg: "bg-violet-500", text: "text-violet-400", label: "LLM" },
-  tts: { bg: "bg-amber-500",  text: "text-amber-400",  label: "TTS" },
+  stt: { bg: "bg-sky-500",    text: "text-sky-600",    label: "STT" },
+  llm: { bg: "bg-violet-500", text: "text-violet-600", label: "LLM" },
+  tts: { bg: "bg-amber-500",  text: "text-amber-600",  label: "TTS" },
 };
 
 function SegmentBar({
@@ -32,7 +32,7 @@ function SegmentBar({
   segments: { key: string; pct: number; bg: string; tooltip: string }[];
 }) {
   return (
-    <div className="flex h-1.5 w-full rounded-full overflow-hidden gap-[1px]">
+    <div className="flex h-1.5 w-full rounded-full overflow-hidden gap-[1px] bg-black/[0.06]">
       {segments.map((s) => (
         <Tooltip key={s.key}>
           <TooltipTrigger asChild>
@@ -62,7 +62,6 @@ export function AgentMetricsBar({
 }: AgentMetricsBarProps) {
   const cost = computePipelineCost(asrProvider, llmProvider, llmModel, ttsProvider, telephonyProvider);
 
-  // Cost bar segments (proportional to total)
   const total = cost.totalPerMin;
   const costSegments = (
     [
@@ -79,7 +78,6 @@ export function AgentMetricsBar({
     tooltip: `${s.label}: $${s.value.toFixed(4)}/min`,
   }));
 
-  // Latency bar
   const hasLatency = avgSttLatencyMs != null || avgLlmLatencyMs != null || avgTtsFirstChunkMs != null;
   const totalLatencyMs = (avgSttLatencyMs ?? 0) + (avgLlmLatencyMs ?? 0) + (avgTtsFirstChunkMs ?? 0);
   const displayLatencyMs = totalLatencyMs || 0;
@@ -112,16 +110,16 @@ export function AgentMetricsBar({
   }
 
   return (
-    <div className="flex items-stretch gap-0 border-b border-zinc-800 bg-[#0e0e0e] shrink-0">
+    <div className="flex items-stretch gap-0 border-b border-black/[0.07] bg-white shrink-0">
       {/* Cost */}
-      <div className="flex-1 flex flex-col gap-1.5 px-5 py-2.5 border-r border-zinc-800">
+      <div className="flex-1 flex flex-col gap-1.5 px-5 py-2.5 border-r border-black/[0.07]">
         <div className="flex items-baseline gap-2">
-          <span className="text-[9px] font-bold tracking-[0.15em] uppercase text-zinc-600">
+          <span className="text-[9px] font-bold tracking-[0.15em] uppercase text-black/35">
             Average Cost
           </span>
-          <span className="text-xs font-bold text-white tabular-nums">
+          <span className="text-xs font-bold text-black/80 tabular-nums">
             ~${cost.totalPerMin.toFixed(2)}{" "}
-            <span className="text-[10px] font-normal text-zinc-500">/min</span>
+            <span className="text-[10px] font-normal text-black/35">/min</span>
           </span>
         </div>
         <SegmentBar segments={costSegments} />
@@ -138,22 +136,22 @@ export function AgentMetricsBar({
       {/* Latency */}
       <div className="flex-1 flex flex-col gap-1.5 px-5 py-2.5">
         <div className="flex items-baseline gap-2">
-          <span className="text-[9px] font-bold tracking-[0.15em] uppercase text-zinc-600">
+          <span className="text-[9px] font-bold tracking-[0.15em] uppercase text-black/35">
             Average Latency
           </span>
           {hasLatency ? (
-            <span className="text-xs font-bold text-white tabular-nums">
+            <span className="text-xs font-bold text-black/80 tabular-nums">
               {fmtLatency(displayLatencyMs)}{" "}
-              <span className="text-[10px] font-normal text-zinc-500">e2e</span>
+              <span className="text-[10px] font-normal text-black/35">e2e</span>
             </span>
           ) : (
-            <span className="text-[10px] text-zinc-600 italic">no data yet</span>
+            <span className="text-[10px] text-black/30 italic">no data yet</span>
           )}
         </div>
         {latencySegments ? (
           <SegmentBar segments={latencySegments} />
         ) : (
-          <div className="h-1.5 w-full rounded-full bg-zinc-800" />
+          <div className="h-1.5 w-full rounded-full bg-black/[0.06]" />
         )}
         <div className="flex items-center gap-3">
           {(["stt", "llm", "tts"] as const).map((k) => (
@@ -163,7 +161,7 @@ export function AgentMetricsBar({
             </span>
           ))}
           {hasLatency && (
-            <span className="text-[9px] text-zinc-600 ml-auto">
+            <span className="text-[9px] text-black/30 ml-auto">
               {avgSttLatencyMs != null && `${avgSttLatencyMs}+`}
               {avgLlmLatencyMs != null && `${avgLlmLatencyMs}+`}
               {avgTtsFirstChunkMs != null && `${avgTtsFirstChunkMs}`}ms

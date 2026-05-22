@@ -9,7 +9,7 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-transparent text-[#353536] flex flex-col">
       {/* Header */}
-      <header className="flex items-center justify-between px-8 h-16 border-b border-[#D4D8DF] bg-white/70/70 backdrop-blur-sm">
+      <header className="flex items-center justify-between px-8 h-16 border-b border-[#D4D8DF] bg-white/70 backdrop-blur-sm">
         <div className="flex items-center gap-2.5">
           <div className="flex h-7 w-7 items-center justify-center rounded bg-[#353536]">
             <SnapServeIcon size={16} className="text-[#EBEDF1]" />
