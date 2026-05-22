@@ -1,12 +1,21 @@
 import { Router, type IRouter } from "express";
+import type { Request, Response, NextFunction } from "express";
 import { db } from "@workspace/db";
 import { platformSettingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { requireAuth } from "../middlewares/requireAuth.js";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { logger } from "../lib/logger.js";
 
 const router: IRouter = Router();
+
+// Wizard routes run after provisionUser which sets req.dbUser on authenticated requests.
+function requireDbUser(req: Request, res: Response, next: NextFunction): void {
+  if (!(req as any).dbUser) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  next();
+}
 
 // ── Master prompt template ───────────────────────────────────────────────────
 
@@ -136,7 +145,7 @@ async function getSetting(key: string): Promise<string | null> {
 
 // ── GET /wizard/voices ────────────────────────────────────────────────────────
 
-router.get("/wizard/voices", requireAuth, async (req, res): Promise<void> => {
+router.get("/wizard/voices", requireDbUser, async (req, res): Promise<void> => {
   const cartesiaKey = await getSetting("managed_cartesia_key");
 
   if (!cartesiaKey) {
@@ -174,7 +183,7 @@ router.get("/wizard/voices", requireAuth, async (req, res): Promise<void> => {
 
 // ── POST /wizard/preview-voice ────────────────────────────────────────────────
 
-router.post("/wizard/preview-voice", requireAuth, async (req, res): Promise<void> => {
+router.post("/wizard/preview-voice", requireDbUser, async (req, res): Promise<void> => {
   const { voiceId, text } = req.body as { voiceId?: string; text?: string };
 
   if (!voiceId) {
@@ -223,7 +232,7 @@ router.post("/wizard/preview-voice", requireAuth, async (req, res): Promise<void
 
 // ── POST /wizard/generate-prompt ─────────────────────────────────────────────
 
-router.post("/wizard/generate-prompt", requireAuth, async (req, res): Promise<void> => {
+router.post("/wizard/generate-prompt", requireDbUser, async (req, res): Promise<void> => {
   const {
     useCase, role, companyName, agentName, serviceDescription,
     agentDirection, callFlowDescription, languages,

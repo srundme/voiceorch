@@ -155,6 +155,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
   const [stepIdx, setStepIdx]         = useState(0);
   const [direction, setDirection]     = useState<"forward" | "back">("forward");
   const [isGenerating, setGenerating] = useState(false);
+  const [generateError, setGenError]  = useState("");
   const [isCreating, setCreating]     = useState(false);
   const [loadingVoices, setLoadVoices]= useState(false);
   const [renderKey, setRenderKey]     = useState(0);
@@ -204,9 +205,10 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
     }
   }
 
-  /* AI prompt generation */
+  /* AI prompt generation — auto-advances to next step on success */
   async function generatePrompt() {
     setGenerating(true);
+    setGenError("");
     try {
       const langs = [state.primaryLanguage, ...state.additionalLanguages];
       const res = await fetch("/api/wizard/generate-prompt", {
@@ -218,12 +220,18 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
           languages: langs,
         }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as any).error ?? `HTTP ${res.status}`);
+      }
       const { prompt } = await res.json();
       update({ generatedPrompt: prompt });
-      toast({ title: "Prompt generated ✨" });
-    } catch {
-      toast({ title: "Generation failed", variant: "destructive" });
+      // Auto-advance to Knowledge Base step
+      setDirection("forward");
+      setStepIdx(i => i + 1);
+      setRenderKey(k => k + 1);
+    } catch (err: any) {
+      setGenError(err?.message ?? "Generation failed — you can still continue manually.");
     } finally { setGenerating(false); }
   }
 
@@ -596,48 +604,63 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
               <div>
                 <p className="text-white/40 text-xs uppercase tracking-[0.2em] mb-3">Step 4</p>
                 <h2 className="text-3xl font-bold text-white mb-2">What should your<br />agent do?</h2>
-                <p className="text-white/40 text-sm mb-8">
-                  Describe the call flow in your own words — no grammar needed. Our AI will turn it into a professional prompt.
+                <p className="text-white/40 text-sm mb-6">
+                  Describe the call flow in your own words — no grammar needed. Our AI turns it into a professional prompt, or you can skip AI and continue directly.
                 </p>
 
                 <textarea
-                  placeholder={`Just describe it naturally:\n\n"Agent should call customers who have unpaid EMI. First remind them politely, ask when they will pay, note the date, if they say they already paid ask for reference number, if they refuse escalate to human."\n\nDon't worry about grammar — just explain what the agent should do.`}
+                  placeholder={"Just describe it naturally:\n\n\"Agent should call customers who have unpaid EMI. First remind them politely, ask when they will pay, note the date, if they say they already paid ask for reference number, if they refuse escalate to human.\"\n\nDon't worry about grammar — just explain what the agent should do."}
                   value={state.callFlowDescription}
-                  onChange={e => update({ callFlowDescription: e.target.value })}
-                  rows={7}
-                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3.5 text-white text-sm placeholder:text-white/20 focus:outline-none focus:border-violet-500/60 transition-all resize-none leading-relaxed mb-4"
+                  onChange={e => { update({ callFlowDescription: e.target.value }); setGenError(""); }}
+                  rows={6}
+                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3.5 text-white text-sm placeholder:text-white/20 focus:outline-none focus:border-violet-500/60 transition-all resize-none leading-relaxed mb-3"
                 />
 
+                {/* Generate button */}
                 <button
                   onClick={generatePrompt}
                   disabled={!state.callFlowDescription.trim() || isGenerating}
                   className={cn(
-                    "w-full flex items-center justify-center gap-2.5 py-3.5 rounded-xl font-semibold text-sm transition-all",
+                    "w-full flex items-center justify-center gap-2.5 py-3.5 rounded-xl font-semibold text-sm transition-all mb-3",
                     !state.callFlowDescription.trim() || isGenerating
                       ? "bg-white/[0.05] text-white/25 cursor-not-allowed"
                       : "bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white shadow-lg shadow-violet-500/20",
                   )}
                 >
                   {isGenerating
-                    ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating your prompt...</>
-                    : <><Sparkles className="h-4 w-4" /> Generate AI Prompt</>
+                    ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating your prompt — this takes a few seconds...</>
+                    : <><Sparkles className="h-4 w-4" /> Generate AI Prompt &amp; Continue</>
                   }
                 </button>
 
-                {state.generatedPrompt && (
-                  <div className="mt-5">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Check className="h-4 w-4 text-emerald-400" />
-                      <p className="text-emerald-400 text-xs font-semibold uppercase tracking-widest">Prompt generated — review & edit below</p>
+                {/* Inline error */}
+                {generateError && (
+                  <div className="flex items-start gap-2.5 p-3.5 rounded-xl border border-rose-500/30 bg-rose-500/5 mb-3">
+                    <X className="h-4 w-4 text-rose-400 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-rose-400 text-xs font-semibold mb-0.5">Generation failed</p>
+                      <p className="text-white/40 text-xs">{generateError}</p>
                     </div>
-                    <textarea
-                      value={state.generatedPrompt}
-                      onChange={e => update({ generatedPrompt: e.target.value })}
-                      rows={10}
-                      className="w-full bg-white/[0.03] border border-white/[0.07] rounded-xl px-4 py-3.5 text-white/70 text-xs font-mono focus:outline-none focus:border-violet-500/40 transition-all resize-none leading-relaxed"
-                    />
                   </div>
                 )}
+
+                {/* Always-visible skip path */}
+                <button
+                  onClick={() => go(1)}
+                  disabled={!state.callFlowDescription.trim()}
+                  className={cn(
+                    "w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm border transition-all",
+                    !state.callFlowDescription.trim()
+                      ? "border-white/[0.05] text-white/20 cursor-not-allowed"
+                      : "border-white/[0.1] text-white/45 hover:text-white/70 hover:border-white/20",
+                  )}
+                >
+                  <SkipForward className="h-3.5 w-3.5" /> Skip AI generation &amp; continue manually
+                </button>
+
+                <p className="text-white/20 text-xs text-center mt-3">
+                  You can edit or write the system prompt manually on the agent settings page.
+                </p>
               </div>
             )}
 
@@ -943,17 +966,16 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                   : <><Check className="h-4 w-4" /> Create Agent</>
                 }
               </button>
+            ) : currentStep === "requirements" ? (
+              /* requirements step has its own inline Continue buttons — show nothing here */
+              null
             ) : (
               <button
                 onClick={() => go(1)}
-                disabled={
-                  (currentStep === "use-case"    && !state.useCase) ||
-                  (currentStep === "requirements" && !state.callFlowDescription.trim())
-                }
+                disabled={currentStep === "use-case" && !state.useCase}
                 className={cn(
                   "flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm transition-all",
-                  (currentStep === "use-case"    && !state.useCase) ||
-                  (currentStep === "requirements" && !state.callFlowDescription.trim())
+                  currentStep === "use-case" && !state.useCase
                     ? "bg-white/[0.06] text-white/25 cursor-not-allowed"
                     : "bg-white/[0.08] hover:bg-white/[0.13] text-white border border-white/[0.08]",
                 )}
