@@ -712,6 +712,58 @@ export class OrchestrationPipeline {
     let triggeredToolName: string | null = null;
     let triggeredToolArgs: Record<string, unknown> = {};
 
+    // ── Think-block filter (streaming) ───────────────────────────────────────
+    // Reasoning models (DeepSeek-R1, Sarvam, etc.) emit <think>…</think> blocks
+    // before their answer.  We must strip these from the TTS stream so the agent
+    // doesn't read the internal reasoning out loud.
+    //
+    // State machine: track whether the current token position is inside a think
+    // block.  Tokens may straddle the <think> / </think> boundary so we handle
+    // partial tags correctly.
+    let inThinkBlock = false;
+    let thinkBuf = "";  // accumulates partial tag characters so we can detect straddled boundaries
+
+    /**
+     * Filters one streaming token: removes any <think>…</think> content.
+     * Returns the portion of the token that should flow to TTS / pendingText.
+     */
+    function filterThinkToken(token: string): string {
+      // Append to tag-detection buffer
+      thinkBuf += token;
+      let out = "";
+
+      while (thinkBuf.length > 0) {
+        if (inThinkBlock) {
+          // Looking for closing tag
+          const closeIdx = thinkBuf.indexOf("</think>");
+          if (closeIdx !== -1) {
+            inThinkBlock = false;
+            thinkBuf = thinkBuf.slice(closeIdx + "</think>".length);
+          } else {
+            // Might be a partial </think — keep tail in buffer, discard rest
+            const tail = Math.max(0, thinkBuf.length - "</think>".length + 1);
+            thinkBuf = thinkBuf.slice(tail); // keep only potential partial tag
+            break;
+          }
+        } else {
+          // Looking for opening tag
+          const openIdx = thinkBuf.indexOf("<think>");
+          if (openIdx !== -1) {
+            out += thinkBuf.slice(0, openIdx);
+            inThinkBlock = true;
+            thinkBuf = thinkBuf.slice(openIdx + "<think>".length);
+          } else {
+            // Might be a partial <think — keep tail, flush safe prefix
+            const tail = Math.max(0, thinkBuf.length - "<think>".length + 1);
+            out += thinkBuf.slice(0, tail);
+            thinkBuf = thinkBuf.slice(tail);
+            break;
+          }
+        }
+      }
+      return out;
+    }
+
     const sentenceQueue: string[] = [];
     let wakePlayer: (() => void) | null = null;
 
@@ -770,8 +822,10 @@ export class OrchestrationPipeline {
       systemPromptForTurn,
       (token) => {
         if (!llmFirstTokenAt) llmFirstTokenAt = Date.now();
-        llmResponse += token;
-        pendingText += token;
+        llmResponse += token;                  // keep raw response (incl. think blocks)
+        const filtered = filterThinkToken(token);
+        if (!filtered) return;                 // token was entirely inside a think block
+        pendingText += filtered;
         const { sentences, remainder } = extractSentences(pendingText);
         for (const s of sentences) enqueue(s);
         pendingText = remainder;
@@ -811,8 +865,11 @@ export class OrchestrationPipeline {
       "LLM complete"
     );
 
-    this.conversationHistory.push({ role: "assistant", content: llmResponse });
-    this.config.onTranscript("agent", llmResponse);
+    // Strip any think blocks from the stored response so they don't appear in
+    // the transcript UI or pollute the conversation history for future turns.
+    const cleanResponse = llmResponse.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+    this.conversationHistory.push({ role: "assistant", content: cleanResponse });
+    this.config.onTranscript("agent", cleanResponse);
     this.config.onConversationUpdate?.(this.conversationHistory);
 
     await playPromise;
