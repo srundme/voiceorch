@@ -46,7 +46,7 @@ function getManagedStack(languages: string[]) {
   return {
     asrProvider:       hasTamil ? "sarvam" : "deepgram",
     llmProvider:       "sarvam",
-    llmModel:          "sarvam-m1",
+    llmModel:          "sarvam-m",
     ttsProvider:       "cartesia",
     telephonyProvider: "vobiz",
   };

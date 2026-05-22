@@ -99,7 +99,11 @@ const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
   deepseek:  [{ value: "deepseek-chat", label: "DeepSeek Chat" }, { value: "deepseek-reasoner", label: "DeepSeek Reasoner" }],
   mistral:   [{ value: "mistral-large-latest", label: "Mistral Large" }, { value: "mistral-small-latest", label: "Mistral Small" }],
   cohere:    [{ value: "command-r-plus", label: "Command R+" }, { value: "command-r", label: "Command R" }],
-  sarvam:    [{ value: "sarvam-2b-v0.5", label: "Sarvam 2B" }],
+  sarvam: [
+    { value: "sarvam-m",    label: "Sarvam M (recommended)" },
+    { value: "sarvam-30b",  label: "Sarvam 30B" },
+    { value: "sarvam-105b", label: "Sarvam 105B" },
+  ],
 };
 const ASR_MODELS: Record<string, { value: string; label: string }[]> = {
   deepgram:   [

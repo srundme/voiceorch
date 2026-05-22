@@ -2,16 +2,15 @@ import type { ConversationTurn, LLMAdapter, ToolDefinition } from "../../types.j
 
 /**
  * Sarvam AI — Chat completions (OpenAI-compatible endpoint)
- * Models: sarvam-2b, sarvam-m
+ * Models: sarvam-m (default), sarvam-30b, sarvam-105b
  * Docs: https://docs.sarvam.ai/api-reference/text/chat-completions
  *
- * Tool calling: supported on sarvam-m only.
- * sarvam-2b is a smaller model that does not support the tools parameter.
+ * Tool calling: supported on sarvam-m and above.
  * The wire format is identical to OpenAI (OpenAI-compatible endpoint).
  */
 
 /** Models that support Sarvam's function-calling interface */
-const TOOL_CAPABLE_MODELS = new Set(["sarvam-m"]);
+const TOOL_CAPABLE_MODELS = new Set(["sarvam-m", "sarvam-30b", "sarvam-105b"]);
 
 export class SarvamLLM implements LLMAdapter {
   private key: string;
@@ -19,7 +18,7 @@ export class SarvamLLM implements LLMAdapter {
 
   constructor(apiKey: string, model: string | null) {
     this.key = apiKey;
-    this.model = model ?? "sarvam-2b";
+    this.model = model ?? "sarvam-m";
   }
 
   async chat(
