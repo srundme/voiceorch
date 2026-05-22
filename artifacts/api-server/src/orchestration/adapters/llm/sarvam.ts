@@ -18,7 +18,14 @@ export class SarvamLLM implements LLMAdapter {
 
   constructor(apiKey: string, model: string | null) {
     this.key = apiKey;
-    this.model = model ?? "sarvam-m";
+    // Map legacy model names to current equivalents
+    const ALIASES: Record<string, string> = {
+      "sarvam-2b":       "sarvam-m",
+      "sarvam-2b-v0.5":  "sarvam-m",
+      "sarvam-m1":       "sarvam-m",
+    };
+    const raw = model ?? "sarvam-m";
+    this.model = ALIASES[raw] ?? raw;
   }
 
   async chat(
