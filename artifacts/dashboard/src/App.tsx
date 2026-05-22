@@ -254,7 +254,7 @@ function Router() {
 
 function App() {
   return (
-    <ThemeProvider defaultTheme="dark">
+    <ThemeProvider defaultTheme="light">
       <TooltipProvider>
         <WouterRouter base={basePath}>
           <Router />
