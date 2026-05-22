@@ -57,22 +57,28 @@ const ARUSHI_VOICE = {
   id: "2ee87190-8f84-4925-97da-e52547f9462c",
   name: "Arushi",
   gender: "Female",
+  language: "en",
   description: "Warm Indian English female — Cartesia",
 };
 
 const FALLBACK_VOICES = [
   ARUSHI_VOICE,
-  { id: "a0e99841-438c-4a64-b679-ae501e7d6091", name: "Priya",  gender: "Female", description: "Friendly Indian English female" },
-  { id: "bf991597-6135-4d4d-a38c-2516e5d30000", name: "Rohan",  gender: "Male",   description: "Confident Indian English male" },
-  { id: "79a125e8-cd45-4c13-8a67-188112f4dd22", name: "Sarah",  gender: "Female", description: "Warm US English female" },
-  { id: "c45bc1d0-7a89-42de-b4b4-a7cbe5f4d4a1", name: "James",  gender: "Male",   description: "Professional US English male" },
-  { id: "b7d50908-b17c-442d-ad8d-810c63997ed9", name: "Emma",   gender: "Female", description: "Clear British English female" },
-  { id: "f9836c6e-a0bd-460e-9d3c-f7299fa60f94", name: "Oliver", gender: "Male",   description: "British English male" },
-  { id: "5c42302c-194b-4d0c-ba1a-8cb485c84ab9", name: "Kavya",  gender: "Female", description: "South Indian English female" },
+  { id: "a0e99841-438c-4a64-b679-ae501e7d6091", name: "Priya",  gender: "Female", language: "en", description: "Friendly Indian English female" },
+  { id: "bf991597-6135-4d4d-a38c-2516e5d30000", name: "Rohan",  gender: "Male",   language: "en", description: "Confident Indian English male" },
+  { id: "726d5ae5-055f-4c3d-8355-d9677de68937", name: "Maya",   gender: "Female", language: "en", description: "Soft South Indian English female" },
+  { id: "5c42302c-194b-4d0c-ba1a-8cb485c84ab9", name: "Kavya",  gender: "Female", language: "en", description: "Tamil/Telugu English female" },
+  { id: "f114a467-c40a-4db8-bc72-d64e2e69fbd1", name: "Ananya", gender: "Female", language: "hi", description: "Hindi female voice" },
+  { id: "83b36547-9e87-4d14-9f16-19437f4059a4", name: "Vikram", gender: "Male",   language: "hi", description: "Hindi male voice" },
 ];
 
+const LANG_LABEL: Record<string, string> = {
+  hi: "Hindi", ta: "Tamil", te: "Telugu", kn: "Kannada",
+  ml: "Malayalam", bn: "Bengali", mr: "Marathi", gu: "Gujarati",
+  pa: "Punjabi", "en-IN": "English · IN", en: "English",
+};
+
 /* ── Types ──────────────────────────────────────────────────────────────── */
-interface CartesiaVoice { id: string; name: string; gender: string; description: string }
+interface CartesiaVoice { id: string; name: string; gender: string; description: string; language?: string }
 type AgentDirection = "inbound" | "outbound" | "both";
 
 interface WizardState {
@@ -821,11 +827,16 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                             {voice.name.charAt(0)}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
                               <span className={cn("font-semibold text-sm", sel ? "text-white" : "text-white/70")}>{voice.name}</span>
                               {isArushi && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-400 font-semibold">Default</span>}
+                              {voice.language && (
+                                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-white/10 text-white/40 font-medium">
+                                  {LANG_LABEL[voice.language] ?? voice.language.toUpperCase()}
+                                </span>
+                              )}
                             </div>
-                            <div className="text-xs text-white/30 mt-0.5 truncate">{voice.description}</div>
+                            <div className="text-xs text-white/30 mt-0.5 truncate">{voice.gender}</div>
                           </div>
                           <button
                             onClick={e => { e.stopPropagation(); void preview(voice.id); }}

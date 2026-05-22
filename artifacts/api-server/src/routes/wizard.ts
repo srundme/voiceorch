@@ -123,18 +123,20 @@ const LANGUAGE_VALUES: Record<string, {
   },
 };
 
-// ── Hardcoded Cartesia voice fallback ────────────────────────────────────────
+// ── Indian-language Cartesia voice fallback ───────────────────────────────────
 
 const FALLBACK_VOICES = [
-  { id: "a0e99841-438c-4a64-b679-ae501e7d6091", name: "Priya", gender: "Female", description: "Warm Indian English female" },
-  { id: "bf991597-6135-4d4d-a38c-2516e5d30000", name: "Aryan", gender: "Male", description: "Confident Indian English male" },
-  { id: "79a125e8-cd45-4c13-8a67-188112f4dd22", name: "Sarah", gender: "Female", description: "Friendly US English female" },
-  { id: "c45bc1d0-7a89-42de-b4b4-a7cbe5f4d4a1", name: "James", gender: "Male", description: "Professional US English male" },
-  { id: "b7d50908-b17c-442d-ad8d-810c63997ed9", name: "Emma", gender: "Female", description: "Clear British English female" },
-  { id: "f9836c6e-a0bd-460e-9d3c-f7299fa60f94", name: "Oliver", gender: "Male", description: "British English male" },
-  { id: "726d5ae5-055f-4c3d-8355-d9677de68937", name: "Maya", gender: "Female", description: "Soft South Indian English female" },
-  { id: "5c42302c-194b-4d0c-ba1a-8cb485c84ab9", name: "Kavya", gender: "Female", description: "Tamil/Telugu female voice" },
+  { id: "2ee87190-8f84-4925-97da-e52547f9462c", name: "Arushi", gender: "Female", language: "en", description: "Warm Indian English female" },
+  { id: "a0e99841-438c-4a64-b679-ae501e7d6091", name: "Priya",  gender: "Female", language: "en", description: "Friendly Indian English female" },
+  { id: "bf991597-6135-4d4d-a38c-2516e5d30000", name: "Rohan",  gender: "Male",   language: "en", description: "Confident Indian English male" },
+  { id: "726d5ae5-055f-4c3d-8355-d9677de68937", name: "Maya",   gender: "Female", language: "en", description: "Soft South Indian English female" },
+  { id: "5c42302c-194b-4d0c-ba1a-8cb485c84ab9", name: "Kavya",  gender: "Female", language: "en", description: "Tamil/Telugu English female" },
+  { id: "f114a467-c40a-4db8-bc72-d64e2e69fbd1", name: "Ananya", gender: "Female", language: "hi", description: "Hindi female voice" },
+  { id: "83b36547-9e87-4d14-9f16-19437f4059a4", name: "Vikram", gender: "Male",   language: "hi", description: "Hindi male voice" },
 ];
+
+// Indian language codes (ISO 639-1)
+const INDIAN_LANGS = new Set(["hi", "ta", "te", "kn", "ml", "bn", "mr", "gu", "pa", "or", "as", "en-IN"]);
 
 // ── Helper: get setting from DB ──────────────────────────────────────────────
 
@@ -167,11 +169,22 @@ router.get("/wizard/voices", requireDbUser, async (req, res): Promise<void> => {
     }
 
     const data = await response.json() as any[];
-    const voices = data.slice(0, 20).map((v: any) => ({
+
+    // Split into Indian-language voices and English voices
+    const indianLang = (data as any[]).filter((v: any) => v.language && INDIAN_LANGS.has(v.language as string));
+    const englishVoices = (data as any[]).filter((v: any) => !v.language || v.language === "en");
+
+    // Use Indian-language voices first; pad with English if fewer than 5
+    const combined = indianLang.length >= 5
+      ? indianLang
+      : [...indianLang, ...englishVoices.slice(0, Math.max(5, 20 - indianLang.length))];
+
+    const voices = combined.map((v: any) => ({
       id: v.id,
       name: v.name,
-      gender: v.gender ?? "Neutral",
-      description: v.description ?? "",
+      gender: (v.gender ?? "Neutral") as string,
+      language: (v.language ?? "en") as string,
+      description: (v.description ?? "") as string,
     }));
 
     res.json({ voices, source: "cartesia" });
@@ -222,8 +235,8 @@ router.post("/wizard/preview-voice", requireDbUser, async (req, res): Promise<vo
     }
 
     const audioBuffer = await response.arrayBuffer();
-    const base64 = Buffer.from(audioBuffer).toString("base64");
-    res.json({ audio: base64, mimeType: "audio/wav" });
+    res.set("Content-Type", "audio/wav");
+    res.send(Buffer.from(audioBuffer));
   } catch (err) {
     logger.error({ err }, "Voice preview failed");
     res.status(500).json({ error: "Voice preview failed" });

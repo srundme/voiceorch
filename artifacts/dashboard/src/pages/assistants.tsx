@@ -583,21 +583,31 @@ function ToggleRow({ label, desc, checked, onChange }: {
   );
 }
 
-type CartesiaVoice = { id: string; name: string; description?: string; gender?: string };
+type CartesiaVoice = { id: string; name: string; description?: string; gender?: string; language?: string };
+
+const LANG_LABEL: Record<string, string> = {
+  hi: "Hindi", ta: "Tamil", te: "Telugu", kn: "Kannada",
+  ml: "Malayalam", bn: "Bengali", mr: "Marathi", gu: "Gujarati",
+  pa: "Punjabi", "en-IN": "English · IN", en: "English",
+};
+function langLabel(lang?: string) { return lang ? (LANG_LABEL[lang] ?? lang.toUpperCase()) : "English"; }
 
 const ARUSHI_VOICE: CartesiaVoice = {
   id: "2ee87190-8f84-4925-97da-e52547f9462c",
   name: "Arushi",
-  description: "Indian English female",
-  gender: "female",
+  description: "Warm Indian English female",
+  gender: "Female",
+  language: "en",
 };
 
 const CARTESIA_FALLBACK_VOICES: CartesiaVoice[] = [
   ARUSHI_VOICE,
-  { id: "a0e99841-438c-4a64-b679-ae501e7d6091", name: "Barbershop Man", gender: "male" },
-  { id: "79a125e8-cd45-4c13-8a67-188112f4dd22", name: "British Lady", gender: "female" },
-  { id: "95856005-0332-41b0-935f-352e296aa0df", name: "Calm Lady", gender: "female" },
-  { id: "bd9120b6-7761-47e7-bf6e-2f793e7c3814", name: "Confident British Man", gender: "male" },
+  { id: "a0e99841-438c-4a64-b679-ae501e7d6091", name: "Priya",  gender: "Female", language: "en", description: "Friendly Indian English female" },
+  { id: "bf991597-6135-4d4d-a38c-2516e5d30000", name: "Rohan",  gender: "Male",   language: "en", description: "Confident Indian English male" },
+  { id: "726d5ae5-055f-4c3d-8355-d9677de68937", name: "Maya",   gender: "Female", language: "en", description: "Soft South Indian English female" },
+  { id: "5c42302c-194b-4d0c-ba1a-8cb485c84ab9", name: "Kavya",  gender: "Female", language: "en", description: "Tamil/Telugu English female" },
+  { id: "f114a467-c40a-4db8-bc72-d64e2e69fbd1", name: "Ananya", gender: "Female", language: "hi", description: "Hindi female voice" },
+  { id: "83b36547-9e87-4d14-9f16-19437f4059a4", name: "Vikram", gender: "Male",   language: "hi", description: "Hindi male voice" },
 ];
 
 const PREVIEW_TEXT = "Hello! I'm your AI voice assistant. How can I help you today?";
@@ -1340,6 +1350,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                                   <span className="flex items-center gap-1.5">
                                     {v.name}
                                     {v.gender && <span className="text-black/35 text-[10px]">· {v.gender}</span>}
+                                    <span className="text-black/25 text-[10px]">· {langLabel(v.language)}</span>
                                   </span>
                                 </SelectItem>
                               ))
