@@ -253,9 +253,9 @@ function ModelSelect({
 const CATEGORY_COLORS: Record<string, string> = {
   support:  "bg-blue-500/15 text-blue-400 border-blue-500/30",
   sales:    "bg-amber-500/15 text-amber-400 border-amber-500/30",
-  booking:  "bg-[#D4D8DF]/20 text-[#353536] border-[#ACADB1]/50",
+  booking:  "bg-black/[0.04] text-black/75 border-black/[0.10]",
   survey:   "bg-purple-500/15 text-purple-400 border-purple-500/30",
-  general:  "bg-[#D4D8DF]/20 text-[#706F70] border-[#D4D8DF]",
+  general:  "bg-black/[0.04] text-black/50 border-black/[0.07]",
 };
 
 export default function AgentNew() {
@@ -404,12 +404,12 @@ export default function AgentNew() {
 
       {/* Templates picker dialog */}
       <Dialog open={templatesOpen} onOpenChange={setTemplatesOpen}>
-        <DialogContent className="bg-white border-[#D4D8DF] max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="bg-white/70 backdrop-blur-lg border-black/[0.07] max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-amber-400" /> Start from a template
             </DialogTitle>
-            <DialogDescription className="text-[#ACADB1]">
+            <DialogDescription className="text-black/35">
               Pick a template to prefill the form. You can customise everything afterwards.
             </DialogDescription>
           </DialogHeader>
@@ -418,17 +418,17 @@ export default function AgentNew() {
               <button
                 key={tpl.id}
                 onClick={() => applyTemplate(tpl)}
-                className="text-left p-4 rounded-lg bg-[#D4D8DF]/30 border border-[#D4D8DF] hover:border-[#ACADB1] hover:bg-[#D4D8DF]/40 transition-colors"
+                className="text-left p-4 rounded-lg bg-black/[0.06] border border-black/[0.07] hover:border-[#ACADB1] hover:bg-black/[0.08] transition-colors"
               >
                 <div className="flex items-start justify-between gap-3 mb-1">
-                  <p className="text-sm font-semibold text-[#080808]">{tpl.name}</p>
+                  <p className="text-sm font-semibold text-black/85">{tpl.name}</p>
                   <Badge className={`text-[10px] shrink-0 ${CATEGORY_COLORS[tpl.category] ?? CATEGORY_COLORS.general}`}>
                     {tpl.category}
                   </Badge>
                 </div>
-                <p className="text-xs text-[#706F70] leading-relaxed">{tpl.description}</p>
+                <p className="text-xs text-black/50 leading-relaxed">{tpl.description}</p>
                 {tpl.llmProvider && (
-                  <p className="text-[11px] text-[#ACADB1] mt-2 font-mono">
+                  <p className="text-[11px] text-black/35 mt-2 font-mono">
                     {tpl.asrProvider} · {tpl.llmProvider} · {tpl.ttsProvider}
                   </p>
                 )}

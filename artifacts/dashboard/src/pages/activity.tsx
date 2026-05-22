@@ -6,22 +6,22 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const EVENT_META: Record<string, { label: string; color: string; icon: React.ElementType }> = {
-  "agent.created":                 { label: "Agent Created",          color: "bg-[#D4D8DF]/20 text-[#353536] border-[#ACADB1]/40",  icon: Bot },
+  "agent.created":                 { label: "Agent Created",          color: "bg-black/[0.04] text-black/75 border-black/[0.08]",  icon: Bot },
   "agent.deleted":                 { label: "Agent Deleted",          color: "bg-red-500/10 text-red-400 border-red-500/20",              icon: Bot },
   "agent.toggled":                 { label: "Agent Toggled",          color: "bg-blue-500/10 text-blue-400 border-blue-500/20",           icon: Bot },
   "call.started":                  { label: "Call Started",           color: "bg-violet-500/10 text-violet-400 border-violet-500/20",     icon: Phone },
-  "call.ended":                    { label: "Call Ended",             color: "bg-[#D4D8DF]/20 text-[#706F70] border-[#D4D8DF]/50",           icon: Phone },
-  "provider.added":                { label: "Provider Added",         color: "bg-[#D4D8DF]/20 text-[#353536] border-[#ACADB1]/40",  icon: Key },
+  "call.ended":                    { label: "Call Ended",             color: "bg-black/[0.04] text-black/50 border-black/[0.04]",           icon: Phone },
+  "provider.added":                { label: "Provider Added",         color: "bg-black/[0.04] text-black/75 border-black/[0.08]",  icon: Key },
   "provider.deleted":              { label: "Provider Deleted",       color: "bg-red-500/10 text-red-400 border-red-500/20",              icon: Key },
   "knowledge_base.created":        { label: "KB Created",             color: "bg-amber-500/10 text-amber-400 border-amber-500/20",        icon: BookOpen },
   "knowledge_base.deleted":        { label: "KB Deleted",             color: "bg-red-500/10 text-red-400 border-red-500/20",              icon: BookOpen },
   "account.api_key_regenerated":   { label: "API Key Regenerated",    color: "bg-orange-500/10 text-orange-400 border-orange-500/20",     icon: RefreshCw },
   "account.concurrent_slot_added": { label: "Concurrent Slot Added",  color: "bg-blue-500/10 text-blue-400 border-blue-500/20",           icon: Settings },
-  "wallet.topup":                  { label: "Wallet Top-up",          color: "bg-[#D4D8DF]/20 text-[#353536] border-[#ACADB1]/40",  icon: Wallet },
+  "wallet.topup":                  { label: "Wallet Top-up",          color: "bg-black/[0.04] text-black/75 border-black/[0.08]",  icon: Wallet },
 };
 
 function eventMeta(type: string) {
-  return EVENT_META[type] ?? { label: type, color: "bg-[#D4D8DF]/20 text-[#706F70] border-[#D4D8DF]/50", icon: Activity };
+  return EVENT_META[type] ?? { label: type, color: "bg-black/[0.04] text-black/50 border-black/[0.04]", icon: Activity };
 }
 
 export default function ActivityPage() {
@@ -31,11 +31,11 @@ export default function ActivityPage() {
   );
 
   return (
-    <div className="flex flex-col h-full overflow-auto bg-[#EBEDF1]">
-      <div className="border-b border-[#D4D8DF] px-6 py-4 flex items-center gap-3 shrink-0">
-        <Activity className="w-5 h-5 text-[#353536]" />
-        <h1 className="font-semibold text-[#080808] text-lg">Activity Log</h1>
-        <span className="text-xs text-[#ACADB1] ml-auto">Audit trail of all platform events</span>
+    <div className="flex flex-col h-full overflow-auto">
+      <div className="border-b border-black/[0.06] px-6 py-4 flex items-center gap-3 shrink-0">
+        <Activity className="w-5 h-5 text-black/75" />
+        <h1 className="font-semibold text-black/85 text-lg">Activity Log</h1>
+        <span className="text-xs text-black/35 ml-auto">Audit trail of all platform events</span>
       </div>
 
       <div className="flex-1 overflow-auto p-6">
@@ -43,7 +43,7 @@ export default function ActivityPage() {
           {isLoading ? (
             <div className="space-y-3">
               {Array.from({ length: 8 }).map((_, i) => (
-                <div key={i} className="flex items-center gap-4 p-3 rounded-lg border border-[#D4D8DF] bg-white/30">
+                <div key={i} className="flex items-center gap-4 p-3 rounded-lg border border-black/[0.07] bg-white/70 backdrop-blur-lg/30">
                   <Skeleton className="h-8 w-8 rounded-full" />
                   <div className="flex-1 space-y-1.5">
                     <Skeleton className="h-4 w-48" />
@@ -54,7 +54,7 @@ export default function ActivityPage() {
               ))}
             </div>
           ) : !logs || logs.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-24 text-[#ACADB1]">
+            <div className="flex flex-col items-center justify-center py-24 text-black/35">
               <Activity className="w-12 h-12 mb-4 opacity-30" />
               <p className="text-sm">No activity yet. Actions you take will appear here.</p>
             </div>
@@ -66,10 +66,10 @@ export default function ActivityPage() {
                 return (
                   <div
                     key={log.id}
-                    className="flex items-start gap-3 px-4 py-3 rounded-lg border border-[#D4D8DF]/60 bg-white/30 hover:bg-white transition-colors"
+                    className="flex items-start gap-3 px-4 py-3 rounded-lg border border-black/[0.07]/60 bg-white/70 backdrop-blur-lg/30 hover:bg-white/70 backdrop-blur-lg transition-colors"
                   >
                     <div className="shrink-0 mt-0.5">
-                      <Icon className="w-4 h-4 text-[#ACADB1]" />
+                      <Icon className="w-4 h-4 text-black/35" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -77,14 +77,14 @@ export default function ActivityPage() {
                           {log.eventType}
                         </Badge>
                         {log.resourceType && log.resourceId && (
-                          <span className="text-[10px] font-mono text-[#ACADB1]">
+                          <span className="text-[10px] font-mono text-black/35">
                             {log.resourceType}#{log.resourceId}
                           </span>
                         )}
                       </div>
-                      <p className="text-sm text-[#353536] mt-1">{log.description}</p>
+                      <p className="text-sm text-black/75 mt-1">{log.description}</p>
                     </div>
-                    <div className="shrink-0 text-xs text-[#ACADB1] whitespace-nowrap mt-0.5">
+                    <div className="shrink-0 text-xs text-black/35 whitespace-nowrap mt-0.5">
                       {format(parseISO(log.createdAt), "MMM d, HH:mm:ss")}
                     </div>
                   </div>

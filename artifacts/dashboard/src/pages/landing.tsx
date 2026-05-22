@@ -6,9 +6,9 @@ const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-[#EBEDF1] text-[#353536] flex flex-col">
+    <div className="min-h-screen bg-transparent text-[#353536] flex flex-col">
       {/* Header */}
-      <header className="flex items-center justify-between px-8 h-16 border-b border-[#D4D8DF] bg-white/70 backdrop-blur-sm">
+      <header className="flex items-center justify-between px-8 h-16 border-b border-[#D4D8DF] bg-white/70/70 backdrop-blur-sm">
         <div className="flex items-center gap-2.5">
           <div className="flex h-7 w-7 items-center justify-center rounded bg-[#353536]">
             <Mic className="h-4 w-4 text-[#EBEDF1]" />
@@ -56,7 +56,7 @@ export default function LandingPage() {
             { icon: Zap, title: "Real-time Orchestration", desc: "ASR → LLM → TTS pipeline in milliseconds" },
             { icon: Globe, title: "Any Telephony", desc: "Twilio, Plivo, Vonage and more" },
           ].map(({ icon: Icon, title, desc }) => (
-            <div key={title} className="rounded-xl border border-[#D4D8DF] bg-white p-5 text-left shadow-sm">
+            <div key={title} className="rounded-xl border border-[#D4D8DF] bg-white/70 p-5 text-left shadow-sm">
               <Icon className="w-4 h-4 text-[#353536] mb-3" />
               <p className="font-medium text-sm text-[#353536] mb-1">{title}</p>
               <p className="text-xs text-[#ACADB1]">{desc}</p>

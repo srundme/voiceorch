@@ -176,7 +176,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
             <DialogTitle>Confirm Purchase</DialogTitle>
             <DialogDescription>
               You are about to purchase <span className="font-mono text-foreground font-semibold">{selected}</span>.
-              This will deduct <span className="text-[#353536] font-semibold">$5.00</span> from your wallet.
+              This will deduct <span className="text-black/75 font-semibold">$5.00</span> from your wallet.
             </DialogDescription>
           </DialogHeader>
           <div className="flex items-start gap-3 p-3 rounded-lg border border-amber-500/20 bg-amber-500/5 text-amber-400 text-sm">
@@ -186,7 +186,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirming(false)}>Back</Button>
             <Button
-              className="bg-[#353536] hover:bg-[#353536] text-[#080808]"
+              className="bg-black/80 hover:bg-black/80 text-black/85"
               onClick={handlePurchase}
               disabled={purchase.isPending}
             >
@@ -269,14 +269,14 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
                     <div className="text-sm">
                       <p className="font-medium">Carrier credentials not set up</p>
                       <p className="text-amber-400/70 mt-0.5 text-xs leading-relaxed">
-                        To provision real phone numbers, add <code className="font-mono bg-[#D4D8DF]/40 px-1 rounded">VOBIZ_AUTH_ID</code> and{" "}
-                        <code className="font-mono bg-[#D4D8DF]/40 px-1 rounded">VOBIZ_AUTH_TOKEN</code> as environment secrets in your Replit project.
+                        To provision real phone numbers, add <code className="font-mono bg-black/[0.08] px-1 rounded">VOBIZ_AUTH_ID</code> and{" "}
+                        <code className="font-mono bg-black/[0.08] px-1 rounded">VOBIZ_AUTH_TOKEN</code> as environment secrets in your Replit project.
                       </p>
                     </div>
                   </div>
                 </div>
               ) : !available || available.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 text-[#ACADB1] text-sm">
+                <div className="flex flex-col items-center justify-center py-8 text-black/35 text-sm">
                   <Globe className="h-8 w-8 mb-2 opacity-30" />
                   No numbers available for this search.
                 </div>
@@ -287,11 +287,11 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
                       key={n.number}
                       onClick={() => setSelected(n.number)}
                       className={`w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-muted/50 transition-colors text-left ${
-                        selected === n.number ? "bg-[#D4D8DF]/20 border-l-2 border-emerald-500" : ""
+                        selected === n.number ? "bg-black/[0.04] border-l-2 border-emerald-500" : ""
                       }`}
                     >
                       <span className="font-mono font-medium">{n.number}</span>
-                      <div className="flex items-center gap-2 text-xs text-[#ACADB1]">
+                      <div className="flex items-center gap-2 text-xs text-black/35">
                         {n.region && <span>{n.region}</span>}
                         <Badge variant="outline" className="text-[10px] capitalize">{n.numberType.replace("_", " ")}</Badge>
                       </div>
@@ -306,7 +306,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button
-            className="bg-[#353536] hover:bg-[#353536] text-[#080808] gap-1.5"
+            className="bg-black/80 hover:bg-black/80 text-black/85 gap-1.5"
             disabled={!selected}
             onClick={() => setConfirming(true)}
           >
@@ -342,15 +342,15 @@ export default function PhoneNumbersPage() {
   }
 
   return (
-    <div className="h-full overflow-y-auto bg-[#EBEDF1]">
+    <div className="h-full overflow-y-auto bg-transparent">
       {/* Header */}
-      <div className="border-b border-[#D4D8DF] px-6 py-4 flex items-center gap-3 shrink-0">
-        <Phone className="w-5 h-5 text-[#353536]" />
-        <h1 className="font-semibold text-[#080808] text-lg">Phone Numbers</h1>
-        <span className="text-xs text-[#ACADB1] ml-auto">Platform-managed numbers · $5.00 / number</span>
+      <div className="border-b border-black/[0.06] px-6 py-4 flex items-center gap-3 shrink-0">
+        <Phone className="w-5 h-5 text-black/75" />
+        <h1 className="font-semibold text-black/85 text-lg">Phone Numbers</h1>
+        <span className="text-xs text-black/35 ml-auto">Platform-managed numbers · $5.00 / number</span>
         <Button
           size="sm"
-          className="h-8 gap-1.5 bg-[#353536] hover:bg-[#353536] text-[#080808]"
+          className="h-8 gap-1.5 bg-black/80 hover:bg-black/80 text-black/85"
           onClick={() => setBuyOpen(true)}
         >
           <Plus className="h-3.5 w-3.5" /> Buy Number
@@ -359,11 +359,11 @@ export default function PhoneNumbersPage() {
 
       <div className="p-6 max-w-4xl mx-auto space-y-4">
         {/* Info banner */}
-        <div className="flex items-start gap-3 p-4 rounded-xl border border-[#D4D8DF] bg-white/80">
-          <Globe className="h-5 w-5 text-[#353536] mt-0.5 shrink-0" />
-          <div className="text-sm text-[#706F70] space-y-0.5">
-            <p className="text-[#353536] font-medium">Managed phone numbers</p>
-            <p>Purchase numbers from our carrier pool. No carrier account needed — assign a number to an agent and inbound calls are automatically routed to its pipeline. <span className="text-[#ACADB1]">$5.00 one-time per number.</span></p>
+        <div className="flex items-start gap-3 p-4 rounded-xl border border-black/[0.07] bg-white/70 backdrop-blur-lg/65 backdrop-blur-xl">
+          <Globe className="h-5 w-5 text-black/75 mt-0.5 shrink-0" />
+          <div className="text-sm text-black/50 space-y-0.5">
+            <p className="text-black/75 font-medium">Managed phone numbers</p>
+            <p>Purchase numbers from our carrier pool. No carrier account needed — assign a number to an agent and inbound calls are automatically routed to its pipeline. <span className="text-black/35">$5.00 one-time per number.</span></p>
           </div>
         </div>
 
@@ -371,7 +371,7 @@ export default function PhoneNumbersPage() {
         {isLoading ? (
           <div className="space-y-2">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-4 p-4 rounded-lg border border-[#D4D8DF] bg-white/30">
+              <div key={i} className="flex items-center gap-4 p-4 rounded-lg border border-black/[0.07] bg-white/70 backdrop-blur-lg/30">
                 <Skeleton className="h-5 w-36" />
                 <Skeleton className="h-5 w-20" />
                 <Skeleton className="h-5 w-28 ml-auto" />
@@ -379,10 +379,10 @@ export default function PhoneNumbersPage() {
             ))}
           </div>
         ) : !numbers || numbers.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 text-[#ACADB1]">
+          <div className="flex flex-col items-center justify-center py-24 text-black/35">
             <Phone className="w-12 h-12 mb-4 opacity-30" />
             <p className="text-sm mb-3">No phone numbers yet.</p>
-            <Button size="sm" className="gap-1.5 bg-[#353536] hover:bg-[#353536] text-[#080808]" onClick={() => setBuyOpen(true)}>
+            <Button size="sm" className="gap-1.5 bg-black/80 hover:bg-black/80 text-black/85" onClick={() => setBuyOpen(true)}>
               <Plus className="h-3.5 w-3.5" /> Buy your first number
             </Button>
           </div>
@@ -391,11 +391,11 @@ export default function PhoneNumbersPage() {
             {numbers.map(n => (
               <div
                 key={n.id}
-                className="flex items-center gap-4 px-4 py-3 rounded-lg border border-[#D4D8DF]/60 bg-white/30 hover:bg-white transition-colors"
+                className="flex items-center gap-4 px-4 py-3 rounded-lg border border-black/[0.07]/60 bg-white/70 backdrop-blur-lg/30 hover:bg-white/70 backdrop-blur-lg transition-colors"
               >
                 <div className="shrink-0">
-                  <p className="font-mono font-semibold text-[#080808] text-sm">{n.number}</p>
-                  <p className="text-[11px] text-[#ACADB1] mt-0.5">{n.countryCode}{n.region ? ` · ${n.region}` : ""}</p>
+                  <p className="font-mono font-semibold text-black/85 text-sm">{n.number}</p>
+                  <p className="text-[11px] text-black/35 mt-0.5">{n.countryCode}{n.region ? ` · ${n.region}` : ""}</p>
                 </div>
 
                 <Badge variant="outline" className="text-[10px] capitalize shrink-0">
@@ -404,12 +404,12 @@ export default function PhoneNumbersPage() {
 
                 <div className="flex-1 min-w-0">
                   {n.agentName ? (
-                    <div className="flex items-center gap-1.5 text-xs text-[#353536]">
+                    <div className="flex items-center gap-1.5 text-xs text-black/75">
                       <Link2 className="h-3 w-3" />
                       <span className="truncate">{n.agentName}</span>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-1.5 text-xs text-[#ACADB1]">
+                    <div className="flex items-center gap-1.5 text-xs text-black/35">
                       <Link2Off className="h-3 w-3" />
                       Unassigned
                     </div>
@@ -420,7 +420,7 @@ export default function PhoneNumbersPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-7 text-xs gap-1.5 text-[#706F70] hover:text-[#080808]"
+                    className="h-7 text-xs gap-1.5 text-black/50 hover:text-black/85"
                     onClick={() => setAssignTarget(n)}
                   >
                     <Link2 className="h-3 w-3" />

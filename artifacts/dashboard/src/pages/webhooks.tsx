@@ -27,12 +27,12 @@ const ALL_EVENTS = ["call.started", "call.ended", "call.failed"] as const;
 
 function EventBadge({ event }: { event: string }) {
   const colors: Record<string, string> = {
-    "call.started": "bg-[#D4D8DF]/20 text-[#353536] border-[#ACADB1]/50",
+    "call.started": "bg-black/[0.04] text-black/75 border-black/[0.10]",
     "call.ended":   "bg-blue-500/15 text-blue-400 border-blue-500/30",
     "call.failed":  "bg-red-500/15 text-red-400 border-red-500/30",
   };
   return (
-    <Badge className={`text-[10px] font-mono ${colors[event] ?? "bg-[#D4D8DF]/40 text-[#706F70]"}`}>
+    <Badge className={`text-[10px] font-mono ${colors[event] ?? "bg-black/[0.08] text-black/50"}`}>
       {event}
     </Badge>
   );
@@ -61,16 +61,16 @@ function WebhookForm({
   return (
     <div className="space-y-4">
       <div>
-        <Label className="text-xs text-[#706F70]">Endpoint URL *</Label>
+        <Label className="text-xs text-black/50">Endpoint URL *</Label>
         <Input
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="https://your-server.com/webhook"
-          className="mt-1.5 h-8 text-sm bg-[#D4D8DF]/40 border-[#D4D8DF]"
+          className="mt-1.5 h-8 text-sm bg-black/[0.08] border-black/[0.07]"
         />
       </div>
       <div>
-        <Label className="text-xs text-[#706F70]">Events to subscribe</Label>
+        <Label className="text-xs text-black/50">Events to subscribe</Label>
         <div className="mt-2 flex flex-wrap gap-2">
           {ALL_EVENTS.map((ev) => (
             <button
@@ -78,8 +78,8 @@ function WebhookForm({
               onClick={() => toggle(ev)}
               className={`px-2.5 py-1 rounded-md text-xs font-mono border transition-colors ${
                 events.includes(ev)
-                  ? "bg-[#D4D8DF]/20 text-[#353536] border-[#ACADB1]/60"
-                  : "bg-[#D4D8DF]/40 text-[#ACADB1] border-[#D4D8DF] hover:border-[#ACADB1]"
+                  ? "bg-black/[0.04] text-black/75 border-[#ACADB1]/60"
+                  : "bg-black/[0.08] text-black/35 border-black/[0.07] hover:border-[#ACADB1]"
               }`}
             >
               {ev}
@@ -88,30 +88,30 @@ function WebhookForm({
         </div>
       </div>
       <div>
-        <Label className="text-xs text-[#706F70]">Description (optional)</Label>
+        <Label className="text-xs text-black/50">Description (optional)</Label>
         <Input
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder="e.g. Slack notifications"
-          className="mt-1.5 h-8 text-sm bg-[#D4D8DF]/40 border-[#D4D8DF]"
+          className="mt-1.5 h-8 text-sm bg-black/[0.08] border-black/[0.07]"
         />
       </div>
       <div>
-        <Label className="text-xs text-[#706F70]">Signing secret (optional — auto-generated if blank)</Label>
+        <Label className="text-xs text-black/50">Signing secret (optional — auto-generated if blank)</Label>
         <Input
           value={secret}
           onChange={(e) => setSecret(e.target.value)}
           placeholder="Leave blank to auto-generate"
-          className="mt-1.5 h-8 text-sm bg-[#D4D8DF]/40 border-[#D4D8DF] font-mono"
+          className="mt-1.5 h-8 text-sm bg-black/[0.08] border-black/[0.07] font-mono"
         />
       </div>
       <DialogFooter>
-        <Button variant="ghost" size="sm" onClick={onCancel} className="text-[#706F70]">Cancel</Button>
+        <Button variant="ghost" size="sm" onClick={onCancel} className="text-black/50">Cancel</Button>
         <Button
           size="sm"
           disabled={!url || events.length === 0 || loading}
           onClick={() => onSubmit({ url, events, description: description || undefined, secret: secret || undefined })}
-          className="bg-[#353536] hover:bg-[#080808] text-[#EBEDF1]"
+          className="bg-black/80 hover:bg-black/90 text-white/90"
         >
           {loading ? "Saving…" : "Save endpoint"}
         </Button>
@@ -171,17 +171,17 @@ export default function WebhooksPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-[#D4D8DF] shrink-0">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-black/[0.06] shrink-0">
         <div>
-          <h1 className="text-base font-semibold text-[#080808]">Webhooks</h1>
-          <p className="text-xs text-[#ACADB1] mt-0.5">
+          <h1 className="text-base font-semibold text-black/85">Webhooks</h1>
+          <p className="text-xs text-black/35 mt-0.5">
             Receive real-time HTTP POST notifications when call events occur.
           </p>
         </div>
         <Button
           size="sm"
           onClick={() => setCreateOpen(true)}
-          className="h-7 px-3 text-xs bg-[#353536] hover:bg-[#080808] text-[#EBEDF1]"
+          className="h-7 px-3 text-xs bg-black/80 hover:bg-black/90 text-white/90"
         >
           <Plus className="w-3 h-3 mr-1.5" />
           Add endpoint
@@ -192,22 +192,22 @@ export default function WebhooksPage() {
         {isLoading ? (
           <div className="space-y-3">
             {[1, 2].map((i) => (
-              <div key={i} className="h-20 rounded-lg bg-white border border-[#D4D8DF] animate-pulse" />
+              <div key={i} className="h-20 rounded-lg bg-white/70 backdrop-blur-lg border border-black/[0.07] animate-pulse" />
             ))}
           </div>
         ) : endpoints.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-center">
-            <div className="h-12 w-12 rounded-full bg-[#D4D8DF]/40 flex items-center justify-center mb-4">
-              <Webhook className="h-6 w-6 text-[#ACADB1]" />
+            <div className="h-12 w-12 rounded-full bg-black/[0.08] flex items-center justify-center mb-4">
+              <Webhook className="h-6 w-6 text-black/35" />
             </div>
-            <p className="text-sm font-medium text-[#706F70]">No webhook endpoints yet</p>
-            <p className="text-xs text-[#ACADB1] mt-1 max-w-xs">
+            <p className="text-sm font-medium text-black/50">No webhook endpoints yet</p>
+            <p className="text-xs text-black/35 mt-1 max-w-xs">
               Add an endpoint to receive POST notifications when calls start, end, or fail.
             </p>
             <Button
               size="sm"
               onClick={() => setCreateOpen(true)}
-              className="mt-4 h-7 px-3 text-xs bg-[#353536] hover:bg-[#080808] text-[#EBEDF1]"
+              className="mt-4 h-7 px-3 text-xs bg-black/80 hover:bg-black/90 text-white/90"
             >
               <Plus className="w-3 h-3 mr-1.5" />
               Add your first endpoint
@@ -216,33 +216,33 @@ export default function WebhooksPage() {
         ) : (
           <div className="space-y-3">
             {endpoints.map((ep) => (
-              <div key={ep.id} className="p-4 rounded-lg bg-white border border-[#D4D8DF] hover:border-[#D4D8DF] transition-colors">
+              <div key={ep.id} className="p-4 rounded-lg bg-white/70 backdrop-blur-lg border border-black/[0.07] hover:border-black/[0.07] transition-colors">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <button
                         onClick={() => copyUrl(ep)}
-                        className="flex items-center gap-1.5 text-sm text-[#080808] font-mono hover:text-[#353536] transition-colors truncate max-w-md"
+                        className="flex items-center gap-1.5 text-sm text-black/85 font-mono hover:text-black/75 transition-colors truncate max-w-md"
                       >
                         {ep.url}
                         {copied === ep.id
-                          ? <CheckCircle2 className="w-3 h-3 shrink-0 text-[#353536]" />
-                          : <Copy className="w-3 h-3 shrink-0 text-[#ACADB1]" />
+                          ? <CheckCircle2 className="w-3 h-3 shrink-0 text-black/75" />
+                          : <Copy className="w-3 h-3 shrink-0 text-black/35" />
                         }
                       </button>
                     </div>
                     {ep.description && (
-                      <p className="text-xs text-[#ACADB1] mb-2">{ep.description}</p>
+                      <p className="text-xs text-black/35 mb-2">{ep.description}</p>
                     )}
                     <div className="flex flex-wrap gap-1.5">
                       {ep.events.map((ev) => <EventBadge key={ev} event={ev} />)}
                     </div>
                     {ep.secretHint && (
-                      <p className="text-[11px] text-[#ACADB1] mt-1.5 font-mono">
+                      <p className="text-[11px] text-black/35 mt-1.5 font-mono">
                         Secret: {ep.secretHint}
                       </p>
                     )}
-                    <p className="text-[11px] text-[#ACADB1] mt-1">
+                    <p className="text-[11px] text-black/35 mt-1">
                       Added {format(new Date(ep.createdAt), "MMM d, yyyy")}
                     </p>
                   </div>
@@ -255,11 +255,11 @@ export default function WebhooksPage() {
                     />
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-[#ACADB1] hover:text-[#080808]">
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-black/35 hover:text-black/85">
                           <MoreHorizontal className="h-3.5 w-3.5" />
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="bg-white border-[#D4D8DF]">
+                      <DropdownMenuContent align="end" className="bg-white/70 backdrop-blur-lg border-black/[0.07]">
                         <DropdownMenuItem onClick={() => setEditTarget(ep)} className="text-xs">
                           <Pencil className="w-3 h-3 mr-2" />
                           Edit
@@ -278,9 +278,9 @@ export default function WebhooksPage() {
         )}
 
         {endpoints.length > 0 && (
-          <div className="mt-6 p-4 rounded-lg bg-[#D4D8DF]/20 border border-[#D4D8DF] text-xs text-[#ACADB1]">
-            <p className="font-medium text-[#706F70] mb-1">Payload format</p>
-            <pre className="font-mono text-[#ACADB1] leading-relaxed whitespace-pre-wrap">{`POST https://your-endpoint.com/webhook
+          <div className="mt-6 p-4 rounded-lg bg-black/[0.04] border border-black/[0.07] text-xs text-black/35">
+            <p className="font-medium text-black/50 mb-1">Payload format</p>
+            <pre className="font-mono text-black/35 leading-relaxed whitespace-pre-wrap">{`POST https://your-endpoint.com/webhook
 Content-Type: application/json
 X-VoiceOrch-Signature: hmac-sha256 of body
 
@@ -294,10 +294,10 @@ X-VoiceOrch-Signature: hmac-sha256 of body
       </div>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="bg-white border-[#D4D8DF] max-w-md">
+        <DialogContent className="bg-white/70 backdrop-blur-lg border-black/[0.07] max-w-md">
           <DialogHeader>
             <DialogTitle className="text-sm">Add webhook endpoint</DialogTitle>
-            <DialogDescription className="text-xs text-[#ACADB1]">
+            <DialogDescription className="text-xs text-black/35">
               Configure a URL to receive event notifications.
             </DialogDescription>
           </DialogHeader>
@@ -310,7 +310,7 @@ X-VoiceOrch-Signature: hmac-sha256 of body
       </Dialog>
 
       <Dialog open={!!editTarget} onOpenChange={(o) => !o && setEditTarget(null)}>
-        <DialogContent className="bg-white border-[#D4D8DF] max-w-md">
+        <DialogContent className="bg-white/70 backdrop-blur-lg border-black/[0.07] max-w-md">
           <DialogHeader>
             <DialogTitle className="text-sm">Edit webhook endpoint</DialogTitle>
           </DialogHeader>
@@ -326,15 +326,15 @@ X-VoiceOrch-Signature: hmac-sha256 of body
       </Dialog>
 
       <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
-        <DialogContent className="bg-white border-[#D4D8DF] max-w-sm">
+        <DialogContent className="bg-white/70 backdrop-blur-lg border-black/[0.07] max-w-sm">
           <DialogHeader>
             <DialogTitle className="text-sm">Delete webhook endpoint?</DialogTitle>
-            <DialogDescription className="text-xs text-[#ACADB1]">
-              No more events will be sent to <span className="font-mono text-[#706F70]">{deleteTarget?.url}</span>. This cannot be undone.
+            <DialogDescription className="text-xs text-black/35">
+              No more events will be sent to <span className="font-mono text-black/50">{deleteTarget?.url}</span>. This cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(null)} className="text-[#706F70]">Cancel</Button>
+            <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(null)} className="text-black/50">Cancel</Button>
             <Button
               size="sm"
               variant="destructive"

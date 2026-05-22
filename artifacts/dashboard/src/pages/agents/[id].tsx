@@ -217,12 +217,12 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
 
   // ── Status display ─────────────────────────────────────────────────────────
   const statusConfig: Record<CallStatus, { label: string; color: string; pulse: boolean }> = {
-    idle:       { label: "Ready to test",    color: "bg-[#ACADB1]",   pulse: false },
+    idle:       { label: "Ready to test",    color: "bg-black/25",   pulse: false },
     connecting: { label: "Connecting…",      color: "bg-amber-400",  pulse: true  },
     listening:  { label: "Listening…",       color: "bg-emerald-400",pulse: true  },
     thinking:   { label: "Thinking…",        color: "bg-amber-400",  pulse: true  },
     speaking:   { label: "Speaking…",        color: "bg-sky-400",    pulse: true  },
-    ended:      { label: "Call ended",       color: "bg-[#ACADB1]",   pulse: false },
+    ended:      { label: "Call ended",       color: "bg-black/25",   pulse: false },
   };
   const sc = statusConfig[status];
   const isActive = status !== "idle" && status !== "ended";
@@ -323,7 +323,7 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
             {embedCode}
           </pre>
           <Button variant="outline" size="sm" className="gap-2" onClick={copyEmbed}>
-            {copied ? <><Check className="h-3.5 w-3.5 text-[#353536]" /> Copied!</> : <><Copy className="h-3.5 w-3.5" /> Copy Embed Code</>}
+            {copied ? <><Check className="h-3.5 w-3.5 text-black/75" /> Copied!</> : <><Copy className="h-3.5 w-3.5" /> Copy Embed Code</>}
           </Button>
           <p className="text-xs text-muted-foreground">
             You can customize <code className="font-mono bg-muted px-1 rounded">data-color</code>, <code className="font-mono bg-muted px-1 rounded">data-name</code>, and <code className="font-mono bg-muted px-1 rounded">data-position</code> (bottom-right, bottom-left, top-right, top-left).
