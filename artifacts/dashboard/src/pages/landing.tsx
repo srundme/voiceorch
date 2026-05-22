@@ -26,213 +26,210 @@ function PipelineScene() {
     const ro = new ResizeObserver(resize);
     ro.observe(canvas);
 
+    // project() defined outside draw so it's not inside a try block
+    const COLS = 14, ROWS = 22;
+    const GW = 420, GH = 420;
+
     const draw = () => {
       const W = canvas.offsetWidth;
       const H = canvas.offsetHeight;
-      ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
-      ctx.clearRect(0, 0, W, H);
+
+      // Skip frame until canvas has real dimensions
+      if (W < 1 || H < 1) {
+        t += 0.8;
+        rafRef.current = requestAnimationFrame(draw);
+        return;
+      }
 
       const cx = W * 0.5;
       const cy = H * 0.52;
       const fov = 340;
+      const tilt = Math.sin(t * 0.0004) * 0.018;
 
-      /* ── Perspective grid ── */
-      const COLS = 14, ROWS = 22;
-      const GW = 420, GH = 420;
-      const tilt = Math.sin(t * 0.0004) * 0.018; // very subtle sway
-
-      function project(x: number, z: number): [number, number, number] {
+      const project = (x: number, z: number): [number, number, number] => {
         const rx = x * Math.cos(tilt) - z * Math.sin(tilt);
         const rz = x * Math.sin(tilt) + z * Math.cos(tilt);
         const scale = fov / (fov + rz + 220);
         return [cx + rx * scale, cy + rz * scale * 0.55, scale];
-      }
+      };
 
-      ctx.save();
-      // Fade grid at edges
-      const gridFade = ctx.createRadialGradient(cx, cy + 40, 10, cx, cy + 40, GW * 0.85);
-      gridFade.addColorStop(0,   "rgba(255,255,255,0.06)");
-      gridFade.addColorStop(0.7, "rgba(255,255,255,0.03)");
-      gridFade.addColorStop(1,   "rgba(255,255,255,0)");
+      try {
+        ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+        ctx.clearRect(0, 0, W, H);
 
-      // Grid columns
-      for (let i = 0; i <= COLS; i++) {
-        const gx = (i / COLS - 0.5) * GW;
-        ctx.beginPath();
-        ctx.strokeStyle = gridFade;
-        ctx.lineWidth = 0.5;
-        for (let j = 0; j <= ROWS; j++) {
-          const gz = (j / ROWS - 0.5) * GH + (t * 0.025 % (GH / ROWS));
-          const [px, py] = project(gx, gz);
-          j === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
-        }
-        ctx.stroke();
-      }
-      // Grid rows
-      for (let j = 0; j <= ROWS; j++) {
-        const gz = (j / ROWS - 0.5) * GH + (t * 0.025 % (GH / ROWS));
-        ctx.beginPath();
-        ctx.strokeStyle = gridFade;
-        ctx.lineWidth = 0.5;
+        /* ── Perspective grid ── */
+        ctx.save();
+        const gridFade = ctx.createRadialGradient(cx, cy + 40, 10, cx, cy + 40, GW * 0.85);
+        gridFade.addColorStop(0,   "rgba(255,255,255,0.06)");
+        gridFade.addColorStop(0.7, "rgba(255,255,255,0.03)");
+        gridFade.addColorStop(1,   "rgba(255,255,255,0)");
+
         for (let i = 0; i <= COLS; i++) {
           const gx = (i / COLS - 0.5) * GW;
-          const [px, py] = project(gx, gz);
-          i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+          ctx.beginPath();
+          ctx.strokeStyle = gridFade;
+          ctx.lineWidth = 0.5;
+          for (let j = 0; j <= ROWS; j++) {
+            const gz = (j / ROWS - 0.5) * GH + (t * 0.025 % (GH / ROWS));
+            const [px, py] = project(gx, gz);
+            j === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+          }
+          ctx.stroke();
         }
-        ctx.stroke();
-      }
-      ctx.restore();
+        for (let j = 0; j <= ROWS; j++) {
+          const gz = (j / ROWS - 0.5) * GH + (t * 0.025 % (GH / ROWS));
+          ctx.beginPath();
+          ctx.strokeStyle = gridFade;
+          ctx.lineWidth = 0.5;
+          for (let i = 0; i <= COLS; i++) {
+            const gx = (i / COLS - 0.5) * GW;
+            const [px, py] = project(gx, gz);
+            i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+          }
+          ctx.stroke();
+        }
+        ctx.restore();
 
-      /* ── Pipeline nodes ── */
-      const nodes = [
-        { label: "ASR",      sub: "Deepgram Nova-3",  x: -130, z: -80,  col: [100, 200, 255] as [number,number,number], r: 28 },
-        { label: "LLM",      sub: "GPT-4o mini",      x:    0, z:  20,  col: [160, 100, 255] as [number,number,number], r: 34 },
-        { label: "TTS",      sub: "Cartesia Sonic-2", x:  130, z: -80,  col: [80,  220, 180] as [number,number,number], r: 28 },
-      ];
+        /* ── Pipeline nodes ── */
+        const nodes = [
+          { label: "ASR", sub: "Deepgram Nova-3",  x: -130, z: -80, col: [100, 200, 255] as [number,number,number], r: 28 },
+          { label: "LLM", sub: "GPT-4o mini",      x:    0, z:  20, col: [160, 100, 255] as [number,number,number], r: 34 },
+          { label: "TTS", sub: "Cartesia Sonic-2", x:  130, z: -80, col: [80,  220, 180] as [number,number,number], r: 28 },
+        ];
 
-      const floatY = Math.sin(t * 0.0012) * 6;
+        const floatY = Math.sin(t * 0.0012) * 6;
+        const projected = nodes.map(n => project(n.x, n.z));
 
-      // Draw connection lines between nodes
-      const projected = nodes.map(n => project(n.x, n.z));
-      for (let i = 0; i < projected.length - 1; i++) {
-        const [x1, y1] = projected[i]!;
-        const [x2, y2] = projected[i + 1]!;
-        const grad = ctx.createLinearGradient(x1, y1, x2, y2);
-        const c1 = nodes[i]!.col;
-        const c2 = nodes[i + 1]!.col;
-        grad.addColorStop(0,   `rgba(${c1[0]},${c1[1]},${c1[2]},0.5)`);
-        grad.addColorStop(0.5, `rgba(200,160,255,0.3)`);
-        grad.addColorStop(1,   `rgba(${c2[0]},${c2[1]},${c2[2]},0.5)`);
-        ctx.beginPath();
-        ctx.strokeStyle = grad;
-        ctx.lineWidth = 1.5;
-        ctx.setLineDash([6, 6]);
-        ctx.lineDashOffset = -(t * 0.12);
-        ctx.moveTo(x1, y1 + floatY);
-        ctx.lineTo(x2, y2 + floatY);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
+        // Connection lines
+        for (let i = 0; i < projected.length - 1; i++) {
+          const [x1, y1] = projected[i]!;
+          const [x2, y2] = projected[i + 1]!;
+          if (Math.abs(x2 - x1) < 0.01 && Math.abs(y2 - y1) < 0.01) continue;
+          const c1 = nodes[i]!.col;
+          const c2 = nodes[i + 1]!.col;
+          const grad = ctx.createLinearGradient(x1, y1, x2, y2);
+          grad.addColorStop(0,   `rgba(${c1[0]},${c1[1]},${c1[2]},0.5)`);
+          grad.addColorStop(0.5, "rgba(200,160,255,0.3)");
+          grad.addColorStop(1,   `rgba(${c2[0]},${c2[1]},${c2[2]},0.5)`);
+          ctx.beginPath();
+          ctx.strokeStyle = grad;
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([6, 6]);
+          ctx.lineDashOffset = -(t * 0.12);
+          ctx.moveTo(x1, y1 + floatY);
+          ctx.lineTo(x2, y2 + floatY);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
 
-      // Caller node (top-left)
-      {
-        const [px, py, sc] = project(-210, -130);
+        // IN node
+        const [inX, inY, inSc] = project(-210, -130);
         ctx.save();
         ctx.globalAlpha = 0.55;
         ctx.beginPath();
-        ctx.arc(px, py + floatY, 18 * sc, 0, Math.PI * 2);
+        ctx.arc(inX, inY + floatY, 18 * inSc, 0, Math.PI * 2);
         ctx.fillStyle = "rgba(80,80,120,0.3)";
         ctx.strokeStyle = "rgba(150,150,200,0.3)";
         ctx.lineWidth = 1;
         ctx.fill(); ctx.stroke();
-        ctx.font = `${Math.round(8 * sc)}px monospace`;
+        ctx.font = `${Math.round(8 * inSc)}px monospace`;
         ctx.fillStyle = "rgba(200,200,255,0.5)";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText("IN", px, py + floatY);
+        ctx.fillText("IN", inX, inY + floatY);
         ctx.restore();
-      }
 
-      // Response node (top-right)
-      {
-        const [px, py, sc] = project(210, -130);
+        // OUT node
+        const [outX, outY, outSc] = project(210, -130);
         ctx.save();
         ctx.globalAlpha = 0.55;
         ctx.beginPath();
-        ctx.arc(px, py + floatY, 18 * sc, 0, Math.PI * 2);
+        ctx.arc(outX, outY + floatY, 18 * outSc, 0, Math.PI * 2);
         ctx.fillStyle = "rgba(30,100,70,0.3)";
         ctx.strokeStyle = "rgba(80,220,160,0.3)";
         ctx.lineWidth = 1;
         ctx.fill(); ctx.stroke();
-        ctx.font = `${Math.round(8 * sc)}px monospace`;
+        ctx.font = `${Math.round(8 * outSc)}px monospace`;
         ctx.fillStyle = "rgba(80,220,160,0.6)";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText("OUT", px, py + floatY);
+        ctx.fillText("OUT", outX, outY + floatY);
         ctx.restore();
-      }
 
-      // Main pipeline nodes
-      nodes.forEach(({ label, sub, x, z, col, r }, idx) => {
-        const [px, py, sc] = project(x, z);
-        const fy = py + floatY + Math.sin(t * 0.0012 + idx * 1.2) * 4;
-        const [cr, cg, cb] = col;
-        const radius = r * sc;
+        // Pipeline nodes
+        nodes.forEach(({ label, sub, x, z, col, r }, idx) => {
+          const [px, py, sc] = project(x, z);
+          const fy = py + floatY + Math.sin(t * 0.0012 + idx * 1.2) * 4;
+          const [cr, cg, cb] = col;
+          const radius = r * sc;
 
-        // Outer glow ring
-        const glow = ctx.createRadialGradient(px, fy, 0, px, fy, radius * 3.2);
-        glow.addColorStop(0,   `rgba(${cr},${cg},${cb},0.18)`);
-        glow.addColorStop(0.4, `rgba(${cr},${cg},${cb},0.08)`);
-        glow.addColorStop(1,   `rgba(${cr},${cg},${cb},0)`);
-        ctx.beginPath();
-        ctx.arc(px, fy, radius * 3.2, 0, Math.PI * 2);
-        ctx.fillStyle = glow;
-        ctx.fill();
+          const glow = ctx.createRadialGradient(px, fy, 0, px, fy, radius * 3.2);
+          glow.addColorStop(0,   `rgba(${cr},${cg},${cb},0.18)`);
+          glow.addColorStop(0.4, `rgba(${cr},${cg},${cb},0.08)`);
+          glow.addColorStop(1,   `rgba(${cr},${cg},${cb},0)`);
+          ctx.beginPath();
+          ctx.arc(px, fy, radius * 3.2, 0, Math.PI * 2);
+          ctx.fillStyle = glow;
+          ctx.fill();
 
-        // Node body
-        const body = ctx.createRadialGradient(px - radius * 0.25, fy - radius * 0.25, 0, px, fy, radius);
-        body.addColorStop(0, `rgba(${cr},${cg},${cb},0.35)`);
-        body.addColorStop(1, `rgba(${Math.round(cr*0.3)},${Math.round(cg*0.3)},${Math.round(cb*0.3)},0.6)`);
-        ctx.beginPath();
-        ctx.arc(px, fy, radius, 0, Math.PI * 2);
-        ctx.fillStyle = body;
-        ctx.fill();
+          const body = ctx.createRadialGradient(px - radius * 0.25, fy - radius * 0.25, 0, px, fy, radius);
+          body.addColorStop(0, `rgba(${cr},${cg},${cb},0.35)`);
+          body.addColorStop(1, `rgba(${Math.round(cr*0.3)},${Math.round(cg*0.3)},${Math.round(cb*0.3)},0.6)`);
+          ctx.beginPath();
+          ctx.arc(px, fy, radius, 0, Math.PI * 2);
+          ctx.fillStyle = body;
+          ctx.fill();
 
-        // Border
-        ctx.beginPath();
-        ctx.arc(px, fy, radius, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(${cr},${cg},${cb},0.55)`;
-        ctx.lineWidth = 1.5 * sc;
-        ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(px, fy, radius, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(${cr},${cg},${cb},0.55)`;
+          ctx.lineWidth = 1.5 * sc;
+          ctx.stroke();
 
-        // Label
-        ctx.font = `bold ${Math.round(10 * sc)}px ui-monospace, monospace`;
-        ctx.fillStyle = `rgba(${cr},${cg},${cb},0.95)`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(label, px, fy);
+          ctx.font = `bold ${Math.round(10 * sc)}px ui-monospace, monospace`;
+          ctx.fillStyle = `rgba(${cr},${cg},${cb},0.95)`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(label, px, fy);
 
-        // Sub-label below node
-        ctx.font = `${Math.round(7.5 * sc)}px ui-sans-serif, sans-serif`;
-        ctx.fillStyle = "rgba(255,255,255,0.28)";
-        ctx.fillText(sub, px, fy + radius + 12 * sc);
-      });
+          ctx.font = `${Math.round(7.5 * sc)}px ui-sans-serif, sans-serif`;
+          ctx.fillStyle = "rgba(255,255,255,0.28)";
+          ctx.fillText(sub, px, fy + radius + 12 * sc);
+        });
 
-      /* ── Latency tags floating above center node ── */
-      const [cx2, cy2] = project(0, 20);
-      const tags = [
-        { label: "184ms total", col: [180, 130, 255] as [number,number,number] },
-      ];
-      tags.forEach(({ label, col }) => {
-        const tx = cx2, ty = cy2 + floatY - 60;
-        const [cr, cg, cb] = col;
+        // Latency badge above LLM node
+        const [lx, ly] = project(0, 20);
+        const badgeTag = "184ms total";
+        const [bcr, bcg, bcb] = [180, 130, 255];
+        const bx = lx, by = ly + floatY - 60;
         ctx.save();
         ctx.font = "bold 11px ui-monospace, monospace";
-        const tw = ctx.measureText(label).width;
-        const rx = tx - tw / 2 - 8, ry = ty - 10, rw = tw + 16, rh = 20, rr = 10;
+        const bw = ctx.measureText(badgeTag).width;
+        const brx = bx - bw / 2 - 8, bry = by - 10, brw = bw + 16, brh = 20, brr = 10;
         ctx.beginPath();
-        ctx.moveTo(rx + rr, ry);
-        ctx.lineTo(rx + rw - rr, ry);
-        ctx.arcTo(rx + rw, ry, rx + rw, ry + rr, rr);
-        ctx.lineTo(rx + rw, ry + rh - rr);
-        ctx.arcTo(rx + rw, ry + rh, rx + rw - rr, ry + rh, rr);
-        ctx.lineTo(rx + rr, ry + rh);
-        ctx.arcTo(rx, ry + rh, rx, ry + rh - rr, rr);
-        ctx.lineTo(rx, ry + rr);
-        ctx.arcTo(rx, ry, rx + rr, ry, rr);
+        ctx.moveTo(brx + brr, bry);
+        ctx.lineTo(brx + brw - brr, bry);
+        ctx.arcTo(brx + brw, bry, brx + brw, bry + brr, brr);
+        ctx.lineTo(brx + brw, bry + brh - brr);
+        ctx.arcTo(brx + brw, bry + brh, brx + brw - brr, bry + brh, brr);
+        ctx.lineTo(brx + brr, bry + brh);
+        ctx.arcTo(brx, bry + brh, brx, bry + brh - brr, brr);
+        ctx.lineTo(brx, bry + brr);
+        ctx.arcTo(brx, bry, brx + brr, bry, brr);
         ctx.closePath();
-        ctx.fillStyle = `rgba(${cr},${cg},${cb},0.12)`;
-        ctx.strokeStyle = `rgba(${cr},${cg},${cb},0.35)`;
+        ctx.fillStyle = `rgba(${bcr},${bcg},${bcb},0.12)`;
+        ctx.strokeStyle = `rgba(${bcr},${bcg},${bcb},0.35)`;
         ctx.lineWidth = 1;
         ctx.fill(); ctx.stroke();
-        ctx.fillStyle = `rgba(${cr},${cg},${cb},0.9)`;
+        ctx.fillStyle = `rgba(${bcr},${bcg},${bcb},0.9)`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText(label, tx, ty);
+        ctx.fillText(badgeTag, bx, by);
         ctx.restore();
-      });
 
-      t += 0.8;
+        t += 0.8;
+      } catch (_) { /* guard against any remaining canvas API edge cases */ }
+
       rafRef.current = requestAnimationFrame(draw);
     };
 
