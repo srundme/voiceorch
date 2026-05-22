@@ -1,5 +1,5 @@
 import { createHmac } from "crypto";
-import { db, agentsTable, callsTable, providersTable } from "@workspace/db";
+import { db, agentsTable, callsTable, providersTable, platformSettingsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { OrchestrationPipeline } from "./pipeline.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
@@ -190,6 +190,58 @@ export async function createSession(params: {
   const providerKeys = new Map<string, string>();
   for (const row of providerRows) {
     providerKeys.set(row.providerName.toLowerCase(), row.apiKey);
+    if (row.extraConfig) providerKeys.set(`${row.providerName.toLowerCase()}:extraConfig`, row.extraConfig);
+  }
+
+  // ── Managed-key fallback ────────────────────────────────────────────────────
+  // If the agent owner hasn't configured a key for a required provider, fall
+  // back to the platform-level managed keys set by the admin.  This enables the
+  // "Managed" mode: the platform operator's keys serve all users transparently.
+  async function getPlatformSetting(key: string): Promise<string | null> {
+    const [row] = await db.select().from(platformSettingsTable).where(eq(platformSettingsTable.key, key));
+    return row?.value ?? null;
+  }
+
+  // Provider name → platform_settings key
+  const MANAGED: Record<string, string> = {
+    google:   "managed_gemini_key",
+    deepgram: "managed_deepgram_key",
+    sarvam:   "managed_sarvam_key",
+    cartesia:  "managed_cartesia_key",
+    openai:   "managed_openai_key",
+  };
+
+  const requiredProviders = [
+    agent.asrProvider?.toLowerCase(),
+    agent.llmProvider?.toLowerCase(),
+    agent.ttsProvider?.toLowerCase(),
+  ].filter((p): p is string => !!p);
+
+  for (const providerName of requiredProviders) {
+    if (!providerKeys.has(providerName) && MANAGED[providerName]) {
+      const managed = await getPlatformSetting(MANAGED[providerName]!);
+      if (managed) {
+        providerKeys.set(providerName, managed);
+        logger.info({ providerName }, "Using platform managed key for provider");
+      }
+    }
+  }
+
+  // Vobiz telephony managed fallback (authToken + authId stored separately)
+  if (!providerKeys.has("vobiz")) {
+    const [authToken, authId] = await Promise.all([
+      getPlatformSetting("managed_vobiz_auth_token"),
+      getPlatformSetting("managed_vobiz_auth_id"),
+    ]);
+    if (authToken && authId) {
+      providerKeys.set("vobiz", authToken);
+      // Preserve any existing extraConfig (e.g. fromNumber) — set authId only
+      const existing = providerKeys.get("vobiz:extraConfig");
+      const cfg = existing ? JSON.parse(existing) as Record<string, string> : {};
+      if (!cfg["authId"]) cfg["authId"] = authId;
+      providerKeys.set("vobiz:extraConfig", JSON.stringify(cfg));
+      logger.info({}, "Using platform managed VoBiz credentials");
+    }
   }
 
   const [callRecord] = await db.insert(callsTable).values({
