@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useAuth } from "@clerk/react";
 import { useLocation } from "wouter";
 import {
   Search, Plus, Phone, Mic, MicOff, PhoneOff, Volume2,
@@ -582,8 +583,28 @@ function ToggleRow({ label, desc, checked, onChange }: {
   );
 }
 
+type CartesiaVoice = { id: string; name: string; description?: string; gender?: string };
+
+const ARUSHI_VOICE: CartesiaVoice = {
+  id: "2ee87190-8f84-4925-97da-e52547f9462c",
+  name: "Arushi",
+  description: "Indian English female",
+  gender: "female",
+};
+
+const CARTESIA_FALLBACK_VOICES: CartesiaVoice[] = [
+  ARUSHI_VOICE,
+  { id: "a0e99841-438c-4a64-b679-ae501e7d6091", name: "Barbershop Man", gender: "male" },
+  { id: "79a125e8-cd45-4c13-8a67-188112f4dd22", name: "British Lady", gender: "female" },
+  { id: "95856005-0332-41b0-935f-352e296aa0df", name: "Calm Lady", gender: "female" },
+  { id: "bd9120b6-7761-47e7-bf6e-2f793e7c3814", name: "Confident British Man", gender: "male" },
+];
+
+const PREVIEW_TEXT = "Hello! I'm your AI voice assistant. How can I help you today?";
+
 function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: () => void }) {
   const queryClient = useQueryClient();
+  const { getToken } = useAuth();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("agent");
   const [outboundDialogOpen, setOutboundDialogOpen] = useState(false);
@@ -630,6 +651,11 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
   const [asrAutoFallback, setAsrAutoFallback]               = useState(false);
   const [ttsProvider, setTtsProvider]                       = useState("");
   const [ttsModel, setTtsModel]                             = useState("");
+  const [ttsVoice, setTtsVoice]                             = useState("");
+  const [cartesiaVoices, setCartesiaVoices]                 = useState<CartesiaVoice[]>(CARTESIA_FALLBACK_VOICES);
+  const [loadingCartesiaVoices, setLoadingCartesiaVoices]   = useState(false);
+  const [voicePlaying, setVoicePlaying]                     = useState<string | null>(null);
+  const voiceAudioRef                                       = useRef<HTMLAudioElement | null>(null);
   const [telephony, setTelephony]                           = useState("");
 
   // ── Tab 4 — Engine ──────────────────────────────────────────────
@@ -640,6 +666,70 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
   const [inactivityMessage, setInactivityMessage]           = useState("");
 
   const [audioAdvanced, setAudioAdvanced]                   = useState(false);
+
+  // ── Auth fetch helper ────────────────────────────────────────────
+  const apiFetch = useCallback(async (path: string, init?: RequestInit): Promise<Response> => {
+    const token = await getToken();
+    return fetch(path, {
+      ...init,
+      headers: { ...(init?.headers ?? {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    });
+  }, [getToken]);
+
+  // ── Cartesia voice loader ────────────────────────────────────────
+  useEffect(() => {
+    if (ttsProvider !== "cartesia") return;
+    if (cartesiaVoices.length > CARTESIA_FALLBACK_VOICES.length) return;
+    setLoadingCartesiaVoices(true);
+    apiFetch("/api/wizard/voices")
+      .then(r => r.ok ? r.json() as Promise<{ voices: CartesiaVoice[] }> : null)
+      .then(data => {
+        if (!data?.voices?.length) return;
+        const arushi = data.voices.find(v => v.name.toLowerCase().includes("arushi")) ?? ARUSHI_VOICE;
+        const rest   = data.voices.filter(v => v.id !== arushi.id);
+        setCartesiaVoices([arushi, ...rest]);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingCartesiaVoices(false));
+  }, [ttsProvider]);
+
+  // ── Voice preview ────────────────────────────────────────────────
+  async function previewVoice(voiceId: string) {
+    if (voicePlaying === voiceId) {
+      voiceAudioRef.current?.pause();
+      setVoicePlaying(null);
+      return;
+    }
+    setVoicePlaying(voiceId);
+    try {
+      const res = await apiFetch("/api/wizard/preview-voice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ voiceId, text: PREVIEW_TEXT }),
+      });
+      if (!res.ok) throw new Error("preview failed");
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      voiceAudioRef.current = audio;
+      audio.onended = () => { setVoicePlaying(null); URL.revokeObjectURL(url); };
+      audio.onerror = () => { setVoicePlaying(null); URL.revokeObjectURL(url); };
+      await audio.play();
+    } catch {
+      // Fallback to browser TTS
+      const voice = cartesiaVoices.find(v => v.id === voiceId);
+      const utt = new SpeechSynthesisUtterance(PREVIEW_TEXT);
+      if (voice?.gender === "male") {
+        const voices = window.speechSynthesis.getVoices();
+        const male = voices.find(v => v.name.toLowerCase().includes("male") || v.name.toLowerCase().includes("daniel"));
+        if (male) utt.voice = male;
+      }
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utt);
+      utt.onend = () => setVoicePlaying(null);
+      setVoicePlaying(voiceId);
+    }
+  }
 
   // ── Tab 5 — Call ────────────────────────────────────────────────
   const [maxDuration, setMaxDuration]                       = useState(300);
@@ -685,7 +775,8 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
     setAsrSmartEndpointing(agent.asrSmartEndpointing ?? "off");
     setAsrAutoFallback(agent.asrAutoFallback ?? false);
     setTtsProvider(agent.ttsProvider ?? "");
-    setTtsModel(agent.ttsModel ?? "");
+    setTtsModel(agent.ttsModel ?? (agent.ttsProvider === "cartesia" ? "sonic-2" : ""));
+    setTtsVoice((agent as unknown as Record<string, unknown>).ttsVoice as string ?? "");
     setTelephony(agent.telephonyProvider ?? "");
     setBackchannelingEnabled(agent.backchannelingEnabled ?? false);
     setBackchannelingFrequency((agent.backchannelingFrequency ?? 0.3) as number);
@@ -726,6 +817,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
           asrSmartEndpointing,
           asrAutoFallback,
           ttsProvider, ttsModel: ttsModel || undefined,
+          ttsVoice: ttsVoice || undefined,
           telephonyProvider: telephony,
           backchannelingEnabled, backchannelingFrequency,
           noiseCancellationEnabled,
@@ -1205,30 +1297,98 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
             </div>
             <div className="bg-black/[0.04] border border-black/[0.07]/40 rounded-xl p-4 space-y-4">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Synthesizer</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <p className="text-xs text-black/50 mb-1">Provider</p>
-                  <Select value={ttsProvider} onValueChange={v => { mark(setTtsProvider)(v); setTtsModel(TTS_MODELS[v]?.[0]?.value ?? ""); }}>
-                    <SelectTrigger className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
-                    <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07]">
-                      {TTS_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-black/75 text-xs">{p.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <p className="text-xs text-black/50 mb-1">Voice</p>
-                  {TTS_MODELS[ttsProvider]
-                    ? <Select value={ttsModel} onValueChange={mark(setTtsModel)}>
-                        <SelectTrigger className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75"><SelectValue placeholder="Select voice" /></SelectTrigger>
-                        <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07] max-h-60">
-                          {TTS_MODELS[ttsProvider]!.map(m => <SelectItem key={m.value} value={m.value} className="text-black/75 text-xs">{m.label}</SelectItem>)}
+
+              {ttsProvider === "cartesia" ? (
+                <div className="space-y-3">
+                  {/* Provider row */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-xs text-black/50 mb-1">Provider</p>
+                      <Select value={ttsProvider} onValueChange={v => { mark(setTtsProvider)(v); setTtsModel(v === "cartesia" ? "sonic-2" : (TTS_MODELS[v]?.[0]?.value ?? "")); setTtsVoice(""); }}>
+                        <SelectTrigger className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
+                        <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07]">
+                          {TTS_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-black/75 text-xs">{p.label}</SelectItem>)}
                         </SelectContent>
                       </Select>
-                    : <Input value={ttsModel} onChange={e => { setTtsModel(e.target.value); setDirty(true); }} placeholder="Voice / model name"
-                        className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75" />
-                  }
+                    </div>
+                    <div>
+                      <p className="text-xs text-black/50 mb-1">Model</p>
+                      <Select value={ttsModel || "sonic-2"} onValueChange={v => { setTtsModel(v); setDirty(true); }}>
+                        <SelectTrigger className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
+                        <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07]">
+                          {TTS_MODELS.cartesia.map(m => <SelectItem key={m.value} value={m.value} className="text-black/75 text-xs">{m.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  {/* Voice row with preview */}
+                  <div>
+                    <p className="text-xs text-black/50 mb-1">Voice</p>
+                    <div className="flex gap-2">
+                      <Select
+                        value={ttsVoice || ARUSHI_VOICE.id}
+                        onValueChange={v => { setTtsVoice(v); setDirty(true); }}
+                      >
+                        <SelectTrigger className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75 flex-1">
+                          <SelectValue placeholder={loadingCartesiaVoices ? "Loading voices…" : "Select voice"} />
+                        </SelectTrigger>
+                        <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07] max-h-72">
+                          {loadingCartesiaVoices
+                            ? <div className="flex items-center gap-2 px-3 py-2 text-xs text-black/50"><Loader2 className="h-3 w-3 animate-spin" /> Loading…</div>
+                            : cartesiaVoices.map(v => (
+                                <SelectItem key={v.id} value={v.id} className="text-black/75 text-xs">
+                                  <span className="flex items-center gap-1.5">
+                                    {v.name}
+                                    {v.gender && <span className="text-black/35 text-[10px]">· {v.gender}</span>}
+                                  </span>
+                                </SelectItem>
+                              ))
+                          }
+                        </SelectContent>
+                      </Select>
+                      <button
+                        type="button"
+                        title="Preview voice"
+                        onClick={() => void previewVoice(ttsVoice || ARUSHI_VOICE.id)}
+                        className="h-7 w-7 shrink-0 flex items-center justify-center rounded-md border border-black/[0.07] bg-white/70 hover:bg-black/[0.08] text-black/50 hover:text-black/75 transition-colors"
+                      >
+                        {voicePlaying === (ttsVoice || ARUSHI_VOICE.id)
+                          ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          : <Volume2 className="h-3.5 w-3.5" />
+                        }
+                      </button>
+                    </div>
+                    {ttsVoice && (
+                      <p className="text-[10px] text-black/35 mt-1 font-mono truncate">{ttsVoice}</p>
+                    )}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-xs text-black/50 mb-1">Provider</p>
+                    <Select value={ttsProvider} onValueChange={v => { mark(setTtsProvider)(v); setTtsModel(TTS_MODELS[v]?.[0]?.value ?? ""); setTtsVoice(""); }}>
+                      <SelectTrigger className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
+                      <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07]">
+                        {TTS_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-black/75 text-xs">{p.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <p className="text-xs text-black/50 mb-1">Voice / Model</p>
+                    {TTS_MODELS[ttsProvider]
+                      ? <Select value={ttsModel} onValueChange={mark(setTtsModel)}>
+                          <SelectTrigger className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75"><SelectValue placeholder="Select voice" /></SelectTrigger>
+                          <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07] max-h-60">
+                            {TTS_MODELS[ttsProvider]!.map(m => <SelectItem key={m.value} value={m.value} className="text-black/75 text-xs">{m.label}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      : <Input value={ttsModel} onChange={e => { setTtsModel(e.target.value); setDirty(true); }} placeholder="Voice / model name"
+                          className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75" />
+                    }
+                  </div>
+                </div>
+              )}
               {/* ── Auto-config banner ── */}
               {telephony && TELEPHONY_AUDIO_DEFAULTS[telephony] ? (
                 <div className="rounded-lg bg-emerald-950/40 border border-emerald-800/50 px-3 py-2.5 flex items-start gap-2.5">
