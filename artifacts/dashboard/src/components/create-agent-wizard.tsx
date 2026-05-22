@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { useAuth } from "@clerk/react";
 import { useCreateAgent, getListAgentsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -99,7 +100,7 @@ const INITIAL: WizardState = {
 };
 
 /* ── Voice preview ──────────────────────────────────────────────────────── */
-function useVoicePreview() {
+function useVoicePreview(apiFetch: (path: string, init?: RequestInit) => Promise<Response>) {
   const [playing, setPlaying] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -107,8 +108,8 @@ function useVoicePreview() {
     if (playing === voiceId) { audioRef.current?.pause(); setPlaying(null); return; }
     setPlaying(voiceId);
     try {
-      const res = await fetch("/api/wizard/preview-voice", {
-        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+      const res = await apiFetch("/api/wizard/preview-voice", {
+        method: "POST",
         body: JSON.stringify({ voiceId, text: "Hello! I am Arushi, your AI voice assistant. I am here to help you today. How can I assist?" }),
       });
       if (!res.ok) { setPlaying(null); return; }
@@ -160,10 +161,21 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
   const [loadingVoices, setLoadVoices]= useState(false);
   const [renderKey, setRenderKey]     = useState(0);
   const fileInputRef                  = useRef<HTMLInputElement>(null);
-  const { playing, preview }          = useVoicePreview();
   const { toast }                     = useToast();
   const qc                            = useQueryClient();
   const create                        = useCreateAgent();
+  const { getToken }                  = useAuth();
+
+  /* Authenticated fetch — mirrors the custom-fetch bearer token pattern */
+  const apiFetch = useCallback(async (path: string, init?: RequestInit): Promise<Response> => {
+    const token = await getToken();
+    const headers = new Headers(init?.headers);
+    headers.set("Content-Type", "application/json");
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    return fetch(path, { ...init, headers, credentials: "include" });
+  }, [getToken]);
+
+  const { playing, preview } = useVoicePreview(apiFetch);
 
   const update = useCallback((patch: Partial<WizardState>) => setState(p => ({ ...p, ...patch })), []);
 
@@ -183,7 +195,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
     if (state.voices.length > FALLBACK_VOICES.length) return;
     setLoadVoices(true);
     try {
-      const res = await fetch("/api/wizard/voices", { credentials: "include" });
+      const res = await apiFetch("/api/wizard/voices", { method: "GET" });
       if (res.ok) {
         const { voices } = await res.json() as { voices: CartesiaVoice[] };
         // put Arushi first if present, otherwise prepend fallback Arushi
@@ -211,8 +223,8 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
     setGenError("");
     try {
       const langs = [state.primaryLanguage, ...state.additionalLanguages];
-      const res = await fetch("/api/wizard/generate-prompt", {
-        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+      const res = await apiFetch("/api/wizard/generate-prompt", {
+        method: "POST",
         body: JSON.stringify({
           useCase: state.useCase, role: state.useCaseRole, companyName: state.companyName,
           agentName: state.agentName, serviceDescription: state.useCaseService,
