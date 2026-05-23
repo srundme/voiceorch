@@ -60,8 +60,8 @@ function getManagedStack(languages: string[]) {
   return {
     asrProvider:       (hasTamil || hasIndic) ? "sarvam" : "deepgram",
     asrModel:          (hasTamil || hasIndic) ? "saarika:v2.5" : "nova-2-general",
-    llmProvider:       "sarvam",
-    llmModel:          "sarvam-m",
+    llmProvider:       (hasTamil || hasIndic) ? "google" : "sarvam",
+    llmModel:          (hasTamil || hasIndic) ? "gemini-2.5-flash" : "sarvam-m",
     ttsProvider:       "cartesia",
     ttsModel:          "sonic-3",
     telephonyProvider: "vobiz",
@@ -611,13 +611,14 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                   const langs = [state.primaryLanguage, ...state.additionalLanguages];
                   const stack = getManagedStack(langs);
                   const hasTamil = langs.includes("tamil");
+                  const hasIndic = langs.some(l => ["hindi","telugu","kannada","marathi","gujarati","bengali","malayalam"].includes(l));
                   return (
                     <div className="p-4 rounded-xl border border-gray-200 bg-gray-50">
                       <p className="text-gray-400 text-xs uppercase tracking-[0.15em] mb-2">Auto-selected AI stack</p>
                       <div className="grid grid-cols-4 gap-2">
                         {[
                           { l: "STT",  v: stack.asrProvider,       note: hasTamil ? "Tamil optimised" : "" },
-                          { l: "LLM",  v: "Sarvam M1",             note: "Indian language optimised" },
+                          { l: "LLM",  v: (hasTamil || hasIndic) ? "Gemini 2.5 Flash" : "Sarvam M1", note: (hasTamil || hasIndic) ? "Multilingual & fast" : "Indian language optimised" },
                           { l: "TTS",  v: stack.ttsProvider,        note: "" },
                           { l: "TEL",  v: stack.telephonyProvider,  note: "" },
                         ].map(item => (
