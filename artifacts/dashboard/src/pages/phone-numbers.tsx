@@ -176,17 +176,17 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
             <DialogTitle>Confirm Purchase</DialogTitle>
             <DialogDescription>
               You are about to purchase <span className="font-mono text-foreground font-semibold">{selected}</span>.
-              This will deduct <span className="text-white/75 font-semibold">$5.00</span> from your wallet.
+              This will deduct <span className="text-gray-700 font-semibold">$5.00</span> from your wallet.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex items-start gap-3 p-3 rounded-lg border border-amber-500/20 bg-amber-500/5 text-amber-400 text-sm">
+          <div className="flex items-start gap-3 p-3 rounded-lg border border-amber-500/20 bg-amber-500/5 text-amber-600 text-sm">
             <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
             This purchase is non-refundable once confirmed.
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirming(false)}>Back</Button>
             <Button
-              className="bg-black/85 hover:bg-black/90 text-white"
+              className="bg-black/85 hover:bg-black/90 text-gray-900"
               onClick={handlePurchase}
               disabled={purchase.isPending}
             >
@@ -264,19 +264,19 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
                 </div>
               ) : platformNotConfigured ? (
                 <div className="flex flex-col gap-2 p-4">
-                  <div className="flex items-start gap-2.5 text-amber-400">
+                  <div className="flex items-start gap-2.5 text-amber-600">
                     <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
                     <div className="text-sm">
                       <p className="font-medium">Carrier credentials not set up</p>
-                      <p className="text-amber-400/70 mt-0.5 text-xs leading-relaxed">
-                        To provision real phone numbers, add <code className="font-mono bg-card/[0.08] px-1 rounded">VOBIZ_AUTH_ID</code> and{" "}
-                        <code className="font-mono bg-card/[0.08] px-1 rounded">VOBIZ_AUTH_TOKEN</code> as environment secrets in your Replit project.
+                      <p className="text-amber-600/70 mt-0.5 text-xs leading-relaxed">
+                        To provision real phone numbers, add <code className="font-mono bg-gray-100 px-1 rounded">VOBIZ_AUTH_ID</code> and{" "}
+                        <code className="font-mono bg-gray-100 px-1 rounded">VOBIZ_AUTH_TOKEN</code> as environment secrets in your Replit project.
                       </p>
                     </div>
                   </div>
                 </div>
               ) : !available || available.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 text-white/35 text-sm">
+                <div className="flex flex-col items-center justify-center py-8 text-gray-400 text-sm">
                   <Globe className="h-8 w-8 mb-2 opacity-30" />
                   No numbers available for this search.
                 </div>
@@ -287,11 +287,11 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
                       key={n.number}
                       onClick={() => setSelected(n.number)}
                       className={`w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-muted/50 transition-colors text-left ${
-                        selected === n.number ? "bg-card/[0.04] border-l-2 border-emerald-500" : ""
+                        selected === n.number ? "bg-gray-50 border-l-2 border-emerald-500" : ""
                       }`}
                     >
                       <span className="font-mono font-medium">{n.number}</span>
-                      <div className="flex items-center gap-2 text-xs text-white/35">
+                      <div className="flex items-center gap-2 text-xs text-gray-400">
                         {n.region && <span>{n.region}</span>}
                         <Badge variant="outline" className="text-[10px] capitalize">{n.numberType.replace("_", " ")}</Badge>
                       </div>
@@ -306,7 +306,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button
-            className="bg-black/85 hover:bg-black/90 text-white gap-1.5"
+            className="bg-black/85 hover:bg-black/90 text-gray-900 gap-1.5"
             disabled={!selected}
             onClick={() => setConfirming(true)}
           >
@@ -382,46 +382,46 @@ function RoutingRulesDialog({ number, onClose }: { number: PhoneNumber; onClose:
           </DialogDescription>
         </DialogHeader>
         {loading ? (
-          <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-white/30" /></div>
+          <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-gray-400" /></div>
         ) : (
           <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
             {rules.length === 0 && (
-              <p className="text-xs text-white/35 text-center py-4">No rules — all calls go to the assigned agent.</p>
+              <p className="text-xs text-gray-400 text-center py-4">No rules — all calls go to the assigned agent.</p>
             )}
             {rules.map((rule, i) => (
-              <div key={i} className="rounded-lg border border-white/[0.08] bg-card/[0.02] p-3 space-y-2">
+              <div key={i} className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
                 <div className="flex items-center gap-2">
                   <Select value={rule.condition} onValueChange={v => updateRule(i, { condition: v as RoutingRule["condition"] })}>
-                    <SelectTrigger className="h-7 text-xs flex-1 bg-card border-white/[0.07]"><SelectValue /></SelectTrigger>
-                    <SelectContent className="bg-card border-white/[0.07]">
+                    <SelectTrigger className="h-7 text-xs flex-1 bg-white border-gray-200"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-white border-gray-200">
                       <SelectItem value="caller_prefix" className="text-xs">Caller prefix matches</SelectItem>
                       <SelectItem value="time_range" className="text-xs">Time of day (UTC)</SelectItem>
                       <SelectItem value="always" className="text-xs">Always (catch-all)</SelectItem>
                     </SelectContent>
                   </Select>
-                  <button type="button" onClick={() => removeRule(i)} className="text-white/25 hover:text-red-400 text-xs px-1 transition-colors">✕</button>
+                  <button type="button" onClick={() => removeRule(i)} className="text-gray-400 hover:text-red-500 text-xs px-1 transition-colors">✕</button>
                 </div>
                 {rule.condition === "caller_prefix" && (
                   <Input value={rule.value ?? ""} onChange={e => updateRule(i, { value: e.target.value })}
-                    placeholder="+1800 or +44" className="h-7 text-xs bg-card border-white/[0.07]" />
+                    placeholder="+1800 or +44" className="h-7 text-xs bg-white border-gray-200" />
                 )}
                 {rule.condition === "time_range" && (
                   <div className="flex gap-2 items-center">
                     <Input type="number" min={0} max={23} value={rule.startHour ?? 9}
                       onChange={e => updateRule(i, { startHour: parseInt(e.target.value) })}
-                      className="h-7 w-16 text-xs text-center bg-card border-white/[0.07]" />
-                    <span className="text-xs text-white/35">to</span>
+                      className="h-7 w-16 text-xs text-center bg-white border-gray-200" />
+                    <span className="text-xs text-gray-400">to</span>
                     <Input type="number" min={0} max={23} value={rule.endHour ?? 17}
                       onChange={e => updateRule(i, { endHour: parseInt(e.target.value) })}
-                      className="h-7 w-16 text-xs text-center bg-card border-white/[0.07]" />
-                    <span className="text-xs text-white/35">UTC</span>
+                      className="h-7 w-16 text-xs text-center bg-white border-gray-200" />
+                    <span className="text-xs text-gray-400">UTC</span>
                   </div>
                 )}
                 <div>
-                  <p className="text-[10px] text-white/40 mb-1">Route to agent</p>
+                  <p className="text-[10px] text-gray-400 mb-1">Route to agent</p>
                   <Select value={String(rule.targetAgentId)} onValueChange={v => updateRule(i, { targetAgentId: parseInt(v) })}>
-                    <SelectTrigger className="h-7 text-xs bg-card border-white/[0.07]"><SelectValue /></SelectTrigger>
-                    <SelectContent className="bg-card border-white/[0.07]">
+                    <SelectTrigger className="h-7 text-xs bg-white border-gray-200"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-white border-gray-200">
                       {agentList.map(a => (
                         <SelectItem key={a.id} value={String(a.id)} className="text-xs">{a.name}</SelectItem>
                       ))}
@@ -431,14 +431,14 @@ function RoutingRulesDialog({ number, onClose }: { number: PhoneNumber; onClose:
               </div>
             ))}
             <button type="button" onClick={addRule}
-              className="w-full text-xs text-white/40 hover:text-white/70 border border-dashed border-white/[0.12] rounded-lg py-2 transition-colors">
+              className="w-full text-xs text-gray-400 hover:text-gray-600 border border-dashed border-white/[0.12] rounded-lg py-2 transition-colors">
               + Add rule
             </button>
           </div>
         )}
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleSave} disabled={saving} className="bg-black/85 hover:bg-black/90 text-white gap-1.5">
+          <Button onClick={handleSave} disabled={saving} className="bg-black/85 hover:bg-black/90 text-gray-900 gap-1.5">
             {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Save Rules
           </Button>
         </DialogFooter>
@@ -474,13 +474,13 @@ export default function PhoneNumbersPage() {
   return (
     <div className="h-full overflow-y-auto bg-transparent">
       {/* Header */}
-      <div className="border-b border-white/[0.06] px-6 py-4 flex items-center gap-3 shrink-0">
-        <Phone className="w-5 h-5 text-white/75" />
-        <h1 className="font-semibold text-white/85 text-lg">Phone Numbers</h1>
-        <span className="text-xs text-white/35 ml-auto">Platform-managed numbers · $5.00 / number</span>
+      <div className="border-b border-gray-200 px-6 py-4 flex items-center gap-3 shrink-0">
+        <Phone className="w-5 h-5 text-gray-700" />
+        <h1 className="font-semibold text-gray-800 text-lg">Phone Numbers</h1>
+        <span className="text-xs text-gray-400 ml-auto">Platform-managed numbers · $5.00 / number</span>
         <Button
           size="sm"
-          className="h-8 gap-1.5 bg-black/85 hover:bg-black/90 text-white"
+          className="h-8 gap-1.5 bg-black/85 hover:bg-black/90 text-gray-900"
           onClick={() => setBuyOpen(true)}
         >
           <Plus className="h-3.5 w-3.5" /> Buy Number
@@ -489,11 +489,11 @@ export default function PhoneNumbersPage() {
 
       <div className="p-6 max-w-4xl mx-auto space-y-4">
         {/* Info banner */}
-        <div className="flex items-start gap-3 p-4 rounded-xl border border-white/[0.07] bg-card">
-          <Globe className="h-5 w-5 text-white/75 mt-0.5 shrink-0" />
-          <div className="text-sm text-white/50 space-y-0.5">
-            <p className="text-white/75 font-medium">Managed phone numbers</p>
-            <p>Purchase numbers from our carrier pool. No carrier account needed — assign a number to an agent and inbound calls are automatically routed to its pipeline. <span className="text-white/35">$5.00 one-time per number.</span></p>
+        <div className="flex items-start gap-3 p-4 rounded-xl border border-gray-200 bg-white">
+          <Globe className="h-5 w-5 text-gray-700 mt-0.5 shrink-0" />
+          <div className="text-sm text-gray-500 space-y-0.5">
+            <p className="text-gray-700 font-medium">Managed phone numbers</p>
+            <p>Purchase numbers from our carrier pool. No carrier account needed — assign a number to an agent and inbound calls are automatically routed to its pipeline. <span className="text-gray-400">$5.00 one-time per number.</span></p>
           </div>
         </div>
 
@@ -501,7 +501,7 @@ export default function PhoneNumbersPage() {
         {isLoading ? (
           <div className="space-y-2">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-4 p-4 rounded-lg border border-white/[0.07] bg-card">
+              <div key={i} className="flex items-center gap-4 p-4 rounded-lg border border-gray-200 bg-white">
                 <Skeleton className="h-5 w-36" />
                 <Skeleton className="h-5 w-20" />
                 <Skeleton className="h-5 w-28 ml-auto" />
@@ -509,10 +509,10 @@ export default function PhoneNumbersPage() {
             ))}
           </div>
         ) : !numbers || numbers.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 text-white/35">
+          <div className="flex flex-col items-center justify-center py-24 text-gray-400">
             <Phone className="w-12 h-12 mb-4 opacity-30" />
             <p className="text-sm mb-3">No phone numbers yet.</p>
-            <Button size="sm" className="gap-1.5 bg-black/85 hover:bg-black/90 text-white" onClick={() => setBuyOpen(true)}>
+            <Button size="sm" className="gap-1.5 bg-black/85 hover:bg-black/90 text-gray-900" onClick={() => setBuyOpen(true)}>
               <Plus className="h-3.5 w-3.5" /> Buy your first number
             </Button>
           </div>
@@ -521,11 +521,11 @@ export default function PhoneNumbersPage() {
             {numbers.map(n => (
               <div
                 key={n.id}
-                className="flex items-center gap-4 px-4 py-3 rounded-lg border border-white/[0.07]/60 bg-card hover:bg-popover/90 backdrop-blur-lg transition-colors"
+                className="flex items-center gap-4 px-4 py-3 rounded-lg border border-gray-200/60 bg-white hover:bg-white transition-colors"
               >
                 <div className="shrink-0">
-                  <p className="font-mono font-semibold text-white/85 text-sm">{n.number}</p>
-                  <p className="text-[11px] text-white/35 mt-0.5">{n.countryCode}{n.region ? ` · ${n.region}` : ""}</p>
+                  <p className="font-mono font-semibold text-gray-800 text-sm">{n.number}</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5">{n.countryCode}{n.region ? ` · ${n.region}` : ""}</p>
                 </div>
 
                 <Badge variant="outline" className="text-[10px] capitalize shrink-0">
@@ -534,12 +534,12 @@ export default function PhoneNumbersPage() {
 
                 <div className="flex-1 min-w-0">
                   {n.agentName ? (
-                    <div className="flex items-center gap-1.5 text-xs text-white/75">
+                    <div className="flex items-center gap-1.5 text-xs text-gray-700">
                       <Link2 className="h-3 w-3" />
                       <span className="truncate">{n.agentName}</span>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-1.5 text-xs text-white/35">
+                    <div className="flex items-center gap-1.5 text-xs text-gray-400">
                       <Link2Off className="h-3 w-3" />
                       Unassigned
                     </div>
@@ -551,7 +551,7 @@ export default function PhoneNumbersPage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-7 text-xs gap-1.5 text-white/50 hover:text-white/85"
+                      className="h-7 text-xs gap-1.5 text-gray-500 hover:text-gray-800"
                       onClick={() => setRoutingTarget(n)}
                     >
                       <GitFork className="h-3 w-3" />
@@ -561,7 +561,7 @@ export default function PhoneNumbersPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-7 text-xs gap-1.5 text-white/50 hover:text-white/85"
+                    className="h-7 text-xs gap-1.5 text-gray-500 hover:text-gray-800"
                     onClick={() => setAssignTarget(n)}
                   >
                     <Link2 className="h-3 w-3" />
@@ -570,7 +570,7 @@ export default function PhoneNumbersPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-7 text-xs gap-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                    className="h-7 text-xs gap-1.5 text-red-500 hover:text-red-300 hover:bg-red-50"
                     onClick={() => setReleaseTarget(n)}
                   >
                     <Trash2 className="h-3 w-3" />

@@ -83,9 +83,9 @@ export default function CallsList() {
 
   const getLatencyColor = (ms: number | null | undefined, thresholds: [number, number]) => {
     if (ms == null) return "text-muted-foreground";
-    if (ms <= thresholds[0]) return "text-emerald-600 dark:text-white/75";
+    if (ms <= thresholds[0]) return "text-emerald-600 dark:text-gray-700";
     if (ms <= thresholds[1]) return "text-yellow-600 dark:text-yellow-400";
-    return "text-red-600 dark:text-red-400";
+    return "text-red-600 dark:text-red-500";
   };
 
   return (
@@ -106,12 +106,12 @@ export default function CallsList() {
           <Input
             type="search"
             placeholder="Search phone numbers..."
-            className="pl-8 bg-card"
+            className="pl-8 bg-white"
           />
         </div>
         
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[180px] bg-card">
+          <SelectTrigger className="w-[180px] bg-white">
             <SelectValue placeholder="Filter by Status" />
           </SelectTrigger>
           <SelectContent>
@@ -123,7 +123,7 @@ export default function CallsList() {
         </Select>
 
         <Select value={agentFilter} onValueChange={setAgentFilter}>
-          <SelectTrigger className="w-[200px] bg-card">
+          <SelectTrigger className="w-[200px] bg-white">
             <SelectValue placeholder="Filter by Agent" />
           </SelectTrigger>
           <SelectContent>
@@ -152,7 +152,7 @@ export default function CallsList() {
                     <TooltipContent side="top" className="text-xs max-w-[220px]">
                       <p className="mb-1 font-semibold">Per-call averages across all turns</p>
                       <p><span className="text-blue-400">STT</span> — speech-to-text round-trip</p>
-                      <p><span className="text-violet-400">LLM</span> — time to first token</p>
+                      <p><span className="text-violet-600">LLM</span> — time to first token</p>
                       <p><span className="text-orange-400">TTS</span> — time to first audio chunk</p>
                     </TooltipContent>
                   </Tooltip>
@@ -188,7 +188,7 @@ export default function CallsList() {
                       <TableCell className="whitespace-nowrap text-muted-foreground font-medium text-xs">
                         {format(parseISO(call.createdAt), "MMM d, HH:mm:ss")}
                       </TableCell>
-                      <TableCell className="font-mono text-xs text-white/35">
+                      <TableCell className="font-mono text-xs text-gray-400">
                         {(call as any).executionId ?? `#${call.id}`}
                       </TableCell>
                       <TableCell>
@@ -249,7 +249,7 @@ export default function CallsList() {
                       </TableCell>
                       <TableCell className="font-mono text-xs">
                         {(call as any).costCents != null && (call as any).costCents > 0 ? (
-                          <span className="flex items-center gap-0.5 text-amber-500 dark:text-amber-400">
+                          <span className="flex items-center gap-0.5 text-amber-500 dark:text-amber-600">
                             <DollarSign className="h-3 w-3" />
                             {((call as any).costCents / 100).toFixed(3)}
                           </span>

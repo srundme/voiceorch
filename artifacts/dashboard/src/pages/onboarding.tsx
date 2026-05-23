@@ -77,7 +77,7 @@ function ContinueButton({
         transition-all duration-150 select-none
         ${disabled
           ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-          : "bg-black text-white hover:bg-gray-800 cursor-pointer shadow-sm"
+          : "bg-black text-gray-900 hover:bg-gray-800 cursor-pointer shadow-sm"
         }
       `}
     >
@@ -168,7 +168,7 @@ function RoleStep({
             className={`
               flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all duration-150 cursor-pointer
               ${value === opt.id
-                ? "border-black bg-black text-white"
+                ? "border-black bg-black text-gray-900"
                 : "border-gray-200 hover:border-gray-400 text-gray-800"
               }
             `}
@@ -236,7 +236,7 @@ function ReferralStep({
             className={`
               flex items-center gap-3.5 px-4 py-3.5 rounded-xl border-2 text-left transition-all duration-150 cursor-pointer
               ${value === opt.id
-                ? "border-black bg-black text-white"
+                ? "border-black bg-black text-gray-900"
                 : "border-gray-200 hover:border-gray-400 text-gray-800"
               }
             `}
@@ -294,7 +294,7 @@ function VoiceAgentStep({
             className={`
               flex-1 flex flex-col items-center gap-2 py-6 rounded-2xl border-2 font-semibold text-base transition-all cursor-pointer
               ${value === opt.v
-                ? "border-black bg-black text-white"
+                ? "border-black bg-black text-gray-900"
                 : "border-gray-200 hover:border-gray-400 text-gray-800"
               }
             `}
@@ -358,7 +358,7 @@ function PlatformsStep({ value, onChange, onNext, loading }: {
               className={`
                 relative flex flex-col items-start p-4 rounded-xl border-2 text-left transition-all cursor-pointer
                 ${selected
-                  ? "border-black bg-black text-white"
+                  ? "border-black bg-black text-gray-900"
                   : `border-gray-200 hover:border-gray-400 text-gray-800 ${opt.color}`
                 }
               `}
@@ -418,7 +418,7 @@ function DoneScreen({ name }: { name: string }) {
         whileHover={{ scale: 1.03 }}
         whileTap={{ scale: 0.97 }}
         onClick={goToDashboard}
-        className="flex items-center gap-2.5 px-8 py-4 bg-black text-white rounded-xl font-semibold text-base hover:bg-gray-800 transition-colors shadow-md cursor-pointer"
+        className="flex items-center gap-2.5 px-8 py-4 bg-black text-gray-900 rounded-xl font-semibold text-base hover:bg-gray-800 transition-colors shadow-md cursor-pointer"
       >
         Go to Dashboard
         <ArrowRight className="h-5 w-5" />

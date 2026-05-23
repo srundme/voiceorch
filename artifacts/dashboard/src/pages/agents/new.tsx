@@ -256,10 +256,10 @@ function ModelSelect({
 
 const CATEGORY_COLORS: Record<string, string> = {
   support:  "bg-blue-500/15 text-blue-400 border-blue-500/30",
-  sales:    "bg-amber-500/15 text-amber-400 border-amber-500/30",
-  booking:  "bg-card/[0.04] text-white/75 border-white/[0.10]",
+  sales:    "bg-amber-500/15 text-amber-600 border-amber-500/30",
+  booking:  "bg-gray-50 text-gray-700 border-gray-200",
   survey:   "bg-purple-500/15 text-purple-400 border-purple-500/30",
-  general:  "bg-card/[0.04] text-white/50 border-white/[0.07]",
+  general:  "bg-gray-50 text-gray-500 border-gray-200",
 };
 
 export default function AgentNew() {
@@ -401,19 +401,19 @@ export default function AgentNew() {
           <p className="text-muted-foreground">Configure a new AI voice agent pipeline.</p>
         </div>
         <Button type="button" variant="outline" onClick={() => setTemplatesOpen(true)} className="gap-2">
-          <Sparkles className="h-4 w-4 text-amber-400" />
+          <Sparkles className="h-4 w-4 text-amber-600" />
           Use Template
         </Button>
       </div>
 
       {/* Templates picker dialog */}
       <Dialog open={templatesOpen} onOpenChange={setTemplatesOpen}>
-        <DialogContent className="bg-popover/90 backdrop-blur-lg border-white/[0.07] max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="bg-white border-gray-200 max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-amber-400" /> Start from a template
+              <Sparkles className="h-4 w-4 text-amber-600" /> Start from a template
             </DialogTitle>
-            <DialogDescription className="text-white/35">
+            <DialogDescription className="text-gray-400">
               Pick a template to prefill the form. You can customise everything afterwards.
             </DialogDescription>
           </DialogHeader>
@@ -422,17 +422,17 @@ export default function AgentNew() {
               <button
                 key={tpl.id}
                 onClick={() => applyTemplate(tpl)}
-                className="text-left p-4 rounded-lg bg-card/[0.06] border border-white/[0.07] hover:border-[#ACADB1] hover:bg-card/[0.08] transition-colors"
+                className="text-left p-4 rounded-lg bg-gray-50 border border-gray-200 hover:border-[#ACADB1] hover:bg-gray-100 transition-colors"
               >
                 <div className="flex items-start justify-between gap-3 mb-1">
-                  <p className="text-sm font-semibold text-white/85">{tpl.name}</p>
+                  <p className="text-sm font-semibold text-gray-800">{tpl.name}</p>
                   <Badge className={`text-[10px] shrink-0 ${CATEGORY_COLORS[tpl.category] ?? CATEGORY_COLORS.general}`}>
                     {tpl.category}
                   </Badge>
                 </div>
-                <p className="text-xs text-white/50 leading-relaxed">{tpl.description}</p>
+                <p className="text-xs text-gray-500 leading-relaxed">{tpl.description}</p>
                 {tpl.llmProvider && (
-                  <p className="text-[11px] text-white/35 mt-2 font-mono">
+                  <p className="text-[11px] text-gray-400 mt-2 font-mono">
                     {tpl.asrProvider} · {tpl.llmProvider} · {tpl.ttsProvider}
                   </p>
                 )}
@@ -669,7 +669,7 @@ export default function AgentNew() {
 
                   {/* Step 1 — ASR */}
                   <div className="space-y-4 p-4 border rounded-md bg-muted/20 relative">
-                    <div className="absolute top-0 right-0 -mt-3 -mr-3 bg-card border rounded-full px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Step 1</div>
+                    <div className="absolute top-0 right-0 -mt-3 -mr-3 bg-white border rounded-full px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Step 1</div>
                     <h4 className="font-medium border-b pb-2">Speech-to-Text</h4>
 
                     <FormField control={form.control} name="asrProvider" render={({ field }) => (
@@ -702,7 +702,7 @@ export default function AgentNew() {
 
                   {/* Step 2 — LLM */}
                   <div className="space-y-4 p-4 border rounded-md bg-muted/20 relative">
-                    <div className="absolute top-0 right-0 -mt-3 -mr-3 bg-card border rounded-full px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Step 2</div>
+                    <div className="absolute top-0 right-0 -mt-3 -mr-3 bg-white border rounded-full px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Step 2</div>
                     <h4 className="font-medium border-b pb-2">Language Model</h4>
 
                     <FormField control={form.control} name="llmProvider" render={({ field }) => (
@@ -735,7 +735,7 @@ export default function AgentNew() {
 
                   {/* Step 3 — TTS */}
                   <div className="space-y-4 p-4 border rounded-md bg-muted/20 relative">
-                    <div className="absolute top-0 right-0 -mt-3 -mr-3 bg-card border rounded-full px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Step 3</div>
+                    <div className="absolute top-0 right-0 -mt-3 -mr-3 bg-white border rounded-full px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Step 3</div>
                     <h4 className="font-medium border-b pb-2">Text-to-Speech</h4>
 
                     <FormField control={form.control} name="ttsProvider" render={({ field }) => (
@@ -787,7 +787,7 @@ export default function AgentNew() {
 
                   {/* Step 4 — Telephony */}
                   <div className="space-y-4 p-4 border rounded-md bg-muted/20 relative">
-                    <div className="absolute top-0 right-0 -mt-3 -mr-3 bg-card border rounded-full px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Step 4</div>
+                    <div className="absolute top-0 right-0 -mt-3 -mr-3 bg-white border rounded-full px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Step 4</div>
                     <h4 className="font-medium border-b pb-2">Telephony</h4>
 
                     <FormField control={form.control} name="telephonyProvider" render={({ field }) => (

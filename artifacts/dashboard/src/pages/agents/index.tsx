@@ -138,13 +138,13 @@ export default function AgentsList() {
           <Input
             type="search"
             placeholder="Search agents..."
-            className="pl-8 bg-card"
+            className="pl-8 bg-white"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             data-testid="input-search-agents"
           />
         </div>
-        <Button variant="outline" size="icon" className="bg-card">
+        <Button variant="outline" size="icon" className="bg-white">
           <Filter className="h-4 w-4" />
         </Button>
       </div>
@@ -215,7 +215,7 @@ export default function AgentsList() {
                           </DropdownMenuItem>
                         </Link>
                         <DropdownMenuItem
-                          className="cursor-pointer text-emerald-600 dark:text-white/75 focus:text-emerald-600 dark:focus:text-white/75"
+                          className="cursor-pointer text-emerald-600 dark:text-gray-700 focus:text-emerald-600 dark:focus:text-gray-700"
                           onClick={() => { setOutboundAgent({ id: agent.id, name: agent.name }); setToNumber(""); }}
                         >
                           <PhoneCall className="mr-2 h-4 w-4" />
@@ -267,7 +267,7 @@ export default function AgentsList() {
             ))}
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center h-full text-center p-8 bg-card rounded-lg border border-dashed">
+          <div className="flex flex-col items-center justify-center h-full text-center p-8 bg-white rounded-lg border border-dashed">
             <Users className="h-12 w-12 text-muted-foreground opacity-20 mb-4" />
             <h3 className="text-lg font-medium mb-2">No agents found</h3>
             <p className="text-sm text-muted-foreground max-w-sm mb-6">
@@ -291,7 +291,7 @@ export default function AgentsList() {
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <PhoneCall className="h-4 w-4 text-white/75" />
+              <PhoneCall className="h-4 w-4 text-gray-700" />
               Outbound Call
             </DialogTitle>
             <DialogDescription>

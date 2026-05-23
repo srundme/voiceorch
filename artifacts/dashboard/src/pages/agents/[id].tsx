@@ -323,7 +323,7 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
             {embedCode}
           </pre>
           <Button variant="outline" size="sm" className="gap-2" onClick={copyEmbed}>
-            {copied ? <><Check className="h-3.5 w-3.5 text-white/75" /> Copied!</> : <><Copy className="h-3.5 w-3.5" /> Copy Embed Code</>}
+            {copied ? <><Check className="h-3.5 w-3.5 text-gray-700" /> Copied!</> : <><Copy className="h-3.5 w-3.5" /> Copy Embed Code</>}
           </Button>
           <p className="text-xs text-muted-foreground">
             You can customize <code className="font-mono bg-muted px-1 rounded">data-color</code>, <code className="font-mono bg-muted px-1 rounded">data-name</code>, and <code className="font-mono bg-muted px-1 rounded">data-position</code> (bottom-right, bottom-left, top-right, top-left).
@@ -544,7 +544,7 @@ export default function AgentDetail() {
                   ].map((stage, i) => (
                     <React.Fragment key={stage.label}>
                       <div className={`flex flex-col items-center gap-2 p-4 border rounded-lg w-full text-center ${
-                        stage.highlight ? "bg-primary/10 border-primary/30" : "bg-card"
+                        stage.highlight ? "bg-primary/10 border-primary/30" : "bg-white"
                       }`}>
                         <span className={`text-xs uppercase tracking-wider font-semibold ${stage.highlight ? "text-primary" : "text-muted-foreground"}`}>
                           {stage.label}
