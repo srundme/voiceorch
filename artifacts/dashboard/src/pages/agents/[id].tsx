@@ -323,7 +323,7 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
             {embedCode}
           </pre>
           <Button variant="outline" size="sm" className="gap-2" onClick={copyEmbed}>
-            {copied ? <><Check className="h-3.5 w-3.5 text-black/75" /> Copied!</> : <><Copy className="h-3.5 w-3.5" /> Copy Embed Code</>}
+            {copied ? <><Check className="h-3.5 w-3.5 text-white/75" /> Copied!</> : <><Copy className="h-3.5 w-3.5" /> Copy Embed Code</>}
           </Button>
           <p className="text-xs text-muted-foreground">
             You can customize <code className="font-mono bg-muted px-1 rounded">data-color</code>, <code className="font-mono bg-muted px-1 rounded">data-name</code>, and <code className="font-mono bg-muted px-1 rounded">data-position</code> (bottom-right, bottom-left, top-right, top-left).

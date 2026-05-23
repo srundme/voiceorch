@@ -396,11 +396,11 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
   return (
     <div className="space-y-4">
       {/* Status */}
-      <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-black/[0.08]/50 border border-black/[0.04]">
+      <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-card/[0.08]/50 border border-white/[0.04]">
         <span className={`w-2 h-2 rounded-full shrink-0 ${s.color} ${s.pulse ? "animate-pulse" : ""}`} />
-        <span className="text-sm text-black/75">{s.label}</span>
+        <span className="text-sm text-white/75">{s.label}</span>
         {status === "ended" && duration !== null && (
-          <span className="text-xs text-black/35 ml-auto">
+          <span className="text-xs text-white/35 ml-auto">
             {Math.floor(duration / 60)}m {duration % 60}s
           </span>
         )}
@@ -415,7 +415,7 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
       {/* Transcript */}
       <div ref={transcriptRef} className="h-48 overflow-y-auto space-y-2 pr-1">
         {msgs.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center text-black/35 gap-2">
+          <div className="h-full flex flex-col items-center justify-center text-center text-white/35 gap-2">
             <Volume2 className="h-7 w-7 opacity-30" />
             <p className="text-xs">Transcript will appear here.</p>
           </div>
@@ -424,9 +424,9 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
             <div className={`max-w-[80%] px-3 py-2 rounded-xl text-sm ${
               m.speaker === "user"
                 ? "bg-black/80 text-white/90 rounded-br-sm"
-                : "bg-transparent text-black/75 border border-black/[0.08] rounded-bl-sm"
+                : "bg-transparent text-white/75 border border-white/[0.08] rounded-bl-sm"
             }`}>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-black/35 mb-0.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-white/35 mb-0.5">
                 {m.speaker === "user" ? "You" : agentName}
               </p>
               {m.text}
@@ -448,17 +448,17 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
 
       {/* Embed snippet */}
       <div className="mt-2">
-        <p className="text-xs text-black/35 mb-1.5">Embed on your website</p>
-        <pre className="bg-black/[0.06] border border-black/[0.04] rounded-lg px-3 py-2.5 text-[11px] font-mono text-black/50 overflow-x-auto whitespace-pre">
+        <p className="text-xs text-white/35 mb-1.5">Embed on your website</p>
+        <pre className="bg-card/[0.06] border border-white/[0.04] rounded-lg px-3 py-2.5 text-[11px] font-mono text-white/50 overflow-x-auto whitespace-pre">
           {embedCode}
         </pre>
         <Button
           variant="ghost"
           size="sm"
-          className="mt-1 h-7 text-xs text-black/35 hover:text-black/75 gap-1.5 px-2"
+          className="mt-1 h-7 text-xs text-white/35 hover:text-white/75 gap-1.5 px-2"
           onClick={() => { navigator.clipboard.writeText(embedCode); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
         >
-          {copied ? <><Check className="h-3 w-3 text-black/75" /> Copied</> : <><Copy className="h-3 w-3" /> Copy snippet</>}
+          {copied ? <><Check className="h-3 w-3 text-white/75" /> Copied</> : <><Copy className="h-3 w-3" /> Copy snippet</>}
         </Button>
       </div>
     </div>
@@ -554,15 +554,15 @@ function SliderRow({ label, desc, value, onChange, min, max, step, unit = "" }: 
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs font-medium text-black/75">{label}</p>
-          {desc && <p className="text-[10px] text-black/35 mt-0.5">{desc}</p>}
+          <p className="text-xs font-medium text-white/75">{label}</p>
+          {desc && <p className="text-[10px] text-white/35 mt-0.5">{desc}</p>}
         </div>
-        <span className="text-xs font-mono bg-black/[0.08] border border-black/[0.07] rounded px-1.5 py-0.5 text-black/75 min-w-[52px] text-center shrink-0 ml-3">
+        <span className="text-xs font-mono bg-card/[0.08] border border-white/[0.07] rounded px-1.5 py-0.5 text-white/75 min-w-[52px] text-center shrink-0 ml-3">
           {display}{unit}
         </span>
       </div>
       <Slider min={min} max={max} step={step} value={[value]} onValueChange={([v]) => onChange(v!)} />
-      <div className="flex justify-between text-[10px] text-black/35">
+      <div className="flex justify-between text-[10px] text-white/35">
         <span>{min}{unit}</span><span>{max}{unit}</span>
       </div>
     </div>
@@ -575,8 +575,8 @@ function ToggleRow({ label, desc, checked, onChange }: {
   return (
     <div className="flex items-center justify-between gap-4">
       <div className="min-w-0">
-        <p className="text-xs font-medium text-black/75">{label}</p>
-        {desc && <p className="text-[10px] text-black/35 mt-0.5">{desc}</p>}
+        <p className="text-xs font-medium text-white/75">{label}</p>
+        {desc && <p className="text-[10px] text-white/35 mt-0.5">{desc}</p>}
       </div>
       <Switch checked={checked} onCheckedChange={onChange} className="shrink-0 data-[state=checked]:bg-black/80" />
     </div>
@@ -878,9 +878,9 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
   if (isLoading) {
     return (
       <div className="flex-1 flex flex-col p-5 gap-4">
-        <Skeleton className="h-8 w-48 bg-black/[0.08]" />
-        <Skeleton className="h-4 w-72 bg-black/[0.08]" />
-        <Skeleton className="h-32 w-full bg-black/[0.08]" />
+        <Skeleton className="h-8 w-48 bg-card/[0.08]" />
+        <Skeleton className="h-4 w-72 bg-card/[0.08]" />
+        <Skeleton className="h-32 w-full bg-card/[0.08]" />
       </div>
     );
   }
@@ -908,10 +908,10 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
   return (
     <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
       {/* ── Top bar ── */}
-      <div className="flex items-center gap-3 px-5 h-12 border-b border-black/[0.06] shrink-0">
+      <div className="flex items-center gap-3 px-5 h-12 border-b border-white/[0.06] shrink-0">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="font-semibold text-sm text-black/85 truncate">{agentName || agent.name}</span>
-          <span className="text-[10px] text-black/35 font-mono hidden sm:block">#{String(agent.id).padStart(4, "0")}</span>
+          <span className="font-semibold text-sm text-white/85 truncate">{agentName || agent.name}</span>
+          <span className="text-[10px] text-white/35 font-mono hidden sm:block">#{String(agent.id).padStart(4, "0")}</span>
           {statusDot(agent.status)}
         </div>
         <div className="ml-auto flex items-center gap-2">
@@ -920,21 +920,21 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
               {update.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} Save
             </Button>
           )}
-          <Button size="sm" variant="outline" className="h-7 text-xs border-black/[0.07] text-black/75 hover:bg-black/[0.08] gap-1.5" onClick={() => setOutboundDialogOpen(true)}>
+          <Button size="sm" variant="outline" className="h-7 text-xs border-white/[0.07] text-white/75 hover:bg-card/[0.08] gap-1.5" onClick={() => setOutboundDialogOpen(true)}>
             <PhoneOutgoing className="h-3 w-3" /> Call
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-black/50 hover:text-black/75 hover:bg-black/[0.08]">
+              <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-white/50 hover:text-white/75 hover:bg-card/[0.08]">
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="bg-white/70 backdrop-blur-lg border-black/[0.07] w-44">
-              <DropdownMenuItem className="text-black/75 hover:bg-black/[0.08] cursor-pointer text-xs" onClick={handleToggle}>
+            <DropdownMenuContent align="end" className="bg-popover/90 backdrop-blur-lg border-white/[0.07] w-44">
+              <DropdownMenuItem className="text-white/75 hover:bg-card/[0.08] cursor-pointer text-xs" onClick={handleToggle}>
                 <PlayCircle className="mr-2 h-3.5 w-3.5" /> {agent.status === "active" ? "Deactivate" : "Activate"}
               </DropdownMenuItem>
-              <DropdownMenuSeparator className="bg-black/[0.08]" />
-              <DropdownMenuItem className="text-red-400 hover:bg-black/[0.08] cursor-pointer text-xs" onClick={handleDelete}>
+              <DropdownMenuSeparator className="bg-card/[0.08]" />
+              <DropdownMenuItem className="text-red-400 hover:bg-card/[0.08] cursor-pointer text-xs" onClick={handleDelete}>
                 <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -943,19 +943,19 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
       </div>
 
       {/* ── Stats row ── */}
-      <div className="flex items-center gap-4 px-5 py-2 border-b border-black/[0.06] bg-white shrink-0">
-        <div className="flex items-center gap-1.5 text-xs text-black/50">
-          <Phone className="h-3 w-3 text-black/35" />
-          <span className="font-semibold text-black/85">{agent.totalCalls ?? 0}</span> calls
+      <div className="flex items-center gap-4 px-5 py-2 border-b border-white/[0.06] bg-card shrink-0">
+        <div className="flex items-center gap-1.5 text-xs text-white/50">
+          <Phone className="h-3 w-3 text-white/35" />
+          <span className="font-semibold text-white/85">{agent.totalCalls ?? 0}</span> calls
         </div>
-        <div className="flex items-center gap-1.5 text-xs text-black/50">
-          <CheckCircle2 className="h-3 w-3 text-black/75" />
-          <span className="font-semibold text-black/85">{successRate}%</span> success
+        <div className="flex items-center gap-1.5 text-xs text-white/50">
+          <CheckCircle2 className="h-3 w-3 text-white/75" />
+          <span className="font-semibold text-white/85">{successRate}%</span> success
         </div>
         {agent.avgDurationSeconds != null && (
-          <div className="flex items-center gap-1.5 text-xs text-black/50">
-            <Clock className="h-3 w-3 text-black/35" />
-            <span className="font-semibold text-black/85">~{agent.avgDurationSeconds}s</span> avg
+          <div className="flex items-center gap-1.5 text-xs text-white/50">
+            <Clock className="h-3 w-3 text-white/35" />
+            <span className="font-semibold text-white/85">~{agent.avgDurationSeconds}s</span> avg
           </div>
         )}
       </div>
@@ -974,11 +974,11 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-        <div className="border-b border-black/[0.06] shrink-0 overflow-x-auto">
+        <div className="border-b border-white/[0.06] shrink-0 overflow-x-auto">
           <TabsList className="w-max min-w-full justify-start rounded-none bg-transparent px-3 h-9 gap-0">
             {TABS.map(t => (
               <TabsTrigger key={t.value} value={t.value}
-                className="h-9 rounded-none border-b-2 border-transparent bg-transparent px-3 text-[11px] font-medium text-black/35 shadow-none transition-none data-[state=active]:border-emerald-500 data-[state=active]:text-black/85 data-[state=active]:shadow-none whitespace-nowrap">
+                className="h-9 rounded-none border-b-2 border-transparent bg-transparent px-3 text-[11px] font-medium text-white/35 shadow-none transition-none data-[state=active]:border-emerald-500 data-[state=active]:text-white/85 data-[state=active]:shadow-none whitespace-nowrap">
                 {t.label}
               </TabsTrigger>
             ))}
@@ -994,42 +994,42 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
             <div className="flex-1 overflow-y-auto px-5 py-4">
               <div className="max-w-xl space-y-4">
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35 mb-1.5">Agent Name</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35 mb-1.5">Agent Name</p>
                   <Input value={agentName} onChange={e => { setAgentName(e.target.value); setDirty(true); }}
-                    className="bg-black/[0.06] border-black/[0.07] text-black/75" />
+                    className="bg-card/[0.06] border-white/[0.07] text-white/75" />
                 </div>
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35 mb-1.5">Agent Type</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35 mb-1.5">Agent Type</p>
                   <Select value={agentType} onValueChange={mark(setAgentType)}>
-                    <SelectTrigger className="h-9 text-sm bg-black/[0.06] border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
-                    <SelectContent className="bg-white border-black/[0.07]">
-                      <SelectItem value="general" className="text-black/75">General Purpose</SelectItem>
-                      <SelectItem value="lead_qualification" className="text-black/75">Lead Qualification</SelectItem>
-                      <SelectItem value="customer_support" className="text-black/75">Customer Support</SelectItem>
-                      <SelectItem value="appointment_booking" className="text-black/75">Appointment Booking</SelectItem>
-                      <SelectItem value="survey" className="text-black/75">Survey</SelectItem>
+                    <SelectTrigger className="h-9 text-sm bg-card/[0.06] border-white/[0.07] text-white/75"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-card border-white/[0.07]">
+                      <SelectItem value="general" className="text-white/75">General Purpose</SelectItem>
+                      <SelectItem value="lead_qualification" className="text-white/75">Lead Qualification</SelectItem>
+                      <SelectItem value="customer_support" className="text-white/75">Customer Support</SelectItem>
+                      <SelectItem value="appointment_booking" className="text-white/75">Appointment Booking</SelectItem>
+                      <SelectItem value="survey" className="text-white/75">Survey</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35 mb-1.5">Welcome Message</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35 mb-1.5">Welcome Message</p>
                   <Textarea value={greetingMessage} onChange={e => { setGreetingMessage(e.target.value); setDirty(true); }}
                     placeholder="First thing the agent says when a call connects"
-                    className="bg-black/[0.06] border-black/[0.07] text-black/75 text-sm resize-none min-h-[72px] placeholder:text-black/35" />
+                    className="bg-card/[0.06] border-white/[0.07] text-white/75 text-sm resize-none min-h-[72px] placeholder:text-white/35" />
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Agent Prompt</p>
-                    <button type="button" className="flex items-center gap-1 text-[11px] text-black/35 hover:text-black/75"
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Agent Prompt</p>
+                    <button type="button" className="flex items-center gap-1 text-[11px] text-white/35 hover:text-white/75"
                       onClick={() => { setSystemPrompt("You are a helpful and professional AI voice assistant. Be concise, clear, and friendly in all responses."); setDirty(true); }}>
                       <Sparkles className="h-3 w-3" /> Generate
                     </button>
                   </div>
                   <Textarea value={systemPrompt} onChange={e => { setSystemPrompt(e.target.value); setDirty(true); }}
                     placeholder="You are a helpful AI voice assistant…"
-                    className="bg-black/[0.06] border-black/[0.07] text-black/75 text-sm resize-none min-h-[200px] placeholder:text-black/35" />
+                    className="bg-card/[0.06] border-white/[0.07] text-white/75 text-sm resize-none min-h-[200px] placeholder:text-white/35" />
                   <div className="flex flex-wrap gap-1.5 mt-2">
-                    <p className="text-[10px] text-black/35 mr-1 self-center">Insert variable:</p>
+                    <p className="text-[10px] text-white/35 mr-1 self-center">Insert variable:</p>
                     {[
                       { var: "{caller_salutation}", tip: "sir / ma'am — requires Gender Detection in Engine tab", color: "violet" },
                       { var: "{caller_number}",     tip: "Caller's phone number",                                color: "sky"    },
@@ -1044,7 +1044,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                         className={`text-[11px] rounded-md border px-2 py-0.5 font-mono transition-colors ${
                           chip.color === "violet" ? "bg-violet-950/40 border-violet-800/50 text-violet-400 hover:bg-violet-900/50" :
                           chip.color === "sky"    ? "bg-sky-950/40 border-sky-800/50 text-sky-400 hover:bg-sky-900/50" :
-                          chip.color === "emerald"? "bg-black/[0.06] border-black/[0.10] text-black/75 hover:bg-black/[0.10]" :
+                          chip.color === "emerald"? "bg-card/[0.06] border-white/[0.10] text-white/75 hover:bg-card/[0.10]" :
                                                     "bg-amber-950/40 border-amber-800/50 text-amber-400 hover:bg-amber-900/50"
                         }`}
                       >
@@ -1054,34 +1054,34 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                   </div>
                 </div>
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35 mb-1.5">Webhook URL <span className="normal-case text-black/35 font-normal">(optional)</span></p>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35 mb-1.5">Webhook URL <span className="normal-case text-white/35 font-normal">(optional)</span></p>
                   <Input value={webhookUrl} onChange={e => { setWebhookUrl(e.target.value); setDirty(true); }}
                     placeholder="https://your-server.com/webhook"
-                    className="bg-black/[0.06] border-black/[0.07] text-black/75 text-sm placeholder:text-black/35" />
-                  <p className="text-[10px] text-black/35 mt-1">Fires a POST with call summary JSON after each call ends.</p>
+                    className="bg-card/[0.06] border-white/[0.07] text-white/75 text-sm placeholder:text-white/35" />
+                  <p className="text-[10px] text-white/35 mt-1">Fires a POST with call summary JSON after each call ends.</p>
                 </div>
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35 mb-1.5">Knowledge Base</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35 mb-1.5">Knowledge Base</p>
                   <Select value={knowledgeBaseId?.toString() ?? "none"} onValueChange={v => { setKnowledgeBaseId(v === "none" ? null : parseInt(v)); setDirty(true); }}>
-                    <SelectTrigger className="h-8 text-xs bg-black/[0.06] border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
-                    <SelectContent className="bg-white border-black/[0.07]">
-                      <SelectItem value="none" className="text-black/50 text-xs">— None —</SelectItem>
-                      {(kbs ?? []).map(kb => <SelectItem key={kb.id} value={kb.id.toString()} className="text-black/75 text-xs">{kb.name}</SelectItem>)}
+                    <SelectTrigger className="h-8 text-xs bg-card/[0.06] border-white/[0.07] text-white/75"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-card border-white/[0.07]">
+                      <SelectItem value="none" className="text-white/50 text-xs">— None —</SelectItem>
+                      {(kbs ?? []).map(kb => <SelectItem key={kb.id} value={kb.id.toString()} className="text-white/75 text-xs">{kb.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                  <p className="text-[10px] text-black/35 mt-1">Relevant chunks are injected into the system prompt on every call.</p>
+                  <p className="text-[10px] text-white/35 mt-1">Relevant chunks are injected into the system prompt on every call.</p>
                 </div>
               </div>
             </div>
 
             {/* ── Right: dark info panel ── */}
-            <div className="w-56 shrink-0 border-l border-black/[0.06] overflow-y-auto p-3 space-y-3 bg-white">
+            <div className="w-56 shrink-0 border-l border-white/[0.06] overflow-y-auto p-3 space-y-3 bg-card">
               {/* Agent Status */}
               <div className="bg-[#1C1C1E] rounded-xl p-3.5">
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-[11px] font-semibold text-white/50">Agent Status</p>
                   <span className={`flex items-center gap-1 text-[10px] font-semibold ${agent.status === "active" ? "text-emerald-400" : "text-white/30"}`}>
-                    <span className={`h-1.5 w-1.5 rounded-full ${agent.status === "active" ? "bg-emerald-400" : "bg-white/20"}`} />
+                    <span className={`h-1.5 w-1.5 rounded-full ${agent.status === "active" ? "bg-emerald-400" : "bg-card/20"}`} />
                     {agent.status === "active" ? "Active" : "Inactive"}
                   </span>
                 </div>
@@ -1106,7 +1106,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                 </div>
                 {callsLoading ? (
                   <div className="space-y-2">
-                    {[1,2,3].map(i => <div key={i} className="h-8 bg-white/5 rounded-lg animate-pulse" />)}
+                    {[1,2,3].map(i => <div key={i} className="h-8 bg-card/5 rounded-lg animate-pulse" />)}
                   </div>
                 ) : !calls?.length ? (
                   <p className="text-[11px] text-white/25 italic">No calls yet</p>
@@ -1155,31 +1155,31 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
         <TabsContent value="llm" className="flex-1 overflow-y-auto m-0 px-5 py-4">
           <div className="max-w-2xl space-y-5">
             <div className="grid grid-cols-2 gap-3">
-              <div className="bg-black/[0.06] border border-black/[0.04] rounded-xl p-3.5 space-y-2">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Provider</p>
+              <div className="bg-card/[0.06] border border-white/[0.04] rounded-xl p-3.5 space-y-2">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Provider</p>
                 <Select value={llmProvider} onValueChange={v => { mark(setLlmProvider)(v); setLlmModel(LLM_MODELS[v]?.[0]?.value ?? ""); }}>
-                  <SelectTrigger className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07]">
-                    {LLM_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-black/75 text-xs">{p.label}</SelectItem>)}
+                  <SelectTrigger className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75"><SelectValue /></SelectTrigger>
+                  <SelectContent className="bg-popover/90 backdrop-blur-lg border-white/[0.07]">
+                    {LLM_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-white/75 text-xs">{p.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
-              <div className="bg-black/[0.06] border border-black/[0.04] rounded-xl p-3.5 space-y-2">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Model</p>
+              <div className="bg-card/[0.06] border border-white/[0.04] rounded-xl p-3.5 space-y-2">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Model</p>
                 {llmModelOptions.length > 0
                   ? <Select value={llmModel} onValueChange={mark(setLlmModel)}>
-                      <SelectTrigger className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
-                      <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07]">
-                        {llmModelOptions.map(m => <SelectItem key={m.value} value={m.value} className="text-black/75 text-xs">{m.label}</SelectItem>)}
+                      <SelectTrigger className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75"><SelectValue /></SelectTrigger>
+                      <SelectContent className="bg-popover/90 backdrop-blur-lg border-white/[0.07]">
+                        {llmModelOptions.map(m => <SelectItem key={m.value} value={m.value} className="text-white/75 text-xs">{m.label}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   : <Input value={llmModel} onChange={e => { setLlmModel(e.target.value); setDirty(true); }} placeholder="Model name"
-                      className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75" />
+                      className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75" />
                 }
               </div>
             </div>
-            <div className="bg-black/[0.04] border border-black/[0.07]/40 rounded-xl p-4 space-y-5">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Sampling Parameters</p>
+            <div className="bg-card/[0.04] border border-white/[0.07]/40 rounded-xl p-4 space-y-5">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Sampling Parameters</p>
               <SliderRow label="Temperature" desc="Randomness — higher = more creative" value={temperature} onChange={v => { setTemperature(v); setDirty(true); }} min={0} max={2} step={0.01} />
               <SliderRow label="Max Tokens" desc="Maximum tokens in the LLM response" value={cfg.maxTokens ?? 200} onChange={v => setCfg({ maxTokens: v })} min={50} max={2000} step={10} />
               <SliderRow label="Top P" desc="Nucleus sampling — lower = more focused" value={cfg.topP ?? 1} onChange={v => setCfg({ topP: v })} min={0} max={1} step={0.01} />
@@ -1189,33 +1189,33 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
               <SliderRow label="Frequency Penalty" desc="Penalises repeated words" value={cfg.frequencyPenalty ?? 0} onChange={v => setCfg({ frequencyPenalty: v })} min={-2} max={2} step={0.01} />
               <ToggleRow label="Request JSON Response" desc="Force model to output structured JSON" checked={cfg.requestJsonResponse ?? false} onChange={v => setCfg({ requestJsonResponse: v })} />
             </div>
-            <div className="bg-black/[0.04] border border-black/[0.07]/40 rounded-xl overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-black/[0.06]/40">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Guardrail Routes</p>
+            <div className="bg-card/[0.04] border border-white/[0.07]/40 rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]/40">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Guardrail Routes</p>
                 <button type="button" onClick={() => setCfg({ guardrailRoutes: [...(cfg.guardrailRoutes ?? []), { name: "", scoreThreshold: 0.8, utterances: "", response: "" }] })}
-                  className="text-[11px] text-black/75 hover:text-emerald-300 flex items-center gap-1">
+                  className="text-[11px] text-white/75 hover:text-emerald-300 flex items-center gap-1">
                   <Plus className="h-3 w-3" /> Add Route
                 </button>
               </div>
               {!(cfg.guardrailRoutes?.length) ? (
-                <p className="text-[11px] text-black/35 px-4 py-3">No guardrail routes. Add routes to intercept specific user intents.</p>
+                <p className="text-[11px] text-white/35 px-4 py-3">No guardrail routes. Add routes to intercept specific user intents.</p>
               ) : (
                 <div className="divide-y divide-black/[0.06]/40">
                   {cfg.guardrailRoutes!.map((route, i) => (
                     <div key={i} className="px-4 py-3 space-y-2">
                       <div className="flex items-center gap-2">
                         <input value={route.name} onChange={e => { const r = [...cfg.guardrailRoutes!]; r[i] = { ...r[i]!, name: e.target.value }; setCfg({ guardrailRoutes: r }); }}
-                          placeholder="Route name" className="flex-1 h-7 rounded-md bg-white/70 backdrop-blur-lg border border-black/[0.07] text-black/75 text-xs px-2.5 placeholder:text-black/35 focus:outline-none focus:border-[#ACADB1]" />
-                        <button type="button" onClick={() => setCfg({ guardrailRoutes: cfg.guardrailRoutes!.filter((_, j) => j !== i) })} className="text-black/35 hover:text-red-400"><X className="h-3.5 w-3.5" /></button>
+                          placeholder="Route name" className="flex-1 h-7 rounded-md bg-popover/90 backdrop-blur-lg border border-white/[0.07] text-white/75 text-xs px-2.5 placeholder:text-white/35 focus:outline-none focus:border-[#ACADB1]" />
+                        <button type="button" onClick={() => setCfg({ guardrailRoutes: cfg.guardrailRoutes!.filter((_, j) => j !== i) })} className="text-white/35 hover:text-red-400"><X className="h-3.5 w-3.5" /></button>
                       </div>
                       <SliderRow label={`Score threshold: ${route.scoreThreshold.toFixed(2)}`} value={route.scoreThreshold}
                         onChange={v => { const r = [...cfg.guardrailRoutes!]; r[i] = { ...r[i]!, scoreThreshold: v }; setCfg({ guardrailRoutes: r }); }} min={0} max={1} step={0.01} />
                       <textarea value={route.utterances} onChange={e => { const r = [...cfg.guardrailRoutes!]; r[i] = { ...r[i]!, utterances: e.target.value }; setCfg({ guardrailRoutes: r }); }}
                         placeholder="Sample utterances (one per line)" rows={2}
-                        className="w-full rounded-md bg-white/70 backdrop-blur-lg border border-black/[0.07] text-black/75 text-xs px-2.5 py-1.5 placeholder:text-black/35 focus:outline-none focus:border-[#ACADB1] resize-none" />
+                        className="w-full rounded-md bg-popover/90 backdrop-blur-lg border border-white/[0.07] text-white/75 text-xs px-2.5 py-1.5 placeholder:text-white/35 focus:outline-none focus:border-[#ACADB1] resize-none" />
                       <input value={route.response} onChange={e => { const r = [...cfg.guardrailRoutes!]; r[i] = { ...r[i]!, response: e.target.value }; setCfg({ guardrailRoutes: r }); }}
                         placeholder="Response to send when triggered"
-                        className="w-full h-7 rounded-md bg-white/70 backdrop-blur-lg border border-black/[0.07] text-black/75 text-xs px-2.5 placeholder:text-black/35 focus:outline-none focus:border-[#ACADB1]" />
+                        className="w-full h-7 rounded-md bg-popover/90 backdrop-blur-lg border border-white/[0.07] text-white/75 text-xs px-2.5 placeholder:text-white/35 focus:outline-none focus:border-[#ACADB1]" />
                     </div>
                   ))}
                 </div>
@@ -1228,49 +1228,49 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
         <TabsContent value="audio" className="flex-1 overflow-y-auto m-0 px-5 py-4">
           <div className="max-w-2xl space-y-5">
             <div className="grid grid-cols-2 gap-3">
-              <div className="bg-black/[0.06] border border-black/[0.04] rounded-xl p-3.5 space-y-2">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Primary Language</p>
+              <div className="bg-card/[0.06] border border-white/[0.04] rounded-xl p-3.5 space-y-2">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Primary Language</p>
                 <Select value={asrLanguage} onValueChange={mark(setAsrLanguage)}>
-                  <SelectTrigger className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07] max-h-60">
-                    {LANGUAGES.map(l => <SelectItem key={l.value} value={l.value} className="text-black/75 text-xs">{l.label}</SelectItem>)}
+                  <SelectTrigger className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75"><SelectValue /></SelectTrigger>
+                  <SelectContent className="bg-popover/90 backdrop-blur-lg border-white/[0.07] max-h-60">
+                    {LANGUAGES.map(l => <SelectItem key={l.value} value={l.value} className="text-white/75 text-xs">{l.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
-              <div className="bg-black/[0.06] border border-black/[0.04] rounded-xl p-3.5 space-y-2">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Secondary Language</p>
+              <div className="bg-card/[0.06] border border-white/[0.04] rounded-xl p-3.5 space-y-2">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Secondary Language</p>
                 <Select value={cfg.secondaryLanguage ?? "none"} onValueChange={v => setCfg({ secondaryLanguage: v === "none" ? undefined : v })}>
-                  <SelectTrigger className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07] max-h-60">
-                    <SelectItem value="none" className="text-black/50 text-xs">— None —</SelectItem>
-                    {LANGUAGES.map(l => <SelectItem key={l.value} value={l.value} className="text-black/75 text-xs">{l.label}</SelectItem>)}
+                  <SelectTrigger className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75"><SelectValue /></SelectTrigger>
+                  <SelectContent className="bg-popover/90 backdrop-blur-lg border-white/[0.07] max-h-60">
+                    <SelectItem value="none" className="text-white/50 text-xs">— None —</SelectItem>
+                    {LANGUAGES.map(l => <SelectItem key={l.value} value={l.value} className="text-white/75 text-xs">{l.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
             </div>
-            <div className="bg-black/[0.04] border border-black/[0.07]/40 rounded-xl p-4 space-y-4">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Transcriber</p>
+            <div className="bg-card/[0.04] border border-white/[0.07]/40 rounded-xl p-4 space-y-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Transcriber</p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <p className="text-xs text-black/50 mb-1">Provider</p>
+                  <p className="text-xs text-white/50 mb-1">Provider</p>
                   <Select value={asrProvider} onValueChange={v => { mark(setAsrProvider)(v); setAsrModel(ASR_MODELS[v]?.[0]?.value ?? ""); }}>
-                    <SelectTrigger className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
-                    <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07]">
-                      {ASR_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-black/75 text-xs">{p.label}</SelectItem>)}
+                    <SelectTrigger className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-popover/90 backdrop-blur-lg border-white/[0.07]">
+                      {ASR_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-white/75 text-xs">{p.label}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <p className="text-xs text-black/50 mb-1">Model</p>
+                  <p className="text-xs text-white/50 mb-1">Model</p>
                   {asrModelOptions.length > 0
                     ? <Select value={asrModel} onValueChange={mark(setAsrModel)}>
-                        <SelectTrigger className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
-                        <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07]">
-                          {asrModelOptions.map(m => <SelectItem key={m.value} value={m.value} className="text-black/75 text-xs">{m.label}</SelectItem>)}
+                        <SelectTrigger className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75"><SelectValue /></SelectTrigger>
+                        <SelectContent className="bg-popover/90 backdrop-blur-lg border-white/[0.07]">
+                          {asrModelOptions.map(m => <SelectItem key={m.value} value={m.value} className="text-white/75 text-xs">{m.label}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     : <Input value={asrModel} onChange={e => { setAsrModel(e.target.value); setDirty(true); }} placeholder="Model name"
-                        className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75" />
+                        className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75" />
                   }
                 </div>
               </div>
@@ -1283,69 +1283,69 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
               <ToggleRow label="Auto Fallback" desc="Automatically pick a backup STT provider if primary fails" checked={asrAutoFallback}
                 onChange={v => { setAsrAutoFallback(v); setDirty(true); }} />
               <div>
-                <p className="text-xs text-black/50 mb-1.5">Smart Endpointing</p>
-                <div className="flex border border-black/[0.07] rounded-lg p-0.5 bg-white/70 backdrop-blur-lg w-fit">
+                <p className="text-xs text-white/50 mb-1.5">Smart Endpointing</p>
+                <div className="flex border border-white/[0.07] rounded-lg p-0.5 bg-popover/90 backdrop-blur-lg w-fit">
                   {(["off", "vapi", "livekit"] as const).map(opt => (
                     <button key={opt} type="button" onClick={() => { setAsrSmartEndpointing(opt); setDirty(true); }}
-                      className={`text-xs h-7 px-4 rounded-md transition-colors ${asrSmartEndpointing === opt ? "bg-black/[0.10] text-black/85 font-semibold" : "text-black/35 hover:text-black/75"}`}>
+                      className={`text-xs h-7 px-4 rounded-md transition-colors ${asrSmartEndpointing === opt ? "bg-card/[0.10] text-white/85 font-semibold" : "text-white/35 hover:text-white/75"}`}>
                       {opt === "off" ? "Off" : opt === "vapi" ? "VAPI" : "LiveKit"}
                     </button>
                   ))}
                 </div>
               </div>
               <div>
-                <p className="text-xs text-black/50 mb-1">Keyterms</p>
+                <p className="text-xs text-white/50 mb-1">Keyterms</p>
                 <Textarea value={asrKeyterms} onChange={e => { setAsrKeyterms(e.target.value); setDirty(true); }}
                   placeholder="e.g. SnapServe, API, webhook" rows={2}
-                  className="bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75 text-xs resize-none placeholder:text-black/35" />
+                  className="bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75 text-xs resize-none placeholder:text-white/35" />
               </div>
             </div>
-            <div className="bg-black/[0.04] border border-black/[0.07]/40 rounded-xl p-4 space-y-4">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Synthesizer</p>
+            <div className="bg-card/[0.04] border border-white/[0.07]/40 rounded-xl p-4 space-y-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Synthesizer</p>
 
               {ttsProvider === "cartesia" ? (
                 <div className="space-y-3">
                   {/* Provider row */}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <p className="text-xs text-black/50 mb-1">Provider</p>
+                      <p className="text-xs text-white/50 mb-1">Provider</p>
                       <Select value={ttsProvider} onValueChange={v => { mark(setTtsProvider)(v); setTtsModel(v === "cartesia" ? "sonic-2" : (TTS_MODELS[v]?.[0]?.value ?? "")); setTtsVoice(""); }}>
-                        <SelectTrigger className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
-                        <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07]">
-                          {TTS_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-black/75 text-xs">{p.label}</SelectItem>)}
+                        <SelectTrigger className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75"><SelectValue /></SelectTrigger>
+                        <SelectContent className="bg-popover/90 backdrop-blur-lg border-white/[0.07]">
+                          {TTS_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-white/75 text-xs">{p.label}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
                     <div>
-                      <p className="text-xs text-black/50 mb-1">Model</p>
+                      <p className="text-xs text-white/50 mb-1">Model</p>
                       <Select value={ttsModel || "sonic-2"} onValueChange={v => { setTtsModel(v); setDirty(true); }}>
-                        <SelectTrigger className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
-                        <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07]">
-                          {TTS_MODELS.cartesia.map(m => <SelectItem key={m.value} value={m.value} className="text-black/75 text-xs">{m.label}</SelectItem>)}
+                        <SelectTrigger className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75"><SelectValue /></SelectTrigger>
+                        <SelectContent className="bg-popover/90 backdrop-blur-lg border-white/[0.07]">
+                          {TTS_MODELS.cartesia.map(m => <SelectItem key={m.value} value={m.value} className="text-white/75 text-xs">{m.label}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
                   </div>
                   {/* Voice row with preview */}
                   <div>
-                    <p className="text-xs text-black/50 mb-1">Voice</p>
+                    <p className="text-xs text-white/50 mb-1">Voice</p>
                     <div className="flex gap-2">
                       <Select
                         value={ttsVoice || ARUSHI_VOICE.id}
                         onValueChange={v => { setTtsVoice(v); setDirty(true); }}
                       >
-                        <SelectTrigger className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75 flex-1">
+                        <SelectTrigger className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75 flex-1">
                           <SelectValue placeholder={loadingCartesiaVoices ? "Loading voices…" : "Select voice"} />
                         </SelectTrigger>
-                        <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07] max-h-72">
+                        <SelectContent className="bg-popover/90 backdrop-blur-lg border-white/[0.07] max-h-72">
                           {loadingCartesiaVoices
-                            ? <div className="flex items-center gap-2 px-3 py-2 text-xs text-black/50"><Loader2 className="h-3 w-3 animate-spin" /> Loading…</div>
+                            ? <div className="flex items-center gap-2 px-3 py-2 text-xs text-white/50"><Loader2 className="h-3 w-3 animate-spin" /> Loading…</div>
                             : cartesiaVoices.map(v => (
-                                <SelectItem key={v.id} value={v.id} className="text-black/75 text-xs">
+                                <SelectItem key={v.id} value={v.id} className="text-white/75 text-xs">
                                   <span className="flex items-center gap-1.5">
                                     {v.name}
-                                    {v.gender && <span className="text-black/35 text-[10px]">· {v.gender}</span>}
-                                    <span className="text-black/25 text-[10px]">· {langLabel(v.language)}</span>
+                                    {v.gender && <span className="text-white/35 text-[10px]">· {v.gender}</span>}
+                                    <span className="text-white/25 text-[10px]">· {langLabel(v.language)}</span>
                                   </span>
                                 </SelectItem>
                               ))
@@ -1356,7 +1356,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                         type="button"
                         title="Preview voice"
                         onClick={() => void previewVoice(ttsVoice || ARUSHI_VOICE.id)}
-                        className="h-7 w-7 shrink-0 flex items-center justify-center rounded-md border border-black/[0.07] bg-white/70 hover:bg-black/[0.08] text-black/50 hover:text-black/75 transition-colors"
+                        className="h-7 w-7 shrink-0 flex items-center justify-center rounded-md border border-white/[0.07] bg-card/70 hover:bg-card/[0.08] text-white/50 hover:text-white/75 transition-colors"
                       >
                         {voicePlaying === (ttsVoice || ARUSHI_VOICE.id)
                           ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1368,32 +1368,32 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                       <p className="text-[10px] text-amber-600/70 mt-1">Configure Cartesia key in Admin → Managed Keys to see all Indian voices</p>
                     )}
                     {ttsVoice && cartesiaVoiceSource === "cartesia" && (
-                      <p className="text-[10px] text-black/35 mt-1 font-mono truncate">{ttsVoice}</p>
+                      <p className="text-[10px] text-white/35 mt-1 font-mono truncate">{ttsVoice}</p>
                     )}
                   </div>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <p className="text-xs text-black/50 mb-1">Provider</p>
+                    <p className="text-xs text-white/50 mb-1">Provider</p>
                     <Select value={ttsProvider} onValueChange={v => { mark(setTtsProvider)(v); setTtsModel(TTS_MODELS[v]?.[0]?.value ?? ""); setTtsVoice(""); }}>
-                      <SelectTrigger className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
-                      <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07]">
-                        {TTS_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-black/75 text-xs">{p.label}</SelectItem>)}
+                      <SelectTrigger className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75"><SelectValue /></SelectTrigger>
+                      <SelectContent className="bg-popover/90 backdrop-blur-lg border-white/[0.07]">
+                        {TTS_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-white/75 text-xs">{p.label}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
                   <div>
-                    <p className="text-xs text-black/50 mb-1">Voice / Model</p>
+                    <p className="text-xs text-white/50 mb-1">Voice / Model</p>
                     {TTS_MODELS[ttsProvider]
                       ? <Select value={ttsModel} onValueChange={mark(setTtsModel)}>
-                          <SelectTrigger className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75"><SelectValue placeholder="Select voice" /></SelectTrigger>
-                          <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07] max-h-60">
-                            {TTS_MODELS[ttsProvider]!.map(m => <SelectItem key={m.value} value={m.value} className="text-black/75 text-xs">{m.label}</SelectItem>)}
+                          <SelectTrigger className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75"><SelectValue placeholder="Select voice" /></SelectTrigger>
+                          <SelectContent className="bg-popover/90 backdrop-blur-lg border-white/[0.07] max-h-60">
+                            {TTS_MODELS[ttsProvider]!.map(m => <SelectItem key={m.value} value={m.value} className="text-white/75 text-xs">{m.label}</SelectItem>)}
                           </SelectContent>
                         </Select>
                       : <Input value={ttsModel} onChange={e => { setTtsModel(e.target.value); setDirty(true); }} placeholder="Voice / model name"
-                          className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75" />
+                          className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75" />
                     }
                   </div>
                 </div>
@@ -1401,7 +1401,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
               {/* ── Auto-config banner ── */}
               {telephony && TELEPHONY_AUDIO_DEFAULTS[telephony] ? (
                 <div className="rounded-lg bg-emerald-950/40 border border-emerald-800/50 px-3 py-2.5 flex items-start gap-2.5">
-                  <Check className="h-3.5 w-3.5 text-black/75 mt-0.5 shrink-0" />
+                  <Check className="h-3.5 w-3.5 text-white/75 mt-0.5 shrink-0" />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs text-emerald-300 font-medium">
                       Auto-configured for {TELEPHONY_PROVIDERS.find(p => p.value === telephony)?.label}
@@ -1413,18 +1413,18 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                   <button
                     type="button"
                     onClick={() => setAudioAdvanced(v => !v)}
-                    className="text-[11px] text-black/35 hover:text-black/75 whitespace-nowrap shrink-0 mt-0.5"
+                    className="text-[11px] text-white/35 hover:text-white/75 whitespace-nowrap shrink-0 mt-0.5"
                   >
                     {audioAdvanced ? "Hide advanced" : "Advanced"}
                   </button>
                 </div>
               ) : (
-                <div className="rounded-lg bg-white/70 backdrop-blur-lg border border-black/[0.04] px-3 py-2.5 flex items-center justify-between">
-                  <p className="text-[11px] text-black/35">Select a telephony provider above to auto-configure audio.</p>
+                <div className="rounded-lg bg-popover/90 backdrop-blur-lg border border-white/[0.04] px-3 py-2.5 flex items-center justify-between">
+                  <p className="text-[11px] text-white/35">Select a telephony provider above to auto-configure audio.</p>
                   <button
                     type="button"
                     onClick={() => setAudioAdvanced(v => !v)}
-                    className="text-[11px] text-black/35 hover:text-black/75"
+                    className="text-[11px] text-white/35 hover:text-white/75"
                   >
                     {audioAdvanced ? "Hide" : "Manual setup"}
                   </button>
@@ -1433,37 +1433,37 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
 
               {/* ── Advanced knobs (hidden by default) ── */}
               {audioAdvanced && (
-                <div className="space-y-3 pt-1 border-t border-black/[0.07]/40">
+                <div className="space-y-3 pt-1 border-t border-white/[0.07]/40">
                   <div className="grid grid-cols-3 gap-3">
                     <div>
-                      <p className="text-xs text-black/50 mb-1">Sampling Rate</p>
+                      <p className="text-xs text-white/50 mb-1">Sampling Rate</p>
                       <Input type="number" value={cfg.ttsSamplingRate ?? ""} onChange={e => setCfg({ ttsSamplingRate: parseInt(e.target.value) || undefined })}
-                        placeholder="e.g. 8000" className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75 placeholder:text-black/35" />
+                        placeholder="e.g. 8000" className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75 placeholder:text-white/35" />
                     </div>
                     <div>
-                      <p className="text-xs text-black/50 mb-1">Encoding</p>
+                      <p className="text-xs text-white/50 mb-1">Encoding</p>
                       <Select value={cfg.ttsEncoding ?? "none"} onValueChange={v => setCfg({ ttsEncoding: v === "none" ? undefined : v })}>
-                        <SelectTrigger className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75"><SelectValue placeholder="Default" /></SelectTrigger>
-                        <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07]">
-                          <SelectItem value="none" className="text-black/50 text-xs">Default</SelectItem>
-                          <SelectItem value="pcm_s16le" className="text-black/75 text-xs">PCM 16-bit LE</SelectItem>
-                          <SelectItem value="mulaw" className="text-black/75 text-xs">μ-law</SelectItem>
-                          <SelectItem value="alaw" className="text-black/75 text-xs">A-law</SelectItem>
-                          <SelectItem value="mp3" className="text-black/75 text-xs">MP3</SelectItem>
-                          <SelectItem value="opus" className="text-black/75 text-xs">Opus</SelectItem>
+                        <SelectTrigger className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75"><SelectValue placeholder="Default" /></SelectTrigger>
+                        <SelectContent className="bg-popover/90 backdrop-blur-lg border-white/[0.07]">
+                          <SelectItem value="none" className="text-white/50 text-xs">Default</SelectItem>
+                          <SelectItem value="pcm_s16le" className="text-white/75 text-xs">PCM 16-bit LE</SelectItem>
+                          <SelectItem value="mulaw" className="text-white/75 text-xs">μ-law</SelectItem>
+                          <SelectItem value="alaw" className="text-white/75 text-xs">A-law</SelectItem>
+                          <SelectItem value="mp3" className="text-white/75 text-xs">MP3</SelectItem>
+                          <SelectItem value="opus" className="text-white/75 text-xs">Opus</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                     <div>
-                      <p className="text-xs text-black/50 mb-1">Format</p>
+                      <p className="text-xs text-white/50 mb-1">Format</p>
                       <Select value={cfg.ttsAudioFormat ?? "none"} onValueChange={v => setCfg({ ttsAudioFormat: v === "none" ? undefined : v })}>
-                        <SelectTrigger className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75"><SelectValue placeholder="Default" /></SelectTrigger>
-                        <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07]">
-                          <SelectItem value="none" className="text-black/50 text-xs">Default</SelectItem>
-                          <SelectItem value="wav" className="text-black/75 text-xs">WAV</SelectItem>
-                          <SelectItem value="mp3" className="text-black/75 text-xs">MP3</SelectItem>
-                          <SelectItem value="ogg" className="text-black/75 text-xs">OGG</SelectItem>
-                          <SelectItem value="flac" className="text-black/75 text-xs">FLAC</SelectItem>
+                        <SelectTrigger className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75"><SelectValue placeholder="Default" /></SelectTrigger>
+                        <SelectContent className="bg-popover/90 backdrop-blur-lg border-white/[0.07]">
+                          <SelectItem value="none" className="text-white/50 text-xs">Default</SelectItem>
+                          <SelectItem value="wav" className="text-white/75 text-xs">WAV</SelectItem>
+                          <SelectItem value="mp3" className="text-white/75 text-xs">MP3</SelectItem>
+                          <SelectItem value="ogg" className="text-white/75 text-xs">OGG</SelectItem>
+                          <SelectItem value="flac" className="text-white/75 text-xs">FLAC</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -1472,8 +1472,8 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                 </div>
               )}
             </div>
-            <div className="bg-black/[0.04] border border-black/[0.07]/40 rounded-xl p-4 space-y-3">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Telephony</p>
+            <div className="bg-card/[0.04] border border-white/[0.07]/40 rounded-xl p-4 space-y-3">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Telephony</p>
               <Select
                 value={telephony}
                 onValueChange={v => {
@@ -1485,9 +1485,9 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                   }
                 }}
               >
-                <SelectTrigger className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
-                <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07]">
-                  {TELEPHONY_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-black/75 text-xs">{p.label}</SelectItem>)}
+                <SelectTrigger className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75"><SelectValue /></SelectTrigger>
+                <SelectContent className="bg-popover/90 backdrop-blur-lg border-white/[0.07]">
+                  {TELEPHONY_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-white/75 text-xs">{p.label}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -1497,15 +1497,15 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
         {/* ── Tab 4: Engine ── */}
         <TabsContent value="engine" className="flex-1 overflow-y-auto m-0 px-5 py-4">
           <div className="max-w-2xl space-y-5">
-            <div className="bg-black/[0.04] border border-black/[0.07]/40 rounded-xl p-4 space-y-5">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Interruption</p>
+            <div className="bg-card/[0.04] border border-white/[0.07]/40 rounded-xl p-4 space-y-5">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Interruption</p>
               <SliderRow label="Words for Interruption" desc="How many user words trigger an interruption" value={cfg.wordsForInterruption ?? 2}
                 onChange={v => setCfg({ wordsForInterruption: v })} min={1} max={10} step={1} />
               <SliderRow label="Incremental Delay" desc="Delay between LLM streaming chunks" value={cfg.incrementalDelay ?? 100}
                 onChange={v => setCfg({ incrementalDelay: v })} min={0} max={2000} step={10} unit="ms" />
             </div>
-            <div className="bg-black/[0.04] border border-black/[0.07]/40 rounded-xl p-4 space-y-5">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Backchanneling</p>
+            <div className="bg-card/[0.04] border border-white/[0.07]/40 rounded-xl p-4 space-y-5">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Backchanneling</p>
               <ToggleRow label="Backchanneling" desc={'Short acknowledgements ("mm-hmm", "I see") while the LLM is thinking'}
                 checked={backchannelingEnabled} onChange={v => { setBackchannelingEnabled(v); setDirty(true); }} />
               {backchannelingEnabled && (
@@ -1517,18 +1517,18 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                 </>
               )}
             </div>
-            <div className="bg-black/[0.04] border border-black/[0.07]/40 rounded-xl p-4 space-y-4">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Ambient &amp; Noise</p>
+            <div className="bg-card/[0.04] border border-white/[0.07]/40 rounded-xl p-4 space-y-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Ambient &amp; Noise</p>
               <ToggleRow label="Ambient Noise" desc="Play background audio to make the call feel natural"
                 checked={cfg.ambientNoiseEnabled ?? false} onChange={v => setCfg({ ambientNoiseEnabled: v })} />
               {cfg.ambientNoiseEnabled && (
                 <div>
-                  <p className="text-xs text-black/50 mb-1">Track</p>
+                  <p className="text-xs text-white/50 mb-1">Track</p>
                   <Select value={cfg.ambientNoiseTrack ?? "office-ambience"} onValueChange={v => setCfg({ ambientNoiseTrack: v })}>
-                    <SelectTrigger className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
-                    <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07]">
+                    <SelectTrigger className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-popover/90 backdrop-blur-lg border-white/[0.07]">
                       {["office-ambience","cafe","coffee-shop","convention-hall","home","outdoor","restaurant"].map(t => (
-                        <SelectItem key={t} value={t} className="text-black/75 text-xs capitalize">{t.replace(/-/g, " ")}</SelectItem>
+                        <SelectItem key={t} value={t} className="text-white/75 text-xs capitalize">{t.replace(/-/g, " ")}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -1538,15 +1538,15 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                 checked={noiseCancellationEnabled} onChange={v => { setNoiseCancellationEnabled(v); setDirty(true); }} />
             </div>
             {/* ── Gender Detection ── */}
-            <div className="bg-black/[0.04] border border-black/[0.07]/40 rounded-xl p-4 space-y-4">
+            <div className="bg-card/[0.04] border border-white/[0.07]/40 rounded-xl p-4 space-y-4">
               <div className="flex items-start gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-violet-950/60 border border-violet-800/40 flex items-center justify-center shrink-0">
                   <span className="text-sm">🎙</span>
                 </div>
                 <div>
-                  <p className="text-xs font-semibold text-black/75">Caller Gender Detection</p>
-                  <p className="text-[10px] text-black/35 mt-0.5 leading-relaxed">
-                    Analyse the caller's voice within the first few seconds and inject <code className="bg-black/[0.08] text-violet-400 rounded px-1 py-px">{"{caller_salutation}"}</code> into your agent prompt — automatically addressing them as <em>sir</em> or <em>ma'am</em>.
+                  <p className="text-xs font-semibold text-white/75">Caller Gender Detection</p>
+                  <p className="text-[10px] text-white/35 mt-0.5 leading-relaxed">
+                    Analyse the caller's voice within the first few seconds and inject <code className="bg-card/[0.08] text-violet-400 rounded px-1 py-px">{"{caller_salutation}"}</code> into your agent prompt — automatically addressing them as <em>sir</em> or <em>ma'am</em>.
                   </p>
                 </div>
               </div>
@@ -1559,57 +1559,57 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
               {cfg.genderDetectionEnabled && (
                 <>
                   <div>
-                    <p className="text-xs text-black/50 mb-1">Detection Provider</p>
+                    <p className="text-xs text-white/50 mb-1">Detection Provider</p>
                     <Select value={cfg.genderDetectionProvider ?? "deepgram"} onValueChange={v => setCfg({ genderDetectionProvider: v })}>
-                      <SelectTrigger className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
-                      <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07]">
-                        <SelectItem value="deepgram" className="text-black/75 text-xs">Deepgram (voice type signal)</SelectItem>
-                        <SelectItem value="assemblyai" className="text-black/75 text-xs">AssemblyAI (speaker analysis)</SelectItem>
-                        <SelectItem value="azure" className="text-black/75 text-xs">Azure Speaker Recognition</SelectItem>
-                        <SelectItem value="internal" className="text-black/75 text-xs">SnapServe built-in (pitch analysis)</SelectItem>
+                      <SelectTrigger className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75"><SelectValue /></SelectTrigger>
+                      <SelectContent className="bg-popover/90 backdrop-blur-lg border-white/[0.07]">
+                        <SelectItem value="deepgram" className="text-white/75 text-xs">Deepgram (voice type signal)</SelectItem>
+                        <SelectItem value="assemblyai" className="text-white/75 text-xs">AssemblyAI (speaker analysis)</SelectItem>
+                        <SelectItem value="azure" className="text-white/75 text-xs">Azure Speaker Recognition</SelectItem>
+                        <SelectItem value="internal" className="text-white/75 text-xs">SnapServe built-in (pitch analysis)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="grid grid-cols-3 gap-2">
                     <div>
-                      <p className="text-xs text-black/50 mb-1">Male salutation</p>
+                      <p className="text-xs text-white/50 mb-1">Male salutation</p>
                       <Input value={cfg.genderDetectionMaleSalutation ?? "sir"}
                         onChange={e => setCfg({ genderDetectionMaleSalutation: e.target.value })}
-                        className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75" />
+                        className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75" />
                     </div>
                     <div>
-                      <p className="text-xs text-black/50 mb-1">Female salutation</p>
+                      <p className="text-xs text-white/50 mb-1">Female salutation</p>
                       <Input value={cfg.genderDetectionFemaleSalutation ?? "ma'am"}
                         onChange={e => setCfg({ genderDetectionFemaleSalutation: e.target.value })}
-                        className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75" />
+                        className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75" />
                     </div>
                     <div>
-                      <p className="text-xs text-black/50 mb-1">Neutral / unknown</p>
+                      <p className="text-xs text-white/50 mb-1">Neutral / unknown</p>
                       <Input value={cfg.genderDetectionNeutralSalutation ?? ""}
                         onChange={e => setCfg({ genderDetectionNeutralSalutation: e.target.value })}
                         placeholder="(skip)"
-                        className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75 placeholder:text-black/35" />
+                        className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75 placeholder:text-white/35" />
                     </div>
                   </div>
                   <div className="rounded-lg bg-violet-950/30 border border-violet-800/40 px-3 py-2.5 space-y-1">
                     <p className="text-[10px] font-semibold text-violet-400 uppercase tracking-widest">How to use in your prompt</p>
-                    <p className="text-[11px] text-black/50 leading-relaxed">
-                      Add <code className="bg-black/[0.08] text-violet-300 rounded px-1">{"{caller_salutation}"}</code> anywhere in your Agent Prompt. At call start it will be replaced with the detected value.
+                    <p className="text-[11px] text-white/50 leading-relaxed">
+                      Add <code className="bg-card/[0.08] text-violet-300 rounded px-1">{"{caller_salutation}"}</code> anywhere in your Agent Prompt. At call start it will be replaced with the detected value.
                     </p>
-                    <p className="text-[11px] text-black/35 italic mt-1">
-                      Example: <span className="not-italic text-black/35">"Good morning, {"{caller_salutation}"}! How can I help you today?"</span>
+                    <p className="text-[11px] text-white/35 italic mt-1">
+                      Example: <span className="not-italic text-white/35">"Good morning, {"{caller_salutation}"}! How can I help you today?"</span>
                     </p>
                   </div>
                 </>
               )}
             </div>
 
-            <div className="bg-black/[0.04] border border-black/[0.07]/40 rounded-xl p-4 space-y-3">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">End Call Phrases</p>
+            <div className="bg-card/[0.04] border border-white/[0.07]/40 rounded-xl p-4 space-y-3">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35">End Call Phrases</p>
               <Textarea value={endCallPhrases} onChange={e => { setEndCallPhrases(e.target.value); setDirty(true); }}
                 placeholder="goodbye, bye, thanks for calling" rows={2}
-                className="bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75 text-xs resize-none placeholder:text-black/35" />
-              <p className="text-[10px] text-black/35">Comma-separated phrases that trigger hangup when detected.</p>
+                className="bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75 text-xs resize-none placeholder:text-white/35" />
+              <p className="text-[10px] text-white/35">Comma-separated phrases that trigger hangup when detected.</p>
             </div>
           </div>
         </TabsContent>
@@ -1617,8 +1617,8 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
         {/* ── Tab 5: Call ── */}
         <TabsContent value="call" className="flex-1 overflow-y-auto m-0 px-5 py-4">
           <div className="max-w-2xl space-y-5">
-            <div className="bg-black/[0.04] border border-black/[0.07]/40 rounded-xl p-4 space-y-5">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Duration &amp; Silence</p>
+            <div className="bg-card/[0.04] border border-white/[0.07]/40 rounded-xl p-4 space-y-5">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Duration &amp; Silence</p>
               <SliderRow label="Max Call Duration" desc="Auto-terminate after this duration" value={maxDuration}
                 onChange={v => { setMaxDuration(v); setDirty(true); }} min={30} max={3600} step={30} unit="s" />
               <SliderRow label="Hangup After Silence" desc="End call if caller is silent this long" value={silenceTimeout}
@@ -1626,80 +1626,80 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
               <ToggleRow label="Hangup After LLM Call" desc="Hang up automatically when the LLM finishes its response"
                 checked={cfg.hangupAfterLlmCall ?? false} onChange={v => setCfg({ hangupAfterLlmCall: v })} />
             </div>
-            <div className="bg-black/[0.04] border border-black/[0.07]/40 rounded-xl p-4 space-y-4">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Messages</p>
+            <div className="bg-card/[0.04] border border-white/[0.07]/40 rounded-xl p-4 space-y-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Messages</p>
               <div>
-                <p className="text-xs text-black/50 mb-1">Cancellation Prompt</p>
+                <p className="text-xs text-white/50 mb-1">Cancellation Prompt</p>
                 <Textarea value={cfg.callCancellationPrompt ?? ""} onChange={e => setCfg({ callCancellationPrompt: e.target.value })}
                   placeholder="What to say when cancelling the call…" rows={2}
-                  className="bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75 text-xs resize-none placeholder:text-black/35" />
+                  className="bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75 text-xs resize-none placeholder:text-white/35" />
               </div>
               <div>
-                <p className="text-xs text-black/50 mb-1">Inactivity Message</p>
+                <p className="text-xs text-white/50 mb-1">Inactivity Message</p>
                 <Input value={inactivityMessage} onChange={e => { setInactivityMessage(e.target.value); setDirty(true); }}
-                  placeholder="Are you still there?" className="h-8 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75 placeholder:text-black/35" />
+                  placeholder="Are you still there?" className="h-8 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75 placeholder:text-white/35" />
               </div>
             </div>
-            <div className="bg-black/[0.04] border border-black/[0.07]/40 rounded-xl p-4 space-y-4">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Detection (P2-B)</p>
+            <div className="bg-card/[0.04] border border-white/[0.07]/40 rounded-xl p-4 space-y-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Detection (P2-B)</p>
               <ToggleRow label="Voicemail / AMD Detection" desc="Detect answering machines on outbound calls and respond appropriately"
                 checked={cfg.voicemailDetection ?? false} onChange={v => setCfg({ voicemailDetection: v })} />
               {cfg.voicemailDetection && (
                 <>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <p className="text-xs text-black/50 mb-1">Detection mode</p>
+                      <p className="text-xs text-white/50 mb-1">Detection mode</p>
                       <Select value={cfg.machineDetectionMode ?? "DetectMessageEnd"}
                         onValueChange={v => setCfg({ machineDetectionMode: v as "Enable" | "DetectMessageEnd" })}>
-                        <SelectTrigger className="h-7 text-xs bg-white border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
-                        <SelectContent className="bg-white border-black/[0.07]">
-                          <SelectItem value="DetectMessageEnd" className="text-black/75 text-xs">🔔 Wait for beep (recommended)</SelectItem>
-                          <SelectItem value="Enable" className="text-black/75 text-xs">⚡ Immediate detect</SelectItem>
+                        <SelectTrigger className="h-7 text-xs bg-card border-white/[0.07] text-white/75"><SelectValue /></SelectTrigger>
+                        <SelectContent className="bg-card border-white/[0.07]">
+                          <SelectItem value="DetectMessageEnd" className="text-white/75 text-xs">🔔 Wait for beep (recommended)</SelectItem>
+                          <SelectItem value="Enable" className="text-white/75 text-xs">⚡ Immediate detect</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                     <div>
-                      <p className="text-xs text-black/50 mb-1">When machine detected</p>
+                      <p className="text-xs text-white/50 mb-1">When machine detected</p>
                       <Select value={cfg.voicemailAction ?? "hangup"}
                         onValueChange={v => setCfg({ voicemailAction: v as "hangup" | "leave_message" | "continue" })}>
-                        <SelectTrigger className="h-7 text-xs bg-white border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
-                        <SelectContent className="bg-white border-black/[0.07]">
-                          <SelectItem value="hangup"       className="text-black/75 text-xs">📵 Hang up</SelectItem>
-                          <SelectItem value="leave_message" className="text-black/75 text-xs">💬 Leave a message</SelectItem>
-                          <SelectItem value="continue"     className="text-black/75 text-xs">▶️ Continue as human</SelectItem>
+                        <SelectTrigger className="h-7 text-xs bg-card border-white/[0.07] text-white/75"><SelectValue /></SelectTrigger>
+                        <SelectContent className="bg-card border-white/[0.07]">
+                          <SelectItem value="hangup"       className="text-white/75 text-xs">📵 Hang up</SelectItem>
+                          <SelectItem value="leave_message" className="text-white/75 text-xs">💬 Leave a message</SelectItem>
+                          <SelectItem value="continue"     className="text-white/75 text-xs">▶️ Continue as human</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                   </div>
                   {cfg.voicemailAction === "leave_message" && (
                     <div>
-                      <p className="text-xs text-black/50 mb-1">Voicemail message</p>
+                      <p className="text-xs text-white/50 mb-1">Voicemail message</p>
                       <Textarea value={cfg.voicemailMessage ?? ""}
                         onChange={e => setCfg({ voicemailMessage: e.target.value })}
                         placeholder="Hi, this is a message from [Company]. Please call us back at +1 555…"
                         rows={2}
-                        className="bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75 text-xs resize-none placeholder:text-black/35" />
+                        className="bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75 text-xs resize-none placeholder:text-white/35" />
                     </div>
                   )}
-                  <p className="text-[10px] text-black/30 leading-relaxed">
+                  <p className="text-[10px] text-white/30 leading-relaxed">
                     AMD runs on outbound calls only. "Wait for beep" gives a natural pause before leaving messages.
                   </p>
                 </>
               )}
             </div>
             {/* P2-C: Call Recording */}
-            <div className="bg-black/[0.04] border border-black/[0.07]/40 rounded-xl p-4 space-y-4">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Recording (P2-C)</p>
+            <div className="bg-card/[0.04] border border-white/[0.07]/40 rounded-xl p-4 space-y-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Recording (P2-C)</p>
               <ToggleRow label="Record Calls" desc="Save an audio recording of every call for review and compliance"
                 checked={cfg.recordingEnabled ?? false} onChange={v => setCfg({ recordingEnabled: v })} />
               {cfg.recordingEnabled && (
                 <div className="w-40">
-                  <p className="text-xs text-black/50 mb-1">Audio format</p>
+                  <p className="text-xs text-white/50 mb-1">Audio format</p>
                   <Select value={cfg.recordingFormat ?? "mp3"} onValueChange={v => setCfg({ recordingFormat: v as "mp3" | "wav" })}>
-                    <SelectTrigger className="h-7 text-xs bg-white border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
-                    <SelectContent className="bg-white border-black/[0.07]">
-                      <SelectItem value="mp3" className="text-black/75 text-xs">MP3 (smaller)</SelectItem>
-                      <SelectItem value="wav" className="text-black/75 text-xs">WAV (lossless)</SelectItem>
+                    <SelectTrigger className="h-7 text-xs bg-card border-white/[0.07] text-white/75"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-card border-white/[0.07]">
+                      <SelectItem value="mp3" className="text-white/75 text-xs">MP3 (smaller)</SelectItem>
+                      <SelectItem value="wav" className="text-white/75 text-xs">WAV (lossless)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1707,26 +1707,26 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
             </div>
 
             {/* P2-D: IVR / DTMF pre-filter */}
-            <div className="bg-black/[0.04] border border-black/[0.07]/40 rounded-xl p-4 space-y-4">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">IVR / DTMF Pre-filter (P2-D)</p>
+            <div className="bg-card/[0.04] border border-white/[0.07]/40 rounded-xl p-4 space-y-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35">IVR / DTMF Pre-filter (P2-D)</p>
               <ToggleRow label="Enable IVR Menu" desc="Play a key-press menu before connecting the caller to this AI agent"
                 checked={cfg.ivrEnabled ?? false} onChange={v => setCfg({ ivrEnabled: v })} />
               {cfg.ivrEnabled && (
                 <>
                   <div>
-                    <p className="text-xs text-black/50 mb-1">Opening greeting</p>
+                    <p className="text-xs text-white/50 mb-1">Opening greeting</p>
                     <Input value={cfg.ivrGreeting ?? ""}
                       onChange={e => setCfg({ ivrGreeting: e.target.value })}
                       placeholder="Welcome to SnapServe. Please choose from the following options."
-                      className="h-7 text-xs bg-white border-black/[0.07] text-black/75 placeholder:text-black/30" />
+                      className="h-7 text-xs bg-card border-white/[0.07] text-white/75 placeholder:text-white/30" />
                   </div>
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <p className="text-xs text-black/50">Menu options</p>
+                      <p className="text-xs text-white/50">Menu options</p>
                       <button
                         type="button"
                         onClick={() => setCfg({ ivrOptions: [...(cfg.ivrOptions ?? []), { digit: "", label: "" }] })}
-                        className="text-[10px] bg-black/[0.08] hover:bg-black/[0.12] text-black/50 px-2 py-1 rounded-md transition-colors">
+                        className="text-[10px] bg-card/[0.08] hover:bg-card/[0.12] text-white/50 px-2 py-1 rounded-md transition-colors">
                         + Add option
                       </button>
                     </div>
@@ -1734,20 +1734,20 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                       <div key={idx} className="flex gap-2 mb-1.5 items-center">
                         <Input value={opt.digit}
                           onChange={e => { const opts = [...(cfg.ivrOptions ?? [])]; opts[idx] = { ...opts[idx], digit: e.target.value }; setCfg({ ivrOptions: opts }); }}
-                          placeholder="1" className="h-7 w-12 text-xs text-center bg-white border-black/[0.07] text-black/75 shrink-0" maxLength={1} />
+                          placeholder="1" className="h-7 w-12 text-xs text-center bg-card border-white/[0.07] text-white/75 shrink-0" maxLength={1} />
                         <Input value={opt.label}
                           onChange={e => { const opts = [...(cfg.ivrOptions ?? [])]; opts[idx] = { ...opts[idx], label: e.target.value }; setCfg({ ivrOptions: opts }); }}
-                          placeholder="Sales" className="h-7 flex-1 text-xs bg-white border-black/[0.07] text-black/75 placeholder:text-black/30" />
+                          placeholder="Sales" className="h-7 flex-1 text-xs bg-card border-white/[0.07] text-white/75 placeholder:text-white/30" />
                         <button type="button"
                           onClick={() => { const opts = (cfg.ivrOptions ?? []).filter((_, i) => i !== idx); setCfg({ ivrOptions: opts }); }}
-                          className="text-black/25 hover:text-red-500 transition-colors text-xs px-1">✕</button>
+                          className="text-white/25 hover:text-red-500 transition-colors text-xs px-1">✕</button>
                       </div>
                     ))}
                     {(cfg.ivrOptions ?? []).length === 0 && (
-                      <p className="text-[10px] text-black/25">No menu options yet — add at least one digit/label pair.</p>
+                      <p className="text-[10px] text-white/25">No menu options yet — add at least one digit/label pair.</p>
                     )}
                   </div>
-                  <p className="text-[10px] text-black/30 leading-relaxed">
+                  <p className="text-[10px] text-white/30 leading-relaxed">
                     The caller hears the greeting, presses a digit, and is routed to the agent assigned to that option.
                     Unmatched digits fall through to this agent.
                   </p>
@@ -1756,34 +1756,34 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
             </div>
 
             {/* P2-E: Call Queue */}
-            <div className="bg-black/[0.04] border border-black/[0.07]/40 rounded-xl p-4 space-y-4">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Call Queue (P2-E)</p>
+            <div className="bg-card/[0.04] border border-white/[0.07]/40 rounded-xl p-4 space-y-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Call Queue (P2-E)</p>
               <ToggleRow label="Enable Call Queue" desc="Hold new callers when agent is busy instead of dropping them"
                 checked={cfg.queueEnabled ?? false} onChange={v => setCfg({ queueEnabled: v })} />
               {cfg.queueEnabled && (
                 <>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <p className="text-xs text-black/50 mb-1">Max concurrent calls</p>
+                      <p className="text-xs text-white/50 mb-1">Max concurrent calls</p>
                       <Input type="number" min={1} max={20} value={cfg.queueMaxConcurrent ?? 1}
                         onChange={e => setCfg({ queueMaxConcurrent: parseInt(e.target.value) || 1 })}
-                        className="h-7 text-xs bg-white border-black/[0.07] text-black/75" />
+                        className="h-7 text-xs bg-card border-white/[0.07] text-white/75" />
                     </div>
                     <div>
-                      <p className="text-xs text-black/50 mb-1">Hold loop length (sec)</p>
+                      <p className="text-xs text-white/50 mb-1">Hold loop length (sec)</p>
                       <Input type="number" min={10} max={120} value={cfg.queueWaitSeconds ?? 30}
                         onChange={e => setCfg({ queueWaitSeconds: parseInt(e.target.value) || 30 })}
-                        className="h-7 text-xs bg-white border-black/[0.07] text-black/75" />
+                        className="h-7 text-xs bg-card border-white/[0.07] text-white/75" />
                     </div>
                   </div>
                   <div>
-                    <p className="text-xs text-black/50 mb-1">Hold music URL <span className="text-black/25">(optional — MP3 stream)</span></p>
+                    <p className="text-xs text-white/50 mb-1">Hold music URL <span className="text-white/25">(optional — MP3 stream)</span></p>
                     <Input value={cfg.queueHoldMusicUrl ?? ""}
                       onChange={e => setCfg({ queueHoldMusicUrl: e.target.value })}
                       placeholder="https://…/hold-music.mp3"
-                      className="h-7 text-xs bg-white border-black/[0.07] text-black/75 placeholder:text-black/30" />
+                      className="h-7 text-xs bg-card border-white/[0.07] text-white/75 placeholder:text-white/30" />
                   </div>
-                  <p className="text-[10px] text-black/30 leading-relaxed">
+                  <p className="text-[10px] text-white/30 leading-relaxed">
                     When all {cfg.queueMaxConcurrent ?? 1} slot{(cfg.queueMaxConcurrent ?? 1) > 1 ? "s are" : " is"} occupied,
                     inbound callers hear hold music and are retried every {cfg.queueWaitSeconds ?? 30}s.
                   </p>
@@ -1791,27 +1791,27 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
               )}
             </div>
 
-            <div className="bg-black/[0.04] border border-black/[0.07]/40 rounded-xl p-4 space-y-4">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Scheduling</p>
+            <div className="bg-card/[0.04] border border-white/[0.07]/40 rounded-xl p-4 space-y-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Scheduling</p>
               <ToggleRow label="Scheduling Guardrails" desc="Restrict when this agent can make outbound calls"
                 checked={cfg.schedulingGuardrails ?? false} onChange={v => setCfg({ schedulingGuardrails: v })} />
               {cfg.schedulingGuardrails && (
                 <div className="grid grid-cols-2 gap-3 pt-1">
                   <div>
-                    <p className="text-xs text-black/50 mb-1">Call Start (hour 0–23)</p>
+                    <p className="text-xs text-white/50 mb-1">Call Start (hour 0–23)</p>
                     <Select value={String(cfg.callStartHour ?? 8)} onValueChange={v => setCfg({ callStartHour: parseInt(v) })}>
-                      <SelectTrigger className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
-                      <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07] max-h-48">
-                        {Array.from({ length: 24 }, (_, i) => <SelectItem key={i} value={String(i)} className="text-black/75 text-xs">{String(i).padStart(2, "0")}:00</SelectItem>)}
+                      <SelectTrigger className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75"><SelectValue /></SelectTrigger>
+                      <SelectContent className="bg-popover/90 backdrop-blur-lg border-white/[0.07] max-h-48">
+                        {Array.from({ length: 24 }, (_, i) => <SelectItem key={i} value={String(i)} className="text-white/75 text-xs">{String(i).padStart(2, "0")}:00</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
                   <div>
-                    <p className="text-xs text-black/50 mb-1">Call End (hour 0–23)</p>
+                    <p className="text-xs text-white/50 mb-1">Call End (hour 0–23)</p>
                     <Select value={String(cfg.callEndHour ?? 20)} onValueChange={v => setCfg({ callEndHour: parseInt(v) })}>
-                      <SelectTrigger className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
-                      <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07] max-h-48">
-                        {Array.from({ length: 24 }, (_, i) => <SelectItem key={i} value={String(i)} className="text-black/75 text-xs">{String(i).padStart(2, "0")}:00</SelectItem>)}
+                      <SelectTrigger className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75"><SelectValue /></SelectTrigger>
+                      <SelectContent className="bg-popover/90 backdrop-blur-lg border-white/[0.07] max-h-48">
+                        {Array.from({ length: 24 }, (_, i) => <SelectItem key={i} value={String(i)} className="text-white/75 text-xs">{String(i).padStart(2, "0")}:00</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
@@ -1820,41 +1820,41 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
             </div>
 
             {/* P2-A: Call Transfer */}
-            <div className="bg-black/[0.04] border border-black/[0.07]/40 rounded-xl p-4 space-y-4">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Call Transfer (P2-A)</p>
+            <div className="bg-card/[0.04] border border-white/[0.07]/40 rounded-xl p-4 space-y-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Call Transfer (P2-A)</p>
               <ToggleRow label="Enable Call Transfer" desc="Allow this agent to transfer calls to a human or another number"
                 checked={cfg.callTransferEnabled ?? false} onChange={v => setCfg({ callTransferEnabled: v })} />
               {cfg.callTransferEnabled && (
                 <>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <p className="text-xs text-black/50 mb-1">Transfer type</p>
+                      <p className="text-xs text-white/50 mb-1">Transfer type</p>
                       <Select value={cfg.callTransferType ?? "cold"} onValueChange={v => setCfg({ callTransferType: v as "warm" | "cold" })}>
-                        <SelectTrigger className="h-7 text-xs bg-white border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
-                        <SelectContent className="bg-white border-black/[0.07]">
-                          <SelectItem value="cold" className="text-black/75 text-xs">🔇 Cold — immediate blind transfer</SelectItem>
-                          <SelectItem value="warm" className="text-black/75 text-xs">🔊 Warm — announce then transfer</SelectItem>
+                        <SelectTrigger className="h-7 text-xs bg-card border-white/[0.07] text-white/75"><SelectValue /></SelectTrigger>
+                        <SelectContent className="bg-card border-white/[0.07]">
+                          <SelectItem value="cold" className="text-white/75 text-xs">🔇 Cold — immediate blind transfer</SelectItem>
+                          <SelectItem value="warm" className="text-white/75 text-xs">🔊 Warm — announce then transfer</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                     <div>
-                      <p className="text-xs text-black/50 mb-1">Default transfer number</p>
+                      <p className="text-xs text-white/50 mb-1">Default transfer number</p>
                       <Input value={cfg.callTransferNumber ?? ""}
                         onChange={e => setCfg({ callTransferNumber: e.target.value })}
                         placeholder="+15551234567"
-                        className="h-7 text-xs bg-white border-black/[0.07] text-black/75 placeholder:text-black/30" />
+                        className="h-7 text-xs bg-card border-white/[0.07] text-white/75 placeholder:text-white/30" />
                     </div>
                   </div>
                   {cfg.callTransferType === "warm" && (
                     <div>
-                      <p className="text-xs text-black/50 mb-1">Warm handoff message</p>
+                      <p className="text-xs text-white/50 mb-1">Warm handoff message</p>
                       <Input value={cfg.callTransferWarmMessage ?? ""}
                         onChange={e => setCfg({ callTransferWarmMessage: e.target.value })}
                         placeholder="Please hold while I connect you to an agent."
-                        className="h-7 text-xs bg-white border-black/[0.07] text-black/75 placeholder:text-black/30" />
+                        className="h-7 text-xs bg-card border-white/[0.07] text-white/75 placeholder:text-white/30" />
                     </div>
                   )}
-                  <p className="text-[10px] text-black/30 leading-relaxed">
+                  <p className="text-[10px] text-white/30 leading-relaxed">
                     The agent will transfer the call when it detects an escalation intent or when triggered from Live Monitor.
                     The LLM tool call uses the default number above unless overridden.
                   </p>
@@ -1867,17 +1867,17 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
         {/* ── Tab 6: Tools ── */}
         <TabsContent value="tools" className="flex-1 overflow-y-auto m-0 px-5 py-4">
           <div className="max-w-2xl">
-            <div className="bg-black/[0.04] border border-black/[0.07]/40 rounded-xl p-8 flex flex-col items-center text-center gap-3">
-              <div className="w-12 h-12 rounded-xl bg-black/[0.08] flex items-center justify-center">
-                <Settings2 className="h-5 w-5 text-black/35" />
+            <div className="bg-card/[0.04] border border-white/[0.07]/40 rounded-xl p-8 flex flex-col items-center text-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-card/[0.08] flex items-center justify-center">
+                <Settings2 className="h-5 w-5 text-white/35" />
               </div>
               <div>
-                <p className="text-sm font-medium text-black/75">Tools — Coming Soon</p>
-                <p className="text-xs text-black/35 mt-1 max-w-sm">Connect calendar booking, CRM integrations, and custom function calls. Tools let your agent take actions during a call.</p>
+                <p className="text-sm font-medium text-white/75">Tools — Coming Soon</p>
+                <p className="text-xs text-white/35 mt-1 max-w-sm">Connect calendar booking, CRM integrations, and custom function calls. Tools let your agent take actions during a call.</p>
               </div>
               <div className="flex flex-wrap gap-2 mt-2 justify-center">
                 {["Google Calendar","HubSpot CRM","Salesforce","Custom Webhook"].map(t => (
-                  <span key={t} className="text-xs bg-black/[0.08] border border-black/[0.07] text-black/35 rounded-md px-2.5 py-1">{t}</span>
+                  <span key={t} className="text-xs bg-card/[0.08] border border-white/[0.07] text-white/35 rounded-md px-2.5 py-1">{t}</span>
                 ))}
               </div>
             </div>
@@ -1887,56 +1887,56 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
         {/* ── Tab 7: Analytics ── */}
         <TabsContent value="analytics" className="flex-1 overflow-y-auto m-0 px-5 py-4">
           <div className="max-w-2xl space-y-5">
-            <div className="bg-black/[0.04] border border-black/[0.07]/40 rounded-xl p-4 space-y-4">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Summarization</p>
+            <div className="bg-card/[0.04] border border-white/[0.07]/40 rounded-xl p-4 space-y-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Summarization</p>
               <ToggleRow label="Auto-Summarize Calls" desc="Generate a summary of each call transcript after the call ends"
                 checked={cfg.summarizationEnabled ?? false} onChange={v => setCfg({ summarizationEnabled: v })} />
               {cfg.summarizationEnabled && (
                 <div>
-                  <p className="text-xs text-black/50 mb-1">Summarization Prompt</p>
+                  <p className="text-xs text-white/50 mb-1">Summarization Prompt</p>
                   <Textarea value={cfg.summarizationPrompt ?? ""} onChange={e => setCfg({ summarizationPrompt: e.target.value })}
                     placeholder="Summarize the key points, next steps, and any issues raised…" rows={4}
-                    className="bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75 text-xs resize-none placeholder:text-black/35" />
+                    className="bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75 text-xs resize-none placeholder:text-white/35" />
                 </div>
               )}
             </div>
-            <div className="bg-black/[0.04] border border-black/[0.07]/40 rounded-xl overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-black/[0.06]/40">
+            <div className="bg-card/[0.04] border border-white/[0.07]/40 rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]/40">
                 <div className="flex items-center gap-2">
-                  <ClipboardList className="h-3.5 w-3.5 text-black/75" />
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Disposition Fields</p>
+                  <ClipboardList className="h-3.5 w-3.5 text-white/75" />
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Disposition Fields</p>
                 </div>
                 <button type="button" onClick={() => { setDispositionSchema(prev => [...prev, { key: "", label: "", type: "text", required: false, options: "" }]); setDirty(true); }}
-                  className="text-[11px] text-black/75 hover:text-emerald-300 flex items-center gap-1">
+                  className="text-[11px] text-white/75 hover:text-emerald-300 flex items-center gap-1">
                   <Plus className="h-3 w-3" /> Add Field
                 </button>
               </div>
               {dispositionSchema.length === 0 ? (
-                <p className="text-[11px] text-black/35 px-4 py-3">No fields defined. Fields are extracted from call transcripts by the LLM after each call.</p>
+                <p className="text-[11px] text-white/35 px-4 py-3">No fields defined. Fields are extracted from call transcripts by the LLM after each call.</p>
               ) : (
                 <div className="divide-y divide-black/[0.06]/40">
                   {dispositionSchema.map((field, i) => (
                     <div key={i} className="px-4 py-3 space-y-2">
                       <div className="flex items-center gap-2">
                         <input value={field.key} onChange={e => { const n = [...dispositionSchema]; n[i] = { ...n[i]!, key: e.target.value }; setDispositionSchema(n); setDirty(true); }}
-                          placeholder="key_name" className="flex-1 h-7 rounded-md bg-white/70 backdrop-blur-lg border border-black/[0.07] text-black/75 text-xs px-2.5 placeholder:text-black/35 focus:outline-none focus:border-[#ACADB1]" />
+                          placeholder="key_name" className="flex-1 h-7 rounded-md bg-popover/90 backdrop-blur-lg border border-white/[0.07] text-white/75 text-xs px-2.5 placeholder:text-white/35 focus:outline-none focus:border-[#ACADB1]" />
                         <input value={field.label} onChange={e => { const n = [...dispositionSchema]; n[i] = { ...n[i]!, label: e.target.value }; setDispositionSchema(n); setDirty(true); }}
-                          placeholder="Display Label" className="flex-1 h-7 rounded-md bg-white/70 backdrop-blur-lg border border-black/[0.07] text-black/75 text-xs px-2.5 placeholder:text-black/35 focus:outline-none focus:border-[#ACADB1]" />
+                          placeholder="Display Label" className="flex-1 h-7 rounded-md bg-popover/90 backdrop-blur-lg border border-white/[0.07] text-white/75 text-xs px-2.5 placeholder:text-white/35 focus:outline-none focus:border-[#ACADB1]" />
                         <Select value={field.type} onValueChange={v => { const n = [...dispositionSchema]; n[i] = { ...n[i]!, type: v }; setDispositionSchema(n); setDirty(true); }}>
-                          <SelectTrigger className="h-7 w-24 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
-                          <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07]">
-                            <SelectItem value="text" className="text-black/75 text-xs">Text</SelectItem>
-                            <SelectItem value="number" className="text-black/75 text-xs">Number</SelectItem>
-                            <SelectItem value="boolean" className="text-black/75 text-xs">Yes / No</SelectItem>
-                            <SelectItem value="choice" className="text-black/75 text-xs">Choice</SelectItem>
+                          <SelectTrigger className="h-7 w-24 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75"><SelectValue /></SelectTrigger>
+                          <SelectContent className="bg-popover/90 backdrop-blur-lg border-white/[0.07]">
+                            <SelectItem value="text" className="text-white/75 text-xs">Text</SelectItem>
+                            <SelectItem value="number" className="text-white/75 text-xs">Number</SelectItem>
+                            <SelectItem value="boolean" className="text-white/75 text-xs">Yes / No</SelectItem>
+                            <SelectItem value="choice" className="text-white/75 text-xs">Choice</SelectItem>
                           </SelectContent>
                         </Select>
-                        <button type="button" onClick={() => { setDispositionSchema(prev => prev.filter((_, j) => j !== i)); setDirty(true); }} className="text-black/35 hover:text-red-400"><X className="h-3.5 w-3.5" /></button>
+                        <button type="button" onClick={() => { setDispositionSchema(prev => prev.filter((_, j) => j !== i)); setDirty(true); }} className="text-white/35 hover:text-red-400"><X className="h-3.5 w-3.5" /></button>
                       </div>
                       {field.type === "choice" && (
                         <input value={field.options ?? ""} onChange={e => { const n = [...dispositionSchema]; n[i] = { ...n[i]!, options: e.target.value }; setDispositionSchema(n); setDirty(true); }}
                           placeholder="Options: resolved, escalated, callback"
-                          className="w-full h-7 rounded-md bg-white/70 backdrop-blur-lg border border-black/[0.07] text-black/75 text-xs px-2.5 placeholder:text-black/35 focus:outline-none focus:border-[#ACADB1]" />
+                          className="w-full h-7 rounded-md bg-popover/90 backdrop-blur-lg border border-white/[0.07] text-white/75 text-xs px-2.5 placeholder:text-white/35 focus:outline-none focus:border-[#ACADB1]" />
                       )}
                     </div>
                   ))}
@@ -1949,49 +1949,49 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
         {/* ── Tab 8: Inbound ── */}
         <TabsContent value="inbound" className="flex-1 overflow-y-auto m-0 px-5 py-4">
           <div className="max-w-2xl space-y-5">
-            <div className="bg-black/[0.04] border border-black/[0.07]/40 rounded-xl p-4 space-y-5">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Call Limits</p>
+            <div className="bg-card/[0.04] border border-white/[0.07]/40 rounded-xl p-4 space-y-5">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Call Limits</p>
               <SliderRow label="Inbound Limit" desc="Max concurrent inbound calls (−1 = unlimited)" value={cfg.inboundLimit ?? -1}
                 onChange={v => setCfg({ inboundLimit: v })} min={-1} max={50} step={1} />
               <ToggleRow label="Disallow Unknown Numbers" desc="Reject calls from numbers not on the whitelist"
                 checked={cfg.disallowUnknownNumbers ?? false} onChange={v => setCfg({ disallowUnknownNumbers: v })} />
               {cfg.disallowUnknownNumbers && (
                 <div>
-                  <p className="text-xs text-black/50 mb-1">Whitelist Numbers</p>
+                  <p className="text-xs text-white/50 mb-1">Whitelist Numbers</p>
                   <Textarea value={cfg.whitelistNumbers ?? ""} onChange={e => setCfg({ whitelistNumbers: e.target.value })}
                     placeholder="+1234567890, +0987654321" rows={2}
-                    className="bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75 text-xs resize-none placeholder:text-black/35" />
-                  <p className="text-[10px] text-black/35 mt-1">Comma-separated E.164 numbers.</p>
+                    className="bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75 text-xs resize-none placeholder:text-white/35" />
+                  <p className="text-[10px] text-white/35 mt-1">Comma-separated E.164 numbers.</p>
                 </div>
               )}
             </div>
-            <div className="bg-black/[0.04] border border-black/[0.07]/40 rounded-xl p-4 space-y-4">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Call Memory / RAG</p>
+            <div className="bg-card/[0.04] border border-white/[0.07]/40 rounded-xl p-4 space-y-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Call Memory / RAG</p>
               <ToggleRow label="Enable Call Memory" desc="Ingest call data into a RAG source for context-aware responses"
                 checked={cfg.callMemoryEnabled ?? false} onChange={v => setCfg({ callMemoryEnabled: v })} />
               {cfg.callMemoryEnabled && (
                 <>
                   <div>
-                    <p className="text-xs text-black/50 mb-1">Source Type</p>
+                    <p className="text-xs text-white/50 mb-1">Source Type</p>
                     <Select value={cfg.callMemorySourceType ?? "api"} onValueChange={v => setCfg({ callMemorySourceType: v })}>
-                      <SelectTrigger className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
-                      <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07]">
-                        <SelectItem value="api" className="text-black/75 text-xs">REST API</SelectItem>
-                        <SelectItem value="s3" className="text-black/75 text-xs">Amazon S3</SelectItem>
-                        <SelectItem value="gcs" className="text-black/75 text-xs">Google Cloud Storage</SelectItem>
-                        <SelectItem value="database" className="text-black/75 text-xs">Database</SelectItem>
+                      <SelectTrigger className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75"><SelectValue /></SelectTrigger>
+                      <SelectContent className="bg-popover/90 backdrop-blur-lg border-white/[0.07]">
+                        <SelectItem value="api" className="text-white/75 text-xs">REST API</SelectItem>
+                        <SelectItem value="s3" className="text-white/75 text-xs">Amazon S3</SelectItem>
+                        <SelectItem value="gcs" className="text-white/75 text-xs">Google Cloud Storage</SelectItem>
+                        <SelectItem value="database" className="text-white/75 text-xs">Database</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div>
-                    <p className="text-xs text-black/50 mb-1">Source URL</p>
+                    <p className="text-xs text-white/50 mb-1">Source URL</p>
                     <Input value={cfg.callMemorySourceUrl ?? ""} onChange={e => setCfg({ callMemorySourceUrl: e.target.value })}
-                      placeholder="https://api.your-rag.com/ingest" className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75 placeholder:text-black/35" />
+                      placeholder="https://api.your-rag.com/ingest" className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75 placeholder:text-white/35" />
                   </div>
                   <div>
-                    <p className="text-xs text-black/50 mb-1">Auth Token</p>
+                    <p className="text-xs text-white/50 mb-1">Auth Token</p>
                     <Input type="password" value={cfg.callMemoryAuthToken ?? ""} onChange={e => setCfg({ callMemoryAuthToken: e.target.value })}
-                      placeholder="Bearer token or API key" className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75 placeholder:text-black/35" />
+                      placeholder="Bearer token or API key" className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75 placeholder:text-white/35" />
                   </div>
                 </>
               )}
@@ -2002,93 +2002,93 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
         {/* ── Tab 9: WhatsApp ── */}
         <TabsContent value="whatsapp" className="flex-1 overflow-y-auto m-0 px-5 py-4">
           <div className="max-w-2xl space-y-5">
-            <div className="bg-black/[0.04] border border-black/[0.07]/40 rounded-xl p-4 space-y-4">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Provider</p>
+            <div className="bg-card/[0.04] border border-white/[0.07]/40 rounded-xl p-4 space-y-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Provider</p>
               <Select value={cfg.whatsappProvider ?? "none"} onValueChange={v => setCfg({ whatsappProvider: v === "none" ? undefined : v })}>
-                <SelectTrigger className="h-8 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75"><SelectValue placeholder="Select provider" /></SelectTrigger>
-                <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07]">
-                  <SelectItem value="none" className="text-black/50 text-xs">— Not configured —</SelectItem>
-                  <SelectItem value="aisensy" className="text-black/75 text-xs">AiSensy</SelectItem>
-                  <SelectItem value="meta" className="text-black/75 text-xs">Meta (Business API)</SelectItem>
-                  <SelectItem value="twilio" className="text-black/75 text-xs">Twilio WhatsApp</SelectItem>
-                  <SelectItem value="360dialog" className="text-black/75 text-xs">360dialog</SelectItem>
-                  <SelectItem value="wati" className="text-black/75 text-xs">WATI</SelectItem>
+                <SelectTrigger className="h-8 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75"><SelectValue placeholder="Select provider" /></SelectTrigger>
+                <SelectContent className="bg-popover/90 backdrop-blur-lg border-white/[0.07]">
+                  <SelectItem value="none" className="text-white/50 text-xs">— Not configured —</SelectItem>
+                  <SelectItem value="aisensy" className="text-white/75 text-xs">AiSensy</SelectItem>
+                  <SelectItem value="meta" className="text-white/75 text-xs">Meta (Business API)</SelectItem>
+                  <SelectItem value="twilio" className="text-white/75 text-xs">Twilio WhatsApp</SelectItem>
+                  <SelectItem value="360dialog" className="text-white/75 text-xs">360dialog</SelectItem>
+                  <SelectItem value="wati" className="text-white/75 text-xs">WATI</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             {cfg.whatsappProvider && cfg.whatsappProvider !== "none" && (
-              <div className="bg-black/[0.04] border border-black/[0.07]/40 rounded-xl p-4 space-y-3">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Credentials</p>
+              <div className="bg-card/[0.04] border border-white/[0.07]/40 rounded-xl p-4 space-y-3">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Credentials</p>
                 {(cfg.whatsappProvider === "aisensy") && (
                   <>
-                    <div><p className="text-xs text-black/50 mb-1">API Key</p>
+                    <div><p className="text-xs text-white/50 mb-1">API Key</p>
                       <Input type="password" value={cfg.whatsappCredentials?.["apiKey"] ?? ""} onChange={e => setCfg({ whatsappCredentials: { ...cfg.whatsappCredentials, apiKey: e.target.value } })}
-                        placeholder="AiSensy API key" className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75" />
+                        placeholder="AiSensy API key" className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75" />
                     </div>
-                    <div><p className="text-xs text-black/50 mb-1">Campaign Name</p>
+                    <div><p className="text-xs text-white/50 mb-1">Campaign Name</p>
                       <Input value={cfg.whatsappCredentials?.["campaignName"] ?? ""} onChange={e => setCfg({ whatsappCredentials: { ...cfg.whatsappCredentials, campaignName: e.target.value } })}
-                        placeholder="Campaign name" className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75" />
+                        placeholder="Campaign name" className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75" />
                     </div>
                   </>
                 )}
                 {cfg.whatsappProvider === "meta" && (
                   <>
-                    <div><p className="text-xs text-black/50 mb-1">Access Token</p>
+                    <div><p className="text-xs text-white/50 mb-1">Access Token</p>
                       <Input type="password" value={cfg.whatsappCredentials?.["accessToken"] ?? ""} onChange={e => setCfg({ whatsappCredentials: { ...cfg.whatsappCredentials, accessToken: e.target.value } })}
-                        placeholder="Meta API access token" className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75" />
+                        placeholder="Meta API access token" className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75" />
                     </div>
-                    <div><p className="text-xs text-black/50 mb-1">Phone Number ID</p>
+                    <div><p className="text-xs text-white/50 mb-1">Phone Number ID</p>
                       <Input value={cfg.whatsappCredentials?.["phoneNumberId"] ?? ""} onChange={e => setCfg({ whatsappCredentials: { ...cfg.whatsappCredentials, phoneNumberId: e.target.value } })}
-                        placeholder="e.g. 123456789012345" className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75" />
+                        placeholder="e.g. 123456789012345" className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75" />
                     </div>
                   </>
                 )}
                 {["twilio","360dialog","wati"].includes(cfg.whatsappProvider) && (
                   <>
-                    <div><p className="text-xs text-black/50 mb-1">API Key / SID</p>
+                    <div><p className="text-xs text-white/50 mb-1">API Key / SID</p>
                       <Input type="password" value={cfg.whatsappCredentials?.["apiKey"] ?? ""} onChange={e => setCfg({ whatsappCredentials: { ...cfg.whatsappCredentials, apiKey: e.target.value } })}
-                        placeholder="API key or account SID" className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75" />
+                        placeholder="API key or account SID" className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75" />
                     </div>
-                    <div><p className="text-xs text-black/50 mb-1">API Secret / Auth Token</p>
+                    <div><p className="text-xs text-white/50 mb-1">API Secret / Auth Token</p>
                       <Input type="password" value={cfg.whatsappCredentials?.["apiSecret"] ?? ""} onChange={e => setCfg({ whatsappCredentials: { ...cfg.whatsappCredentials, apiSecret: e.target.value } })}
-                        placeholder="API secret or auth token" className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75" />
+                        placeholder="API secret or auth token" className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75" />
                     </div>
                   </>
                 )}
               </div>
             )}
             {cfg.whatsappProvider && cfg.whatsappProvider !== "none" && (
-              <div className="bg-black/[0.04] border border-black/[0.07]/40 rounded-xl overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-black/[0.06]/40">
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Outcome Messages</p>
+              <div className="bg-card/[0.04] border border-white/[0.07]/40 rounded-xl overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]/40">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Outcome Messages</p>
                   <button type="button" onClick={() => setCfg({ whatsappOutcomeMessages: [...(cfg.whatsappOutcomeMessages ?? []), { outcome: "interested", templateName: "", language: "en" }] })}
-                    className="text-[11px] text-black/75 hover:text-emerald-300 flex items-center gap-1"><Plus className="h-3 w-3" /> Add</button>
+                    className="text-[11px] text-white/75 hover:text-emerald-300 flex items-center gap-1"><Plus className="h-3 w-3" /> Add</button>
                 </div>
                 {!(cfg.whatsappOutcomeMessages?.length) ? (
-                  <p className="text-[11px] text-black/35 px-4 py-3">No outcome messages configured.</p>
+                  <p className="text-[11px] text-white/35 px-4 py-3">No outcome messages configured.</p>
                 ) : (
                   <div className="divide-y divide-black/[0.06]/40">
                     {cfg.whatsappOutcomeMessages!.map((msg, i) => (
                       <div key={i} className="px-4 py-3 space-y-2">
                         <div className="flex items-center gap-2">
                           <Select value={msg.outcome} onValueChange={v => { const m = [...cfg.whatsappOutcomeMessages!]; m[i] = { ...m[i]!, outcome: v }; setCfg({ whatsappOutcomeMessages: m }); }}>
-                            <SelectTrigger className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75 w-36"><SelectValue /></SelectTrigger>
-                            <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07]">
-                              <SelectItem value="interested" className="text-black/75 text-xs">Interested</SelectItem>
-                              <SelectItem value="callback" className="text-black/75 text-xs">Callback</SelectItem>
-                              <SelectItem value="no_answer" className="text-black/75 text-xs">No Answer</SelectItem>
-                              <SelectItem value="not_interested" className="text-black/75 text-xs">Not Interested</SelectItem>
+                            <SelectTrigger className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75 w-36"><SelectValue /></SelectTrigger>
+                            <SelectContent className="bg-popover/90 backdrop-blur-lg border-white/[0.07]">
+                              <SelectItem value="interested" className="text-white/75 text-xs">Interested</SelectItem>
+                              <SelectItem value="callback" className="text-white/75 text-xs">Callback</SelectItem>
+                              <SelectItem value="no_answer" className="text-white/75 text-xs">No Answer</SelectItem>
+                              <SelectItem value="not_interested" className="text-white/75 text-xs">Not Interested</SelectItem>
                             </SelectContent>
                           </Select>
                           <input value={msg.templateName} onChange={e => { const m = [...cfg.whatsappOutcomeMessages!]; m[i] = { ...m[i]!, templateName: e.target.value }; setCfg({ whatsappOutcomeMessages: m }); }}
-                            placeholder="Template name" className="flex-1 h-7 rounded-md bg-white/70 backdrop-blur-lg border border-black/[0.07] text-black/75 text-xs px-2.5 placeholder:text-black/35 focus:outline-none focus:border-[#ACADB1]" />
-                          <button type="button" onClick={() => setCfg({ whatsappOutcomeMessages: cfg.whatsappOutcomeMessages!.filter((_, j) => j !== i) })} className="text-black/35 hover:text-red-400"><X className="h-3.5 w-3.5" /></button>
+                            placeholder="Template name" className="flex-1 h-7 rounded-md bg-popover/90 backdrop-blur-lg border border-white/[0.07] text-white/75 text-xs px-2.5 placeholder:text-white/35 focus:outline-none focus:border-[#ACADB1]" />
+                          <button type="button" onClick={() => setCfg({ whatsappOutcomeMessages: cfg.whatsappOutcomeMessages!.filter((_, j) => j !== i) })} className="text-white/35 hover:text-red-400"><X className="h-3.5 w-3.5" /></button>
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                           <input value={msg.mediaUrl ?? ""} onChange={e => { const m = [...cfg.whatsappOutcomeMessages!]; m[i] = { ...m[i]!, mediaUrl: e.target.value }; setCfg({ whatsappOutcomeMessages: m }); }}
-                            placeholder="Media URL (optional)" className="h-7 rounded-md bg-white/70 backdrop-blur-lg border border-black/[0.07] text-black/75 text-xs px-2.5 placeholder:text-black/35 focus:outline-none focus:border-[#ACADB1]" />
+                            placeholder="Media URL (optional)" className="h-7 rounded-md bg-popover/90 backdrop-blur-lg border border-white/[0.07] text-white/75 text-xs px-2.5 placeholder:text-white/35 focus:outline-none focus:border-[#ACADB1]" />
                           <input value={msg.mediaFilename ?? ""} onChange={e => { const m = [...cfg.whatsappOutcomeMessages!]; m[i] = { ...m[i]!, mediaFilename: e.target.value }; setCfg({ whatsappOutcomeMessages: m }); }}
-                            placeholder="Filename (optional)" className="h-7 rounded-md bg-white/70 backdrop-blur-lg border border-black/[0.07] text-black/75 text-xs px-2.5 placeholder:text-black/35 focus:outline-none focus:border-[#ACADB1]" />
+                            placeholder="Filename (optional)" className="h-7 rounded-md bg-popover/90 backdrop-blur-lg border border-white/[0.07] text-white/75 text-xs px-2.5 placeholder:text-white/35 focus:outline-none focus:border-[#ACADB1]" />
                         </div>
                       </div>
                     ))}
@@ -2103,32 +2103,32 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
         <TabsContent value="logs" className="flex-1 overflow-y-auto m-0">
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
-              <thead className="bg-white/70 backdrop-blur-lg sticky top-0">
+              <thead className="bg-popover/90 backdrop-blur-lg sticky top-0">
                 <tr>
-                  <th className="text-left px-4 py-2.5 text-black/35 font-medium">Date</th>
-                  <th className="text-left px-4 py-2.5 text-black/35 font-medium">Status</th>
-                  <th className="text-left px-4 py-2.5 text-black/35 font-medium">To / From</th>
-                  <th className="text-left px-4 py-2.5 text-black/35 font-medium">Duration</th>
+                  <th className="text-left px-4 py-2.5 text-white/35 font-medium">Date</th>
+                  <th className="text-left px-4 py-2.5 text-white/35 font-medium">Status</th>
+                  <th className="text-left px-4 py-2.5 text-white/35 font-medium">To / From</th>
+                  <th className="text-left px-4 py-2.5 text-white/35 font-medium">Duration</th>
                 </tr>
               </thead>
               <tbody>
                 {callsLoading ? (
                   [1,2,3].map(i => (
-                    <tr key={i}>{[1,2,3,4].map(j => <td key={j} className="px-4 py-2.5"><Skeleton className="h-4 w-full bg-black/[0.08]" /></td>)}</tr>
+                    <tr key={i}>{[1,2,3,4].map(j => <td key={j} className="px-4 py-2.5"><Skeleton className="h-4 w-full bg-card/[0.08]" /></td>)}</tr>
                   ))
                 ) : (calls ?? []).length === 0 ? (
-                  <tr><td colSpan={4} className="text-center text-black/35 py-10">No calls yet for this assistant.</td></tr>
+                  <tr><td colSpan={4} className="text-center text-white/35 py-10">No calls yet for this assistant.</td></tr>
                 ) : (calls ?? []).map(call => (
-                  <tr key={call.id} className="border-b border-black/[0.06]/50 hover:bg-black/[0.08]/30 transition-colors">
-                    <td className="px-4 py-2.5 text-black/50 whitespace-nowrap">{format(new Date(call.createdAt), "MMM d, HH:mm")}</td>
+                  <tr key={call.id} className="border-b border-white/[0.06]/50 hover:bg-card/[0.08]/30 transition-colors">
+                    <td className="px-4 py-2.5 text-white/50 whitespace-nowrap">{format(new Date(call.createdAt), "MMM d, HH:mm")}</td>
                     <td className="px-4 py-2.5">
-                      {call.status === "completed"   && <span className="text-black/75">completed</span>}
+                      {call.status === "completed"   && <span className="text-white/75">completed</span>}
                       {call.status === "failed"      && <span className="text-red-400">failed</span>}
                       {call.status === "in_progress" && <span className="text-amber-400">in progress</span>}
-                      {!["completed","failed","in_progress"].includes(call.status) && <span className="text-black/35">{call.status}</span>}
+                      {!["completed","failed","in_progress"].includes(call.status) && <span className="text-white/35">{call.status}</span>}
                     </td>
-                    <td className="px-4 py-2.5 text-black/50 font-mono text-[11px]">{call.toNumber || "—"}</td>
-                    <td className="px-4 py-2.5 text-black/50">{call.durationSeconds != null ? `${call.durationSeconds}s` : "—"}</td>
+                    <td className="px-4 py-2.5 text-white/50 font-mono text-[11px]">{call.toNumber || "—"}</td>
+                    <td className="px-4 py-2.5 text-white/50">{call.durationSeconds != null ? `${call.durationSeconds}s` : "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -2146,21 +2146,21 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
 
       {/* Outbound call dialog */}
       <Dialog open={outboundDialogOpen} onOpenChange={setOutboundDialogOpen}>
-        <DialogContent className="bg-white/70 backdrop-blur-lg border-black/[0.07] sm:max-w-md">
+        <DialogContent className="bg-popover/90 backdrop-blur-lg border-white/[0.07] sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-black/85 flex items-center gap-2">
-              <PhoneOutgoing className="h-4 w-4 text-black/75" /> Make a Call
+            <DialogTitle className="text-white/85 flex items-center gap-2">
+              <PhoneOutgoing className="h-4 w-4 text-white/75" /> Make a Call
             </DialogTitle>
-            <DialogDescription className="text-black/50 text-sm">
-              Dial a number using <span className="capitalize font-medium text-black/75">{agent.telephonyProvider}</span>.
+            <DialogDescription className="text-white/50 text-sm">
+              Dial a number using <span className="capitalize font-medium text-white/75">{agent.telephonyProvider}</span>.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
-            <Label className="text-black/50 text-xs">Destination number (E.164)</Label>
-            <Input placeholder="+1234567890" value={toNumber} onChange={e => setToNumber(e.target.value)} className="bg-black/[0.08] border-black/[0.07] text-black/75" />
+            <Label className="text-white/50 text-xs">Destination number (E.164)</Label>
+            <Input placeholder="+1234567890" value={toNumber} onChange={e => setToNumber(e.target.value)} className="bg-card/[0.08] border-white/[0.07] text-white/75" />
           </div>
           <DialogFooter>
-            <Button variant="outline" className="border-black/[0.07] text-black/50" onClick={() => setOutboundDialogOpen(false)}>Cancel</Button>
+            <Button variant="outline" className="border-white/[0.07] text-white/50" onClick={() => setOutboundDialogOpen(false)}>Cancel</Button>
             <Button
               className="bg-black/85 hover:bg-black/90 text-white"
               disabled={!toNumber.trim() || initiateOutbound.isPending}
@@ -2236,51 +2236,51 @@ function NewAgentPanel({ onCreated }: { onCreated: (id: number) => void }) {
 
   return (
     <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-      <div className="flex items-center gap-3 px-5 h-12 border-b border-black/[0.06] shrink-0">
-        <span className="font-semibold text-sm text-black/85">New Assistant</span>
+      <div className="flex items-center gap-3 px-5 h-12 border-b border-white/[0.06] shrink-0">
+        <span className="font-semibold text-sm text-white/85">New Assistant</span>
       </div>
       <div className="flex-1 overflow-y-auto px-5 py-5">
         <div className="max-w-2xl space-y-5">
           <div>
-            <p className="text-xs font-semibold text-black/50 uppercase tracking-wide mb-1.5">Name</p>
+            <p className="text-xs font-semibold text-white/50 uppercase tracking-wide mb-1.5">Name</p>
             <Input
               value={name}
               onChange={e => setName(e.target.value)}
-              className="bg-black/[0.06] border-black/[0.07] text-black/75"
+              className="bg-card/[0.06] border-white/[0.07] text-white/75"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="bg-black/[0.06] border border-black/[0.04] rounded-xl p-3.5 space-y-2">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Transcriber</p>
+            <div className="bg-card/[0.06] border border-white/[0.04] rounded-xl p-3.5 space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Transcriber</p>
               <Select value={asr} onValueChange={setAsr}>
-                <SelectTrigger className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
-                <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07]">
-                  {ASR_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-black/75 text-xs">{p.label}</SelectItem>)}
+                <SelectTrigger className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75"><SelectValue /></SelectTrigger>
+                <SelectContent className="bg-popover/90 backdrop-blur-lg border-white/[0.07]">
+                  {ASR_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-white/75 text-xs">{p.label}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-            <div className="bg-black/[0.06] border border-black/[0.04] rounded-xl p-3.5 space-y-2">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Model</p>
+            <div className="bg-card/[0.06] border border-white/[0.04] rounded-xl p-3.5 space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Model</p>
               <Select value={llm} onValueChange={(v) => { setLlm(v); setLlmModel(LLM_MODELS[v]?.[0]?.value ?? ""); }}>
-                <SelectTrigger className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
-                <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07]">
-                  {LLM_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-black/75 text-xs">{p.label}</SelectItem>)}
+                <SelectTrigger className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75"><SelectValue /></SelectTrigger>
+                <SelectContent className="bg-popover/90 backdrop-blur-lg border-white/[0.07]">
+                  {LLM_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-white/75 text-xs">{p.label}</SelectItem>)}
                 </SelectContent>
               </Select>
               {LLM_MODELS[llm] && (
                 <Select value={llmModel} onValueChange={setLlmModel}>
-                  <SelectTrigger className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/50"><SelectValue placeholder="Select model" /></SelectTrigger>
-                  <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07]">
+                  <SelectTrigger className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/50"><SelectValue placeholder="Select model" /></SelectTrigger>
+                  <SelectContent className="bg-popover/90 backdrop-blur-lg border-white/[0.07]">
                     {LLM_MODELS[llm]!.map(m => (
-                      <SelectItem key={m.value} value={m.value} className="text-black/75 text-xs">{m.label}</SelectItem>
+                      <SelectItem key={m.value} value={m.value} className="text-white/75 text-xs">{m.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               )}
             </div>
-            <div className="bg-black/[0.06] border border-black/[0.04] rounded-xl p-3.5 space-y-2">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Voice</p>
+            <div className="bg-card/[0.06] border border-white/[0.04] rounded-xl p-3.5 space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Voice</p>
               <Select
                 value={tts}
                 onValueChange={(v) => {
@@ -2288,39 +2288,39 @@ function NewAgentPanel({ onCreated }: { onCreated: (id: number) => void }) {
                   setTtsModel(TTS_MODELS[v]?.[0]?.value ?? "");
                 }}
               >
-                <SelectTrigger className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
-                <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07]">
-                  {TTS_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-black/75 text-xs">{p.label}</SelectItem>)}
+                <SelectTrigger className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75"><SelectValue /></SelectTrigger>
+                <SelectContent className="bg-popover/90 backdrop-blur-lg border-white/[0.07]">
+                  {TTS_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-white/75 text-xs">{p.label}</SelectItem>)}
                 </SelectContent>
               </Select>
               {TTS_MODELS[tts] && (
                 <Select value={ttsModel} onValueChange={setTtsModel}>
-                  <SelectTrigger className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/50"><SelectValue placeholder="Select model / voice" /></SelectTrigger>
-                  <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07]">
+                  <SelectTrigger className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/50"><SelectValue placeholder="Select model / voice" /></SelectTrigger>
+                  <SelectContent className="bg-popover/90 backdrop-blur-lg border-white/[0.07]">
                     {TTS_MODELS[tts]!.map(m => (
-                      <SelectItem key={m.value} value={m.value} className="text-black/75 text-xs">{m.label}</SelectItem>
+                      <SelectItem key={m.value} value={m.value} className="text-white/75 text-xs">{m.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               )}
             </div>
-            <div className="bg-black/[0.06] border border-black/[0.04] rounded-xl p-3.5 space-y-2">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">Telephony</p>
+            <div className="bg-card/[0.06] border border-white/[0.04] rounded-xl p-3.5 space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Telephony</p>
               <Select value={tel} onValueChange={setTel}>
-                <SelectTrigger className="h-7 text-xs bg-white/70 backdrop-blur-lg border-black/[0.07] text-black/75"><SelectValue /></SelectTrigger>
-                <SelectContent className="bg-white/70 backdrop-blur-lg border-black/[0.07]">
-                  {TELEPHONY_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-black/75 text-xs">{p.label}</SelectItem>)}
+                <SelectTrigger className="h-7 text-xs bg-popover/90 backdrop-blur-lg border-white/[0.07] text-white/75"><SelectValue /></SelectTrigger>
+                <SelectContent className="bg-popover/90 backdrop-blur-lg border-white/[0.07]">
+                  {TELEPHONY_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-white/75 text-xs">{p.label}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
           </div>
 
           <div>
-            <p className="text-xs font-semibold text-black/50 uppercase tracking-wide mb-1.5">System Prompt</p>
+            <p className="text-xs font-semibold text-white/50 uppercase tracking-wide mb-1.5">System Prompt</p>
             <Textarea
               value={prompt}
               onChange={e => setPrompt(e.target.value)}
-              className="bg-black/[0.06] border-black/[0.07] text-black/75 text-sm min-h-[120px] resize-none placeholder:text-black/35"
+              className="bg-card/[0.06] border-white/[0.07] text-white/75 text-sm min-h-[120px] resize-none placeholder:text-white/35"
             />
           </div>
 
@@ -2365,19 +2365,19 @@ export default function AssistantsPage() {
   return (
     <div className="flex h-full overflow-hidden">
       {/* ── Agents List Panel ─────────────────────────────────────── */}
-      <div className="w-64 shrink-0 flex flex-col border-r border-black/[0.07] bg-white/70 backdrop-blur-lg/40 backdrop-blur-xl">
+      <div className="w-64 shrink-0 flex flex-col border-r border-white/[0.07] bg-popover/90 backdrop-blur-lg/40 backdrop-blur-xl">
         {/* Header */}
-        <div className="flex items-center gap-2 px-3 h-12 border-b border-black/[0.06] shrink-0">
-          <span className="font-semibold text-sm text-black/85 flex-1">Assistants</span>
+        <div className="flex items-center gap-2 px-3 h-12 border-b border-white/[0.06] shrink-0">
+          <span className="font-semibold text-sm text-white/85 flex-1">Assistants</span>
           {agents && (
-            <span className="text-[10px] bg-black/[0.08] text-black/50 rounded px-1.5 py-0.5 font-mono">
+            <span className="text-[10px] bg-card/[0.08] text-white/50 rounded px-1.5 py-0.5 font-mono">
               {agents.length}
             </span>
           )}
           <Button
             size="icon"
             variant="ghost"
-            className="h-6 w-6 text-black/50 hover:text-black/85 hover:bg-black/[0.08]"
+            className="h-6 w-6 text-white/50 hover:text-white/85 hover:bg-card/[0.08]"
             onClick={() => setWizardOpen(true)}
             title="Create assistant"
           >
@@ -2390,7 +2390,7 @@ export default function AssistantsPage() {
           <Button
             variant="outline"
             size="sm"
-            className="w-full h-7 text-xs border-black/[0.07] text-black/50 hover:bg-black/[0.08] hover:text-black/75 gap-1.5 justify-start"
+            className="w-full h-7 text-xs border-white/[0.07] text-white/50 hover:bg-card/[0.08] hover:text-white/75 gap-1.5 justify-start"
             onClick={() => setWizardOpen(true)}
           >
             <Plus className="h-3 w-3" /> Create Assistant
@@ -2400,12 +2400,12 @@ export default function AssistantsPage() {
         {/* Search */}
         <div className="px-3 pb-2 shrink-0">
           <div className="relative">
-            <Search className="absolute left-2.5 top-1.5 h-3.5 w-3.5 text-black/35" />
+            <Search className="absolute left-2.5 top-1.5 h-3.5 w-3.5 text-white/35" />
             <Input
               placeholder="Search assistants…"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="h-7 pl-7 text-xs bg-black/[0.06] border-black/[0.07] text-black/75 placeholder:text-black/35 focus:border-[#ACADB1]"
+              className="h-7 pl-7 text-xs bg-card/[0.06] border-white/[0.07] text-white/75 placeholder:text-white/35 focus:border-[#ACADB1]"
             />
           </div>
         </div>
@@ -2415,11 +2415,11 @@ export default function AssistantsPage() {
           {isLoading ? (
             <div className="px-3 space-y-2 py-2">
               {[1, 2, 3, 4].map(i => (
-                <div key={i} className="h-14 rounded-lg bg-black/[0.08]/50 animate-pulse" />
+                <div key={i} className="h-14 rounded-lg bg-card/[0.08]/50 animate-pulse" />
               ))}
             </div>
           ) : filtered?.length === 0 ? (
-            <div className="px-3 py-8 text-center text-black/35 text-xs">No assistants found.</div>
+            <div className="px-3 py-8 text-center text-white/35 text-xs">No assistants found.</div>
           ) : (
             filtered?.map(agent => {
               const isSelected = selectedId === agent.id;
@@ -2428,21 +2428,21 @@ export default function AssistantsPage() {
                 <button
                   key={agent.id}
                   onClick={() => setSelectedId(agent.id)}
-                  className={`w-full text-left px-3 py-2.5 transition-colors border-b border-black/[0.06]/50 ${
+                  className={`w-full text-left px-3 py-2.5 transition-colors border-b border-white/[0.06]/50 ${
                     isSelected
-                      ? "bg-black/[0.08]/80 border-l-2 border-l-emerald-500"
-                      : "hover:bg-black/[0.04] border-l-2 border-l-transparent"
+                      ? "bg-card/[0.08]/80 border-l-2 border-l-emerald-500"
+                      : "hover:bg-card/[0.04] border-l-2 border-l-transparent"
                   }`}
                 >
                   <div className="flex items-center gap-1.5 mb-0.5">
                     {statusDot(agent.status)}
-                    <span className={`text-xs font-medium truncate ${isSelected ? "text-black/85" : "text-black/75"}`}>
+                    <span className={`text-xs font-medium truncate ${isSelected ? "text-white/85" : "text-white/75"}`}>
                       {agent.name}
                     </span>
                   </div>
                   <div className="flex flex-wrap gap-1 ml-3">
                     {tags.map(t => (
-                      <span key={t} className="text-[10px] text-black/35 bg-black/[0.06] rounded px-1">
+                      <span key={t} className="text-[10px] text-white/35 bg-card/[0.06] rounded px-1">
                         {t}
                       </span>
                     ))}
@@ -2459,16 +2459,16 @@ export default function AssistantsPage() {
         {selectedId !== null ? (
           <AgentConfigPanel agentId={selectedId} onDeleted={() => setSelectedId(agents?.[0]?.id ?? null)} />
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-center text-black/35 gap-3">
+          <div className="flex-1 flex flex-col items-center justify-center text-center text-white/35 gap-3">
             <Mic className="h-10 w-10 opacity-20" />
             <div>
-              <p className="text-sm font-medium text-black/35">No assistant selected</p>
+              <p className="text-sm font-medium text-white/35">No assistant selected</p>
               <p className="text-xs mt-1">Choose one from the list or create a new one.</p>
             </div>
             <Button
               variant="outline"
               size="sm"
-              className="border-black/[0.07] text-black/50 hover:bg-black/[0.08] gap-1.5 mt-2"
+              className="border-white/[0.07] text-white/50 hover:bg-card/[0.08] gap-1.5 mt-2"
               onClick={() => setWizardOpen(true)}
             >
               <Plus className="h-3.5 w-3.5" /> Create Assistant

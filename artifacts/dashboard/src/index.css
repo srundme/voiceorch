@@ -68,135 +68,127 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* ──────────────────────────────────────────────────────────────────────────
-   Reference design: light grey sidebar (#EBEBEB) + white content
-   Dark metric cards + dark right-panel cards  ·  VoiceOrch/SnapServe style
-   ────────────────────────────────────────────────────────────────────────── */
+/* ── Dark theme (default) ────────────────────────────────────────────────── */
 :root {
-  --button-outline: rgba(0,0,0,.10);
-  --badge-outline:  rgba(0,0,0,.06);
-  --opaque-button-border-intensity: -8;
+  --button-outline: rgba(255,255,255,.08);
+  --badge-outline:  rgba(255,255,255,.06);
+  --opaque-button-border-intensity: 8;
 
-  /* Page/content background — white */
+  /* Page background — deep dark */
+  --background: 234 18% 8%;
+  --foreground: 220 15% 90%;
+  --border: 240 6% 17%;
+
+  /* Card */
+  --card: 234 14% 11%;
+  --card-foreground: 220 15% 90%;
+  --card-border: 240 6% 18%;
+
+  /* Sidebar */
+  --sidebar: 240 20% 5%;
+  --sidebar-foreground: 220 15% 90%;
+  --sidebar-border: 240 8% 13%;
+  --sidebar-primary: 263 70% 65%;
+  --sidebar-primary-foreground: 240 20% 5%;
+  --sidebar-accent: 240 8% 14%;
+  --sidebar-accent-foreground: 220 15% 90%;
+  --sidebar-accent-border: 240 8% 18%;
+  --sidebar-ring: 263 70% 60%;
+
+  --popover: 234 16% 10%;
+  --popover-foreground: 220 15% 90%;
+  --popover-border: 240 6% 18%;
+
+  /* Primary = violet */
+  --primary: 263 70% 65%;
+  --primary-foreground: 240 20% 5%;
+
+  --secondary: 240 8% 16%;
+  --secondary-foreground: 220 15% 80%;
+
+  --muted: 240 8% 15%;
+  --muted-foreground: 228 6% 52%;
+
+  --accent: 240 8% 16%;
+  --accent-foreground: 220 15% 90%;
+
+  --destructive: 0 65% 50%;
+  --destructive-foreground: 0 0% 98%;
+
+  --input: 240 8% 16%;
+  --ring: 263 70% 60%;
+
+  --chart-1: 263 70% 68%;
+  --chart-2: 217 80% 65%;
+  --chart-3: 160 60% 50%;
+  --chart-4: 35 85% 60%;
+  --chart-5: 0 72% 60%;
+
+  --app-font-sans:  -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Display', sans-serif;
+  --app-font-serif: Georgia, serif;
+  --app-font-mono:  'JetBrains Mono', 'SF Mono', 'Menlo', monospace;
+  --radius: 0.5rem;
+
+  --shadow-2xs: 0px 1px 2px 0px rgba(0,0,0,.3);
+  --shadow-xs:  0px 1px 4px 0px rgba(0,0,0,.35);
+  --shadow-sm:  0px 1px 3px 0px rgba(0,0,0,.4), 0px 1px 2px -1px rgba(0,0,0,.25);
+  --shadow:     0px 2px 8px 0px rgba(0,0,0,.45), 0px 1px 2px -1px rgba(0,0,0,.3);
+  --shadow-md:  0px 4px 16px -1px rgba(0,0,0,.5), 0px 2px 4px -2px rgba(0,0,0,.3);
+  --shadow-lg:  0px 10px 30px -3px rgba(0,0,0,.55);
+
+  --glass-bg:     rgba(18,18,26,0.92);
+  --glass-border: rgba(255,255,255,0.07);
+  --glass-blur:   16px;
+  --glass-shadow: 0 4px 24px rgba(0,0,0,0.4);
+
+  --sidebar-glass-bg:     #0A0A10;
+  --sidebar-glass-border: rgba(255,255,255,0.05);
+}
+
+/* ── Light theme (opt-in via .light class) ───────────────────────────────── */
+.light {
   --background: 0 0% 100%;
   --foreground: 240 3% 12%;
   --border: 240 6% 89%;
-
-  /* White cards */
   --card: 0 0% 100%;
   --card-foreground: 240 3% 12%;
   --card-border: 240 6% 90%;
-
-  /* Sidebar — light grey #EBEBEB */
   --sidebar: 0 0% 92%;
   --sidebar-foreground: 240 3% 18%;
   --sidebar-border: 240 4% 85%;
-  --sidebar-primary: 0 0% 86%;
-  --sidebar-primary-foreground: 240 3% 12%;
+  --sidebar-primary: 263 70% 52%;
+  --sidebar-primary-foreground: 0 0% 100%;
   --sidebar-accent: 0 0% 89%;
   --sidebar-accent-foreground: 240 3% 15%;
-  --sidebar-ring: 240 4% 75%;
-
+  --sidebar-ring: 263 70% 52%;
   --popover: 0 0% 100%;
   --popover-foreground: 240 3% 12%;
   --popover-border: 240 6% 88%;
-
-  /* Primary = near-black */
-  --primary: 240 4% 14%;
-  --primary-foreground: 0 0% 98%;
-
+  --primary: 263 70% 52%;
+  --primary-foreground: 0 0% 100%;
   --secondary: 0 0% 93%;
   --secondary-foreground: 240 3% 18%;
-
   --muted: 0 0% 93%;
   --muted-foreground: 240 4% 46%;
-
   --accent: 0 0% 94%;
   --accent-foreground: 240 3% 12%;
-
   --destructive: 0 72% 51%;
   --destructive-foreground: 0 0% 98%;
-
   --input: 0 0% 91%;
-  --ring: 240 5% 20%;
-
-  --chart-1: 240 5% 16%;
-  --chart-2: 217 80% 58%;
-  --chart-3: 280 60% 60%;
-  --chart-4: 160 60% 45%;
-  --chart-5: 35 85% 55%;
-
-  --app-font-sans:  -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif;
-  --app-font-serif: Georgia, serif;
-  --app-font-mono:  'SF Mono', 'JetBrains Mono', 'Menlo', monospace;
-  --radius: 0.625rem;
-
-  --shadow-2xs: 0px 1px 2px 0px rgba(0,0,0,.04);
-  --shadow-xs:  0px 1px 4px 0px rgba(0,0,0,.05);
-  --shadow-sm:  0px 1px 3px 0px rgba(0,0,0,.05), 0px 1px 2px -1px rgba(0,0,0,.03);
-  --shadow:     0px 2px 8px 0px rgba(0,0,0,.07), 0px 1px 2px -1px rgba(0,0,0,.04);
-  --shadow-md:  0px 4px 16px -1px rgba(0,0,0,.09), 0px 2px 4px -2px rgba(0,0,0,.05);
-  --shadow-lg:  0px 10px 30px -3px rgba(0,0,0,.09);
-
-  /* Glass — popovers, dropdowns */
+  --ring: 263 70% 52%;
   --glass-bg:     rgba(255,255,255,0.96);
   --glass-border: rgba(0,0,0,0.07);
-  --glass-blur:   16px;
   --glass-shadow: 0 4px 20px rgba(0,0,0,0.08);
-
-  /* Sidebar — kept for legacy .glass-sidebar usage */
   --sidebar-glass-bg:     #EBEBEB;
   --sidebar-glass-border: rgba(0,0,0,0.07);
-}
-
-.dark {
-  --background: 235 15% 8%;
-  --foreground: 220 17% 93%;
-  --border: 240 5% 22%;
-  --card: 235 12% 12%;
-  --card-foreground: 220 17% 93%;
-  --card-border: 240 5% 22%;
-  --sidebar: 235 15% 6%;
-  --sidebar-foreground: 220 17% 93%;
-  --sidebar-border: 240 5% 18%;
-  --sidebar-primary: 228 5% 68%;
-  --sidebar-primary-foreground: 235 15% 6%;
-  --sidebar-accent: 240 5% 17%;
-  --sidebar-accent-foreground: 220 17% 93%;
-  --sidebar-ring: 220 15% 55%;
-  --popover: 235 12% 10%;
-  --popover-foreground: 220 17% 93%;
-  --popover-border: 240 5% 22%;
-  --primary: 220 15% 85%;
-  --primary-foreground: 235 15% 8%;
-  --secondary: 240 5% 22%;
-  --secondary-foreground: 220 17% 93%;
-  --muted: 240 5% 17%;
-  --muted-foreground: 228 5% 60%;
-  --accent: 240 5% 19%;
-  --accent-foreground: 220 17% 93%;
-  --destructive: 0 62.8% 45%;
-  --destructive-foreground: 0 0% 98%;
-  --input: 240 5% 19%;
-  --ring: 220 15% 70%;
-  --chart-1: 220 17% 90%;
-  --chart-2: 217 80% 65%;
-  --chart-3: 280 60% 65%;
-  --chart-4: 160 60% 50%;
-  --chart-5: 35 85% 60%;
-  --glass-bg:     rgba(30,32,48,0.85);
-  --glass-border: rgba(255,255,255,0.08);
-  --glass-shadow: 0 4px 24px rgba(0,0,0,0.25);
-  --sidebar-glass-bg: #111113;
-  --sidebar-glass-border: rgba(255,255,255,0.05);
 }
 
 @layer base {
   * { @apply border-border; }
   html, body, #root { height: 100%; min-height: 100%; }
   body {
-    @apply font-sans antialiased text-foreground selection:bg-primary/15;
-    background: #ffffff;
+    @apply font-sans antialiased text-foreground selection:bg-primary/20;
+    background: hsl(234 18% 8%);
   }
 }
 

@@ -358,7 +358,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
       `}</style>
 
       {/* Progress bar */}
-      <div className="h-0.5 bg-white/[0.06] shrink-0">
+      <div className="h-0.5 bg-card/[0.06] shrink-0">
         <div
           className="h-full bg-gradient-to-r from-violet-500 to-indigo-400 transition-all duration-500 ease-out"
           style={{ width: `${progress}%` }}
@@ -387,7 +387,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
               {String(stepIdx + 1).padStart(2, "0")} / {String(totalManagedSteps).padStart(2, "0")} — {STEP_LABELS[currentStep]}
             </span>
           )}
-          <button onClick={handleClose} className="h-8 w-8 rounded-full bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center text-white/50 hover:text-white/80 transition-all">
+          <button onClick={handleClose} className="h-8 w-8 rounded-full bg-card/[0.06] hover:bg-card/[0.12] flex items-center justify-center text-white/50 hover:text-white/80 transition-all">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -408,7 +408,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                 <div className="grid grid-cols-2 gap-4">
                   <button
                     onClick={() => { update({ mode: "managed" }); setDirection("forward"); setRenderKey(k => k + 1); }}
-                    className="group relative text-left p-6 rounded-2xl border border-white/[0.08] bg-white/[0.03] hover:bg-white/[0.07] hover:border-violet-500/60 transition-all duration-200"
+                    className="group relative text-left p-6 rounded-2xl border border-white/[0.08] bg-card/[0.03] hover:bg-card/[0.07] hover:border-violet-500/60 transition-all duration-200"
                   >
                     <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-violet-500/10 to-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
                     <div className="relative">
@@ -428,10 +428,10 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
 
                   <button
                     onClick={() => { update({ mode: "byop" }); setDirection("forward"); setRenderKey(k => k + 1); }}
-                    className="group relative text-left p-6 rounded-2xl border border-white/[0.08] bg-white/[0.03] hover:bg-white/[0.07] hover:border-white/20 transition-all duration-200"
+                    className="group relative text-left p-6 rounded-2xl border border-white/[0.08] bg-card/[0.03] hover:bg-card/[0.07] hover:border-white/20 transition-all duration-200"
                   >
                     <div className="relative">
-                      <div className="h-11 w-11 rounded-xl bg-white/[0.08] flex items-center justify-center mb-4">
+                      <div className="h-11 w-11 rounded-xl bg-card/[0.08] flex items-center justify-center mb-4">
                         <Globe className="h-5 w-5 text-white/70" />
                       </div>
                       <div className="mb-1.5">
@@ -471,12 +471,12 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                           "text-left p-4 rounded-xl border transition-all duration-200 flex items-center gap-3 group",
                           sel
                             ? "border-violet-500/70 bg-violet-500/10 shadow-[0_0_0_1px_rgba(139,92,246,0.3)]"
-                            : "border-white/[0.06] bg-white/[0.02] hover:border-white/15 hover:bg-white/[0.04]",
+                            : "border-white/[0.06] bg-card/[0.02] hover:border-white/15 hover:bg-card/[0.04]",
                         )}
                       >
                         <div className={cn(
                           "h-9 w-9 rounded-lg flex items-center justify-center shrink-0 transition-colors",
-                          sel ? "bg-violet-500 text-white" : "bg-white/[0.07] text-white/50",
+                          sel ? "bg-violet-500 text-white" : "bg-card/[0.07] text-white/50",
                         )}>
                           <Icon className="h-4 w-4" />
                         </div>
@@ -511,7 +511,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                         onClick={() => update({ isMultilingual: opt.value, additionalLanguages: [] })}
                         className={cn(
                           "flex-1 p-4 rounded-xl border transition-all flex items-start gap-3",
-                          sel ? "border-violet-500/70 bg-violet-500/10" : "border-white/[0.08] bg-white/[0.02] hover:border-white/15",
+                          sel ? "border-violet-500/70 bg-violet-500/10" : "border-white/[0.08] bg-card/[0.02] hover:border-white/15",
                         )}
                       >
                         {opt.value ? <Languages className={cn("h-5 w-5 mt-0.5 shrink-0", sel ? "text-violet-400" : "text-white/40")} /> : <Volume2 className={cn("h-5 w-5 mt-0.5 shrink-0", sel ? "text-violet-400" : "text-white/40")} />}
@@ -535,7 +535,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                         onClick={() => update({ primaryLanguage: lang.code })}
                         className={cn(
                           "p-3 rounded-xl border flex items-center gap-2.5 transition-all",
-                          sel ? "border-violet-500/70 bg-violet-500/10" : "border-white/[0.06] bg-white/[0.02] hover:border-white/15",
+                          sel ? "border-violet-500/70 bg-violet-500/10" : "border-white/[0.06] bg-card/[0.02] hover:border-white/15",
                         )}
                       >
                         <span className="text-lg">{lang.flag}</span>
@@ -567,7 +567,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                               "p-3 rounded-xl border flex items-center gap-2.5 transition-all",
                               sel    ? "border-violet-500/70 bg-violet-500/10"
                               : maxed ? "border-white/[0.03] opacity-30 cursor-not-allowed"
-                              : "border-white/[0.06] bg-white/[0.02] hover:border-white/15",
+                              : "border-white/[0.06] bg-card/[0.02] hover:border-white/15",
                             )}
                           >
                             <span className="text-lg">{lang.flag}</span>
@@ -586,7 +586,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                   const stack = getManagedStack(langs);
                   const hasTamil = langs.includes("tamil");
                   return (
-                    <div className="p-4 rounded-xl border border-white/[0.06] bg-white/[0.02]">
+                    <div className="p-4 rounded-xl border border-white/[0.06] bg-card/[0.02]">
                       <p className="text-white/30 text-xs uppercase tracking-[0.15em] mb-2">Auto-selected AI stack</p>
                       <div className="grid grid-cols-4 gap-2">
                         {[
@@ -595,7 +595,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                           { l: "TTS",  v: stack.ttsProvider,        note: "" },
                           { l: "TEL",  v: stack.telephonyProvider,  note: "" },
                         ].map(item => (
-                          <div key={item.l} className="text-center p-2.5 rounded-lg bg-white/[0.04] border border-white/[0.05]">
+                          <div key={item.l} className="text-center p-2.5 rounded-lg bg-card/[0.04] border border-white/[0.05]">
                             <div className="text-white/25 text-[9px] uppercase tracking-widest">{item.l}</div>
                             <div className="text-white/80 text-xs font-semibold capitalize mt-0.5">{item.v}</div>
                             {item.note && <div className="text-violet-400/70 text-[9px] mt-0.5">{item.note}</div>}
@@ -623,7 +623,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                       placeholder="e.g. Arushi, Priya, Alex"
                       value={state.agentName}
                       onChange={e => update({ agentName: e.target.value })}
-                      className="w-full bg-white/[0.05] border border-white/[0.1] rounded-xl px-4 py-3.5 text-white text-base placeholder:text-white/20 focus:outline-none focus:border-violet-500/60 focus:bg-white/[0.07] transition-all"
+                      className="w-full bg-card/[0.05] border border-white/[0.1] rounded-xl px-4 py-3.5 text-white text-base placeholder:text-white/20 focus:outline-none focus:border-violet-500/60 focus:bg-card/[0.07] transition-all"
                     />
                   </div>
                   <div>
@@ -633,7 +633,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                       placeholder="e.g. QuickPay, Acme Corp"
                       value={state.companyName}
                       onChange={e => update({ companyName: e.target.value })}
-                      className="w-full bg-white/[0.05] border border-white/[0.1] rounded-xl px-4 py-3.5 text-white text-base placeholder:text-white/20 focus:outline-none focus:border-violet-500/60 focus:bg-white/[0.07] transition-all"
+                      className="w-full bg-card/[0.05] border border-white/[0.1] rounded-xl px-4 py-3.5 text-white text-base placeholder:text-white/20 focus:outline-none focus:border-violet-500/60 focus:bg-card/[0.07] transition-all"
                     />
                   </div>
                   <div>
@@ -647,7 +647,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                             "flex-1 py-3 px-4 rounded-xl border font-medium text-sm capitalize transition-all",
                             state.agentDirection === dir
                               ? "border-violet-500/70 bg-violet-500/10 text-white"
-                              : "border-white/[0.08] bg-white/[0.02] text-white/40 hover:border-white/20",
+                              : "border-white/[0.08] bg-card/[0.02] text-white/40 hover:border-white/20",
                           )}
                         >
                           {dir}
@@ -673,7 +673,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                   value={state.callFlowDescription}
                   onChange={e => { update({ callFlowDescription: e.target.value }); setGenError(""); }}
                   rows={6}
-                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3.5 text-white text-sm placeholder:text-white/20 focus:outline-none focus:border-violet-500/60 transition-all resize-none leading-relaxed mb-3"
+                  className="w-full bg-card/[0.04] border border-white/[0.08] rounded-xl px-4 py-3.5 text-white text-sm placeholder:text-white/20 focus:outline-none focus:border-violet-500/60 transition-all resize-none leading-relaxed mb-3"
                 />
 
                 {/* Generate button */}
@@ -683,7 +683,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                   className={cn(
                     "w-full flex items-center justify-center gap-2.5 py-3.5 rounded-xl font-semibold text-sm transition-all mb-3",
                     !state.callFlowDescription.trim() || isGenerating
-                      ? "bg-white/[0.05] text-white/25 cursor-not-allowed"
+                      ? "bg-card/[0.05] text-white/25 cursor-not-allowed"
                       : "bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white shadow-lg shadow-violet-500/20",
                   )}
                 >
@@ -740,7 +740,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                     onDragOver={e => e.preventDefault()}
                     onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
                   >
-                    <div className="h-14 w-14 rounded-2xl bg-white/[0.05] group-hover:bg-white/[0.08] flex items-center justify-center mx-auto mb-4 transition-colors">
+                    <div className="h-14 w-14 rounded-2xl bg-card/[0.05] group-hover:bg-card/[0.08] flex items-center justify-center mx-auto mb-4 transition-colors">
                       <Upload className="h-7 w-7 text-white/40" />
                     </div>
                     <p className="text-white/60 font-semibold mb-1">Drop a file or click to upload</p>
@@ -773,10 +773,10 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                   value={state.kbContent && !state.kbFileName ? state.kbContent : ""}
                   onChange={e => update({ kbContent: e.target.value, kbFileName: "" })}
                   rows={5}
-                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3.5 text-white text-sm placeholder:text-white/20 focus:outline-none focus:border-violet-500/60 transition-all resize-none leading-relaxed"
+                  className="w-full bg-card/[0.04] border border-white/[0.08] rounded-xl px-4 py-3.5 text-white text-sm placeholder:text-white/20 focus:outline-none focus:border-violet-500/60 transition-all resize-none leading-relaxed"
                 />
 
-                <div className="mt-4 p-3.5 rounded-xl border border-white/[0.06] bg-white/[0.02] flex items-center gap-2.5">
+                <div className="mt-4 p-3.5 rounded-xl border border-white/[0.06] bg-card/[0.02] flex items-center gap-2.5">
                   <SkipForward className="h-4 w-4 text-white/30 shrink-0" />
                   <p className="text-white/35 text-xs">You can skip this step and add a knowledge base later from the agent settings.</p>
                 </div>
@@ -810,7 +810,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                             "p-4 rounded-xl border cursor-pointer transition-all duration-200 flex items-center gap-3 group",
                             sel
                               ? "border-violet-500/70 bg-violet-500/10 shadow-[0_0_0_1px_rgba(139,92,246,0.25)]"
-                              : "border-white/[0.06] bg-white/[0.02] hover:border-white/15 hover:bg-white/[0.04]",
+                              : "border-white/[0.06] bg-card/[0.02] hover:border-white/15 hover:bg-card/[0.04]",
                           )}
                         >
                           <div className={cn(
@@ -824,7 +824,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                               <span className={cn("font-semibold text-sm", sel ? "text-white" : "text-white/70")}>{voice.name}</span>
                               {isArushi && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-400 font-semibold">Default</span>}
                               {voice.language && (
-                                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-white/10 text-white/40 font-medium">
+                                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-card/10 text-white/40 font-medium">
                                   {LANG_LABEL[voice.language] ?? voice.language.toUpperCase()}
                                 </span>
                               )}
@@ -835,7 +835,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                             onClick={e => { e.stopPropagation(); void preview(voice.id); }}
                             className={cn(
                               "h-8 w-8 rounded-full flex items-center justify-center shrink-0 transition-all",
-                              isPlay ? "bg-violet-500 text-white" : "bg-white/[0.08] text-white/50 hover:bg-white/15 hover:text-white/80",
+                              isPlay ? "bg-violet-500 text-white" : "bg-card/[0.08] text-white/50 hover:bg-card/15 hover:text-white/80",
                             )}
                           >
                             {isPlay ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
@@ -860,7 +860,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                   {/* Call Transfer */}
                   <div className={cn(
                     "p-5 rounded-xl border transition-all",
-                    state.callTransferEnabled ? "border-violet-500/50 bg-violet-500/5" : "border-white/[0.07] bg-white/[0.02]",
+                    state.callTransferEnabled ? "border-violet-500/50 bg-violet-500/5" : "border-white/[0.07] bg-card/[0.02]",
                   )}>
                     <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-2.5">
@@ -871,11 +871,11 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                         onClick={() => update({ callTransferEnabled: !state.callTransferEnabled })}
                         className={cn(
                           "relative w-11 h-6 rounded-full transition-colors",
-                          state.callTransferEnabled ? "bg-violet-500" : "bg-white/[0.12]",
+                          state.callTransferEnabled ? "bg-violet-500" : "bg-card/[0.12]",
                         )}
                       >
                         <span className={cn(
-                          "absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform",
+                          "absolute top-0.5 w-5 h-5 rounded-full bg-card shadow transition-transform",
                           state.callTransferEnabled ? "translate-x-5" : "translate-x-0.5",
                         )} />
                       </button>
@@ -887,7 +887,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                         placeholder="+91 9876543210"
                         value={state.callTransferNumber}
                         onChange={e => update({ callTransferNumber: e.target.value })}
-                        className="w-full bg-white/[0.06] border border-white/[0.1] rounded-lg px-3 py-2.5 text-white text-sm placeholder:text-white/25 focus:outline-none focus:border-violet-500/60 transition-all"
+                        className="w-full bg-card/[0.06] border border-white/[0.1] rounded-lg px-3 py-2.5 text-white text-sm placeholder:text-white/25 focus:outline-none focus:border-violet-500/60 transition-all"
                       />
                     )}
                   </div>
@@ -907,17 +907,17 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                   </div>
 
                   {/* Coming soon */}
-                  <div className="p-4 rounded-xl border border-white/[0.05] bg-white/[0.02]">
+                  <div className="p-4 rounded-xl border border-white/[0.05] bg-card/[0.02]">
                     <p className="text-white/25 text-xs uppercase tracking-widest mb-2">Coming soon</p>
                     <div className="flex flex-wrap gap-2">
                       {["WhatsApp Integration", "SMS Service", "CRM Sync", "Zapier", "Salesforce"].map(item => (
-                        <span key={item} className="px-2.5 py-1 rounded-full bg-white/[0.04] text-xs text-white/25 border border-white/[0.05]">{item}</span>
+                        <span key={item} className="px-2.5 py-1 rounded-full bg-card/[0.04] text-xs text-white/25 border border-white/[0.05]">{item}</span>
                       ))}
                     </div>
                   </div>
 
                   {/* Summary card */}
-                  <div className="p-5 rounded-xl border border-white/[0.07] bg-white/[0.02] mt-2">
+                  <div className="p-5 rounded-xl border border-white/[0.07] bg-card/[0.02] mt-2">
                     <p className="text-white/30 text-xs uppercase tracking-widest mb-3">Your agent summary</p>
                     <div className="space-y-2">
                       {[
@@ -952,7 +952,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                   <div>
                     <label className="text-white/50 text-xs uppercase tracking-widest block mb-2">Agent Name</label>
                     <input type="text" placeholder="My Assistant" value={state.agentName} onChange={e => update({ agentName: e.target.value })}
-                      className="w-full bg-white/[0.05] border border-white/[0.1] rounded-xl px-4 py-3 text-white placeholder:text-white/25 focus:outline-none focus:border-violet-500/60 transition-all" />
+                      className="w-full bg-card/[0.05] border border-white/[0.1] rounded-xl px-4 py-3 text-white placeholder:text-white/25 focus:outline-none focus:border-violet-500/60 transition-all" />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     {[
@@ -961,12 +961,12 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                       { label: "Voice (TTS)",       key: "byopTts",       opts: ["elevenlabs","openai","cartesia","azure","aws_polly","deepgram"] },
                       { label: "Telephony",         key: "byopTelephony", opts: ["twilio","plivo","vonage","vobiz"] },
                     ].map(field => (
-                      <div key={field.key} className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-3.5">
+                      <div key={field.key} className="bg-card/[0.04] border border-white/[0.06] rounded-xl p-3.5">
                         <p className="text-white/30 text-[10px] font-semibold uppercase tracking-widest mb-2">{field.label}</p>
                         <select
                           value={(state as any)[field.key]}
                           onChange={e => update({ [field.key]: e.target.value } as any)}
-                          className="w-full bg-white/[0.07] border border-white/[0.08] rounded-lg text-xs text-white/70 py-2 px-2.5 focus:outline-none focus:border-violet-500/60"
+                          className="w-full bg-card/[0.07] border border-white/[0.08] rounded-lg text-xs text-white/70 py-2 px-2.5 focus:outline-none focus:border-violet-500/60"
                         >
                           {field.opts.map(o => <option key={`${field.key}-${o}`} value={o} className="bg-zinc-900">{o}</option>)}
                         </select>
@@ -977,7 +977,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                     <label className="text-white/50 text-xs uppercase tracking-widest block mb-2">System Prompt</label>
                     <textarea
                       value={state.byopPrompt} onChange={e => update({ byopPrompt: e.target.value })} rows={6}
-                      className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-white/80 text-sm focus:outline-none focus:border-violet-500/60 transition-all resize-none"
+                      className="w-full bg-card/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-white/80 text-sm focus:outline-none focus:border-violet-500/60 transition-all resize-none"
                     />
                   </div>
                 </div>
@@ -997,9 +997,9 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                 key={i}
                 className={cn(
                   "h-1 rounded-full transition-all duration-300",
-                  i < stepIdx ? "w-5 bg-white/40"
+                  i < stepIdx ? "w-5 bg-card/40"
                   : i === stepIdx ? "w-5 bg-violet-400"
-                  : "w-2 bg-white/[0.12]",
+                  : "w-2 bg-card/[0.12]",
                 )}
               />
             ))}
@@ -1022,7 +1022,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                 className={cn(
                   "flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm transition-all",
                   isCreating || create.isPending
-                    ? "bg-white/[0.08] text-white/30 cursor-not-allowed"
+                    ? "bg-card/[0.08] text-white/30 cursor-not-allowed"
                     : "bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white shadow-lg shadow-violet-500/25",
                 )}
               >
@@ -1041,8 +1041,8 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                 className={cn(
                   "flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm transition-all",
                   currentStep === "use-case" && !state.useCase
-                    ? "bg-white/[0.06] text-white/25 cursor-not-allowed"
-                    : "bg-white/[0.08] hover:bg-white/[0.13] text-white border border-white/[0.08]",
+                    ? "bg-card/[0.06] text-white/25 cursor-not-allowed"
+                    : "bg-card/[0.08] hover:bg-card/[0.13] text-white border border-white/[0.08]",
                 )}
               >
                 Continue <ChevronRight className="h-4 w-4" />

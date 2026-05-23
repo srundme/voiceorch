@@ -32,7 +32,7 @@ function SegmentBar({
   segments: { key: string; pct: number; bg: string; tooltip: string }[];
 }) {
   return (
-    <div className="flex h-1 w-full rounded-full overflow-hidden gap-px bg-white/10">
+    <div className="flex h-1 w-full rounded-full overflow-hidden gap-px bg-card/10">
       {segments.map((s) => (
         <Tooltip key={s.key}>
           <TooltipTrigger asChild>
@@ -94,7 +94,7 @@ export function AgentMetricsBar({
   }
 
   return (
-    <div className="flex gap-3 px-5 py-3 border-b border-black/[0.06] bg-white shrink-0">
+    <div className="flex gap-3 px-5 py-3 border-b border-white/[0.06] bg-card shrink-0">
       {/* Cost card */}
       <div className="flex-1 bg-[#1C1C1E] rounded-xl px-4 py-3 space-y-2">
         <div className="flex items-baseline gap-2">
@@ -135,7 +135,7 @@ export function AgentMetricsBar({
         {latencySegments ? (
           <SegmentBar segments={latencySegments} />
         ) : (
-          <div className="h-1 w-full rounded-full bg-white/10" />
+          <div className="h-1 w-full rounded-full bg-card/10" />
         )}
         <div className="flex items-center gap-3">
           {(["stt", "llm", "tts"] as const).map((k) => (

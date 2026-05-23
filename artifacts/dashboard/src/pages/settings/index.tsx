@@ -29,7 +29,7 @@ function CopyButton({ text }: { text: string }) {
         setTimeout(() => setCopied(false), 2000);
       }}
     >
-      {copied ? <Check className="h-3.5 w-3.5 text-black/75" /> : <Copy className="h-3.5 w-3.5" />}
+      {copied ? <Check className="h-3.5 w-3.5 text-white/75" /> : <Copy className="h-3.5 w-3.5" />}
     </Button>
   );
 }
@@ -121,12 +121,12 @@ function TelephonyGuide({ provider, agentId }: TelephonyGuideProps) {
 
 function MaskedKey({ value }: { value: string | null | undefined }) {
   const [show, setShow] = useState(false);
-  if (!value) return <span className="text-black/35 text-xs italic">Not generated yet</span>;
+  if (!value) return <span className="text-white/35 text-xs italic">Not generated yet</span>;
   const masked = value.slice(0, 8) + "•".repeat(20) + value.slice(-4);
   return (
     <div className="flex items-center gap-2 bg-muted/60 border border-border/60 rounded-md px-3 py-2 font-mono text-xs text-foreground/90 overflow-x-auto flex-1">
       <span className="flex-1 whitespace-nowrap">{show ? value : masked}</span>
-      <button onClick={() => setShow(s => !s)} className="text-black/35 hover:text-black/75 transition-colors">
+      <button onClick={() => setShow(s => !s)} className="text-white/35 hover:text-white/75 transition-colors">
         {show ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
       </button>
       <CopyButton text={value} />
@@ -198,7 +198,7 @@ export default function SettingsPage() {
             <div key={i} className="flex items-center justify-between gap-3 py-2 border-b border-border/40 last:border-0">
               <div className="flex items-center gap-2.5">
                 {item.done ? (
-                  <CheckCircle2 className="h-4 w-4 text-black/75 shrink-0" />
+                  <CheckCircle2 className="h-4 w-4 text-white/75 shrink-0" />
                 ) : (
                   <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0" />
                 )}
@@ -209,7 +209,7 @@ export default function SettingsPage() {
                   <Button variant="outline" size="sm" className="text-xs h-7">{item.action.label}</Button>
                 </Link>
               )}
-              {item.done && <Badge variant="outline" className="text-[10px] bg-black/[0.04] text-black/75 border-black/[0.08]">Done</Badge>}
+              {item.done && <Badge variant="outline" className="text-[10px] bg-card/[0.04] text-white/75 border-white/[0.08]">Done</Badge>}
             </div>
           ))}
         </CardContent>
@@ -286,9 +286,9 @@ export default function SettingsPage() {
             <>
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium">Secret API Key <span className="text-[10px] text-black/35 font-mono ml-1">vok_…</span></p>
+                  <p className="text-sm font-medium">Secret API Key <span className="text-[10px] text-white/35 font-mono ml-1">vok_…</span></p>
                   <Button
-                    variant="ghost" size="sm" className="h-7 text-xs gap-1.5 text-black/50 hover:text-black/85"
+                    variant="ghost" size="sm" className="h-7 text-xs gap-1.5 text-white/50 hover:text-white/85"
                     disabled={regenerate.isPending}
                     onClick={() => regenerate.mutate(undefined, {
                       onSuccess: () => { queryClient.invalidateQueries({ queryKey: getGetAccountQueryKey() }); toast({ title: "API key regenerated" }); },
@@ -299,13 +299,13 @@ export default function SettingsPage() {
                   </Button>
                 </div>
                 <MaskedKey value={account?.apiKey} />
-                <p className="text-[11px] text-black/35">Include as <code className="bg-black/[0.08] px-1 rounded text-black/50">Authorization: Bearer &lt;key&gt;</code> header.</p>
+                <p className="text-[11px] text-white/35">Include as <code className="bg-card/[0.08] px-1 rounded text-white/50">Authorization: Bearer &lt;key&gt;</code> header.</p>
               </div>
 
               <div className="space-y-1.5">
-                <p className="text-sm font-medium">Organisation Key <span className="text-[10px] text-black/35 font-mono ml-1">voo_…</span></p>
+                <p className="text-sm font-medium">Organisation Key <span className="text-[10px] text-white/35 font-mono ml-1">voo_…</span></p>
                 <MaskedKey value={account?.orgKey} />
-                <p className="text-[11px] text-black/35">Use to verify webhook signatures sent from SnapServe to your server.</p>
+                <p className="text-[11px] text-white/35">Use to verify webhook signatures sent from SnapServe to your server.</p>
               </div>
 
               <div className="flex items-center justify-between p-4 rounded-lg border border-border/60 bg-muted/20">
