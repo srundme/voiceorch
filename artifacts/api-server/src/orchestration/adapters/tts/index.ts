@@ -11,13 +11,14 @@ export function createTTSAdapter(
   apiKey: string,
   voice: string | null,
   model: string | null = null,
-  extraConfig?: string | null
+  extraConfig?: string | null,
+  language?: string | null,
 ): TTSAdapter {
   switch (provider.toLowerCase()) {
     case "elevenlabs":
       return new ElevenLabsTTS(apiKey, voice);
     case "cartesia":
-      return new CartesiaTTS(apiKey, voice, model);
+      return new CartesiaTTS(apiKey, voice, model, language);
     case "sarvam":
       return new SarvamTTS(apiKey, voice, extraConfig);
     case "openai":

@@ -9,8 +9,9 @@ export class CartesiaTTS implements TTSAdapter {
   private key: string;
   private voiceId: string;
   private modelId: string;
+  private language: string | null;
 
-  constructor(apiKey: string, voice: string | null, model: string | null) {
+  constructor(apiKey: string, voice: string | null, model: string | null, language?: string | null) {
     this.key = apiKey;
     this.voiceId = voice ?? "a0e99841-438c-4a64-b679-ae501e7d6091"; // British Reading Lady
     // Normalise legacy / invalid model IDs to the supported set
@@ -20,10 +21,12 @@ export class CartesiaTTS implements TTSAdapter {
       "sonic-turbo-2025-03-07", "sonic-turbo-2025-06-04",
       "sonic-english", "sonic-multilingual"]);
     this.modelId = model && VALID.has(model) ? model : "sonic-3";
+    // Map BCP-47 to ISO 639-1 (e.g. "ta-IN" → "ta", "en-US" → "en")
+    this.language = language ? language.split("-")[0] : null;
   }
 
   private buildRequestBody(text: string): string {
-    return JSON.stringify({
+    const body: Record<string, unknown> = {
       transcript: text,
       model_id: this.modelId,
       voice: { mode: "id", id: this.voiceId },
@@ -32,7 +35,9 @@ export class CartesiaTTS implements TTSAdapter {
         encoding: "pcm_s16le",
         sample_rate: 16000,
       },
-    });
+    };
+    if (this.language) body.language = this.language;
+    return JSON.stringify(body);
   }
 
   async synthesize(text: string): Promise<Buffer> {

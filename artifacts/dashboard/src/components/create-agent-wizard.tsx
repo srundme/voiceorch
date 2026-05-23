@@ -62,8 +62,8 @@ function getManagedStack(languages: string[]) {
     asrModel:          (hasTamil || hasIndic) ? "saarika:v2.5" : "nova-2-general",
     llmProvider:       (hasTamil || hasIndic) ? "google" : "sarvam",
     llmModel:          (hasTamil || hasIndic) ? "gemini-2.5-flash" : "sarvam-m",
-    ttsProvider:       (hasTamil || hasIndic) ? "sarvam" : "cartesia",
-    ttsModel:          (hasTamil || hasIndic) ? "bulbul:v2" : "sonic-3",
+    ttsProvider:       "cartesia",
+    ttsModel:          "sonic-3",
     telephonyProvider: "vobiz",
   };
 }
@@ -619,7 +619,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                         {[
                           { l: "STT",  v: stack.asrProvider,       note: hasTamil ? "Tamil optimised" : "" },
                           { l: "LLM",  v: (hasTamil || hasIndic) ? "Gemini 2.5 Flash" : "Sarvam M1", note: (hasTamil || hasIndic) ? "Multilingual & fast" : "Indian language optimised" },
-                          { l: "TTS",  v: (hasTamil || hasIndic) ? "Sarvam Bulbul" : "Cartesia Sonic", note: (hasTamil || hasIndic) ? "Native Indic voices" : "" },
+                          { l: "TTS",  v: "Cartesia Sonic", note: "" },
                           { l: "TEL",  v: stack.telephonyProvider,  note: "" },
                         ].map(item => (
                           <div key={item.l} className="text-center p-2.5 rounded-lg bg-gray-50 border border-gray-100">
