@@ -62,7 +62,8 @@ AI voice agent orchestration SaaS platform — users bring their own provider AP
 ## Gotchas
 
 - After any OpenAPI spec change, always run `pnpm --filter @workspace/api-spec run codegen` then `pnpm run typecheck:libs` before touching backend routes
-- Provider `apiKey` is stored in plaintext in DB — production should encrypt at rest
+- Provider `apiKey` is encrypted at rest (AES-256-GCM, key derived from `SESSION_SECRET`)
+- **Migration:** existing provider keys added before this change are still plaintext in the DB (decryptKey passes them through transparently). Re-save each provider in the Providers page to encrypt them.
 - `pnpm run typecheck:libs` must run after adding new schema files to `lib/db/src/schema/` for the api-server to pick up the new types
 
 ## Pointers

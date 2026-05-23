@@ -11,12 +11,14 @@ import {
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logActivity } from "../lib/activity.js";
+import { encryptKey, decryptKey } from "../lib/crypto.js";
 
 const router: IRouter = Router();
 
 function maskKey(key: string): string {
-  if (key.length <= 4) return "****";
-  return "..." + key.slice(-4);
+  const plain = decryptKey(key);
+  if (plain.length <= 4) return "****";
+  return "..." + plain.slice(-4);
 }
 
 function toProviderConfig(p: typeof providersTable.$inferSelect) {
@@ -50,7 +52,7 @@ router.post("/providers", requireAuth, async (req, res): Promise<void> => {
   }
   const [provider] = await db
     .insert(providersTable)
-    .values({ ...parsed.data, userId: clerkId })
+    .values({ ...parsed.data, apiKey: encryptKey(parsed.data.apiKey), userId: clerkId })
     .returning();
   await logActivity({ userId: clerkId, eventType: "provider.added", resourceType: "provider", resourceId: String(provider.id), description: `${provider.providerType.toUpperCase()} provider "${provider.providerName}" added` });
   res.status(201).json(toProviderConfig(provider));
@@ -68,9 +70,11 @@ router.patch("/providers/:id", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+  const updateData = { ...parsed.data };
+  if (updateData.apiKey) updateData.apiKey = encryptKey(updateData.apiKey);
   const [provider] = await db
     .update(providersTable)
-    .set(parsed.data)
+    .set(updateData)
     .where(and(eq(providersTable.id, params.data.id), eq(providersTable.userId, clerkId)))
     .returning();
   if (!provider) {

@@ -10,6 +10,7 @@ import { db, scheduledCallbacksTable, agentsTable, providersTable } from "@works
 import { and, eq, lte } from "drizzle-orm";
 import { dialTwilio, dialPlivo, dialVobiz } from "./telephony/dial.js";
 import { logger } from "../lib/logger.js";
+import { decryptKey } from "../lib/crypto.js";
 
 const POLL_INTERVAL_MS = 30_000;
 
@@ -77,7 +78,7 @@ async function fireCallback(cb: CallbackRow, baseUrl: string): Promise<void> {
     if (provider === "twilio") {
       if (!cfg["accountSid"] || !cfg["fromNumber"]) throw new Error("Twilio config missing accountSid or fromNumber");
       await dialTwilio({
-        accountSid: cfg["accountSid"]!, authToken: provRow.apiKey,
+        accountSid: cfg["accountSid"]!, authToken: decryptKey(provRow.apiKey),
         fromNumber: cfg["fromNumber"]!, toNumber: cb.toNumber,
         webhookUrl: `${baseUrl}/api/webhooks/twilio/voice?agentId=${cb.agentId}`,
         statusCallbackUrl: `${baseUrl}/api/webhooks/twilio/status`,
@@ -85,14 +86,14 @@ async function fireCallback(cb: CallbackRow, baseUrl: string): Promise<void> {
     } else if (provider === "plivo") {
       if (!cfg["authId"] || !cfg["fromNumber"]) throw new Error("Plivo config missing authId or fromNumber");
       await dialPlivo({
-        authId: cfg["authId"]!, authToken: provRow.apiKey,
+        authId: cfg["authId"]!, authToken: decryptKey(provRow.apiKey),
         fromNumber: cfg["fromNumber"]!, toNumber: cb.toNumber,
         answerUrl: `${baseUrl}/api/webhooks/plivo/voice?agentId=${cb.agentId}`,
       });
     } else if (provider === "vobiz") {
       if (!cfg["authId"] || !cfg["fromNumber"]) throw new Error("Vobiz config missing authId or fromNumber");
       await dialVobiz({
-        authId: cfg["authId"]!, authToken: provRow.apiKey,
+        authId: cfg["authId"]!, authToken: decryptKey(provRow.apiKey),
         fromNumber: cfg["fromNumber"]!, toNumber: cb.toNumber,
         answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${cb.agentId}`,
         hangupUrl:  `${baseUrl}/api/webhooks/vobiz/status`,

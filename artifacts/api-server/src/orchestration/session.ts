@@ -1,5 +1,6 @@
 import { createHmac } from "crypto";
 import { db, agentsTable, callsTable, providersTable, platformSettingsTable } from "@workspace/db";
+import { decryptKey } from "../lib/crypto.js";
 import { eq, and } from "drizzle-orm";
 import { OrchestrationPipeline } from "./pipeline.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
@@ -189,7 +190,7 @@ export async function createSession(params: {
     : await db.select().from(providersTable).where(eq(providersTable.isActive, true));
   const providerKeys = new Map<string, string>();
   for (const row of providerRows) {
-    providerKeys.set(row.providerName.toLowerCase(), row.apiKey);
+    providerKeys.set(row.providerName.toLowerCase(), decryptKey(row.apiKey));
     if (row.extraConfig) providerKeys.set(`${row.providerName.toLowerCase()}:extraConfig`, row.extraConfig);
   }
 

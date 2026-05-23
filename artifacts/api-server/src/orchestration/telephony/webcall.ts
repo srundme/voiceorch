@@ -9,6 +9,11 @@ import { detectCallerGender, applyCallerSalutation, buildGenderInstruction } fro
 import { logger } from "../../lib/logger.js";
 import { RecordingBuffer } from "../recorder.js";
 import type { ConversationTurn, STTConfig } from "../types.js";
+import { decryptKey } from "../../lib/crypto.js";
+
+// ── Per-user concurrent call rate limit ──────────────────────────────────────
+const activeCalls = new Map<string, number>();
+const MAX_CONCURRENT_CALLS = 5;
 
 // ── Tuning constants ─────────────────────────────────────────────────────────
 const VAD_SILENCE_MS        = 300;
@@ -107,9 +112,24 @@ export async function handleWebCallWebSocket(
     }
   }
 
+  // ── Rate limit: max concurrent calls per user ─────────────────────────────
+  const rateLimitKey = agent.userId ?? `agent-${agentId}`;
+  const current = activeCalls.get(rateLimitKey) ?? 0;
+  if (current >= MAX_CONCURRENT_CALLS) {
+    send({ type: "error", message: `Too many concurrent calls (max ${MAX_CONCURRENT_CALLS}). Please wait for an active call to finish.` });
+    ws.close();
+    return;
+  }
+  activeCalls.set(rateLimitKey, current + 1);
+  ws.once("close", () => {
+    const n = activeCalls.get(rateLimitKey) ?? 1;
+    if (n <= 1) activeCalls.delete(rateLimitKey);
+    else activeCalls.set(rateLimitKey, n - 1);
+  });
+
   const providerRows = await db.select().from(providersTable).where(eq(providersTable.isActive, true));
   const providerKeys = new Map<string, string>();
-  for (const row of providerRows) providerKeys.set(row.providerName.toLowerCase(), row.apiKey);
+  for (const row of providerRows) providerKeys.set(row.providerName.toLowerCase(), decryptKey(row.apiKey));
 
   const sttKey = providerKeys.get(agent.asrProvider);
   const llmKey = providerKeys.get(agent.llmProvider);
@@ -136,7 +156,7 @@ export async function handleWebCallWebSocket(
 
   const stt = createSTTAdapter(agent.asrProvider, sttKey, agent.asrModel, null, sttConfig);
   const llm = createLLMAdapter(agent.llmProvider, llmKey, agent.llmModel);
-  const agentLanguage = (agent as any).language as string | null ?? null;
+  const agentLanguage = agent.language ?? null;
   const ttsExtraConfig = agent.ttsProvider === "sarvam"
     ? JSON.stringify({ language: agentLanguage ?? "en-IN" })
     : null;

@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, and, sql } from "drizzle-orm";
 import OpenAI from "openai";
 import { db, knowledgeBasesTable, kbDocumentsTable, kbChunksTable, providersTable } from "@workspace/db";
+import { decryptKey } from "../lib/crypto.js";
 
 const router: IRouter = Router();
 
@@ -97,7 +98,7 @@ async function getOpenAiKey(): Promise<string | null> {
     .from(providersTable)
     .where(and(eq(providersTable.providerName, "openai"), eq(providersTable.isActive, true)))
     .limit(1);
-  return rows[0]?.apiKey ?? null;
+  return rows[0]?.apiKey ? decryptKey(rows[0].apiKey) : null;
 }
 
 /** Generate embeddings for a batch of texts */
