@@ -771,7 +771,13 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
     setTemperature((agent.temperature ?? 0.7) as number);
     setAsrProvider(agent.asrProvider ?? "");
     setAsrModel(agent.asrModel ?? "");
-    setAsrLanguage(agent.asrLanguage ?? "en");
+    const LANG_NORM: Record<string, string> = {
+      ta: "ta-IN", te: "te-IN", kn: "kn-IN", mr: "mr-IN",
+      gu: "gu-IN", bn: "bn-IN", ml: "ml-IN",
+      "en-US": "en", "en-GB": "en", "en-IN": "en",
+    };
+    const rawLang = agent.asrLanguage || (agent as unknown as Record<string,unknown>).language as string || "en";
+    setAsrLanguage(LANG_NORM[rawLang] ?? rawLang);
     setAsrBackgroundDenoising(agent.asrBackgroundDenoising ?? false);
     setAsrConfidenceThreshold((agent.asrConfidenceThreshold ?? 0.40) as number);
     setAsrEndOfTurnConfidence((agent.asrEndOfTurnConfidence ?? 0.70) as number);
@@ -794,7 +800,14 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
       ((a.dispositionSchema as Array<{ key: string; label: string; type: string; required?: boolean; options?: string[] }> | undefined) ?? [])
         .map(f => ({ ...f, options: f.options?.join(", ") ?? "" }))
     );
-    setAgentConfig(((a.agentConfig as AgentCfg) ?? {}) as AgentCfg);
+    const existingCfg = ((a.agentConfig as AgentCfg) ?? {}) as AgentCfg;
+    const agentTools = (a.tools as Array<{ type: string; transferTo?: string }> | undefined) ?? [];
+    const ctTool = agentTools.find(t => t.type === "call_transfer");
+    setAgentConfig({
+      ...existingCfg,
+      callTransferEnabled:  existingCfg.callTransferEnabled  ?? (ctTool !== undefined),
+      callTransferNumber:   existingCfg.callTransferNumber   ?? ctTool?.transferTo ?? "",
+    });
     setDirty(false);
   }, [agent?.id]);
 

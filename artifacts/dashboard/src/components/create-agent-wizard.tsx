@@ -43,9 +43,15 @@ const LANGUAGES = [
 
 /* ── Managed stack ──────────────────────────────────────────────────────── */
 /* Maps wizard language codes → BCP-47 codes stored on the agent */
+/* language → BCP-47 code sent to ASR/TTS engine */
 const LANG_CODE_MAP: Record<string, string> = {
   english: "en-US", hindi: "hi", tamil: "ta", telugu: "te",
   kannada: "kn", marathi: "mr", gujarati: "gu", bengali: "bn", malayalam: "ml",
+};
+/* language → asrLanguage code matching the Audio-tab dropdown options */
+const ASR_LANG_CODE_MAP: Record<string, string> = {
+  english: "en", hindi: "hi", tamil: "ta-IN", telugu: "te-IN",
+  kannada: "kn-IN", marathi: "mr-IN", gujarati: "gu-IN", bengali: "bn-IN", malayalam: "ml-IN",
 };
 
 function getManagedStack(languages: string[]) {
@@ -327,6 +333,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
     const payload = isManaged ? {
       name: state.agentName || `${STEP_LABELS["use-case"]} Agent`,
       language: LANG_CODE_MAP[state.primaryLanguage] ?? "en-US",
+      asrLanguage: ASR_LANG_CODE_MAP[state.primaryLanguage] ?? "en",
       asrProvider: stack.asrProvider, asrModel: stack.asrModel,
       llmProvider: stack.llmProvider, llmModel: stack.llmModel,
       ttsProvider: stack.ttsProvider, ttsModel: stack.ttsModel,
