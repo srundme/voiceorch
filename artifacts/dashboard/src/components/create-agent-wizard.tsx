@@ -221,7 +221,6 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
   const [direction, setDirection]     = useState<"forward" | "back">("forward");
   const [isGenerating, setGenerating] = useState(false);
   const [generateError, setGenError]  = useState("");
-  const [isCreating, setCreating]     = useState(false);
   const [loadingVoices, setLoadVoices]= useState(false);
   const [voiceSource, setVoiceSource] = useState<"cartesia" | "browser">("browser");
   const [renderKey, setRenderKey]     = useState(0);
@@ -248,7 +247,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
   useEffect(() => { setVoicesRef(state.voices); }, [state.voices]);
 
   /* close & reset */
-  function handleClose() { setState(INITIAL); setStepIdx(0); onClose(); }
+  function handleClose() { setState(INITIAL); setStepIdx(0); create.reset(); onClose(); }
 
   /* keyboard: Esc */
   useEffect(() => {
@@ -325,7 +324,6 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
 
   /* create agent */
   async function handleCreate() {
-    setCreating(true);
     const isManaged = state.mode === "managed";
     const langs  = [state.primaryLanguage, ...state.additionalLanguages];
     const stack  = getManagedStack(langs);
@@ -362,7 +360,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
         setState(INITIAL); setStepIdx(0);
         onCreated(created.id);
       },
-      onError: () => { toast({ title: "Create failed", variant: "destructive" }); setCreating(false); },
+      onError: () => { toast({ title: "Create failed", variant: "destructive" }); },
     });
   }
 
@@ -1041,15 +1039,15 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
             {state.mode === "byop" || currentStep === "skills" ? (
               <button
                 onClick={handleCreate}
-                disabled={isCreating || create.isPending}
+                disabled={create.isPending}
                 className={cn(
                   "flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm transition-all",
-                  isCreating || create.isPending
+                  create.isPending
                     ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                     : "bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white shadow-lg shadow-violet-500/25",
                 )}
               >
-                {isCreating || create.isPending
+                {create.isPending
                   ? <><Loader2 className="h-4 w-4 animate-spin" /> Creating...</>
                   : <><Check className="h-4 w-4" /> Create Agent</>
                 }
