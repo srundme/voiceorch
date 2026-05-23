@@ -93,8 +93,6 @@ const ASR_MODELS: Record<string, { value: string; label: string }[]> = {
   assemblyai: [{ value: "best", label: "Best (default)" }, { value: "nano", label: "Nano (fast)" }],
   sarvam:     [
     { value: "saarika:v2.5", label: "Saarika v2.5 (latest)" },
-    { value: "saarika:v2",   label: "Saarika v2" },
-    { value: "saarika:v1",   label: "Saarika v1" },
     { value: "saarika:flash",label: "Saarika Flash (fast)" },
     { value: "saaras:v3",    label: "Saaras v3" },
     { value: "saaras:v3-realtime", label: "Saaras v3 Realtime" },
