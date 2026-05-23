@@ -906,35 +906,40 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
   ];
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+    <div className="flex-1 flex flex-col min-w-0 overflow-hidden animate-fade-in">
       {/* ── Top bar ── */}
-      <div className="flex items-center gap-3 px-5 h-12 border-b border-white/[0.06] shrink-0">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="font-semibold text-sm text-white/85 truncate">{agentName || agent.name}</span>
-          <span className="text-[10px] text-white/35 font-mono hidden sm:block">#{String(agent.id).padStart(4, "0")}</span>
+      <div className="flex items-center gap-3 px-6 h-14 shrink-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="font-semibold text-[15px] truncate" style={{ color: "rgba(255,255,255,0.9)" }}>{agentName || agent.name}</span>
+          <span className="text-[10px] font-mono hidden sm:flex items-center px-1.5 py-0.5 rounded-md" style={{ background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.3)" }}>
+            #{String(agent.id).padStart(4, "0")}
+          </span>
           {statusDot(agent.status)}
         </div>
         <div className="ml-auto flex items-center gap-2">
           {dirty && (
-            <Button size="sm" className="h-7 text-xs bg-black/85 hover:bg-black/90 text-white gap-1.5" onClick={handleSave} disabled={update.isPending}>
+            <Button size="sm" className="h-8 text-xs gap-1.5 text-white border-0 transition-all" onClick={handleSave} disabled={update.isPending}
+              style={{ background: "linear-gradient(135deg, #7C3AED 0%, #8B5CF6 100%)", boxShadow: "0 0 16px rgba(124,58,237,0.35)" }}>
               {update.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} Save
             </Button>
           )}
-          <Button size="sm" variant="outline" className="h-7 text-xs border-white/[0.07] text-white/75 hover:bg-card/[0.08] gap-1.5" onClick={() => setOutboundDialogOpen(true)}>
+          <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 transition-all" onClick={() => setOutboundDialogOpen(true)}
+            style={{ borderColor: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.6)", background: "rgba(255,255,255,0.04)" }}>
             <PhoneOutgoing className="h-3 w-3" /> Call
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-white/50 hover:text-white/75 hover:bg-card/[0.08]">
+              <Button size="sm" variant="ghost" className="h-8 w-8 p-0 transition-colors"
+                style={{ color: "rgba(255,255,255,0.4)" }}>
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="bg-popover/90 backdrop-blur-lg border-white/[0.07] w-44">
-              <DropdownMenuItem className="text-white/75 hover:bg-card/[0.08] cursor-pointer text-xs" onClick={handleToggle}>
+            <DropdownMenuContent align="end" className="bg-popover border-white/[0.08] w-44">
+              <DropdownMenuItem className="text-white/70 hover:bg-white/[0.06] cursor-pointer text-xs" onClick={handleToggle}>
                 <PlayCircle className="mr-2 h-3.5 w-3.5" /> {agent.status === "active" ? "Deactivate" : "Activate"}
               </DropdownMenuItem>
-              <DropdownMenuSeparator className="bg-card/[0.08]" />
-              <DropdownMenuItem className="text-red-400 hover:bg-card/[0.08] cursor-pointer text-xs" onClick={handleDelete}>
+              <DropdownMenuSeparator className="bg-white/[0.06]" />
+              <DropdownMenuItem className="text-red-400 hover:bg-white/[0.06] cursor-pointer text-xs" onClick={handleDelete}>
                 <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -943,21 +948,18 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
       </div>
 
       {/* ── Stats row ── */}
-      <div className="flex items-center gap-4 px-5 py-2 border-b border-white/[0.06] bg-card shrink-0">
-        <div className="flex items-center gap-1.5 text-xs text-white/50">
-          <Phone className="h-3 w-3 text-white/35" />
-          <span className="font-semibold text-white/85">{agent.totalCalls ?? 0}</span> calls
-        </div>
-        <div className="flex items-center gap-1.5 text-xs text-white/50">
-          <CheckCircle2 className="h-3 w-3 text-white/75" />
-          <span className="font-semibold text-white/85">{successRate}%</span> success
-        </div>
-        {agent.avgDurationSeconds != null && (
-          <div className="flex items-center gap-1.5 text-xs text-white/50">
-            <Clock className="h-3 w-3 text-white/35" />
-            <span className="font-semibold text-white/85">~{agent.avgDurationSeconds}s</span> avg
+      <div className="flex items-center gap-3 px-6 py-3 shrink-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", background: "rgba(255,255,255,0.015)" }}>
+        {[
+          { icon: Phone,         val: String(agent.totalCalls ?? 0),                                                label: "calls",   color: "#8B5CF6" },
+          { icon: CheckCircle2,  val: `${successRate}%`,                                                             label: "success", color: "#10B981" },
+          ...(agent.avgDurationSeconds != null ? [{ icon: Clock, val: `~${agent.avgDurationSeconds}s`, label: "avg", color: "#F59E0B" }] : []),
+        ].map(({ icon: Icon, val, label, color }) => (
+          <div key={label} className="flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.05)" }}>
+            <Icon className="h-3 w-3 shrink-0" style={{ color }} />
+            <span className="text-[13px] font-bold tabular-nums" style={{ color: "rgba(255,255,255,0.85)" }}>{val}</span>
+            <span className="text-[11px]" style={{ color: "rgba(255,255,255,0.35)" }}>{label}</span>
           </div>
-        )}
+        ))}
       </div>
 
       {/* ── Latency bar ── */}
@@ -974,11 +976,15 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-        <div className="border-b border-white/[0.06] shrink-0 overflow-x-auto">
-          <TabsList className="w-max min-w-full justify-start rounded-none bg-transparent px-3 h-9 gap-0">
+        <div className="shrink-0 overflow-x-auto" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+          <TabsList className="w-max min-w-full justify-start rounded-none bg-transparent px-4 h-10 gap-0">
             {TABS.map(t => (
               <TabsTrigger key={t.value} value={t.value}
-                className="h-9 rounded-none border-b-2 border-transparent bg-transparent px-3 text-[11px] font-medium text-white/35 shadow-none transition-none data-[state=active]:border-emerald-500 data-[state=active]:text-white/85 data-[state=active]:shadow-none whitespace-nowrap">
+                className="h-10 rounded-none border-b-2 border-transparent bg-transparent px-3.5 text-[12.5px] font-medium shadow-none transition-colors whitespace-nowrap data-[state=active]:shadow-none"
+                style={{
+                  color: activeTab === t.value ? "rgba(167,139,250,1)" : "rgba(255,255,255,0.32)",
+                  borderBottomColor: activeTab === t.value ? "#7C3AED" : "transparent",
+                }}>
                 {t.label}
               </TabsTrigger>
             ))}
@@ -991,18 +997,30 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
         <TabsContent value="agent" className="flex-1 overflow-hidden m-0">
           <div className="flex h-full">
             {/* ── Left: form ── */}
-            <div className="flex-1 overflow-y-auto px-5 py-4">
-              <div className="max-w-xl space-y-4">
+            <div className="flex-1 overflow-y-auto px-8 py-6">
+              <div className="max-w-[560px] space-y-5">
+
+                {/* Agent Name */}
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35 mb-1.5">Agent Name</p>
+                  <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] mb-2" style={{ color: "rgba(255,255,255,0.32)" }}>
+                    Agent Name
+                  </label>
                   <Input value={agentName} onChange={e => { setAgentName(e.target.value); setDirty(true); }}
-                    className="bg-card/[0.06] border-white/[0.07] text-white/75" />
+                    className="h-11 text-[14px] border transition-all focus-visible:ring-0"
+                    style={{ background: "rgba(255,255,255,0.04)", borderColor: "rgba(255,255,255,0.09)", color: "rgba(255,255,255,0.85)" }} />
                 </div>
+
+                {/* Agent Type */}
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35 mb-1.5">Agent Type</p>
+                  <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] mb-2" style={{ color: "rgba(255,255,255,0.32)" }}>
+                    Agent Type
+                  </label>
                   <Select value={agentType} onValueChange={mark(setAgentType)}>
-                    <SelectTrigger className="h-9 text-sm bg-card/[0.06] border-white/[0.07] text-white/75"><SelectValue /></SelectTrigger>
-                    <SelectContent className="bg-card border-white/[0.07]">
+                    <SelectTrigger className="h-11 text-[14px] border transition-all focus-visible:ring-0"
+                      style={{ background: "rgba(255,255,255,0.04)", borderColor: "rgba(255,255,255,0.09)", color: "rgba(255,255,255,0.75)" }}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover border-white/[0.08]">
                       <SelectItem value="general" className="text-white/75">General Purpose</SelectItem>
                       <SelectItem value="lead_qualification" className="text-white/75">Lead Qualification</SelectItem>
                       <SelectItem value="customer_support" className="text-white/75">Customer Support</SelectItem>
@@ -1011,25 +1029,37 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* Welcome Message */}
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35 mb-1.5">Welcome Message</p>
+                  <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] mb-2" style={{ color: "rgba(255,255,255,0.32)" }}>
+                    Welcome Message
+                  </label>
                   <Textarea value={greetingMessage} onChange={e => { setGreetingMessage(e.target.value); setDirty(true); }}
                     placeholder="First thing the agent says when a call connects"
-                    className="bg-card/[0.06] border-white/[0.07] text-white/75 text-sm resize-none min-h-[72px] placeholder:text-white/35" />
+                    className="text-[14px] border resize-none min-h-[80px] leading-relaxed transition-all focus-visible:ring-0"
+                    style={{ background: "rgba(255,255,255,0.04)", borderColor: "rgba(255,255,255,0.09)", color: "rgba(255,255,255,0.8)", padding: "12px 14px" }} />
                 </div>
+
+                {/* Agent Prompt */}
                 <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35">Agent Prompt</p>
-                    <button type="button" className="flex items-center gap-1 text-[11px] text-white/35 hover:text-white/75"
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: "rgba(255,255,255,0.32)" }}>
+                      Agent Prompt
+                    </label>
+                    <button type="button"
+                      className="flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-lg transition-all"
+                      style={{ color: "rgba(167,139,250,0.8)", background: "rgba(124,58,237,0.1)", border: "1px solid rgba(124,58,237,0.2)" }}
                       onClick={() => { setSystemPrompt("You are a helpful and professional AI voice assistant. Be concise, clear, and friendly in all responses."); setDirty(true); }}>
                       <Sparkles className="h-3 w-3" /> Generate
                     </button>
                   </div>
                   <Textarea value={systemPrompt} onChange={e => { setSystemPrompt(e.target.value); setDirty(true); }}
                     placeholder="You are a helpful AI voice assistant…"
-                    className="bg-card/[0.06] border-white/[0.07] text-white/75 text-sm resize-none min-h-[200px] placeholder:text-white/35" />
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    <p className="text-[10px] text-white/35 mr-1 self-center">Insert variable:</p>
+                    className="text-[14px] border resize-none min-h-[180px] leading-relaxed transition-all focus-visible:ring-0"
+                    style={{ background: "rgba(255,255,255,0.04)", borderColor: "rgba(255,255,255,0.09)", color: "rgba(255,255,255,0.8)", padding: "12px 14px" }} />
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    <span className="text-[11px] self-center" style={{ color: "rgba(255,255,255,0.3)" }}>Insert variable:</span>
                     {[
                       { var: "{caller_salutation}", tip: "sir / ma'am — requires Gender Detection in Engine tab", color: "violet" },
                       { var: "{caller_number}",     tip: "Caller's phone number",                                color: "sky"    },
@@ -1041,11 +1071,11 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                         type="button"
                         title={chip.tip}
                         onClick={() => { setSystemPrompt(p => p + " " + chip.var); setDirty(true); }}
-                        className={`text-[11px] rounded-md border px-2 py-0.5 font-mono transition-colors ${
-                          chip.color === "violet" ? "bg-violet-950/40 border-violet-800/50 text-violet-400 hover:bg-violet-900/50" :
-                          chip.color === "sky"    ? "bg-sky-950/40 border-sky-800/50 text-sky-400 hover:bg-sky-900/50" :
-                          chip.color === "emerald"? "bg-card/[0.06] border-white/[0.10] text-white/75 hover:bg-card/[0.10]" :
-                                                    "bg-amber-950/40 border-amber-800/50 text-amber-400 hover:bg-amber-900/50"
+                        className={`text-[11px] rounded-lg border px-2.5 py-1 font-mono transition-all ${
+                          chip.color === "violet" ? "bg-violet-950/50 border-violet-700/40 text-violet-300 hover:border-violet-600/60" :
+                          chip.color === "sky"    ? "bg-sky-950/50 border-sky-700/40 text-sky-300 hover:border-sky-600/60" :
+                          chip.color === "emerald"? "bg-emerald-950/50 border-emerald-700/40 text-emerald-300 hover:border-emerald-600/60" :
+                                                    "bg-amber-950/50 border-amber-700/40 text-amber-300 hover:border-amber-600/60"
                         }`}
                       >
                         {chip.var}
@@ -1053,99 +1083,123 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                     ))}
                   </div>
                 </div>
+
+                {/* Webhook URL */}
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35 mb-1.5">Webhook URL <span className="normal-case text-white/35 font-normal">(optional)</span></p>
+                  <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] mb-2" style={{ color: "rgba(255,255,255,0.32)" }}>
+                    Webhook URL <span className="normal-case font-normal" style={{ color: "rgba(255,255,255,0.22)" }}>(optional)</span>
+                  </label>
                   <Input value={webhookUrl} onChange={e => { setWebhookUrl(e.target.value); setDirty(true); }}
                     placeholder="https://your-server.com/webhook"
-                    className="bg-card/[0.06] border-white/[0.07] text-white/75 text-sm placeholder:text-white/35" />
-                  <p className="text-[10px] text-white/35 mt-1">Fires a POST with call summary JSON after each call ends.</p>
+                    className="h-11 text-[14px] border transition-all focus-visible:ring-0"
+                    style={{ background: "rgba(255,255,255,0.04)", borderColor: "rgba(255,255,255,0.09)", color: "rgba(255,255,255,0.75)" }} />
+                  <p className="text-[11px] mt-1.5" style={{ color: "rgba(255,255,255,0.28)" }}>Fires a POST with call summary JSON after each call ends.</p>
                 </div>
+
+                {/* Knowledge Base */}
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-white/35 mb-1.5">Knowledge Base</p>
+                  <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] mb-2" style={{ color: "rgba(255,255,255,0.32)" }}>
+                    Knowledge Base
+                  </label>
                   <Select value={knowledgeBaseId?.toString() ?? "none"} onValueChange={v => { setKnowledgeBaseId(v === "none" ? null : parseInt(v)); setDirty(true); }}>
-                    <SelectTrigger className="h-8 text-xs bg-card/[0.06] border-white/[0.07] text-white/75"><SelectValue /></SelectTrigger>
-                    <SelectContent className="bg-card border-white/[0.07]">
-                      <SelectItem value="none" className="text-white/50 text-xs">— None —</SelectItem>
-                      {(kbs ?? []).map(kb => <SelectItem key={kb.id} value={kb.id.toString()} className="text-white/75 text-xs">{kb.name}</SelectItem>)}
+                    <SelectTrigger className="h-11 text-[14px] border transition-all focus-visible:ring-0"
+                      style={{ background: "rgba(255,255,255,0.04)", borderColor: "rgba(255,255,255,0.09)", color: "rgba(255,255,255,0.75)" }}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover border-white/[0.08]">
+                      <SelectItem value="none" className="text-white/45">— None —</SelectItem>
+                      {(kbs ?? []).map(kb => <SelectItem key={kb.id} value={kb.id.toString()} className="text-white/75">{kb.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                  <p className="text-[10px] text-white/35 mt-1">Relevant chunks are injected into the system prompt on every call.</p>
+                  <p className="text-[11px] mt-1.5" style={{ color: "rgba(255,255,255,0.28)" }}>Relevant chunks are injected into the system prompt on every call.</p>
                 </div>
               </div>
             </div>
 
-            {/* ── Right: dark info panel ── */}
-            <div className="w-56 shrink-0 border-l border-white/[0.06] overflow-y-auto p-3 space-y-3 bg-card">
-              {/* Agent Status */}
-              <div className="bg-[#1C1C1E] rounded-xl p-3.5">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-[11px] font-semibold text-white/50">Agent Status</p>
-                  <span className={`flex items-center gap-1 text-[10px] font-semibold ${agent.status === "active" ? "text-emerald-400" : "text-white/30"}`}>
-                    <span className={`h-1.5 w-1.5 rounded-full ${agent.status === "active" ? "bg-emerald-400" : "bg-card/20"}`} />
+            {/* ── Right: analytics panel ── */}
+            <div className="w-[280px] shrink-0 overflow-y-auto p-4 space-y-3"
+              style={{ borderLeft: "1px solid rgba(255,255,255,0.05)", background: "rgba(255,255,255,0.015)" }}>
+
+              {/* Agent Status card */}
+              <div className="rounded-2xl p-4 space-y-3"
+                style={{ background: "linear-gradient(135deg, rgba(124,58,237,0.15) 0%, rgba(17,24,39,0.8) 100%)", border: "1px solid rgba(124,58,237,0.2)" }}>
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.4)" }}>Agent Status</span>
+                  <span className={`flex items-center gap-1.5 text-[11px] font-semibold ${agent.status === "active" ? "text-emerald-400" : "text-white/30"}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${agent.status === "active" ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.7)]" : "bg-white/20"}`} />
                     {agent.status === "active" ? "Active" : "Inactive"}
                   </span>
                 </div>
                 <div className="space-y-2.5">
                   {[
-                    { label: "Total calls",   value: String(agent.totalCalls ?? 0) },
-                    { label: "Success rate",  value: `${successRate}%` },
-                    { label: "Avg duration",  value: agent.avgDurationSeconds != null ? `~${agent.avgDurationSeconds}s` : "—" },
+                    { label: "Total calls",  value: String(agent.totalCalls ?? 0), accent: "#8B5CF6" },
+                    { label: "Success rate", value: `${successRate}%`,              accent: "#10B981" },
+                    { label: "Avg duration", value: agent.avgDurationSeconds != null ? `~${agent.avgDurationSeconds}s` : "—", accent: "#F59E0B" },
                   ].map(row => (
-                    <div key={row.label} className="flex items-center justify-between">
-                      <span className="text-[11px] text-white/35">{row.label}</span>
-                      <span className="text-[11px] font-semibold text-white/80 tabular-nums">{row.value}</span>
+                    <div key={row.label}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[11px]" style={{ color: "rgba(255,255,255,0.38)" }}>{row.label}</span>
+                        <span className="text-[12px] font-bold tabular-nums" style={{ color: row.accent }}>{row.value}</span>
+                      </div>
+                      {row.label === "Success rate" && (
+                        <div className="h-1 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
+                          <div className="h-full rounded-full transition-all" style={{ width: `${successRate}%`, background: "linear-gradient(90deg, #10B981, #34D399)" }} />
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* Recent Activity */}
-              <div className="bg-[#1C1C1E] rounded-xl p-3.5">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-[11px] font-semibold text-white/50">Recent Activity</p>
+              {/* Provider Stack card */}
+              <div className="rounded-2xl p-4 space-y-3"
+                style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.4)" }}>Provider Stack</span>
+                <div className="space-y-2">
+                  {[
+                    { label: "ASR",       value: agent.asrProvider,       color: "#60A5FA" },
+                    { label: "LLM",       value: agent.llmProvider,       color: "#A78BFA" },
+                    { label: "TTS",       value: agent.ttsProvider,       color: "#34D399" },
+                    { label: "Telephony", value: agent.telephonyProvider, color: "#FBBF24" },
+                  ].map(row => (
+                    <div key={row.label} className="flex items-center justify-between py-1.5 px-3 rounded-lg"
+                      style={{ background: "rgba(255,255,255,0.03)" }}>
+                      <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.28)" }}>{row.label}</span>
+                      <span className="text-[12px] font-semibold capitalize" style={{ color: row.color }}>{row.value}</span>
+                    </div>
+                  ))}
                 </div>
+              </div>
+
+              {/* Recent Calls card */}
+              <div className="rounded-2xl p-4 space-y-3"
+                style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.4)" }}>Recent Calls</span>
                 {callsLoading ? (
                   <div className="space-y-2">
-                    {[1,2,3].map(i => <div key={i} className="h-8 bg-card/5 rounded-lg animate-pulse" />)}
+                    {[1,2,3].map(i => <div key={i} className="h-8 rounded-lg animate-pulse" style={{ background: "rgba(255,255,255,0.04)" }} />)}
                   </div>
                 ) : !calls?.length ? (
-                  <p className="text-[11px] text-white/25 italic">No calls yet</p>
+                  <p className="text-[12px] italic" style={{ color: "rgba(255,255,255,0.22)" }}>No calls yet</p>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     {calls.slice(0, 5).map(call => (
-                      <div key={call.id} className="flex items-center justify-between gap-2">
-                        <span className="text-[11px] text-white/50 font-mono truncate flex-1">
+                      <div key={call.id} className="flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg"
+                        style={{ background: "rgba(255,255,255,0.03)" }}>
+                        <span className="text-[11.5px] font-mono truncate flex-1" style={{ color: "rgba(255,255,255,0.5)" }}>
                           {call.fromNumber ?? `#${call.id}`}
                         </span>
-                        <span className={`text-[10px] font-semibold shrink-0 ${
-                          call.status === "completed" ? "text-emerald-400" :
-                          call.status === "failed"    ? "text-red-400" :
-                                                        "text-white/30"
+                        <span className={`text-[11px] font-bold shrink-0 px-1.5 py-0.5 rounded ${
+                          call.status === "completed" ? "text-emerald-400 bg-emerald-500/10" :
+                          call.status === "failed"    ? "text-red-400 bg-red-500/10" :
+                                                        "text-white/30 bg-white/5"
                         }`}>
-                          {call.status === "completed" ? "✓" : call.status === "failed" ? "✗" : "·"}
+                          {call.status === "completed" ? "OK" : call.status === "failed" ? "Fail" : "—"}
                         </span>
                       </div>
                     ))}
                   </div>
                 )}
-              </div>
-
-              {/* Provider Stack */}
-              <div className="bg-[#1C1C1E] rounded-xl p-3.5">
-                <p className="text-[11px] font-semibold text-white/50 mb-3">Provider Stack</p>
-                <div className="space-y-2">
-                  {[
-                    { label: "ASR",       value: agent.asrProvider },
-                    { label: "LLM",       value: agent.llmProvider },
-                    { label: "TTS",       value: agent.ttsProvider },
-                    { label: "Telephony", value: agent.telephonyProvider },
-                  ].map(row => (
-                    <div key={row.label} className="flex items-center justify-between">
-                      <span className="text-[10px] text-white/30 uppercase tracking-wide">{row.label}</span>
-                      <span className="text-[11px] font-medium text-white/65 capitalize">{row.value}</span>
-                    </div>
-                  ))}
-                </div>
               </div>
             </div>
           </div>
@@ -2365,61 +2419,76 @@ export default function AssistantsPage() {
   return (
     <div className="flex h-full overflow-hidden">
       {/* ── Agents List Panel ─────────────────────────────────────── */}
-      <div className="w-64 shrink-0 flex flex-col border-r border-white/[0.07] bg-popover/90 backdrop-blur-lg/40 backdrop-blur-xl">
+      <div className="w-[272px] shrink-0 flex flex-col"
+        style={{ borderRight: "1px solid rgba(255,255,255,0.06)", background: "hsl(224 45% 5%)" }}>
+
         {/* Header */}
-        <div className="flex items-center gap-2 px-3 h-12 border-b border-white/[0.06] shrink-0">
-          <span className="font-semibold text-sm text-white/85 flex-1">Assistants</span>
+        <div className="flex items-center gap-2.5 px-4 h-14 shrink-0"
+          style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+          <span className="font-semibold text-[14px] flex-1" style={{ color: "rgba(255,255,255,0.85)" }}>
+            Assistants
+          </span>
           {agents && (
-            <span className="text-[10px] bg-card/[0.08] text-white/50 rounded px-1.5 py-0.5 font-mono">
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md tabular-nums"
+              style={{ background: "rgba(124,58,237,0.15)", color: "rgba(167,139,250,0.7)", border: "1px solid rgba(124,58,237,0.2)" }}>
               {agents.length}
             </span>
           )}
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-6 w-6 text-white/50 hover:text-white/85 hover:bg-card/[0.08]"
+          <button
             onClick={() => setWizardOpen(true)}
             title="Create assistant"
+            className="h-7 w-7 flex items-center justify-center rounded-lg transition-all"
+            style={{ background: "rgba(124,58,237,0.12)", color: "rgba(167,139,250,0.8)", border: "1px solid rgba(124,58,237,0.2)" }}
           >
             <Plus className="h-3.5 w-3.5" />
-          </Button>
+          </button>
         </div>
 
         {/* Create button */}
         <div className="px-3 pt-3 pb-2 shrink-0">
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full h-7 text-xs border-white/[0.07] text-white/50 hover:bg-card/[0.08] hover:text-white/75 gap-1.5 justify-start"
+          <button
             onClick={() => setWizardOpen(true)}
+            className="w-full flex items-center justify-center gap-2 h-9 rounded-xl text-[13px] font-medium transition-all"
+            style={{
+              background: "linear-gradient(135deg, rgba(124,58,237,0.18) 0%, rgba(139,92,246,0.08) 100%)",
+              border: "1px solid rgba(124,58,237,0.25)",
+              color: "rgba(167,139,250,0.9)",
+            }}
           >
-            <Plus className="h-3 w-3" /> Create Assistant
-          </Button>
+            <Plus className="h-3.5 w-3.5" /> Create Assistant
+          </button>
         </div>
 
         {/* Search */}
-        <div className="px-3 pb-2 shrink-0">
+        <div className="px-3 pb-3 shrink-0">
           <div className="relative">
-            <Search className="absolute left-2.5 top-1.5 h-3.5 w-3.5 text-white/35" />
-            <Input
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5" style={{ color: "rgba(255,255,255,0.28)" }} />
+            <input
               placeholder="Search assistants…"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="h-7 pl-7 text-xs bg-card/[0.06] border-white/[0.07] text-white/75 placeholder:text-white/35 focus:border-[#ACADB1]"
+              className="w-full h-9 pl-9 pr-3 rounded-xl text-[13px] outline-none transition-all"
+              style={{
+                background: "rgba(255,255,255,0.05)",
+                border: "1px solid rgba(255,255,255,0.07)",
+                color: "rgba(255,255,255,0.75)",
+              }}
             />
           </div>
         </div>
 
         {/* List */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-1">
           {isLoading ? (
-            <div className="px-3 space-y-2 py-2">
+            <div className="space-y-2 p-1">
               {[1, 2, 3, 4].map(i => (
-                <div key={i} className="h-14 rounded-lg bg-card/[0.08]/50 animate-pulse" />
+                <div key={i} className="h-[60px] rounded-xl animate-pulse" style={{ background: "rgba(255,255,255,0.04)" }} />
               ))}
             </div>
           ) : filtered?.length === 0 ? (
-            <div className="px-3 py-8 text-center text-white/35 text-xs">No assistants found.</div>
+            <div className="py-8 text-center text-[12px]" style={{ color: "rgba(255,255,255,0.28)" }}>
+              No assistants found.
+            </div>
           ) : (
             filtered?.map(agent => {
               const isSelected = selectedId === agent.id;
@@ -2428,21 +2497,26 @@ export default function AssistantsPage() {
                 <button
                   key={agent.id}
                   onClick={() => setSelectedId(agent.id)}
-                  className={`w-full text-left px-3 py-2.5 transition-colors border-b border-white/[0.06]/50 ${
-                    isSelected
-                      ? "bg-card/[0.08]/80 border-l-2 border-l-emerald-500"
-                      : "hover:bg-card/[0.04] border-l-2 border-l-transparent"
-                  }`}
+                  className="w-full text-left px-3 py-2.5 rounded-xl transition-all card-hover"
+                  style={{
+                    background: isSelected
+                      ? "linear-gradient(135deg, rgba(124,58,237,0.18) 0%, rgba(139,92,246,0.08) 100%)"
+                      : "rgba(255,255,255,0.02)",
+                    border: `1px solid ${isSelected ? "rgba(124,58,237,0.3)" : "rgba(255,255,255,0.05)"}`,
+                    boxShadow: isSelected ? "0 0 16px rgba(124,58,237,0.1)" : undefined,
+                  }}
                 >
-                  <div className="flex items-center gap-1.5 mb-0.5">
+                  <div className="flex items-center gap-2 mb-1.5">
                     {statusDot(agent.status)}
-                    <span className={`text-xs font-medium truncate ${isSelected ? "text-white/85" : "text-white/75"}`}>
+                    <span className="text-[13px] font-medium truncate"
+                      style={{ color: isSelected ? "rgba(255,255,255,0.92)" : "rgba(255,255,255,0.7)" }}>
                       {agent.name}
                     </span>
                   </div>
-                  <div className="flex flex-wrap gap-1 ml-3">
+                  <div className="flex flex-wrap gap-1 ml-4">
                     {tags.map(t => (
-                      <span key={t} className="text-[10px] text-white/35 bg-card/[0.06] rounded px-1">
+                      <span key={t} className="text-[10px] px-1.5 py-0.5 rounded-md"
+                        style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.38)" }}>
                         {t}
                       </span>
                     ))}
@@ -2455,24 +2529,30 @@ export default function AssistantsPage() {
       </div>
 
       {/* ── Config / Editor Panel ─────────────────────────────────── */}
-      <div className="flex-1 flex flex-col min-w-0 bg-transparent">
+      <div className="flex-1 flex flex-col min-w-0">
         {selectedId !== null ? (
           <AgentConfigPanel agentId={selectedId} onDeleted={() => setSelectedId(agents?.[0]?.id ?? null)} />
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-center text-white/35 gap-3">
-            <Mic className="h-10 w-10 opacity-20" />
-            <div>
-              <p className="text-sm font-medium text-white/35">No assistant selected</p>
-              <p className="text-xs mt-1">Choose one from the list or create a new one.</p>
+          <div className="flex-1 flex flex-col items-center justify-center text-center gap-4">
+            <div className="h-16 w-16 rounded-2xl flex items-center justify-center"
+              style={{ background: "rgba(124,58,237,0.1)", border: "1px solid rgba(124,58,237,0.2)" }}>
+              <Mic className="h-8 w-8" style={{ color: "rgba(167,139,250,0.5)" }} />
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="border-white/[0.07] text-white/50 hover:bg-card/[0.08] gap-1.5 mt-2"
+            <div>
+              <p className="text-[14px] font-semibold" style={{ color: "rgba(255,255,255,0.5)" }}>No assistant selected</p>
+              <p className="text-[12px] mt-1" style={{ color: "rgba(255,255,255,0.28)" }}>Choose one from the list or create a new one.</p>
+            </div>
+            <button
               onClick={() => setWizardOpen(true)}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-medium transition-all"
+              style={{
+                background: "linear-gradient(135deg, #7C3AED 0%, #8B5CF6 100%)",
+                color: "white",
+                boxShadow: "0 0 20px rgba(124,58,237,0.35)",
+              }}
             >
-              <Plus className="h-3.5 w-3.5" /> Create Assistant
-            </Button>
+              <Plus className="h-4 w-4" /> Create Assistant
+            </button>
           </div>
         )}
       </div>

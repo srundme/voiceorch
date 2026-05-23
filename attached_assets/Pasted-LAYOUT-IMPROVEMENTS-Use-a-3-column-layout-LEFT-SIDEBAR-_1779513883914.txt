@@ -1,0 +1,191 @@
+LAYOUT IMPROVEMENTS
+
+Use a 3-column layout:
+
+LEFT SIDEBAR
+Width: 240px
+Soft dark background
+Minimal icons
+Active tab with subtle purple glow
+Better spacing between groups
+Rounded navigation items
+Reduce visual noise
+CENTER PANEL
+Main workspace
+Max width around 1100px
+Add proper padding (32px)
+Improve vertical spacing
+Use cards with subtle borders
+Inputs should feel lightweight and modern
+RIGHT ANALYTICS PANEL
+Width: 320px
+Floating cards style
+Sticky position
+Separate from main form with spacing
+COLOR SYSTEM
+
+Use this palette:
+
+Background:
+#0B0F19
+
+Card:
+#111827
+
+Elevated Card:
+#172033
+
+Border:
+rgba(255,255,255,0.06)
+
+Primary:
+#7C3AED
+
+Primary Hover:
+#8B5CF6
+
+Text Primary:
+#F9FAFB
+
+Text Secondary:
+#9CA3AF
+
+Success:
+#10B981
+
+Warning:
+#F59E0B
+
+Danger:
+#EF4444
+
+TYPOGRAPHY
+
+Use:
+
+Inter font
+Strong hierarchy
+More whitespace
+
+Sizes:
+
+Page Title: 28px semibold
+Section Title: 16px semibold
+Labels: 12px medium uppercase
+Body: 14px regular
+
+Improve readability heavily.
+
+CARD DESIGN
+
+Cards should have:
+
+rounded-2xl
+subtle border
+soft shadows
+slight background blur
+hover transitions
+cleaner internal padding
+
+Do NOT use harsh borders.
+
+FORM DESIGN
+
+Inputs should:
+
+Have softer backgrounds
+Use subtle inner borders
+Height around 44px
+Smooth focus states
+Purple glow on focus
+Better placeholder styling
+
+Textarea should:
+
+Auto resize
+Clean typography
+Larger padding
+TOP METRICS SECTION
+
+Redesign metrics cards:
+
+Add gradient backgrounds
+Minimal charts
+Better spacing
+Small trend indicators
+Modern graph lines
+Remove clutter
+
+Cards:
+
+Average Cost
+Average Latency
+Total Calls
+Success Rate
+
+Should look premium and futuristic.
+
+SIDEBAR ASSISTANTS LIST
+
+Assistant cards should:
+
+Be compact
+Hover elevate slightly
+Show provider tags cleanly
+Active assistant highlighted
+Add tiny status indicators
+RIGHT PANEL
+
+Create modern analytics widgets:
+
+Agent status
+Recent calls
+Intent breakdown
+Provider stack
+
+Use:
+
+gradient cards
+progress bars
+subtle charts
+modern spacing
+ANIMATIONS
+
+Use Framer Motion:
+
+Fade transitions
+Hover lift
+Smooth tab switching
+Animated charts
+Smooth sidebar interactions
+
+Keep animations subtle and fast.
+
+OVERALL FEEL
+
+The dashboard should feel:
+
+Premium
+Modern
+Expensive
+AI-native
+Enterprise-ready
+Clean and spacious
+
+Avoid:
+
+Crowded layouts
+Thick borders
+Excessive shadows
+Flat old-style admin UI
+Bootstrap-like appearance
+
+Focus heavily on:
+
+spacing
+hierarchy
+visual balance
+consistency
+premium feel
+
+Generate production-quality UI.
