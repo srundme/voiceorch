@@ -146,26 +146,29 @@ function useVoicePreview(apiFetch: (path: string, init?: RequestInit) => Promise
       });
 
       if (res.ok) {
-        // Cartesia audio available
-        const { audio, mimeType } = await res.json();
-        const blob = new Blob([Uint8Array.from(atob(audio), c => c.charCodeAt(0))], { type: mimeType });
+        // Server sends raw audio/wav bytes — use blob() not json()
+        const blob = await res.blob();
         const url = URL.createObjectURL(blob);
         if (audioRef.current) { audioRef.current.pause(); URL.revokeObjectURL(audioRef.current.src); }
         const el = new Audio(url);
         audioRef.current = el;
-        el.onended = () => setPlaying(null);
-        el.onerror = () => setPlaying(null);
+        el.onended = () => { setPlaying(null); URL.revokeObjectURL(url); };
+        el.onerror = () => { setPlaying(null); URL.revokeObjectURL(url); };
         void el.play();
         return;
       }
 
-      // 503 = Cartesia key not set → fall back to browser TTS
-      const voice = voicesRef.current.find(v => v.id === voiceId);
-      speakWithBrowser(voice?.name ?? "", voice?.gender ?? "Female", () => setPlaying(null));
+      if (res.status === 503) {
+        // Cartesia key not configured — fall back to browser TTS with a clear indication
+        setPlaying(null);
+        const voice = voicesRef.current.find(v => v.id === voiceId);
+        speakWithBrowser(voice?.name ?? "", voice?.gender ?? "Female", () => setPlaying(null));
+        return;
+      }
+
+      setPlaying(null);
     } catch {
-      // network error → still try browser TTS
-      const voice = voicesRef.current.find(v => v.id === voiceId);
-      speakWithBrowser(voice?.name ?? "", voice?.gender ?? "Female", () => setPlaying(null));
+      setPlaying(null);
     }
   }
 
@@ -204,6 +207,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
   const [generateError, setGenError]  = useState("");
   const [isCreating, setCreating]     = useState(false);
   const [loadingVoices, setLoadVoices]= useState(false);
+  const [voiceSource, setVoiceSource] = useState<"cartesia" | "browser">("browser");
   const [renderKey, setRenderKey]     = useState(0);
   const fileInputRef                  = useRef<HTMLInputElement>(null);
   const { toast }                     = useToast();
@@ -245,12 +249,13 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
     try {
       const res = await apiFetch("/api/wizard/voices", { method: "GET" });
       if (res.ok) {
-        const { voices } = await res.json() as { voices: CartesiaVoice[] };
+        const { voices, source } = await res.json() as { voices: CartesiaVoice[]; source: string };
         // put Arushi first if present, otherwise prepend fallback Arushi
         const arushi = voices.find(v => v.name.toLowerCase().includes("arushi")) ?? ARUSHI_VOICE;
         const rest   = voices.filter(v => v.id !== arushi.id);
         const merged = [arushi, ...rest];
         update({ voices: merged, selectedVoiceId: arushi.id });
+        setVoiceSource(source === "cartesia" ? "cartesia" : "browser");
       }
     } finally { setLoadVoices(false); }
   }
@@ -789,7 +794,10 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                 <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">Step 6</p>
                 <h2 className="text-3xl font-bold text-gray-900 mb-2">Choose your<br />agent's voice</h2>
                 <p className="text-gray-400 text-sm mb-8">
-                  <span className="text-violet-600 font-medium">Arushi</span> is pre-selected — warm Indian English female. Press ▶ to hear any voice.
+                  <span className="text-violet-600 font-medium">Arushi</span> is pre-selected — warm Indian English female.{" "}
+                  {voiceSource === "cartesia"
+                    ? "Press ▶ to hear any voice."
+                    : <span className="text-amber-500">Preview plays your browser's built-in voice (Cartesia key not configured).</span>}
                 </p>
 
                 {loadingVoices ? (
