@@ -128,9 +128,12 @@ export class OrchestrationPipeline {
       this.agent.sttConfig
     );
     this.llm = createLLMAdapter(this.agent.llmProvider, llmKey, this.agent.llmModel);
+    const ttsExtraConfig = this.agent.ttsProvider === "sarvam"
+      ? JSON.stringify({ language: (this.agent as any).language ?? "en-IN" })
+      : (keys.get(`${this.agent.ttsProvider}:extraConfig`) ?? null);
     this.tts = createTTSAdapter(
       this.agent.ttsProvider, ttsKey, this.agent.ttsVoice, this.agent.ttsModel,
-      keys.get(`${this.agent.ttsProvider}:extraConfig`) ?? null
+      ttsExtraConfig
     );
 
     if (this.agent.noiseCancellationEnabled) {

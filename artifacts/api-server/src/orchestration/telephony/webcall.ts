@@ -136,7 +136,10 @@ export async function handleWebCallWebSocket(
 
   const stt = createSTTAdapter(agent.asrProvider, sttKey, agent.asrModel, null, sttConfig);
   const llm = createLLMAdapter(agent.llmProvider, llmKey, agent.llmModel);
-  const tts = createTTSAdapter(agent.ttsProvider, ttsKey, agent.ttsVoice, agent.ttsModel);
+  const ttsExtraConfig = agent.ttsProvider === "sarvam"
+    ? JSON.stringify({ language: (agent as any).language ?? "en-IN" })
+    : null;
+  const tts = createTTSAdapter(agent.ttsProvider, ttsKey, agent.ttsVoice, agent.ttsModel, ttsExtraConfig);
 
   // ── Create call DB record ─────────────────────────────────────────────────
   const [callRecord] = await db.insert(callsTable).values({

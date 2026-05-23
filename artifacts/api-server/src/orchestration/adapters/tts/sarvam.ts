@@ -6,14 +6,37 @@ import type { TTSAdapter } from "../../types.js";
  * Models: bulbul:v1, bulbul:v2
  * Returns base64-encoded WAV audio
  */
+/** Maps BCP-47 / short codes stored on agents → Sarvam target_language_code */
+const SARVAM_LANG: Record<string, string> = {
+  "ta": "ta-IN", "ta-IN": "ta-IN",
+  "hi": "hi-IN", "hi-IN": "hi-IN",
+  "te": "te-IN", "te-IN": "te-IN",
+  "kn": "kn-IN", "kn-IN": "kn-IN",
+  "mr": "mr-IN", "mr-IN": "mr-IN",
+  "gu": "gu-IN", "gu-IN": "gu-IN",
+  "bn": "bn-IN", "bn-IN": "bn-IN",
+  "ml": "ml-IN", "ml-IN": "ml-IN",
+  "pa": "pa-IN", "pa-IN": "pa-IN",
+};
+
+/** Default Sarvam speaker per language (female, language-native) */
+const SARVAM_DEFAULT_SPEAKER: Record<string, string> = {
+  "ta-IN": "meera", "hi-IN": "maitreyi", "te-IN": "pavithra",
+  "kn-IN": "meera",  "mr-IN": "meera",   "gu-IN": "meera",
+  "bn-IN": "meera",  "ml-IN": "meera",   "pa-IN": "meera",
+};
+
 export class SarvamTTS implements TTSAdapter {
   private key: string;
   private speaker: string;
   private model: string;
+  private langCode: string;
 
-  constructor(apiKey: string, voice: string | null) {
+  constructor(apiKey: string, voice: string | null, extraConfig?: string | null) {
     this.key = apiKey;
-    this.speaker = voice ?? "meera";
+    const cfg = extraConfig ? (JSON.parse(extraConfig) as { language?: string }) : {};
+    this.langCode = SARVAM_LANG[cfg.language ?? ""] ?? "en-IN";
+    this.speaker = (voice && !voice.includes("-")) ? voice : (SARVAM_DEFAULT_SPEAKER[this.langCode] ?? "meera");
     this.model = "bulbul:v2";
   }
 
@@ -26,7 +49,7 @@ export class SarvamTTS implements TTSAdapter {
       },
       body: JSON.stringify({
         inputs: [text],
-        target_language_code: "en-IN",
+        target_language_code: this.langCode,
         speaker: this.speaker,
         model: this.model,
         enable_preprocessing: true,
