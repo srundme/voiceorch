@@ -453,7 +453,7 @@ export default function KnowledgeBasePage() {
   return (
     <div className="flex h-full overflow-hidden">
       {/* KB list panel */}
-      <div className="w-64 shrink-0 flex flex-col border-r border-gray-200 bg-white/40 backdrop-blur-xl">
+      <div className="w-64 shrink-0 flex flex-col border-r border-gray-200 bg-white">
         {/* Header */}
         <div className="flex items-center gap-2 px-4 h-12 border-b border-gray-200 shrink-0">
           <span className="font-semibold text-sm text-gray-800 flex-1">Knowledge Bases</span>
@@ -497,7 +497,7 @@ export default function KnowledgeBasePage() {
               <div
                 key={kb.id}
                 onClick={() => setSelectedId(kb.id === selectedId ? null : kb.id)}
-                className={`mx-2 my-0.5 px-3 py-2.5 rounded-lg cursor-pointer transition-colors group ${selectedId === kb.id ? "bg-white/10" : "hover:bg-white/5"}`}
+                className={`mx-2 my-0.5 px-3 py-2.5 rounded-lg cursor-pointer transition-colors group ${selectedId === kb.id ? "bg-violet-50 border border-violet-100" : "hover:bg-gray-50"}`}
               >
                 <div className="flex items-start gap-2">
                   <BookOpen className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${selectedId === kb.id ? "text-gray-700" : "text-gray-400"}`} />
@@ -544,7 +544,7 @@ export default function KnowledgeBasePage() {
             <p className="text-sm font-medium text-gray-500">Select a knowledge base</p>
             <p className="text-xs text-gray-400 mt-1">or create one to start ingesting documents</p>
           </div>
-          <Button size="sm" onClick={() => setShowNewDialog(true)} className="bg-gray-800 hover:bg-black/90 text-gray-900 text-xs">
+          <Button size="sm" onClick={() => setShowNewDialog(true)} className="bg-gray-800 hover:bg-gray-900 text-white text-xs">
             <Plus className="w-3.5 h-3.5 mr-1.5" />New Knowledge Base
           </Button>
           <div className="mt-4 grid grid-cols-3 gap-3 max-w-sm">

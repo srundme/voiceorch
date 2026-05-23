@@ -127,7 +127,7 @@ export default function WalletPage() {
         <div className="max-w-4xl mx-auto space-y-6">
 
           {/* Balance Card */}
-          <div className={`rounded-xl border p-6 ${balanceLow ? "border-amber-500/30 bg-amber-500/5" : "border-gray-200 bg-white/90 backdrop-blur-xl"}`}>
+          <div className={`rounded-xl border p-6 ${balanceLow ? "border-amber-500/30 bg-amber-500/5" : "border-gray-200 bg-white"}`}>
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-xs text-gray-400 uppercase tracking-widest mb-1">Available Balance</p>
@@ -154,7 +154,7 @@ export default function WalletPage() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Top-up */}
-            <div className="rounded-xl border border-gray-200 bg-white/90 backdrop-blur-xl p-5 space-y-4">
+            <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-4">
               <div className="flex items-center gap-2">
                 <CreditCard className="w-4 h-4 text-gray-500" />
                 <h2 className="font-medium text-gray-800 text-sm">Add Funds</h2>
@@ -206,7 +206,7 @@ export default function WalletPage() {
             </div>
 
             {/* Auto-pay */}
-            <div className="rounded-xl border border-gray-200 bg-white/90 backdrop-blur-xl p-5 space-y-4">
+            <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <RefreshCw className="w-4 h-4 text-gray-500" />
@@ -261,7 +261,7 @@ export default function WalletPage() {
           </div>
 
           {/* Transaction history */}
-          <div className="rounded-xl border border-gray-200 bg-white/90 backdrop-blur-xl overflow-hidden">
+          <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-200">
               <h2 className="font-medium text-gray-800 text-sm">Transaction History</h2>
             </div>

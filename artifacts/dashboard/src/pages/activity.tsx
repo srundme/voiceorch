@@ -43,7 +43,7 @@ export default function ActivityPage() {
           {isLoading ? (
             <div className="space-y-3">
               {Array.from({ length: 8 }).map((_, i) => (
-                <div key={i} className="flex items-center gap-4 p-3 rounded-lg border border-gray-200 bg-white/30">
+                <div key={i} className="flex items-center gap-4 p-3 rounded-lg border border-gray-200 bg-white">
                   <Skeleton className="h-8 w-8 rounded-full" />
                   <div className="flex-1 space-y-1.5">
                     <Skeleton className="h-4 w-48" />
@@ -66,7 +66,7 @@ export default function ActivityPage() {
                 return (
                   <div
                     key={log.id}
-                    className="flex items-start gap-3 px-4 py-3 rounded-lg border border-gray-200/60 bg-white/30 hover:bg-white transition-colors"
+                    className="flex items-start gap-3 px-4 py-3 rounded-lg border border-gray-200/60 bg-white hover:bg-white transition-colors"
                   >
                     <div className="shrink-0 mt-0.5">
                       <Icon className="w-4 h-4 text-gray-400" />
