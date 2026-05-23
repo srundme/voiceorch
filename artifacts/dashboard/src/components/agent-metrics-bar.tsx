@@ -13,17 +13,17 @@ interface AgentMetricsBarProps {
 }
 
 const COST_COLORS = {
-  asr:       { bg: "bg-teal-400",    text: "text-teal-400",    label: "ASR" },
-  llm:       { bg: "bg-violet-400",  text: "text-violet-400",  label: "LLM" },
-  tts:       { bg: "bg-orange-400",  text: "text-orange-400",  label: "TTS" },
-  telephony: { bg: "bg-blue-400",    text: "text-blue-400",    label: "Tel" },
-  platform:  { bg: "bg-emerald-400", text: "text-emerald-400", label: "Fee" },
+  asr:       { bg: "bg-teal-400",    text: "text-teal-600",    label: "ASR" },
+  llm:       { bg: "bg-violet-400",  text: "text-violet-600",  label: "LLM" },
+  tts:       { bg: "bg-orange-400",  text: "text-orange-600",  label: "TTS" },
+  telephony: { bg: "bg-blue-400",    text: "text-blue-600",    label: "Tel" },
+  platform:  { bg: "bg-emerald-400", text: "text-emerald-600", label: "Fee" },
 };
 
 const LATENCY_COLORS = {
-  stt: { bg: "bg-sky-400",    text: "text-sky-400",    label: "STT" },
-  llm: { bg: "bg-violet-400", text: "text-violet-400", label: "LLM" },
-  tts: { bg: "bg-amber-400",  text: "text-amber-400",  label: "TTS" },
+  stt: { bg: "bg-sky-400",    text: "text-sky-600",    label: "STT" },
+  llm: { bg: "bg-violet-400", text: "text-violet-600", label: "LLM" },
+  tts: { bg: "bg-amber-400",  text: "text-amber-600",  label: "TTS" },
 };
 
 function SegmentBar({
@@ -32,7 +32,7 @@ function SegmentBar({
   segments: { key: string; pct: number; bg: string; tooltip: string }[];
 }) {
   return (
-    <div className="flex h-1 w-full rounded-full overflow-hidden gap-px bg-card/10">
+    <div className="flex h-1 w-full rounded-full overflow-hidden gap-px bg-gray-200">
       {segments.map((s) => (
         <Tooltip key={s.key}>
           <TooltipTrigger asChild>
@@ -94,16 +94,16 @@ export function AgentMetricsBar({
   }
 
   return (
-    <div className="flex gap-3 px-5 py-3 border-b border-white/[0.06] bg-card shrink-0">
+    <div className="flex gap-3 px-5 py-3 border-b border-gray-200 bg-white shrink-0">
       {/* Cost card */}
-      <div className="flex-1 bg-[#1C1C1E] rounded-xl px-4 py-3 space-y-2">
+      <div className="flex-1 bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 space-y-2">
         <div className="flex items-baseline gap-2">
-          <span className="text-[9px] font-bold tracking-[0.15em] uppercase text-white/35">
+          <span className="text-[9px] font-bold tracking-[0.15em] uppercase text-gray-400">
             Average Cost
           </span>
-          <span className="text-xs font-bold text-white tabular-nums ml-auto">
+          <span className="text-xs font-bold text-gray-900 tabular-nums ml-auto">
             ~${cost.totalPerMin.toFixed(2)}
-            <span className="text-[10px] font-normal text-white/40 ml-0.5">/min</span>
+            <span className="text-[10px] font-normal text-gray-400 ml-0.5">/min</span>
           </span>
         </div>
         <SegmentBar segments={costSegments} />
@@ -118,24 +118,24 @@ export function AgentMetricsBar({
       </div>
 
       {/* Latency card */}
-      <div className="flex-1 bg-[#1C1C1E] rounded-xl px-4 py-3 space-y-2">
+      <div className="flex-1 bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 space-y-2">
         <div className="flex items-baseline gap-2">
-          <span className="text-[9px] font-bold tracking-[0.15em] uppercase text-white/35">
+          <span className="text-[9px] font-bold tracking-[0.15em] uppercase text-gray-400">
             Average Latency
           </span>
           {hasLatency ? (
-            <span className="text-xs font-bold text-white tabular-nums ml-auto">
+            <span className="text-xs font-bold text-gray-900 tabular-nums ml-auto">
               {fmtLatency(totalLatencyMs)}
-              <span className="text-[10px] font-normal text-white/40 ml-0.5">e2e</span>
+              <span className="text-[10px] font-normal text-gray-400 ml-0.5">e2e</span>
             </span>
           ) : (
-            <span className="text-[10px] text-white/25 italic ml-auto">no data yet</span>
+            <span className="text-[10px] text-gray-400 italic ml-auto">no data yet</span>
           )}
         </div>
         {latencySegments ? (
           <SegmentBar segments={latencySegments} />
         ) : (
-          <div className="h-1 w-full rounded-full bg-card/10" />
+          <div className="h-1 w-full rounded-full bg-gray-200" />
         )}
         <div className="flex items-center gap-3">
           {(["stt", "llm", "tts"] as const).map((k) => (
@@ -145,7 +145,7 @@ export function AgentMetricsBar({
             </span>
           ))}
           {hasLatency && (
-            <span className="text-[9px] text-white/25 ml-auto">
+            <span className="text-[9px] text-gray-400 ml-auto">
               {[avgSttLatencyMs, avgLlmLatencyMs, avgTtsFirstChunkMs].filter(Boolean).join("+")}ms
             </span>
           )}
