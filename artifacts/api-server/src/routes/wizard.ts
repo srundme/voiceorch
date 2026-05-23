@@ -140,10 +140,10 @@ async function getSetting(key: string): Promise<string | null> {
 // ── GET /wizard/voices ────────────────────────────────────────────────────────
 
 router.get("/wizard/voices", requireDbUser, async (req, res): Promise<void> => {
+  const { language: langFilter } = req.query as { language?: string };
   const cartesiaKey = await getSetting("managed_cartesia_key");
 
   if (!cartesiaKey) {
-    // No key configured — only return the one verified Indian voice
     res.json({ voices: [ARUSHI_VOICE], source: "fallback" });
     return;
   }
@@ -163,26 +163,34 @@ router.get("/wizard/voices", requireDbUser, async (req, res): Promise<void> => {
 
     const data = await response.json() as any[];
 
-    // Indian-language voices (native speakers)
-    const indianLang = data.filter((v: any) => v.language && INDIAN_LANGS.has(v.language as string));
-
-    // English voices that are Arushi or named with common Indian names (accent-based)
     const INDIAN_NAMES = new Set(["arushi","priya","ananya","kavya","maya","pooja","shruti","riya",
       "neha","divya","meera","rani","aisha","rohan","arjun","vikram","raj","rahul","amit","nikhil"]);
+
+    // Voices for the requested language (exact match)
+    const langMatches = (langFilter && INDIAN_LANGS.has(langFilter))
+      ? data.filter((v: any) => v.language === langFilter)
+      : [];
+
+    // All other Indian-language voices (non-English Indic)
+    const otherIndic = data.filter((v: any) =>
+      v.language && INDIAN_LANGS.has(v.language as string) && v.language !== langFilter
+    );
+
+    // Indian-accented English voices
     const indianEnglish = data.filter((v: any) =>
       (v.language === "en" || !v.language) &&
       INDIAN_NAMES.has((v.name as string || "").toLowerCase().split(" ")[0]!)
     );
 
-    // Combine: Indian-language first, then Indian-accented English, remove duplicates
+    // Combine: language-match first, then other Indic, then Indian English
     const seen = new Set<string>();
     const combined: any[] = [];
-    for (const v of [...indianLang, ...indianEnglish]) {
+    for (const v of [...langMatches, ...otherIndic, ...indianEnglish]) {
       if (!seen.has(v.id)) { seen.add(v.id); combined.push(v); }
     }
 
-    // Always make sure Arushi is present (it's a confirmed Indian voice)
-    if (!seen.has(ARUSHI_VOICE.id)) combined.unshift(ARUSHI_VOICE);
+    // Only prepend Arushi when no language-specific voices were found
+    if (langMatches.length === 0 && !seen.has(ARUSHI_VOICE.id)) combined.unshift(ARUSHI_VOICE);
 
     const voices = combined.map((v: any) => ({
       id: v.id,

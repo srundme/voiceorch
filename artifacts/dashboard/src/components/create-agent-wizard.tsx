@@ -262,14 +262,18 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
     if (state.voices.length > FALLBACK_VOICES.length) return;
     setLoadVoices(true);
     try {
-      const res = await apiFetch("/api/wizard/voices", { method: "GET" });
+      // pass the base language code so the server ranks matching voices first
+      const baseLang = (LANG_CODE_MAP[state.primaryLanguage] ?? "en").split("-")[0];
+      const res = await apiFetch(`/api/wizard/voices?language=${baseLang}`, { method: "GET" });
       if (res.ok) {
         const { voices, source } = await res.json() as { voices: CartesiaVoice[]; source: string };
-        // put Arushi first if present, otherwise prepend fallback Arushi
-        const arushi = voices.find(v => v.name.toLowerCase().includes("arushi")) ?? ARUSHI_VOICE;
-        const rest   = voices.filter(v => v.id !== arushi.id);
-        const merged = [arushi, ...rest];
-        update({ voices: merged, selectedVoiceId: arushi.id });
+        // Auto-select: first voice whose language matches the agent's language,
+        // else fall back to Arushi (Indian English).
+        const langMatch  = voices.find(v => v.language === baseLang && baseLang !== "en");
+        const arushi     = voices.find(v => v.name.toLowerCase().includes("arushi")) ?? ARUSHI_VOICE;
+        const defaultVoice = langMatch ?? arushi;
+        const rest       = voices.filter(v => v.id !== defaultVoice.id);
+        update({ voices: [defaultVoice, ...rest], selectedVoiceId: defaultVoice.id });
         setVoiceSource(source === "cartesia" ? "cartesia" : "browser");
       }
     } finally { setLoadVoices(false); }
@@ -816,7 +820,10 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                 <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">Step 6</p>
                 <h2 className="text-3xl font-bold text-gray-900 mb-2">Choose your<br />agent's voice</h2>
                 <p className="text-gray-400 text-sm mb-8">
-                  <span className="text-violet-600 font-medium">Arushi</span> is pre-selected — warm Indian English female.{" "}
+                  {state.primaryLanguage !== "english"
+                    ? <><span className="text-violet-600 font-medium">A native {state.primaryLanguage} voice is pre-selected</span> — voices with a matching language badge work best.{" "}</>
+                    : <><span className="text-violet-600 font-medium">Arushi</span> is pre-selected — warm Indian English female.{" "}</>
+                  }
                   {voiceSource === "cartesia"
                     ? "Press ▶ to hear any voice."
                     : <span className="text-amber-500">Preview plays your browser's built-in voice (Cartesia key not configured).</span>}
