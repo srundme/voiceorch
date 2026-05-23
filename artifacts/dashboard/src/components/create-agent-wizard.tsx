@@ -422,8 +422,8 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
       </div>
 
       {/* Main content area */}
-      <div className="flex-1 overflow-y-auto flex flex-col items-center justify-center px-6 py-8">
-        <div className="w-full max-w-2xl">
+      <div className="flex-1 overflow-y-auto px-6 py-8">
+        <div className="w-full max-w-2xl mx-auto min-h-full flex flex-col justify-center">
           <SlideStep key={`${state.mode}-${stepIdx}-${renderKey}`} direction={direction}>
 
             {/* ── Mode selection ── */}
