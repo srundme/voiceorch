@@ -1353,3 +1353,184 @@ export const CompleteOnboardingResponse = zod.object({
 })
 
 
+/**
+ * @summary List all campaigns for the current user
+ */
+export const ListCampaignsResponseItem = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "agentId": zod.number().nullish(),
+  "status": zod.enum(['draft', 'active', 'paused']),
+  "webhookToken": zod.string(),
+  "fieldMappings": zod.record(zod.string(), zod.string()).describe('Maps lead source field names to roles: phone (required), name, email, and any custom fields passed as prompt variables'),
+  "fromNumber": zod.string().nullish(),
+  "callDelaySeconds": zod.number(),
+  "maxAttempts": zod.number(),
+  "retryDelayMinutes": zod.number(),
+  "totalLeads": zod.number(),
+  "calledLeads": zod.number(),
+  "isActive": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListCampaignsResponse = zod.array(ListCampaignsResponseItem)
+
+
+/**
+ * @summary Create a new campaign
+ */
+export const createCampaignBodyCallDelaySecondsDefault = 5;
+export const createCampaignBodyMaxAttemptsDefault = 1;
+export const createCampaignBodyRetryDelayMinutesDefault = 60;
+
+export const CreateCampaignBody = zod.object({
+  "name": zod.string(),
+  "description": zod.string().optional(),
+  "agentId": zod.number(),
+  "fieldMappings": zod.record(zod.string(), zod.string()).describe('Maps lead source field names to roles. Must include \'phone\' key.'),
+  "fromNumber": zod.string().optional(),
+  "callDelaySeconds": zod.number().default(createCampaignBodyCallDelaySecondsDefault),
+  "maxAttempts": zod.number().default(createCampaignBodyMaxAttemptsDefault),
+  "retryDelayMinutes": zod.number().default(createCampaignBodyRetryDelayMinutesDefault)
+})
+
+
+/**
+ * @summary Get a single campaign
+ */
+export const GetCampaignParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetCampaignResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "agentId": zod.number().nullish(),
+  "status": zod.enum(['draft', 'active', 'paused']),
+  "webhookToken": zod.string(),
+  "fieldMappings": zod.record(zod.string(), zod.string()).describe('Maps lead source field names to roles: phone (required), name, email, and any custom fields passed as prompt variables'),
+  "fromNumber": zod.string().nullish(),
+  "callDelaySeconds": zod.number(),
+  "maxAttempts": zod.number(),
+  "retryDelayMinutes": zod.number(),
+  "totalLeads": zod.number(),
+  "calledLeads": zod.number(),
+  "isActive": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update a campaign
+ */
+export const UpdateCampaignParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateCampaignBody = zod.object({
+  "name": zod.string().optional(),
+  "description": zod.string().optional(),
+  "agentId": zod.number().optional(),
+  "status": zod.enum(['draft', 'active', 'paused']).optional(),
+  "fieldMappings": zod.record(zod.string(), zod.string()).optional().describe('Maps lead source field names to roles.'),
+  "fromNumber": zod.string().optional(),
+  "callDelaySeconds": zod.number().optional(),
+  "maxAttempts": zod.number().optional(),
+  "retryDelayMinutes": zod.number().optional(),
+  "isActive": zod.boolean().optional()
+})
+
+export const UpdateCampaignResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "agentId": zod.number().nullish(),
+  "status": zod.enum(['draft', 'active', 'paused']),
+  "webhookToken": zod.string(),
+  "fieldMappings": zod.record(zod.string(), zod.string()).describe('Maps lead source field names to roles: phone (required), name, email, and any custom fields passed as prompt variables'),
+  "fromNumber": zod.string().nullish(),
+  "callDelaySeconds": zod.number(),
+  "maxAttempts": zod.number(),
+  "retryDelayMinutes": zod.number(),
+  "totalLeads": zod.number(),
+  "calledLeads": zod.number(),
+  "isActive": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a campaign
+ */
+export const DeleteCampaignParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary List leads for a campaign
+ */
+export const ListCampaignLeadsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const listCampaignLeadsQueryLimitDefault = 50;
+export const listCampaignLeadsQueryOffsetDefault = 0;
+
+export const ListCampaignLeadsQueryParams = zod.object({
+  "status": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().default(listCampaignLeadsQueryLimitDefault),
+  "offset": zod.coerce.number().default(listCampaignLeadsQueryOffsetDefault)
+})
+
+export const ListCampaignLeadsResponse = zod.object({
+  "leads": zod.array(zod.object({
+  "id": zod.number(),
+  "campaignId": zod.number(),
+  "phone": zod.string(),
+  "name": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "leadData": zod.record(zod.string(), zod.string()).optional(),
+  "callStatus": zod.enum(['pending', 'calling', 'completed', 'failed', 'skipped']),
+  "callId": zod.number().nullish(),
+  "callAttempts": zod.number(),
+  "lastAttemptAt": zod.coerce.date().nullish(),
+  "source": zod.string(),
+  "externalLeadId": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Retry a failed or skipped lead
+ */
+export const RetryCampaignLeadParams = zod.object({
+  "id": zod.coerce.number(),
+  "leadId": zod.coerce.number()
+})
+
+export const RetryCampaignLeadResponse = zod.object({
+  "id": zod.number(),
+  "campaignId": zod.number(),
+  "phone": zod.string(),
+  "name": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "leadData": zod.record(zod.string(), zod.string()).optional(),
+  "callStatus": zod.enum(['pending', 'calling', 'completed', 'failed', 'skipped']),
+  "callId": zod.number().nullish(),
+  "callAttempts": zod.number(),
+  "lastAttemptAt": zod.coerce.date().nullish(),
+  "source": zod.string(),
+  "externalLeadId": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+

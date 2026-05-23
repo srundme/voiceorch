@@ -17,12 +17,17 @@ import agentTemplatesRouter from "./agent-templates.js";
 import onboardingRouter from "./onboarding.js";
 import adminRouter from "./admin.js";
 import wizardRouter from "./wizard.js";
+import campaignsRouter from "./campaigns.js";
+import campaignWebhookRouter from "./campaign-webhook.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
 const router: IRouter = Router();
 
 // Admin routes bypass user provisioning middleware
 router.use(adminRouter);
+
+// Public campaign lead webhook — must be before provisionUser (no Clerk session needed)
+router.use(campaignWebhookRouter);
 
 router.use(storageRouter);
 router.use(provisionUser);
@@ -42,5 +47,6 @@ router.use(webhookEndpointsRouter);
 router.use(agentTemplatesRouter);
 router.use(onboardingRouter);
 router.use(wizardRouter);
+router.use(campaignsRouter);
 
 export default router;

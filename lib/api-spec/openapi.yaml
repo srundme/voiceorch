@@ -34,6 +34,8 @@ tags:
     description: Real-time active call monitoring
   - name: onboarding
     description: User onboarding flow
+  - name: campaigns
+    description: Auto-call campaign management
 
 paths:
   /healthz:
@@ -1195,6 +1197,183 @@ paths:
         "401":
           description: Unauthorized
 
+  # ── Campaigns ────────────────────────────────────────────────────────────────
+  /campaigns:
+    get:
+      operationId: listCampaigns
+      tags: [campaigns]
+      summary: List all campaigns for the current user
+      responses:
+        "200":
+          description: Campaign list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Campaign"
+        "401":
+          description: Unauthorized
+    post:
+      operationId: createCampaign
+      tags: [campaigns]
+      summary: Create a new campaign
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CampaignCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+        "400":
+          description: Validation error
+        "401":
+          description: Unauthorized
+
+  /campaigns/{id}:
+    get:
+      operationId: getCampaign
+      tags: [campaigns]
+      summary: Get a single campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Campaign
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+    patch:
+      operationId: updateCampaign
+      tags: [campaigns]
+      summary: Update a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CampaignUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteCampaign
+      tags: [campaigns]
+      summary: Delete a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+
+  /campaigns/{id}/leads:
+    get:
+      operationId: listCampaignLeads
+      tags: [campaigns]
+      summary: List leads for a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Lead list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [leads, total]
+                properties:
+                  leads:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CampaignLead"
+                  total:
+                    type: integer
+        "401":
+          description: Unauthorized
+
+  /campaigns/{id}/leads/{leadId}/retry:
+    post:
+      operationId: retryCampaignLead
+      tags: [campaigns]
+      summary: Retry a failed or skipped lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: leadId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Retry queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignLead"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+
 components:
   schemas:
     HealthStatus:
@@ -2348,3 +2527,148 @@ components:
           items:
             type: string
             enum: [vapi, retell, bolna, other]
+
+    Campaign:
+      type: object
+      required: [id, name, status, webhookToken, fieldMappings, callDelaySeconds, maxAttempts, retryDelayMinutes, totalLeads, calledLeads, isActive, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        agentId:
+          type: integer
+          nullable: true
+        status:
+          type: string
+          enum: [draft, active, paused]
+        webhookToken:
+          type: string
+        fieldMappings:
+          type: object
+          description: "Maps lead source field names to roles: phone (required), name, email, and any custom fields passed as prompt variables"
+          additionalProperties:
+            type: string
+        fromNumber:
+          type: string
+          nullable: true
+        callDelaySeconds:
+          type: integer
+        maxAttempts:
+          type: integer
+        retryDelayMinutes:
+          type: integer
+        totalLeads:
+          type: integer
+        calledLeads:
+          type: integer
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CampaignCreate:
+      type: object
+      required: [name, agentId, fieldMappings]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        agentId:
+          type: integer
+        fieldMappings:
+          type: object
+          description: "Maps lead source field names to roles. Must include 'phone' key."
+          additionalProperties:
+            type: string
+        fromNumber:
+          type: string
+        callDelaySeconds:
+          type: integer
+          default: 5
+        maxAttempts:
+          type: integer
+          default: 1
+        retryDelayMinutes:
+          type: integer
+          default: 60
+
+    CampaignUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        agentId:
+          type: integer
+        status:
+          type: string
+          enum: [draft, active, paused]
+        fieldMappings:
+          type: object
+          additionalProperties:
+            type: string
+          description: "Maps lead source field names to roles."
+        fromNumber:
+          type: string
+        callDelaySeconds:
+          type: integer
+        maxAttempts:
+          type: integer
+        retryDelayMinutes:
+          type: integer
+        isActive:
+          type: boolean
+
+    CampaignLead:
+      type: object
+      required: [id, campaignId, phone, callStatus, callAttempts, source, createdAt]
+      properties:
+        id:
+          type: integer
+        campaignId:
+          type: integer
+        phone:
+          type: string
+        name:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        leadData:
+          type: object
+          additionalProperties:
+            type: string
+        callStatus:
+          type: string
+          enum: [pending, calling, completed, failed, skipped]
+        callId:
+          type: integer
+          nullable: true
+        callAttempts:
+          type: integer
+        lastAttemptAt:
+          type: string
+          format: date-time
+          nullable: true
+        source:
+          type: string
+        externalLeadId:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time

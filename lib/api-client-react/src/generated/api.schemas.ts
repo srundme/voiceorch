@@ -1035,6 +1035,115 @@ export interface OnboardingStatus {
   data?: OnboardingData;
 }
 
+export type CampaignStatus = typeof CampaignStatus[keyof typeof CampaignStatus];
+
+
+export const CampaignStatus = {
+  draft: 'draft',
+  active: 'active',
+  paused: 'paused',
+} as const;
+
+/**
+ * Maps lead source field names to roles: phone (required), name, email, and any custom fields passed as prompt variables
+ */
+export type CampaignFieldMappings = {[key: string]: string};
+
+export interface Campaign {
+  id: number;
+  name: string;
+  description?: string | null;
+  agentId?: number | null;
+  status: CampaignStatus;
+  webhookToken: string;
+  /** Maps lead source field names to roles: phone (required), name, email, and any custom fields passed as prompt variables */
+  fieldMappings: CampaignFieldMappings;
+  fromNumber?: string | null;
+  callDelaySeconds: number;
+  maxAttempts: number;
+  retryDelayMinutes: number;
+  totalLeads: number;
+  calledLeads: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Maps lead source field names to roles. Must include 'phone' key.
+ */
+export type CampaignCreateFieldMappings = {[key: string]: string};
+
+export interface CampaignCreate {
+  name: string;
+  description?: string;
+  agentId: number;
+  /** Maps lead source field names to roles. Must include 'phone' key. */
+  fieldMappings: CampaignCreateFieldMappings;
+  fromNumber?: string;
+  callDelaySeconds?: number;
+  maxAttempts?: number;
+  retryDelayMinutes?: number;
+}
+
+export type CampaignUpdateStatus = typeof CampaignUpdateStatus[keyof typeof CampaignUpdateStatus];
+
+
+export const CampaignUpdateStatus = {
+  draft: 'draft',
+  active: 'active',
+  paused: 'paused',
+} as const;
+
+/**
+ * Maps lead source field names to roles.
+ */
+export type CampaignUpdateFieldMappings = {[key: string]: string};
+
+export interface CampaignUpdate {
+  name?: string;
+  description?: string;
+  agentId?: number;
+  status?: CampaignUpdateStatus;
+  /** Maps lead source field names to roles. */
+  fieldMappings?: CampaignUpdateFieldMappings;
+  fromNumber?: string;
+  callDelaySeconds?: number;
+  maxAttempts?: number;
+  retryDelayMinutes?: number;
+  isActive?: boolean;
+}
+
+export type CampaignLeadLeadData = {[key: string]: string};
+
+export type CampaignLeadCallStatus = typeof CampaignLeadCallStatus[keyof typeof CampaignLeadCallStatus];
+
+
+export const CampaignLeadCallStatus = {
+  pending: 'pending',
+  calling: 'calling',
+  completed: 'completed',
+  failed: 'failed',
+  skipped: 'skipped',
+} as const;
+
+export interface CampaignLead {
+  id: number;
+  campaignId: number;
+  phone: string;
+  name?: string | null;
+  email?: string | null;
+  leadData?: CampaignLeadLeadData;
+  callStatus: CampaignLeadCallStatus;
+  callId?: number | null;
+  callAttempts: number;
+  lastAttemptAt?: string | null;
+  source: string;
+  externalLeadId?: string | null;
+  notes?: string | null;
+  createdAt: string;
+}
+
 export type ListCallsParams = {
 /**
  * @nullable
@@ -1081,4 +1190,15 @@ export const ListAvailablePhoneNumbersNumberType = {
   toll_free: 'toll_free',
   mobile: 'mobile',
 } as const;
+
+export type ListCampaignLeadsParams = {
+status?: string;
+limit?: number;
+offset?: number;
+};
+
+export type ListCampaignLeads200 = {
+  leads: CampaignLead[];
+  total: number;
+};
 

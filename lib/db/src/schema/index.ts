@@ -9,3 +9,4 @@ export * from "./webhook-endpoints";
 export * from "./callerProfiles";
 export * from "./scheduledCallbacks";
 export * from "./platform-settings";
+export * from "./campaigns";

@@ -31,6 +31,12 @@ const NAV_SECTIONS = [
     ],
   },
   {
+    label: "Outreach",
+    items: [
+      { name: "Campaigns", href: "/app/campaigns", icon: Zap },
+    ],
+  },
+  {
     label: "Platform",
     items: [
       { name: "Phone Numbers", href: "/app/phone-numbers", icon: Phone },

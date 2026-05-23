@@ -31,6 +31,8 @@ import WebhooksPage from "@/pages/webhooks";
 import AgentAnalyticsPage from "@/pages/agent-analytics";
 import NotFound from "@/pages/not-found";
 import OnboardingPage from "@/pages/onboarding";
+import CampaignsPage from "@/pages/campaigns/index";
+import CampaignDetailPage from "@/pages/campaigns/[id]";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -193,6 +195,8 @@ function AppRoutes() {
         <Route path="/app/monitor" component={MonitorPage} />
         <Route path="/app/webhooks" component={WebhooksPage} />
         <Route path="/app/analytics/agents/:id" component={AgentAnalyticsPage} />
+        <Route path="/app/campaigns/:id" component={CampaignDetailPage} />
+        <Route path="/app/campaigns" component={CampaignsPage} />
         <Route path="/app/settings" component={Settings} />
         <Route component={NotFound} />
       </Switch>
