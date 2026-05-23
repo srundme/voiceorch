@@ -12,6 +12,7 @@ import {
   Languages, SkipForward,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Switch } from "@/components/ui/switch";
 
 /* ── Use-case catalogue ─────────────────────────────────────────────────── */
 const USE_CASES = [
@@ -41,13 +42,22 @@ const LANGUAGES = [
 ];
 
 /* ── Managed stack ──────────────────────────────────────────────────────── */
+/* Maps wizard language codes → BCP-47 codes stored on the agent */
+const LANG_CODE_MAP: Record<string, string> = {
+  english: "en-US", hindi: "hi", tamil: "ta", telugu: "te",
+  kannada: "kn", marathi: "mr", gujarati: "gu", bengali: "bn", malayalam: "ml",
+};
+
 function getManagedStack(languages: string[]) {
   const hasTamil = languages.includes("tamil");
+  const hasIndic = languages.some(l => ["hindi","telugu","kannada","marathi","gujarati","bengali","malayalam"].includes(l));
   return {
-    asrProvider:       hasTamil ? "sarvam" : "deepgram",
+    asrProvider:       (hasTamil || hasIndic) ? "sarvam" : "deepgram",
+    asrModel:          (hasTamil || hasIndic) ? "saarika:v2.5" : "nova-2-general",
     llmProvider:       "sarvam",
     llmModel:          "sarvam-m",
     ttsProvider:       "cartesia",
+    ttsModel:          "sonic-3",
     telephonyProvider: "vobiz",
   };
 }
@@ -316,8 +326,11 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
 
     const payload = isManaged ? {
       name: state.agentName || `${STEP_LABELS["use-case"]} Agent`,
-      asrProvider: stack.asrProvider, llmProvider: stack.llmProvider, llmModel: stack.llmModel,
-      ttsProvider: stack.ttsProvider, ttsVoice: state.selectedVoiceId || ARUSHI_VOICE.id,
+      language: LANG_CODE_MAP[state.primaryLanguage] ?? "en-US",
+      asrProvider: stack.asrProvider, asrModel: stack.asrModel,
+      llmProvider: stack.llmProvider, llmModel: stack.llmModel,
+      ttsProvider: stack.ttsProvider, ttsModel: stack.ttsModel,
+      ttsVoice: state.selectedVoiceId || ARUSHI_VOICE.id,
       telephonyProvider: stack.telephonyProvider,
       systemPrompt: state.generatedPrompt || state.callFlowDescription || "You are a helpful AI voice assistant.",
       maxDuration: 600,
@@ -325,6 +338,9 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
         summarizationEnabled: true,
         summarizationPrompt: "Summarize this call in 3 bullet points: 1) caller intent, 2) key information exchanged, 3) outcome or next step.",
       } as any,
+      tools: state.callTransferEnabled && state.callTransferNumber.trim()
+        ? [{ type: "call_transfer", name: "transfer_to_human", description: "Transfer the call to a human agent when the caller requests it or when escalation is needed.", transferTo: state.callTransferNumber.trim() }]
+        : [],
     } : {
       name: state.agentName || "New Assistant",
       asrProvider: state.byopAsr, llmProvider: state.byopLlm,
@@ -868,25 +884,17 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                   {/* Call Transfer */}
                   <div className={cn(
                     "p-5 rounded-xl border transition-all",
-                    state.callTransferEnabled ? "border-violet-300 bg-violet-50" : "border-gray-200 bg-gray-50",
+                    state.callTransferEnabled ? "border-violet-200 bg-violet-50/60" : "border-gray-200 bg-white",
                   )}>
                     <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-2.5">
-                        <PhoneForwarded className={cn("h-4.5 w-4.5", state.callTransferEnabled ? "text-violet-600" : "text-gray-400")} />
-                        <span className="font-semibold text-gray-700 text-sm">Call Transfer</span>
+                        <PhoneForwarded className={cn("h-4 w-4", state.callTransferEnabled ? "text-violet-600" : "text-gray-400")} />
+                        <span className="font-semibold text-gray-800 text-sm">Call Transfer</span>
                       </div>
-                      <button
-                        onClick={() => update({ callTransferEnabled: !state.callTransferEnabled })}
-                        className={cn(
-                          "relative w-11 h-6 rounded-full transition-colors",
-                          state.callTransferEnabled ? "bg-violet-500" : "bg-gray-100",
-                        )}
-                      >
-                        <span className={cn(
-                          "absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform",
-                          state.callTransferEnabled ? "translate-x-5" : "translate-x-0.5",
-                        )} />
-                      </button>
+                      <Switch
+                        checked={state.callTransferEnabled}
+                        onCheckedChange={v => update({ callTransferEnabled: v })}
+                      />
                     </div>
                     <p className="text-gray-400 text-xs mb-3">Agent can transfer calls to a human agent when needed</p>
                     {state.callTransferEnabled && (
@@ -895,7 +903,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                         placeholder="+91 9876543210"
                         value={state.callTransferNumber}
                         onChange={e => update({ callTransferNumber: e.target.value })}
-                        className="w-full bg-gray-100 border border-gray-200 rounded-lg px-3 py-2.5 text-gray-900 text-sm placeholder:text-gray-400 focus:outline-none focus:border-violet-500/60 transition-all"
+                        className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2.5 text-gray-900 text-sm placeholder:text-gray-400 focus:outline-none focus:border-violet-400 transition-all"
                       />
                     )}
                   </div>
