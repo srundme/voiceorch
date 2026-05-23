@@ -193,7 +193,7 @@ function UserMenu() {
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div className="absolute bottom-full left-0 right-0 mb-2 rounded-xl overflow-hidden z-50"
             style={{
-              background: "hsl(221 40% 9%)",
+              background: "#182235",
               border: "1px solid rgba(255,255,255,0.08)",
               boxShadow: "0 -8px 32px rgba(0,0,0,0.6)",
             }}>
@@ -218,7 +218,7 @@ function UserMenu() {
 function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   return (
     <div className="flex flex-col h-full" style={{
-      background: "hsl(224 45% 5%)",
+      background: "#0D1322",
       borderRight: "1px solid rgba(255,255,255,0.05)",
     }}>
       {/* Logo */}
@@ -274,7 +274,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <div className="flex h-screen w-full overflow-hidden" style={{ background: "hsl(223 39% 7%)" }}>
+    <div className="flex h-screen w-full overflow-hidden" style={{ background: "#0A0E1A" }}>
       {/* Desktop sidebar */}
       <aside className="hidden md:block w-[240px] shrink-0">
         <SidebarContent />
@@ -297,7 +297,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Page content */}
       <main className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden"
-        style={{ background: "hsl(223 39% 7%)" }}>
+        style={{ background: "#0A0E1A" }}>
         {children}
       </main>
     </div>

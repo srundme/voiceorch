@@ -1,0 +1,214 @@
+I want you to completely redesign the visual design system and color system of my AI voice agent SaaS dashboard.
+
+IMPORTANT:
+The current UI still looks ugly because colors are inconsistent, muddy, overly dark, and not premium.
+
+Problems:
+
+* Too many black backgrounds
+* No contrast hierarchy
+* Sidebar blends into content
+* Cards look flat
+* Borders are too visible
+* Purple accent is weak
+* Inputs feel outdated
+* Everything looks “same color”
+* UI has no depth
+
+I want a premium AI-native dark theme similar to:
+
+* Linear
+* Vapi
+* Retell AI
+* Stripe Dashboard
+* OpenAI Platform
+* Raycast
+* Supabase
+
+---
+
+## CREATE A COMPLETE DESIGN TOKEN SYSTEM
+
+Use semantic color tokens instead of random Tailwind classes.
+
+Create:
+
+* background
+* surface
+* elevated surface
+* border
+* muted text
+* primary text
+* accent
+* success
+* warning
+* danger
+
+Use these EXACT colors:
+
+BACKGROUND:
+#0A0E1A
+
+SIDEBAR:
+#0D1322
+
+CARD:
+#131A2A
+
+ELEVATED CARD:
+#182235
+
+BORDER:
+rgba(255,255,255,0.06)
+
+PRIMARY:
+#7C3AED
+
+PRIMARY HOVER:
+#8B5CF6
+
+TEXT PRIMARY:
+#F8FAFC
+
+TEXT SECONDARY:
+#94A3B8
+
+SUCCESS:
+#10B981
+
+WARNING:
+#F59E0B
+
+DANGER:
+#EF4444
+
+---
+
+## VISUAL DEPTH
+
+Add depth using:
+
+* subtle gradients
+* layered surfaces
+* soft shadows
+* glow accents
+* backdrop blur
+
+DO NOT use:
+
+* pure black
+* harsh borders
+* flat gray cards
+* bootstrap styling
+
+---
+
+## CARD STYLE
+
+All cards should:
+
+* rounded-2xl
+* subtle border
+* soft shadow
+* darker outer background
+* lighter inner surface
+* hover elevation
+
+Use:
+background: linear-gradient(
+180deg,
+rgba(255,255,255,0.02),
+rgba(255,255,255,0.01)
+)
+
+---
+
+## SIDEBAR STYLE
+
+Sidebar should:
+
+* feel separated from content
+* use slightly different background
+* have active item glow
+* have cleaner hover states
+
+Active nav item:
+
+* purple glow
+* soft background
+* brighter icon
+
+---
+
+## INPUT STYLE
+
+Inputs currently look ugly.
+
+Make inputs:
+
+* semi-transparent
+* soft borders
+* smooth focus glow
+* modern placeholder colors
+
+Focus state:
+
+* purple ring
+* subtle glow
+* smooth transition
+
+---
+
+## BUTTON STYLE
+
+Primary buttons:
+
+* gradient purple
+* soft shadow
+* hover lift
+
+Secondary buttons:
+
+* glassmorphism style
+* transparent background
+* subtle border
+
+---
+
+## CHARTS & METRICS
+
+Current charts look outdated.
+
+Make charts:
+
+* thinner lines
+* soft gradients
+* cleaner spacing
+* modern analytics aesthetic
+
+Metric cards should feel futuristic.
+
+---
+
+## GLOBAL STYLING RULES
+
+Use:
+
+* less visual noise
+* more spacing
+* better contrast hierarchy
+* subtle animations
+* premium surfaces
+
+Everything should feel:
+
+* modern
+* expensive
+* clean
+* AI-native
+* enterprise-grade
+
+IMPORTANT:
+Replace ALL hardcoded colors with reusable design tokens and Tailwind theme variables.
+
+Do a full UI polish pass and modernize the entire application visually.
