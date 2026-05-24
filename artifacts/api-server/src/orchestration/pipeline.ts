@@ -16,6 +16,8 @@ import { eq, and, or, sql } from "drizzle-orm";
 import { getAvailableSlots } from "../services/scheduling/slot-engine.js";
 import type { TimeSlot } from "../services/scheduling/slot-engine.js";
 import { buildSlotLockKey } from "../services/scheduling/lock.js";
+import { sendBookingCreatedEmail, sendBookingCancelledEmail, sendBookingRescheduledEmail } from "../services/scheduling/notifications.js";
+import { dispatchSchedulingWebhooks } from "../routes/scheduling/webhooks.js";
 
 const VAD_SILENCE_MS          = 250;    // silence window before STT flush
 const MIN_SPEECH_BYTES        = 3200;   // ~200ms @ 8kHz PCM — skip noise bursts shorter than this
@@ -1305,6 +1307,28 @@ export class OrchestrationPipeline {
 
       const dateStr = format(slotStart, "EEEE, MMMM do 'at' h:mm a");
       logger.info({ callId: this.config.callId, bookingId: booking.id, slotStart, attendeeEmail }, "Native booking created");
+
+      void sendBookingCreatedEmail({
+        attendeeName:  booking.attendeeName,
+        attendeeEmail: booking.attendeeEmail,
+        eventTypeName: eventType.name,
+        slotStart:     booking.slotStart,
+        slotEnd:       booking.slotEnd,
+        timezone:      calendar.timezone,
+        bookingId:     booking.id,
+        notes:         booking.attendeeNotes,
+      });
+      void dispatchSchedulingWebhooks(calendar.userId, "scheduling.booking.created", {
+        booking: {
+          ...booking,
+          slotStart:   booking.slotStart.toISOString(),
+          slotEnd:     booking.slotEnd.toISOString(),
+          cancelledAt: booking.cancelledAt?.toISOString() ?? null,
+          createdAt:   booking.createdAt.toISOString(),
+          updatedAt:   booking.updatedAt.toISOString(),
+        },
+      });
+
       return `booking_confirmed: event="${eventType.name}", slot="${dateStr}", booking_id=${booking.id}, attendee="${attendeeName}", email="${attendeeEmail}", status="${booking.status}"`;
     } catch (err) {
       logger.error({ callId: this.config.callId, err }, "Native booking tool execution failed");
@@ -1444,6 +1468,29 @@ export class OrchestrationPipeline {
 
       const dateStr = format(newStart, "EEEE, MMMM do 'at' h:mm a");
       logger.info({ callId: this.config.callId, oldBookingId: bookingId, newBookingId: newBooking.id }, "Native reschedule complete");
+
+      void sendBookingRescheduledEmail({
+        attendeeName:  newBooking.attendeeName,
+        attendeeEmail: newBooking.attendeeEmail,
+        eventTypeName: eventType.name,
+        slotStart:     newBooking.slotStart,
+        slotEnd:       newBooking.slotEnd,
+        timezone:      calendar.timezone,
+        bookingId:     newBooking.id,
+        notes:         newBooking.attendeeNotes,
+        oldSlotStart:  existing.slotStart,
+      });
+      void dispatchSchedulingWebhooks(calendar.userId, "scheduling.booking.rescheduled", {
+        booking: {
+          ...newBooking,
+          slotStart:   newBooking.slotStart.toISOString(),
+          slotEnd:     newBooking.slotEnd.toISOString(),
+          cancelledAt: newBooking.cancelledAt?.toISOString() ?? null,
+          createdAt:   newBooking.createdAt.toISOString(),
+          updatedAt:   newBooking.updatedAt.toISOString(),
+        },
+      });
+
       return `reschedule_confirmed: old_booking_id=${bookingId}, new_booking_id=${newBooking.id}, new_slot="${dateStr}", status="${newBooking.status}"`;
     } catch (err) {
       logger.error({ callId: this.config.callId, err }, "Native reschedule tool execution failed");
@@ -1490,11 +1537,40 @@ export class OrchestrationPipeline {
         return `info: booking ${bookingId} was already cancelled`;
       }
 
+      const [eventType] = await db.select().from(eventTypesTable).where(eq(eventTypesTable.id, existing.eventTypeId));
+      const [calendar]  = await db.select().from(schedulingCalendarsTable).where(eq(schedulingCalendarsTable.id, existing.calendarId));
+
+      const cancelledAt = new Date();
       await db.update(bookingsTable)
-        .set({ status: "cancelled", cancelledAt: new Date() })
+        .set({ status: "cancelled", cancelledAt })
         .where(eq(bookingsTable.id, bookingId));
 
       logger.info({ callId: this.config.callId, bookingId }, "Native cancel complete");
+
+      if (eventType && calendar) {
+        void sendBookingCancelledEmail({
+          attendeeName:  existing.attendeeName,
+          attendeeEmail: existing.attendeeEmail,
+          eventTypeName: eventType.name,
+          slotStart:     existing.slotStart,
+          slotEnd:       existing.slotEnd,
+          timezone:      calendar.timezone,
+          bookingId:     existing.id,
+          notes:         existing.attendeeNotes,
+        });
+        void dispatchSchedulingWebhooks(calendar.userId, "scheduling.booking.cancelled", {
+          booking: {
+            ...existing,
+            status:      "cancelled",
+            cancelledAt: cancelledAt.toISOString(),
+            slotStart:   existing.slotStart.toISOString(),
+            slotEnd:     existing.slotEnd.toISOString(),
+            createdAt:   existing.createdAt.toISOString(),
+            updatedAt:   existing.updatedAt.toISOString(),
+          },
+        });
+      }
+
       return `cancellation_confirmed: booking_id=${bookingId}`;
     } catch (err) {
       logger.error({ callId: this.config.callId, err }, "Native cancel tool execution failed");
