@@ -33,7 +33,8 @@ interface TwilioEvent {
 
 export async function handleTwilioWebSocket(
   ws: WebSocket,
-  agentId: number
+  agentId: number,
+  campaignLeadId?: number
 ): Promise<void> {
   let sessionId: string | null = null;
   let streamSid: string | null = null;
@@ -76,6 +77,7 @@ export async function handleTwilioWebSocket(
             toNumber,
             fromNumber,
             externalCallId: callSid ?? undefined,
+            campaignLeadId,
             onAudioOut: sendAudioToTwilio,
             onCallEnd: () => ws.close(),
             onBargeIn: () => {
@@ -125,11 +127,12 @@ export async function handleTwilioWebSocket(
 }
 
 /** Generate TwiML to connect call to Media Streams WebSocket */
-export function getTwilioVoiceTwiML(wsBaseUrl: string, agentId: number): string {
+export function getTwilioVoiceTwiML(wsBaseUrl: string, agentId: number, campaignLeadId?: number): string {
+  const qs = campaignLeadId ? `?campaignLeadId=${campaignLeadId}` : "";
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Connect>
-    <Stream url="${wsBaseUrl}/api/ws/twilio/${agentId}">
+    <Stream url="${wsBaseUrl}/api/ws/twilio/${agentId}${qs}">
       <Parameter name="agentId" value="${agentId}"/>
     </Stream>
   </Connect>

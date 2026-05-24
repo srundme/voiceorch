@@ -1,5 +1,5 @@
 import { createHmac } from "crypto";
-import { db, agentsTable, callsTable, providersTable, platformSettingsTable } from "@workspace/db";
+import { db, agentsTable, callsTable, providersTable, platformSettingsTable, campaignLeadsTable } from "@workspace/db";
 import { decryptKey } from "../lib/crypto.js";
 import { eq, and } from "drizzle-orm";
 import { OrchestrationPipeline } from "./pipeline.js";
@@ -58,6 +58,8 @@ export async function createSession(params: {
   platformTelephony?: boolean;
   /** Inbound call parameters (e.g. Vobiz customParameters) merged into prompt variable resolution */
   customParameters?: Record<string, string>;
+  /** Campaign lead ID — if set, lead data is merged into prompt variable resolution */
+  campaignLeadId?: number;
   onAudioOut: (audio: Buffer) => void;
   onCallEnd: () => void;
   onBargeIn?: () => void;
@@ -159,6 +161,25 @@ export async function createSession(params: {
   // resolves it at runtime after detecting the caller's gender from audio.
   // Priority order (lowest → highest): system defaults < agent promptVariables < inbound customParameters
   const now = new Date();
+  // Load campaign lead data if a campaignLeadId was supplied
+  let campaignLeadVars: Record<string, string> = {};
+  if (params.campaignLeadId) {
+    try {
+      const [lead] = await db.select().from(campaignLeadsTable).where(eq(campaignLeadsTable.id, params.campaignLeadId));
+      if (lead) {
+        campaignLeadVars = {
+          phone:  lead.phone,
+          name:   lead.name  ?? "",
+          email:  lead.email ?? "",
+          ...lead.leadData,
+        };
+        logger.info({ campaignLeadId: params.campaignLeadId, phone: lead.phone }, "Campaign lead vars loaded into session");
+      }
+    } catch (leadErr) {
+      logger.warn({ campaignLeadId: params.campaignLeadId, leadErr }, "Failed to load campaign lead — continuing without lead vars");
+    }
+  }
+
   const dynVars: Record<string, string> = {
     // System-provided built-in variables
     to_number:     params.toNumber,
@@ -168,7 +189,9 @@ export async function createSession(params: {
     date: now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" }),
     // P1-A: Agent-level prompt variable defaults (user-defined in agent config)
     ...Object.fromEntries(agentConfig.promptVariables.map(v => [v.key, v.defaultValue])),
-    // P1-A: Inbound call parameters override defaults (e.g. Vobiz customParameters)
+    // Campaign lead data overrides agent defaults
+    ...campaignLeadVars,
+    // P1-A: Inbound call parameters override everything (e.g. Vobiz customParameters)
     ...Object.fromEntries(Object.entries(params.customParameters ?? {}).map(([k, v]) => [k, v])),
   };
 

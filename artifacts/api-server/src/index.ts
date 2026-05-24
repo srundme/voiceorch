@@ -40,14 +40,16 @@ server.on("upgrade", (request, socket, head) => {
   const provider          = match[1] as "twilio" | "plivo" | "vobiz" | "webcall";
   const agentId           = parseInt(match[2]!, 10);
   const platformTelephony = url.includes("pt=1");
+  const qs                = new URLSearchParams(url.split("?")[1] ?? "");
+  const campaignLeadId    = qs.has("campaignLeadId") ? parseInt(qs.get("campaignLeadId")!, 10) : undefined;
 
   wss.handleUpgrade(request, socket, head, (ws: import("ws").WebSocket) => {
-    logger.info({ provider, agentId, platformTelephony, url }, "WebSocket upgraded");
+    logger.info({ provider, agentId, platformTelephony, campaignLeadId, url }, "WebSocket upgraded");
     switch (provider) {
-      case "twilio":   void handleTwilioWebSocket(ws, agentId);                      break;
-      case "plivo":    void handlePlivoWebSocket(ws, agentId);                       break;
-      case "vobiz":    void handleVobizWebSocket(ws, agentId, platformTelephony);    break;
-      case "webcall":  void handleWebCallWebSocket(ws, agentId);                     break;
+      case "twilio":   void handleTwilioWebSocket(ws, agentId, campaignLeadId);                      break;
+      case "plivo":    void handlePlivoWebSocket(ws, agentId, campaignLeadId);                       break;
+      case "vobiz":    void handleVobizWebSocket(ws, agentId, platformTelephony, campaignLeadId);    break;
+      case "webcall":  void handleWebCallWebSocket(ws, agentId);                                     break;
     }
   });
 });

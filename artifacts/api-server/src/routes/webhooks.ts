@@ -36,7 +36,8 @@ router.post("/webhooks/twilio/voice", async (req, res): Promise<void> => {
   }
 
   const wsBaseUrl = getWsBaseUrl(req);
-  const twiml = getTwilioVoiceTwiML(wsBaseUrl, agentId);
+  const campaignLeadId = req.query["campaignLeadId"] ? parseInt(String(req.query["campaignLeadId"]), 10) : undefined;
+  const twiml = getTwilioVoiceTwiML(wsBaseUrl, agentId, campaignLeadId);
 
   res.set("Content-Type", "text/xml").send(twiml);
 });
@@ -56,7 +57,8 @@ router.post("/webhooks/plivo/voice", async (req, res): Promise<void> => {
   }
 
   const wsBaseUrl = getWsBaseUrl(req);
-  const xml = getPlivoAnswerXML(wsBaseUrl, agentId);
+  const campaignLeadId = req.query["campaignLeadId"] ? parseInt(String(req.query["campaignLeadId"]), 10) : undefined;
+  const xml = getPlivoAnswerXML(wsBaseUrl, agentId, campaignLeadId);
 
   res.set("Content-Type", "text/xml").send(xml);
 });
@@ -176,8 +178,9 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
     ? `${httpBase}/api/webhooks/vobiz/recording`
     : undefined;
 
+  const campaignLeadId = req.query["campaignLeadId"] ? parseInt(String(req.query["campaignLeadId"]), 10) : undefined;
   res.set("Content-Type", "text/xml").send(
-    getVobizAnswerXML(wsBaseUrl, agentId, platformTelephony, { recordingCallbackUrl })
+    getVobizAnswerXML(wsBaseUrl, agentId, platformTelephony, { recordingCallbackUrl, campaignLeadId })
   );
 });
 

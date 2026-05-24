@@ -64,22 +64,8 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
       ? (JSON.parse(provRow.extraConfig) as Record<string, string>)
       : {} as Record<string, string>;
 
-    // Build variable map from lead data (merge named fields + raw leadData)
-    const vars: Record<string, string> = {
-      phone:  lead.phone,
-      name:   lead.name  ?? "",
-      email:  lead.email ?? "",
-      ...lead.leadData,
-    };
-
-    // Patch the agent system prompt with lead variables
-    const patchedSystemPrompt = interpolateTemplate(agent.systemPrompt, vars);
-    const patchedAgent = { ...agent, systemPrompt: patchedSystemPrompt };
-
-    // Store patched agent in a temp override via query param so the session handler picks it up
-    // We embed campaignLeadId in the webhook URL so the call result can be mapped back
-    const callbackSuffix = `&campaignLeadId=${lead.id}`;
-
+    // campaignLeadId is passed through the webhook URL so the session handler
+    // can look up the lead and apply {{variable}} substitution at call-start time.
     if (provider === "twilio") {
       if (!cfg["accountSid"] || !cfg["fromNumber"]) throw new Error("Twilio config missing accountSid or fromNumber");
       const fromNumber = campaign.fromNumber ?? cfg["fromNumber"]!;
@@ -88,7 +74,7 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
         authToken: decryptKey(provRow.apiKey),
         fromNumber,
         toNumber: lead.phone,
-        webhookUrl: `${baseUrl}/api/webhooks/twilio/voice?agentId=${agent.id}&promptOverride=${encodeURIComponent(patchedSystemPrompt)}${callbackSuffix}`,
+        webhookUrl: `${baseUrl}/api/webhooks/twilio/voice?agentId=${agent.id}&campaignLeadId=${lead.id}`,
         statusCallbackUrl: `${baseUrl}/api/webhooks/twilio/status`,
       });
     } else if (provider === "plivo") {
@@ -99,7 +85,7 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
         authToken: decryptKey(provRow.apiKey),
         fromNumber,
         toNumber: lead.phone,
-        answerUrl: `${baseUrl}/api/webhooks/plivo/voice?agentId=${agent.id}&promptOverride=${encodeURIComponent(patchedSystemPrompt)}${callbackSuffix}`,
+        answerUrl: `${baseUrl}/api/webhooks/plivo/voice?agentId=${agent.id}&campaignLeadId=${lead.id}`,
       });
     } else if (provider === "vobiz") {
       if (!cfg["authId"] || !cfg["fromNumber"]) throw new Error("Vobiz config missing authId or fromNumber");
@@ -109,7 +95,7 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
         authToken: decryptKey(provRow.apiKey),
         fromNumber,
         toNumber: lead.phone,
-        answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${agent.id}&promptOverride=${encodeURIComponent(patchedSystemPrompt)}${callbackSuffix}`,
+        answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${agent.id}&campaignLeadId=${lead.id}`,
         hangupUrl: `${baseUrl}/api/webhooks/vobiz/status`,
       });
     } else {

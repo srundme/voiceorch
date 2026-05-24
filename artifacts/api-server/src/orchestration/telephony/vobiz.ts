@@ -52,7 +52,8 @@ interface VobizMessage {
 export async function handleVobizWebSocket(
   ws: WebSocket,
   agentId: number,
-  platformTelephony = false
+  platformTelephony = false,
+  campaignLeadId?: number
 ): Promise<void> {
   let sessionId: string | null = null;
   let streamId: string | null = null;
@@ -116,6 +117,7 @@ export async function handleVobizWebSocket(
             externalCallId: callId ?? undefined,
             platformTelephony,
             customParameters: params,
+            campaignLeadId,
             onAudioOut: sendAudioToVobiz,
             onCallEnd: () => ws.close(),
             onBargeIn: sendBargeIn,
@@ -165,11 +167,13 @@ export function getVobizAnswerXML(
   wsBaseUrl: string,
   agentId: number,
   platformTelephony = false,
-  opts: { recordingCallbackUrl?: string } = {},
+  opts: { recordingCallbackUrl?: string; campaignLeadId?: number } = {},
 ): string {
-  const wsUrl = platformTelephony
-    ? `${wsBaseUrl}/api/ws/vobiz/${agentId}?pt=1`
-    : `${wsBaseUrl}/api/ws/vobiz/${agentId}`;
+  const qsParts: string[] = [];
+  if (platformTelephony) qsParts.push("pt=1");
+  if (opts.campaignLeadId) qsParts.push(`campaignLeadId=${opts.campaignLeadId}`);
+  const qs = qsParts.length ? `?${qsParts.join("&")}` : "";
+  const wsUrl = `${wsBaseUrl}/api/ws/vobiz/${agentId}${qs}`;
   const recordTag = opts.recordingCallbackUrl
     ? `\n  <Record action="${opts.recordingCallbackUrl}" method="POST" maxLength="3600" redirect="false" />`
     : "";

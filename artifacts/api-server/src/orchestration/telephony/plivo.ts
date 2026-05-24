@@ -35,7 +35,8 @@ interface PlivoEvent {
 
 export async function handlePlivoWebSocket(
   ws: WebSocket,
-  agentId: number
+  agentId: number,
+  campaignLeadId?: number
 ): Promise<void> {
   let sessionId: string | null = null;
   let streamId: string | null = null;
@@ -78,6 +79,7 @@ export async function handlePlivoWebSocket(
             toNumber,
             fromNumber,
             externalCallId: callId,
+            campaignLeadId,
             onAudioOut: sendAudioToPlivo,
             onCallEnd: () => ws.close(),
           });
@@ -115,11 +117,12 @@ export async function handlePlivoWebSocket(
 }
 
 /** Generate Plivo Answer XML to connect call to WebSocket stream */
-export function getPlivoAnswerXML(wsBaseUrl: string, agentId: number): string {
+export function getPlivoAnswerXML(wsBaseUrl: string, agentId: number, campaignLeadId?: number): string {
+  const qs = campaignLeadId ? `?campaignLeadId=${campaignLeadId}` : "";
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Stream keepCallAlive="true" streamTimeout="600" contentType="audio/x-mulaw;rate=8000" bidirectional="true">
-    <WebSocket url="${wsBaseUrl}/api/ws/plivo/${agentId}"/>
+    <WebSocket url="${wsBaseUrl}/api/ws/plivo/${agentId}${qs}"/>
   </Stream>
 </Response>`;
 }
