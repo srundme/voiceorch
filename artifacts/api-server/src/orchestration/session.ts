@@ -309,6 +309,48 @@ export async function createSession(params: {
       transferredTo = to;
       logger.info({ callId: callRecord.id, transferTo: to }, "Call transfer initiated");
       void patchSessionMeta(sessionId, { wasTransferred: true, transferredTo: to }, redisTtl);
+
+      // Execute the actual provider-level call redirect
+      void (async () => {
+        try {
+          if (!params.externalCallId) {
+            logger.warn({ callId: callRecord.id }, "Transfer: no externalCallId — cannot redirect call");
+            return;
+          }
+          const domains = process.env["REPLIT_DOMAINS"];
+          const baseUrl = domains
+            ? `https://${domains.split(",")[0]!.trim()}`
+            : `http://localhost:${process.env["PORT"] ?? "8080"}`;
+
+          const { transferTwilioCall, transferPlivoCall, transferVobizCall } = await import("./telephony/transfer.js");
+          const tprov = params.telephonyProvider;
+
+          if (tprov === "twilio") {
+            const authToken = providerKeys.get("twilio") ?? "";
+            const extra = providerKeys.get("twilio:extraConfig");
+            const cfg = extra ? (JSON.parse(extra) as Record<string, string>) : {};
+            const accountSid = cfg["accountSid"] ?? "";
+            const xmlUrl = `${baseUrl}/api/webhooks/twilio/transfer-xml?target=${encodeURIComponent(to)}`;
+            await transferTwilioCall({ accountSid, authToken, callSid: params.externalCallId, xmlUrl });
+          } else if (tprov === "plivo") {
+            const authToken = providerKeys.get("plivo") ?? "";
+            const extra = providerKeys.get("plivo:extraConfig");
+            const cfg = extra ? (JSON.parse(extra) as Record<string, string>) : {};
+            const authId = cfg["authId"] ?? "";
+            const xmlUrl = `${baseUrl}/api/webhooks/plivo/transfer-xml?target=${encodeURIComponent(to)}`;
+            await transferPlivoCall({ authId, authToken, callUuid: params.externalCallId, xmlUrl });
+          } else if (tprov === "vobiz") {
+            const authToken = providerKeys.get("vobiz") ?? "";
+            const extra = providerKeys.get("vobiz:extraConfig");
+            const cfg = extra ? (JSON.parse(extra) as Record<string, string>) : {};
+            const authId = cfg["authId"] ?? "";
+            const xmlUrl = `${baseUrl}/api/webhooks/vobiz/transfer-xml?target=${encodeURIComponent(to)}`;
+            await transferVobizCall({ authId, authToken, callUuid: params.externalCallId, xmlUrl });
+          }
+        } catch (err) {
+          logger.error({ callId: callRecord.id, err }, "Provider call transfer API failed");
+        }
+      })();
     },
     onBargeIn: params.onBargeIn,
     onMetrics: (m: PipelineMetrics) => {

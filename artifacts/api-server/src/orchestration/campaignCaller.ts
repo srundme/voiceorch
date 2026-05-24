@@ -64,11 +64,18 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
       ? (JSON.parse(provRow.extraConfig) as Record<string, string>)
       : {} as Record<string, string>;
 
+    // Read AMD config from the agent's agentConfig JSON
+    const agentCfg = (agent.agentConfig ?? {}) as Record<string, unknown>;
+    const machineDetectionMode = agentCfg["machineDetectionMode"] as string | undefined;
+    const amdEnabled = machineDetectionMode === "enable" || machineDetectionMode === "detect_message_end";
+
     // campaignLeadId is passed through the webhook URL so the session handler
     // can look up the lead and apply {{variable}} substitution at call-start time.
     if (provider === "twilio") {
       if (!cfg["accountSid"] || !cfg["fromNumber"]) throw new Error("Twilio config missing accountSid or fromNumber");
       const fromNumber = campaign.fromNumber ?? cfg["fromNumber"]!;
+      const amdCallbackUrl = `${baseUrl}/api/webhooks/twilio/amd?agentId=${agent.id}`;
+      const recordingEnabled = agentCfg["recordingEnabled"] === true;
       await dialTwilio({
         accountSid: cfg["accountSid"]!,
         authToken: decryptKey(provRow.apiKey),
@@ -76,20 +83,34 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
         toNumber: lead.phone,
         webhookUrl: `${baseUrl}/api/webhooks/twilio/voice?agentId=${agent.id}&campaignLeadId=${lead.id}`,
         statusCallbackUrl: `${baseUrl}/api/webhooks/twilio/status`,
+        ...(amdEnabled ? {
+          machineDetection: machineDetectionMode === "detect_message_end" ? "DetectMessageEnd" : "Enable",
+          machineDetectionUrl: amdCallbackUrl,
+        } : {}),
+        ...(recordingEnabled ? {
+          recordingEnabled: true,
+          recordingStatusCallbackUrl: `${baseUrl}/api/webhooks/twilio/recording`,
+        } : {}),
       });
     } else if (provider === "plivo") {
       if (!cfg["authId"] || !cfg["fromNumber"]) throw new Error("Plivo config missing authId or fromNumber");
       const fromNumber = campaign.fromNumber ?? cfg["fromNumber"]!;
+      const amdCallbackUrl = `${baseUrl}/api/webhooks/plivo/amd?agentId=${agent.id}`;
       await dialPlivo({
         authId: cfg["authId"]!,
         authToken: decryptKey(provRow.apiKey),
         fromNumber,
         toNumber: lead.phone,
         answerUrl: `${baseUrl}/api/webhooks/plivo/voice?agentId=${agent.id}&campaignLeadId=${lead.id}`,
+        ...(amdEnabled ? {
+          machineDetectionEnabled: true,
+          machineDetectionUrl: amdCallbackUrl,
+        } : {}),
       });
     } else if (provider === "vobiz") {
       if (!cfg["authId"] || !cfg["fromNumber"]) throw new Error("Vobiz config missing authId or fromNumber");
       const fromNumber = campaign.fromNumber ?? cfg["fromNumber"]!;
+      const amdCallbackUrl = `${baseUrl}/api/webhooks/vobiz/amd?agentId=${agent.id}`;
       await dialVobiz({
         authId: cfg["authId"]!,
         authToken: decryptKey(provRow.apiKey),
@@ -97,6 +118,10 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
         toNumber: lead.phone,
         answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${agent.id}&campaignLeadId=${lead.id}`,
         hangupUrl: `${baseUrl}/api/webhooks/vobiz/status`,
+        ...(amdEnabled ? {
+          machineDetection: machineDetectionMode === "detect_message_end" ? "DetectMessageEnd" : "Enable",
+          machineDetectionUrl: amdCallbackUrl,
+        } : {}),
       });
     } else {
       throw new Error(`Outbound not supported for provider: ${provider}`);

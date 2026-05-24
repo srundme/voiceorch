@@ -79,6 +79,8 @@ export class OrchestrationPipeline {
   // Streaming STT (Deepgram live transcription)
   private streamSTT: StreamSTT | null = null;
   private pendingTranscript: string | null = null;
+  private streamSTTReconnectAttempts = 0;
+  private streamSTTReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Metrics
   private firstAudioSentAt: number | null = null;
@@ -157,11 +159,33 @@ export class OrchestrationPipeline {
   private initStreamingSTT(): void {
     if (!this.stt.transcribeStream) return;
     try {
-      this.streamSTT = this.stt.transcribeStream((text, isFinal) => {
-        if (!isFinal || !text.trim() || this.closed) return;
-        this.resetHangupTimer();
-        void this.handleStreamingTranscript(text);
-      });
+      this.streamSTT = this.stt.transcribeStream(
+        (text, isFinal) => {
+          if (!isFinal || !text.trim() || this.closed) return;
+          this.streamSTTReconnectAttempts = 0; // reset backoff on successful transcript
+          this.resetHangupTimer();
+          void this.handleStreamingTranscript(text);
+        },
+        () => {
+          // Stream closed — attempt reconnect unless the call is already over
+          if (this.closed) return;
+          this.streamSTT = null;
+          const MAX_ATTEMPTS = 5;
+          if (this.streamSTTReconnectAttempts >= MAX_ATTEMPTS) {
+            logger.warn({ callId: this.config.callId }, "Streaming STT: max reconnect attempts reached — falling back to batch STT");
+            return;
+          }
+          const backoffMs = Math.min(1000 * 2 ** this.streamSTTReconnectAttempts, 16000);
+          this.streamSTTReconnectAttempts++;
+          logger.warn(
+            { callId: this.config.callId, attempt: this.streamSTTReconnectAttempts, backoffMs },
+            "Streaming STT disconnected — scheduling reconnect"
+          );
+          this.streamSTTReconnectTimer = setTimeout(() => {
+            if (!this.closed) this.initStreamingSTT();
+          }, backoffMs);
+        }
+      );
       logger.info({ callId: this.config.callId }, "Streaming STT initialized (Deepgram)");
     } catch (err) {
       logger.error({ callId: this.config.callId, err }, "Streaming STT init failed — falling back to batch");
@@ -948,6 +972,10 @@ export class OrchestrationPipeline {
       this.silenceHangupTimer = null;
     }
     this.stopHandoffSilenceTimer();
+    if (this.streamSTTReconnectTimer) {
+      clearTimeout(this.streamSTTReconnectTimer);
+      this.streamSTTReconnectTimer = null;
+    }
     this.streamSTT?.close();
     this.streamSTT = null;
     logger.info({ callId: this.config.callId }, "Pipeline closed");

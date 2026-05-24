@@ -10,6 +10,12 @@ export async function dialTwilio(opts: {
   toNumber: string;
   webhookUrl: string;
   statusCallbackUrl: string;
+  /** AMD — omit to disable */
+  machineDetection?: "Enable" | "DetectMessageEnd";
+  machineDetectionUrl?: string;
+  /** Recording */
+  recordingEnabled?: boolean;
+  recordingStatusCallbackUrl?: string;
 }): Promise<string> {
   const url   = `https://api.twilio.com/2010-04-01/Accounts/${opts.accountSid}/Calls.json`;
   const creds = Buffer.from(`${opts.accountSid}:${opts.authToken}`).toString("base64");
@@ -18,6 +24,15 @@ export async function dialTwilio(opts: {
     Url: opts.webhookUrl, StatusCallback: opts.statusCallbackUrl,
     StatusCallbackMethod: "POST",
   });
+  if (opts.machineDetection) {
+    body.append("MachineDetection", opts.machineDetection);
+    if (opts.machineDetectionUrl) body.append("MachineDetectionUrl", opts.machineDetectionUrl);
+  }
+  if (opts.recordingEnabled) {
+    body.append("Record", "true");
+    if (opts.recordingStatusCallbackUrl) body.append("RecordingStatusCallback", opts.recordingStatusCallbackUrl);
+    body.append("RecordingStatusCallbackMethod", "POST");
+  }
   const resp = await fetch(url, {
     method: "POST",
     headers: { Authorization: `Basic ${creds}`, "Content-Type": "application/x-www-form-urlencoded" },
@@ -34,13 +49,24 @@ export async function dialPlivo(opts: {
   fromNumber: string;
   toNumber: string;
   answerUrl: string;
+  /** AMD — omit to disable */
+  machineDetectionEnabled?: boolean;
+  machineDetectionUrl?: string;
 }): Promise<string> {
   const url   = `https://api.plivo.com/v1/Account/${opts.authId}/Call/`;
   const creds = Buffer.from(`${opts.authId}:${opts.authToken}`).toString("base64");
+  const callBody: Record<string, string | boolean> = {
+    to: opts.toNumber, from: opts.fromNumber,
+    answer_url: opts.answerUrl, answer_method: "POST",
+  };
+  if (opts.machineDetectionEnabled) {
+    callBody["machine_detection"] = "enable";
+    if (opts.machineDetectionUrl) callBody["machine_detection_url"] = opts.machineDetectionUrl;
+  }
   const resp  = await fetch(url, {
     method: "POST",
     headers: { Authorization: `Basic ${creds}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ to: opts.toNumber, from: opts.fromNumber, answer_url: opts.answerUrl, answer_method: "POST" }),
+    body: JSON.stringify(callBody),
   });
   if (!resp.ok) throw new Error(`Plivo API error ${resp.status}: ${await resp.text()}`);
   const data = await resp.json() as { request_uuid: string };

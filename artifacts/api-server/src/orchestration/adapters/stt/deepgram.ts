@@ -75,7 +75,8 @@ export class DeepgramSTT implements STTAdapter {
   }
 
   transcribeStream(
-    onTranscript: (text: string, isFinal: boolean) => void
+    onTranscript: (text: string, isFinal: boolean) => void,
+    onClose?: () => void,
   ): StreamSTT {
     const model = this.model ?? "nova-2";
     const useSmartEndpointing = this.cfg.smartEndpointing !== "off";
@@ -188,6 +189,7 @@ export class DeepgramSTT implements STTAdapter {
 
     ws.on("close", () => {
       logger.info("Deepgram streaming STT WebSocket closed");
+      onClose?.();
     });
 
     return {

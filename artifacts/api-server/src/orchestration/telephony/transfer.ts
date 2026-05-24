@@ -1,22 +1,19 @@
 /**
- * P2-A: Call Transfer helpers
+ * Call Transfer helpers — Twilio, Plivo, VoBiz
  *
- * VoBiz transfer uses their REST API to redirect the aleg (caller) to a new
- * XML URL that returns a <Dial> instruction.
- *
- * POST https://api.vobiz.ai/api/v1/Account/{authId}/Call/{callUuid}/Transfer/
- * Body: { legs: "aleg", aleg_url: "<url>", aleg_method: "GET" }
- *
- * The aleg_url must return VoiceXML with a <Dial> node pointing at the target.
+ * Each provider exposes a REST endpoint to redirect a live call to a new
+ * XML/TwiML URL that returns a <Dial> instruction.
  */
 
 import { logger } from "../../lib/logger.js";
 
 export type TransferType = "warm" | "cold";
 
+// ── VoBiz ────────────────────────────────────────────────────────────────────
+
 /**
  * Calls VoBiz REST API to redirect the active call to a new XML URL.
- * The XML URL should return a <Dial> response targeting the transfer destination.
+ * POST https://api.vobiz.ai/api/v1/Account/{authId}/Call/{callUuid}/Transfer/
  */
 export async function transferVobizCall(opts: {
   authId: string;
@@ -32,25 +29,82 @@ export async function transferVobizCall(opts: {
       "X-Auth-Token": opts.authToken,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      legs: "aleg",
-      aleg_url: opts.xmlUrl,
-      aleg_method: "GET",
-    }),
+    body: JSON.stringify({ legs: "aleg", aleg_url: opts.xmlUrl, aleg_method: "GET" }),
   });
-
   const text = await resp.text();
-  if (!resp.ok) {
-    throw new Error(`VoBiz transfer API error ${resp.status}: ${text}`);
-  }
+  if (!resp.ok) throw new Error(`VoBiz transfer API error ${resp.status}: ${text}`);
   logger.info({ callUuid: opts.callUuid, xmlUrl: opts.xmlUrl }, "VoBiz transfer initiated");
 }
 
-/**
- * Build the VoiceXML response that VoBiz fetches from our transfer callback URL.
- * Returns XML that dials the target number / SIP URI directly.
- */
+/** VoiceXML response that dials the target number directly. */
 export function buildTransferXml(target: string): string {
-  const escaped = target.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial>${escaped}</Dial>\n</Response>`;
+  const e = xmlEscape(target);
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial>${e}</Dial>\n</Response>`;
+}
+
+// ── Twilio ───────────────────────────────────────────────────────────────────
+
+/**
+ * Redirect a live Twilio call to a new TwiML URL.
+ * POST /2010-04-01/Accounts/{accountSid}/Calls/{callSid}.json  Url=<url>
+ */
+export async function transferTwilioCall(opts: {
+  accountSid: string;
+  authToken: string;
+  callSid: string;
+  xmlUrl: string;
+}): Promise<void> {
+  const url   = `https://api.twilio.com/2010-04-01/Accounts/${opts.accountSid}/Calls/${opts.callSid}.json`;
+  const creds = Buffer.from(`${opts.accountSid}:${opts.authToken}`).toString("base64");
+  const body  = new URLSearchParams({ Url: opts.xmlUrl, Method: "GET" });
+  const resp  = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Basic ${creds}`, "Content-Type": "application/x-www-form-urlencoded" },
+    body: body.toString(),
+  });
+  const text = await resp.text();
+  if (!resp.ok) throw new Error(`Twilio transfer API error ${resp.status}: ${text}`);
+  logger.info({ callSid: opts.callSid, xmlUrl: opts.xmlUrl }, "Twilio transfer initiated");
+}
+
+/** TwiML response that dials the target number. */
+export function buildTwilioTransferTwiML(target: string): string {
+  const e = xmlEscape(target);
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial>${e}</Dial>\n</Response>`;
+}
+
+// ── Plivo ────────────────────────────────────────────────────────────────────
+
+/**
+ * Redirect a live Plivo call to a new answer URL.
+ * POST /v1/Account/{authId}/Call/{callUuid}/Transfer/
+ */
+export async function transferPlivoCall(opts: {
+  authId: string;
+  authToken: string;
+  callUuid: string;
+  xmlUrl: string;
+}): Promise<void> {
+  const url   = `https://api.plivo.com/v1/Account/${opts.authId}/Call/${opts.callUuid}/Transfer/`;
+  const creds = Buffer.from(`${opts.authId}:${opts.authToken}`).toString("base64");
+  const resp  = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Basic ${creds}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ legs: "aleg", aleg_url: opts.xmlUrl, aleg_method: "GET" }),
+  });
+  const text = await resp.text();
+  if (!resp.ok) throw new Error(`Plivo transfer API error ${resp.status}: ${text}`);
+  logger.info({ callUuid: opts.callUuid, xmlUrl: opts.xmlUrl }, "Plivo transfer initiated");
+}
+
+/** Plivo XML response that dials the target number. */
+export function buildPlivoTransferXml(target: string): string {
+  const e = xmlEscape(target);
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial>${e}</Dial>\n</Response>`;
+}
+
+// ── helpers ──────────────────────────────────────────────────────────────────
+
+function xmlEscape(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
