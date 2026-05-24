@@ -61,6 +61,9 @@ export default function SchedulingPage() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" asChild>
+            <Link href={`${BASE}/app/scheduling/calendars`}>Calendars</Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
             <Link href={`${BASE}/app/scheduling/event-types`}>Event Types</Link>
           </Button>
           <Button variant="outline" size="sm" asChild>
