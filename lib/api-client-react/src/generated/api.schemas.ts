@@ -1198,6 +1198,252 @@ export interface CsvImportResult {
   errors?: string[];
 }
 
+export interface SchedulingCalendar {
+  id: number;
+  agentId: number;
+  userId: string;
+  name: string;
+  timezone: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SchedulingCalendarInput {
+  agentId: number;
+  name: string;
+  timezone: string;
+  isActive?: boolean;
+}
+
+export interface SchedulingCalendarUpdate {
+  name?: string;
+  timezone?: string;
+  isActive?: boolean;
+}
+
+export type EventTypeConfirmationMode = typeof EventTypeConfirmationMode[keyof typeof EventTypeConfirmationMode];
+
+
+export const EventTypeConfirmationMode = {
+  instant: 'instant',
+  manual: 'manual',
+} as const;
+
+export interface EventType {
+  id: number;
+  calendarId: number;
+  userId: string;
+  name: string;
+  slug: string;
+  /** @nullable */
+  description?: string | null;
+  durationMinutes: number;
+  bufferBeforeMins: number;
+  bufferAfterMins: number;
+  confirmationMode: EventTypeConfirmationMode;
+  maxBookingsPerSlot: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type EventTypeInputConfirmationMode = typeof EventTypeInputConfirmationMode[keyof typeof EventTypeInputConfirmationMode];
+
+
+export const EventTypeInputConfirmationMode = {
+  instant: 'instant',
+  manual: 'manual',
+} as const;
+
+export interface EventTypeInput {
+  calendarId: number;
+  name: string;
+  slug: string;
+  description?: string;
+  durationMinutes: number;
+  bufferBeforeMins?: number;
+  bufferAfterMins?: number;
+  confirmationMode?: EventTypeInputConfirmationMode;
+  maxBookingsPerSlot?: number;
+  isActive?: boolean;
+}
+
+export type EventTypeUpdateConfirmationMode = typeof EventTypeUpdateConfirmationMode[keyof typeof EventTypeUpdateConfirmationMode];
+
+
+export const EventTypeUpdateConfirmationMode = {
+  instant: 'instant',
+  manual: 'manual',
+} as const;
+
+export interface EventTypeUpdate {
+  name?: string;
+  description?: string;
+  durationMinutes?: number;
+  bufferBeforeMins?: number;
+  bufferAfterMins?: number;
+  confirmationMode?: EventTypeUpdateConfirmationMode;
+  maxBookingsPerSlot?: number;
+  isActive?: boolean;
+}
+
+export type PublicEventTypeConfirmationMode = typeof PublicEventTypeConfirmationMode[keyof typeof PublicEventTypeConfirmationMode];
+
+
+export const PublicEventTypeConfirmationMode = {
+  instant: 'instant',
+  manual: 'manual',
+} as const;
+
+export interface PublicEventType {
+  id: number;
+  calendarId: number;
+  name: string;
+  slug: string;
+  /** @nullable */
+  description?: string | null;
+  durationMinutes: number;
+  confirmationMode: PublicEventTypeConfirmationMode;
+}
+
+export interface AvailabilitySchedule {
+  id: number;
+  calendarId: number;
+  /** 0=Sunday, 1=Monday, ..., 6=Saturday */
+  dayOfWeek: number;
+  /** HH:MM in 24h format */
+  startTime: string;
+  /** HH:MM in 24h format */
+  endTime: string;
+  isActive: boolean;
+}
+
+export interface AvailabilityScheduleInput {
+  calendarId: number;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  isActive?: boolean;
+}
+
+export interface AvailabilityScheduleUpdate {
+  startTime?: string;
+  endTime?: string;
+  isActive?: boolean;
+}
+
+export interface AvailabilityOverride {
+  id: number;
+  calendarId: number;
+  date: string;
+  isBlocked: boolean;
+  /** @nullable */
+  startTime?: string | null;
+  /** @nullable */
+  endTime?: string | null;
+  /** @nullable */
+  reason?: string | null;
+}
+
+export interface AvailabilityOverrideInput {
+  calendarId: number;
+  date: string;
+  isBlocked: boolean;
+  startTime?: string;
+  endTime?: string;
+  reason?: string;
+}
+
+export interface TimeSlot {
+  slotStart: string;
+  slotEnd: string;
+}
+
+export type BookingStatus = typeof BookingStatus[keyof typeof BookingStatus];
+
+
+export const BookingStatus = {
+  pending: 'pending',
+  confirmed: 'confirmed',
+  cancelled: 'cancelled',
+  rescheduled: 'rescheduled',
+} as const;
+
+export type BookingBookedVia = typeof BookingBookedVia[keyof typeof BookingBookedVia];
+
+
+export const BookingBookedVia = {
+  agent: 'agent',
+  web: 'web',
+  api: 'api',
+} as const;
+
+export interface Booking {
+  id: number;
+  eventTypeId: number;
+  calendarId: number;
+  /** @nullable */
+  callId?: number | null;
+  userId: string;
+  attendeeName: string;
+  attendeeEmail: string;
+  /** @nullable */
+  attendeeNotes?: string | null;
+  slotStart: string;
+  slotEnd: string;
+  status: BookingStatus;
+  bookedVia: BookingBookedVia;
+  /** @nullable */
+  cancelledAt?: string | null;
+  /** @nullable */
+  rescheduledFromId?: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type BookingInputBookedVia = typeof BookingInputBookedVia[keyof typeof BookingInputBookedVia];
+
+
+export const BookingInputBookedVia = {
+  agent: 'agent',
+  web: 'web',
+  api: 'api',
+} as const;
+
+export interface BookingInput {
+  eventTypeId: number;
+  slotStart: string;
+  attendeeName: string;
+  attendeeEmail: string;
+  attendeeNotes?: string;
+  callId?: number;
+  bookedVia?: BookingInputBookedVia;
+}
+
+export interface PublicBookingInput {
+  eventTypeSlug: string;
+  slotStart: string;
+  attendeeName: string;
+  attendeeEmail: string;
+  attendeeNotes?: string;
+}
+
+export type BookingUpdateStatus = typeof BookingUpdateStatus[keyof typeof BookingUpdateStatus];
+
+
+export const BookingUpdateStatus = {
+  confirmed: 'confirmed',
+  cancelled: 'cancelled',
+  rescheduled: 'rescheduled',
+} as const;
+
+export interface BookingUpdate {
+  status?: BookingUpdateStatus;
+  /** New slot start when rescheduling */
+  slotStart?: string;
+}
+
 export type ListCallsParams = {
 /**
  * @nullable
@@ -1254,5 +1500,68 @@ offset?: number;
 export type ListCampaignLeads200 = {
   leads: CampaignLead[];
   total: number;
+};
+
+export type ListEventTypesParams = {
+/**
+ * @nullable
+ */
+calendarId?: number | null;
+};
+
+export type ListAvailabilityParams = {
+calendarId: number;
+};
+
+export type ListAvailabilityOverridesParams = {
+calendarId: number;
+};
+
+export type GetAvailableSlotsParams = {
+eventTypeId: number;
+/**
+ * Start date (YYYY-MM-DD) in the calendar's timezone
+ */
+startDate: string;
+/**
+ * End date (YYYY-MM-DD, inclusive) in the calendar's timezone
+ */
+endDate: string;
+};
+
+export type ListBookingsParams = {
+/**
+ * @nullable
+ */
+status?: ListBookingsStatus;
+/**
+ * @nullable
+ */
+calendarId?: number | null;
+/**
+ * @nullable
+ */
+startDate?: string | null;
+/**
+ * @nullable
+ */
+endDate?: string | null;
+};
+
+export type ListBookingsStatus = typeof ListBookingsStatus[keyof typeof ListBookingsStatus] | null;
+
+
+export const ListBookingsStatus = {
+  pending: 'pending',
+  confirmed: 'confirmed',
+  cancelled: 'cancelled',
+  rescheduled: 'rescheduled',
+  null: 'null',
+} as const;
+
+export type GetPublicSlotsParams = {
+slug: string;
+startDate: string;
+endDate: string;
 };
 

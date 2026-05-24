@@ -1,0 +1,238 @@
+import { useState } from "react";
+import { useRoute } from "wouter";
+import { format, parseISO } from "date-fns";
+import { Calendar, Clock, CheckCircle, AlertCircle } from "lucide-react";
+import {
+  useGetPublicEventType,
+  useGetPublicSlots,
+  useCreatePublicBooking,
+} from "@workspace/api-client-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+function addDays(date: Date, days: number) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+function formatDate(d: Date) {
+  return d.toISOString().slice(0, 10);
+}
+
+export default function PublicBookingPage() {
+  const [, params] = useRoute("/book/:slug");
+  const slug = params?.slug ?? "";
+
+  const today = new Date();
+  const [startDate] = useState(formatDate(today));
+  const [endDate] = useState(formatDate(addDays(today, 13)));
+  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [notes, setNotes] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+  const [bookingError, setBookingError] = useState<string | null>(null);
+
+  const { data: eventType, isLoading: etLoading, error: etError } = useGetPublicEventType(slug);
+
+  const { data: slots, isLoading: slotsLoading } = useGetPublicSlots({ slug, startDate, endDate });
+
+  const createMut = useCreatePublicBooking();
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedSlot || !name || !email) return;
+    setBookingError(null);
+    try {
+      await createMut.mutateAsync({ data: {
+        eventTypeSlug: slug,
+        slotStart: selectedSlot,
+        attendeeName: name,
+        attendeeEmail: email,
+        attendeeNotes: notes || undefined,
+      }});
+      setSubmitted(true);
+    } catch (err: any) {
+      setBookingError(err.message ?? "Booking failed. The slot may no longer be available.");
+    }
+  }
+
+  if (etLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
+        <div className="text-muted-foreground animate-pulse">Loading...</div>
+      </div>
+    );
+  }
+
+  if (etError || !eventType) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
+        <Card className="max-w-md w-full">
+          <CardContent className="flex flex-col items-center gap-4 py-12">
+            <AlertCircle className="h-10 w-10 text-destructive" />
+            <div className="text-center">
+              <p className="font-semibold text-lg">Page not found</p>
+              <p className="text-muted-foreground text-sm mt-1">This booking link is invalid or has been removed.</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (submitted) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
+        <Card className="max-w-md w-full">
+          <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
+            <div className="p-4 rounded-full bg-emerald-50">
+              <CheckCircle className="h-10 w-10 text-emerald-500" />
+            </div>
+            <div>
+              <p className="font-semibold text-xl">Booking confirmed!</p>
+              <p className="text-muted-foreground mt-2">
+                You'll receive a confirmation email at <strong>{email}</strong>.
+              </p>
+              {selectedSlot && (
+                <p className="text-sm text-muted-foreground mt-2">
+                  {format(parseISO(selectedSlot), "EEEE, MMMM d, yyyy")} at {format(parseISO(selectedSlot), "h:mm a")}
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const slotsByDay = (slots ?? []).reduce<Record<string, string[]>>((acc, s) => {
+    const day = parseISO(s.slotStart).toISOString().slice(0, 10);
+    if (!acc[day]) acc[day] = [];
+    acc[day]!.push(s.slotStart);
+    return acc;
+  }, {});
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4 sm:p-8">
+      <div className="max-w-3xl mx-auto">
+        <div className="mb-8 text-center">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-sm font-medium mb-4">
+            <Clock className="h-3.5 w-3.5" />
+            {eventType.durationMinutes} min
+          </div>
+          <h1 className="text-3xl font-bold text-slate-900">{eventType.name}</h1>
+          {eventType.description && (
+            <p className="text-slate-600 mt-2">{eventType.description}</p>
+          )}
+          {eventType.confirmationMode === "manual" && (
+            <Badge variant="outline" className="mt-2">Requires host approval</Badge>
+          )}
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-6">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <Calendar className="h-4 w-4" /> Select a time
+            </h2>
+            {slotsLoading && <div className="text-muted-foreground text-sm animate-pulse">Loading slots...</div>}
+            {!slotsLoading && Object.keys(slotsByDay).length === 0 && (
+              <p className="text-muted-foreground text-sm">No available slots in the next 2 weeks. Please check back later.</p>
+            )}
+            <div className="flex flex-col gap-4">
+              {Object.entries(slotsByDay).map(([day, daySlots]) => (
+                <div key={day}>
+                  <p className="text-xs font-semibold text-slate-500 mb-2">
+                    {format(parseISO(day + "T00:00:00"), "EEEE, MMMM d")}
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {daySlots.map(slot => (
+                      <button
+                        key={slot}
+                        onClick={() => setSelectedSlot(slot)}
+                        className={`px-3 py-2 rounded-lg border text-sm font-medium transition-all ${
+                          selectedSlot === slot
+                            ? "bg-emerald-600 border-emerald-600 text-white"
+                            : "bg-white border-slate-200 text-slate-700 hover:border-emerald-400 hover:bg-emerald-50"
+                        }`}
+                      >
+                        {format(parseISO(slot), "h:mm a")}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wider mb-3">
+              Your details
+            </h2>
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="name">Full name <span className="text-destructive">*</span></Label>
+                <Input
+                  id="name"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  required
+                  placeholder="Jane Smith"
+                  className="bg-white"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="email">Email <span className="text-destructive">*</span></Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  required
+                  placeholder="jane@example.com"
+                  className="bg-white"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="notes">Notes</Label>
+                <textarea
+                  id="notes"
+                  value={notes}
+                  onChange={e => setNotes(e.target.value)}
+                  placeholder="Anything you'd like to share in advance..."
+                  className="flex min-h-[80px] w-full rounded-md border border-input bg-white px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+                />
+              </div>
+
+              {selectedSlot && (
+                <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-800">
+                  <strong>Selected:</strong> {format(parseISO(selectedSlot), "EEEE, MMMM d")} at {format(parseISO(selectedSlot), "h:mm a")}
+                </div>
+              )}
+
+              {bookingError && (
+                <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                  {bookingError}
+                </div>
+              )}
+
+              <Button
+                type="submit"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                disabled={!selectedSlot || !name || !email || createMut.isPending}
+              >
+                {createMut.isPending ? "Booking..." : "Confirm booking"}
+              </Button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

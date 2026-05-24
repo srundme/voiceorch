@@ -33,6 +33,11 @@ import NotFound from "@/pages/not-found";
 import OnboardingPage from "@/pages/onboarding";
 import CampaignsPage from "@/pages/campaigns/index";
 import CampaignDetailPage from "@/pages/campaigns/[id]";
+import SchedulingPage from "@/pages/scheduling/index";
+import SchedulingEventTypesPage from "@/pages/scheduling/EventTypes";
+import SchedulingAvailabilityPage from "@/pages/scheduling/Availability";
+import SchedulingBookingDetailPage from "@/pages/scheduling/Bookings";
+import PublicBookingPage from "@/pages/book/[slug]";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -197,6 +202,10 @@ function AppRoutes() {
         <Route path="/app/analytics/agents/:id" component={AgentAnalyticsPage} />
         <Route path="/app/campaigns/:id" component={CampaignDetailPage} />
         <Route path="/app/campaigns" component={CampaignsPage} />
+        <Route path="/app/scheduling/bookings/:id" component={SchedulingBookingDetailPage} />
+        <Route path="/app/scheduling/event-types" component={SchedulingEventTypesPage} />
+        <Route path="/app/scheduling/availability" component={SchedulingAvailabilityPage} />
+        <Route path="/app/scheduling" component={SchedulingPage} />
         <Route path="/app/settings" component={Settings} />
         <Route component={NotFound} />
       </Switch>
@@ -246,6 +255,7 @@ function Router() {
           <Route path="/sign-in/*?" component={SignInPage} />
           <Route path="/sign-up/*?" component={SignUpPage} />
           <Route path="/app/*?" component={ProtectedApp} />
+          <Route path="/book/:slug" component={PublicBookingPage} />
           <Route component={NotFound} />
         </Switch>
       </QueryClientProvider>

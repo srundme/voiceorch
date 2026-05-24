@@ -30,7 +30,15 @@ import type {
   AgentUpdate,
   AssignPhoneNumberInput,
   AutoPaySettings,
+  AvailabilityOverride,
+  AvailabilityOverrideInput,
+  AvailabilitySchedule,
+  AvailabilityScheduleInput,
+  AvailabilityScheduleUpdate,
   AvailablePhoneNumber,
+  Booking,
+  BookingInput,
+  BookingUpdate,
   Call,
   CallEndPayload,
   CallInput,
@@ -44,6 +52,11 @@ import type {
   CsvImportResult,
   DailyCallVolume,
   DashboardStats,
+  EventType,
+  EventTypeInput,
+  EventTypeUpdate,
+  GetAvailableSlotsParams,
+  GetPublicSlotsParams,
   HealthStatus,
   KbChunkResult,
   KbDocument,
@@ -54,10 +67,14 @@ import type {
   KnowledgeBaseInput,
   KnowledgeBaseUpdate,
   ListActivityLogsParams,
+  ListAvailabilityOverridesParams,
+  ListAvailabilityParams,
   ListAvailablePhoneNumbersParams,
+  ListBookingsParams,
   ListCallsParams,
   ListCampaignLeads200,
   ListCampaignLeadsParams,
+  ListEventTypesParams,
   ListTransactionsParams,
   OnboardingData,
   OnboardingStatus,
@@ -66,7 +83,13 @@ import type {
   ProviderConfig,
   ProviderInput,
   ProviderUpdate,
+  PublicBookingInput,
+  PublicEventType,
   PurchasePhoneNumberInput,
+  SchedulingCalendar,
+  SchedulingCalendarInput,
+  SchedulingCalendarUpdate,
+  TimeSlot,
   TopupInput,
   TopupOrder,
   TransferCallBody,
@@ -4770,5 +4793,1888 @@ export const useRetryCampaignLead = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getRetryCampaignLeadMutationOptions(options));
+    }
+
+export const getListCalendarsUrl = () => {
+
+
+
+
+  return `/api/scheduling/calendars`
+}
+
+/**
+ * @summary List scheduling calendars for the current user
+ */
+export const listCalendars = async ( options?: RequestInit): Promise<SchedulingCalendar[]> => {
+
+  return customFetch<SchedulingCalendar[]>(getListCalendarsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCalendarsQueryKey = () => {
+    return [
+    `/api/scheduling/calendars`
+    ] as const;
+    }
+
+
+export const getListCalendarsQueryOptions = <TData = Awaited<ReturnType<typeof listCalendars>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCalendars>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCalendarsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCalendars>>> = ({ signal }) => listCalendars({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCalendars>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListCalendarsQueryResult = NonNullable<Awaited<ReturnType<typeof listCalendars>>>
+export type ListCalendarsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List scheduling calendars for the current user
+ */
+
+export function useListCalendars<TData = Awaited<ReturnType<typeof listCalendars>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCalendars>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListCalendarsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateCalendarUrl = () => {
+
+
+
+
+  return `/api/scheduling/calendars`
+}
+
+/**
+ * @summary Create a scheduling calendar
+ */
+export const createCalendar = async (schedulingCalendarInput: SchedulingCalendarInput, options?: RequestInit): Promise<SchedulingCalendar> => {
+
+  return customFetch<SchedulingCalendar>(getCreateCalendarUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      schedulingCalendarInput,)
+  }
+);}
+
+
+
+
+export const getCreateCalendarMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCalendar>>, TError,{data: BodyType<SchedulingCalendarInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createCalendar>>, TError,{data: BodyType<SchedulingCalendarInput>}, TContext> => {
+
+const mutationKey = ['createCalendar'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createCalendar>>, {data: BodyType<SchedulingCalendarInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createCalendar(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateCalendarMutationResult = NonNullable<Awaited<ReturnType<typeof createCalendar>>>
+    export type CreateCalendarMutationBody = BodyType<SchedulingCalendarInput>
+    export type CreateCalendarMutationError = ErrorType<void>
+
+    /**
+ * @summary Create a scheduling calendar
+ */
+export const useCreateCalendar = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCalendar>>, TError,{data: BodyType<SchedulingCalendarInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createCalendar>>,
+        TError,
+        {data: BodyType<SchedulingCalendarInput>},
+        TContext
+      > => {
+      return useMutation(getCreateCalendarMutationOptions(options));
+    }
+
+export const getGetCalendarUrl = (id: number,) => {
+
+
+
+
+  return `/api/scheduling/calendars/${id}`
+}
+
+/**
+ * @summary Get a scheduling calendar
+ */
+export const getCalendar = async (id: number, options?: RequestInit): Promise<SchedulingCalendar> => {
+
+  return customFetch<SchedulingCalendar>(getGetCalendarUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCalendarQueryKey = (id: number,) => {
+    return [
+    `/api/scheduling/calendars/${id}`
+    ] as const;
+    }
+
+
+export const getGetCalendarQueryOptions = <TData = Awaited<ReturnType<typeof getCalendar>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCalendar>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCalendarQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCalendar>>> = ({ signal }) => getCalendar(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCalendar>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCalendarQueryResult = NonNullable<Awaited<ReturnType<typeof getCalendar>>>
+export type GetCalendarQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get a scheduling calendar
+ */
+
+export function useGetCalendar<TData = Awaited<ReturnType<typeof getCalendar>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCalendar>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCalendarQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getUpdateCalendarUrl = (id: number,) => {
+
+
+
+
+  return `/api/scheduling/calendars/${id}`
+}
+
+/**
+ * @summary Update a scheduling calendar
+ */
+export const updateCalendar = async (id: number,
+    schedulingCalendarUpdate: SchedulingCalendarUpdate, options?: RequestInit): Promise<SchedulingCalendar> => {
+
+  return customFetch<SchedulingCalendar>(getUpdateCalendarUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      schedulingCalendarUpdate,)
+  }
+);}
+
+
+
+
+export const getUpdateCalendarMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCalendar>>, TError,{id: number;data: BodyType<SchedulingCalendarUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateCalendar>>, TError,{id: number;data: BodyType<SchedulingCalendarUpdate>}, TContext> => {
+
+const mutationKey = ['updateCalendar'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateCalendar>>, {id: number;data: BodyType<SchedulingCalendarUpdate>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateCalendar(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateCalendarMutationResult = NonNullable<Awaited<ReturnType<typeof updateCalendar>>>
+    export type UpdateCalendarMutationBody = BodyType<SchedulingCalendarUpdate>
+    export type UpdateCalendarMutationError = ErrorType<void>
+
+    /**
+ * @summary Update a scheduling calendar
+ */
+export const useUpdateCalendar = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCalendar>>, TError,{id: number;data: BodyType<SchedulingCalendarUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateCalendar>>,
+        TError,
+        {id: number;data: BodyType<SchedulingCalendarUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateCalendarMutationOptions(options));
+    }
+
+export const getDeleteCalendarUrl = (id: number,) => {
+
+
+
+
+  return `/api/scheduling/calendars/${id}`
+}
+
+/**
+ * @summary Delete a scheduling calendar
+ */
+export const deleteCalendar = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteCalendarUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteCalendarMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteCalendar>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteCalendar>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteCalendar'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteCalendar>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteCalendar(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteCalendarMutationResult = NonNullable<Awaited<ReturnType<typeof deleteCalendar>>>
+
+    export type DeleteCalendarMutationError = ErrorType<void>
+
+    /**
+ * @summary Delete a scheduling calendar
+ */
+export const useDeleteCalendar = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteCalendar>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteCalendar>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteCalendarMutationOptions(options));
+    }
+
+export const getListEventTypesUrl = (params?: ListEventTypesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/scheduling/event-types?${stringifiedParams}` : `/api/scheduling/event-types`
+}
+
+/**
+ * @summary List event types
+ */
+export const listEventTypes = async (params?: ListEventTypesParams, options?: RequestInit): Promise<EventType[]> => {
+
+  return customFetch<EventType[]>(getListEventTypesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListEventTypesQueryKey = (params?: ListEventTypesParams,) => {
+    return [
+    `/api/scheduling/event-types`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListEventTypesQueryOptions = <TData = Awaited<ReturnType<typeof listEventTypes>>, TError = ErrorType<unknown>>(params?: ListEventTypesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listEventTypes>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListEventTypesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listEventTypes>>> = ({ signal }) => listEventTypes(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listEventTypes>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListEventTypesQueryResult = NonNullable<Awaited<ReturnType<typeof listEventTypes>>>
+export type ListEventTypesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List event types
+ */
+
+export function useListEventTypes<TData = Awaited<ReturnType<typeof listEventTypes>>, TError = ErrorType<unknown>>(
+ params?: ListEventTypesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listEventTypes>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListEventTypesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateEventTypeUrl = () => {
+
+
+
+
+  return `/api/scheduling/event-types`
+}
+
+/**
+ * @summary Create an event type
+ */
+export const createEventType = async (eventTypeInput: EventTypeInput, options?: RequestInit): Promise<EventType> => {
+
+  return customFetch<EventType>(getCreateEventTypeUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      eventTypeInput,)
+  }
+);}
+
+
+
+
+export const getCreateEventTypeMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createEventType>>, TError,{data: BodyType<EventTypeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createEventType>>, TError,{data: BodyType<EventTypeInput>}, TContext> => {
+
+const mutationKey = ['createEventType'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createEventType>>, {data: BodyType<EventTypeInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createEventType(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateEventTypeMutationResult = NonNullable<Awaited<ReturnType<typeof createEventType>>>
+    export type CreateEventTypeMutationBody = BodyType<EventTypeInput>
+    export type CreateEventTypeMutationError = ErrorType<void>
+
+    /**
+ * @summary Create an event type
+ */
+export const useCreateEventType = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createEventType>>, TError,{data: BodyType<EventTypeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createEventType>>,
+        TError,
+        {data: BodyType<EventTypeInput>},
+        TContext
+      > => {
+      return useMutation(getCreateEventTypeMutationOptions(options));
+    }
+
+export const getGetEventTypeUrl = (id: number,) => {
+
+
+
+
+  return `/api/scheduling/event-types/${id}`
+}
+
+/**
+ * @summary Get an event type
+ */
+export const getEventType = async (id: number, options?: RequestInit): Promise<EventType> => {
+
+  return customFetch<EventType>(getGetEventTypeUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetEventTypeQueryKey = (id: number,) => {
+    return [
+    `/api/scheduling/event-types/${id}`
+    ] as const;
+    }
+
+
+export const getGetEventTypeQueryOptions = <TData = Awaited<ReturnType<typeof getEventType>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEventType>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetEventTypeQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getEventType>>> = ({ signal }) => getEventType(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getEventType>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetEventTypeQueryResult = NonNullable<Awaited<ReturnType<typeof getEventType>>>
+export type GetEventTypeQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get an event type
+ */
+
+export function useGetEventType<TData = Awaited<ReturnType<typeof getEventType>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEventType>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetEventTypeQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getUpdateEventTypeUrl = (id: number,) => {
+
+
+
+
+  return `/api/scheduling/event-types/${id}`
+}
+
+/**
+ * @summary Update an event type
+ */
+export const updateEventType = async (id: number,
+    eventTypeUpdate: EventTypeUpdate, options?: RequestInit): Promise<EventType> => {
+
+  return customFetch<EventType>(getUpdateEventTypeUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      eventTypeUpdate,)
+  }
+);}
+
+
+
+
+export const getUpdateEventTypeMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateEventType>>, TError,{id: number;data: BodyType<EventTypeUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateEventType>>, TError,{id: number;data: BodyType<EventTypeUpdate>}, TContext> => {
+
+const mutationKey = ['updateEventType'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateEventType>>, {id: number;data: BodyType<EventTypeUpdate>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateEventType(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateEventTypeMutationResult = NonNullable<Awaited<ReturnType<typeof updateEventType>>>
+    export type UpdateEventTypeMutationBody = BodyType<EventTypeUpdate>
+    export type UpdateEventTypeMutationError = ErrorType<void>
+
+    /**
+ * @summary Update an event type
+ */
+export const useUpdateEventType = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateEventType>>, TError,{id: number;data: BodyType<EventTypeUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateEventType>>,
+        TError,
+        {id: number;data: BodyType<EventTypeUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateEventTypeMutationOptions(options));
+    }
+
+export const getDeleteEventTypeUrl = (id: number,) => {
+
+
+
+
+  return `/api/scheduling/event-types/${id}`
+}
+
+/**
+ * @summary Delete an event type
+ */
+export const deleteEventType = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteEventTypeUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteEventTypeMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteEventType>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteEventType>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteEventType'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteEventType>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteEventType(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteEventTypeMutationResult = NonNullable<Awaited<ReturnType<typeof deleteEventType>>>
+
+    export type DeleteEventTypeMutationError = ErrorType<void>
+
+    /**
+ * @summary Delete an event type
+ */
+export const useDeleteEventType = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteEventType>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteEventType>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteEventTypeMutationOptions(options));
+    }
+
+export const getListAvailabilityUrl = (params: ListAvailabilityParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/scheduling/availability?${stringifiedParams}` : `/api/scheduling/availability`
+}
+
+/**
+ * @summary List weekly availability schedules for a calendar
+ */
+export const listAvailability = async (params: ListAvailabilityParams, options?: RequestInit): Promise<AvailabilitySchedule[]> => {
+
+  return customFetch<AvailabilitySchedule[]>(getListAvailabilityUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAvailabilityQueryKey = (params?: ListAvailabilityParams,) => {
+    return [
+    `/api/scheduling/availability`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListAvailabilityQueryOptions = <TData = Awaited<ReturnType<typeof listAvailability>>, TError = ErrorType<unknown>>(params: ListAvailabilityParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAvailability>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAvailabilityQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAvailability>>> = ({ signal }) => listAvailability(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAvailability>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAvailabilityQueryResult = NonNullable<Awaited<ReturnType<typeof listAvailability>>>
+export type ListAvailabilityQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List weekly availability schedules for a calendar
+ */
+
+export function useListAvailability<TData = Awaited<ReturnType<typeof listAvailability>>, TError = ErrorType<unknown>>(
+ params: ListAvailabilityParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAvailability>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAvailabilityQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateAvailabilityUrl = () => {
+
+
+
+
+  return `/api/scheduling/availability`
+}
+
+/**
+ * @summary Create a weekly availability slot
+ */
+export const createAvailability = async (availabilityScheduleInput: AvailabilityScheduleInput, options?: RequestInit): Promise<AvailabilitySchedule> => {
+
+  return customFetch<AvailabilitySchedule>(getCreateAvailabilityUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      availabilityScheduleInput,)
+  }
+);}
+
+
+
+
+export const getCreateAvailabilityMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAvailability>>, TError,{data: BodyType<AvailabilityScheduleInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createAvailability>>, TError,{data: BodyType<AvailabilityScheduleInput>}, TContext> => {
+
+const mutationKey = ['createAvailability'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createAvailability>>, {data: BodyType<AvailabilityScheduleInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createAvailability(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateAvailabilityMutationResult = NonNullable<Awaited<ReturnType<typeof createAvailability>>>
+    export type CreateAvailabilityMutationBody = BodyType<AvailabilityScheduleInput>
+    export type CreateAvailabilityMutationError = ErrorType<void>
+
+    /**
+ * @summary Create a weekly availability slot
+ */
+export const useCreateAvailability = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAvailability>>, TError,{data: BodyType<AvailabilityScheduleInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createAvailability>>,
+        TError,
+        {data: BodyType<AvailabilityScheduleInput>},
+        TContext
+      > => {
+      return useMutation(getCreateAvailabilityMutationOptions(options));
+    }
+
+export const getUpdateAvailabilityUrl = (id: number,) => {
+
+
+
+
+  return `/api/scheduling/availability/${id}`
+}
+
+/**
+ * @summary Update an availability schedule
+ */
+export const updateAvailability = async (id: number,
+    availabilityScheduleUpdate: AvailabilityScheduleUpdate, options?: RequestInit): Promise<AvailabilitySchedule> => {
+
+  return customFetch<AvailabilitySchedule>(getUpdateAvailabilityUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      availabilityScheduleUpdate,)
+  }
+);}
+
+
+
+
+export const getUpdateAvailabilityMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAvailability>>, TError,{id: number;data: BodyType<AvailabilityScheduleUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateAvailability>>, TError,{id: number;data: BodyType<AvailabilityScheduleUpdate>}, TContext> => {
+
+const mutationKey = ['updateAvailability'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateAvailability>>, {id: number;data: BodyType<AvailabilityScheduleUpdate>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateAvailability(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateAvailabilityMutationResult = NonNullable<Awaited<ReturnType<typeof updateAvailability>>>
+    export type UpdateAvailabilityMutationBody = BodyType<AvailabilityScheduleUpdate>
+    export type UpdateAvailabilityMutationError = ErrorType<void>
+
+    /**
+ * @summary Update an availability schedule
+ */
+export const useUpdateAvailability = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAvailability>>, TError,{id: number;data: BodyType<AvailabilityScheduleUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateAvailability>>,
+        TError,
+        {id: number;data: BodyType<AvailabilityScheduleUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateAvailabilityMutationOptions(options));
+    }
+
+export const getDeleteAvailabilityUrl = (id: number,) => {
+
+
+
+
+  return `/api/scheduling/availability/${id}`
+}
+
+/**
+ * @summary Delete an availability schedule
+ */
+export const deleteAvailability = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteAvailabilityUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteAvailabilityMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAvailability>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteAvailability>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteAvailability'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteAvailability>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteAvailability(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteAvailabilityMutationResult = NonNullable<Awaited<ReturnType<typeof deleteAvailability>>>
+
+    export type DeleteAvailabilityMutationError = ErrorType<void>
+
+    /**
+ * @summary Delete an availability schedule
+ */
+export const useDeleteAvailability = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAvailability>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteAvailability>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteAvailabilityMutationOptions(options));
+    }
+
+export const getListAvailabilityOverridesUrl = (params: ListAvailabilityOverridesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/scheduling/overrides?${stringifiedParams}` : `/api/scheduling/overrides`
+}
+
+/**
+ * @summary List availability overrides for a calendar
+ */
+export const listAvailabilityOverrides = async (params: ListAvailabilityOverridesParams, options?: RequestInit): Promise<AvailabilityOverride[]> => {
+
+  return customFetch<AvailabilityOverride[]>(getListAvailabilityOverridesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAvailabilityOverridesQueryKey = (params?: ListAvailabilityOverridesParams,) => {
+    return [
+    `/api/scheduling/overrides`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListAvailabilityOverridesQueryOptions = <TData = Awaited<ReturnType<typeof listAvailabilityOverrides>>, TError = ErrorType<unknown>>(params: ListAvailabilityOverridesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAvailabilityOverrides>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAvailabilityOverridesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAvailabilityOverrides>>> = ({ signal }) => listAvailabilityOverrides(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAvailabilityOverrides>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAvailabilityOverridesQueryResult = NonNullable<Awaited<ReturnType<typeof listAvailabilityOverrides>>>
+export type ListAvailabilityOverridesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List availability overrides for a calendar
+ */
+
+export function useListAvailabilityOverrides<TData = Awaited<ReturnType<typeof listAvailabilityOverrides>>, TError = ErrorType<unknown>>(
+ params: ListAvailabilityOverridesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAvailabilityOverrides>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAvailabilityOverridesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateAvailabilityOverrideUrl = () => {
+
+
+
+
+  return `/api/scheduling/overrides`
+}
+
+/**
+ * @summary Create an availability override (block or extra hours)
+ */
+export const createAvailabilityOverride = async (availabilityOverrideInput: AvailabilityOverrideInput, options?: RequestInit): Promise<AvailabilityOverride> => {
+
+  return customFetch<AvailabilityOverride>(getCreateAvailabilityOverrideUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      availabilityOverrideInput,)
+  }
+);}
+
+
+
+
+export const getCreateAvailabilityOverrideMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAvailabilityOverride>>, TError,{data: BodyType<AvailabilityOverrideInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createAvailabilityOverride>>, TError,{data: BodyType<AvailabilityOverrideInput>}, TContext> => {
+
+const mutationKey = ['createAvailabilityOverride'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createAvailabilityOverride>>, {data: BodyType<AvailabilityOverrideInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createAvailabilityOverride(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateAvailabilityOverrideMutationResult = NonNullable<Awaited<ReturnType<typeof createAvailabilityOverride>>>
+    export type CreateAvailabilityOverrideMutationBody = BodyType<AvailabilityOverrideInput>
+    export type CreateAvailabilityOverrideMutationError = ErrorType<void>
+
+    /**
+ * @summary Create an availability override (block or extra hours)
+ */
+export const useCreateAvailabilityOverride = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAvailabilityOverride>>, TError,{data: BodyType<AvailabilityOverrideInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createAvailabilityOverride>>,
+        TError,
+        {data: BodyType<AvailabilityOverrideInput>},
+        TContext
+      > => {
+      return useMutation(getCreateAvailabilityOverrideMutationOptions(options));
+    }
+
+export const getDeleteAvailabilityOverrideUrl = (id: number,) => {
+
+
+
+
+  return `/api/scheduling/overrides/${id}`
+}
+
+/**
+ * @summary Delete an availability override
+ */
+export const deleteAvailabilityOverride = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteAvailabilityOverrideUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteAvailabilityOverrideMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAvailabilityOverride>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteAvailabilityOverride>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteAvailabilityOverride'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteAvailabilityOverride>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteAvailabilityOverride(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteAvailabilityOverrideMutationResult = NonNullable<Awaited<ReturnType<typeof deleteAvailabilityOverride>>>
+
+    export type DeleteAvailabilityOverrideMutationError = ErrorType<void>
+
+    /**
+ * @summary Delete an availability override
+ */
+export const useDeleteAvailabilityOverride = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAvailabilityOverride>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteAvailabilityOverride>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteAvailabilityOverrideMutationOptions(options));
+    }
+
+export const getGetAvailableSlotsUrl = (params: GetAvailableSlotsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/scheduling/slots?${stringifiedParams}` : `/api/scheduling/slots`
+}
+
+/**
+ * @summary Get available booking slots for an event type
+ */
+export const getAvailableSlots = async (params: GetAvailableSlotsParams, options?: RequestInit): Promise<TimeSlot[]> => {
+
+  return customFetch<TimeSlot[]>(getGetAvailableSlotsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAvailableSlotsQueryKey = (params?: GetAvailableSlotsParams,) => {
+    return [
+    `/api/scheduling/slots`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetAvailableSlotsQueryOptions = <TData = Awaited<ReturnType<typeof getAvailableSlots>>, TError = ErrorType<void>>(params: GetAvailableSlotsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAvailableSlots>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAvailableSlotsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAvailableSlots>>> = ({ signal }) => getAvailableSlots(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAvailableSlots>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAvailableSlotsQueryResult = NonNullable<Awaited<ReturnType<typeof getAvailableSlots>>>
+export type GetAvailableSlotsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get available booking slots for an event type
+ */
+
+export function useGetAvailableSlots<TData = Awaited<ReturnType<typeof getAvailableSlots>>, TError = ErrorType<void>>(
+ params: GetAvailableSlotsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAvailableSlots>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAvailableSlotsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListBookingsUrl = (params?: ListBookingsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/scheduling/bookings?${stringifiedParams}` : `/api/scheduling/bookings`
+}
+
+/**
+ * @summary List bookings for the current user
+ */
+export const listBookings = async (params?: ListBookingsParams, options?: RequestInit): Promise<Booking[]> => {
+
+  return customFetch<Booking[]>(getListBookingsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListBookingsQueryKey = (params?: ListBookingsParams,) => {
+    return [
+    `/api/scheduling/bookings`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListBookingsQueryOptions = <TData = Awaited<ReturnType<typeof listBookings>>, TError = ErrorType<unknown>>(params?: ListBookingsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBookings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListBookingsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listBookings>>> = ({ signal }) => listBookings(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listBookings>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListBookingsQueryResult = NonNullable<Awaited<ReturnType<typeof listBookings>>>
+export type ListBookingsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List bookings for the current user
+ */
+
+export function useListBookings<TData = Awaited<ReturnType<typeof listBookings>>, TError = ErrorType<unknown>>(
+ params?: ListBookingsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBookings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListBookingsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateBookingUrl = () => {
+
+
+
+
+  return `/api/scheduling/bookings`
+}
+
+/**
+ * @summary Create a booking (AI tool call or web)
+ */
+export const createBooking = async (bookingInput: BookingInput, options?: RequestInit): Promise<Booking> => {
+
+  return customFetch<Booking>(getCreateBookingUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      bookingInput,)
+  }
+);}
+
+
+
+
+export const getCreateBookingMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createBooking>>, TError,{data: BodyType<BookingInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createBooking>>, TError,{data: BodyType<BookingInput>}, TContext> => {
+
+const mutationKey = ['createBooking'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createBooking>>, {data: BodyType<BookingInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createBooking(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateBookingMutationResult = NonNullable<Awaited<ReturnType<typeof createBooking>>>
+    export type CreateBookingMutationBody = BodyType<BookingInput>
+    export type CreateBookingMutationError = ErrorType<void>
+
+    /**
+ * @summary Create a booking (AI tool call or web)
+ */
+export const useCreateBooking = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createBooking>>, TError,{data: BodyType<BookingInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createBooking>>,
+        TError,
+        {data: BodyType<BookingInput>},
+        TContext
+      > => {
+      return useMutation(getCreateBookingMutationOptions(options));
+    }
+
+export const getGetBookingUrl = (id: number,) => {
+
+
+
+
+  return `/api/scheduling/bookings/${id}`
+}
+
+/**
+ * @summary Get a booking
+ */
+export const getBooking = async (id: number, options?: RequestInit): Promise<Booking> => {
+
+  return customFetch<Booking>(getGetBookingUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBookingQueryKey = (id: number,) => {
+    return [
+    `/api/scheduling/bookings/${id}`
+    ] as const;
+    }
+
+
+export const getGetBookingQueryOptions = <TData = Awaited<ReturnType<typeof getBooking>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBooking>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBookingQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBooking>>> = ({ signal }) => getBooking(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBooking>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBookingQueryResult = NonNullable<Awaited<ReturnType<typeof getBooking>>>
+export type GetBookingQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get a booking
+ */
+
+export function useGetBooking<TData = Awaited<ReturnType<typeof getBooking>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBooking>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBookingQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getUpdateBookingUrl = (id: number,) => {
+
+
+
+
+  return `/api/scheduling/bookings/${id}`
+}
+
+/**
+ * @summary Reschedule or cancel a booking
+ */
+export const updateBooking = async (id: number,
+    bookingUpdate: BookingUpdate, options?: RequestInit): Promise<Booking> => {
+
+  return customFetch<Booking>(getUpdateBookingUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      bookingUpdate,)
+  }
+);}
+
+
+
+
+export const getUpdateBookingMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateBooking>>, TError,{id: number;data: BodyType<BookingUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateBooking>>, TError,{id: number;data: BodyType<BookingUpdate>}, TContext> => {
+
+const mutationKey = ['updateBooking'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateBooking>>, {id: number;data: BodyType<BookingUpdate>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateBooking(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateBookingMutationResult = NonNullable<Awaited<ReturnType<typeof updateBooking>>>
+    export type UpdateBookingMutationBody = BodyType<BookingUpdate>
+    export type UpdateBookingMutationError = ErrorType<void>
+
+    /**
+ * @summary Reschedule or cancel a booking
+ */
+export const useUpdateBooking = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateBooking>>, TError,{id: number;data: BodyType<BookingUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateBooking>>,
+        TError,
+        {id: number;data: BodyType<BookingUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateBookingMutationOptions(options));
+    }
+
+export const getGetPublicEventTypeUrl = (slug: string,) => {
+
+
+
+
+  return `/api/scheduling/public/event-types/${slug}`
+}
+
+/**
+ * @summary Get public event type info by slug (unauthenticated)
+ */
+export const getPublicEventType = async (slug: string, options?: RequestInit): Promise<PublicEventType> => {
+
+  return customFetch<PublicEventType>(getGetPublicEventTypeUrl(slug),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPublicEventTypeQueryKey = (slug: string,) => {
+    return [
+    `/api/scheduling/public/event-types/${slug}`
+    ] as const;
+    }
+
+
+export const getGetPublicEventTypeQueryOptions = <TData = Awaited<ReturnType<typeof getPublicEventType>>, TError = ErrorType<void>>(slug: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicEventType>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPublicEventTypeQueryKey(slug);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPublicEventType>>> = ({ signal }) => getPublicEventType(slug, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(slug), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPublicEventType>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPublicEventTypeQueryResult = NonNullable<Awaited<ReturnType<typeof getPublicEventType>>>
+export type GetPublicEventTypeQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get public event type info by slug (unauthenticated)
+ */
+
+export function useGetPublicEventType<TData = Awaited<ReturnType<typeof getPublicEventType>>, TError = ErrorType<void>>(
+ slug: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicEventType>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPublicEventTypeQueryOptions(slug,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetPublicSlotsUrl = (params: GetPublicSlotsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/scheduling/public/slots?${stringifiedParams}` : `/api/scheduling/public/slots`
+}
+
+/**
+ * @summary Get public available slots for an event type slug (unauthenticated)
+ */
+export const getPublicSlots = async (params: GetPublicSlotsParams, options?: RequestInit): Promise<TimeSlot[]> => {
+
+  return customFetch<TimeSlot[]>(getGetPublicSlotsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPublicSlotsQueryKey = (params?: GetPublicSlotsParams,) => {
+    return [
+    `/api/scheduling/public/slots`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetPublicSlotsQueryOptions = <TData = Awaited<ReturnType<typeof getPublicSlots>>, TError = ErrorType<void>>(params: GetPublicSlotsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicSlots>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPublicSlotsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPublicSlots>>> = ({ signal }) => getPublicSlots(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPublicSlots>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPublicSlotsQueryResult = NonNullable<Awaited<ReturnType<typeof getPublicSlots>>>
+export type GetPublicSlotsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get public available slots for an event type slug (unauthenticated)
+ */
+
+export function useGetPublicSlots<TData = Awaited<ReturnType<typeof getPublicSlots>>, TError = ErrorType<void>>(
+ params: GetPublicSlotsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicSlots>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPublicSlotsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreatePublicBookingUrl = () => {
+
+
+
+
+  return `/api/scheduling/public/bookings`
+}
+
+/**
+ * @summary Create a booking via public form (unauthenticated)
+ */
+export const createPublicBooking = async (publicBookingInput: PublicBookingInput, options?: RequestInit): Promise<Booking> => {
+
+  return customFetch<Booking>(getCreatePublicBookingUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      publicBookingInput,)
+  }
+);}
+
+
+
+
+export const getCreatePublicBookingMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPublicBooking>>, TError,{data: BodyType<PublicBookingInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createPublicBooking>>, TError,{data: BodyType<PublicBookingInput>}, TContext> => {
+
+const mutationKey = ['createPublicBooking'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createPublicBooking>>, {data: BodyType<PublicBookingInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createPublicBooking(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreatePublicBookingMutationResult = NonNullable<Awaited<ReturnType<typeof createPublicBooking>>>
+    export type CreatePublicBookingMutationBody = BodyType<PublicBookingInput>
+    export type CreatePublicBookingMutationError = ErrorType<void>
+
+    /**
+ * @summary Create a booking via public form (unauthenticated)
+ */
+export const useCreatePublicBooking = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPublicBooking>>, TError,{data: BodyType<PublicBookingInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createPublicBooking>>,
+        TError,
+        {data: BodyType<PublicBookingInput>},
+        TContext
+      > => {
+      return useMutation(getCreatePublicBookingMutationOptions(options));
     }
 

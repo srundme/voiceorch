@@ -36,6 +36,8 @@ tags:
     description: User onboarding flow
   - name: campaigns
     description: Auto-call campaign management
+  - name: scheduling
+    description: Native appointment scheduling engine
 
 paths:
   /healthz:
@@ -1405,6 +1407,570 @@ paths:
         "404":
           description: Not found
 
+  # ── Scheduling ───────────────────────────────────────────────────────────────
+  /scheduling/calendars:
+    get:
+      operationId: listCalendars
+      tags: [scheduling]
+      summary: List scheduling calendars for the current user
+      responses:
+        "200":
+          description: List of calendars
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SchedulingCalendar"
+    post:
+      operationId: createCalendar
+      tags: [scheduling]
+      summary: Create a scheduling calendar
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SchedulingCalendarInput"
+      responses:
+        "201":
+          description: Created calendar
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchedulingCalendar"
+        "400":
+          description: Validation error
+
+  /scheduling/calendars/{id}:
+    get:
+      operationId: getCalendar
+      tags: [scheduling]
+      summary: Get a scheduling calendar
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Calendar
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchedulingCalendar"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateCalendar
+      tags: [scheduling]
+      summary: Update a scheduling calendar
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SchedulingCalendarUpdate"
+      responses:
+        "200":
+          description: Updated calendar
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchedulingCalendar"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteCalendar
+      tags: [scheduling]
+      summary: Delete a scheduling calendar
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  /scheduling/event-types:
+    get:
+      operationId: listEventTypes
+      tags: [scheduling]
+      summary: List event types
+      parameters:
+        - name: calendarId
+          in: query
+          required: false
+          schema:
+            type: ["integer", "null"]
+      responses:
+        "200":
+          description: List of event types
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EventType"
+    post:
+      operationId: createEventType
+      tags: [scheduling]
+      summary: Create an event type
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EventTypeInput"
+      responses:
+        "201":
+          description: Created event type
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventType"
+        "400":
+          description: Validation error
+
+  /scheduling/event-types/{id}:
+    get:
+      operationId: getEventType
+      tags: [scheduling]
+      summary: Get an event type
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Event type
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventType"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateEventType
+      tags: [scheduling]
+      summary: Update an event type
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EventTypeUpdate"
+      responses:
+        "200":
+          description: Updated event type
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventType"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteEventType
+      tags: [scheduling]
+      summary: Delete an event type
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  /scheduling/availability:
+    get:
+      operationId: listAvailability
+      tags: [scheduling]
+      summary: List weekly availability schedules for a calendar
+      parameters:
+        - name: calendarId
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of availability schedules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AvailabilitySchedule"
+    post:
+      operationId: createAvailability
+      tags: [scheduling]
+      summary: Create a weekly availability slot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AvailabilityScheduleInput"
+      responses:
+        "201":
+          description: Created availability
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AvailabilitySchedule"
+        "400":
+          description: Validation error
+
+  /scheduling/availability/{id}:
+    patch:
+      operationId: updateAvailability
+      tags: [scheduling]
+      summary: Update an availability schedule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AvailabilityScheduleUpdate"
+      responses:
+        "200":
+          description: Updated availability
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AvailabilitySchedule"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteAvailability
+      tags: [scheduling]
+      summary: Delete an availability schedule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  /scheduling/overrides:
+    get:
+      operationId: listAvailabilityOverrides
+      tags: [scheduling]
+      summary: List availability overrides for a calendar
+      parameters:
+        - name: calendarId
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of overrides
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AvailabilityOverride"
+    post:
+      operationId: createAvailabilityOverride
+      tags: [scheduling]
+      summary: Create an availability override (block or extra hours)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AvailabilityOverrideInput"
+      responses:
+        "201":
+          description: Created override
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AvailabilityOverride"
+        "400":
+          description: Validation error
+
+  /scheduling/overrides/{id}:
+    delete:
+      operationId: deleteAvailabilityOverride
+      tags: [scheduling]
+      summary: Delete an availability override
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  /scheduling/slots:
+    get:
+      operationId: getAvailableSlots
+      tags: [scheduling]
+      summary: Get available booking slots for an event type
+      parameters:
+        - name: eventTypeId
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: startDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          description: Start date (YYYY-MM-DD) in the calendar's timezone
+        - name: endDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          description: End date (YYYY-MM-DD, inclusive) in the calendar's timezone
+      responses:
+        "200":
+          description: Available time slots
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TimeSlot"
+        "400":
+          description: Validation error
+        "404":
+          description: Event type not found
+
+  /scheduling/bookings:
+    get:
+      operationId: listBookings
+      tags: [scheduling]
+      summary: List bookings for the current user
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: ["string", "null"]
+            enum: [pending, confirmed, cancelled, rescheduled, "null"]
+        - name: calendarId
+          in: query
+          required: false
+          schema:
+            type: ["integer", "null"]
+        - name: startDate
+          in: query
+          required: false
+          schema:
+            type: ["string", "null"]
+        - name: endDate
+          in: query
+          required: false
+          schema:
+            type: ["string", "null"]
+      responses:
+        "200":
+          description: List of bookings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Booking"
+    post:
+      operationId: createBooking
+      tags: [scheduling]
+      summary: Create a booking (AI tool call or web)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookingInput"
+      responses:
+        "201":
+          description: Booking created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+        "400":
+          description: Validation error
+        "409":
+          description: Slot already booked (advisory lock contention)
+
+  /scheduling/bookings/{id}:
+    get:
+      operationId: getBooking
+      tags: [scheduling]
+      summary: Get a booking
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Booking
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateBooking
+      tags: [scheduling]
+      summary: Reschedule or cancel a booking
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookingUpdate"
+      responses:
+        "200":
+          description: Updated booking
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+        "400":
+          description: Validation error
+        "404":
+          description: Not found
+        "409":
+          description: New slot already booked
+
+  /scheduling/public/event-types/{slug}:
+    get:
+      operationId: getPublicEventType
+      tags: [scheduling]
+      summary: Get public event type info by slug (unauthenticated)
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Public event type info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicEventType"
+        "404":
+          description: Not found
+
+  /scheduling/public/slots:
+    get:
+      operationId: getPublicSlots
+      tags: [scheduling]
+      summary: Get public available slots for an event type slug (unauthenticated)
+      parameters:
+        - name: slug
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Available time slots
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TimeSlot"
+        "400":
+          description: Validation error
+        "404":
+          description: Event type not found
+
+  /scheduling/public/bookings:
+    post:
+      operationId: createPublicBooking
+      tags: [scheduling]
+      summary: Create a booking via public form (unauthenticated)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PublicBookingInput"
+      responses:
+        "201":
+          description: Booking created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+        "400":
+          description: Validation error
+        "409":
+          description: Slot already booked
+
 components:
   schemas:
     HealthStatus:
@@ -2761,3 +3327,350 @@ components:
           items:
             type: string
           description: Error messages for skipped rows (up to 20)
+
+    # ── Scheduling ───────────────────────────────────────────────────────────
+    SchedulingCalendar:
+      type: object
+      required: [id, agentId, userId, name, timezone, isActive, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        agentId:
+          type: integer
+        userId:
+          type: string
+        name:
+          type: string
+        timezone:
+          type: string
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    SchedulingCalendarInput:
+      type: object
+      required: [agentId, name, timezone]
+      properties:
+        agentId:
+          type: integer
+        name:
+          type: string
+        timezone:
+          type: string
+        isActive:
+          type: boolean
+          default: true
+
+    SchedulingCalendarUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        timezone:
+          type: string
+        isActive:
+          type: boolean
+
+    EventType:
+      type: object
+      required: [id, calendarId, userId, name, slug, durationMinutes, bufferBeforeMins, bufferAfterMins, confirmationMode, maxBookingsPerSlot, isActive, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        calendarId:
+          type: integer
+        userId:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: ["string", "null"]
+        durationMinutes:
+          type: integer
+        bufferBeforeMins:
+          type: integer
+        bufferAfterMins:
+          type: integer
+        confirmationMode:
+          type: string
+          enum: [instant, manual]
+        maxBookingsPerSlot:
+          type: integer
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    EventTypeInput:
+      type: object
+      required: [calendarId, name, slug, durationMinutes]
+      properties:
+        calendarId:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        durationMinutes:
+          type: integer
+          default: 30
+        bufferBeforeMins:
+          type: integer
+          default: 0
+        bufferAfterMins:
+          type: integer
+          default: 0
+        confirmationMode:
+          type: string
+          enum: [instant, manual]
+          default: instant
+        maxBookingsPerSlot:
+          type: integer
+          default: 1
+        isActive:
+          type: boolean
+          default: true
+
+    EventTypeUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        durationMinutes:
+          type: integer
+        bufferBeforeMins:
+          type: integer
+        bufferAfterMins:
+          type: integer
+        confirmationMode:
+          type: string
+          enum: [instant, manual]
+        maxBookingsPerSlot:
+          type: integer
+        isActive:
+          type: boolean
+
+    PublicEventType:
+      type: object
+      required: [id, calendarId, name, slug, durationMinutes, confirmationMode]
+      properties:
+        id:
+          type: integer
+        calendarId:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: ["string", "null"]
+        durationMinutes:
+          type: integer
+        confirmationMode:
+          type: string
+          enum: [instant, manual]
+
+    AvailabilitySchedule:
+      type: object
+      required: [id, calendarId, dayOfWeek, startTime, endTime, isActive]
+      properties:
+        id:
+          type: integer
+        calendarId:
+          type: integer
+        dayOfWeek:
+          type: integer
+          description: 0=Sunday, 1=Monday, ..., 6=Saturday
+        startTime:
+          type: string
+          description: "HH:MM in 24h format"
+        endTime:
+          type: string
+          description: "HH:MM in 24h format"
+        isActive:
+          type: boolean
+
+    AvailabilityScheduleInput:
+      type: object
+      required: [calendarId, dayOfWeek, startTime, endTime]
+      properties:
+        calendarId:
+          type: integer
+        dayOfWeek:
+          type: integer
+        startTime:
+          type: string
+        endTime:
+          type: string
+        isActive:
+          type: boolean
+          default: true
+
+    AvailabilityScheduleUpdate:
+      type: object
+      properties:
+        startTime:
+          type: string
+        endTime:
+          type: string
+        isActive:
+          type: boolean
+
+    AvailabilityOverride:
+      type: object
+      required: [id, calendarId, date, isBlocked]
+      properties:
+        id:
+          type: integer
+        calendarId:
+          type: integer
+        date:
+          type: string
+          format: date
+        isBlocked:
+          type: boolean
+        startTime:
+          type: ["string", "null"]
+        endTime:
+          type: ["string", "null"]
+        reason:
+          type: ["string", "null"]
+
+    AvailabilityOverrideInput:
+      type: object
+      required: [calendarId, date, isBlocked]
+      properties:
+        calendarId:
+          type: integer
+        date:
+          type: string
+          format: date
+        isBlocked:
+          type: boolean
+        startTime:
+          type: string
+        endTime:
+          type: string
+        reason:
+          type: string
+
+    TimeSlot:
+      type: object
+      required: [slotStart, slotEnd]
+      properties:
+        slotStart:
+          type: string
+          format: date-time
+        slotEnd:
+          type: string
+          format: date-time
+
+    Booking:
+      type: object
+      required: [id, eventTypeId, calendarId, userId, attendeeName, attendeeEmail, slotStart, slotEnd, status, bookedVia, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        eventTypeId:
+          type: integer
+        calendarId:
+          type: integer
+        callId:
+          type: ["integer", "null"]
+        userId:
+          type: string
+        attendeeName:
+          type: string
+        attendeeEmail:
+          type: string
+        attendeeNotes:
+          type: ["string", "null"]
+        slotStart:
+          type: string
+          format: date-time
+        slotEnd:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [pending, confirmed, cancelled, rescheduled]
+        bookedVia:
+          type: string
+          enum: [agent, web, api]
+        cancelledAt:
+          type: ["string", "null"]
+          format: date-time
+        rescheduledFromId:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    BookingInput:
+      type: object
+      required: [eventTypeId, slotStart, attendeeName, attendeeEmail]
+      properties:
+        eventTypeId:
+          type: integer
+        slotStart:
+          type: string
+          format: date-time
+        attendeeName:
+          type: string
+        attendeeEmail:
+          type: string
+          format: email
+        attendeeNotes:
+          type: string
+        callId:
+          type: integer
+        bookedVia:
+          type: string
+          enum: [agent, web, api]
+          default: api
+
+    PublicBookingInput:
+      type: object
+      required: [eventTypeSlug, slotStart, attendeeName, attendeeEmail]
+      properties:
+        eventTypeSlug:
+          type: string
+        slotStart:
+          type: string
+          format: date-time
+        attendeeName:
+          type: string
+        attendeeEmail:
+          type: string
+          format: email
+        attendeeNotes:
+          type: string
+
+    BookingUpdate:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [confirmed, cancelled, rescheduled]
+        slotStart:
+          type: string
+          format: date-time
+          description: New slot start when rescheduling

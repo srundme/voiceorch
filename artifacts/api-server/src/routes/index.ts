@@ -19,6 +19,7 @@ import adminRouter from "./admin.js";
 import wizardRouter from "./wizard.js";
 import campaignsRouter from "./campaigns.js";
 import campaignWebhookRouter from "./campaign-webhook.js";
+import schedulingRouter from "./scheduling/index.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
 const router: IRouter = Router();
@@ -48,5 +49,6 @@ router.use(agentTemplatesRouter);
 router.use(onboardingRouter);
 router.use(wizardRouter);
 router.use(campaignsRouter);
+router.use(schedulingRouter);
 
 export default router;

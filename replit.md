@@ -45,7 +45,19 @@ AI voice agent orchestration SaaS platform — users bring their own provider AP
 - **Agents** — create/manage voice agents with ASR + LLM + TTS + telephony pipeline config
 - **Calls Log** — filterable call history with transcripts and status tracking
 - **Providers** — manage user-supplied API keys (masked), grouped by type: ASR / LLM / TTS / Telephony
+- **Scheduling** — multi-tenant booking engine: calendars, event types, availability windows, date overrides, advisory-locked slot booking, email notifications, webhook dispatch
+- **Public Booking Page** — unauthenticated `/book/:slug` page for attendees to pick a slot and book
 - **Settings** — placeholder for future platform-level config
+
+## Scheduling Architecture
+
+- 5 DB tables: `scheduling_calendars`, `event_types`, `availability_schedules`, `availability_overrides`, `bookings`
+- Slot engine (`services/scheduling/slot-engine.ts`): date-fns-tz aware, respects weekly schedules + overrides + existing bookings
+- Advisory lock (`services/scheduling/lock.ts`): `pg_try_advisory_xact_lock` prevents double-booking
+- Email (`services/scheduling/notifications.ts`): nodemailer/Gmail, gracefully skipped if env vars absent
+- Webhooks: `dispatchSchedulingWebhooks` in `routes/scheduling/webhooks.ts`
+- Public routes (no auth): `GET /api/scheduling/public/event-types/:slug`, `GET /api/scheduling/public/slots`, `POST /api/scheduling/public/bookings`
+- Env: `GMAIL_USER` + `GMAIL_APP_PASSWORD` (optional) for email notifications
 
 ## Supported providers
 

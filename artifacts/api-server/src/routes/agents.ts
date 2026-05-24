@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
-import { db, agentsTable } from "@workspace/db";
+import { db, agentsTable, schedulingCalendarsTable } from "@workspace/db";
 import {
   CreateAgentBody,
   UpdateAgentBody,
@@ -40,6 +40,18 @@ router.post("/agents", requireAuth, async (req, res): Promise<void> => {
     .values({ ...parsed.data, userId: clerkId })
     .returning();
   await logActivity({ userId: clerkId, eventType: "agent.created", resourceType: "agent", resourceId: String(agent.id), description: `Agent "${agent.name}" created` });
+  db.insert(schedulingCalendarsTable)
+    .values({
+      agentId: agent.id,
+      userId: clerkId,
+      name: `${agent.name} Calendar`,
+      timezone: "UTC",
+      isActive: true,
+    })
+    .onConflictDoNothing()
+    .catch((err) => {
+      req.log.warn({ err, agentId: agent.id }, "Failed to auto-create scheduling calendar for agent");
+    });
   res.status(201).json(GetAgentResponse.parse(agent));
 });
 

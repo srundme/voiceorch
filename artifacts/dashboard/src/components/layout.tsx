@@ -4,7 +4,7 @@ import {
   Users, Phone, Key, Settings, Menu,
   LayoutDashboard, BarChart3, BookOpen,
   Wallet, LogOut, ChevronDown, AlertCircle, Radio, Webhook,
-  Zap, ChevronRight,
+  Zap, ChevronRight, CalendarDays,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useClerk, useUser } from "@clerk/react";
@@ -33,7 +33,8 @@ const NAV_SECTIONS = [
   {
     label: "Outreach",
     items: [
-      { name: "Campaigns", href: "/app/campaigns", icon: Zap },
+      { name: "Campaigns",  href: "/app/campaigns",  icon: Zap },
+      { name: "Scheduling", href: "/app/scheduling", icon: CalendarDays },
     ],
   },
   {

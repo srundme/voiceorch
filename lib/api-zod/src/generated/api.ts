@@ -1606,3 +1606,474 @@ export const RetryCampaignLeadResponse = zod.object({
 })
 
 
+/**
+ * @summary List scheduling calendars for the current user
+ */
+export const ListCalendarsResponseItem = zod.object({
+  "id": zod.number(),
+  "agentId": zod.number(),
+  "userId": zod.string(),
+  "name": zod.string(),
+  "timezone": zod.string(),
+  "isActive": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListCalendarsResponse = zod.array(ListCalendarsResponseItem)
+
+
+/**
+ * @summary Create a scheduling calendar
+ */
+export const createCalendarBodyIsActiveDefault = true;
+
+export const CreateCalendarBody = zod.object({
+  "agentId": zod.number(),
+  "name": zod.string(),
+  "timezone": zod.string(),
+  "isActive": zod.boolean().default(createCalendarBodyIsActiveDefault)
+})
+
+
+/**
+ * @summary Get a scheduling calendar
+ */
+export const GetCalendarParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetCalendarResponse = zod.object({
+  "id": zod.number(),
+  "agentId": zod.number(),
+  "userId": zod.string(),
+  "name": zod.string(),
+  "timezone": zod.string(),
+  "isActive": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update a scheduling calendar
+ */
+export const UpdateCalendarParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateCalendarBody = zod.object({
+  "name": zod.string().optional(),
+  "timezone": zod.string().optional(),
+  "isActive": zod.boolean().optional()
+})
+
+export const UpdateCalendarResponse = zod.object({
+  "id": zod.number(),
+  "agentId": zod.number(),
+  "userId": zod.string(),
+  "name": zod.string(),
+  "timezone": zod.string(),
+  "isActive": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a scheduling calendar
+ */
+export const DeleteCalendarParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary List event types
+ */
+export const ListEventTypesQueryParams = zod.object({
+  "calendarId": zod.coerce.number().nullish()
+})
+
+export const ListEventTypesResponseItem = zod.object({
+  "id": zod.number(),
+  "calendarId": zod.number(),
+  "userId": zod.string(),
+  "name": zod.string(),
+  "slug": zod.string(),
+  "description": zod.string().nullish(),
+  "durationMinutes": zod.number(),
+  "bufferBeforeMins": zod.number(),
+  "bufferAfterMins": zod.number(),
+  "confirmationMode": zod.enum(['instant', 'manual']),
+  "maxBookingsPerSlot": zod.number(),
+  "isActive": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListEventTypesResponse = zod.array(ListEventTypesResponseItem)
+
+
+/**
+ * @summary Create an event type
+ */
+export const createEventTypeBodyDurationMinutesDefault = 30;
+export const createEventTypeBodyBufferBeforeMinsDefault = 0;
+export const createEventTypeBodyBufferAfterMinsDefault = 0;
+export const createEventTypeBodyConfirmationModeDefault = `instant`;
+export const createEventTypeBodyMaxBookingsPerSlotDefault = 1;
+export const createEventTypeBodyIsActiveDefault = true;
+
+export const CreateEventTypeBody = zod.object({
+  "calendarId": zod.number(),
+  "name": zod.string(),
+  "slug": zod.string(),
+  "description": zod.string().optional(),
+  "durationMinutes": zod.number().default(createEventTypeBodyDurationMinutesDefault),
+  "bufferBeforeMins": zod.number().default(createEventTypeBodyBufferBeforeMinsDefault),
+  "bufferAfterMins": zod.number().default(createEventTypeBodyBufferAfterMinsDefault),
+  "confirmationMode": zod.enum(['instant', 'manual']).default(createEventTypeBodyConfirmationModeDefault),
+  "maxBookingsPerSlot": zod.number().default(createEventTypeBodyMaxBookingsPerSlotDefault),
+  "isActive": zod.boolean().default(createEventTypeBodyIsActiveDefault)
+})
+
+
+/**
+ * @summary Get an event type
+ */
+export const GetEventTypeParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetEventTypeResponse = zod.object({
+  "id": zod.number(),
+  "calendarId": zod.number(),
+  "userId": zod.string(),
+  "name": zod.string(),
+  "slug": zod.string(),
+  "description": zod.string().nullish(),
+  "durationMinutes": zod.number(),
+  "bufferBeforeMins": zod.number(),
+  "bufferAfterMins": zod.number(),
+  "confirmationMode": zod.enum(['instant', 'manual']),
+  "maxBookingsPerSlot": zod.number(),
+  "isActive": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update an event type
+ */
+export const UpdateEventTypeParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateEventTypeBody = zod.object({
+  "name": zod.string().optional(),
+  "description": zod.string().optional(),
+  "durationMinutes": zod.number().optional(),
+  "bufferBeforeMins": zod.number().optional(),
+  "bufferAfterMins": zod.number().optional(),
+  "confirmationMode": zod.enum(['instant', 'manual']).optional(),
+  "maxBookingsPerSlot": zod.number().optional(),
+  "isActive": zod.boolean().optional()
+})
+
+export const UpdateEventTypeResponse = zod.object({
+  "id": zod.number(),
+  "calendarId": zod.number(),
+  "userId": zod.string(),
+  "name": zod.string(),
+  "slug": zod.string(),
+  "description": zod.string().nullish(),
+  "durationMinutes": zod.number(),
+  "bufferBeforeMins": zod.number(),
+  "bufferAfterMins": zod.number(),
+  "confirmationMode": zod.enum(['instant', 'manual']),
+  "maxBookingsPerSlot": zod.number(),
+  "isActive": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete an event type
+ */
+export const DeleteEventTypeParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary List weekly availability schedules for a calendar
+ */
+export const ListAvailabilityQueryParams = zod.object({
+  "calendarId": zod.coerce.number()
+})
+
+export const ListAvailabilityResponseItem = zod.object({
+  "id": zod.number(),
+  "calendarId": zod.number(),
+  "dayOfWeek": zod.number().describe('0=Sunday, 1=Monday, ..., 6=Saturday'),
+  "startTime": zod.string().describe('HH:MM in 24h format'),
+  "endTime": zod.string().describe('HH:MM in 24h format'),
+  "isActive": zod.boolean()
+})
+export const ListAvailabilityResponse = zod.array(ListAvailabilityResponseItem)
+
+
+/**
+ * @summary Create a weekly availability slot
+ */
+export const createAvailabilityBodyIsActiveDefault = true;
+
+export const CreateAvailabilityBody = zod.object({
+  "calendarId": zod.number(),
+  "dayOfWeek": zod.number(),
+  "startTime": zod.string(),
+  "endTime": zod.string(),
+  "isActive": zod.boolean().default(createAvailabilityBodyIsActiveDefault)
+})
+
+
+/**
+ * @summary Update an availability schedule
+ */
+export const UpdateAvailabilityParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateAvailabilityBody = zod.object({
+  "startTime": zod.string().optional(),
+  "endTime": zod.string().optional(),
+  "isActive": zod.boolean().optional()
+})
+
+export const UpdateAvailabilityResponse = zod.object({
+  "id": zod.number(),
+  "calendarId": zod.number(),
+  "dayOfWeek": zod.number().describe('0=Sunday, 1=Monday, ..., 6=Saturday'),
+  "startTime": zod.string().describe('HH:MM in 24h format'),
+  "endTime": zod.string().describe('HH:MM in 24h format'),
+  "isActive": zod.boolean()
+})
+
+
+/**
+ * @summary Delete an availability schedule
+ */
+export const DeleteAvailabilityParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary List availability overrides for a calendar
+ */
+export const ListAvailabilityOverridesQueryParams = zod.object({
+  "calendarId": zod.coerce.number()
+})
+
+export const ListAvailabilityOverridesResponseItem = zod.object({
+  "id": zod.number(),
+  "calendarId": zod.number(),
+  "date": zod.coerce.date(),
+  "isBlocked": zod.boolean(),
+  "startTime": zod.string().nullish(),
+  "endTime": zod.string().nullish(),
+  "reason": zod.string().nullish()
+})
+export const ListAvailabilityOverridesResponse = zod.array(ListAvailabilityOverridesResponseItem)
+
+
+/**
+ * @summary Create an availability override (block or extra hours)
+ */
+export const CreateAvailabilityOverrideBody = zod.object({
+  "calendarId": zod.number(),
+  "date": zod.coerce.date(),
+  "isBlocked": zod.boolean(),
+  "startTime": zod.string().optional(),
+  "endTime": zod.string().optional(),
+  "reason": zod.string().optional()
+})
+
+
+/**
+ * @summary Delete an availability override
+ */
+export const DeleteAvailabilityOverrideParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary Get available booking slots for an event type
+ */
+export const GetAvailableSlotsQueryParams = zod.object({
+  "eventTypeId": zod.coerce.number(),
+  "startDate": zod.date().describe('Start date (YYYY-MM-DD) in the calendar\'s timezone'),
+  "endDate": zod.date().describe('End date (YYYY-MM-DD, inclusive) in the calendar\'s timezone')
+})
+
+export const GetAvailableSlotsResponseItem = zod.object({
+  "slotStart": zod.coerce.date(),
+  "slotEnd": zod.coerce.date()
+})
+export const GetAvailableSlotsResponse = zod.array(GetAvailableSlotsResponseItem)
+
+
+/**
+ * @summary List bookings for the current user
+ */
+export const ListBookingsQueryParams = zod.object({
+  "status": zod.enum(['pending', 'confirmed', 'cancelled', 'rescheduled', 'null']).nullish(),
+  "calendarId": zod.coerce.number().nullish(),
+  "startDate": zod.coerce.string().nullish(),
+  "endDate": zod.coerce.string().nullish()
+})
+
+export const ListBookingsResponseItem = zod.object({
+  "id": zod.number(),
+  "eventTypeId": zod.number(),
+  "calendarId": zod.number(),
+  "callId": zod.number().nullish(),
+  "userId": zod.string(),
+  "attendeeName": zod.string(),
+  "attendeeEmail": zod.string(),
+  "attendeeNotes": zod.string().nullish(),
+  "slotStart": zod.coerce.date(),
+  "slotEnd": zod.coerce.date(),
+  "status": zod.enum(['pending', 'confirmed', 'cancelled', 'rescheduled']),
+  "bookedVia": zod.enum(['agent', 'web', 'api']),
+  "cancelledAt": zod.coerce.date().nullish(),
+  "rescheduledFromId": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListBookingsResponse = zod.array(ListBookingsResponseItem)
+
+
+/**
+ * @summary Create a booking (AI tool call or web)
+ */
+export const createBookingBodyBookedViaDefault = `api`;
+
+export const CreateBookingBody = zod.object({
+  "eventTypeId": zod.number(),
+  "slotStart": zod.coerce.date(),
+  "attendeeName": zod.string(),
+  "attendeeEmail": zod.string().email(),
+  "attendeeNotes": zod.string().optional(),
+  "callId": zod.number().optional(),
+  "bookedVia": zod.enum(['agent', 'web', 'api']).default(createBookingBodyBookedViaDefault)
+})
+
+
+/**
+ * @summary Get a booking
+ */
+export const GetBookingParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetBookingResponse = zod.object({
+  "id": zod.number(),
+  "eventTypeId": zod.number(),
+  "calendarId": zod.number(),
+  "callId": zod.number().nullish(),
+  "userId": zod.string(),
+  "attendeeName": zod.string(),
+  "attendeeEmail": zod.string(),
+  "attendeeNotes": zod.string().nullish(),
+  "slotStart": zod.coerce.date(),
+  "slotEnd": zod.coerce.date(),
+  "status": zod.enum(['pending', 'confirmed', 'cancelled', 'rescheduled']),
+  "bookedVia": zod.enum(['agent', 'web', 'api']),
+  "cancelledAt": zod.coerce.date().nullish(),
+  "rescheduledFromId": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Reschedule or cancel a booking
+ */
+export const UpdateBookingParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateBookingBody = zod.object({
+  "status": zod.enum(['confirmed', 'cancelled', 'rescheduled']).optional(),
+  "slotStart": zod.coerce.date().optional().describe('New slot start when rescheduling')
+})
+
+export const UpdateBookingResponse = zod.object({
+  "id": zod.number(),
+  "eventTypeId": zod.number(),
+  "calendarId": zod.number(),
+  "callId": zod.number().nullish(),
+  "userId": zod.string(),
+  "attendeeName": zod.string(),
+  "attendeeEmail": zod.string(),
+  "attendeeNotes": zod.string().nullish(),
+  "slotStart": zod.coerce.date(),
+  "slotEnd": zod.coerce.date(),
+  "status": zod.enum(['pending', 'confirmed', 'cancelled', 'rescheduled']),
+  "bookedVia": zod.enum(['agent', 'web', 'api']),
+  "cancelledAt": zod.coerce.date().nullish(),
+  "rescheduledFromId": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Get public event type info by slug (unauthenticated)
+ */
+export const GetPublicEventTypeParams = zod.object({
+  "slug": zod.coerce.string()
+})
+
+export const GetPublicEventTypeResponse = zod.object({
+  "id": zod.number(),
+  "calendarId": zod.number(),
+  "name": zod.string(),
+  "slug": zod.string(),
+  "description": zod.string().nullish(),
+  "durationMinutes": zod.number(),
+  "confirmationMode": zod.enum(['instant', 'manual'])
+})
+
+
+/**
+ * @summary Get public available slots for an event type slug (unauthenticated)
+ */
+export const GetPublicSlotsQueryParams = zod.object({
+  "slug": zod.coerce.string(),
+  "startDate": zod.date(),
+  "endDate": zod.date()
+})
+
+export const GetPublicSlotsResponseItem = zod.object({
+  "slotStart": zod.coerce.date(),
+  "slotEnd": zod.coerce.date()
+})
+export const GetPublicSlotsResponse = zod.array(GetPublicSlotsResponseItem)
+
+
+/**
+ * @summary Create a booking via public form (unauthenticated)
+ */
+export const CreatePublicBookingBody = zod.object({
+  "eventTypeSlug": zod.string(),
+  "slotStart": zod.coerce.date(),
+  "attendeeName": zod.string(),
+  "attendeeEmail": zod.string().email(),
+  "attendeeNotes": zod.string().optional()
+})
+
+

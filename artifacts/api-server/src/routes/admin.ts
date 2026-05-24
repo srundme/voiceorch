@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, usersTable, walletTransactionsTable, callsTable, agentsTable, scheduledCallbacksTable } from "@workspace/db";
+import { db, usersTable, walletTransactionsTable, callsTable, agentsTable, scheduledCallbacksTable, bookingsTable, eventTypesTable, schedulingCalendarsTable } from "@workspace/db";
 import { eq, sql, count, sum, desc, lt, gt, and, inArray } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { getAllSessions } from "../orchestration/session.js";
@@ -347,6 +347,51 @@ router.get("/admin/growth/top-users", async (_req, res): Promise<void> => {
 
     res.json(topUsers);
   } catch (err) {
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── Scheduling ──────────────────────────────────────────────────────────────
+
+router.get("/admin/scheduling/bookings", async (req, res): Promise<void> => {
+  try {
+    const { status, startDate, endDate, agentId } = req.query as Record<string, string>;
+    const conditions: any[] = [];
+    if (status && status !== "all") {
+      conditions.push(eq(bookingsTable.status, status as any));
+    }
+    if (startDate) {
+      conditions.push(sql`${bookingsTable.slotStart} >= ${startDate}::timestamptz`);
+    }
+    if (endDate) {
+      conditions.push(sql`${bookingsTable.slotStart} <= ${endDate}::timestamptz + interval '1 day'`);
+    }
+    if (agentId) {
+      conditions.push(eq(schedulingCalendarsTable.agentId, parseInt(agentId)));
+    }
+    const rows = await db
+      .select({
+        id: bookingsTable.id,
+        attendeeName: bookingsTable.attendeeName,
+        attendeeEmail: bookingsTable.attendeeEmail,
+        slotStart: bookingsTable.slotStart,
+        slotEnd: bookingsTable.slotEnd,
+        status: bookingsTable.status,
+        bookedVia: bookingsTable.bookedVia,
+        userId: schedulingCalendarsTable.userId,
+        agentId: schedulingCalendarsTable.agentId,
+        calendarName: schedulingCalendarsTable.name,
+        createdAt: bookingsTable.createdAt,
+      })
+      .from(bookingsTable)
+      .leftJoin(eventTypesTable, eq(bookingsTable.eventTypeId, eventTypesTable.id))
+      .leftJoin(schedulingCalendarsTable, eq(eventTypesTable.calendarId, schedulingCalendarsTable.id))
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(desc(bookingsTable.createdAt))
+      .limit(500);
+    res.json(rows);
+  } catch (err) {
+    req.log.error({ err }, "admin/scheduling/bookings failed");
     res.status(500).json({ error: "Internal server error" });
   }
 });

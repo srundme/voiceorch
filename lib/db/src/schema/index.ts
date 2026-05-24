@@ -10,3 +10,4 @@ export * from "./callerProfiles";
 export * from "./scheduledCallbacks";
 export * from "./platform-settings";
 export * from "./campaigns";
+export * from "./scheduling";
