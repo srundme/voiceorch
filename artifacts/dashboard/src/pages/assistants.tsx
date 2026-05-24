@@ -7,7 +7,7 @@ import {
   Check, Copy, Loader2, ChevronDown, Sparkles, PhoneOutgoing,
   BarChart2, Clock, CheckCircle2, XCircle, BookOpen,
   AlertTriangle, Target, AlignLeft, Zap, RefreshCw, ClipboardList, X,
-  PhoneForwarded, Globe,
+  PhoneForwarded, Globe, CalendarPlus, CalendarClock, CalendarX,
 } from "lucide-react";
 import { CreateAgentWizard } from "@/components/create-agent-wizard";
 import {
@@ -20,6 +20,7 @@ import {
   useCreateAgent,
   useListKnowledgeBases,
   useInitiateOutboundCall,
+  useListEventTypes,
   getListAgentsQueryKey,
   getGetAgentQueryKey,
   getListCallsQueryKey,
@@ -582,6 +583,22 @@ type AgentToolLocal =
       apiKey: string;
       eventTypeId: number;
       timezone?: string;
+    }
+  | {
+      type: "native_booking";
+      name: string;
+      description: string;
+      eventTypeId: number;
+    }
+  | {
+      type: "native_reschedule";
+      name: string;
+      description: string;
+    }
+  | {
+      type: "native_cancel";
+      name: string;
+      description: string;
     };
 
 function SliderRow({ label, desc, value, onChange, min, max, step, unit = "" }: {
@@ -666,6 +683,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
   const deleteAgent     = useDeleteAgent();
   const initiateOutbound = useInitiateOutboundCall();
   const { data: kbs } = useListKnowledgeBases();
+  const { data: eventTypes } = useListEventTypes();
 
   // ── Tab 1 — Agent ───────────────────────────────────────────────
   const [agentName, setAgentName]                           = useState("");
@@ -2012,6 +2030,30 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
               </button>
               <button
                 type="button"
+                onClick={() => { setAgentTools(prev => [...prev, { type: "native_booking", name: "book_appointment", description: "Book an appointment using the platform's scheduling engine when the caller wants to schedule a meeting.", eventTypeId: 0 }]); setDirty(true); }}
+                className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50 rounded-lg px-3 py-2 transition-colors"
+              >
+                <CalendarPlus className="h-3.5 w-3.5 text-indigo-500" />
+                Book Appointment
+              </button>
+              <button
+                type="button"
+                onClick={() => { setAgentTools(prev => [...prev, { type: "native_reschedule", name: "reschedule_appointment", description: "Reschedule an existing booking when the caller provides their booking reference and wants a new time." }]); setDirty(true); }}
+                className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50 rounded-lg px-3 py-2 transition-colors"
+              >
+                <CalendarClock className="h-3.5 w-3.5 text-amber-500" />
+                Reschedule Appointment
+              </button>
+              <button
+                type="button"
+                onClick={() => { setAgentTools(prev => [...prev, { type: "native_cancel", name: "cancel_appointment", description: "Cancel an existing booking when the caller provides their booking reference and wants to cancel." }]); setDirty(true); }}
+                className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50 rounded-lg px-3 py-2 transition-colors"
+              >
+                <CalendarX className="h-3.5 w-3.5 text-rose-500" />
+                Cancel Appointment
+              </button>
+              <button
+                type="button"
                 onClick={() => { setAgentTools(prev => [...prev, { type: "webhook", name: "custom_action", description: "Invoke this when the caller requests a specific action.", url: "", method: "POST" }]); setDirty(true); }}
                 className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50 rounded-lg px-3 py-2 transition-colors"
               >
@@ -2035,16 +2077,22 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                 {/* Card header */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    {tool.type === "call_transfer" && <PhoneForwarded className="h-4 w-4 text-violet-500" />}
-                    {tool.type === "send_sms"      && <Zap            className="h-4 w-4 text-emerald-500" />}
-                    {tool.type === "end_call"       && <PhoneOff        className="h-4 w-4 text-red-400" />}
-                    {tool.type === "cal_com"        && <Clock           className="h-4 w-4 text-blue-400" />}
-                    {tool.type === "webhook"        && <Globe           className="h-4 w-4 text-gray-500" />}
+                    {tool.type === "call_transfer"   && <PhoneForwarded className="h-4 w-4 text-violet-500" />}
+                    {tool.type === "send_sms"        && <Zap            className="h-4 w-4 text-emerald-500" />}
+                    {tool.type === "end_call"         && <PhoneOff        className="h-4 w-4 text-red-400" />}
+                    {tool.type === "cal_com"          && <Clock           className="h-4 w-4 text-blue-400" />}
+                    {tool.type === "webhook"          && <Globe           className="h-4 w-4 text-gray-500" />}
+                    {tool.type === "native_booking"   && <CalendarPlus    className="h-4 w-4 text-indigo-500" />}
+                    {tool.type === "native_reschedule" && <CalendarClock  className="h-4 w-4 text-amber-500" />}
+                    {tool.type === "native_cancel"    && <CalendarX       className="h-4 w-4 text-rose-500" />}
                     <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-                      {tool.type === "call_transfer" ? "Call Transfer"
-                        : tool.type === "send_sms" ? "Send SMS"
-                        : tool.type === "end_call"  ? "End Call"
-                        : tool.type === "cal_com"   ? "Cal.com Booking"
+                      {tool.type === "call_transfer"   ? "Call Transfer"
+                        : tool.type === "send_sms"       ? "Send SMS"
+                        : tool.type === "end_call"       ? "End Call"
+                        : tool.type === "cal_com"        ? "Cal.com Booking"
+                        : tool.type === "native_booking" ? "Book Appointment"
+                        : tool.type === "native_reschedule" ? "Reschedule Appointment"
+                        : tool.type === "native_cancel"  ? "Cancel Appointment"
                         : "Webhook"}
                     </span>
                   </div>
@@ -2174,6 +2222,44 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                     </div>
                     <p className="text-[10px] text-gray-400">The AI collects the caller's name, email, and preferred time, then books the first available slot.</p>
                   </>
+                )}
+
+                {/* ── Native Booking fields ── */}
+                {tool.type === "native_booking" && (
+                  <>
+                    <div className="space-y-1">
+                      <p className="text-xs text-gray-500">Event Type</p>
+                      <Select
+                        value={tool.eventTypeId ? String(tool.eventTypeId) : ""}
+                        onValueChange={v => { const next = [...agentTools]; next[idx] = { ...tool, eventTypeId: parseInt(v) || 0 }; setAgentTools(next); setDirty(true); }}
+                      >
+                        <SelectTrigger className="bg-white border-gray-200 text-gray-700 text-xs h-8">
+                          <SelectValue placeholder="Select an event type…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(eventTypes ?? []).map(et => (
+                            <SelectItem key={et.id} value={String(et.id)}>
+                              {et.name} ({et.durationMinutes} min)
+                            </SelectItem>
+                          ))}
+                          {(eventTypes ?? []).length === 0 && (
+                            <SelectItem value="0" disabled>No event types found — create one in Scheduling</SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <p className="text-[10px] text-gray-400">The AI will collect the caller's name and email, then book the first available slot for this event type.</p>
+                  </>
+                )}
+
+                {/* ── Native Reschedule fields ── */}
+                {tool.type === "native_reschedule" && (
+                  <p className="text-[10px] text-gray-400">The AI will ask the caller for their booking reference ID and reschedule them to the next available slot.</p>
+                )}
+
+                {/* ── Native Cancel fields ── */}
+                {tool.type === "native_cancel" && (
+                  <p className="text-[10px] text-gray-400">The AI will ask the caller for their booking reference ID and cancel the appointment.</p>
                 )}
 
                 {/* ── Webhook fields ── */}

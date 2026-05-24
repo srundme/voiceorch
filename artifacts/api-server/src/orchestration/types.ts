@@ -41,7 +41,26 @@ export interface CalComTool {
   timezone?: string;
 }
 
-export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | EndCallTool | CalComTool;
+export interface NativeBookingTool {
+  type: "native_booking";
+  name: string;
+  description: string;
+  eventTypeId: number;
+}
+
+export interface NativeRescheduleTool {
+  type: "native_reschedule";
+  name: string;
+  description: string;
+}
+
+export interface NativeCancelTool {
+  type: "native_cancel";
+  name: string;
+  description: string;
+}
+
+export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | EndCallTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool;
 
 /** JSON Schema-compatible tool definition passed to LLM providers */
 export interface ToolDefinition {

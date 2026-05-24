@@ -9,6 +9,11 @@ import type { AgentConfig, AgentTool, ConversationTurn, SessionConfig, StreamSTT
 import { detectCallerGender, applyCallerSalutation, buildGenderInstruction } from "./genderDetection.js";
 import { retrieveKbContext } from "./kb-retrieval.js";
 import { logger } from "../lib/logger.js";
+import { format, addMinutes } from "date-fns";
+import { db, bookingsTable, eventTypesTable, schedulingCalendarsTable, agentsTable } from "@workspace/db";
+import { eq, and, or, sql } from "drizzle-orm";
+import { getAvailableSlots } from "../services/scheduling/slot-engine.js";
+import { buildSlotLockKey } from "../services/scheduling/lock.js";
 
 const VAD_SILENCE_MS          = 250;    // silence window before STT flush
 const MIN_SPEECH_BYTES        = 3200;   // ~200ms @ 8kHz PCM — skip noise bursts shorter than this
@@ -628,11 +633,11 @@ export class OrchestrationPipeline {
 
   // ── Tool execution ───────────────────────────────────────────────────────────
 
-  private async handleToolCall(toolName: string, args: Record<string, unknown>): Promise<void> {
+  private async handleToolCall(toolName: string, args: Record<string, unknown>): Promise<string | undefined> {
     const tool = this.agent.tools.find((t) => t.name === toolName);
     if (!tool) {
       logger.warn({ callId: this.config.callId, toolName }, "LLM called unknown tool — ignoring");
-      return;
+      return undefined;
     }
 
     logger.info({ callId: this.config.callId, toolName, toolType: tool.type, args }, "Tool invoked by LLM");
@@ -647,7 +652,14 @@ export class OrchestrationPipeline {
       await this.executeEndCall(tool);
     } else if (tool.type === "cal_com") {
       await this.executeCalCom(tool, args);
+    } else if (tool.type === "native_booking") {
+      return await this.executeNativeBooking(tool, args);
+    } else if (tool.type === "native_reschedule") {
+      return await this.executeNativeReschedule(tool, args);
+    } else if (tool.type === "native_cancel") {
+      return await this.executeNativeCancel(tool, args);
     }
+    return undefined;
   }
 
   private async executeWebhookTool(tool: AgentTool & { type: "webhook" }, args: Record<string, unknown>): Promise<void> {
@@ -883,20 +895,60 @@ export class OrchestrationPipeline {
     }
 
     // ── Build tool definitions from agent config ──
-    const toolDefs: ToolDefinition[] = this.agent.tools.map((t) => ({
-      name: t.name,
-      description: t.description,
-      parameters: {
-        type: "object" as const,
-        properties: {
-          reason: {
-            type: "string",
-            description: "Brief reason for invoking this tool",
+    const toolDefs: ToolDefinition[] = this.agent.tools.map((t): ToolDefinition => {
+      if (t.type === "native_booking") {
+        return {
+          name: t.name,
+          description: t.description,
+          parameters: {
+            type: "object",
+            properties: {
+              attendee_name:  { type: "string", description: "Full name of the person being booked" },
+              attendee_email: { type: "string", description: "Email address of the person being booked" },
+            },
+            required: ["attendee_name", "attendee_email"],
           },
+        };
+      }
+      if (t.type === "native_reschedule") {
+        return {
+          name: t.name,
+          description: t.description,
+          parameters: {
+            type: "object",
+            properties: {
+              booking_id:     { type: "string", description: "The booking reference ID to reschedule" },
+              preferred_date: { type: "string", description: "Optional preferred date/time for the new slot, e.g. 'next Tuesday' or '2025-06-10T14:00'" },
+            },
+            required: ["booking_id"],
+          },
+        };
+      }
+      if (t.type === "native_cancel") {
+        return {
+          name: t.name,
+          description: t.description,
+          parameters: {
+            type: "object",
+            properties: {
+              booking_id: { type: "string", description: "The booking reference ID to cancel" },
+            },
+            required: ["booking_id"],
+          },
+        };
+      }
+      return {
+        name: t.name,
+        description: t.description,
+        parameters: {
+          type: "object",
+          properties: {
+            reason: { type: "string", description: "Brief reason for invoking this tool" },
+          },
+          required: [],
         },
-        required: [],
-      },
-    }));
+      };
+    });
 
     const llmStart = Date.now();
     let llmFirstTokenAt: number | null = null;
@@ -1044,7 +1096,10 @@ export class OrchestrationPipeline {
       wakePlayer = null;
       if (finalWake) finalWake();
       await playPromise;
-      await this.handleToolCall(triggeredToolName, triggeredToolArgs);
+      const toolResult = await this.handleToolCall(triggeredToolName, triggeredToolArgs);
+      if (toolResult !== undefined) {
+        await this.continueWithToolResult(triggeredToolName, toolResult);
+      }
       return;
     }
 
@@ -1120,7 +1175,346 @@ export class OrchestrationPipeline {
       .join("\n");
   }
 
-  /** P2-A: Speak a raw message to the caller (used by warm transfer REST endpoint). */
+  /** P2-A: Execute a native booking and return a structured result string for LLM consumption. */
+  private async executeNativeBooking(tool: AgentTool & { type: "native_booking" }, args: Record<string, unknown>): Promise<string> {
+    logger.info({ callId: this.config.callId, eventTypeId: tool.eventTypeId }, "Native booking tool invoked");
+    const attendeeName  = String(args["attendee_name"]  ?? args["name"]  ?? "Guest");
+    const attendeeEmail = String(args["attendee_email"] ?? args["email"] ?? "");
+
+    if (!attendeeEmail) {
+      logger.warn({ callId: this.config.callId }, "Native booking: no attendee email — cannot book");
+      return "error: attendee_email is required to complete the booking";
+    }
+
+    try {
+      // ── Authorization: resolve the owning userId for this agent ──
+      const [agentCalendar] = await db
+        .select({ userId: schedulingCalendarsTable.userId })
+        .from(schedulingCalendarsTable)
+        .where(eq(schedulingCalendarsTable.agentId, this.agent.id));
+      let authorizedUserId: string | null = null;
+      if (agentCalendar) {
+        authorizedUserId = agentCalendar.userId;
+      } else {
+        const [agentRow] = await db
+          .select({ userId: agentsTable.userId })
+          .from(agentsTable)
+          .where(eq(agentsTable.id, this.agent.id));
+        authorizedUserId = agentRow?.userId ?? null;
+      }
+
+      const [eventType] = await db.select().from(eventTypesTable).where(eq(eventTypesTable.id, tool.eventTypeId));
+      if (!eventType || !eventType.isActive) {
+        return "error: the appointment type is unavailable";
+      }
+
+      const [calendar] = await db.select().from(schedulingCalendarsTable).where(eq(schedulingCalendarsTable.id, eventType.calendarId));
+      if (!calendar || !calendar.isActive) {
+        return "error: the calendar is unavailable";
+      }
+
+      // ── Ownership check: event type calendar must belong to this agent's user ──
+      if (authorizedUserId && calendar.userId !== authorizedUserId) {
+        logger.warn({ callId: this.config.callId, eventTypeId: tool.eventTypeId, authorizedUserId, calendarUserId: calendar.userId }, "Native booking: event type ownership mismatch — rejected");
+        return "error: the appointment type is unavailable";
+      }
+
+      const now          = new Date();
+      const weekLater    = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      const slots        = await getAvailableSlots(tool.eventTypeId, format(now, "yyyy-MM-dd"), format(weekLater, "yyyy-MM-dd"));
+      if (slots.length === 0) {
+        logger.info({ callId: this.config.callId, eventTypeId: tool.eventTypeId }, "Native booking: no available slots in next 7 days");
+        return "error: no available slots in the next 7 days";
+      }
+
+      const slot      = slots[0]!;
+      const slotStart = slot.slotStart;
+      const slotEnd   = slot.slotEnd;
+      const lockKey   = buildSlotLockKey(calendar.id, slotStart);
+
+      let booking: typeof bookingsTable.$inferSelect | undefined;
+      let lockConflict = false;
+
+      await db.transaction(async (tx) => {
+        const lockResult = await tx.execute(sql`SELECT pg_try_advisory_xact_lock(hashtext(${lockKey})) AS acquired`);
+        const acquired = (lockResult.rows[0] as any)?.acquired === true;
+        if (!acquired) { lockConflict = true; return; }
+
+        const bufBefore = addMinutes(slotStart, -eventType.bufferBeforeMins);
+        const bufAfter  = addMinutes(slotEnd,   eventType.bufferAfterMins);
+
+        const overlapCount = await tx
+          .select({ count: sql<number>`count(*)::int` })
+          .from(bookingsTable)
+          .where(and(
+            eq(bookingsTable.calendarId, calendar.id),
+            or(eq(bookingsTable.status, "pending"), eq(bookingsTable.status, "confirmed")),
+            sql`${bookingsTable.slotStart} < ${bufAfter}`,
+            sql`${bookingsTable.slotEnd} > ${bufBefore}`,
+          ))
+          .then(r => r[0]?.count ?? 0);
+
+        const exactOverlapCount = await tx
+          .select({ count: sql<number>`count(*)::int` })
+          .from(bookingsTable)
+          .where(and(
+            eq(bookingsTable.calendarId, calendar.id),
+            or(eq(bookingsTable.status, "pending"), eq(bookingsTable.status, "confirmed")),
+            sql`${bookingsTable.slotStart} < ${slotEnd}`,
+            sql`${bookingsTable.slotEnd} > ${slotStart}`,
+          ))
+          .then(r => r[0]?.count ?? 0);
+
+        if (exactOverlapCount >= eventType.maxBookingsPerSlot || overlapCount > exactOverlapCount) {
+          lockConflict = true; return;
+        }
+
+        const [inserted] = await tx.insert(bookingsTable).values({
+          eventTypeId: eventType.id,
+          calendarId:  calendar.id,
+          callId:      this.config.callId,
+          userId:      calendar.userId,
+          attendeeName,
+          attendeeEmail,
+          attendeeNotes: null,
+          slotStart,
+          slotEnd,
+          status:    eventType.confirmationMode === "instant" ? "confirmed" : "pending",
+          bookedVia: "agent",
+        }).returning();
+        booking = inserted;
+      });
+
+      if (lockConflict || !booking) {
+        logger.warn({ callId: this.config.callId }, "Native booking: slot conflict");
+        return "error: slot was just taken — no booking created";
+      }
+
+      const dateStr = format(slotStart, "EEEE, MMMM do 'at' h:mm a");
+      logger.info({ callId: this.config.callId, bookingId: booking.id, slotStart, attendeeEmail }, "Native booking created");
+      return `booking_confirmed: event="${eventType.name}", slot="${dateStr}", booking_id=${booking.id}, attendee="${attendeeName}", email="${attendeeEmail}", status="${booking.status}"`;
+    } catch (err) {
+      logger.error({ callId: this.config.callId, err }, "Native booking tool execution failed");
+      return "error: booking failed due to a technical issue";
+    }
+  }
+
+  private async executeNativeReschedule(tool: AgentTool & { type: "native_reschedule" }, args: Record<string, unknown>): Promise<string> {
+    logger.info({ callId: this.config.callId }, "Native reschedule tool invoked");
+    const bookingId    = Number(args["booking_id"] ?? args["bookingId"] ?? 0);
+    const preferredRaw = args["preferred_date"] != null ? String(args["preferred_date"]) : null;
+    if (!bookingId) {
+      return "error: booking_id is required to reschedule";
+    }
+
+    try {
+      // ── Authorization: resolve the owning userId for this agent ──
+      const [agentCalendar] = await db
+        .select({ userId: schedulingCalendarsTable.userId })
+        .from(schedulingCalendarsTable)
+        .where(eq(schedulingCalendarsTable.agentId, this.agent.id));
+      let authorizedUserId: string | null = null;
+      if (agentCalendar) {
+        authorizedUserId = agentCalendar.userId;
+      } else {
+        const [agentRow] = await db
+          .select({ userId: agentsTable.userId })
+          .from(agentsTable)
+          .where(eq(agentsTable.id, this.agent.id));
+        authorizedUserId = agentRow?.userId ?? null;
+      }
+
+      const [existing] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId));
+      if (!existing || existing.status === "cancelled") {
+        return `error: no active booking found with reference ${bookingId}`;
+      }
+
+      // ── Ownership check ──
+      if (authorizedUserId && existing.userId !== authorizedUserId) {
+        logger.warn({ callId: this.config.callId, bookingId, authorizedUserId, bookingUserId: existing.userId }, "Native reschedule: ownership mismatch — rejected");
+        return `error: no active booking found with reference ${bookingId}`;
+      }
+
+      const [eventType] = await db.select().from(eventTypesTable).where(eq(eventTypesTable.id, existing.eventTypeId));
+      if (!eventType) {
+        return "error: appointment type not found for this booking";
+      }
+
+      const [calendar] = await db.select().from(schedulingCalendarsTable).where(eq(schedulingCalendarsTable.id, existing.calendarId));
+      if (!calendar || !calendar.isActive) {
+        return "error: calendar is unavailable";
+      }
+
+      // ── Resolve preferred start date ──
+      let searchStart = new Date();
+      if (preferredRaw) {
+        const parsed = new Date(preferredRaw);
+        if (!isNaN(parsed.getTime()) && parsed > searchStart) searchStart = parsed;
+      }
+      const searchEnd     = new Date(searchStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+      const slots         = await getAvailableSlots(eventType.id, format(searchStart, "yyyy-MM-dd"), format(searchEnd, "yyyy-MM-dd"));
+      const filteredSlots = slots.filter(s => s.slotStart.getTime() !== existing.slotStart.getTime());
+      if (filteredSlots.length === 0) {
+        return "error: no other available slots in the next 7 days";
+      }
+
+      const newSlot  = filteredSlots[0]!;
+      const newStart = newSlot.slotStart;
+      const newEnd   = newSlot.slotEnd;
+      const lockKey  = buildSlotLockKey(calendar.id, newStart);
+      let newBooking: typeof bookingsTable.$inferSelect | undefined;
+      let lockConflict = false;
+
+      await db.transaction(async (tx) => {
+        const lockResult = await tx.execute(sql`SELECT pg_try_advisory_xact_lock(hashtext(${lockKey})) AS acquired`);
+        const acquired = (lockResult.rows[0] as any)?.acquired === true;
+        if (!acquired) { lockConflict = true; return; }
+
+        // ── Same overlap/capacity checks as public booking flow ──
+        const bufBefore = addMinutes(newStart, -eventType.bufferBeforeMins);
+        const bufAfter  = addMinutes(newEnd,    eventType.bufferAfterMins);
+
+        const overlapCount = await tx
+          .select({ count: sql<number>`count(*)::int` })
+          .from(bookingsTable)
+          .where(and(
+            eq(bookingsTable.calendarId, calendar.id),
+            or(eq(bookingsTable.status, "pending"), eq(bookingsTable.status, "confirmed")),
+            sql`${bookingsTable.slotStart} < ${bufAfter}`,
+            sql`${bookingsTable.slotEnd} > ${bufBefore}`,
+          ))
+          .then(r => r[0]?.count ?? 0);
+
+        const exactOverlapCount = await tx
+          .select({ count: sql<number>`count(*)::int` })
+          .from(bookingsTable)
+          .where(and(
+            eq(bookingsTable.calendarId, calendar.id),
+            or(eq(bookingsTable.status, "pending"), eq(bookingsTable.status, "confirmed")),
+            sql`${bookingsTable.slotStart} < ${newEnd}`,
+            sql`${bookingsTable.slotEnd} > ${newStart}`,
+          ))
+          .then(r => r[0]?.count ?? 0);
+
+        if (exactOverlapCount >= eventType.maxBookingsPerSlot || overlapCount > exactOverlapCount) {
+          lockConflict = true; return;
+        }
+
+        await tx.update(bookingsTable)
+          .set({ status: "cancelled", cancelledAt: new Date() })
+          .where(eq(bookingsTable.id, bookingId));
+
+        const [inserted] = await tx.insert(bookingsTable).values({
+          eventTypeId:       eventType.id,
+          calendarId:        calendar.id,
+          callId:            this.config.callId,
+          userId:            calendar.userId,
+          attendeeName:      existing.attendeeName,
+          attendeeEmail:     existing.attendeeEmail,
+          attendeeNotes:     existing.attendeeNotes,
+          slotStart:         newStart,
+          slotEnd:           newEnd,
+          status:            eventType.confirmationMode === "instant" ? "confirmed" : "pending",
+          bookedVia:         "agent",
+          rescheduledFromId: bookingId,
+        }).returning();
+        newBooking = inserted;
+      });
+
+      if (lockConflict || !newBooking) {
+        return "error: slot was just taken — reschedule failed";
+      }
+
+      const dateStr = format(newStart, "EEEE, MMMM do 'at' h:mm a");
+      logger.info({ callId: this.config.callId, oldBookingId: bookingId, newBookingId: newBooking.id }, "Native reschedule complete");
+      return `reschedule_confirmed: old_booking_id=${bookingId}, new_booking_id=${newBooking.id}, new_slot="${dateStr}", status="${newBooking.status}"`;
+    } catch (err) {
+      logger.error({ callId: this.config.callId, err }, "Native reschedule tool execution failed");
+      return "error: reschedule failed due to a technical issue";
+    }
+  }
+
+  private async executeNativeCancel(tool: AgentTool & { type: "native_cancel" }, args: Record<string, unknown>): Promise<string> {
+    logger.info({ callId: this.config.callId }, "Native cancel tool invoked");
+    const bookingId = Number(args["booking_id"] ?? args["bookingId"] ?? 0);
+    if (!bookingId) {
+      return "error: booking_id is required to cancel";
+    }
+
+    try {
+      // ── Authorization: resolve the owning userId for this agent ──
+      const [agentCalendar] = await db
+        .select({ userId: schedulingCalendarsTable.userId })
+        .from(schedulingCalendarsTable)
+        .where(eq(schedulingCalendarsTable.agentId, this.agent.id));
+      let authorizedUserId: string | null = null;
+      if (agentCalendar) {
+        authorizedUserId = agentCalendar.userId;
+      } else {
+        const [agentRow] = await db
+          .select({ userId: agentsTable.userId })
+          .from(agentsTable)
+          .where(eq(agentsTable.id, this.agent.id));
+        authorizedUserId = agentRow?.userId ?? null;
+      }
+
+      const [existing] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId));
+      if (!existing) {
+        return `error: no booking found with reference ${bookingId}`;
+      }
+
+      // ── Ownership check ──
+      if (authorizedUserId && existing.userId !== authorizedUserId) {
+        logger.warn({ callId: this.config.callId, bookingId, authorizedUserId, bookingUserId: existing.userId }, "Native cancel: ownership mismatch — rejected");
+        return `error: no booking found with reference ${bookingId}`;
+      }
+
+      if (existing.status === "cancelled") {
+        return `info: booking ${bookingId} was already cancelled`;
+      }
+
+      await db.update(bookingsTable)
+        .set({ status: "cancelled", cancelledAt: new Date() })
+        .where(eq(bookingsTable.id, bookingId));
+
+      logger.info({ callId: this.config.callId, bookingId }, "Native cancel complete");
+      return `cancellation_confirmed: booking_id=${bookingId}`;
+    } catch (err) {
+      logger.error({ callId: this.config.callId, err }, "Native cancel tool execution failed");
+      return "error: cancellation failed due to a technical issue";
+    }
+  }
+
+  /**
+   * After a native scheduling tool executes, push its structured result to
+   * conversation history and run a follow-up LLM turn so the agent responds
+   * naturally to the caller based on the outcome.
+   */
+  private async continueWithToolResult(toolName: string, result: string): Promise<void> {
+    this.conversationHistory.push({ role: "user", content: `[Tool result for ${toolName}]: ${result}` });
+
+    let llmResponse = "";
+    try {
+      await this.llm.chat(
+        this.conversationHistory,
+        this.resolvedSystemPrompt(),
+        () => {},
+        async (fullText) => { llmResponse = fullText; },
+      );
+    } catch (err) {
+      logger.error({ callId: this.config.callId, err }, "continueWithToolResult LLM call failed");
+      return;
+    }
+
+    if (llmResponse.trim()) {
+      const cleaned = llmResponse.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+      this.conversationHistory.push({ role: "assistant", content: cleaned });
+      this.config.onTranscript("agent", cleaned);
+      this.config.onConversationUpdate?.(this.conversationHistory);
+      await this.speakRaw(cleaned);
+    }
+  }
+
   async speakRaw(text: string): Promise<void> {
     if (!text.trim() || this.closed) return;
     await this.playSentence(text);

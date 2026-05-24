@@ -2011,8 +2011,8 @@ components:
       properties:
         type:
           type: string
-          enum: [call_transfer, webhook, send_sms, end_call, cal_com]
-          description: "Tool type: call_transfer, webhook, send_sms, end_call, or cal_com"
+          enum: [call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel]
+          description: "Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, or native_cancel"
         name:
           type: string
           description: LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)
@@ -2051,7 +2051,7 @@ components:
           description: (cal_com) Cal.com API key
         eventTypeId:
           type: integer
-          description: (cal_com) Event type ID from Cal.com
+          description: (cal_com / native_booking) Event type ID
         timezone:
           type: string
           description: (cal_com / send_sms) Default timezone for bookings (e.g. America/New_York)

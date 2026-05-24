@@ -55,7 +55,7 @@ export const ListAgentsResponseItem = zod.object({
   "inactivityMessage": zod.string().nullish().describe('Message spoken to the caller before hanging up due to silence timeout'),
   "knowledgeBaseId": zod.number().nullish().describe('ID of an attached knowledge base for RAG context injection'),
   "tools": zod.array(zod.object({
-  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com']).describe('Tool type: call_transfer, webhook, send_sms, end_call, or cal_com'),
+  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, or native_cancel'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
   "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
   "transferTo": zod.string().optional().describe('(call_transfer) E.164 phone number to transfer the call to (e.g. +12125551234)'),
@@ -67,7 +67,7 @@ export const ListAgentsResponseItem = zod.object({
   "messageTemplate": zod.string().optional().describe('(send_sms) SMS body to send to the caller — supports plain text'),
   "goodbyeMessage": zod.string().optional().describe('(end_call) Optional message spoken to the caller before hanging up'),
   "apiKey": zod.string().optional().describe('(cal_com) Cal.com API key'),
-  "eventTypeId": zod.number().optional().describe('(cal_com) Event type ID from Cal.com'),
+  "eventTypeId": zod.number().optional().describe('(cal_com \/ native_booking) Event type ID'),
   "timezone": zod.string().optional().describe('(cal_com \/ send_sms) Default timezone for bookings (e.g. America\/New_York)')
 })).nullish().describe('List of tools (functions) the LLM can invoke during a call'),
   "maxConcurrentCalls": zod.number().nullish().describe('Per-agent concurrent call cap (null = use account limit)'),
@@ -131,7 +131,7 @@ export const CreateAgentBody = zod.object({
   "noiseCancellationEnabled": zod.boolean().optional(),
   "inactivityMessage": zod.string().optional(),
   "tools": zod.array(zod.object({
-  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com']).describe('Tool type: call_transfer, webhook, send_sms, end_call, or cal_com'),
+  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, or native_cancel'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
   "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
   "transferTo": zod.string().optional().describe('(call_transfer) E.164 phone number to transfer the call to (e.g. +12125551234)'),
@@ -143,7 +143,7 @@ export const CreateAgentBody = zod.object({
   "messageTemplate": zod.string().optional().describe('(send_sms) SMS body to send to the caller — supports plain text'),
   "goodbyeMessage": zod.string().optional().describe('(end_call) Optional message spoken to the caller before hanging up'),
   "apiKey": zod.string().optional().describe('(cal_com) Cal.com API key'),
-  "eventTypeId": zod.number().optional().describe('(cal_com) Event type ID from Cal.com'),
+  "eventTypeId": zod.number().optional().describe('(cal_com \/ native_booking) Event type ID'),
   "timezone": zod.string().optional().describe('(cal_com \/ send_sms) Default timezone for bookings (e.g. America\/New_York)')
 })).optional().describe('List of tools (functions) the LLM can invoke during a call'),
   "agentConfig": zod.record(zod.string(), zod.unknown()).optional().describe('Advanced per-tab configuration')
@@ -193,7 +193,7 @@ export const GetAgentResponse = zod.object({
   "inactivityMessage": zod.string().nullish().describe('Message spoken to the caller before hanging up due to silence timeout'),
   "knowledgeBaseId": zod.number().nullish().describe('ID of an attached knowledge base for RAG context injection'),
   "tools": zod.array(zod.object({
-  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com']).describe('Tool type: call_transfer, webhook, send_sms, end_call, or cal_com'),
+  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, or native_cancel'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
   "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
   "transferTo": zod.string().optional().describe('(call_transfer) E.164 phone number to transfer the call to (e.g. +12125551234)'),
@@ -205,7 +205,7 @@ export const GetAgentResponse = zod.object({
   "messageTemplate": zod.string().optional().describe('(send_sms) SMS body to send to the caller — supports plain text'),
   "goodbyeMessage": zod.string().optional().describe('(end_call) Optional message spoken to the caller before hanging up'),
   "apiKey": zod.string().optional().describe('(cal_com) Cal.com API key'),
-  "eventTypeId": zod.number().optional().describe('(cal_com) Event type ID from Cal.com'),
+  "eventTypeId": zod.number().optional().describe('(cal_com \/ native_booking) Event type ID'),
   "timezone": zod.string().optional().describe('(cal_com \/ send_sms) Default timezone for bookings (e.g. America\/New_York)')
 })).nullish().describe('List of tools (functions) the LLM can invoke during a call'),
   "maxConcurrentCalls": zod.number().nullish().describe('Per-agent concurrent call cap (null = use account limit)'),
@@ -270,7 +270,7 @@ export const UpdateAgentBody = zod.object({
   "inactivityMessage": zod.string().optional(),
   "knowledgeBaseId": zod.number().optional().describe('ID of an attached knowledge base for RAG context injection'),
   "tools": zod.array(zod.object({
-  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com']).describe('Tool type: call_transfer, webhook, send_sms, end_call, or cal_com'),
+  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, or native_cancel'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
   "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
   "transferTo": zod.string().optional().describe('(call_transfer) E.164 phone number to transfer the call to (e.g. +12125551234)'),
@@ -282,7 +282,7 @@ export const UpdateAgentBody = zod.object({
   "messageTemplate": zod.string().optional().describe('(send_sms) SMS body to send to the caller — supports plain text'),
   "goodbyeMessage": zod.string().optional().describe('(end_call) Optional message spoken to the caller before hanging up'),
   "apiKey": zod.string().optional().describe('(cal_com) Cal.com API key'),
-  "eventTypeId": zod.number().optional().describe('(cal_com) Event type ID from Cal.com'),
+  "eventTypeId": zod.number().optional().describe('(cal_com \/ native_booking) Event type ID'),
   "timezone": zod.string().optional().describe('(cal_com \/ send_sms) Default timezone for bookings (e.g. America\/New_York)')
 })).optional().describe('List of tools (functions) the LLM can invoke during a call'),
   "status": zod.string().optional(),
@@ -334,7 +334,7 @@ export const UpdateAgentResponse = zod.object({
   "inactivityMessage": zod.string().nullish().describe('Message spoken to the caller before hanging up due to silence timeout'),
   "knowledgeBaseId": zod.number().nullish().describe('ID of an attached knowledge base for RAG context injection'),
   "tools": zod.array(zod.object({
-  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com']).describe('Tool type: call_transfer, webhook, send_sms, end_call, or cal_com'),
+  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, or native_cancel'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
   "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
   "transferTo": zod.string().optional().describe('(call_transfer) E.164 phone number to transfer the call to (e.g. +12125551234)'),
@@ -346,7 +346,7 @@ export const UpdateAgentResponse = zod.object({
   "messageTemplate": zod.string().optional().describe('(send_sms) SMS body to send to the caller — supports plain text'),
   "goodbyeMessage": zod.string().optional().describe('(end_call) Optional message spoken to the caller before hanging up'),
   "apiKey": zod.string().optional().describe('(cal_com) Cal.com API key'),
-  "eventTypeId": zod.number().optional().describe('(cal_com) Event type ID from Cal.com'),
+  "eventTypeId": zod.number().optional().describe('(cal_com \/ native_booking) Event type ID'),
   "timezone": zod.string().optional().describe('(cal_com \/ send_sms) Default timezone for bookings (e.g. America\/New_York)')
 })).nullish().describe('List of tools (functions) the LLM can invoke during a call'),
   "maxConcurrentCalls": zod.number().nullish().describe('Per-agent concurrent call cap (null = use account limit)'),
@@ -421,7 +421,7 @@ export const ToggleAgentResponse = zod.object({
   "inactivityMessage": zod.string().nullish().describe('Message spoken to the caller before hanging up due to silence timeout'),
   "knowledgeBaseId": zod.number().nullish().describe('ID of an attached knowledge base for RAG context injection'),
   "tools": zod.array(zod.object({
-  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com']).describe('Tool type: call_transfer, webhook, send_sms, end_call, or cal_com'),
+  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, or native_cancel'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
   "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
   "transferTo": zod.string().optional().describe('(call_transfer) E.164 phone number to transfer the call to (e.g. +12125551234)'),
@@ -433,7 +433,7 @@ export const ToggleAgentResponse = zod.object({
   "messageTemplate": zod.string().optional().describe('(send_sms) SMS body to send to the caller — supports plain text'),
   "goodbyeMessage": zod.string().optional().describe('(end_call) Optional message spoken to the caller before hanging up'),
   "apiKey": zod.string().optional().describe('(cal_com) Cal.com API key'),
-  "eventTypeId": zod.number().optional().describe('(cal_com) Event type ID from Cal.com'),
+  "eventTypeId": zod.number().optional().describe('(cal_com \/ native_booking) Event type ID'),
   "timezone": zod.string().optional().describe('(cal_com \/ send_sms) Default timezone for bookings (e.g. America\/New_York)')
 })).nullish().describe('List of tools (functions) the LLM can invoke during a call'),
   "maxConcurrentCalls": zod.number().nullish().describe('Per-agent concurrent call cap (null = use account limit)'),

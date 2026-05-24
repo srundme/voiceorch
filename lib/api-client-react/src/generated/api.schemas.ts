@@ -36,7 +36,7 @@ export interface DispositionField {
 }
 
 /**
- * Tool type: call_transfer, webhook, send_sms, end_call, or cal_com
+ * Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, or native_cancel
  */
 export type AgentToolType = typeof AgentToolType[keyof typeof AgentToolType];
 
@@ -47,6 +47,9 @@ export const AgentToolType = {
   send_sms: 'send_sms',
   end_call: 'end_call',
   cal_com: 'cal_com',
+  native_booking: 'native_booking',
+  native_reschedule: 'native_reschedule',
+  native_cancel: 'native_cancel',
 } as const;
 
 /**
@@ -66,7 +69,7 @@ export const AgentToolMethod = {
 export type AgentToolHeaders = {[key: string]: string};
 
 export interface AgentTool {
-  /** Tool type: call_transfer, webhook, send_sms, end_call, or cal_com */
+  /** Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, or native_cancel */
   type: AgentToolType;
   /** LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human) */
   name: string;
@@ -90,7 +93,7 @@ export interface AgentTool {
   goodbyeMessage?: string;
   /** (cal_com) Cal.com API key */
   apiKey?: string;
-  /** (cal_com) Event type ID from Cal.com */
+  /** (cal_com / native_booking) Event type ID */
   eventTypeId?: number;
   /** (cal_com / send_sms) Default timezone for bookings (e.g. America/New_York) */
   timezone?: string;
