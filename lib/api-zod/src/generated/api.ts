@@ -1563,6 +1563,24 @@ export const ListCampaignLeadsResponse = zod.object({
 
 
 /**
+ * @summary Import leads from parsed CSV rows (client-side parsed)
+ */
+export const ImportCampaignLeadsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ImportCampaignLeadsBody = zod.object({
+  "leads": zod.array(zod.record(zod.string(), zod.string())).describe('Parsed CSV rows as key-value pairs (one object per row)')
+})
+
+export const ImportCampaignLeadsResponse = zod.object({
+  "imported": zod.number().describe('Number of leads successfully imported'),
+  "skipped": zod.number().describe('Number of rows skipped due to missing phone number'),
+  "errors": zod.array(zod.string()).optional().describe('Error messages for skipped rows (up to 20)')
+})
+
+
+/**
  * @summary Retry a failed or skipped lead
  */
 export const RetryCampaignLeadParams = zod.object({

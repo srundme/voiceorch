@@ -1346,6 +1346,37 @@ paths:
         "401":
           description: Unauthorized
 
+  /campaigns/{id}/import-leads:
+    post:
+      operationId: importCampaignLeads
+      tags: [campaigns]
+      summary: Import leads from parsed CSV rows (client-side parsed)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CsvImportBody"
+      responses:
+        "200":
+          description: Import result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CsvImportResult"
+        "400":
+          description: Validation error
+        "401":
+          description: Unauthorized
+        "404":
+          description: Campaign not found
+
   /campaigns/{id}/leads/{leadId}/retry:
     post:
       operationId: retryCampaignLead
@@ -2702,3 +2733,31 @@ components:
         createdAt:
           type: string
           format: date-time
+
+    CsvImportBody:
+      type: object
+      required: [leads]
+      properties:
+        leads:
+          type: array
+          items:
+            type: object
+            additionalProperties:
+              type: string
+          description: Parsed CSV rows as key-value pairs (one object per row)
+
+    CsvImportResult:
+      type: object
+      required: [imported, skipped]
+      properties:
+        imported:
+          type: integer
+          description: Number of leads successfully imported
+        skipped:
+          type: integer
+          description: Number of rows skipped due to missing phone number
+        errors:
+          type: array
+          items:
+            type: string
+          description: Error messages for skipped rows (up to 20)

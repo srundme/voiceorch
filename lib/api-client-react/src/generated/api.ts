@@ -40,6 +40,8 @@ import type {
   CampaignCreate,
   CampaignLead,
   CampaignUpdate,
+  CsvImportBody,
+  CsvImportResult,
   DailyCallVolume,
   DashboardStats,
   HealthStatus,
@@ -4625,6 +4627,78 @@ export function useListCampaignLeads<TData = Awaited<ReturnType<typeof listCampa
 
 
 
+
+export const getImportCampaignLeadsUrl = (id: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/import-leads`
+}
+
+/**
+ * @summary Import leads from parsed CSV rows (client-side parsed)
+ */
+export const importCampaignLeads = async (id: number,
+    csvImportBody: CsvImportBody, options?: RequestInit): Promise<CsvImportResult> => {
+
+  return customFetch<CsvImportResult>(getImportCampaignLeadsUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      csvImportBody,)
+  }
+);}
+
+
+
+
+export const getImportCampaignLeadsMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importCampaignLeads>>, TError,{id: number;data: BodyType<CsvImportBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof importCampaignLeads>>, TError,{id: number;data: BodyType<CsvImportBody>}, TContext> => {
+
+const mutationKey = ['importCampaignLeads'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof importCampaignLeads>>, {id: number;data: BodyType<CsvImportBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  importCampaignLeads(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ImportCampaignLeadsMutationResult = NonNullable<Awaited<ReturnType<typeof importCampaignLeads>>>
+    export type ImportCampaignLeadsMutationBody = BodyType<CsvImportBody>
+    export type ImportCampaignLeadsMutationError = ErrorType<void>
+
+    /**
+ * @summary Import leads from parsed CSV rows (client-side parsed)
+ */
+export const useImportCampaignLeads = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importCampaignLeads>>, TError,{id: number;data: BodyType<CsvImportBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof importCampaignLeads>>,
+        TError,
+        {id: number;data: BodyType<CsvImportBody>},
+        TContext
+      > => {
+      return useMutation(getImportCampaignLeadsMutationOptions(options));
+    }
 
 export const getRetryCampaignLeadUrl = (id: number,
     leadId: number,) => {

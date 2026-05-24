@@ -182,6 +182,63 @@ router.get("/campaigns/:id/leads", async (req, res): Promise<void> => {
   res.json({ leads: leads.map(toLead), total: Number(total) });
 });
 
+// ── POST /campaigns/:id/import-leads ──────────────────────────────────────
+router.post("/campaigns/:id/import-leads", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const campaignId = parseInt(req.params["id"]!, 10);
+
+  const [campaign] = await db.select().from(campaignsTable)
+    .where(and(eq(campaignsTable.id, campaignId), eq(campaignsTable.userId, userId)));
+  if (!campaign) { res.status(404).json({ error: "Not found" }); return; }
+
+  const body = req.body as { leads?: unknown };
+  if (!Array.isArray(body.leads)) {
+    res.status(400).json({ error: "leads must be an array" });
+    return;
+  }
+
+  const rawLeads = body.leads as Record<string, string>[];
+  const mappings = campaign.fieldMappings as CampaignFieldMappings;
+  const phoneField = mappings.phone ?? "phone";
+  const nameField  = mappings.name  ?? "name";
+  const emailField = mappings.email ?? "email";
+
+  let imported = 0;
+  let skipped  = 0;
+  const errors: string[] = [];
+  const toInsert: (typeof campaignLeadsTable.$inferInsert)[] = [];
+
+  for (const row of rawLeads) {
+    const phone = (row[phoneField] ?? row["phone"] ?? "").trim();
+    if (!phone) {
+      skipped++;
+      if (errors.length < 20) errors.push(`Row skipped — missing phone column "${phoneField}"`);
+      continue;
+    }
+    const name  = (row[nameField]  ?? row["name"]  ?? "").trim() || null;
+    const email = (row[emailField] ?? row["email"] ?? "").trim() || null;
+    const leadData: Record<string, string> = {};
+    for (const [k, v] of Object.entries(row)) { if (v?.trim()) leadData[k] = v.trim(); }
+
+    toInsert.push({ campaignId, phone, name, email, leadData, source: "csv" });
+    imported++;
+  }
+
+  if (toInsert.length > 0) {
+    for (let i = 0; i < toInsert.length; i += 100) {
+      await db.insert(campaignLeadsTable).values(toInsert.slice(i, i + 100));
+    }
+    await db.update(campaignsTable)
+      .set({ totalLeads: campaign.totalLeads + imported })
+      .where(eq(campaignsTable.id, campaignId));
+  }
+
+  req.log.info({ campaignId, imported, skipped }, "CSV leads imported");
+  res.json({ imported, skipped, errors });
+});
+
 // ── POST /campaigns/:id/leads/:leadId/retry ────────────────────────────────
 router.post("/campaigns/:id/leads/:leadId/retry", async (req, res): Promise<void> => {
   const { userId } = getAuth(req);

@@ -1182,6 +1182,22 @@ export interface CampaignLead {
   createdAt: string;
 }
 
+export type CsvImportBodyLeadsItem = {[key: string]: string};
+
+export interface CsvImportBody {
+  /** Parsed CSV rows as key-value pairs (one object per row) */
+  leads: CsvImportBodyLeadsItem[];
+}
+
+export interface CsvImportResult {
+  /** Number of leads successfully imported */
+  imported: number;
+  /** Number of rows skipped due to missing phone number */
+  skipped: number;
+  /** Error messages for skipped rows (up to 20) */
+  errors?: string[];
+}
+
 export type ListCallsParams = {
 /**
  * @nullable
