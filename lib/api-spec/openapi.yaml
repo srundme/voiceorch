@@ -1809,6 +1809,12 @@ paths:
           required: false
           schema:
             type: ["string", "null"]
+        - name: bookedVia
+          in: query
+          required: false
+          schema:
+            type: ["string", "null"]
+            enum: [agent, web, api, "null"]
       responses:
         "200":
           description: List of bookings

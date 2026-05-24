@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { format, parseISO } from "date-fns";
-import { Calendar, Plus, Filter, ChevronRight, Clock, User, Mail } from "lucide-react";
+import { Calendar, Filter, ChevronRight, Bot, Globe } from "lucide-react";
 import {
   useListBookings,
   useListCalendars,
@@ -12,7 +12,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Input } from "@/components/ui/input";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -33,17 +32,36 @@ function statusBadge(status: string) {
   }
 }
 
+function sourceBadge(bookedVia: string) {
+  if (bookedVia === "agent") {
+    return (
+      <Badge className="bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-50 gap-1">
+        <Bot className="h-3 w-3" />Agent Call
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="gap-1 text-muted-foreground">
+      <Globe className="h-3 w-3" />Web
+    </Badge>
+  );
+}
+
 export default function SchedulingPage() {
   const [, navigate] = useLocation();
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [calendarFilter, setCalendarFilter] = useState<string>("all");
+  const [sourceFilter, setSourceFilter] = useState<string>("all");
+
+  const queryParams = {
+    status: statusFilter !== "all" ? statusFilter as Booking["status"] : undefined,
+    calendarId: calendarFilter !== "all" ? parseInt(calendarFilter) : undefined,
+    bookedVia: sourceFilter !== "all" ? sourceFilter as Booking["bookedVia"] : undefined,
+  };
 
   const { data: bookings, isLoading } = useListBookings(
-    {
-      status: statusFilter !== "all" ? statusFilter as Booking["status"] : undefined,
-      calendarId: calendarFilter !== "all" ? parseInt(calendarFilter) : undefined,
-    },
-    { query: { queryKey: getListBookingsQueryKey({ status: statusFilter !== "all" ? statusFilter as any : undefined, calendarId: calendarFilter !== "all" ? parseInt(calendarFilter) : undefined }) } }
+    queryParams,
+    { query: { queryKey: getListBookingsQueryKey(queryParams) } }
   );
   const { data: calendars } = useListCalendars();
 
@@ -72,7 +90,7 @@ export default function SchedulingPage() {
         </div>
       </div>
 
-      <div className="flex gap-3 items-center">
+      <div className="flex gap-3 items-center flex-wrap">
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-40">
             <Filter className="h-3.5 w-3.5 mr-2" />
@@ -84,6 +102,17 @@ export default function SchedulingPage() {
             <SelectItem value="confirmed">Confirmed</SelectItem>
             <SelectItem value="cancelled">Cancelled</SelectItem>
             <SelectItem value="rescheduled">Rescheduled</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={sourceFilter} onValueChange={setSourceFilter}>
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder="Source" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All sources</SelectItem>
+            <SelectItem value="agent">Agent Call</SelectItem>
+            <SelectItem value="web">Web</SelectItem>
+            <SelectItem value="api">API</SelectItem>
           </SelectContent>
         </Select>
         {calendars && calendars.length > 0 && (
@@ -150,9 +179,7 @@ export default function SchedulingPage() {
                     </div>
                   </TableCell>
                   <TableCell>{statusBadge(b.status)}</TableCell>
-                  <TableCell>
-                    <span className="text-xs text-muted-foreground capitalize">{b.bookedVia}</span>
-                  </TableCell>
+                  <TableCell>{sourceBadge(b.bookedVia)}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">
                     {format(parseISO(b.createdAt), "MMM d")}
                   </TableCell>

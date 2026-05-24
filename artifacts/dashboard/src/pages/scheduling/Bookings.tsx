@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { format, parseISO } from "date-fns";
-import { Calendar, Clock, User, Mail, Phone, X, RotateCcw, Check, ChevronLeft } from "lucide-react";
+import { Calendar, Clock, User, Mail, Phone, X, RotateCcw, Check, ChevronLeft, Bot, ExternalLink } from "lucide-react";
 import {
   useGetBooking,
   useUpdateBooking,
@@ -131,9 +131,26 @@ export default function BookingDetailPage() {
               <Clock className="h-4 w-4 text-muted-foreground" />
               <span>{format(parseISO(booking.slotStart), "h:mm a")} – {format(parseISO(booking.slotEnd), "h:mm a")}</span>
             </div>
-            <div className="text-xs text-muted-foreground">
-              Booked via <span className="capitalize font-medium">{booking.bookedVia}</span> on {format(parseISO(booking.createdAt), "MMM d, yyyy 'at' h:mm a")}
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              {booking.bookedVia === "agent" ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200 font-medium">
+                  <Bot className="h-3 w-3" />Agent Call
+                </span>
+              ) : (
+                <span className="capitalize font-medium">{booking.bookedVia}</span>
+              )}
+              <span>on {format(parseISO(booking.createdAt), "MMM d, yyyy 'at' h:mm a")}</span>
             </div>
+            {booking.bookedVia === "agent" && booking.callId != null && (
+              <a
+                href={`${BASE}/app/calls/${booking.callId}`}
+                className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline mt-0.5"
+                onClick={e => e.stopPropagation()}
+              >
+                <ExternalLink className="h-3 w-3" />
+                View call log #{booking.callId}
+              </a>
+            )}
           </CardContent>
         </Card>
       </div>

@@ -46,6 +46,7 @@ router.get("/scheduling/bookings", requireAuth, async (req, res): Promise<void> 
   if (qp.data.calendarId != null) conditions.push(eq(bookingsTable.calendarId, qp.data.calendarId));
   if (qp.data.startDate) conditions.push(gte(bookingsTable.slotStart, new Date(qp.data.startDate)));
   if (qp.data.endDate) conditions.push(lte(bookingsTable.slotStart, new Date(`${qp.data.endDate}T23:59:59Z`)));
+  if (qp.data.bookedVia) conditions.push(eq(bookingsTable.bookedVia, qp.data.bookedVia));
 
   const rows = await db.select().from(bookingsTable)
     .where(and(...conditions))

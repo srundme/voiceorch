@@ -1932,7 +1932,8 @@ export const ListBookingsQueryParams = zod.object({
   "status": zod.enum(['pending', 'confirmed', 'cancelled', 'rescheduled', 'null']).nullish(),
   "calendarId": zod.coerce.number().nullish(),
   "startDate": zod.coerce.string().nullish(),
-  "endDate": zod.coerce.string().nullish()
+  "endDate": zod.coerce.string().nullish(),
+  "bookedVia": zod.enum(['agent', 'web', 'api', 'null']).nullish()
 })
 
 export const ListBookingsResponseItem = zod.object({

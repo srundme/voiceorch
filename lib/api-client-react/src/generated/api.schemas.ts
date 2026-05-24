@@ -1549,6 +1549,10 @@ startDate?: string | null;
  * @nullable
  */
 endDate?: string | null;
+/**
+ * @nullable
+ */
+bookedVia?: ListBookingsBookedVia;
 };
 
 export type ListBookingsStatus = typeof ListBookingsStatus[keyof typeof ListBookingsStatus] | null;
@@ -1559,6 +1563,16 @@ export const ListBookingsStatus = {
   confirmed: 'confirmed',
   cancelled: 'cancelled',
   rescheduled: 'rescheduled',
+  null: 'null',
+} as const;
+
+export type ListBookingsBookedVia = typeof ListBookingsBookedVia[keyof typeof ListBookingsBookedVia] | null;
+
+
+export const ListBookingsBookedVia = {
+  agent: 'agent',
+  web: 'web',
+  api: 'api',
   null: 'null',
 } as const;
 
