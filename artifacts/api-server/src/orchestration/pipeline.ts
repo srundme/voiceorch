@@ -641,6 +641,12 @@ export class OrchestrationPipeline {
       await this.executeCallTransfer(tool, args);
     } else if (tool.type === "webhook") {
       await this.executeWebhookTool(tool, args);
+    } else if (tool.type === "send_sms") {
+      await this.executeSendSms(tool, args);
+    } else if (tool.type === "end_call") {
+      await this.executeEndCall(tool);
+    } else if (tool.type === "cal_com") {
+      await this.executeCalCom(tool, args);
     }
   }
 
@@ -669,6 +675,135 @@ export class OrchestrationPipeline {
       }
     } catch (err) {
       logger.error({ callId: this.config.callId, url: tool.url, err }, "Webhook tool execution failed");
+    }
+  }
+
+  private async executeSendSms(tool: AgentTool & { type: "send_sms" }, _args: Record<string, unknown>): Promise<void> {
+    const callerPhone = this.config.callerPhone;
+    if (!callerPhone) {
+      logger.warn({ callId: this.config.callId }, "Send SMS: no caller phone available — skipping");
+      return;
+    }
+    const message = tool.messageTemplate;
+    const tprov = this.config.telephonyProvider;
+    logger.info({ callId: this.config.callId, to: callerPhone, tprov }, "Executing Send SMS tool");
+    try {
+      if (tprov === "twilio") {
+        const authToken = this.config.providerKeys.get("twilio") ?? "";
+        const extra = this.config.providerKeys.get("twilio:extraConfig");
+        const cfg = extra ? (JSON.parse(extra) as Record<string, string>) : {};
+        const accountSid = cfg["accountSid"] ?? "";
+        const fromNumber = cfg["fromNumber"] ?? "";
+        const body = new URLSearchParams({ To: callerPhone, From: fromNumber, Body: message });
+        const resp = await fetch(
+          `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
+          {
+            method: "POST",
+            headers: {
+              "Authorization": `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString("base64")}`,
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: body.toString(),
+          },
+        );
+        if (!resp.ok) logger.warn({ callId: this.config.callId, status: resp.status }, "Twilio SMS failed");
+        else logger.info({ callId: this.config.callId, to: callerPhone }, "SMS sent via Twilio");
+      } else if (tprov === "plivo") {
+        const authToken = this.config.providerKeys.get("plivo") ?? "";
+        const extra = this.config.providerKeys.get("plivo:extraConfig");
+        const cfg = extra ? (JSON.parse(extra) as Record<string, string>) : {};
+        const authId = cfg["authId"] ?? "";
+        const fromNumber = cfg["fromNumber"] ?? "";
+        const resp = await fetch(
+          `https://api.plivo.com/v1/Account/${authId}/Message/`,
+          {
+            method: "POST",
+            headers: {
+              "Authorization": `Basic ${Buffer.from(`${authId}:${authToken}`).toString("base64")}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ src: fromNumber, dst: callerPhone, text: message }),
+          },
+        );
+        if (!resp.ok) logger.warn({ callId: this.config.callId, status: resp.status }, "Plivo SMS failed");
+        else logger.info({ callId: this.config.callId, to: callerPhone }, "SMS sent via Plivo");
+      } else {
+        logger.warn({ callId: this.config.callId, tprov }, "Send SMS: telephony provider does not support SMS");
+      }
+    } catch (err) {
+      logger.error({ callId: this.config.callId, err }, "Send SMS tool execution failed");
+    }
+  }
+
+  private async executeEndCall(tool: AgentTool & { type: "end_call" }): Promise<void> {
+    logger.info({ callId: this.config.callId }, "End Call tool invoked by LLM");
+    if (tool.goodbyeMessage?.trim()) {
+      await this.speakRaw(tool.goodbyeMessage);
+    }
+    this.config.onCallEnd();
+  }
+
+  private async executeCalCom(tool: AgentTool & { type: "cal_com" }, args: Record<string, unknown>): Promise<void> {
+    logger.info({ callId: this.config.callId, eventTypeId: tool.eventTypeId }, "Cal.com booking tool invoked");
+    const attendeeName  = String(args["attendee_name"]  ?? args["name"]  ?? "Guest");
+    const attendeeEmail = String(args["attendee_email"] ?? args["email"] ?? "");
+    const timezone      = String(args["timezone"]       ?? tool.timezone  ?? "UTC");
+
+    if (!attendeeEmail) {
+      logger.warn({ callId: this.config.callId }, "Cal.com: no attendee email provided — cannot book");
+      return;
+    }
+    try {
+      // Fetch available slots for the next 7 days
+      const now       = new Date();
+      const weekLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      const slotsResp = await fetch(
+        `https://api.cal.com/v2/slots/available?eventTypeId=${tool.eventTypeId}` +
+        `&startTime=${now.toISOString()}&endTime=${weekLater.toISOString()}` +
+        `&timeZone=${encodeURIComponent(timezone)}`,
+        {
+          headers: {
+            "Authorization": `Bearer ${tool.apiKey}`,
+            "cal-api-version": "2024-09-04",
+          },
+          signal: AbortSignal.timeout(8000),
+        },
+      );
+      if (!slotsResp.ok) {
+        logger.warn({ callId: this.config.callId, status: slotsResp.status }, "Cal.com: slots API error");
+        return;
+      }
+      const slotsData = await slotsResp.json() as {
+        data?: { slots?: Record<string, Array<{ time: string }>> }
+      };
+      const allSlots = Object.values(slotsData.data?.slots ?? {}).flat();
+      if (allSlots.length === 0) {
+        logger.info({ callId: this.config.callId }, "Cal.com: no available slots in next 7 days");
+        return;
+      }
+      const slot = allSlots[0]!;
+      const bookResp = await fetch("https://api.cal.com/v2/bookings", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${tool.apiKey}`,
+          "cal-api-version": "2024-09-04",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          eventTypeId: tool.eventTypeId,
+          start: slot.time,
+          attendee: { name: attendeeName, email: attendeeEmail, timeZone: timezone },
+        }),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (bookResp.ok) {
+        logger.info({ callId: this.config.callId, start: slot.time, attendeeEmail }, "Cal.com booking created");
+      } else {
+        const errText = await bookResp.text().catch(() => "");
+        logger.warn({ callId: this.config.callId, status: bookResp.status, errText }, "Cal.com booking API error");
+      }
+    } catch (err) {
+      logger.error({ callId: this.config.callId, err }, "Cal.com tool execution failed");
     }
   }
 

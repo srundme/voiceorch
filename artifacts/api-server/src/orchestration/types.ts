@@ -18,7 +18,30 @@ export interface WebhookTool {
   secret?: string;
 }
 
-export type AgentTool = CallTransferTool | WebhookTool;
+export interface SendSmsTool {
+  type: "send_sms";
+  name: string;
+  description: string;
+  messageTemplate: string;
+}
+
+export interface EndCallTool {
+  type: "end_call";
+  name: string;
+  description: string;
+  goodbyeMessage?: string;
+}
+
+export interface CalComTool {
+  type: "cal_com";
+  name: string;
+  description: string;
+  apiKey: string;
+  eventTypeId: number;
+  timezone?: string;
+}
+
+export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | EndCallTool | CalComTool;
 
 /** JSON Schema-compatible tool definition passed to LLM providers */
 export interface ToolDefinition {
@@ -162,6 +185,7 @@ export interface SessionConfig {
   agentConfig: AgentConfig;
   providerKeys: Map<string, string>;
   telephonyProvider: TelephonyProvider;
+  callerPhone?: string | null;
   onAudioOut: (audio: Buffer) => void;
   onTranscript: (speaker: "user" | "agent", text: string) => void;
   onCallEnd: () => void;

@@ -36,7 +36,7 @@ export interface DispositionField {
 }
 
 /**
- * Tool type: call_transfer redirects the call; webhook calls an HTTP endpoint
+ * Tool type: call_transfer, webhook, send_sms, end_call, or cal_com
  */
 export type AgentToolType = typeof AgentToolType[keyof typeof AgentToolType];
 
@@ -44,6 +44,9 @@ export type AgentToolType = typeof AgentToolType[keyof typeof AgentToolType];
 export const AgentToolType = {
   call_transfer: 'call_transfer',
   webhook: 'webhook',
+  send_sms: 'send_sms',
+  end_call: 'end_call',
+  cal_com: 'cal_com',
 } as const;
 
 /**
@@ -63,7 +66,7 @@ export const AgentToolMethod = {
 export type AgentToolHeaders = {[key: string]: string};
 
 export interface AgentTool {
-  /** Tool type: call_transfer redirects the call; webhook calls an HTTP endpoint */
+  /** Tool type: call_transfer, webhook, send_sms, end_call, or cal_com */
   type: AgentToolType;
   /** LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human) */
   name: string;
@@ -81,6 +84,16 @@ export interface AgentTool {
   headers?: AgentToolHeaders;
   /** (webhook) Optional secret sent as X-Webhook-Secret header */
   secret?: string;
+  /** (send_sms) SMS body to send to the caller — supports plain text */
+  messageTemplate?: string;
+  /** (end_call) Optional message spoken to the caller before hanging up */
+  goodbyeMessage?: string;
+  /** (cal_com) Cal.com API key */
+  apiKey?: string;
+  /** (cal_com) Event type ID from Cal.com */
+  eventTypeId?: number;
+  /** (cal_com / send_sms) Default timezone for bookings (e.g. America/New_York) */
+  timezone?: string;
 }
 
 /**

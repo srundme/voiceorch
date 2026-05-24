@@ -1414,8 +1414,8 @@ components:
       properties:
         type:
           type: string
-          enum: [call_transfer, webhook]
-          description: "Tool type: call_transfer redirects the call; webhook calls an HTTP endpoint"
+          enum: [call_transfer, webhook, send_sms, end_call, cal_com]
+          description: "Tool type: call_transfer, webhook, send_sms, end_call, or cal_com"
         name:
           type: string
           description: LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)
@@ -1443,6 +1443,21 @@ components:
         secret:
           type: string
           description: (webhook) Optional secret sent as X-Webhook-Secret header
+        messageTemplate:
+          type: string
+          description: (send_sms) SMS body to send to the caller — supports plain text
+        goodbyeMessage:
+          type: string
+          description: (end_call) Optional message spoken to the caller before hanging up
+        apiKey:
+          type: string
+          description: (cal_com) Cal.com API key
+        eventTypeId:
+          type: integer
+          description: (cal_com) Event type ID from Cal.com
+        timezone:
+          type: string
+          description: (cal_com / send_sms) Default timezone for bookings (e.g. America/New_York)
 
     # ── Agent ──────────────────────────────────────────────────────────────────
     Agent:

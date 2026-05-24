@@ -296,6 +296,7 @@ export async function createSession(params: {
     agentConfig,
     providerKeys,
     telephonyProvider: params.telephonyProvider,
+    callerPhone,
     onAudioOut: params.onAudioOut,
     onTranscript: (speaker, text) => {
       logger.debug({ callId: callRecord.id, speaker, text: text.slice(0, 80) }, "Transcript");
