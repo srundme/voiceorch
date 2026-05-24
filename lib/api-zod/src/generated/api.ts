@@ -1615,6 +1615,7 @@ export const ListCalendarsResponseItem = zod.object({
   "userId": zod.string(),
   "name": zod.string(),
   "timezone": zod.string(),
+  "hostEmail": zod.string().nullish(),
   "isActive": zod.boolean(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -1631,6 +1632,7 @@ export const CreateCalendarBody = zod.object({
   "agentId": zod.number(),
   "name": zod.string(),
   "timezone": zod.string(),
+  "hostEmail": zod.string().nullish(),
   "isActive": zod.boolean().default(createCalendarBodyIsActiveDefault)
 })
 
@@ -1648,6 +1650,7 @@ export const GetCalendarResponse = zod.object({
   "userId": zod.string(),
   "name": zod.string(),
   "timezone": zod.string(),
+  "hostEmail": zod.string().nullish(),
   "isActive": zod.boolean(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -1664,6 +1667,7 @@ export const UpdateCalendarParams = zod.object({
 export const UpdateCalendarBody = zod.object({
   "name": zod.string().optional(),
   "timezone": zod.string().optional(),
+  "hostEmail": zod.string().nullish(),
   "isActive": zod.boolean().optional()
 })
 
@@ -1673,6 +1677,7 @@ export const UpdateCalendarResponse = zod.object({
   "userId": zod.string(),
   "name": zod.string(),
   "timezone": zod.string(),
+  "hostEmail": zod.string().nullish(),
   "isActive": zod.boolean(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()

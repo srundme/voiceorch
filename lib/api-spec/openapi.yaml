@@ -3349,6 +3349,8 @@ components:
           type: string
         timezone:
           type: string
+        hostEmail:
+          type: ["string", "null"]
         isActive:
           type: boolean
         createdAt:
@@ -3368,6 +3370,8 @@ components:
           type: string
         timezone:
           type: string
+        hostEmail:
+          type: ["string", "null"]
         isActive:
           type: boolean
           default: true
@@ -3379,6 +3383,8 @@ components:
           type: string
         timezone:
           type: string
+        hostEmail:
+          type: ["string", "null"]
         isActive:
           type: boolean
 

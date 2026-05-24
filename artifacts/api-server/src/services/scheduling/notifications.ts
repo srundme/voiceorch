@@ -9,8 +9,10 @@ interface BookingEmailData {
   slotEnd: Date;
   timezone: string;
   hostName?: string;
+  hostEmail?: string | null;
   bookingId: number;
   notes?: string | null;
+  meetLink?: string | null;
 }
 
 function getTransporter() {
@@ -38,11 +40,40 @@ function formatDateTime(date: Date, timezone: string): string {
 }
 
 function buildEmailContent(subject: string, body: string): { subject: string; text: string; html: string } {
+  const htmlBody = body
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\n/g, "<br>");
+
   return {
     subject,
     text: body,
-    html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px"><p style="white-space:pre-line">${body}</p><hr/><p style="color:#888;font-size:12px">Powered by VoiceOrch Scheduling</p></div>`,
+    html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#1a1a1a">${htmlBody}<hr style="margin-top:24px;border:none;border-top:1px solid #e5e7eb"/><p style="color:#888;font-size:12px;margin-top:12px">Powered by VoiceOrch Scheduling</p></div>`,
   };
+}
+
+async function sendToAll(
+  transporter: ReturnType<typeof nodemailer.createTransport>,
+  to: string,
+  cc: string | null | undefined,
+  content: { subject: string; text: string; html: string },
+  bookingId: number,
+  tag: string,
+) {
+  const mailOptions: nodemailer.SendMailOptions = {
+    from: process.env["GMAIL_USER"],
+    to,
+    ...content,
+  };
+  if (cc) mailOptions.cc = cc;
+
+  try {
+    await transporter.sendMail(mailOptions);
+    logger.info({ bookingId, email: to, cc, tag }, "Booking email sent");
+  } catch (err) {
+    logger.warn({ err, bookingId, tag }, "Failed to send booking email");
+  }
 }
 
 export async function sendBookingCreatedEmail(data: BookingEmailData): Promise<void> {
@@ -54,28 +85,32 @@ export async function sendBookingCreatedEmail(data: BookingEmailData): Promise<v
 
   const from = formatDateTime(data.slotStart, data.timezone);
   const to = formatDateTime(data.slotEnd, data.timezone);
-  const body = `Hi ${data.attendeeName},
+  const meetLine = data.meetLink ? `\nGoogle Meet: ${data.meetLink}` : "";
 
-Your appointment has been ${data.eventTypeName ? `"${data.eventTypeName}"` : "booked"} successfully.
+  const attendeeBody = `Hi ${data.attendeeName},
 
-Date & Time: ${from} – ${to} (${data.timezone})
-${data.notes ? `\nNotes: ${data.notes}` : ""}
+Your appointment "${data.eventTypeName}" has been booked successfully.
+
+Date & Time: ${from} – ${to} (${data.timezone})${meetLine}${data.notes ? `\nNotes: ${data.notes}` : ""}
 
 Booking Reference: #${data.bookingId}
 
 We look forward to speaking with you!`;
 
-  const content = buildEmailContent(`Appointment Confirmed: ${data.eventTypeName}`, body);
+  const content = buildEmailContent(`Appointment Confirmed: ${data.eventTypeName}`, attendeeBody);
+  await sendToAll(transporter, data.attendeeEmail, data.hostEmail, content, data.bookingId, "created");
 
-  try {
-    await transporter.sendMail({
-      from: process.env["GMAIL_USER"],
-      to: data.attendeeEmail,
-      ...content,
-    });
-    logger.info({ bookingId: data.bookingId, email: data.attendeeEmail }, "Booking created email sent");
-  } catch (err) {
-    logger.warn({ err, bookingId: data.bookingId }, "Failed to send booking created email");
+  if (data.hostEmail) {
+    const hostBody = `New booking received.
+
+Attendee: ${data.attendeeName} (${data.attendeeEmail})
+Event: ${data.eventTypeName}
+Date & Time: ${from} – ${to} (${data.timezone})${meetLine}${data.notes ? `\nNotes: ${data.notes}` : ""}
+
+Booking Reference: #${data.bookingId}`;
+
+    const hostContent = buildEmailContent(`New Booking: ${data.attendeeName} — ${data.eventTypeName}`, hostBody);
+    await sendToAll(transporter, data.hostEmail, null, hostContent, data.bookingId, "created-host");
   }
 }
 
@@ -85,26 +120,19 @@ export async function sendBookingConfirmedEmail(data: BookingEmailData): Promise
 
   const from = formatDateTime(data.slotStart, data.timezone);
   const to = formatDateTime(data.slotEnd, data.timezone);
+  const meetLine = data.meetLink ? `\nGoogle Meet: ${data.meetLink}` : "";
+
   const body = `Hi ${data.attendeeName},
 
 Your appointment "${data.eventTypeName}" has been confirmed by the host.
 
-Date & Time: ${from} – ${to} (${data.timezone})
+Date & Time: ${from} – ${to} (${data.timezone})${meetLine}
 Booking Reference: #${data.bookingId}
 
 See you then!`;
 
   const content = buildEmailContent(`Appointment Confirmed: ${data.eventTypeName}`, body);
-
-  try {
-    await transporter.sendMail({
-      from: process.env["GMAIL_USER"],
-      to: data.attendeeEmail,
-      ...content,
-    });
-  } catch (err) {
-    logger.warn({ err, bookingId: data.bookingId }, "Failed to send booking confirmed email");
-  }
+  await sendToAll(transporter, data.attendeeEmail, data.hostEmail, content, data.bookingId, "confirmed");
 }
 
 export async function sendBookingCancelledEmail(data: BookingEmailData): Promise<void> {
@@ -112,7 +140,8 @@ export async function sendBookingCancelledEmail(data: BookingEmailData): Promise
   if (!transporter) return;
 
   const from = formatDateTime(data.slotStart, data.timezone);
-  const body = `Hi ${data.attendeeName},
+
+  const attendeeBody = `Hi ${data.attendeeName},
 
 Your appointment "${data.eventTypeName}" scheduled for ${from} (${data.timezone}) has been cancelled.
 
@@ -120,16 +149,19 @@ Booking Reference: #${data.bookingId}
 
 If you have any questions, please reach out.`;
 
-  const content = buildEmailContent(`Appointment Cancelled: ${data.eventTypeName}`, body);
+  const content = buildEmailContent(`Appointment Cancelled: ${data.eventTypeName}`, attendeeBody);
+  await sendToAll(transporter, data.attendeeEmail, null, content, data.bookingId, "cancelled-attendee");
 
-  try {
-    await transporter.sendMail({
-      from: process.env["GMAIL_USER"],
-      to: data.attendeeEmail,
-      ...content,
-    });
-  } catch (err) {
-    logger.warn({ err, bookingId: data.bookingId }, "Failed to send booking cancelled email");
+  if (data.hostEmail) {
+    const hostBody = `A booking has been cancelled.
+
+Attendee: ${data.attendeeName} (${data.attendeeEmail})
+Event: ${data.eventTypeName}
+Originally scheduled: ${from} (${data.timezone})
+Booking Reference: #${data.bookingId}`;
+
+    const hostContent = buildEmailContent(`Booking Cancelled: ${data.attendeeName} — ${data.eventTypeName}`, hostBody);
+    await sendToAll(transporter, data.hostEmail, null, hostContent, data.bookingId, "cancelled-host");
   }
 }
 
@@ -139,24 +171,32 @@ export async function sendBookingRescheduledEmail(data: BookingEmailData & { old
 
   const from = formatDateTime(data.slotStart, data.timezone);
   const to = formatDateTime(data.slotEnd, data.timezone);
-  const body = `Hi ${data.attendeeName},
+  const meetLine = data.meetLink ? `\nGoogle Meet: ${data.meetLink}` : "";
+  const oldFrom = data.oldSlotStart ? formatDateTime(data.oldSlotStart, data.timezone) : "previous time";
+
+  const attendeeBody = `Hi ${data.attendeeName},
 
 Your appointment "${data.eventTypeName}" has been rescheduled.
 
-New Date & Time: ${from} – ${to} (${data.timezone})
+Previous time: ${oldFrom}
+New Date & Time: ${from} – ${to} (${data.timezone})${meetLine}
 Booking Reference: #${data.bookingId}
 
 If you did not request this change, please contact us.`;
 
-  const content = buildEmailContent(`Appointment Rescheduled: ${data.eventTypeName}`, body);
+  const content = buildEmailContent(`Appointment Rescheduled: ${data.eventTypeName}`, attendeeBody);
+  await sendToAll(transporter, data.attendeeEmail, null, content, data.bookingId, "rescheduled-attendee");
 
-  try {
-    await transporter.sendMail({
-      from: process.env["GMAIL_USER"],
-      to: data.attendeeEmail,
-      ...content,
-    });
-  } catch (err) {
-    logger.warn({ err, bookingId: data.bookingId }, "Failed to send booking rescheduled email");
+  if (data.hostEmail) {
+    const hostBody = `A booking has been rescheduled.
+
+Attendee: ${data.attendeeName} (${data.attendeeEmail})
+Event: ${data.eventTypeName}
+Previous time: ${oldFrom}
+New Date & Time: ${from} – ${to} (${data.timezone})${meetLine}
+Booking Reference: #${data.bookingId}`;
+
+    const hostContent = buildEmailContent(`Booking Rescheduled: ${data.attendeeName} — ${data.eventTypeName}`, hostBody);
+    await sendToAll(transporter, data.hostEmail, null, hostContent, data.bookingId, "rescheduled-host");
   }
 }

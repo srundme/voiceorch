@@ -10,6 +10,7 @@ export const schedulingCalendarsTable = pgTable("scheduling_calendars", {
   userId: text("user_id").notNull(),
   name: text("name").notNull().default("My Calendar"),
   timezone: text("timezone").notNull().default("UTC"),
+  hostEmail: text("host_email"),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

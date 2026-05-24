@@ -1207,6 +1207,8 @@ export interface SchedulingCalendar {
   userId: string;
   name: string;
   timezone: string;
+  /** @nullable */
+  hostEmail?: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -1216,12 +1218,16 @@ export interface SchedulingCalendarInput {
   agentId: number;
   name: string;
   timezone: string;
+  /** @nullable */
+  hostEmail?: string | null;
   isActive?: boolean;
 }
 
 export interface SchedulingCalendarUpdate {
   name?: string;
   timezone?: string;
+  /** @nullable */
+  hostEmail?: string | null;
   isActive?: boolean;
 }
 

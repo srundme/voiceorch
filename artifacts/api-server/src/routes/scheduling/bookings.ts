@@ -164,6 +164,7 @@ router.post("/scheduling/bookings", requireAuth, async (req, res): Promise<void>
     slotStart: booking.slotStart,
     slotEnd: booking.slotEnd,
     timezone: calendar.timezone,
+    hostEmail: calendar.hostEmail,
     bookingId: booking.id,
     notes: booking.attendeeNotes,
   });
@@ -300,6 +301,7 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
       slotStart: newBooking.slotStart,
       slotEnd: newBooking.slotEnd,
       timezone: calendar?.timezone ?? "UTC",
+      hostEmail: calendar?.hostEmail,
       bookingId: newBooking.id,
       oldSlotStart: existing.slotStart,
     });
@@ -334,6 +336,7 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
       slotStart: row.slotStart,
       slotEnd: row.slotEnd,
       timezone: calendar?.timezone ?? "UTC",
+      hostEmail: calendar?.hostEmail,
       bookingId: row.id,
     });
   } else if (webhookEvent === "scheduling.booking.confirmed") {
@@ -344,6 +347,7 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
       slotStart: row.slotStart,
       slotEnd: row.slotEnd,
       timezone: calendar?.timezone ?? "UTC",
+      hostEmail: calendar?.hostEmail,
       bookingId: row.id,
     });
   }

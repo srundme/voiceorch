@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { Plus, Pencil, Trash2, MoreHorizontal, Calendar, ArrowLeft, Globe } from "lucide-react";
+import { Plus, Pencil, Trash2, MoreHorizontal, Calendar, ArrowLeft, Globe, Mail } from "lucide-react";
 import {
   useListCalendars,
   useCreateCalendar,
@@ -80,11 +80,12 @@ type FormState = {
   agentId: string;
   name: string;
   timezone: string;
+  hostEmail: string;
   isActive: boolean;
 };
 
 function defaultForm(): FormState {
-  return { agentId: "", name: "My Calendar", timezone: "UTC", isActive: true };
+  return { agentId: "", name: "My Calendar", timezone: "UTC", hostEmail: "", isActive: true };
 }
 
 function CalendarFormDialog({
@@ -104,7 +105,7 @@ function CalendarFormDialog({
 
   const [form, setForm] = useState<FormState>(() =>
     editing
-      ? { agentId: String(editing.agentId), name: editing.name, timezone: editing.timezone, isActive: editing.isActive }
+      ? { agentId: String(editing.agentId), name: editing.name, timezone: editing.timezone, hostEmail: editing.hostEmail ?? "", isActive: editing.isActive }
       : defaultForm()
   );
 
@@ -120,11 +121,12 @@ function CalendarFormDialog({
       toast({ title: "Name is required", variant: "destructive" }); return;
     }
     try {
+      const hostEmail = form.hostEmail.trim() || null;
       if (editing) {
-        await update.mutateAsync({ id: editing.id, data: { name: form.name, timezone: form.timezone, isActive: form.isActive } });
+        await update.mutateAsync({ id: editing.id, data: { name: form.name, timezone: form.timezone, hostEmail, isActive: form.isActive } });
         toast({ title: "Calendar updated" });
       } else {
-        await create.mutateAsync({ data: { agentId: parseInt(form.agentId), name: form.name, timezone: form.timezone, isActive: form.isActive } });
+        await create.mutateAsync({ data: { agentId: parseInt(form.agentId), name: form.name, timezone: form.timezone, hostEmail, isActive: form.isActive } });
         toast({ title: "Calendar created" });
       }
       await qc.invalidateQueries({ queryKey: getListCalendarsQueryKey() });
@@ -195,6 +197,19 @@ function CalendarFormDialog({
             </p>
           </div>
 
+          <div className="space-y-1.5">
+            <Label>Host / organizer email</Label>
+            <Input
+              type="email"
+              value={form.hostEmail}
+              onChange={e => set("hostEmail", e.target.value)}
+              placeholder="you@example.com"
+            />
+            <p className="text-xs text-muted-foreground">
+              When set, a separate notification email is sent to this address on every booking, cancellation, and reschedule.
+            </p>
+          </div>
+
           <div className="flex items-center gap-2">
             <Switch checked={form.isActive} onCheckedChange={v => set("isActive", v)} />
             <Label>Active</Label>
@@ -247,7 +262,7 @@ function CalendarCard({ calendar, agentName }: { calendar: SchedulingCalendar; a
                 <Badge variant="outline" className="text-xs bg-emerald-50 text-emerald-700 border-emerald-200">Active</Badge>
               )}
             </div>
-            <div className="flex items-center gap-3 mt-0.5">
+            <div className="flex items-center gap-3 mt-0.5 flex-wrap">
               {agentName && (
                 <span className="text-xs text-muted-foreground">Agent: {agentName}</span>
               )}
@@ -255,6 +270,12 @@ function CalendarCard({ calendar, agentName }: { calendar: SchedulingCalendar; a
                 <Globe className="h-3 w-3" />
                 {calendar.timezone.replace(/_/g, " ")}
               </span>
+              {calendar.hostEmail && (
+                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Mail className="h-3 w-3" />
+                  {calendar.hostEmail}
+                </span>
+              )}
               <span className="text-xs text-muted-foreground">
                 Created {formatDistanceToNow(new Date(calendar.createdAt), { addSuffix: true })}
               </span>
