@@ -10,9 +10,11 @@ import { detectCallerGender, applyCallerSalutation, buildGenderInstruction } fro
 import { retrieveKbContext } from "./kb-retrieval.js";
 import { logger } from "../lib/logger.js";
 import { format, addMinutes } from "date-fns";
+import { toZonedTime } from "date-fns-tz";
 import { db, bookingsTable, eventTypesTable, schedulingCalendarsTable, agentsTable } from "@workspace/db";
 import { eq, and, or, sql } from "drizzle-orm";
 import { getAvailableSlots } from "../services/scheduling/slot-engine.js";
+import type { TimeSlot } from "../services/scheduling/slot-engine.js";
 import { buildSlotLockKey } from "../services/scheduling/lock.js";
 
 const VAD_SILENCE_MS          = 250;    // silence window before STT flush
@@ -905,6 +907,7 @@ export class OrchestrationPipeline {
             properties: {
               attendee_name:  { type: "string", description: "Full name of the person being booked" },
               attendee_email: { type: "string", description: "Email address of the person being booked" },
+              preferred_date: { type: "string", description: "Optional preferred date or time of day for the appointment, e.g. 'next Tuesday', '2025-06-10', 'morning', or 'afternoon'. The system will find the first available slot on or after this date/time." },
             },
             required: ["attendee_name", "attendee_email"],
           },
@@ -1180,6 +1183,7 @@ export class OrchestrationPipeline {
     logger.info({ callId: this.config.callId, eventTypeId: tool.eventTypeId }, "Native booking tool invoked");
     const attendeeName  = String(args["attendee_name"]  ?? args["name"]  ?? "Guest");
     const attendeeEmail = String(args["attendee_email"] ?? args["email"] ?? "");
+    const preferredRaw  = args["preferred_date"] != null ? String(args["preferred_date"]) : null;
 
     if (!attendeeEmail) {
       logger.warn({ callId: this.config.callId }, "Native booking: no attendee email — cannot book");
@@ -1219,12 +1223,21 @@ export class OrchestrationPipeline {
         return "error: the appointment type is unavailable";
       }
 
-      const now          = new Date();
-      const weekLater    = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-      const slots        = await getAvailableSlots(tool.eventTypeId, format(now, "yyyy-MM-dd"), format(weekLater, "yyyy-MM-dd"));
+      // ── Resolve search window from optional preferred_date ──
+      const { searchStart, minSlotStart, timeFilter } = preferredRaw
+        ? parsePreferredDate(preferredRaw, calendar.timezone)
+        : { searchStart: new Date(), minSlotStart: undefined, timeFilter: undefined };
+      if (preferredRaw) {
+        logger.info({ callId: this.config.callId, preferredRaw, searchStart, minSlotStart }, "Native booking: preferred date resolved");
+      }
+      const searchEnd  = new Date(searchStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+      let slots        = await getAvailableSlots(tool.eventTypeId, format(searchStart, "yyyy-MM-dd"), format(searchEnd, "yyyy-MM-dd"));
+      if (minSlotStart) slots = slots.filter(s => s.slotStart >= minSlotStart);
+      if (timeFilter)   slots = slots.filter(timeFilter);
       if (slots.length === 0) {
-        logger.info({ callId: this.config.callId, eventTypeId: tool.eventTypeId }, "Native booking: no available slots in next 7 days");
-        return "error: no available slots in the next 7 days";
+        const rangeDesc = preferredRaw ? `on or after "${preferredRaw}"` : "in the next 7 days";
+        logger.info({ callId: this.config.callId, eventTypeId: tool.eventTypeId }, `Native booking: no available slots ${rangeDesc}`);
+        return `error: no available slots ${rangeDesc}`;
       }
 
       const slot      = slots[0]!;
@@ -1346,16 +1359,20 @@ export class OrchestrationPipeline {
       }
 
       // ── Resolve preferred start date ──
-      let searchStart = new Date();
+      const { searchStart, minSlotStart, timeFilter } = preferredRaw
+        ? parsePreferredDate(preferredRaw, calendar.timezone)
+        : { searchStart: new Date(), minSlotStart: undefined, timeFilter: undefined };
       if (preferredRaw) {
-        const parsed = new Date(preferredRaw);
-        if (!isNaN(parsed.getTime()) && parsed > searchStart) searchStart = parsed;
+        logger.info({ callId: this.config.callId, preferredRaw, searchStart, minSlotStart }, "Native reschedule: preferred date resolved");
       }
       const searchEnd     = new Date(searchStart.getTime() + 7 * 24 * 60 * 60 * 1000);
-      const slots         = await getAvailableSlots(eventType.id, format(searchStart, "yyyy-MM-dd"), format(searchEnd, "yyyy-MM-dd"));
+      let slots           = await getAvailableSlots(eventType.id, format(searchStart, "yyyy-MM-dd"), format(searchEnd, "yyyy-MM-dd"));
+      if (minSlotStart) slots = slots.filter(s => s.slotStart >= minSlotStart);
+      if (timeFilter)   slots = slots.filter(timeFilter);
       const filteredSlots = slots.filter(s => s.slotStart.getTime() !== existing.slotStart.getTime());
       if (filteredSlots.length === 0) {
-        return "error: no other available slots in the next 7 days";
+        const rangeDesc = preferredRaw ? `on or after "${preferredRaw}"` : "in the next 7 days";
+        return `error: no other available slots ${rangeDesc}`;
       }
 
       const newSlot  = filteredSlots[0]!;
@@ -1542,6 +1559,112 @@ export class OrchestrationPipeline {
 }
 
 // ── Sentence segmentation ─────────────────────────────────────────────────────
+
+/**
+ * Parse a natural-language or ISO preferred date string into a concrete search
+ * start date, an optional minimum slot start instant for time-precision, and an
+ * optional time-of-day slot filter.
+ *
+ * @param raw  - The raw preferred_date value from the LLM tool call.
+ * @param tz   - IANA timezone string of the calendar (e.g. "America/New_York").
+ *               Used to interpret "morning"/"afternoon"/"evening" in local time.
+ *               Falls back to UTC if omitted.
+ *
+ * Supported inputs:
+ *   - ISO date strings:     "2025-06-10"          → search from that date
+ *   - ISO datetime strings: "2025-06-10T14:00"    → search from that date AND
+ *                                                    enforce slotStart ≥ parsed instant
+ *   - "today", "tomorrow"
+ *   - Weekday names: "tuesday", "next friday", "this monday"
+ *   - Time of day: "morning" (before noon), "afternoon" (noon–5 pm), "evening" (5 pm+)
+ *     Hours are compared in the calendar's local timezone.
+ *
+ * Falls back to `now` for any unrecognised input so booking always proceeds.
+ */
+function parsePreferredDate(
+  raw: string,
+  tz = "UTC",
+): { searchStart: Date; minSlotStart?: Date; timeFilter?: (slot: TimeSlot) => boolean } {
+  const now   = new Date();
+  const lower = raw.trim().toLowerCase();
+
+  // ── Time-of-day preferences (timezone-aware) ─────────────────────────────
+  if (lower === "morning") {
+    return {
+      searchStart: now,
+      timeFilter: (s) => toZonedTime(s.slotStart, tz).getHours() < 12,
+    };
+  }
+  if (lower === "afternoon") {
+    return {
+      searchStart: now,
+      timeFilter: (s) => {
+        const h = toZonedTime(s.slotStart, tz).getHours();
+        return h >= 12 && h < 17;
+      },
+    };
+  }
+  if (lower === "evening") {
+    return {
+      searchStart: now,
+      timeFilter: (s) => toZonedTime(s.slotStart, tz).getHours() >= 17,
+    };
+  }
+
+  // ── Relative day references ──────────────────────────────────────────────
+  if (lower === "today") {
+    return { searchStart: now };
+  }
+  if (lower === "tomorrow") {
+    const d = new Date(now);
+    d.setDate(d.getDate() + 1);
+    d.setHours(0, 0, 0, 0);
+    return { searchStart: d };
+  }
+
+  // ── Weekday names: "tuesday", "next friday", "this monday" ───────────────
+  const DAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+  const dayMatch  = lower.match(/^(?:(next|this)\s+)?(\w+)$/);
+  if (dayMatch) {
+    const modifier = dayMatch[1];  // "next" | "this" | undefined
+    const dayName  = dayMatch[2]!;
+    const dayIdx   = DAY_NAMES.indexOf(dayName);
+    if (dayIdx !== -1) {
+      const d = new Date(now);
+      d.setHours(0, 0, 0, 0);
+      const currentDay = d.getDay();
+      let daysAhead    = dayIdx - currentDay;
+      // "next <day>" always means strictly next week's occurrence
+      if (modifier === "next") {
+        if (daysAhead <= 0) daysAhead += 7;
+        else daysAhead += 7;
+      } else {
+        // "this <day>" or bare day name: nearest upcoming occurrence (same day rolls to next week)
+        if (daysAhead <= 0) daysAhead += 7;
+      }
+      d.setDate(d.getDate() + daysAhead);
+      return { searchStart: d };
+    }
+  }
+
+  // ── ISO / parseable date or datetime string ───────────────────────────────
+  const parsed = new Date(raw);
+  if (!isNaN(parsed.getTime())) {
+    const effectiveStart = parsed > now ? parsed : now;
+    // Detect whether the original string carries a time component.
+    // A bare date like "2025-06-10" parses to midnight UTC, so its time parts
+    // are all zero.  If any time digit is non-zero the string is a datetime.
+    const hasTimeComponent = raw.includes("T") || raw.includes(" ");
+    return {
+      searchStart:  effectiveStart,
+      // Enforce the time instant so slots earlier in the day are excluded
+      minSlotStart: hasTimeComponent ? effectiveStart : undefined,
+    };
+  }
+
+  // ── Fallback ──────────────────────────────────────────────────────────────
+  return { searchStart: now };
+}
 
 function extractSentences(text: string): { sentences: string[]; remainder: string } {
   const sentences: string[] = [];
