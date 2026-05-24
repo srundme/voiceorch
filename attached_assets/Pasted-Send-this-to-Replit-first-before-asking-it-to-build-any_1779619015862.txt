@@ -1,0 +1,63 @@
+Send this to Replit first before asking it to build anything.
+This will help Replit understand the product vision, architecture direction, and ask the right technical questions before generating code.
+
+We are building a native AI Appointment Scheduling Infrastructure inside our AI Voice Agent Orchestration Platform.
+
+This is NOT a simple booking app.
+
+The goal is to build an internal scheduling engine similar to Cal.com / Calendly, but fully embedded into our platform so AI voice agents can directly book appointments using internal tool calls instead of external APIs.
+
+The scheduling system will be used by:
+
+* AI Voice Agents
+* AI Chat Agents
+* Workflow Automations
+* **Orchestrati**on Systems
+
+The architecture must be:
+
+* Multi-tenant
+* API-first
+* Scalable
+* Timezone-safe
+* Production-ready
+
+Core features we want:
+
+* Event Types
+* Availability Management
+* Slot Generation
+* Booking Engine
+* Rescheduling
+* Cancellation
+* Public Booking Pages
+* AI Tool Calling APIs
+* Webhooks
+* Notification System
+* Calendar Integrations (future phase)
+
+The AI agents should be able to:
+
+* check availability
+* create bookings
+* reschedule bookings
+* cancel appointments
+
+We already have an existing platform and want to integrate this as a native module inside the current system.
+
+Before generating any code, I want you to:
+
+1. Analyze the product requirements
+2. Understand the architecture requirements
+3. Suggest the best scalable architecture
+4. Identify the hardest engineering challenges
+5. List all database models required
+6. Ask me all important technical and product questions needed before implementation
+7. Suggest the best folder structure and system design
+8. Suggest the best approach for timezone handling and double booking prevention
+9. Suggest MVP scope vs future scalability
+10. Recommend the best tech stack choices for long-term scalability
+
+Do NOT directly generate the full project yet.
+
+First deeply analyze the system and ask me all required questions before implementation.
