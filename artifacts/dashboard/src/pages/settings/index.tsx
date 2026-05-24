@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import {
   Phone, Copy, Check, ExternalLink, Zap, Key, BookOpen,
   ChevronDown, ChevronRight, AlertTriangle, CheckCircle2,
-  RefreshCw, Plus, Eye, EyeOff, Users
+  RefreshCw, Plus, Eye, EyeOff, Users, Video
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -153,9 +153,16 @@ export default function SettingsPage() {
   return (
     <div className="h-full overflow-y-auto">
     <div className="space-y-6 p-6 md:p-8 pt-6 max-w-5xl mx-auto">
-      <div>
-        <h2 className="text-3xl font-bold tracking-tight">Settings</h2>
-        <p className="text-muted-foreground">Configure your SnapServe integration and go live.</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">Settings</h2>
+          <p className="text-muted-foreground">Configure your SnapServe integration and go live.</p>
+        </div>
+        <Link href="/app/settings/conferencing">
+          <Button variant="outline" size="sm" className="gap-1.5 shrink-0">
+            <Video className="h-3.5 w-3.5" /> Conferencing
+          </Button>
+        </Link>
       </div>
 
       {/* Readiness checklist */}

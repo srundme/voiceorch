@@ -1956,6 +1956,8 @@ export const ListBookingsResponseItem = zod.object({
   "bookedVia": zod.enum(['agent', 'web', 'api']),
   "cancelledAt": zod.coerce.date().nullish(),
   "rescheduledFromId": zod.number().nullish(),
+  "meetLink": zod.string().nullish(),
+  "googleEventId": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -2000,6 +2002,8 @@ export const GetBookingResponse = zod.object({
   "bookedVia": zod.enum(['agent', 'web', 'api']),
   "cancelledAt": zod.coerce.date().nullish(),
   "rescheduledFromId": zod.number().nullish(),
+  "meetLink": zod.string().nullish(),
+  "googleEventId": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -2032,6 +2036,8 @@ export const UpdateBookingResponse = zod.object({
   "bookedVia": zod.enum(['agent', 'web', 'api']),
   "cancelledAt": zod.coerce.date().nullish(),
   "rescheduledFromId": zod.number().nullish(),
+  "meetLink": zod.string().nullish(),
+  "googleEventId": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })

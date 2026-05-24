@@ -46,3 +46,5 @@ channel = "stable-25_05"
 
 [userenv.shared]
 ADMIN_TOKEN = "voiceorch-admin-2025"
+GOOGLE_CLIENT_ID = "709589107531-0bai7anh6tvcuub726v9pdtc79ggia9j.apps.googleusercontent.com"
+GOOGLE_CLIENT_SECRET = "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"

@@ -1407,8 +1407,18 @@ export interface Booking {
   cancelledAt?: string | null;
   /** @nullable */
   rescheduledFromId?: number | null;
+  /** @nullable */
+  meetLink?: string | null;
+  /** @nullable */
+  googleEventId?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface GoogleCalendarStatus {
+  connected: boolean;
+  /** @nullable */
+  email?: string | null;
 }
 
 export type BookingInputBookedVia = typeof BookingInputBookedVia[keyof typeof BookingInputBookedVia];

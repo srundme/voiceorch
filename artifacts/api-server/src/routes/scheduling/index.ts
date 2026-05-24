@@ -5,10 +5,12 @@ import availabilityRouter from "./availability.js";
 import slotsRouter from "./slots.js";
 import bookingsRouter from "./bookings.js";
 import publicRouter from "./public.js";
+import googleOAuthRouter from "./google-oauth.js";
 
 const router: IRouter = Router();
 
 router.use(publicRouter);
+router.use(googleOAuthRouter);
 router.use(calendarsRouter);
 router.use(eventTypesRouter);
 router.use(availabilityRouter);

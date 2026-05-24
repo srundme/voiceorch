@@ -22,6 +22,7 @@ import CallsList from "@/pages/calls/index";
 import CallDetail from "@/pages/calls/[id]";
 import ProvidersList from "@/pages/providers/index";
 import Settings from "@/pages/settings/index";
+import ConferencingPage from "@/pages/settings/Conferencing";
 import KnowledgeBasePage from "@/pages/knowledge-base";
 import WalletPage from "@/pages/wallet";
 import ActivityPage from "@/pages/activity";
@@ -208,6 +209,7 @@ function AppRoutes() {
         <Route path="/app/scheduling/event-types" component={SchedulingEventTypesPage} />
         <Route path="/app/scheduling/availability" component={SchedulingAvailabilityPage} />
         <Route path="/app/scheduling" component={SchedulingPage} />
+        <Route path="/app/settings/conferencing" component={ConferencingPage} />
         <Route path="/app/settings" component={Settings} />
         <Route component={NotFound} />
       </Switch>

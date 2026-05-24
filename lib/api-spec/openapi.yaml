@@ -3629,12 +3629,25 @@ components:
           format: date-time
         rescheduledFromId:
           type: ["integer", "null"]
+        meetLink:
+          type: ["string", "null"]
+        googleEventId:
+          type: ["string", "null"]
         createdAt:
           type: string
           format: date-time
         updatedAt:
           type: string
           format: date-time
+
+    GoogleCalendarStatus:
+      type: object
+      required: [connected]
+      properties:
+        connected:
+          type: boolean
+        email:
+          type: ["string", "null"]
 
     BookingInput:
       type: object

@@ -20,6 +20,7 @@ import {
   sendBookingRescheduledEmail,
   sendBookingConfirmedEmail,
 } from "../../services/scheduling/notifications.js";
+import { createCalendarEvent, deleteCalendarEvent } from "../../services/scheduling/google-calendar.js";
 import { dispatchSchedulingWebhooks } from "./webhooks.js";
 import { addMinutes, format } from "date-fns";
 
@@ -33,6 +34,8 @@ function formatBooking(b: typeof bookingsTable.$inferSelect) {
     cancelledAt: b.cancelledAt?.toISOString() ?? null,
     createdAt: b.createdAt.toISOString(),
     updatedAt: b.updatedAt.toISOString(),
+    meetLink: (b as any).meetLink ?? null,
+    googleEventId: (b as any).googleEventId ?? null,
   };
 }
 
@@ -157,6 +160,32 @@ router.post("/scheduling/bookings", requireAuth, async (req, res): Promise<void>
     return;
   }
 
+  // Create Google Calendar event with Meet link (best-effort, non-blocking)
+  let meetLink: string | null = null;
+  let googleEventId: string | null = null;
+  try {
+    const gcalResult = await createCalendarEvent({
+      userId: clerkId,
+      summary: `${eventType.name} — ${booking.attendeeName}`,
+      description: booking.attendeeNotes ?? undefined,
+      startTime: booking.slotStart,
+      endTime: booking.slotEnd,
+      attendeeEmail: booking.attendeeEmail,
+      attendeeName: booking.attendeeName,
+      timezone: calendar.timezone,
+      hostEmail: calendar.hostEmail,
+    });
+    if (gcalResult) {
+      meetLink = gcalResult.meetLink;
+      googleEventId = gcalResult.eventId;
+      if (meetLink || googleEventId) {
+        await db.execute(
+          sql`UPDATE bookings SET meet_link = ${meetLink}, google_event_id = ${googleEventId} WHERE id = ${booking.id}`
+        );
+      }
+    }
+  } catch { /* non-fatal */ }
+
   void sendBookingCreatedEmail({
     attendeeName: booking.attendeeName,
     attendeeEmail: booking.attendeeEmail,
@@ -167,10 +196,11 @@ router.post("/scheduling/bookings", requireAuth, async (req, res): Promise<void>
     hostEmail: calendar.hostEmail,
     bookingId: booking.id,
     notes: booking.attendeeNotes,
+    meetLink,
   });
   void dispatchSchedulingWebhooks(clerkId, "scheduling.booking.created", { booking: formatBooking(booking) });
 
-  res.status(201).json(GetBookingResponse.parse(formatBooking(booking)));
+  res.status(201).json(GetBookingResponse.parse({ ...formatBooking(booking), meetLink, googleEventId }));
 });
 
 router.get("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<void> => {
