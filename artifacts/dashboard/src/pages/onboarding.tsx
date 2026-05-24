@@ -136,9 +136,9 @@ function RoleStep({
   onSelect: (v: Role) => void;
   onNext: () => void;
 }) {
-  const options: { id: Role; label: string; emoji: string; desc: string }[] = [
-    { id: "student",      label: "Student",      emoji: "🎓", desc: "Exploring AI as part of my studies" },
-    { id: "professional", label: "Professional",  emoji: "💼", desc: "Building voice agents for work" },
+  const options: { id: Role; label: string; desc: string }[] = [
+    { id: "student",      label: "Student",      desc: "Exploring AI as part of my studies" },
+    { id: "professional", label: "Professional",  desc: "Building voice agents for work" },
   ];
 
   useEffect(() => {
@@ -173,7 +173,6 @@ function RoleStep({
               }
             `}
           >
-            <span className="text-2xl">{opt.emoji}</span>
             <div className="flex-1">
               <div className="flex items-center gap-2">
                 <span className="text-[11px] font-bold opacity-40">{idx + 1}</span>
@@ -199,12 +198,12 @@ function ReferralStep({
   onSelect: (v: ReferralSource) => void;
   onNext: () => void;
 }) {
-  const options: { id: ReferralSource; label: string; emoji: string }[] = [
-    { id: "instagram",  label: "Instagram",          emoji: "📸" },
-    { id: "youtube",    label: "YouTube",             emoji: "▶️" },
-    { id: "reference",  label: "Someone referred me", emoji: "🤝" },
-    { id: "google",     label: "Google Search",       emoji: "🔍" },
-    { id: "ai_search",  label: "AI Search Results",   emoji: "🤖" },
+  const options: { id: ReferralSource; label: string }[] = [
+    { id: "instagram",  label: "Instagram" },
+    { id: "youtube",    label: "YouTube" },
+    { id: "reference",  label: "Someone referred me" },
+    { id: "google",     label: "Google Search" },
+    { id: "ai_search",  label: "AI Search Results" },
   ];
 
   useEffect(() => {
@@ -241,7 +240,6 @@ function ReferralStep({
               }
             `}
           >
-            <span className="text-lg w-7 text-center">{opt.emoji}</span>
             <div className="flex items-center gap-2 flex-1">
               <span className={`text-[11px] font-bold ${value === opt.id ? "text-gray-400" : "opacity-30"}`}>{idx + 1}</span>
               <span className="font-medium text-[15px]">{opt.label}</span>
@@ -283,8 +281,8 @@ function VoiceAgentStep({
       <p className="text-gray-400 text-base mb-8">No wrong answer — we just want to set the right starting point.</p>
       <div className="flex gap-3">
         {[
-          { v: true,  label: "Yes", emoji: "👍", key: "Y" },
-          { v: false, label: "No",  emoji: "👋", key: "N" },
+          { v: true,  label: "Yes", key: "Y" },
+          { v: false, label: "No",  key: "N" },
         ].map(opt => (
           <motion.button
             key={String(opt.v)}
@@ -299,7 +297,6 @@ function VoiceAgentStep({
               }
             `}
           >
-            <span className="text-3xl">{opt.emoji}</span>
             <div className="flex items-center gap-1.5">
               <span className={`text-[11px] ${value === opt.v ? "text-gray-400" : "text-gray-300"}`}>{opt.key}</span>
               <span>{opt.label}</span>
@@ -409,7 +406,7 @@ function DoneScreen({ name }: { name: string }) {
         <Check className="h-10 w-10 text-black/85" strokeWidth={2.5} />
       </motion.div>
       <h2 className="text-4xl font-bold text-gray-900 mb-3">
-        You're all set{name ? `, ${name.split(" ")[0]}` : ""}! 🎉
+        You're all set{name ? `, ${name.split(" ")[0]}` : ""}!
       </h2>
       <p className="text-gray-400 text-lg mb-10 leading-relaxed">
         Welcome to SnapServe. Let's build your first AI voice agent.

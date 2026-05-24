@@ -70,7 +70,7 @@ function TransferDialog({
                       : "bg-white text-gray-500 border-gray-200 hover:border-gray-300 hover:text-gray-600"
                   }`}
                 >
-                  {t === "cold" ? "🔇 Cold" : "🔊 Warm"}
+                  {t === "cold" ? "Cold" : "Warm"}
                 </button>
               ))}
             </div>

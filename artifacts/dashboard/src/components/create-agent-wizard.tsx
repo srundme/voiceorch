@@ -30,15 +30,15 @@ const USE_CASES = [
 
 /* ── Language catalogue ─────────────────────────────────────────────────── */
 const LANGUAGES = [
-  { code: "english",   label: "English",   flag: "🇬🇧" },
-  { code: "hindi",     label: "Hindi",     flag: "🇮🇳" },
-  { code: "tamil",     label: "Tamil",     flag: "🇮🇳" },
-  { code: "telugu",    label: "Telugu",    flag: "🇮🇳" },
-  { code: "kannada",   label: "Kannada",   flag: "🇮🇳" },
-  { code: "marathi",   label: "Marathi",   flag: "🇮🇳" },
-  { code: "gujarati",  label: "Gujarati",  flag: "🇮🇳" },
-  { code: "bengali",   label: "Bengali",   flag: "🇮🇳" },
-  { code: "malayalam", label: "Malayalam", flag: "🇮🇳" },
+  { code: "english",   label: "English" },
+  { code: "hindi",     label: "Hindi" },
+  { code: "tamil",     label: "Tamil" },
+  { code: "telugu",    label: "Telugu" },
+  { code: "kannada",   label: "Kannada" },
+  { code: "marathi",   label: "Marathi" },
+  { code: "gujarati",  label: "Gujarati" },
+  { code: "bengali",   label: "Bengali" },
+  { code: "malayalam", label: "Malayalam" },
 ];
 
 /* ── Managed stack ──────────────────────────────────────────────────────── */
@@ -568,7 +568,6 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                           sel ? "border-violet-400 bg-violet-50" : "border-gray-200 bg-gray-50 hover:border-gray-200",
                         )}
                       >
-                        <span className="text-lg">{lang.flag}</span>
                         <span className={cn("font-medium text-sm", sel ? "text-gray-900" : "text-gray-500")}>{lang.label}</span>
                         {sel && <Check className="h-3.5 w-3.5 text-violet-600 ml-auto" />}
                       </button>
@@ -600,7 +599,6 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                               : "border-gray-200 bg-gray-50 hover:border-gray-200",
                             )}
                           >
-                            <span className="text-lg">{lang.flag}</span>
                             <span className={cn("font-medium text-sm", sel ? "text-gray-900" : "text-gray-500")}>{lang.label}</span>
                             {sel && <Check className="h-3.5 w-3.5 text-violet-600 ml-auto" />}
                           </button>

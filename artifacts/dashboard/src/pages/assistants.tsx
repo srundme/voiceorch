@@ -1608,7 +1608,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
             <div className="bg-gray-50 border border-gray-200/40 rounded-xl p-4 space-y-4">
               <div className="flex items-start gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-violet-950/60 border border-violet-800/40 flex items-center justify-center shrink-0">
-                  <span className="text-sm">🎙</span>
+                  <span className="text-sm font-bold text-violet-300">G</span>
                 </div>
                 <div>
                   <p className="text-xs font-semibold text-gray-700">Caller Gender Detection</p>
@@ -1720,8 +1720,8 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                         onValueChange={v => setCfg({ machineDetectionMode: v as "Enable" | "DetectMessageEnd" })}>
                         <SelectTrigger className="h-7 text-xs bg-card border-gray-200 text-gray-700"><SelectValue /></SelectTrigger>
                         <SelectContent className="bg-card border-gray-200">
-                          <SelectItem value="DetectMessageEnd" className="text-gray-700 text-xs">🔔 Wait for beep (recommended)</SelectItem>
-                          <SelectItem value="Enable" className="text-gray-700 text-xs">⚡ Immediate detect</SelectItem>
+                          <SelectItem value="DetectMessageEnd" className="text-gray-700 text-xs">Wait for beep (recommended)</SelectItem>
+                          <SelectItem value="Enable" className="text-gray-700 text-xs">Immediate detect</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -1731,9 +1731,9 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                         onValueChange={v => setCfg({ voicemailAction: v as "hangup" | "leave_message" | "continue" })}>
                         <SelectTrigger className="h-7 text-xs bg-card border-gray-200 text-gray-700"><SelectValue /></SelectTrigger>
                         <SelectContent className="bg-card border-gray-200">
-                          <SelectItem value="hangup"       className="text-gray-700 text-xs">📵 Hang up</SelectItem>
-                          <SelectItem value="leave_message" className="text-gray-700 text-xs">💬 Leave a message</SelectItem>
-                          <SelectItem value="continue"     className="text-gray-700 text-xs">▶️ Continue as human</SelectItem>
+                          <SelectItem value="hangup"       className="text-gray-700 text-xs">Hang up</SelectItem>
+                          <SelectItem value="leave_message" className="text-gray-700 text-xs">Leave a message</SelectItem>
+                          <SelectItem value="continue"     className="text-gray-700 text-xs">Continue as human</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -1899,8 +1899,8 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                       <Select value={cfg.callTransferType ?? "cold"} onValueChange={v => setCfg({ callTransferType: v as "warm" | "cold" })}>
                         <SelectTrigger className="h-7 text-xs bg-card border-gray-200 text-gray-700"><SelectValue /></SelectTrigger>
                         <SelectContent className="bg-card border-gray-200">
-                          <SelectItem value="cold" className="text-gray-700 text-xs">🔇 Cold — immediate blind transfer</SelectItem>
-                          <SelectItem value="warm" className="text-gray-700 text-xs">🔊 Warm — announce then transfer</SelectItem>
+                          <SelectItem value="cold" className="text-gray-700 text-xs">Cold — immediate blind transfer</SelectItem>
+                          <SelectItem value="warm" className="text-gray-700 text-xs">Warm — announce then transfer</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>

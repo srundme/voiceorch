@@ -161,12 +161,6 @@ const TYPE_LABELS: Record<string, string> = {
   telephony: "Telephony",
 };
 
-const TYPE_ICONS: Record<string, string> = {
-  asr: "🎙️",
-  llm: "🤖",
-  tts: "🔊",
-  telephony: "📞",
-};
 
 /* ── Form schema ──────────────────────────────────────────────────────────── */
 
@@ -312,10 +306,10 @@ export default function ProvidersList() {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="asr">🎙️ Speech-to-Text (ASR)</SelectItem>
-                        <SelectItem value="llm">🤖 Language Model (LLM)</SelectItem>
-                        <SelectItem value="tts">🔊 Text-to-Speech (TTS)</SelectItem>
-                        <SelectItem value="telephony">📞 Telephony</SelectItem>
+                        <SelectItem value="asr">Speech-to-Text (ASR)</SelectItem>
+                        <SelectItem value="llm">Language Model (LLM)</SelectItem>
+                        <SelectItem value="tts">Text-to-Speech (TTS)</SelectItem>
+                        <SelectItem value="telephony">Telephony</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -437,7 +431,6 @@ export default function ProvidersList() {
                 <Card key={type} className="flex flex-col">
                   <CardHeader className="pb-3 border-b border-border/50">
                     <CardTitle className="text-base font-semibold flex items-center gap-2">
-                      <span>{TYPE_ICONS[type]}</span>
                       {TYPE_LABELS[type]}
                     </CardTitle>
                     <p className="text-xs text-muted-foreground mt-0.5">
