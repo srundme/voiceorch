@@ -7,6 +7,7 @@ import {
   Check, Copy, Loader2, ChevronDown, Sparkles, PhoneOutgoing,
   BarChart2, Clock, CheckCircle2, XCircle, BookOpen,
   AlertTriangle, Target, AlignLeft, Zap, RefreshCw, ClipboardList, X,
+  PhoneForwarded, Globe,
 } from "lucide-react";
 import { CreateAgentWizard } from "@/components/create-agent-wizard";
 import {
@@ -545,6 +546,24 @@ type AgentCfg = {
   genderDetectionNeutralSalutation?: string;
 };
 
+type AgentToolLocal =
+  | {
+      type: "call_transfer";
+      name: string;
+      description: string;
+      transferTo: string;
+      warmHandoffMessage?: string;
+    }
+  | {
+      type: "webhook";
+      name: string;
+      description: string;
+      url: string;
+      method: "GET" | "POST";
+      headers?: Record<string, string>;
+      secret?: string;
+    };
+
 function SliderRow({ label, desc, value, onChange, min, max, step, unit = "" }: {
   label: string; desc?: string; value: number; onChange: (v: number) => void;
   min: number; max: number; step: number; unit?: string;
@@ -642,6 +661,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
   const [temperature, setTemperature]                       = useState(0.7);
 
   // ── Tab 3 — Audio ───────────────────────────────────────────────
+  const [agentTools, setAgentTools]                         = useState<AgentToolLocal[]>([]);
   const [asrProvider, setAsrProvider]                       = useState("");
   const [asrModel, setAsrModel]                             = useState("");
   const [asrLanguage, setAsrLanguage]                       = useState("en");
@@ -801,8 +821,9 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
         .map(f => ({ ...f, options: f.options?.join(", ") ?? "" }))
     );
     const existingCfg = ((a.agentConfig as AgentCfg) ?? {}) as AgentCfg;
-    const agentTools = (a.tools as Array<{ type: string; transferTo?: string }> | undefined) ?? [];
-    const ctTool = agentTools.find(t => t.type === "call_transfer");
+    const rawTools = (a.tools as AgentToolLocal[] | undefined) ?? [];
+    setAgentTools(rawTools);
+    const ctTool = rawTools.find(t => t.type === "call_transfer") as { transferTo?: string } | undefined;
     setAgentConfig({
       ...existingCfg,
       callTransferEnabled:  existingCfg.callTransferEnabled  ?? (ctTool !== undefined),
@@ -850,6 +871,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
               options: f.type === "choice" && f.options ? f.options.split(",").map(s => s.trim()).filter(Boolean) : undefined,
             })),
           agentConfig,
+          tools: agentTools as Parameters<typeof update.mutate>[0]["data"]["tools"],
         } as Parameters<typeof update.mutate>[0]["data"],
       },
       {
@@ -1933,21 +1955,205 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
 
         {/* ── Tab 6: Tools ── */}
         <TabsContent value="tools" className="flex-1 overflow-y-auto m-0 px-5 py-4">
-          <div className="max-w-2xl">
-            <div className="bg-gray-50 border border-gray-200/40 rounded-xl p-8 flex flex-col items-center text-center gap-3">
-              <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center">
-                <Settings2 className="h-5 w-5 text-gray-400" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-700">Tools — Coming Soon</p>
-                <p className="text-xs text-gray-400 mt-1 max-w-sm">Connect calendar booking, CRM integrations, and custom function calls. Tools let your agent take actions during a call.</p>
-              </div>
-              <div className="flex flex-wrap gap-2 mt-2 justify-center">
-                {["Google Calendar","HubSpot CRM","Salesforce","Custom Webhook"].map(t => (
-                  <span key={t} className="text-xs bg-gray-100 border border-gray-200 text-gray-400 rounded-md px-2.5 py-1">{t}</span>
-                ))}
-              </div>
+          <div className="max-w-2xl space-y-4">
+            {/* Add buttons */}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setAgentTools(prev => [...prev, {
+                    type: "call_transfer",
+                    name: "transfer_to_human",
+                    description: "Transfer the call to a human agent when the caller requests escalation or needs specialist help.",
+                    transferTo: "",
+                    warmHandoffMessage: "",
+                  }]);
+                  setDirty(true);
+                }}
+                className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50 rounded-lg px-3 py-2 transition-colors"
+              >
+                <PhoneForwarded className="h-3.5 w-3.5 text-violet-500" />
+                Add Call Transfer
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAgentTools(prev => [...prev, {
+                    type: "webhook",
+                    name: "custom_action",
+                    description: "Invoke this when the caller requests a specific action.",
+                    url: "",
+                    method: "POST",
+                  }]);
+                  setDirty(true);
+                }}
+                className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50 rounded-lg px-3 py-2 transition-colors"
+              >
+                <Globe className="h-3.5 w-3.5 text-blue-500" />
+                Add Webhook
+              </button>
             </div>
+
+            {/* Empty state */}
+            {agentTools.length === 0 && (
+              <div className="bg-gray-50 border border-gray-200/40 rounded-xl p-8 flex flex-col items-center text-center gap-2">
+                <Settings2 className="h-8 w-8 text-gray-300" />
+                <p className="text-sm font-medium text-gray-500">No tools configured</p>
+                <p className="text-xs text-gray-400 max-w-sm">Add a call transfer or webhook tool above. The AI decides when to invoke each tool based on the conversation context and the description you provide.</p>
+              </div>
+            )}
+
+            {/* Tool cards */}
+            {agentTools.map((tool, idx) => (
+              <div key={idx} className="bg-gray-50 border border-gray-200/40 rounded-xl p-4 space-y-3">
+                {/* Card header */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {tool.type === "call_transfer"
+                      ? <PhoneForwarded className="h-4 w-4 text-violet-500" />
+                      : <Globe className="h-4 w-4 text-blue-500" />
+                    }
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                      {tool.type === "call_transfer" ? "Call Transfer" : "Webhook"}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setAgentTools(prev => prev.filter((_, i) => i !== idx)); setDirty(true); }}
+                    className="text-gray-300 hover:text-red-400 transition-colors"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+
+                {/* Common: name + type-specific primary field */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <p className="text-xs text-gray-500">Function Name</p>
+                    <Input
+                      value={tool.name}
+                      onChange={e => {
+                        const next = [...agentTools];
+                        next[idx] = { ...tool, name: e.target.value };
+                        setAgentTools(next); setDirty(true);
+                      }}
+                      placeholder="snake_case_name"
+                      className="bg-white border-gray-200 text-gray-700 text-xs h-8"
+                    />
+                  </div>
+                  {tool.type === "call_transfer" ? (
+                    <div className="space-y-1">
+                      <p className="text-xs text-gray-500">Transfer To (E.164)</p>
+                      <Input
+                        value={tool.transferTo}
+                        onChange={e => {
+                          const next = [...agentTools];
+                          next[idx] = { ...tool, transferTo: e.target.value };
+                          setAgentTools(next); setDirty(true);
+                        }}
+                        placeholder="+12125551234"
+                        className="bg-white border-gray-200 text-gray-700 text-xs h-8"
+                      />
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <p className="text-xs text-gray-500">HTTP Method</p>
+                      <Select value={tool.method} onValueChange={v => {
+                        const next = [...agentTools];
+                        next[idx] = { ...tool, method: v as "GET" | "POST" };
+                        setAgentTools(next); setDirty(true);
+                      }}>
+                        <SelectTrigger className="bg-white border-gray-200 text-gray-700 text-xs h-8">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="GET">GET</SelectItem>
+                          <SelectItem value="POST">POST</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                </div>
+
+                {/* Description */}
+                <div className="space-y-1">
+                  <p className="text-xs text-gray-500">
+                    Description <span className="text-gray-400">(tells the AI when to use this tool)</span>
+                  </p>
+                  <Textarea
+                    value={tool.description}
+                    onChange={e => {
+                      const next = [...agentTools];
+                      next[idx] = { ...tool, description: e.target.value };
+                      setAgentTools(next); setDirty(true);
+                    }}
+                    rows={2}
+                    className="bg-white border-gray-200 text-gray-700 text-xs resize-none"
+                  />
+                </div>
+
+                {/* Call transfer: warm handoff message */}
+                {tool.type === "call_transfer" && (
+                  <div className="space-y-1">
+                    <p className="text-xs text-gray-500">
+                      Warm Handoff Message <span className="text-gray-400">(spoken before transferring, optional)</span>
+                    </p>
+                    <Textarea
+                      value={tool.warmHandoffMessage ?? ""}
+                      onChange={e => {
+                        const next = [...agentTools];
+                        next[idx] = { ...tool, warmHandoffMessage: e.target.value };
+                        setAgentTools(next); setDirty(true);
+                      }}
+                      rows={2}
+                      placeholder="Please hold while I connect you with a specialist…"
+                      className="bg-white border-gray-200 text-gray-700 text-xs resize-none placeholder:text-gray-400"
+                    />
+                  </div>
+                )}
+
+                {/* Webhook: URL + secret */}
+                {tool.type === "webhook" && (
+                  <>
+                    <div className="space-y-1">
+                      <p className="text-xs text-gray-500">Endpoint URL</p>
+                      <Input
+                        value={tool.url}
+                        onChange={e => {
+                          const next = [...agentTools];
+                          next[idx] = { ...tool, url: e.target.value };
+                          setAgentTools(next); setDirty(true);
+                        }}
+                        placeholder="https://your-api.com/webhook"
+                        className="bg-white border-gray-200 text-gray-700 text-xs h-8"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs text-gray-500">
+                        Secret <span className="text-gray-400">(sent as X-Webhook-Secret header, optional)</span>
+                      </p>
+                      <Input
+                        value={tool.secret ?? ""}
+                        onChange={e => {
+                          const next = [...agentTools];
+                          next[idx] = { ...tool, secret: e.target.value };
+                          setAgentTools(next); setDirty(true);
+                        }}
+                        placeholder="optional-shared-secret"
+                        type="password"
+                        className="bg-white border-gray-200 text-gray-700 text-xs h-8"
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+
+            {agentTools.length > 0 && (
+              <p className="text-[11px] text-gray-400 px-1">
+                The AI automatically decides when to invoke each tool based on the conversation context and the description you provide.
+              </p>
+            )}
           </div>
         </TabsContent>
 

@@ -1410,12 +1410,12 @@ components:
 
     AgentTool:
       type: object
-      required: [type, name, description, transferTo]
+      required: [type, name, description]
       properties:
         type:
           type: string
-          enum: [call_transfer]
-          description: Tool type — currently only call_transfer is supported
+          enum: [call_transfer, webhook]
+          description: "Tool type: call_transfer redirects the call; webhook calls an HTTP endpoint"
         name:
           type: string
           description: LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)
@@ -1424,10 +1424,25 @@ components:
           description: Explains to the LLM when and why to invoke this tool
         transferTo:
           type: string
-          description: E.164 phone number to transfer the call to (e.g. +12125551234)
+          description: (call_transfer) E.164 phone number to transfer the call to (e.g. +12125551234)
         warmHandoffMessage:
           type: string
-          description: Optional message the agent speaks to the caller before transferring
+          description: (call_transfer) Optional message the agent speaks to the caller before transferring
+        url:
+          type: string
+          description: (webhook) HTTP endpoint URL to POST/GET when this tool is invoked
+        method:
+          type: string
+          enum: [GET, POST]
+          description: (webhook) HTTP method
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+          description: (webhook) Optional extra HTTP headers
+        secret:
+          type: string
+          description: (webhook) Optional secret sent as X-Webhook-Secret header
 
     # ── Agent ──────────────────────────────────────────────────────────────────
     Agent:

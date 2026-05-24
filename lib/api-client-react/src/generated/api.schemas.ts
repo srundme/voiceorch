@@ -36,26 +36,51 @@ export interface DispositionField {
 }
 
 /**
- * Tool type — currently only call_transfer is supported
+ * Tool type: call_transfer redirects the call; webhook calls an HTTP endpoint
  */
 export type AgentToolType = typeof AgentToolType[keyof typeof AgentToolType];
 
 
 export const AgentToolType = {
   call_transfer: 'call_transfer',
+  webhook: 'webhook',
 } as const;
 
+/**
+ * (webhook) HTTP method
+ */
+export type AgentToolMethod = typeof AgentToolMethod[keyof typeof AgentToolMethod];
+
+
+export const AgentToolMethod = {
+  GET: 'GET',
+  POST: 'POST',
+} as const;
+
+/**
+ * (webhook) Optional extra HTTP headers
+ */
+export type AgentToolHeaders = {[key: string]: string};
+
 export interface AgentTool {
-  /** Tool type — currently only call_transfer is supported */
+  /** Tool type: call_transfer redirects the call; webhook calls an HTTP endpoint */
   type: AgentToolType;
   /** LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human) */
   name: string;
   /** Explains to the LLM when and why to invoke this tool */
   description: string;
-  /** E.164 phone number to transfer the call to (e.g. +12125551234) */
-  transferTo: string;
-  /** Optional message the agent speaks to the caller before transferring */
+  /** (call_transfer) E.164 phone number to transfer the call to (e.g. +12125551234) */
+  transferTo?: string;
+  /** (call_transfer) Optional message the agent speaks to the caller before transferring */
   warmHandoffMessage?: string;
+  /** (webhook) HTTP endpoint URL to POST/GET when this tool is invoked */
+  url?: string;
+  /** (webhook) HTTP method */
+  method?: AgentToolMethod;
+  /** (webhook) Optional extra HTTP headers */
+  headers?: AgentToolHeaders;
+  /** (webhook) Optional secret sent as X-Webhook-Secret header */
+  secret?: string;
 }
 
 /**

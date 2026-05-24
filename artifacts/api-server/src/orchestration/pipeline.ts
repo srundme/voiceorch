@@ -639,6 +639,36 @@ export class OrchestrationPipeline {
 
     if (tool.type === "call_transfer") {
       await this.executeCallTransfer(tool, args);
+    } else if (tool.type === "webhook") {
+      await this.executeWebhookTool(tool, args);
+    }
+  }
+
+  private async executeWebhookTool(tool: AgentTool & { type: "webhook" }, args: Record<string, unknown>): Promise<void> {
+    logger.info({ callId: this.config.callId, url: tool.url, method: tool.method }, "Executing webhook tool");
+    try {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        ...(tool.headers ?? {}),
+      };
+      if (tool.secret) headers["X-Webhook-Secret"] = tool.secret;
+
+      const resp = await fetch(tool.url, {
+        method: tool.method,
+        headers,
+        body: tool.method === "POST"
+          ? JSON.stringify({ callId: this.config.callId, toolName: tool.name, args })
+          : undefined,
+        signal: AbortSignal.timeout(8000),
+      });
+
+      if (!resp.ok) {
+        logger.warn({ callId: this.config.callId, url: tool.url, status: resp.status }, "Webhook tool returned non-OK status");
+      } else {
+        logger.info({ callId: this.config.callId, url: tool.url, status: resp.status }, "Webhook tool executed successfully");
+      }
+    } catch (err) {
+      logger.error({ callId: this.config.callId, url: tool.url, err }, "Webhook tool execution failed");
     }
   }
 

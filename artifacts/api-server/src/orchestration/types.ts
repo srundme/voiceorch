@@ -8,7 +8,17 @@ export interface CallTransferTool {
   warmHandoffMessage?: string;
 }
 
-export type AgentTool = CallTransferTool;
+export interface WebhookTool {
+  type: "webhook";
+  name: string;
+  description: string;
+  url: string;
+  method: "GET" | "POST";
+  headers?: Record<string, string>;
+  secret?: string;
+}
+
+export type AgentTool = CallTransferTool | WebhookTool;
 
 /** JSON Schema-compatible tool definition passed to LLM providers */
 export interface ToolDefinition {
