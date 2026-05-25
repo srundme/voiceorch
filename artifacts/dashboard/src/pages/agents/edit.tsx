@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { Link, useLocation, useParams } from "wouter";
 import { ArrowLeft, Save, Bot, Plus, Trash2, PhoneForwarded, ClipboardList } from "lucide-react";
 import {
@@ -214,8 +214,10 @@ export default function AgentEdit() {
   const { toast } = useToast();
 
   const { data: agent, isLoading } = useGetAgent(id, {
-    query: { enabled: !!id, queryKey: getGetAgentQueryKey(id) }
+    query: { enabled: !!id, queryKey: getGetAgentQueryKey(id), staleTime: Infinity }
   });
+
+  const formInitialized = useRef(false);
 
   const updateAgent = useUpdateAgent();
 
@@ -251,7 +253,11 @@ export default function AgentEdit() {
   });
 
   useEffect(() => {
-    if (!agent) return;
+    // Only populate the form once — the first time agent data arrives.
+    // Subsequent query refetches or cache invalidations must NOT reset the
+    // form, or the user would lose any unsaved changes mid-edit.
+    if (!agent || formInitialized.current) return;
+    formInitialized.current = true;
     form.reset({
       name:              agent.name,
       description:       agent.description ?? "",

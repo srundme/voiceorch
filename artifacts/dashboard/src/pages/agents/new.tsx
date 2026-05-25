@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { ArrowLeft, Save, Bot, Plus, Trash2, PhoneForwarded, Sparkles, X, ChevronDown, ChevronUp, Database, ClipboardList } from "lucide-react";
 import { useCreateAgent, useListAgentTemplates, useListKnowledgeBases, getListAgentsQueryKey } from "@workspace/api-client-react";
@@ -336,7 +336,13 @@ export default function AgentNew() {
   const backchannelingEnabled = useWatch({ control: form.control, name: "backchannelingEnabled" });
   const backchannelingFrequency = useWatch({ control: form.control, name: "backchannelingFrequency" });
 
-  useEffect(() => { form.setValue("asrModel", DEFAULT_ASR_MODEL(asrProvider)); }, [asrProvider]);
+  // Skip the very first render — defaults are already set in useForm.
+  // Only reset model/voice when the user actually changes a provider.
+  const isMounted = useRef(false);
+  useEffect(() => {
+    if (!isMounted.current) { isMounted.current = true; return; }
+    form.setValue("asrModel", DEFAULT_ASR_MODEL(asrProvider));
+  }, [asrProvider]);
   useEffect(() => { form.setValue("llmModel", DEFAULT_LLM_MODEL(llmProvider)); }, [llmProvider]);
   useEffect(() => { form.setValue("ttsVoice", DEFAULT_TTS_VOICE(ttsProvider)); }, [ttsProvider]);
   useEffect(() => { form.setValue("ttsModel", TTS_MODELS[ttsProvider]?.[0]?.value ?? ""); }, [ttsProvider]);
