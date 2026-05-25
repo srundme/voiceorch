@@ -5,8 +5,8 @@ import { useCreateAgent, getListAgentsQueryKey } from "@workspace/api-client-rea
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Users, Target, Rocket, ShoppingCart, Headphones, Bell,
-  Megaphone, Building2, BarChart2, Package, Wand2, Globe,
+  Users, Target, Headphones, Bell,
+  Megaphone, Building2, Wand2, Globe,
   ChevronLeft, ChevronRight, Check, X, Loader2, Sparkles,
   Play, Pause, Volume2, Upload, FileText, PhoneForwarded,
   Languages, SkipForward,
@@ -16,16 +16,14 @@ import { Switch } from "@/components/ui/switch";
 
 /* ── Use-case catalogue ─────────────────────────────────────────────────── */
 const USE_CASES = [
-  { id: "recruitment",      label: "Recruitment Agent",     desc: "Screen, interview, and onboard candidates",              role: "recruitment specialist",             service: "candidate screening and recruitment",                icon: Users },
-  { id: "lead_qual",        label: "Lead Qualification",    desc: "Qualify leads and warm-introduce your business",          role: "sales representative",               service: "lead qualification and sales outreach",              icon: Target },
-  { id: "onboarding",       label: "Onboarding Agent",      desc: "Conduct personalized onboarding calls",                   role: "onboarding specialist",              service: "customer onboarding and guidance",                   icon: Rocket },
-  { id: "cart_abandon",     label: "Cart Abandonment",      desc: "Recover abandoned carts with outbound calls",             role: "customer success representative",     service: "cart recovery and sales",                            icon: ShoppingCart },
-  { id: "customer_support", label: "Customer Support",      desc: "24/7 inbound call answering for FAQs",                    role: "customer support agent",             service: "customer support and issue resolution",              icon: Headphones },
-  { id: "reminder",         label: "Reminder Agent",        desc: "Automate EMI, collection, and deadline reminders",        role: "reminder and collections specialist", service: "payment reminders and collections follow-up",        icon: Bell },
-  { id: "announcement",     label: "Announcement Agent",    desc: "Engage users with product upgrades and launches",         role: "product announcements specialist",    service: "product updates and feature announcements",          icon: Megaphone },
-  { id: "front_desk",       label: "Front Desk Agent",      desc: "Handle clinic, hotel, and office scheduling",             role: "front desk receptionist",            service: "scheduling and appointment management",              icon: Building2 },
-  { id: "survey",           label: "Survey Agent",          desc: "Automated NPS, feedback and product surveys",             role: "survey and feedback specialist",      service: "customer feedback and NPS surveys",                  icon: BarChart2 },
-  { id: "cod_confirm",      label: "COD Confirmation",      desc: "Handle last-mile logistics and delivery confirmation",     role: "logistics confirmation specialist",   service: "COD order confirmation and last-mile logistics",     icon: Package },
+  { id: "recruitment",        label: "Recruitment Agent",          desc: "Screen, interview, and shortlist candidates automatically",                 role: "recruitment specialist",              service: "candidate screening, interviewing, and shortlisting",          icon: Users },
+  { id: "insurance_screener", label: "Insurance Lead Screener",    desc: "IRDAI-compliant outbound screening before handoff to human agents",         role: "insurance sales specialist",          service: "insurance lead screening and compliance-based qualification",  icon: FileText },
+  { id: "policy_renewal",     label: "Policy Renewal Agent",       desc: "Remind and nudge customers before policy expiry",                           role: "policy renewal specialist",           service: "insurance policy renewal reminders and follow-ups",            icon: Megaphone },
+  { id: "property_qualifier", label: "Property Lead Qualifier",    desc: "Filter serious property buyers from cold leads",                            role: "real estate sales specialist",        service: "property lead qualification and buyer intent assessment",      icon: Building2 },
+  { id: "customer_support",   label: "Customer Support",           desc: "24/7 inbound call answering for FAQs and customer queries",                 role: "customer support agent",              service: "customer support and issue resolution",                        icon: Headphones },
+  { id: "candidate_screen",   label: "Candidate Screening Agent",  desc: "Call applicants, ask pre-screening questions, and shortlist",               role: "talent acquisition specialist",       service: "applicant pre-screening and candidate shortlisting",           icon: Target },
+  { id: "lead_qual",          label: "Lead Qualification",         desc: "Qualify and warm-introduce leads across industries",                        role: "sales representative",                service: "lead qualification and sales outreach",                        icon: Wand2 },
+  { id: "reminder",           label: "Reminder Agent",             desc: "Automate EMI, policy, and interview reminders",                             role: "reminder and follow-up specialist",   service: "automated reminders for EMI payments, policy renewals, and scheduled events", icon: Bell },
 ];
 
 /* ── Language catalogue ─────────────────────────────────────────────────── */
