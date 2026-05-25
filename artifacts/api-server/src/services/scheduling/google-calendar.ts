@@ -24,6 +24,12 @@ const SCOPES = [
 // ── Platform-level OAuth client ──────────────────────────────────────────────
 
 function callbackUrl(): string {
+  // Prefer an explicitly-set redirect URI (works for both dev and production).
+  // Set GOOGLE_REDIRECT_URI = https://<your-domain>/api/scheduling/google/callback
+  if (process.env["GOOGLE_REDIRECT_URI"]) {
+    return process.env["GOOGLE_REDIRECT_URI"];
+  }
+  // Auto-detect from REPLIT_DOMAINS (works in dev; may differ in production)
   const domain = process.env["REPLIT_DOMAINS"]?.split(",")[0];
   return domain
     ? `https://${domain}/api/scheduling/google/callback`
