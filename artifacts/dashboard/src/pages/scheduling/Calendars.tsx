@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from "react";
-import { useAuth } from "@clerk/react";
 import { Link } from "wouter";
 import { Plus, Pencil, Trash2, MoreHorizontal, Calendar, ArrowLeft, Globe, Mail, Video, Loader2, CheckCircle2, Link2 } from "lucide-react";
 import {
@@ -9,6 +8,7 @@ import {
   useDeleteCalendar,
   useListAgents,
   getListCalendarsQueryKey,
+  customFetch,
 } from "@workspace/api-client-react";
 import type { SchedulingCalendar } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -246,7 +246,6 @@ function CalendarCard({
 }) {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const { getToken } = useAuth();
   const del = useDeleteCalendar();
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -266,16 +265,10 @@ function CalendarCard({
     const connectionId = value === "__none__" ? null : value;
     setLinkingGcal(true);
     try {
-      const token = await getToken();
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-      const r = await fetch(`${API}/scheduling/calendars/${calendar.id}/google-connection`, {
+      await customFetch(`${API}/scheduling/calendars/${calendar.id}/google-connection`, {
         method: "PATCH",
-        headers,
-        credentials: "include",
         body: JSON.stringify({ connectionId }),
       });
-      if (!r.ok) throw new Error("Failed");
       onLinkChange(calendar.id, connectionId);
       toast({ title: connectionId ? "Google account linked" : "Google account unlinked" });
     } catch {
@@ -406,27 +399,18 @@ export default function CalendarsPage({ embedded = false }: { embedded?: boolean
 
   const agentMap = new Map(agents?.map(a => [a.id, a.name]) ?? []);
 
-  const { getToken } = useAuth();
-
-  const authFetch = useCallback(async (url: string, init: RequestInit = {}): Promise<Response> => {
-    const token = await getToken();
-    const headers = new Headers(init.headers);
-    if (token) headers.set("Authorization", `Bearer ${token}`);
-    return fetch(url, { ...init, headers, credentials: "include" });
-  }, [getToken]);
-
   const loadGoogleData = useCallback(async () => {
     try {
-      const [connsRes, linksRes] = await Promise.all([
-        authFetch(`${API}/scheduling/google/connections`),
-        authFetch(`${API}/scheduling/google/calendar-links`),
+      const [conns, links] = await Promise.all([
+        customFetch<GoogleConnection[]>(`${API}/scheduling/google/connections`),
+        customFetch<Record<number, string | null>>(`${API}/scheduling/google/calendar-links`),
       ]);
-      if (connsRes.ok) setGoogleConnections(await connsRes.json());
-      if (linksRes.ok) setCalendarLinks(await linksRes.json());
+      setGoogleConnections(conns);
+      setCalendarLinks(links);
     } catch { /* non-fatal */ } finally {
       setGcalLoading(false);
     }
-  }, [authFetch]);
+  }, []);
 
   useEffect(() => { void loadGoogleData(); }, [loadGoogleData]);
 
@@ -485,9 +469,7 @@ export default function CalendarsPage({ embedded = false }: { embedded?: boolean
   async function handleConnect() {
     setConnecting(true);
     try {
-      const r = await authFetch(`${API}/scheduling/google/connect-url?returnTo=calendar&returnOrigin=${encodeURIComponent(window.location.origin)}`);
-      if (!r.ok) throw new Error("Failed");
-      const { url } = await r.json() as { url: string };
+      const { url } = await customFetch<{ url: string }>(`${API}/scheduling/google/connect-url?returnTo=calendar&returnOrigin=${encodeURIComponent(window.location.origin)}`);
       window.open(url, "_blank", "noopener");
     } catch {
       toast({ title: "Could not start Google sign-in", variant: "destructive" });
@@ -498,8 +480,7 @@ export default function CalendarsPage({ embedded = false }: { embedded?: boolean
   async function handleRemoveGoogle(id: string) {
     setRemovingId(id);
     try {
-      const r = await authFetch(`${API}/scheduling/google/connections/${id}`, { method: "DELETE" });
-      if (!r.ok) throw new Error("Failed");
+      await customFetch<void>(`${API}/scheduling/google/connections/${id}`, { method: "DELETE" });
       setGoogleConnections(prev => prev.filter(c => c.id !== id));
       toast({ title: "Google account disconnected" });
     } catch {
