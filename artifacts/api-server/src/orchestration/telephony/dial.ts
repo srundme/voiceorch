@@ -100,6 +100,7 @@ export async function dialVobiz(opts: {
     method: "POST",
     headers: {
       "X-Auth-ID": opts.authId, "X-Auth-Token": opts.authToken,
+      "Accept": "application/json",
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),

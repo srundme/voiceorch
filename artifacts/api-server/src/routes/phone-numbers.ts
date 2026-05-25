@@ -33,6 +33,7 @@ function vobizHeaders(authId: string, authToken: string) {
   return {
     "X-Auth-ID":    authId,
     "X-Auth-Token": authToken,
+    "Accept":       "application/json",
     "Content-Type": "application/json",
   };
 }
