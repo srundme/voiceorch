@@ -9,7 +9,7 @@ import {
   Megaphone, Building2, Wand2, Globe,
   ChevronLeft, ChevronRight, Check, X, Loader2, Sparkles,
   Play, Pause, Volume2, Upload, FileText, PhoneForwarded,
-  Languages, SkipForward,
+  Languages, SkipForward, MessageCircle, MessageSquare, Phone, ArrowDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
@@ -499,7 +499,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
             <span className="text-gray-400 text-xs font-mono tracking-widest uppercase">
               {microStep < 5
                 ? `${String(microStep + 1).padStart(2, "0")} / 05 — ${MICRO_STEP_LABELS[microStep]}`
-                : "Review — Summary"}
+                : "Call Flow Preview"}
             </span>
           )}
           {!microActive && state.mode === "managed" && currentStep && (
@@ -655,28 +655,93 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                 </div>
               )}
 
-              {/* Summary Screen */}
-              {microStep === 5 && (
-                <div>
-                  <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">Review</p>
-                  <h2 className="text-3xl font-bold text-gray-900 mb-2">Here's what your agent<br />will be built on</h2>
-                  <p className="text-gray-400 text-sm mb-8">Review your answers before we generate the agent.</p>
-                  <div className="space-y-3">
-                    {[
-                      { label: "01 / 05 — Business & Service",    value: microAnswers.business },
-                      { label: "02 / 05 — Call Direction",         value: microAnswers.callDirection },
-                      { label: "03 / 05 — Customer Details",       value: microAnswers.customerDetails.join(", ") || "—" },
-                      { label: "04 / 05 — Post Booking Action",    value: microAnswers.postBooking },
-                      { label: "05 / 05 — Escalation / Rejection", value: microAnswers.escalation.trim() || "None" },
-                    ].map(row => (
-                      <div key={row.label} className="p-4 rounded-xl border border-gray-200 bg-gray-50">
-                        <p className="text-gray-400 text-[10px] font-semibold uppercase tracking-[0.15em] mb-1.5">{row.label}</p>
-                        <p className="text-gray-700 text-sm leading-relaxed">{row.value}</p>
-                      </div>
-                    ))}
+              {/* Call Flow Preview Screen */}
+              {microStep === 5 && (() => {
+                const detailsBadge = microAnswers.customerDetails.length > 0
+                  ? microAnswers.customerDetails.slice(0, 3).join(", ") + (microAnswers.customerDetails.length > 3 ? ` +${microAnswers.customerDetails.length - 3} more` : "")
+                  : "customer info";
+                const postBookingLabel = (() => {
+                  if (microAnswers.postBooking === "Send WhatsApp confirmation") return "Sends WhatsApp confirmation to customer";
+                  if (microAnswers.postBooking === "Transfer to a human agent") return "Transfers call to a human agent";
+                  if (microAnswers.postBooking === "Send SMS confirmation") return "Sends SMS confirmation to customer";
+                  if (microAnswers.postBooking === "Just close the call") return "Thanks the customer and closes the call";
+                  return microAnswers.postBooking || "Completes post-booking action";
+                })();
+                const postBookingIcon = (() => {
+                  if (microAnswers.postBooking === "Send WhatsApp confirmation") return MessageCircle;
+                  if (microAnswers.postBooking === "Transfer to a human agent") return PhoneForwarded;
+                  if (microAnswers.postBooking === "Send SMS confirmation") return MessageSquare;
+                  return Phone;
+                })();
+                type FlowNode = {
+                  label: string;
+                  badge?: string;
+                  branch?: boolean;
+                  Icon?: React.ElementType;
+                };
+                const nodes: FlowNode[] = [
+                  { label: "Agent greets the customer and introduces itself", badge: microAnswers.business ? microAnswers.business.slice(0, 55) + (microAnswers.business.length > 55 ? "…" : "") : undefined },
+                  { label: "Checks if it is a good time to talk" },
+                  { label: "If busy — asks for a callback time and closes politely", branch: true },
+                  { label: "If available — explains the purpose of the call", branch: true },
+                  { label: "Collects customer details", badge: detailsBadge },
+                  { label: "Checks availability and confirms appointment slot" },
+                  { label: "Handles objections or rescheduling requests if any" },
+                  { label: postBookingLabel, Icon: postBookingIcon },
+                  { label: "Closes the call warmly" },
+                ];
+                return (
+                  <div>
+                    <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">Call Flow</p>
+                    <h2 className="text-2xl font-bold text-gray-900 mb-1.5">Here is how your agent<br />will handle the call</h2>
+                    <p className="text-gray-400 text-sm mb-7">This is the flow your agent will follow. You can add more details in the next step.</p>
+
+                    <div className="relative">
+                      {nodes.map((node, idx) => (
+                        <div key={idx} className="flex gap-3">
+                          {/* Connector column */}
+                          <div className="flex flex-col items-center w-8 shrink-0">
+                            {node.branch ? (
+                              <div className="h-7 w-7 rounded-full border-2 border-dashed border-violet-300 bg-violet-50 flex items-center justify-center shrink-0">
+                                <ArrowDown className="h-3 w-3 text-violet-400" />
+                              </div>
+                            ) : node.Icon ? (
+                              <div className="h-7 w-7 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shrink-0 shadow-sm shadow-violet-500/30">
+                                <node.Icon className="h-3.5 w-3.5 text-white" />
+                              </div>
+                            ) : (
+                              <div className="h-7 w-7 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shrink-0 shadow-sm shadow-violet-500/30">
+                                <span className="text-white text-[10px] font-bold leading-none">{idx + 1}</span>
+                              </div>
+                            )}
+                            {idx < nodes.length - 1 && (
+                              <div className={cn(
+                                "w-px flex-1 min-h-[14px] my-0.5",
+                                node.branch ? "border-l border-dashed border-violet-200" : "bg-gradient-to-b from-violet-200 to-indigo-100",
+                              )} />
+                            )}
+                          </div>
+
+                          {/* Content column */}
+                          <div className={cn("pb-3 pt-0.5 flex-1", idx === nodes.length - 1 && "pb-0")}>
+                            <p className={cn(
+                              "text-sm leading-snug",
+                              node.branch ? "text-gray-400 italic" : "text-gray-800 font-medium",
+                            )}>
+                              {node.label}
+                            </p>
+                            {node.badge && (
+                              <span className="inline-block mt-1 px-2.5 py-0.5 text-[10px] font-semibold rounded-full bg-violet-50 text-violet-600 border border-violet-200 leading-normal">
+                                {node.badge}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
             </SlideStep>
           )}
@@ -1321,7 +1386,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                 onClick={handleMicroConfirm}
                 className="flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white shadow-lg shadow-violet-500/25 transition-all"
               >
-                <Check className="h-4 w-4" /> Confirm &amp; Continue
+                Add more details to this flow <ChevronRight className="h-4 w-4" />
               </button>
             )}
             {microActive && microStep < 5 && (
