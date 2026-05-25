@@ -31,25 +31,42 @@ router.get("/scheduling/google/connections", requireAuth, async (req, res): Prom
 // ── OAuth connect — redirect to Google consent screen ───────────────────────
 
 router.get("/scheduling/google/connect", requireAuth, (req, res): void => {
-  const clerkId = (req as any).clerkUserId as string;
+  const clerkId  = (req as any).clerkUserId as string;
+  const returnTo = (req.query["returnTo"] as string | undefined) ?? "conferencing";
 
   if (!process.env["GOOGLE_CLIENT_ID"] || !process.env["GOOGLE_CLIENT_SECRET"]) {
     res.status(503).json({ error: "Google OAuth not configured on this platform." });
     return;
   }
 
-  const url = getAuthUrl(clerkId);
+  const url = getAuthUrl(clerkId, returnTo);
   res.redirect(url);
 });
 
 // ── OAuth callback — no requireAuth: Google redirects here ──────────────────
-// We identify the user via the `state` param (= clerkId set in /connect).
+// State is JSON { clerkId, returnTo } — tells us who connected and where to redirect.
 
 router.get("/scheduling/google/callback", async (req, res): Promise<void> => {
-  const { code, error, state: clerkId } = req.query as {
+  const { code, error, state: rawState } = req.query as {
     code?: string; error?: string; state?: string;
   };
-  const redirectBase = `${DASHBOARD_BASE()}/app/settings/conferencing`;
+
+  // Decode state — support both legacy string (plain clerkId) and new JSON format
+  let clerkId: string | undefined;
+  let returnTo = "conferencing";
+  if (rawState) {
+    try {
+      const parsed = JSON.parse(rawState) as { clerkId?: string; returnTo?: string };
+      clerkId  = parsed.clerkId;
+      returnTo = parsed.returnTo ?? "conferencing";
+    } catch {
+      // Legacy: state was just the clerkId string
+      clerkId = rawState;
+    }
+  }
+
+  const settingsPath = returnTo === "calendar" ? "calendar" : "conferencing";
+  const redirectBase = `${DASHBOARD_BASE()}/app/settings/${settingsPath}`;
 
   if (error || !code || !clerkId) {
     logger.warn({ clerkId, error }, "Google OAuth callback error or missing params");

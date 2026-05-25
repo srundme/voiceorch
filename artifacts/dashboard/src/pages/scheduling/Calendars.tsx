@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Link } from "wouter";
-import { Plus, Pencil, Trash2, MoreHorizontal, Calendar, ArrowLeft, Globe, Mail, Video } from "lucide-react";
+import { Plus, Pencil, Trash2, MoreHorizontal, Calendar, ArrowLeft, Globe, Mail, Video, Loader2, CheckCircle2, Link2 } from "lucide-react";
 import {
   useListCalendars,
   useCreateCalendar,
@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
@@ -391,10 +391,13 @@ export default function CalendarsPage({ embedded = false }: { embedded?: boolean
   const [createOpen, setCreateOpen] = useState(false);
   const { data: calendars, isLoading } = useListCalendars();
   const { data: agents } = useListAgents();
+  const { toast } = useToast();
 
   const [googleConnections, setGoogleConnections] = useState<GoogleConnection[]>([]);
-  // calendarId → connectionId (or null)
   const [calendarLinks, setCalendarLinks] = useState<Record<number, string | null>>({});
+  const [gcalLoading,  setGcalLoading]  = useState(true);
+  const [connecting,   setConnecting]   = useState(false);
+  const [removingId,   setRemovingId]   = useState<string | null>(null);
 
   const agentMap = new Map(agents?.map(a => [a.id, a.name]) ?? []);
 
@@ -406,10 +409,51 @@ export default function CalendarsPage({ embedded = false }: { embedded?: boolean
       ]);
       if (connsRes.ok) setGoogleConnections(await connsRes.json());
       if (linksRes.ok) setCalendarLinks(await linksRes.json());
-    } catch { /* non-fatal */ }
+    } catch { /* non-fatal */ } finally {
+      setGcalLoading(false);
+    }
   }, []);
 
   useEffect(() => { void loadGoogleData(); }, [loadGoogleData]);
+
+  // Handle OAuth return — ?gcal=connected or ?gcal=error
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const gcal  = params.get("gcal");
+    const email = params.get("email");
+    if (gcal === "connected") {
+      toast({
+        title: "Google account connected!",
+        description: email ? `${email} is now linked.` : "Google Calendar connected.",
+      });
+      window.history.replaceState({}, "", window.location.pathname);
+      void loadGoogleData();
+    } else if (gcal === "error") {
+      toast({ title: "Connection failed", description: "Google sign-in failed. Please try again.", variant: "destructive" });
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, [toast, loadGoogleData]);
+
+  function handleConnect() {
+    setConnecting(true);
+    window.location.href = `${API}/scheduling/google/connect?returnTo=calendar`;
+  }
+
+  async function handleRemoveGoogle(id: string) {
+    setRemovingId(id);
+    try {
+      const r = await fetch(`${API}/scheduling/google/connections/${id}`, {
+        method: "DELETE", credentials: "include",
+      });
+      if (!r.ok) throw new Error("Failed");
+      setGoogleConnections(prev => prev.filter(c => c.id !== id));
+      toast({ title: "Google account disconnected" });
+    } catch {
+      toast({ title: "Failed to disconnect", variant: "destructive" });
+    } finally {
+      setRemovingId(null);
+    }
+  }
 
   function handleLinkChange(calendarId: number, connectionId: string | null) {
     setCalendarLinks(prev => ({ ...prev, [calendarId]: connectionId }));
@@ -446,19 +490,80 @@ export default function CalendarsPage({ embedded = false }: { embedded?: boolean
         </div>
       )}
 
-      {/* Google Meet prompt (only if no connections) */}
-      {googleConnections.length === 0 && (calendars?.length ?? 0) > 0 && (
-        <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
-          <p className="text-sm text-blue-800">
-            <strong>Connect Google Calendar</strong> to auto-generate Meet links for bookings
-          </p>
-          <Link href={`${BASE}/app/settings/conferencing`}>
-            <Button size="sm" variant="outline" className="border-blue-300 text-blue-700 hover:bg-blue-100 gap-1.5">
-              <Video className="h-3.5 w-3.5" /> Connect
+      {/* Google Calendar connection panel */}
+      <Card className={googleConnections.length > 0 ? "border-emerald-300 bg-emerald-50/20" : ""}>
+        <CardHeader className="pb-3">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center shrink-0 border">
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                </svg>
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-sm font-semibold">Google Calendar</CardTitle>
+                  {googleConnections.length > 0 && (
+                    <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-xs">
+                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                      {googleConnections.length === 1 ? "1 account" : `${googleConnections.length} accounts`}
+                    </Badge>
+                  )}
+                </div>
+                <CardDescription className="text-xs mt-0.5">
+                  Connect to auto-generate Google Meet links for every booking
+                </CardDescription>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              onClick={handleConnect}
+              disabled={connecting || gcalLoading}
+              variant={googleConnections.length > 0 ? "outline" : "default"}
+              className="shrink-0 gap-1.5"
+            >
+              {connecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+              {connecting ? "Redirecting…" : googleConnections.length > 0 ? "Add account" : "Connect Google"}
             </Button>
-          </Link>
-        </div>
-      )}
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0">
+          {gcalLoading ? (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading…
+            </div>
+          ) : googleConnections.length > 0 ? (
+            <div className="space-y-2">
+              {googleConnections.map(conn => (
+                <div key={conn.id} className="flex items-center justify-between px-3 py-2 bg-background border rounded-lg">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
+                      <span className="text-xs font-semibold text-blue-700">{conn.email[0]?.toUpperCase()}</span>
+                    </div>
+                    <span className="text-sm truncate">{conn.email}</span>
+                  </div>
+                  <Button
+                    variant="ghost" size="sm"
+                    disabled={removingId === conn.id}
+                    onClick={() => handleRemoveGoogle(conn.id)}
+                    className="h-7 px-2 text-muted-foreground hover:text-destructive shrink-0"
+                  >
+                    {removingId === conn.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 py-2 text-xs text-muted-foreground">
+              <Link2 className="h-4 w-4 shrink-0" />
+              No Google account connected — click <strong className="mx-1">Connect Google</strong> to sign in and enable Meet links
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Setup guide (only shown when empty) */}
       {!isLoading && (!calendars || calendars.length === 0) && (

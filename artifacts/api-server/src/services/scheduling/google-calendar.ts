@@ -43,10 +43,12 @@ export function makePlatformOAuth2Client() {
 
 /**
  * Generate the Google OAuth consent screen URL.
- * `state` encodes the user's Clerk ID so the callback can map the account.
+ * `state` is a JSON object `{ clerkId, returnTo? }` so the callback can map
+ * the account AND redirect back to whichever page initiated the flow.
  */
-export function getAuthUrl(state: string): string {
+export function getAuthUrl(clerkId: string, returnTo?: string): string {
   const client = makePlatformOAuth2Client();
+  const state = JSON.stringify({ clerkId, returnTo: returnTo ?? "conferencing" });
   return client.generateAuthUrl({
     access_type: "offline",
     scope: SCOPES,
