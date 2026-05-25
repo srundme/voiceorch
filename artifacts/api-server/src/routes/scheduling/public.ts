@@ -13,6 +13,10 @@ import {
   GetBookingResponse,
 } from "@workspace/api-zod";
 import { buildSlotLockKey } from "../../services/scheduling/lock.js";
+import {
+  createCalendarEvent,
+  getFirstConnectionForUser,
+} from "../../services/scheduling/google-calendar.js";
 
 const router: IRouter = Router();
 
@@ -155,6 +159,38 @@ router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
     return;
   }
 
+  // Create Google Calendar event with Meet link (best-effort, non-blocking)
+  let meetLink: string | null = null;
+  let googleEventId: string | null = null;
+  try {
+    const calRow = await db.execute(
+      sql`SELECT google_calendar_connection_id FROM scheduling_calendars WHERE id = ${calendar.id}`
+    );
+    const calendarConnectionId = (calRow.rows[0] as any)?.google_calendar_connection_id as string | null;
+    const connectionId = calendarConnectionId ?? (await getFirstConnectionForUser(calendar.userId))?.id ?? null;
+
+    const gcalResult = connectionId ? await createCalendarEvent({
+      connectionId,
+      summary: `${eventType.name} — ${booking.attendeeName}`,
+      description: booking.attendeeNotes ?? undefined,
+      startTime: booking.slotStart,
+      endTime: booking.slotEnd,
+      attendeeEmail: booking.attendeeEmail,
+      attendeeName: booking.attendeeName,
+      timezone: calendar.timezone,
+      hostEmail: calendar.hostEmail,
+    }) : null;
+    if (gcalResult) {
+      meetLink = gcalResult.meetLink;
+      googleEventId = gcalResult.eventId;
+      if (meetLink || googleEventId) {
+        await db.execute(
+          sql`UPDATE bookings SET meet_link = ${meetLink}, google_event_id = ${googleEventId} WHERE id = ${booking.id}`
+        );
+      }
+    }
+  } catch { /* non-fatal */ }
+
   void sendBookingCreatedEmail({
     attendeeName: booking.attendeeName,
     attendeeEmail: booking.attendeeEmail,
@@ -164,6 +200,7 @@ router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
     timezone: calendar.timezone,
     bookingId: booking.id,
     notes: booking.attendeeNotes,
+    meetLink,
   });
   void dispatchSchedulingWebhooks(calendar.userId, "scheduling.booking.created", {
     booking: {
@@ -173,6 +210,8 @@ router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
       cancelledAt: booking.cancelledAt?.toISOString() ?? null,
       createdAt: booking.createdAt.toISOString(),
       updatedAt: booking.updatedAt.toISOString(),
+      meetLink,
+      googleEventId,
     },
   });
 
@@ -183,6 +222,8 @@ router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
     cancelledAt: booking.cancelledAt?.toISOString() ?? null,
     createdAt: booking.createdAt.toISOString(),
     updatedAt: booking.updatedAt.toISOString(),
+    meetLink,
+    googleEventId,
   }));
 });
 

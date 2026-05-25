@@ -266,8 +266,65 @@ export async function deleteCalendarEvent(connectionId: string, eventId: string)
   const calendar = google.calendar({ version: "v3", auth: client });
   try {
     await calendar.events.delete({ calendarId: "primary", eventId });
+    logger.info({ connectionId, eventId }, "Google Calendar event deleted");
   } catch (err) {
     logger.warn({ err, connectionId, eventId }, "Failed to delete Google Calendar event");
+  }
+}
+
+/**
+ * Update an existing Google Calendar event in-place (patch).
+ * Returns null if the connection is missing or the API call fails.
+ */
+export async function updateCalendarEvent(params: {
+  connectionId: string;
+  eventId: string;
+  summary?: string;
+  description?: string;
+  startTime?: Date;
+  endTime?: Date;
+  attendeeEmail?: string;
+  attendeeName?: string;
+  timezone?: string;
+  hostEmail?: string | null;
+}): Promise<{ meetLink: string | null; eventId: string } | null> {
+  const tokens = await getValidAccessToken(params.connectionId);
+  if (!tokens) return null;
+
+  const client = makePlatformOAuth2Client();
+  client.setCredentials({ access_token: tokens.accessToken });
+  const calendar = google.calendar({ version: "v3", auth: client });
+
+  const requestBody: Record<string, unknown> = {};
+  if (params.summary !== undefined) requestBody["summary"] = params.summary;
+  if (params.description !== undefined) requestBody["description"] = params.description;
+  if (params.startTime !== undefined && params.timezone !== undefined) {
+    requestBody["start"] = { dateTime: params.startTime.toISOString(), timeZone: params.timezone };
+  }
+  if (params.endTime !== undefined && params.timezone !== undefined) {
+    requestBody["end"] = { dateTime: params.endTime.toISOString(), timeZone: params.timezone };
+  }
+  if (params.attendeeEmail !== undefined) {
+    const attendees: { email: string; displayName?: string }[] = [
+      { email: params.attendeeEmail, displayName: params.attendeeName },
+    ];
+    if (params.hostEmail) attendees.push({ email: params.hostEmail });
+    requestBody["attendees"] = attendees;
+  }
+
+  try {
+    const event = await calendar.events.patch({
+      calendarId: "primary",
+      eventId: params.eventId,
+      requestBody,
+    });
+    const meetLink = event.data.conferenceData?.entryPoints?.find(e => e.entryPointType === "video")?.uri ?? null;
+    const eventId  = event.data.id ?? params.eventId;
+    logger.info({ connectionId: params.connectionId, eventId, meetLink }, "Google Calendar event updated");
+    return { meetLink, eventId };
+  } catch (err) {
+    logger.warn({ err, connectionId: params.connectionId, eventId: params.eventId }, "Failed to update Google Calendar event");
+    return null;
   }
 }
 

@@ -235,6 +235,12 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
     .where(and(eq(bookingsTable.id, params.data.id), eq(bookingsTable.userId, clerkId)));
   if (!existing) { res.status(404).json({ error: "Booking not found" }); return; }
 
+  // Fetch google_event_id explicitly — it exists in the DB but is not in the Drizzle schema type
+  const existingGcalRow = await db.execute(
+    sql`SELECT google_event_id FROM bookings WHERE id = ${existing.id}`
+  );
+  const existingGoogleEventId = (existingGcalRow.rows[0] as any)?.google_event_id as string | null ?? null;
+
   const [eventType] = await db.select().from(eventTypesTable).where(eq(eventTypesTable.id, existing.eventTypeId));
   const [calendar] = await db.select().from(schedulingCalendarsTable).where(eq(schedulingCalendarsTable.id, existing.calendarId));
 
@@ -335,6 +341,43 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
       return;
     }
 
+    // Google Calendar sync for reschedule (best-effort, non-blocking)
+    void (async () => {
+      try {
+        // Resolve Google connection (calendar-specific or first user connection)
+        const calRow = await db.execute(
+          sql`SELECT google_calendar_connection_id FROM scheduling_calendars WHERE id = ${existing.calendarId}`
+        );
+        const calendarConnectionId = (calRow.rows[0] as any)?.google_calendar_connection_id as string | null;
+        const connectionId = calendarConnectionId ?? (await getFirstConnectionForUser(clerkId))?.id ?? null;
+
+        // (a) Delete old Calendar event
+        if (existingGoogleEventId && connectionId) {
+          await deleteCalendarEvent(connectionId, existingGoogleEventId);
+        }
+
+        // (b) Create new Calendar event for the rescheduled slot
+        if (connectionId && newBooking) {
+          const gcalResult = await createCalendarEvent({
+            connectionId,
+            summary: `${eventType?.name ?? "Meeting"} — ${newBooking.attendeeName}`,
+            description: newBooking.attendeeNotes ?? undefined,
+            startTime: newBooking.slotStart,
+            endTime: newBooking.slotEnd,
+            attendeeEmail: newBooking.attendeeEmail,
+            attendeeName: newBooking.attendeeName,
+            timezone: calendar?.timezone ?? "UTC",
+            hostEmail: calendar?.hostEmail,
+          });
+          if (gcalResult) {
+            await db.execute(
+              sql`UPDATE bookings SET meet_link = ${gcalResult.meetLink}, google_event_id = ${gcalResult.eventId} WHERE id = ${newBooking.id}`
+            );
+          }
+        }
+      } catch { /* non-fatal */ }
+    })();
+
     void sendBookingRescheduledEmail({
       attendeeName: newBooking.attendeeName,
       attendeeEmail: newBooking.attendeeEmail,
@@ -370,6 +413,22 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
   if (!row) { res.status(404).json({ error: "Booking not found" }); return; }
 
   if (webhookEvent === "scheduling.booking.cancelled") {
+    // Delete Google Calendar event on cancellation (best-effort, fire-and-forget)
+    if (existingGoogleEventId) {
+      void (async () => {
+        try {
+          const calRow = await db.execute(
+            sql`SELECT google_calendar_connection_id FROM scheduling_calendars WHERE id = ${existing.calendarId}`
+          );
+          const calendarConnectionId = (calRow.rows[0] as any)?.google_calendar_connection_id as string | null;
+          const connectionId = calendarConnectionId ?? (await getFirstConnectionForUser(clerkId))?.id ?? null;
+          if (connectionId) {
+            await deleteCalendarEvent(connectionId, existingGoogleEventId);
+          }
+        } catch { /* non-fatal */ }
+      })();
+    }
+
     void sendBookingCancelledEmail({
       attendeeName: row.attendeeName,
       attendeeEmail: row.attendeeEmail,
