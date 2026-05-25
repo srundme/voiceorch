@@ -2,22 +2,56 @@ import { google } from "googleapis";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import { logger } from "../../lib/logger.js";
+import { encryptKey, decryptKey } from "../../lib/crypto.js";
 
 const SCOPES = [
   "https://www.googleapis.com/auth/calendar.events",
   "https://www.googleapis.com/auth/calendar.readonly",
+  "https://www.googleapis.com/auth/userinfo.email",
 ];
 
-export function getOAuth2Client() {
-  return new google.auth.OAuth2(
-    process.env["GOOGLE_CLIENT_ID"],
-    process.env["GOOGLE_CLIENT_SECRET"],
-    process.env["GOOGLE_REDIRECT_URI"] ?? `${process.env["REPLIT_DOMAINS"]?.split(",")[0] ? `https://${process.env["REPLIT_DOMAINS"]?.split(",")[0]}` : "http://localhost:80"}/api/scheduling/google/callback`,
-  );
+function callbackUrl(): string {
+  const domain = process.env["REPLIT_DOMAINS"]?.split(",")[0];
+  return domain
+    ? `https://${domain}/api/scheduling/google/callback`
+    : "http://localhost:80/api/scheduling/google/callback";
 }
 
-export function getAuthUrl(state?: string): string {
-  const client = getOAuth2Client();
+export function makeOAuth2Client(clientId: string, clientSecret: string) {
+  return new google.auth.OAuth2(clientId, clientSecret, callbackUrl());
+}
+
+// ── Per-user credential store ────────────────────────────────────────────────
+
+export async function getOAuthConfig(userId: string): Promise<{ clientId: string; clientSecret: string } | null> {
+  const rows = await db.execute(
+    sql`SELECT client_id, client_secret FROM user_google_oauth_config WHERE user_id = ${userId}`,
+  );
+  const row = rows.rows[0] as any;
+  if (!row) return null;
+  return { clientId: row.client_id, clientSecret: decryptKey(row.client_secret) };
+}
+
+export async function saveOAuthConfig(userId: string, clientId: string, clientSecret: string): Promise<void> {
+  const encrypted = encryptKey(clientSecret);
+  await db.execute(sql`
+    INSERT INTO user_google_oauth_config (user_id, client_id, client_secret)
+    VALUES (${userId}, ${clientId}, ${encrypted})
+    ON CONFLICT (user_id) DO UPDATE
+      SET client_id = EXCLUDED.client_id,
+          client_secret = EXCLUDED.client_secret,
+          updated_at = NOW()
+  `);
+}
+
+export async function deleteOAuthConfig(userId: string): Promise<void> {
+  await db.execute(sql`DELETE FROM user_google_oauth_config WHERE user_id = ${userId}`);
+}
+
+// ── Auth URL ────────────────────────────────────────────────────────────────
+
+export function getAuthUrl(clientId: string, clientSecret: string, state: string): string {
+  const client = makeOAuth2Client(clientId, clientSecret);
   return client.generateAuthUrl({
     access_type: "offline",
     scope: SCOPES,
@@ -26,13 +60,18 @@ export function getAuthUrl(state?: string): string {
   });
 }
 
-export async function exchangeCode(code: string): Promise<{ accessToken: string; refreshToken: string; expiry: Date; email: string }> {
-  const client = getOAuth2Client();
+// ── Code exchange ────────────────────────────────────────────────────────────
+
+export async function exchangeCode(
+  clientId: string,
+  clientSecret: string,
+  code: string,
+): Promise<{ accessToken: string; refreshToken: string; expiry: Date; email: string }> {
+  const client = makeOAuth2Client(clientId, clientSecret);
   const { tokens } = await client.getToken(code);
   if (!tokens.access_token) {
     throw new Error("Missing access_token from Google OAuth response");
   }
-  // Fetch user email via direct fetch (avoids googleapis oauth2 client auth issues)
   const userInfoRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
     headers: { Authorization: `Bearer ${tokens.access_token}` },
   });
@@ -42,25 +81,27 @@ export async function exchangeCode(code: string): Promise<{ accessToken: string;
   const userInfo = await userInfoRes.json() as { email?: string };
   if (!userInfo.email) throw new Error("Could not fetch email from Google account");
 
-  // If no refresh_token (user already granted access before), load existing stored token
-  const refreshToken = tokens.refresh_token ?? null;
-
   return {
     accessToken: tokens.access_token,
-    refreshToken: refreshToken ?? "",
+    refreshToken: tokens.refresh_token ?? "",
     expiry: tokens.expiry_date ? new Date(tokens.expiry_date) : new Date(Date.now() + 3600_000),
     email: userInfo.email,
   };
 }
 
-export async function getTokensForUser(userId: string): Promise<{ accessToken: string; refreshToken: string; email: string } | null> {
+// ── Token store ──────────────────────────────────────────────────────────────
+
+export async function getTokensForUser(userId: string): Promise<{ accessToken: string; refreshToken: string; email: string; clientId: string; clientSecret: string } | null> {
+  const config = await getOAuthConfig(userId);
+  if (!config) return null;
+
   const rows = await db.execute(
     sql`SELECT access_token, refresh_token, token_expiry, email FROM google_calendar_tokens WHERE user_id = ${userId}`,
   );
   const row = rows.rows[0] as any;
   if (!row) return null;
 
-  const client = getOAuth2Client();
+  const client = makeOAuth2Client(config.clientId, config.clientSecret);
   client.setCredentials({
     access_token: row.access_token,
     refresh_token: row.refresh_token,
@@ -80,14 +121,14 @@ export async function getTokensForUser(userId: string): Promise<{ accessToken: s
               updated_at = NOW()
           WHERE user_id = ${userId}
         `);
-        return { accessToken: credentials.access_token, refreshToken: row.refresh_token, email: row.email };
+        return { accessToken: credentials.access_token, refreshToken: row.refresh_token, email: row.email, clientId: config.clientId, clientSecret: config.clientSecret };
       }
     } catch (err) {
       logger.warn({ err, userId }, "Failed to refresh Google token");
     }
   }
 
-  return { accessToken: row.access_token, refreshToken: row.refresh_token, email: row.email };
+  return { accessToken: row.access_token, refreshToken: row.refresh_token, email: row.email, clientId: config.clientId, clientSecret: config.clientSecret };
 }
 
 export async function storeTokens(userId: string, accessToken: string, refreshToken: string, expiry: Date, email: string): Promise<void> {
@@ -109,11 +150,16 @@ export async function revokeTokens(userId: string): Promise<void> {
   );
   const row = rows.rows[0] as any;
   if (row?.access_token) {
-    const client = getOAuth2Client();
-    try { await client.revokeToken(row.access_token); } catch { /* best effort */ }
+    const config = await getOAuthConfig(userId);
+    if (config) {
+      const client = makeOAuth2Client(config.clientId, config.clientSecret);
+      try { await client.revokeToken(row.access_token); } catch { /* best effort */ }
+    }
   }
   await db.execute(sql`DELETE FROM google_calendar_tokens WHERE user_id = ${userId}`);
 }
+
+// ── Calendar event creation ──────────────────────────────────────────────────
 
 export async function createCalendarEvent(params: {
   userId: string;
@@ -129,7 +175,7 @@ export async function createCalendarEvent(params: {
   const tokens = await getTokensForUser(params.userId);
   if (!tokens) return null;
 
-  const client = getOAuth2Client();
+  const client = makeOAuth2Client(tokens.clientId, tokens.clientSecret);
   client.setCredentials({ access_token: tokens.accessToken, refresh_token: tokens.refreshToken });
 
   const calendar = google.calendar({ version: "v3", auth: client });
@@ -174,7 +220,7 @@ export async function createCalendarEvent(params: {
 export async function deleteCalendarEvent(userId: string, eventId: string): Promise<void> {
   const tokens = await getTokensForUser(userId);
   if (!tokens) return;
-  const client = getOAuth2Client();
+  const client = makeOAuth2Client(tokens.clientId, tokens.clientSecret);
   client.setCredentials({ access_token: tokens.accessToken, refresh_token: tokens.refreshToken });
   const calendar = google.calendar({ version: "v3", auth: client });
   try {
