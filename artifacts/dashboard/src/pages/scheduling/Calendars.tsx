@@ -450,7 +450,7 @@ export default function CalendarsPage({ embedded = false }: { embedded?: boolean
       const r = await authFetch(`${API}/scheduling/google/connect-url?returnTo=calendar`);
       if (!r.ok) throw new Error("Failed");
       const { url } = await r.json() as { url: string };
-      (window.top ?? window).location.href = url;
+      window.open(url, "_blank", "noopener");
     } catch {
       toast({ title: "Could not start Google sign-in", variant: "destructive" });
       setConnecting(false);
