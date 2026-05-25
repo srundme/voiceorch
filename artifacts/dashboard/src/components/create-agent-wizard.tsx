@@ -16,7 +16,7 @@ import { Switch } from "@/components/ui/switch";
 
 /* ── Use-case catalogue ─────────────────────────────────────────────────── */
 const USE_CASES = [
-  { id: "recruitment",        label: "Recruitment Agent",          desc: "Screen, interview, and shortlist candidates automatically",                 role: "recruitment specialist",              service: "candidate screening, interviewing, and shortlisting",          icon: Users },
+  { id: "appointment_booking", label: "Appointment Booking Agent",  desc: "Book and confirm patient appointments automatically",                       role: "appointment booking specialist",       service: "patient appointment booking and confirmation",                 icon: Users },
   { id: "insurance_screener", label: "Insurance Lead Screener",    desc: "IRDAI-compliant outbound screening before handoff to human agents",         role: "insurance sales specialist",          service: "insurance lead screening and compliance-based qualification",  icon: FileText },
   { id: "policy_renewal",     label: "Policy Renewal Agent",       desc: "Remind and nudge customers before policy expiry",                           role: "policy renewal specialist",           service: "insurance policy renewal reminders and follow-ups",            icon: Megaphone },
   { id: "property_qualifier", label: "Property Lead Qualifier",    desc: "Filter serious property buyers from cold leads",                            role: "real estate sales specialist",        service: "property lead qualification and buyer intent assessment",      icon: Building2 },
