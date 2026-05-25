@@ -51,9 +51,15 @@ export function makePlatformOAuth2Client() {
  * `state` is a JSON object `{ clerkId, returnTo? }` so the callback can map
  * the account AND redirect back to whichever page initiated the flow.
  */
-export function getAuthUrl(clerkId: string, returnTo?: string): string {
+export function getAuthUrl(clerkId: string, returnTo?: string, returnOrigin?: string): string {
   const client = makePlatformOAuth2Client();
-  const state = JSON.stringify({ clerkId, returnTo: returnTo ?? "conferencing" });
+  const state = JSON.stringify({
+    clerkId,
+    returnTo: returnTo ?? "conferencing",
+    // Pass the caller's origin so the callback can redirect back to the right domain
+    // (dev preview vs production). Validated in the callback before use.
+    ...(returnOrigin ? { returnOrigin } : {}),
+  });
   return client.generateAuthUrl({
     access_type: "offline",
     scope: SCOPES,

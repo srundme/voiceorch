@@ -111,7 +111,7 @@ export default function ConferencingPage({ embedded = false }: { embedded?: bool
   async function handleConnect() {
     setConnecting(true);
     try {
-      const r = await authFetch(`${API}/scheduling/google/connect-url?returnTo=conferencing`);
+      const r = await authFetch(`${API}/scheduling/google/connect-url?returnTo=conferencing&returnOrigin=${encodeURIComponent(window.location.origin)}`);
       if (!r.ok) throw new Error("Failed");
       const { url } = await r.json() as { url: string };
       window.open(url, "_blank", "noopener");

@@ -16,6 +16,30 @@ const DASHBOARD_BASE = () => {
   return domain ? `https://${domain}` : "http://localhost:80";
 };
 
+/**
+ * Allow the callback to redirect back to the origin that initiated the flow.
+ * Accepts:
+ *   - Any origin listed in REPLIT_DOMAINS (production + dev previews registered there)
+ *   - Any *.sisko.replit.dev or *.replit.dev Replit workspace domain (dev previews)
+ * Rejects anything else to prevent open-redirect abuse.
+ */
+function isTrustedOrigin(origin: string): boolean {
+  try {
+    const url = new URL(origin);
+    if (url.protocol !== "https:") return false;
+    const host = url.hostname;
+    // Production domains explicitly registered
+    const registered = (process.env["REPLIT_DOMAINS"] ?? "").split(",").map(d => d.trim()).filter(Boolean);
+    if (registered.includes(host)) return true;
+    // Replit dev preview domains
+    if (/^[a-z0-9-]+-\d{2}-[a-z0-9]+\.sisko\.replit\.dev$/.test(host)) return true;
+    if (/^[a-z0-9-]+\.replit\.dev$/.test(host)) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 // ── List connected Google accounts ───────────────────────────────────────────
 
 router.get("/scheduling/google/connections", requireAuth, async (req, res): Promise<void> => {
@@ -31,30 +55,32 @@ router.get("/scheduling/google/connections", requireAuth, async (req, res): Prom
 // ── OAuth connect — redirect to Google consent screen ───────────────────────
 
 router.get("/scheduling/google/connect", requireAuth, (req, res): void => {
-  const clerkId  = (req as any).clerkUserId as string;
-  const returnTo = (req.query["returnTo"] as string | undefined) ?? "conferencing";
+  const clerkId      = (req as any).clerkUserId as string;
+  const returnTo     = (req.query["returnTo"] as string | undefined) ?? "conferencing";
+  const returnOrigin = req.query["returnOrigin"] as string | undefined;
 
   if (!process.env["GOOGLE_CLIENT_ID"] || !process.env["GOOGLE_CLIENT_SECRET"]) {
     res.status(503).json({ error: "Google OAuth not configured on this platform." });
     return;
   }
 
-  const url = getAuthUrl(clerkId, returnTo);
+  const url = getAuthUrl(clerkId, returnTo, returnOrigin && isTrustedOrigin(returnOrigin) ? returnOrigin : undefined);
   res.redirect(url);
 });
 
 // ── OAuth connect URL — returns the Google auth URL as JSON (for Bearer-token callers) ─
 
 router.get("/scheduling/google/connect-url", requireAuth, (req, res): void => {
-  const clerkId  = (req as any).clerkUserId as string;
-  const returnTo = (req.query["returnTo"] as string | undefined) ?? "conferencing";
+  const clerkId      = (req as any).clerkUserId as string;
+  const returnTo     = (req.query["returnTo"] as string | undefined) ?? "conferencing";
+  const returnOrigin = req.query["returnOrigin"] as string | undefined;
 
   if (!process.env["GOOGLE_CLIENT_ID"] || !process.env["GOOGLE_CLIENT_SECRET"]) {
     res.status(503).json({ error: "Google OAuth not configured on this platform." });
     return;
   }
 
-  const url = getAuthUrl(clerkId, returnTo);
+  const url = getAuthUrl(clerkId, returnTo, returnOrigin && isTrustedOrigin(returnOrigin) ? returnOrigin : undefined);
   res.json({ url });
 });
 
@@ -68,12 +94,14 @@ router.get("/scheduling/google/callback", async (req, res): Promise<void> => {
 
   // Decode state — support both legacy string (plain clerkId) and new JSON format
   let clerkId: string | undefined;
-  let returnTo = "conferencing";
+  let returnTo     = "conferencing";
+  let returnOrigin: string | undefined;
   if (rawState) {
     try {
-      const parsed = JSON.parse(rawState) as { clerkId?: string; returnTo?: string };
-      clerkId  = parsed.clerkId;
-      returnTo = parsed.returnTo ?? "conferencing";
+      const parsed = JSON.parse(rawState) as { clerkId?: string; returnTo?: string; returnOrigin?: string };
+      clerkId      = parsed.clerkId;
+      returnTo     = parsed.returnTo ?? "conferencing";
+      returnOrigin = parsed.returnOrigin;
     } catch {
       // Legacy: state was just the clerkId string
       clerkId = rawState;
@@ -81,7 +109,10 @@ router.get("/scheduling/google/callback", async (req, res): Promise<void> => {
   }
 
   const settingsPath = returnTo === "calendar" ? "calendar" : "conferencing";
-  const redirectBase = `${DASHBOARD_BASE()}/app/settings/${settingsPath}`;
+  // If the request came from a dev preview, redirect the popup back to that origin
+  // instead of the production domain so BroadcastChannel fires on the right page.
+  const base = returnOrigin && isTrustedOrigin(returnOrigin) ? returnOrigin : DASHBOARD_BASE();
+  const redirectBase = `${base}/app/settings/${settingsPath}`;
 
   if (error || !code || !clerkId) {
     logger.warn({ clerkId, error }, "Google OAuth callback error or missing params");
