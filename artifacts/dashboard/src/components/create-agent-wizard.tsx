@@ -9,7 +9,7 @@ import {
   Megaphone, Building2, Wand2, Globe,
   ChevronLeft, ChevronRight, Check, X, Loader2, Sparkles,
   Play, Pause, Volume2, Upload, FileText, PhoneForwarded,
-  Languages, SkipForward, MessageCircle, MessageSquare, Phone, ArrowDown,
+  Languages, SkipForward, Phone, Pencil,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
@@ -26,35 +26,202 @@ const USE_CASES = [
   { id: "reminder",           label: "Reminder Agent",             desc: "Automate EMI, policy, and interview reminders",                             role: "reminder and follow-up specialist",   service: "automated reminders for EMI payments, policy renewals, and scheduled events", icon: Bell },
 ];
 
-/* ── Appointment Booking micro-wizard ───────────────────────────────────── */
-const MICRO_STEP_LABELS = [
-  "Business & Service", "Call Direction", "Customer Details", "Post Booking", "Escalation",
-];
-const CALL_DIRECTION_OPTS = [
-  "Inbound — customers calling us to book",
-  "Outbound — we call leads to book appointments",
-  "Both",
-];
-const CUSTOMER_DETAIL_OPTS = [
-  "Full Name", "Phone Number", "Email", "Reason for Visit",
-  "Preferred Date and Time", "Budget", "Location or Address",
-];
-const POST_BOOKING_OPTS = [
-  "Send WhatsApp confirmation",
-  "Transfer to a human agent",
-  "Send SMS confirmation",
-  "Just close the call",
-];
-interface MicroAnswers {
-  business: string;
-  callDirection: string;
-  customerDetails: string[];
-  postBooking: string;
-  escalation: string;
-}
-const MICRO_INIT: MicroAnswers = {
-  business: "", callDirection: "", customerDetails: [], postBooking: "", escalation: "",
+/* ── Domain-specific micro-wizard questions ─────────────────────────────── */
+type MicroQ = { q: string; hint: string; placeholder: string; type: "textarea" | "jd-upload" };
+
+const MICRO_QUESTIONS: Record<string, MicroQ[]> = {
+  appointment_booking: [
+    { q: "What types of appointments or services can be booked?", hint: "e.g. consultation, follow-up, demo, therapy session", placeholder: "e.g. 30-min physiotherapy sessions, dental checkups, GP consultations...", type: "textarea" },
+    { q: "What are the working hours and available days for bookings?", hint: "Include timezone if relevant", placeholder: "e.g. Monday–Friday 9am–6pm IST, Saturday 10am–2pm. Closed Sundays.", type: "textarea" },
+    { q: "How far in advance can appointments be scheduled, and what is the cancellation window?", hint: "Helps the agent qualify slot requests correctly", placeholder: "e.g. Up to 30 days in advance. Cancellations must be made at least 24 hours before.", type: "textarea" },
+    { q: "What information must be collected from the customer before confirming the booking?", hint: "e.g. name, phone, reason, insurance ID", placeholder: "e.g. Full name, mobile number, reason for visit, preferred date and time slot...", type: "textarea" },
+    { q: "Should the agent handle rescheduling and cancellations autonomously, or escalate to a human?", hint: "Optional — leave blank to allow autonomous handling", placeholder: "e.g. Handle rescheduling autonomously. Escalate cancellations less than 24h before to a human.", type: "textarea" },
+  ],
+  admission_assist: [
+    { q: "What course, program, or institution is the agent assisting with admissions for?", hint: "e.g. BBA, MBA, B.Tech, MBBS at XYZ University", placeholder: "e.g. B.Tech Computer Science at ABC Engineering College — 2025–26 batch admissions...", type: "textarea" },
+    { q: "What are the eligibility criteria or minimum qualifications required?", hint: "e.g. 60% in 12th, JEE score, work experience", placeholder: "e.g. Minimum 60% marks in 10+2 with PCM, valid JEE Main score above 80 percentile...", type: "textarea" },
+    { q: "What details or documents should the agent collect from the prospective student?", hint: "e.g. name, 12th marks, city, preferred course", placeholder: "e.g. Student name, 10+2 percentage, stream, preferred specialisation, city and phone number...", type: "textarea" },
+    { q: "What are the key admission dates? e.g. application deadline, entrance exam, results", hint: "Include any batch or round cut-offs", placeholder: "e.g. Application deadline: 30 June. Entrance test: 15 July. Results: 30 July. Seat booking: 10 Aug.", type: "textarea" },
+    { q: "Should the agent schedule a counselling session directly, or transfer to an admissions officer?", hint: "Optional — leave blank for autonomous scheduling", placeholder: "e.g. Schedule a 20-min counselling call directly. If student asks about scholarships, transfer to admissions officer.", type: "textarea" },
+  ],
+  policy_renewal: [
+    { q: "What type of policies are being renewed?", hint: "e.g. health, motor, life, travel, commercial", placeholder: "e.g. Two-wheeler motor insurance policies for individual customers...", type: "textarea" },
+    { q: "What is the renewal window — how many days before expiry should outreach begin?", hint: "Include any follow-up call intervals", placeholder: "e.g. First call 30 days before expiry. Follow-up at 15 days and 7 days if no response.", type: "textarea" },
+    { q: "What renewal offers, discounts, or plan upgrade options should the agent communicate?", hint: "e.g. 5% early-bird discount, no-claim bonus", placeholder: "e.g. 5% early-bird discount if renewed 15+ days early. No-claim bonus of 20% for zero-claim year.", type: "textarea" },
+    { q: "Should the agent collect payment intent on the call, or only confirm renewal willingness?", hint: "e.g. send a payment link, note intent, take card details", placeholder: "e.g. Confirm willingness and send a payment link via SMS. Do not collect card details on the call.", type: "textarea" },
+    { q: "What action should be taken if the customer does not respond after multiple attempts?", hint: "Optional — leave blank to flag for human review", placeholder: "e.g. After 3 unanswered calls over 7 days, send a final SMS and mark the lead as lapsed.", type: "textarea" },
+  ],
+  property_qualifier: [
+    { q: "What type of property is being sold or rented?", hint: "e.g. residential flat, commercial office, villa, plot", placeholder: "e.g. 2BHK and 3BHK residential apartments in Whitefield, Bengaluru, ready to move in...", type: "textarea" },
+    { q: "What is the price range or budget bracket the agent should qualify leads against?", hint: "Include unit, currency, and any negotiation range", placeholder: "e.g. ₹60L to ₹1.2Cr. Leads below ₹50L should be redirected to the affordable housing project.", type: "textarea" },
+    { q: "What signals indicate a serious buyer?", hint: "e.g. ready for site visit, loan pre-approved, immediate timeline", placeholder: "e.g. Ready for a site visit this week, has loan pre-approval or own funds, planning to buy within 3 months.", type: "textarea" },
+    { q: "Should the agent schedule site visits directly, or hand off to a sales executive?", hint: "Optional — leave blank to schedule directly", placeholder: "e.g. Schedule the site visit directly for weekends. Weekday visits should be passed to the sales team.", type: "textarea" },
+    { q: "How should cold or unqualified leads be handled?", hint: "Optional — leave blank to tag for nurture", placeholder: "e.g. Tag as 'warm' and add to a 30-day follow-up sequence. If budget is out of range, mark as disqualified.", type: "textarea" },
+  ],
+  customer_support: [
+    { q: "What are the most common queries or issues customers call in about?", hint: "List the top 3–5 issues", placeholder: "e.g. Order delivery status, refund requests, EMI payment issues, product exchange, account login problems...", type: "textarea" },
+    { q: "Does the agent need real-time access to account, order, or ticket data to resolve queries?", hint: "e.g. order status API, CRM, ticketing system", placeholder: "e.g. Yes — agent needs live order status via the Orders API and should be able to raise a ticket in Freshdesk.", type: "textarea" },
+    { q: "What is the escalation trigger — at what point should the call go to a human agent?", hint: "e.g. after 2 failed resolution attempts, if customer is upset", placeholder: "e.g. Escalate if the issue is unresolved after 2 attempts, or if the customer explicitly requests a person.", type: "textarea" },
+    { q: "What is the resolution flow for the top 3 complaint types?", hint: "Describe step-by-step for each type", placeholder: "e.g. Refunds: verify order → confirm eligibility → initiate refund → give timeline. Delivery: check status → explain or rebook...", type: "textarea" },
+    { q: "Should the agent proactively collect a feedback or CSAT rating at the end of every call?", hint: "Optional — leave blank to skip CSAT collection", placeholder: "e.g. Yes — ask for a rating from 1–5 after every resolved call. If rated 1 or 2, flag for quality review.", type: "textarea" },
+  ],
+  candidate_screen: [
+    { q: "Upload the job description or describe the role manually", hint: "Upload a PDF or DOCX, or type the role title and must-have skills below", placeholder: "e.g. Sales Executive — Must have 2+ years B2B experience, strong communication, CRM knowledge...", type: "jd-upload" },
+    { q: "What are the 3 to 5 screening questions the agent must ask every candidate?", hint: "One question per line works best", placeholder: "e.g. How many years of B2B sales experience do you have?\nAre you comfortable with field visits?\nWhat CRM tools have you used?", type: "textarea" },
+    { q: "What is the scoring or decision logic — what qualifies a candidate to move forward?", hint: "e.g. minimum score, knockout criteria", placeholder: "e.g. Must have 2+ years experience. Score 3 out of 5 on screening questions. Disqualify if not open to field work.", type: "textarea" },
+    { q: "Should the agent inform candidates of the result on the call, or send it later via message?", hint: "e.g. instant result, 24-hour delay, recruiter reviews first", placeholder: "e.g. Inform shortlisted candidates immediately on the call. Rejected candidates receive an SMS within 24 hours.", type: "textarea" },
+    { q: "What is the next step for a shortlisted candidate?", hint: "Optional — e.g. interview scheduling, assessment link, human callback", placeholder: "e.g. Schedule a video interview with the hiring manager directly. Send the assessment link via WhatsApp immediately.", type: "textarea" },
+  ],
+  lead_qual: [
+    { q: "What product or service is being sold, and who is the target customer?", hint: "Include the core value proposition", placeholder: "e.g. SaaS-based payroll software for SMEs with 10–500 employees. Target: HR managers and business owners.", type: "textarea" },
+    { q: "What 3 questions best identify a qualified lead for this business?", hint: "One question per line", placeholder: "e.g. How many employees does your company have?\nAre you currently using a payroll tool?\nWhat is your monthly payroll volume?", type: "textarea" },
+    { q: "What is the minimum intent or budget signal required to pass a lead to sales?", hint: "e.g. monthly budget, intent score, decision-maker contact", placeholder: "e.g. Budget of at least ₹10K/month, actively evaluating a payroll solution, and has decision-making authority.", type: "textarea" },
+    { q: "Should the agent do a warm transfer to a sales rep, or just log and notify?", hint: "Optional — leave blank for log-and-notify", placeholder: "e.g. For hot leads (score 4+), do a warm transfer to the nearest available rep. Otherwise log and send a Slack notification.", type: "textarea" },
+    { q: "What should happen to unqualified leads?", hint: "Optional — leave blank to tag for nurture", placeholder: "e.g. Tag as 'nurture' and enrol in a 4-week email drip. If budget is zero, mark as disqualified and do not re-contact.", type: "textarea" },
+  ],
+  reminder: [
+    { q: "What event or action is the reminder tied to?", hint: "e.g. EMI due date, policy expiry, interview slot, appointment", placeholder: "e.g. Monthly EMI payment due on the 5th of every month for personal loan customers...", type: "textarea" },
+    { q: "How many reminder attempts should be made, and at what intervals?", hint: "Include timing relative to the event date", placeholder: "e.g. 3 attempts: 5 days before due date, 1 day before, and on the due date itself if still unpaid.", type: "textarea" },
+    { q: "Should the agent accept a live confirmation, reschedule request, or payment acknowledgment on the call?", hint: "e.g. confirm receipt, take payment date, log acknowledgment", placeholder: "e.g. Collect the expected payment date. If customer says already paid, ask for transaction reference number.", type: "textarea" },
+    { q: "What happens if the customer requests more time or raises a dispute on the call?", hint: "e.g. grant a grace period, escalate, log and follow up", placeholder: "e.g. Grant up to 7 days extension autonomously. For disputes, escalate immediately to the collections team.", type: "textarea" },
+    { q: "Should missed or unresponsive contacts be escalated to a human, or flagged in the system?", hint: "Optional — leave blank to flag in system", placeholder: "e.g. After 3 unanswered calls, flag in CRM and send to a human collections agent for manual follow-up.", type: "textarea" },
+  ],
 };
+
+/* ── Call flow builder ───────────────────────────────────────────────────── */
+interface FlowNode { label: string; badge?: string; branch?: boolean; }
+
+function buildCallFlowNodes(useCase: string, answers: string[], agentName: string, companyName: string): FlowNode[] {
+  const ag = agentName.trim() || "the agent";
+  const co = companyName.trim() || "your company";
+  const a = answers;
+
+  switch (useCase) {
+    case "appointment_booking": return [
+      { label: `${ag} greets the customer and introduces itself as ${ag} from ${co}`, badge: "Greeting" },
+      { label: "Checks if this is a good time to talk", branch: true },
+      { label: "If busy → asks for a preferred callback time and closes politely", branch: true },
+      { label: `Explains the purpose: booking a ${a[0] || "service"}`, badge: "Purpose" },
+      { label: `Checks availability within working hours: ${a[1] || "business hours"}` },
+      { label: `Collects required details: ${a[3] || "name, phone, and preferred time"}`, badge: "Data Collect" },
+      { label: `Confirms slot per scheduling rules: ${a[2] || "standard advance booking window"}` },
+      { label: a[4] || "Handles rescheduling or escalates to a human if needed" },
+      { label: "Confirms the appointment and closes the call warmly", badge: "Close" },
+    ];
+    case "admission_assist": return [
+      { label: `${ag} greets the student and introduces itself as ${ag} from ${co}`, badge: "Greeting" },
+      { label: "Checks if the student is interested in an admission enquiry", branch: true },
+      { label: "If not interested → closes politely and offers a callback", branch: true },
+      { label: `Introduces the program: ${a[0] || "the course"} and explains key highlights`, badge: "Program" },
+      { label: `Checks eligibility: ${a[1] || "minimum qualification criteria"}` },
+      { label: `Collects student details: ${a[2] || "name, marks, city, and contact"}`, badge: "Data Collect" },
+      { label: `Shares key dates: ${a[3] || "application deadline and entrance exam schedule"}` },
+      { label: a[4] || "Schedules a counselling session or transfers to an admissions officer", badge: "Next Step" },
+      { label: "Wraps up with confirmation of next steps", badge: "Close" },
+    ];
+    case "policy_renewal": return [
+      { label: `${ag} introduces itself as ${ag} from ${co} calling about policy renewal`, badge: "Greeting" },
+      { label: "Confirms the customer's identity and checks availability", branch: true },
+      { label: "If busy → schedules a callback at the customer's preferred time", branch: true },
+      { label: `Explains the reason: ${a[0] || "policy"} renewal is due soon`, badge: "Purpose" },
+      { label: `Outreach timing: ${a[1] || "within the defined renewal window"}` },
+      { label: `Presents renewal offers: ${a[2] || "discounts and plan options"}`, badge: "Offer" },
+      { label: a[3] || "Confirms renewal willingness and sends a payment link" },
+      { label: a[4] || "Flags non-responsive contacts for human follow-up", badge: "Non-response" },
+      { label: "Closes the call with confirmation of next steps", badge: "Close" },
+    ];
+    case "property_qualifier": return [
+      { label: `${ag} introduces itself as ${ag} from ${co} and mentions the property`, badge: "Greeting" },
+      { label: "Checks if the lead is looking for a property and has time to talk", branch: true },
+      { label: "If not interested → closes politely and offers a brochure via SMS", branch: true },
+      { label: `Introduces the project: ${a[0] || "the property"}`, badge: "Property" },
+      { label: `Qualifies budget: confirms the range — ${a[1] || "the property price bracket"}` },
+      { label: `Identifies buyer intent: ${a[2] || "site visit readiness, loan status, timeline"}`, badge: "Qualify" },
+      { label: a[3] || "Schedules a site visit or passes the lead to a sales executive" },
+      { label: a[4] || "Tags cold leads for nurture or marks as disqualified", badge: "Disposition" },
+      { label: "Closes the call and confirms the next step", badge: "Close" },
+    ];
+    case "customer_support": return [
+      { label: `${ag} answers the call as ${ag} from ${co} support`, badge: "Greeting" },
+      { label: "Asks the customer to describe their issue", branch: true },
+      { label: `Most common issues handled: ${a[0] || "FAQs and common customer queries"}`, badge: "Issue" },
+      { label: a[1] ? `Accesses live data: ${a[1]}` : "Looks up order or account details if needed" },
+      { label: `Resolution flow: ${a[3] || "step-by-step resolution for each query type"}`, badge: "Resolution" },
+      { label: `Escalation trigger: ${a[2] || "escalates to human if unresolved after 2 attempts"}` },
+      { label: a[4] || "Collects CSAT rating at end of call if issue is resolved", badge: "CSAT" },
+      { label: "Closes the call with a resolution summary or ticket confirmation", badge: "Close" },
+    ];
+    case "candidate_screen": return [
+      { label: `${ag} calls the candidate and introduces itself as ${ag} from ${co} talent team`, badge: "Greeting" },
+      { label: "Checks if it's a good time to speak and confirms interest", branch: true },
+      { label: "If busy or uninterested → reschedules or closes politely", branch: true },
+      { label: `Confirms the role: ${(a[0] || "").slice(0, 80) || "the position applied for"}`, badge: "Role" },
+      { label: `Asks screening questions: ${a[1] || "3–5 defined screening questions"}`, badge: "Screen" },
+      { label: `Evaluates against criteria: ${a[2] || "defined scoring and qualification logic"}` },
+      { label: a[3] || "Informs the candidate of the result on the call or sends it later" },
+      { label: `Next step for shortlisted: ${a[4] || "interview scheduling, assessment link, or callback"}`, badge: "Next Step" },
+      { label: "Closes the call warmly with timeline clarity", badge: "Close" },
+    ];
+    case "lead_qual": return [
+      { label: `${ag} introduces itself as ${ag} from ${co} and states the purpose`, badge: "Greeting" },
+      { label: "Checks if the prospect has a moment to talk", branch: true },
+      { label: "If busy → schedules a callback or closes politely", branch: true },
+      { label: `Introduces the offering: ${a[0] || "the product or service"}`, badge: "Pitch" },
+      { label: `Asks qualifying questions: ${a[1] || "3 key qualifying questions"}`, badge: "Qualify" },
+      { label: `Checks intent threshold: ${a[2] || "minimum budget or intent signal"}` },
+      { label: a[3] || "Warm transfers to sales rep or logs and notifies" },
+      { label: a[4] || "Tags unqualified leads for nurture or disqualifies", badge: "Disposition" },
+      { label: "Closes the call and confirms next steps", badge: "Close" },
+    ];
+    case "reminder": return [
+      { label: `${ag} calls the customer as ${ag} from ${co} with a reminder`, badge: "Greeting" },
+      { label: "Confirms the customer's identity before sharing details", branch: true },
+      { label: "If wrong number or unavailable → logs and re-attempts as scheduled", branch: true },
+      { label: `Delivers the reminder: ${a[0] || "upcoming due event or deadline"}`, badge: "Reminder" },
+      { label: `Call schedule: ${a[1] || "defined attempts at set intervals"}` },
+      { label: `Collects response: ${a[2] || "confirmation, reschedule, or acknowledgment"}`, badge: "Response" },
+      { label: a[3] || "Handles disputes or extension requests per defined rules" },
+      { label: a[4] || "Escalates missed contacts to human or flags in system", badge: "Non-response" },
+      { label: "Closes the call with a summary of what was agreed", badge: "Close" },
+    ];
+    default: return [
+      { label: `${ag} greets the customer and introduces itself as ${ag} from ${co}`, badge: "Greeting" },
+      { label: "Opens the conversation based on the use case purpose", branch: true },
+      { label: "Handles the main interaction flow", badge: "Main Flow" },
+      { label: "Collects any required information or confirmation", badge: "Data Collect" },
+      { label: "Resolves the call objective or escalates as needed" },
+      { label: "Closes the call warmly with confirmed next steps", badge: "Close" },
+    ];
+  }
+}
+
+function nodesToText(nodes: FlowNode[]): string {
+  return nodes.map((n, i) => {
+    const prefix = n.branch ? "  →" : `${i + 1}.`;
+    return `${prefix} ${n.label}${n.badge ? ` [${n.badge}]` : ""}`;
+  }).join("\n");
+}
+
+function textToNodes(text: string): FlowNode[] {
+  return text.split("\n")
+    .filter(l => l.trim().length > 0)
+    .map(line => {
+      const isBranch = line.trimStart().startsWith("→") || line.startsWith("  ");
+      const stripped = line.trim().replace(/^(\d+\.\s*|→\s*)/, "");
+      const badgeMatch = stripped.match(/\s*\[([^\]]+)\]\s*$/);
+      const label = badgeMatch ? stripped.slice(0, stripped.lastIndexOf("[")).trim() : stripped.trim();
+      return { label: label || stripped, badge: badgeMatch?.[1], branch: isBranch };
+    })
+    .filter(n => n.label.length > 0);
+}
+
+/* ── MicroAnswers ─────────────────────────────────────────────────────────── */
+interface MicroAnswers {
+  answers: string[];
+  jdFileContent: string;
+  jdFileName: string;
+}
+const MICRO_INIT: MicroAnswers = { answers: [], jdFileContent: "", jdFileName: "" };
 
 /* ── Language catalogue ─────────────────────────────────────────────────── */
 const LANGUAGES = [
@@ -70,13 +237,10 @@ const LANGUAGES = [
 ];
 
 /* ── Managed stack ──────────────────────────────────────────────────────── */
-/* Maps wizard language codes → BCP-47 codes stored on the agent */
-/* language → BCP-47 code sent to ASR/TTS engine */
 const LANG_CODE_MAP: Record<string, string> = {
   english: "en-US", hindi: "hi", tamil: "ta", telugu: "te",
   kannada: "kn", marathi: "mr", gujarati: "gu", bengali: "bn", malayalam: "ml",
 };
-/* language → asrLanguage code matching the Audio-tab dropdown options */
 const ASR_LANG_CODE_MAP: Record<string, string> = {
   english: "en", hindi: "hi", tamil: "ta-IN", telugu: "te-IN",
   kannada: "kn-IN", marathi: "mr-IN", gujarati: "gu-IN", bengali: "bn-IN", malayalam: "ml-IN",
@@ -105,7 +269,6 @@ const ARUSHI_VOICE = {
   description: "Warm Indian English female — Cartesia",
 };
 
-// Only Arushi is a confirmed real Cartesia Indian voice — all others load from the API
 const FALLBACK_VOICES = [ARUSHI_VOICE];
 
 const LANG_LABEL: Record<string, string> = {
@@ -145,7 +308,6 @@ const INITIAL: WizardState = {
 /* ── Voice preview ──────────────────────────────────────────────────────── */
 const PREVIEW_TEXT = "Hello! I am your AI voice assistant. I am here to help you today. How can I assist you?";
 
-/** Browser speechSynthesis fallback — picks a voice that roughly matches gender */
 function speakWithBrowser(voiceName: string, gender: string, onEnd: () => void) {
   window.speechSynthesis.cancel();
   const utter = new SpeechSynthesisUtterance(PREVIEW_TEXT);
@@ -170,11 +332,9 @@ function useVoicePreview(apiFetch: (path: string, init?: RequestInit) => Promise
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const voicesRef = useRef<CartesiaVoice[]>([]);
 
-  // keep a ref of current voices so the closure can access gender
   function setVoicesRef(voices: CartesiaVoice[]) { voicesRef.current = voices; }
 
   async function preview(voiceId: string) {
-    // stop if already playing
     if (playing === voiceId) {
       audioRef.current?.pause();
       window.speechSynthesis.cancel();
@@ -190,7 +350,6 @@ function useVoicePreview(apiFetch: (path: string, init?: RequestInit) => Promise
       });
 
       if (res.ok) {
-        // Server sends raw audio/wav bytes — use blob() not json()
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
         if (audioRef.current) { audioRef.current.pause(); URL.revokeObjectURL(audioRef.current.src); }
@@ -203,7 +362,6 @@ function useVoicePreview(apiFetch: (path: string, init?: RequestInit) => Promise
       }
 
       if (res.status === 503) {
-        // Cartesia key not configured — fall back to browser TTS with a clear indication
         setPlaying(null);
         const voice = voicesRef.current.find(v => v.id === voiceId);
         speakWithBrowser(voice?.name ?? "", voice?.gender ?? "Female", () => setPlaying(null));
@@ -220,14 +378,15 @@ function useVoicePreview(apiFetch: (path: string, init?: RequestInit) => Promise
 }
 
 /* ── Step definitions ───────────────────────────────────────────────────── */
+// Step order: use-case → details → language → [micro 5q] → [call flow] → requirements → knowledge → voice → skills
 const MANAGED_STEPS = [
-  "use-case", "language", "details", "requirements", "knowledge", "voice", "skills",
+  "use-case", "details", "language", "requirements", "knowledge", "voice", "skills",
 ] as const;
 type ManagedStep = typeof MANAGED_STEPS[number];
 
 const STEP_LABELS: Record<ManagedStep, string> = {
-  "use-case": "Use Case", language: "Language", details: "Agent Details",
-  requirements: "Requirements", knowledge: "Knowledge Base", voice: "Voice", skills: "Skills & Finish",
+  "use-case": "Use Case", details: "Agent Details", language: "Language",
+  requirements: "Agent Instructions", knowledge: "Knowledge Base", voice: "Voice", skills: "Skills & Finish",
 };
 
 /* ── Animated step wrapper ──────────────────────────────────────────────── */
@@ -253,21 +412,29 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
   const [loadingVoices, setLoadVoices]= useState(false);
   const [voiceSource, setVoiceSource] = useState<"cartesia" | "browser">("browser");
   const [renderKey, setRenderKey]     = useState(0);
-  /* micro-wizard (Appointment Booking) */
+
+  /* micro-wizard state */
   const [microActive, setMicroActive]       = useState(false);
-  const [microStep, setMicroStep]           = useState(0); // 0-4 = questions, 5 = summary
+  const [microStep, setMicroStep]           = useState(0); // 0-4 = questions, 5 = call flow preview
   const [microDir, setMicroDir]             = useState<"forward" | "back">("forward");
   const [microAnswers, setMicroAnswers]     = useState<MicroAnswers>(MICRO_INIT);
   const [microRenderKey, setMicroRenderKey] = useState(0);
+
+  /* call flow edit state */
+  const [flowEditMode, setFlowEditMode]         = useState(false);
+  const [flowEditText, setFlowEditText]         = useState("");
+  const [confirmedFlowNodes, setConfirmedFlowNodes] = useState<FlowNode[] | null>(null);
+
   const updateMicro = useCallback((patch: Partial<MicroAnswers>) =>
     setMicroAnswers(p => ({ ...p, ...patch })), []);
-  const fileInputRef                  = useRef<HTMLInputElement>(null);
-  const { toast }                     = useToast();
-  const qc                            = useQueryClient();
-  const create                        = useCreateAgent();
-  const { getToken }                  = useAuth();
 
-  /* Authenticated fetch — mirrors the custom-fetch bearer token pattern */
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const jdInputRef   = useRef<HTMLInputElement>(null);
+  const { toast }    = useToast();
+  const qc           = useQueryClient();
+  const create       = useCreateAgent();
+  const { getToken } = useAuth();
+
   const apiFetch = useCallback(async (path: string, init?: RequestInit): Promise<Response> => {
     const token = await getToken();
     const headers = new Headers(init?.headers);
@@ -280,50 +447,52 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
 
   const update = useCallback((patch: Partial<WizardState>) => setState(p => ({ ...p, ...patch })), []);
 
-  /* keep voicesRef in sync so the preview hook can look up gender */
   useEffect(() => { setVoicesRef(state.voices); }, [state.voices]);
 
   /* close & reset */
   function handleClose() {
     setState(INITIAL); setStepIdx(0); create.reset();
     setMicroActive(false); setMicroStep(0); setMicroAnswers(MICRO_INIT);
+    setFlowEditMode(false); setFlowEditText(""); setConfirmedFlowNodes(null);
     onClose();
   }
 
   /* micro-wizard: go to next/prev step */
   function microGo(delta: 1 | -1) {
+    if (delta === -1 && flowEditMode) { setFlowEditMode(false); return; }
     setMicroDir(delta === 1 ? "forward" : "back");
     setMicroStep(s => s + delta);
     setMicroRenderKey(k => k + 1);
+    if (delta === 1) {
+      setFlowEditMode(false);
+      setFlowEditText("");
+    }
   }
 
-  /* micro-wizard: on Confirm — build callFlowDescription and advance to Language */
+  /* micro-wizard: confirmed call flow → pre-fill requirements textarea, advance */
   function handleMicroConfirm() {
-    let agentDir: AgentDirection = "inbound";
-    if (microAnswers.callDirection.startsWith("Outbound")) agentDir = "outbound";
-    else if (microAnswers.callDirection === "Both") agentDir = "both";
-    const desc = [
-      `Business: ${microAnswers.business}`,
-      `Call direction: ${microAnswers.callDirection}`,
-      `Collect from customer: ${microAnswers.customerDetails.join(", ") || "Not specified"}`,
-      `After booking confirmed: ${microAnswers.postBooking}`,
-      `Escalation / rejection rules: ${microAnswers.escalation.trim() || "None"}`,
-    ].join("\n");
-    update({ agentDirection: agentDir, callFlowDescription: desc });
+    const nodes = confirmedFlowNodes ?? buildCallFlowNodes(
+      state.useCase, microAnswers.answers, state.agentName, state.companyName,
+    );
+    const flowText = nodesToText(nodes);
+    update({ callFlowDescription: flowText });
     setMicroActive(false);
-    setMicroAnswers(MICRO_INIT);
     setMicroStep(0);
+    setMicroAnswers(MICRO_INIT);
+    setConfirmedFlowNodes(null);
+    setFlowEditMode(false);
+    setFlowEditText("");
     go(1);
   }
 
   /* micro: is current step answered? */
-  function microStepValid() {
-    if (microStep === 0) return microAnswers.business.trim().length > 0;
-    if (microStep === 1) return microAnswers.callDirection.length > 0;
-    if (microStep === 2) return microAnswers.customerDetails.length > 0;
-    if (microStep === 3) return microAnswers.postBooking.length > 0;
-    if (microStep === 4) return true; // escalation is optional (text)
-    return true; // summary
+  function microStepValid(): boolean {
+    if (microStep >= 5) return true;
+    if (microStep === 4) return true; // Q5 is always optional
+    if (microStep === 0 && state.useCase === "candidate_screen") {
+      return microAnswers.jdFileName.length > 0 || (microAnswers.answers[0]?.trim().length ?? 0) > 0;
+    }
+    return (microAnswers.answers[microStep]?.trim().length ?? 0) > 0;
   }
 
   /* keyboard: Esc */
@@ -339,15 +508,11 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
     if (state.voices.length > FALLBACK_VOICES.length) return;
     setLoadVoices(true);
     try {
-      // pass the base language code so the server ranks matching voices first
       const baseLang = (LANG_CODE_MAP[state.primaryLanguage] ?? "en").split("-")[0];
       const res = await apiFetch(`/api/wizard/voices?language=${baseLang}`, { method: "GET" });
       if (res.ok) {
         const { voices, source } = await res.json() as { voices: CartesiaVoice[]; source: string };
-        if (voices.length === 0) return; // keep existing fallback
-        // Auto-select: first voice whose language matches the agent's language,
-        // else the first voice in the server-returned list.
-        // Never inject a local ARUSHI_VOICE — respect the admin whitelist.
+        if (voices.length === 0) return;
         const langMatch    = voices.find(v => v.language === baseLang && baseLang !== "en");
         const defaultVoice = langMatch ?? voices[0]!;
         const rest         = voices.filter(v => v.id !== defaultVoice.id);
@@ -367,7 +532,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
     }
   }
 
-  /* AI prompt generation — auto-advances to next step on success */
+  /* AI prompt generation */
   async function generatePrompt() {
     setGenerating(true);
     setGenError("");
@@ -388,7 +553,6 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
       }
       const { prompt } = await res.json();
       update({ generatedPrompt: prompt });
-      // Auto-advance to Knowledge Base step
       setDirection("forward");
       setStepIdx(i => i + 1);
       setRenderKey(k => k + 1);
@@ -397,11 +561,31 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
     } finally { setGenerating(false); }
   }
 
-  /* file read */
+  /* KB file read */
   function handleFile(file: File) {
     const reader = new FileReader();
     reader.onload = e => update({ kbContent: e.target?.result as string, kbFileName: file.name });
     reader.readAsText(file);
+  }
+
+  /* JD file read (candidate screening) */
+  function handleJDFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.name.endsWith(".txt") || file.name.endsWith(".md")) {
+      const reader = new FileReader();
+      reader.onload = ev => {
+        const content = ev.target?.result as string;
+        const next = [...microAnswers.answers];
+        next[0] = content.slice(0, 2000);
+        updateMicro({ jdFileContent: content, jdFileName: file.name, answers: next });
+      };
+      reader.readAsText(file);
+    } else {
+      // For PDF/DOCX, store filename; user fills text manually if needed
+      updateMicro({ jdFileName: file.name, jdFileContent: `(${file.name} uploaded — describe key requirements in Option B if needed)` });
+    }
+    e.target.value = "";
   }
 
   /* create agent */
@@ -435,7 +619,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
       systemPrompt: state.byopPrompt, maxDuration: 300,
     };
 
-    create.mutate({ data: payload as any }, {
+    create.mutate(payload as any, {
       onSuccess: (created) => {
         qc.invalidateQueries({ queryKey: getListAgentsQueryKey() });
         toast({ title: `${created.name} is ready!` });
@@ -456,11 +640,15 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
     ? ((stepIdx + 1) / totalManagedSteps) * 100
     : state.mode === "byop" ? 100 : 0;
 
+  /* current call flow nodes for preview */
+  const currentFlowNodes = confirmedFlowNodes ?? buildCallFlowNodes(
+    state.useCase, microAnswers.answers, state.agentName, state.companyName,
+  );
+
   /* ────────────────────────────────────────────────────────────────────── */
   return createPortal(
     <div className="fixed inset-0 z-[9999] bg-white flex flex-col overflow-hidden">
 
-      {/* CSS keyframes injection */}
       <style>{`
         @keyframes slideInRight { from { opacity:0; transform:translateX(48px); } to { opacity:1; transform:translateX(0); } }
         @keyframes slideInLeft  { from { opacity:0; transform:translateX(-48px); } to { opacity:1; transform:translateX(0); } }
@@ -481,6 +669,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
           {(state.mode !== null || microActive) && (
             <button
               onClick={() => {
+                if (flowEditMode) { setFlowEditMode(false); return; }
                 if (microActive) {
                   if (microStep > 0) microGo(-1);
                   else { setMicroActive(false); setMicroRenderKey(k => k + 1); }
@@ -489,7 +678,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
               }}
               className="flex items-center gap-1.5 text-gray-400 hover:text-gray-700 transition-colors text-sm"
             >
-              <ChevronLeft className="h-4 w-4" /> Back
+              <ChevronLeft className="h-4 w-4" /> {flowEditMode ? "Cancel edit" : "Back"}
             </button>
           )}
         </div>
@@ -498,8 +687,8 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
           {microActive && (
             <span className="text-gray-400 text-xs font-mono tracking-widest uppercase">
               {microStep < 5
-                ? `${String(microStep + 1).padStart(2, "0")} / 05 — ${MICRO_STEP_LABELS[microStep]}`
-                : "Call Flow Preview"}
+                ? `${String(microStep + 1).padStart(2, "0")} / 05 — Question ${microStep + 1}`
+                : flowEditMode ? "Call Flow — Edit Mode" : "Call Flow Preview"}
             </span>
           )}
           {!microActive && state.mode === "managed" && currentStep && (
@@ -517,221 +706,149 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
       <div className="flex-1 overflow-y-auto px-6 py-8">
         <div className="w-full max-w-2xl mx-auto min-h-full flex flex-col justify-center">
 
-          {/* ── Appointment Booking micro-wizard ─────────────────────────── */}
+          {/* ── Domain micro-wizard ─────────────────────────────────────────── */}
           {microActive && (
             <SlideStep key={`micro-${microStep}-${microRenderKey}`} direction={microDir}>
 
-              {/* Step 1 — Business & Service */}
-              {microStep === 0 && (
-                <div>
-                  <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">01 / 05</p>
-                  <h2 className="text-3xl font-bold text-gray-900 mb-2">What is your business<br />and what service do you offer?</h2>
-                  <p className="text-gray-400 text-sm mb-8">Describe your business so the agent can introduce itself correctly.</p>
-                  <textarea
-                    autoFocus
-                    rows={4}
-                    placeholder="e.g. We are a physiotherapy clinic offering rehabilitation and pain relief sessions"
-                    value={microAnswers.business}
-                    onChange={e => updateMicro({ business: e.target.value })}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 text-gray-900 text-sm placeholder:text-gray-300 focus:outline-none focus:border-violet-500/60 transition-all resize-none leading-relaxed"
-                  />
-                </div>
-              )}
+              {/* Steps 0–4: domain-specific questions */}
+              {microStep < 5 && (() => {
+                const questions = MICRO_QUESTIONS[state.useCase] ?? [];
+                const q = questions[microStep];
+                if (!q) return null;
 
-              {/* Step 2 — Call Direction */}
-              {microStep === 1 && (
-                <div>
-                  <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">02 / 05</p>
-                  <h2 className="text-3xl font-bold text-gray-900 mb-2">Who are you calling —<br />inbound or outbound?</h2>
-                  <p className="text-gray-400 text-sm mb-8">This shapes how the agent opens the call.</p>
-                  <div className="flex flex-col gap-3">
-                    {CALL_DIRECTION_OPTS.map(opt => {
-                      const sel = microAnswers.callDirection === opt;
-                      return (
-                        <button
-                          key={opt}
-                          onClick={() => updateMicro({ callDirection: opt })}
-                          className={cn(
-                            "w-full text-left px-5 py-4 rounded-xl border transition-all duration-150 flex items-center justify-between gap-3",
-                            sel ? "border-violet-400 bg-violet-50 shadow-[0_0_0_1px_rgba(99,102,241,0.2)]"
-                               : "border-gray-200 bg-gray-50 hover:border-gray-300",
-                          )}
-                        >
-                          <span className={cn("font-medium text-sm", sel ? "text-gray-900" : "text-gray-500")}>{opt}</span>
-                          {sel && <Check className="h-4 w-4 text-violet-600 shrink-0" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+                /* Special: Candidate Screening Q0 — JD upload + manual text */
+                if (q.type === "jd-upload") {
+                  return (
+                    <div>
+                      <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">01 / 05</p>
+                      <h2 className="text-3xl font-bold text-gray-900 mb-2">Job description &amp;<br />must-have skills</h2>
+                      <p className="text-gray-400 text-sm mb-8">{q.hint}</p>
 
-              {/* Step 3 — Customer Details */}
-              {microStep === 2 && (
-                <div>
-                  <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">03 / 05</p>
-                  <h2 className="text-3xl font-bold text-gray-900 mb-2">What should the agent<br />collect before confirming?</h2>
-                  <p className="text-gray-400 text-sm mb-8">Select all the information the agent needs from the customer.</p>
-                  <div className="grid grid-cols-2 gap-2.5">
-                    {CUSTOMER_DETAIL_OPTS.map(opt => {
-                      const sel = microAnswers.customerDetails.includes(opt);
-                      return (
-                        <button
-                          key={opt}
-                          onClick={() => {
-                            const next = sel
-                              ? microAnswers.customerDetails.filter(x => x !== opt)
-                              : [...microAnswers.customerDetails, opt];
-                            updateMicro({ customerDetails: next });
-                          }}
-                          className={cn(
-                            "text-left px-4 py-3.5 rounded-xl border transition-all duration-150 flex items-center gap-3",
-                            sel ? "border-violet-400 bg-violet-50 shadow-[0_0_0_1px_rgba(99,102,241,0.2)]"
-                               : "border-gray-200 bg-gray-50 hover:border-gray-300",
-                          )}
-                        >
-                          <div className={cn(
-                            "h-4 w-4 rounded border-2 shrink-0 flex items-center justify-center transition-colors",
-                            sel ? "border-violet-500 bg-violet-500" : "border-gray-300",
-                          )}>
-                            {sel && <Check className="h-2.5 w-2.5 text-white" />}
+                      <div className="mb-5">
+                        <p className="text-gray-500 text-xs uppercase tracking-[0.15em] mb-3 font-semibold">Option A — Upload JD file</p>
+                        {microAnswers.jdFileName ? (
+                          <div className="p-4 rounded-xl border border-emerald-300 bg-emerald-50 flex items-center gap-3">
+                            <FileText className="h-5 w-5 text-emerald-600 shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-gray-700 text-sm font-semibold truncate">{microAnswers.jdFileName}</p>
+                              <p className="text-gray-400 text-xs">Uploaded — add any extra notes in Option B if needed</p>
+                            </div>
+                            <button
+                              onClick={() => updateMicro({ jdFileContent: "", jdFileName: "" })}
+                              className="text-gray-400 hover:text-gray-500 transition-colors"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
                           </div>
-                          <span className={cn("text-sm font-medium", sel ? "text-gray-900" : "text-gray-500")}>{opt}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {microAnswers.customerDetails.length > 0 && (
-                    <p className="text-xs text-violet-600 mt-3 font-medium">
-                      {microAnswers.customerDetails.length} field{microAnswers.customerDetails.length !== 1 ? "s" : ""} selected
-                    </p>
-                  )}
-                </div>
-              )}
+                        ) : (
+                          <div
+                            className="border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center hover:border-gray-300 transition-colors cursor-pointer group"
+                            onClick={() => jdInputRef.current?.click()}
+                          >
+                            <div className="h-12 w-12 rounded-2xl bg-gray-50 group-hover:bg-gray-100 flex items-center justify-center mx-auto mb-3 transition-colors">
+                              <Upload className="h-6 w-6 text-gray-400" />
+                            </div>
+                            <p className="text-gray-500 font-semibold text-sm mb-1">Click to upload JD</p>
+                            <p className="text-gray-400 text-xs">PDF, DOCX, or TXT — max 5 MB</p>
+                            <input ref={jdInputRef} type="file" accept=".txt,.pdf,.docx,.md" className="hidden" onChange={handleJDFile} />
+                          </div>
+                        )}
+                      </div>
 
-              {/* Step 4 — Post Booking Action */}
-              {microStep === 3 && (
-                <div>
-                  <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">04 / 05</p>
-                  <h2 className="text-3xl font-bold text-gray-900 mb-2">What should the agent do<br />after booking is confirmed?</h2>
-                  <p className="text-gray-400 text-sm mb-8">Choose one action to take when the appointment is locked in.</p>
-                  <div className="flex flex-col gap-3">
-                    {POST_BOOKING_OPTS.map(opt => {
-                      const sel = microAnswers.postBooking === opt;
-                      return (
-                        <button
-                          key={opt}
-                          onClick={() => updateMicro({ postBooking: opt })}
-                          className={cn(
-                            "w-full text-left px-5 py-4 rounded-xl border transition-all duration-150 flex items-center justify-between gap-3",
-                            sel ? "border-violet-400 bg-violet-50 shadow-[0_0_0_1px_rgba(99,102,241,0.2)]"
-                               : "border-gray-200 bg-gray-50 hover:border-gray-300",
-                          )}
-                        >
-                          <span className={cn("font-medium text-sm", sel ? "text-gray-900" : "text-gray-500")}>{opt}</span>
-                          {sel && <Check className="h-4 w-4 text-violet-600 shrink-0" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+                      <p className="text-gray-400 text-xs text-center mb-5">— or —</p>
 
-              {/* Step 5 — Escalation & Rejection */}
-              {microStep === 4 && (
-                <div>
-                  <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">05 / 05</p>
-                  <h2 className="text-3xl font-bold text-gray-900 mb-2">When should the agent<br />reject or escalate?</h2>
-                  <p className="text-gray-400 text-sm mb-8">Optional — describe any conditions where the agent should not confirm the booking.</p>
-                  <textarea
-                    autoFocus
-                    rows={4}
-                    placeholder="e.g. Escalate if customer is outside service area, or if budget is below minimum, or if it is an emergency"
-                    value={microAnswers.escalation}
-                    onChange={e => updateMicro({ escalation: e.target.value })}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 text-gray-900 text-sm placeholder:text-gray-300 focus:outline-none focus:border-violet-500/60 transition-all resize-none leading-relaxed"
-                  />
-                  <p className="text-xs text-gray-300 mt-3">Leave blank if the agent should always confirm.</p>
-                </div>
-              )}
+                      <div>
+                        <p className="text-gray-500 text-xs uppercase tracking-[0.15em] mb-3 font-semibold">Option B — Type role &amp; requirements manually</p>
+                        <textarea
+                          rows={4}
+                          placeholder={q.placeholder}
+                          value={microAnswers.answers[0] ?? ""}
+                          onChange={e => {
+                            const next = [...microAnswers.answers];
+                            next[0] = e.target.value;
+                            updateMicro({ answers: next });
+                          }}
+                          className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 text-gray-900 text-sm placeholder:text-gray-300 focus:outline-none focus:border-violet-500/60 transition-all resize-none leading-relaxed"
+                        />
+                      </div>
+                    </div>
+                  );
+                }
 
-              {/* Call Flow Preview Screen */}
-              {microStep === 5 && (() => {
-                const detailsBadge = microAnswers.customerDetails.length > 0
-                  ? microAnswers.customerDetails.slice(0, 3).join(", ") + (microAnswers.customerDetails.length > 3 ? ` +${microAnswers.customerDetails.length - 3} more` : "")
-                  : "customer info";
-                const postBookingLabel = (() => {
-                  if (microAnswers.postBooking === "Send WhatsApp confirmation") return "Sends WhatsApp confirmation to customer";
-                  if (microAnswers.postBooking === "Transfer to a human agent") return "Transfers call to a human agent";
-                  if (microAnswers.postBooking === "Send SMS confirmation") return "Sends SMS confirmation to customer";
-                  if (microAnswers.postBooking === "Just close the call") return "Thanks the customer and closes the call";
-                  return microAnswers.postBooking || "Completes post-booking action";
-                })();
-                const postBookingIcon = (() => {
-                  if (microAnswers.postBooking === "Send WhatsApp confirmation") return MessageCircle;
-                  if (microAnswers.postBooking === "Transfer to a human agent") return PhoneForwarded;
-                  if (microAnswers.postBooking === "Send SMS confirmation") return MessageSquare;
-                  return Phone;
-                })();
-                type FlowNode = {
-                  label: string;
-                  badge?: string;
-                  branch?: boolean;
-                  Icon?: React.ElementType;
-                };
-                const nodes: FlowNode[] = [
-                  { label: "Agent greets the customer and introduces itself", badge: microAnswers.business ? microAnswers.business.slice(0, 55) + (microAnswers.business.length > 55 ? "…" : "") : undefined },
-                  { label: "Checks if it is a good time to talk" },
-                  { label: "If busy — asks for a callback time and closes politely", branch: true },
-                  { label: "If available — explains the purpose of the call", branch: true },
-                  { label: "Collects customer details", badge: detailsBadge },
-                  { label: "Checks availability and confirms appointment slot" },
-                  { label: "Handles objections or rescheduling requests if any" },
-                  { label: postBookingLabel, Icon: postBookingIcon },
-                  { label: "Closes the call warmly" },
-                ];
+                /* Standard textarea question */
                 return (
                   <div>
-                    <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">Call Flow</p>
-                    <h2 className="text-2xl font-bold text-gray-900 mb-1.5">Here is how your agent<br />will handle the call</h2>
-                    <p className="text-gray-400 text-sm mb-7">This is the flow your agent will follow. You can add more details in the next step.</p>
+                    <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">
+                      {String(microStep + 1).padStart(2, "0")} / 05
+                    </p>
+                    <h2 className="text-3xl font-bold text-gray-900 mb-2">{q.q}</h2>
+                    <p className="text-gray-400 text-sm mb-8">{q.hint}</p>
+                    <textarea
+                      autoFocus
+                      rows={5}
+                      placeholder={q.placeholder}
+                      value={microAnswers.answers[microStep] ?? ""}
+                      onChange={e => {
+                        const next = [...microAnswers.answers];
+                        next[microStep] = e.target.value;
+                        updateMicro({ answers: next });
+                      }}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 text-gray-900 text-sm placeholder:text-gray-300 focus:outline-none focus:border-violet-500/60 transition-all resize-none leading-relaxed"
+                    />
+                    {microStep === 4 && (
+                      <p className="text-gray-300 text-xs mt-2">Optional — leave blank and continue to proceed with default handling.</p>
+                    )}
+                  </div>
+                );
+              })()}
 
-                    <div className="relative">
-                      {nodes.map((node, idx) => (
-                        <div key={idx} className="flex gap-3">
-                          {/* Connector column */}
-                          <div className="flex flex-col items-center w-8 shrink-0">
-                            {node.branch ? (
-                              <div className="h-7 w-7 rounded-full border-2 border-dashed border-violet-300 bg-violet-50 flex items-center justify-center shrink-0">
-                                <ArrowDown className="h-3 w-3 text-violet-400" />
-                              </div>
-                            ) : node.Icon ? (
-                              <div className="h-7 w-7 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shrink-0 shadow-sm shadow-violet-500/30">
-                                <node.Icon className="h-3.5 w-3.5 text-white" />
-                              </div>
-                            ) : (
-                              <div className="h-7 w-7 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shrink-0 shadow-sm shadow-violet-500/30">
-                                <span className="text-white text-[10px] font-bold leading-none">{idx + 1}</span>
-                              </div>
-                            )}
-                            {idx < nodes.length - 1 && (
-                              <div className={cn(
-                                "w-px flex-1 min-h-[14px] my-0.5",
-                                node.branch ? "border-l border-dashed border-violet-200" : "bg-gradient-to-b from-violet-200 to-indigo-100",
-                              )} />
-                            )}
-                          </div>
+              {/* Step 5: Call Flow Preview */}
+              {microStep === 5 && (() => {
+                if (flowEditMode) {
+                  return (
+                    <div>
+                      <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">Call Flow — Edit Mode</p>
+                      <h2 className="text-3xl font-bold text-gray-900 mb-2">Edit your call flow</h2>
+                      <p className="text-gray-400 text-sm mb-6">
+                        Edit each step below — one step per line. Lines starting with → are branch paths. Use <code className="bg-gray-100 px-1 rounded text-xs">[Badge]</code> at the end of a line to add a tag.
+                      </p>
+                      <textarea
+                        autoFocus
+                        rows={14}
+                        value={flowEditText}
+                        onChange={e => setFlowEditText(e.target.value)}
+                        className="w-full bg-gray-50 border border-violet-300 rounded-xl px-4 py-3.5 text-gray-900 text-sm font-mono placeholder:text-gray-300 focus:outline-none focus:border-violet-500/60 transition-all resize-none leading-relaxed"
+                      />
+                    </div>
+                  );
+                }
 
-                          {/* Content column */}
-                          <div className={cn("pb-3 pt-0.5 flex-1", idx === nodes.length - 1 && "pb-0")}>
+                return (
+                  <div>
+                    <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">Step 5 of 9 — Call Flow Preview</p>
+                    <h2 className="text-3xl font-bold text-gray-900 mb-2">Here's how your<br />agent will run</h2>
+                    <p className="text-gray-400 text-sm mb-7">
+                      This call flow was built from your answers. Review it carefully — click <strong className="text-gray-600">Edit this flow</strong> to make changes, or continue when it looks right.
+                    </p>
+
+                    {/* Flow nodes */}
+                    <div className="relative pl-5">
+                      <div className="absolute left-0 top-2 bottom-2 w-px bg-gray-100" />
+                      {currentFlowNodes.map((node, i) => (
+                        <div key={i} className={cn("relative mb-5 last:mb-0", node.branch && "ml-5")}>
+                          <div className={cn(
+                            "absolute -left-5 top-[7px] h-2.5 w-2.5 rounded-full border-2",
+                            node.branch ? "border-gray-200 bg-white" : "border-violet-400 bg-violet-400",
+                          )} />
+                          <div className="pl-3">
                             <p className={cn(
                               "text-sm leading-snug",
-                              node.branch ? "text-gray-400 italic" : "text-gray-800 font-medium",
+                              node.branch ? "text-gray-400 font-normal" : "text-gray-700 font-medium",
                             )}>
                               {node.label}
                             </p>
                             {node.badge && (
-                              <span className="inline-block mt-1 px-2.5 py-0.5 text-[10px] font-semibold rounded-full bg-violet-50 text-violet-600 border border-violet-200 leading-normal">
+                              <span className="inline-block mt-1.5 px-2.5 py-0.5 text-[10px] font-semibold rounded-full bg-violet-50 text-violet-600 border border-violet-200 leading-normal">
                                 {node.badge}
                               </span>
                             )}
@@ -806,7 +923,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
             {/* Step 1: Use Case */}
             {currentStep === "use-case" && (
               <div>
-                <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">Step 1</p>
+                <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">Step 1 of 9</p>
                 <h2 className="text-3xl font-bold text-gray-900 mb-2">What type of agent<br />do you need?</h2>
                 <p className="text-gray-400 text-sm mb-8">Select the use case that best matches your goal.</p>
 
@@ -843,10 +960,73 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
               </div>
             )}
 
-            {/* Step 2: Language */}
+            {/* Step 2: Agent Details */}
+            {currentStep === "details" && (
+              <div>
+                <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">Step 2 of 9</p>
+                <h2 className="text-3xl font-bold text-gray-900 mb-2">Tell us about<br />your agent</h2>
+                <p className="text-gray-400 text-sm mb-8">Basic details that personalise the agent's identity.</p>
+
+                <div className="space-y-5">
+                  <div>
+                    <label className="text-gray-500 text-xs uppercase tracking-[0.15em] block mb-2">Agent's name</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Arushi, Priya, Alex"
+                      value={state.agentName}
+                      onChange={e => { update({ agentName: e.target.value }); if (e.target.value.trim()) setDetailsErrors(prev => ({ ...prev, agentName: undefined })); }}
+                      className={cn(
+                        "w-full bg-gray-50 border rounded-xl px-4 py-3.5 text-gray-900 text-base placeholder:text-gray-300 focus:outline-none focus:bg-gray-100 transition-all",
+                        detailsErrors.agentName ? "border-red-400 focus:border-red-400" : "border-gray-200 focus:border-violet-500/60",
+                      )}
+                    />
+                    {detailsErrors.agentName && (
+                      <p className="mt-1.5 text-xs text-red-500">{detailsErrors.agentName}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-gray-500 text-xs uppercase tracking-[0.15em] block mb-2">Company name</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. QuickPay, Acme Corp"
+                      value={state.companyName}
+                      onChange={e => { update({ companyName: e.target.value }); if (e.target.value.trim()) setDetailsErrors(prev => ({ ...prev, companyName: undefined })); }}
+                      className={cn(
+                        "w-full bg-gray-50 border rounded-xl px-4 py-3.5 text-gray-900 text-base placeholder:text-gray-300 focus:outline-none focus:bg-gray-100 transition-all",
+                        detailsErrors.companyName ? "border-red-400 focus:border-red-400" : "border-gray-200 focus:border-violet-500/60",
+                      )}
+                    />
+                    {detailsErrors.companyName && (
+                      <p className="mt-1.5 text-xs text-red-500">{detailsErrors.companyName}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-gray-500 text-xs uppercase tracking-[0.15em] block mb-3">Call direction</label>
+                    <div className="flex gap-3">
+                      {(["inbound", "outbound", "both"] as AgentDirection[]).map(dir => (
+                        <button
+                          key={dir}
+                          onClick={() => update({ agentDirection: dir })}
+                          className={cn(
+                            "flex-1 py-3 px-4 rounded-xl border font-medium text-sm capitalize transition-all",
+                            state.agentDirection === dir
+                              ? "border-violet-400 bg-violet-50 text-gray-900"
+                              : "border-gray-200 bg-gray-50 text-gray-400 hover:border-gray-300",
+                          )}
+                        >
+                          {dir}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Step 3: Language */}
             {currentStep === "language" && (
               <div>
-                <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">Step 2</p>
+                <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">Step 3 of 9</p>
                 <h2 className="text-3xl font-bold text-gray-900 mb-2">What language will<br />your agent speak?</h2>
                 <p className="text-gray-400 text-sm mb-8">English is always available. Add regional languages for Indian markets.</p>
 
@@ -929,7 +1109,6 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                   </>
                 )}
 
-                {/* Stack info */}
                 {(() => {
                   const langs = [state.primaryLanguage, ...state.additionalLanguages];
                   const stack = getManagedStack(langs);
@@ -958,87 +1137,23 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
               </div>
             )}
 
-            {/* Step 3: Agent Details */}
-            {currentStep === "details" && (
-              <div>
-                <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">Step 3</p>
-                <h2 className="text-3xl font-bold text-gray-900 mb-2">Tell us about<br />your agent</h2>
-                <p className="text-gray-400 text-sm mb-8">Basic details that personalise the agent's identity.</p>
-
-                <div className="space-y-5">
-                  <div>
-                    <label className="text-gray-500 text-xs uppercase tracking-[0.15em] block mb-2">Agent's name</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Arushi, Priya, Alex"
-                      value={state.agentName}
-                      onChange={e => { update({ agentName: e.target.value }); if (e.target.value.trim()) setDetailsErrors(prev => ({ ...prev, agentName: undefined })); }}
-                      className={cn(
-                        "w-full bg-gray-50 border rounded-xl px-4 py-3.5 text-gray-900 text-base placeholder:text-gray-300 focus:outline-none focus:bg-gray-100 transition-all",
-                        detailsErrors.agentName ? "border-red-400 focus:border-red-400" : "border-gray-200 focus:border-violet-500/60",
-                      )}
-                    />
-                    {detailsErrors.agentName && (
-                      <p className="mt-1.5 text-xs text-red-500">{detailsErrors.agentName}</p>
-                    )}
-                  </div>
-                  <div>
-                    <label className="text-gray-500 text-xs uppercase tracking-[0.15em] block mb-2">Company name</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. QuickPay, Acme Corp"
-                      value={state.companyName}
-                      onChange={e => { update({ companyName: e.target.value }); if (e.target.value.trim()) setDetailsErrors(prev => ({ ...prev, companyName: undefined })); }}
-                      className={cn(
-                        "w-full bg-gray-50 border rounded-xl px-4 py-3.5 text-gray-900 text-base placeholder:text-gray-300 focus:outline-none focus:bg-gray-100 transition-all",
-                        detailsErrors.companyName ? "border-red-400 focus:border-red-400" : "border-gray-200 focus:border-violet-500/60",
-                      )}
-                    />
-                    {detailsErrors.companyName && (
-                      <p className="mt-1.5 text-xs text-red-500">{detailsErrors.companyName}</p>
-                    )}
-                  </div>
-                  <div>
-                    <label className="text-gray-500 text-xs uppercase tracking-[0.15em] block mb-3">Call direction</label>
-                    <div className="flex gap-3">
-                      {(["inbound", "outbound", "both"] as AgentDirection[]).map(dir => (
-                        <button
-                          key={dir}
-                          onClick={() => update({ agentDirection: dir })}
-                          className={cn(
-                            "flex-1 py-3 px-4 rounded-xl border font-medium text-sm capitalize transition-all",
-                            state.agentDirection === dir
-                              ? "border-violet-400 bg-violet-50 text-gray-900"
-                              : "border-gray-200 bg-gray-50 text-gray-400 hover:border-gray-300",
-                          )}
-                        >
-                          {dir}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Step 4: Requirements */}
+            {/* Step 6: Agent Instructions (pre-filled from call flow) */}
             {currentStep === "requirements" && (
               <div>
-                <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">Step 4</p>
-                <h2 className="text-3xl font-bold text-gray-900 mb-2">What should your<br />agent do?</h2>
+                <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">Step 6 of 9</p>
+                <h2 className="text-3xl font-bold text-gray-900 mb-2">Refine your agent's<br />instructions</h2>
                 <p className="text-gray-400 text-sm mb-6">
-                  Describe the call flow in your own words — no grammar needed. Our AI turns it into a professional prompt, or you can skip AI and continue directly.
+                  Your call flow has been pre-filled below. Edit it if needed, then generate an AI prompt or continue directly.
                 </p>
 
                 <textarea
-                  placeholder={"Just describe it naturally:\n\n\"Agent should call customers who have unpaid EMI. First remind them politely, ask when they will pay, note the date, if they say they already paid ask for reference number, if they refuse escalate to human.\"\n\nDon't worry about grammar — just explain what the agent should do."}
+                  placeholder={"The call flow from your answers will appear here automatically. You can also describe additional rules or scenarios here."}
                   value={state.callFlowDescription}
                   onChange={e => { update({ callFlowDescription: e.target.value }); setGenError(""); }}
-                  rows={6}
+                  rows={7}
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 text-gray-900 text-sm placeholder:text-gray-300 focus:outline-none focus:border-violet-500/60 transition-all resize-none leading-relaxed mb-3"
                 />
 
-                {/* Generate button */}
                 <button
                   onClick={generatePrompt}
                   disabled={!state.callFlowDescription.trim() || isGenerating}
@@ -1055,7 +1170,6 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                   }
                 </button>
 
-                {/* Inline error */}
                 {generateError && (
                   <div className="flex items-start gap-2.5 p-3.5 rounded-xl border border-rose-300 bg-rose-50 mb-3">
                     <X className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
@@ -1066,7 +1180,6 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                   </div>
                 )}
 
-                {/* Always-visible skip path */}
                 <button
                   onClick={() => go(1)}
                   disabled={!state.callFlowDescription.trim()}
@@ -1086,10 +1199,10 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
               </div>
             )}
 
-            {/* Step 5: Knowledge Base */}
+            {/* Step 7: Knowledge Base */}
             {currentStep === "knowledge" && (
               <div>
-                <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">Step 5</p>
+                <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">Step 7 of 9</p>
                 <h2 className="text-3xl font-bold text-gray-900 mb-2">Add a knowledge<br />base <span className="text-gray-400">(optional)</span></h2>
                 <p className="text-gray-400 text-sm mb-8">
                   Upload FAQs, product info, or any text your agent should know. The agent references this during calls. You can skip and add it later.
@@ -1145,10 +1258,10 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
               </div>
             )}
 
-            {/* Step 6: Voice */}
+            {/* Step 8: Voice */}
             {currentStep === "voice" && (
               <div>
-                <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">Step 6</p>
+                <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">Step 8 of 9</p>
                 <h2 className="text-3xl font-bold text-gray-900 mb-2">Choose your<br />agent's voice</h2>
                 <p className="text-gray-400 text-sm mb-8">
                   {state.primaryLanguage !== "english"
@@ -1217,11 +1330,11 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
               </div>
             )}
 
-            {/* Step 7: Skills & Finish */}
+            {/* Step 9: Skills & Finish */}
             {currentStep === "skills" && (
               <div>
-                <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">Step 7 — Final step</p>
-                <h2 className="text-3xl font-bold text-gray-900 mb-2">Agent skills &<br />final setup</h2>
+                <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">Step 9 — Final step</p>
+                <h2 className="text-3xl font-bold text-gray-900 mb-2">Agent skills &amp;<br />final setup</h2>
                 <p className="text-gray-400 text-sm mb-8">Enable capabilities your agent needs. Auto-summarize is always on.</p>
 
                 <div className="space-y-4">
@@ -1380,15 +1493,45 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
           </div>
 
           <div className="flex items-center gap-3">
+
             {/* ── Micro-wizard navigation ── */}
-            {microActive && microStep === 5 && (
+            {microActive && microStep === 5 && !flowEditMode && (
+              <>
+                {/* Edit this flow button */}
+                <button
+                  onClick={() => {
+                    setFlowEditText(nodesToText(currentFlowNodes));
+                    setFlowEditMode(true);
+                  }}
+                  className="flex items-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm border border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:text-gray-800 transition-all"
+                >
+                  <Pencil className="h-3.5 w-3.5" /> Edit this flow
+                </button>
+                {/* Looks good, continue button */}
+                <button
+                  onClick={handleMicroConfirm}
+                  className="flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white shadow-lg shadow-violet-500/25 transition-all"
+                >
+                  Looks good, continue <ChevronRight className="h-4 w-4" />
+                </button>
+              </>
+            )}
+
+            {/* Edit mode: Apply changes button */}
+            {microActive && microStep === 5 && flowEditMode && (
               <button
-                onClick={handleMicroConfirm}
+                onClick={() => {
+                  const parsed = textToNodes(flowEditText);
+                  if (parsed.length > 0) setConfirmedFlowNodes(parsed);
+                  setFlowEditMode(false);
+                }}
                 className="flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white shadow-lg shadow-violet-500/25 transition-all"
               >
-                Add more details to this flow <ChevronRight className="h-4 w-4" />
+                <Check className="h-4 w-4" /> Apply changes
               </button>
             )}
+
+            {/* Questions 0–4: Continue */}
             {microActive && microStep < 5 && (
               <button
                 onClick={() => microGo(1)}
@@ -1431,7 +1574,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                 }
               </button>
             ) : !microActive && currentStep === "requirements" ? (
-              null
+              null /* requirements step handles its own navigation buttons */
             ) : !microActive ? (
               <button
                 onClick={() => {
@@ -1442,11 +1585,15 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                     if (Object.keys(errs).length > 0) { setDetailsErrors(errs); return; }
                     setDetailsErrors({});
                   }
-                  if (currentStep === "use-case" && state.useCase === "appointment_booking") {
+                  /* After language: trigger domain micro-wizard for all use cases */
+                  if (currentStep === "language") {
                     setMicroActive(true);
                     setMicroStep(0);
                     setMicroDir("forward");
                     setMicroRenderKey(k => k + 1);
+                    setConfirmedFlowNodes(null);
+                    setFlowEditMode(false);
+                    setFlowEditText("");
                     return;
                   }
                   go(1);
@@ -1466,6 +1613,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                 Continue <ChevronRight className="h-4 w-4" />
               </button>
             ) : null}
+
           </div>
         </div>
       )}

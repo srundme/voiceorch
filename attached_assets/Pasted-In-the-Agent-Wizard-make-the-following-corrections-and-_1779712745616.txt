@@ -1,0 +1,125 @@
+In the Agent Wizard, make the following corrections and updates across the entire wizard flow:
+
+Change 1 — Step Order Correction:
+The main Agent Wizard steps should follow this exact order:
+
+Step 1 — Use Case Selection (What type of agent do you need)
+Step 2 — Agent Details — collect Agent Name, Business Name, and Call Direction
+Step 3 — Language Selection (What language will your agent speak)
+Step 4 — 5-question micro-wizard based on selected use case
+Step 5 — Call Flow Preview with Edit and Continue options
+Step 6 — Knowledge Base (optional)
+Step 7 — Choose your agent voice
+Step 8 — Agent skills and final setup
+
+
+Change 2 — Dynamic Call Flow Preview:
+On the Call Flow preview screen, replace all generic text with real values pulled from the main wizard steps. Specifically:
+Instead of:
+"Agent greets the customer and introduces itself"
+Show:
+"[Agent Name] greets the customer and introduces itself as [Agent Name] from [Business Name]"
+Every node in the call flow that references the agent or business should use the actual values from Step 2.
+
+Change 3 — Edit and Continue Buttons on Call Flow Screen:
+On the Call Flow preview screen add two buttons at the bottom:
+
+Edit this flow — outlined secondary button on the left
+Looks good, continue — filled primary purple button on the right
+
+If the user clicks Edit this flow — show a text input asking what change they want. Apply the edit, regenerate the call flow, and show the two buttons again. Repeat until the user clicks Looks good, continue.
+Only when the user clicks Looks good, continue — proceed to the next wizard step.
+
+Change 4 — Pre-fill from Confirmed Call Flow:
+Once the user confirms the call flow by clicking Looks good, continue, auto-fill the text area in the "What should your agent do?" step with the finalized call flow content so the user does not have to type it again.
+
+Change 5 — Back Navigation Rule:
+The Back button must always navigate to the exact previous step the user just came from. It must never skip steps or jump back to the beginning.
+Rules:
+
+Every Back button press moves exactly one step behind — no skipping under any circumstance
+All previously entered answers must be preserved when going back — nothing should be cleared or reset
+When the user goes back and changes an answer, any subsequent steps that depend on that answer must update accordingly
+The progress indicator must reflect the correct current step when going back
+Inside the micro-wizard, the Back button must go question by question — it must not exit the micro-wizard and jump to the main wizard step before it
+The Back button must be visible and functional on every single screen including the Call Flow preview screen and the micro-wizard questions
+
+
+Change 6 — Domain-Specific Micro-Wizard Questions:
+For each agent type selected in Step 1, the micro-wizard in Step 4 must show the following domain-specific questions one at a time with a progress indicator:
+
+Appointment Booking Agent:
+
+What types of appointments or services can be booked? e.g. consultation, follow-up, demo, therapy session
+What are the working hours and available days for bookings?
+How far in advance can appointments be scheduled, and what is the cancellation window?
+What information must be collected before confirming a booking? e.g. name, phone, reason, insurance ID
+Should the agent handle rescheduling and cancellations autonomously or escalate to a human?
+
+
+Insurance Lead Screener:
+
+What type of policies are being renewed? e.g. health, motor, life, travel, commercial
+What is the renewal window — how many days before expiry should outreach begin?
+What renewal offers, discounts, or plan upgrade options should the agent communicate?
+Should the agent collect payment intent on the call or only confirm renewal willingness?
+What action is taken if the customer does not respond after multiple attempts?
+
+
+Policy Renewal Agent:
+
+What type of policies are being renewed? e.g. health, motor, life, travel, commercial
+What is the renewal window — how many days before expiry should outreach begin?
+What renewal offers, discounts, or plan upgrade options should the agent communicate?
+Should the agent collect payment intent on the call or only confirm renewal willingness?
+What action is taken if the customer does not respond after multiple attempts?
+
+
+Property Lead Qualifier:
+
+What type of property is being sold or rented? e.g. residential, commercial, villa, plot
+What is the price range or budget bracket the agent should qualify against?
+What signals determine a serious buyer? e.g. ready for site visit, loan pre-approved, immediate timeline
+Should the agent schedule site visits directly or pass the lead to a sales executive?
+How should cold or unqualified leads be handled — nurture sequence or disqualify?
+
+
+Customer Support:
+
+What are the most common queries or issues customers call in about?
+Does the agent need real-time access to account, order, or ticket data to resolve queries?
+What is the escalation trigger — at what point should the call go to a human agent?
+What is the resolution flow for the top 3 complaint types?
+Should the agent proactively collect feedback or CSAT rating at the end of every call?
+
+
+Candidate Screening Agent:
+For Step 1 of the Candidate Screening Agent wizard, present the user with two options:
+Option A — Upload JD: Show a file upload button that accepts PDF or DOCX. Once uploaded, parse the document to extract the job role title and must-have skills automatically and display them to the user for confirmation.
+Option B — Type Manually: Show a text area with the placeholder: "e.g. Sales Executive — Must have 2+ years B2B experience, strong communication, CRM knowledge"
+Both options should populate the same underlying config fields: role_title and must_have_skills. Only one option needs to be completed to proceed to Step 2.
+Remaining questions:
+2. What are the 3 to 5 screening questions the agent must ask every candidate?
+3. What is the scoring or decision logic — what qualifies a candidate to move forward?
+4. Should the agent inform candidates of the result on the call or send it later via message?
+5. What is the next step for a shortlisted candidate — interview scheduling, assessment link, or human callback?
+
+Lead Qualification:
+
+What product or service is being sold, and who is the target customer?
+What 3 questions best identify a qualified lead for this business?
+What is the minimum intent or budget signal required to pass a lead to sales?
+Should the agent do a warm transfer to a sales rep or just log and notify?
+What should happen to unqualified leads — drop, tag for nurture, or send to a different campaign?
+
+
+Reminder Agent:
+
+What event or action is the reminder tied to? e.g. EMI due date, policy expiry, interview slot, appointment
+How many reminder attempts should be made, and at what intervals?
+Should the agent accept a live confirmation, reschedule request, or payment acknowledgment on the call?
+What happens if the customer requests more time or raises a dispute on the call?
+Should missed or unresponsive contacts be escalated to a human or flagged in the system?
+
+
+Apply all 6 changes together without breaking any existing wizard functionality. Keep the same UI style, fonts, card design, and step numbering throughout.
