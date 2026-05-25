@@ -12,6 +12,33 @@ import type { ConversationTurn, LLMAdapter, ToolDefinition } from "../../types.j
 /** Models that support Sarvam's function-calling interface */
 const TOOL_CAPABLE_MODELS = new Set(["sarvam-m", "sarvam-30b", "sarvam-105b"]);
 
+/**
+ * Sarvam requires strictly-alternating user/assistant turns starting with a user message.
+ * This function collapses any consecutive same-role messages by joining their content,
+ * then drops any leading assistant turns.
+ */
+function sanitizeForAlternation(messages: ConversationTurn[]): ConversationTurn[] {
+  if (messages.length === 0) return messages;
+
+  // Merge consecutive same-role turns
+  const merged: ConversationTurn[] = [];
+  for (const msg of messages) {
+    const last = merged[merged.length - 1];
+    if (last && last.role === msg.role) {
+      merged[merged.length - 1] = { role: last.role, content: `${last.content}\n${msg.content}` };
+    } else {
+      merged.push({ ...msg });
+    }
+  }
+
+  // Drop any leading assistant messages (must start with user)
+  while (merged.length > 0 && merged[0]!.role !== "user") {
+    merged.shift();
+  }
+
+  return merged;
+}
+
 export class SarvamLLM implements LLMAdapter {
   private key: string;
   private model: string;
@@ -51,6 +78,10 @@ export class SarvamLLM implements LLMAdapter {
         }))
       : undefined;
 
+    // Sarvam enforces strict user/assistant alternation starting with a user message.
+    // Merge any consecutive same-role turns before sending.
+    const sanitized = sanitizeForAlternation(messages);
+
     const resp = await fetch("https://api.sarvam.ai/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -62,7 +93,7 @@ export class SarvamLLM implements LLMAdapter {
         stream: true,
         messages: [
           { role: "system", content: systemPrompt },
-          ...messages.map((m) => ({ role: m.role, content: m.content })),
+          ...sanitized.map((m) => ({ role: m.role, content: m.content })),
         ],
         ...(sarvamTools ? { tools: sarvamTools, tool_choice: "auto" } : {}),
       }),
