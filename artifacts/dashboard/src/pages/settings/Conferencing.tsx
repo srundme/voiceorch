@@ -42,28 +42,69 @@ export default function ConferencingPage({ embedded = false }: { embedded?: bool
     }
   }, [authFetch]);
 
-  // Handle OAuth return — ?gcal=connected or ?gcal=error
+  // Handle OAuth return in THIS tab (?gcal=connected / ?gcal=error)
+  // This runs when the OAuth popup redirects back and lands on this page.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const gcal  = params.get("gcal");
     const email = params.get("email");
     if (gcal === "connected") {
+      window.history.replaceState({}, "", window.location.pathname);
+      // Broadcast to the original tab so it reloads without user action
+      try {
+        const ch = new BroadcastChannel("google-oauth");
+        ch.postMessage({ type: "connected", email: email ?? "" });
+        ch.close();
+      } catch { /* BroadcastChannel not available (old Safari) */ }
+      // Also refresh & show toast in this tab (same-tab / production flow)
       toast({
         title: "Google account connected!",
         description: email
           ? `${email} is now linked. Meet links will be created automatically.`
           : "Your Google Calendar is now connected.",
       });
-      window.history.replaceState({}, "", window.location.pathname);
+      setTimeout(() => void load(), 600);
+      // Close this tab if it was the OAuth popup
+      setTimeout(() => { try { window.close(); } catch { /* noop */ } }, 1800);
     } else if (gcal === "error") {
+      window.history.replaceState({}, "", window.location.pathname);
+      try {
+        const ch = new BroadcastChannel("google-oauth");
+        ch.postMessage({ type: "error" });
+        ch.close();
+      } catch { /* noop */ }
       toast({
         title: "Connection failed",
         description: "Something went wrong with Google sign-in. Please try again.",
         variant: "destructive",
       });
-      window.history.replaceState({}, "", window.location.pathname);
+      setTimeout(() => { try { window.close(); } catch { /* noop */ } }, 1800);
     }
-  }, [toast]);
+  }, [toast, load]);
+
+  // Receive broadcast from OAuth popup tab → reload connections in original tab
+  useEffect(() => {
+    let ch: BroadcastChannel;
+    try {
+      ch = new BroadcastChannel("google-oauth");
+      ch.onmessage = (e: MessageEvent<{ type: string; email?: string }>) => {
+        if (e.data?.type === "connected") {
+          toast({
+            title: "Google account connected!",
+            description: e.data.email
+              ? `${e.data.email} is now linked. Meet links will be created automatically.`
+              : "Your Google Calendar is now connected.",
+          });
+          setTimeout(() => void load(), 600);
+          setConnecting(false);
+        } else if (e.data?.type === "error") {
+          toast({ title: "Connection failed", description: "Something went wrong with Google sign-in.", variant: "destructive" });
+          setConnecting(false);
+        }
+      };
+    } catch { /* BroadcastChannel not available */ }
+    return () => { try { ch?.close(); } catch { /* noop */ } };
+  }, [toast, load]);
 
   useEffect(() => { void load(); }, [load]);
 

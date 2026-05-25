@@ -426,22 +426,56 @@ export default function CalendarsPage({ embedded = false }: { embedded?: boolean
 
   useEffect(() => { void loadGoogleData(); }, [loadGoogleData]);
 
-  // Handle OAuth return — ?gcal=connected or ?gcal=error
+  // Handle OAuth return in THIS tab (?gcal=connected / ?gcal=error)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const gcal  = params.get("gcal");
     const email = params.get("email");
     if (gcal === "connected") {
+      window.history.replaceState({}, "", window.location.pathname);
+      try {
+        const ch = new BroadcastChannel("google-oauth");
+        ch.postMessage({ type: "connected", email: email ?? "" });
+        ch.close();
+      } catch { /* noop */ }
       toast({
         title: "Google account connected!",
         description: email ? `${email} is now linked.` : "Google Calendar connected.",
       });
-      window.history.replaceState({}, "", window.location.pathname);
-      void loadGoogleData();
+      setTimeout(() => void loadGoogleData(), 600);
+      setTimeout(() => { try { window.close(); } catch { /* noop */ } }, 1800);
     } else if (gcal === "error") {
-      toast({ title: "Connection failed", description: "Google sign-in failed. Please try again.", variant: "destructive" });
       window.history.replaceState({}, "", window.location.pathname);
+      try {
+        const ch = new BroadcastChannel("google-oauth");
+        ch.postMessage({ type: "error" });
+        ch.close();
+      } catch { /* noop */ }
+      toast({ title: "Connection failed", description: "Google sign-in failed. Please try again.", variant: "destructive" });
+      setTimeout(() => { try { window.close(); } catch { /* noop */ } }, 1800);
     }
+  }, [toast, loadGoogleData]);
+
+  // Receive broadcast from OAuth popup → reload Google data in original tab
+  useEffect(() => {
+    let ch: BroadcastChannel;
+    try {
+      ch = new BroadcastChannel("google-oauth");
+      ch.onmessage = (e: MessageEvent<{ type: string; email?: string }>) => {
+        if (e.data?.type === "connected") {
+          toast({
+            title: "Google account connected!",
+            description: e.data.email ? `${e.data.email} is now linked.` : "Google Calendar connected.",
+          });
+          setTimeout(() => void loadGoogleData(), 600);
+          setConnecting(false);
+        } else if (e.data?.type === "error") {
+          toast({ title: "Connection failed", description: "Google sign-in failed. Please try again.", variant: "destructive" });
+          setConnecting(false);
+        }
+      };
+    } catch { /* BroadcastChannel not available */ }
+    return () => { try { ch?.close(); } catch { /* noop */ } };
   }, [toast, loadGoogleData]);
 
   async function handleConnect() {
