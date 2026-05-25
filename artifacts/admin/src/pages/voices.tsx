@@ -13,10 +13,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Mic2, Save, RefreshCw, Loader2, Search, Info, Play, Square } from "lucide-react";
+import { Mic2, Save, RefreshCw, Loader2, Search, Info, Play, Square, AlertTriangle, KeyRound } from "lucide-react";
+import { Link } from "wouter";
 
 export default function Voices() {
-  const { data, isLoading, refetch, isRefetching } = useAdminCartesiaVoices();
+  const { data, isLoading, refetch, isRefetching, isError, error } = useAdminCartesiaVoices();
   const { mutate: saveVoices, isPending } = useSaveListedVoices();
   const { toast } = useToast();
 
@@ -183,7 +184,7 @@ export default function Voices() {
           <Button
             size="sm"
             onClick={handleSave}
-            disabled={isPending || isLoading}
+            disabled={isPending || isLoading || isError}
             className="gap-2"
           >
             {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
@@ -199,6 +200,35 @@ export default function Voices() {
         </div>
       </div>
 
+      {isError && (() => {
+        const msg = (error as Error)?.message ?? "";
+        const isKeyMissing = msg.includes("Cartesia key not configured");
+        return (
+          <div className={`rounded-md border p-4 flex items-start gap-3 ${isKeyMissing ? "border-amber-500/30 bg-amber-500/5" : "border-destructive/30 bg-destructive/5"}`}>
+            {isKeyMissing ? (
+              <KeyRound className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+            ) : (
+              <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+            )}
+            <div className="text-sm">
+              {isKeyMissing ? (
+                <>
+                  <strong className="text-amber-600 dark:text-amber-400">Cartesia key not configured</strong>
+                  <span className="text-muted-foreground"> — add it on the </span>
+                  <Link href="/managed-keys" className="underline text-amber-600 dark:text-amber-400 hover:opacity-80">Managed Keys</Link>
+                  <span className="text-muted-foreground"> page to load voices.</span>
+                </>
+              ) : (
+                <>
+                  <strong className="text-destructive">Could not load voices</strong>
+                  <span className="text-muted-foreground"> — check that the API server is reachable and try again.</span>
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       <Card>
         <CardHeader className="border-b border-border pb-4">
           <div className="flex items-center justify-between">
@@ -207,8 +237,8 @@ export default function Voices() {
                 <Mic2 className="h-4 w-4 text-primary" /> Cartesia Voices
               </CardTitle>
               <CardDescription className="text-xs mt-1">
-                {isLoading ? "Loading…" : `${voices.length} total voices · `}
-                {!isLoading && (
+                {isLoading ? "Loading…" : isError ? "Unavailable" : `${voices.length} total voices · `}
+                {!isLoading && !isError && (
                   <Badge variant="secondary" className="ml-1 text-xs">
                     {listedCount} listed for users
                   </Badge>
@@ -257,6 +287,8 @@ export default function Voices() {
             <div className="flex items-center gap-2 text-muted-foreground text-sm p-6">
               <Loader2 className="h-4 w-4 animate-spin" /> Fetching voices from Cartesia…
             </div>
+          ) : isError ? (
+            <div className="p-6 text-sm text-muted-foreground">Voices could not be loaded. See the message above for details.</div>
           ) : filtered.length === 0 ? (
             <div className="p-6 text-sm text-muted-foreground">No voices match your filters.</div>
           ) : (
@@ -333,11 +365,15 @@ export default function Voices() {
       </Card>
 
       <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>Showing {filtered.length} of {voices.length} voices · {listedCount} selected for users</span>
+        <span>
+          {isError
+            ? "Voice data unavailable"
+            : `Showing ${filtered.length} of ${voices.length} voices · ${listedCount} selected for users`}
+        </span>
         <Button
           size="sm"
           onClick={handleSave}
-          disabled={isPending || isLoading}
+          disabled={isPending || isLoading || isError}
           className="gap-2"
         >
           {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
