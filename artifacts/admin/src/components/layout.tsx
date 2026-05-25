@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { 
   Activity, 
-  BarChart3, 
+  BarChart3,
+  BarChart2,
   Users, 
   Wallet, 
   Cpu, 
@@ -32,6 +33,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/", label: "Overview", icon: Activity },
     { href: "/users", label: "Users", icon: Users },
     { href: "/finance", label: "Finance", icon: Wallet },
+    { href: "/usage", label: "Usage", icon: BarChart2 },
     { href: "/platform", label: "Platform", icon: Cpu },
     { href: "/growth", label: "Growth", icon: BarChart3 },
     { href: "/managed-keys", label: "Managed Keys", icon: KeyRound },

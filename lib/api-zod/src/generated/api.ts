@@ -2090,6 +2090,37 @@ export const CreatePublicBookingBody = zod.object({
 
 
 /**
+ * @summary Platform-wide STT/LLM/TTS usage breakdown by user
+ */
+export const adminGetUsageQueryDaysDefault = 30;
+
+export const AdminGetUsageQueryParams = zod.object({
+  "days": zod.union([zod.literal(0),zod.literal(7),zod.literal(30),zod.literal(90)]).default(adminGetUsageQueryDaysDefault).describe('Filter window in days. 0 = all time. Allowed: 0, 7, 30, 90. Defaults to 30.')
+})
+
+export const AdminGetUsageResponse = zod.object({
+  "totals": zod.object({
+  "totalSttCalls": zod.number(),
+  "totalLlmCalls": zod.number(),
+  "totalTtsCalls": zod.number()
+}),
+  "rows": zod.array(zod.object({
+  "clerkId": zod.string().nullable(),
+  "email": zod.string().nullable(),
+  "callCount": zod.number(),
+  "sttCallCount": zod.number(),
+  "avgSttLatencyMs": zod.number().nullish(),
+  "llmCallCount": zod.number(),
+  "avgLlmLatencyMs": zod.number().nullish(),
+  "ttsCallCount": zod.number(),
+  "avgTtsFirstChunkMs": zod.number().nullish(),
+  "totalDurationSeconds": zod.number(),
+  "totalCostCents": zod.number()
+}))
+})
+
+
+/**
  * @summary Fetch all Cartesia voices (live) with current listed status
  */
 export const AdminGetCartesiaVoicesResponse = zod.object({

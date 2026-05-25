@@ -1484,6 +1484,36 @@ export interface AdminSaveListedVoicesInput {
   voices: AdminSaveListedVoicesInputVoicesItem[];
 }
 
+export interface AdminUsageRow {
+  /** @nullable */
+  clerkId: string | null;
+  /** @nullable */
+  email: string | null;
+  callCount: number;
+  sttCallCount: number;
+  /** @nullable */
+  avgSttLatencyMs?: number | null;
+  llmCallCount: number;
+  /** @nullable */
+  avgLlmLatencyMs?: number | null;
+  ttsCallCount: number;
+  /** @nullable */
+  avgTtsFirstChunkMs?: number | null;
+  totalDurationSeconds: number;
+  totalCostCents: number;
+}
+
+export type AdminUsageResponseTotals = {
+  totalSttCalls: number;
+  totalLlmCalls: number;
+  totalTtsCalls: number;
+};
+
+export interface AdminUsageResponse {
+  totals: AdminUsageResponseTotals;
+  rows: AdminUsageRow[];
+}
+
 export type ListCallsParams = {
 /**
  * @nullable
@@ -1618,6 +1648,23 @@ slug: string;
 startDate: string;
 endDate: string;
 };
+
+export type AdminGetUsageParams = {
+/**
+ * Filter window in days. 0 = all time. Allowed: 0, 7, 30, 90. Defaults to 30.
+ */
+days?: AdminGetUsageDays;
+};
+
+export type AdminGetUsageDays = typeof AdminGetUsageDays[keyof typeof AdminGetUsageDays];
+
+
+export const AdminGetUsageDays = {
+  NUMBER_0: 0,
+  NUMBER_7: 7,
+  NUMBER_30: 30,
+  NUMBER_90: 90,
+} as const;
 
 export type AdminGetCartesiaVoices200 = {
   voices: AdminVoice[];

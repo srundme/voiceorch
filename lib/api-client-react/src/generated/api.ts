@@ -25,8 +25,10 @@ import type {
   ActivityLog,
   AdminGetCartesiaVoices200,
   AdminGetListedVoices200,
+  AdminGetUsageParams,
   AdminSaveListedVoices200,
   AdminSaveListedVoicesInput,
+  AdminUsageResponse,
   Agent,
   AgentInput,
   AgentStats,
@@ -6681,6 +6683,90 @@ export const useCreatePublicBooking = <TError = ErrorType<void>,
       > => {
       return useMutation(getCreatePublicBookingMutationOptions(options));
     }
+
+export const getAdminGetUsageUrl = (params?: AdminGetUsageParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/admin/usage?${stringifiedParams}` : `/api/admin/usage`
+}
+
+/**
+ * @summary Platform-wide STT/LLM/TTS usage breakdown by user
+ */
+export const adminGetUsage = async (params?: AdminGetUsageParams, options?: RequestInit): Promise<AdminUsageResponse> => {
+
+  return customFetch<AdminUsageResponse>(getAdminGetUsageUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getAdminGetUsageQueryKey = (params?: AdminGetUsageParams,) => {
+    return [
+    `/api/admin/usage`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getAdminGetUsageQueryOptions = <TData = Awaited<ReturnType<typeof adminGetUsage>>, TError = ErrorType<unknown>>(params?: AdminGetUsageParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof adminGetUsage>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminGetUsageQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminGetUsage>>> = ({ signal }) => adminGetUsage(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminGetUsage>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type AdminGetUsageQueryResult = NonNullable<Awaited<ReturnType<typeof adminGetUsage>>>
+export type AdminGetUsageQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Platform-wide STT/LLM/TTS usage breakdown by user
+ */
+
+export function useAdminGetUsage<TData = Awaited<ReturnType<typeof adminGetUsage>>, TError = ErrorType<unknown>>(
+ params?: AdminGetUsageParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof adminGetUsage>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getAdminGetUsageQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 
 export const getAdminGetCartesiaVoicesUrl = () => {
 

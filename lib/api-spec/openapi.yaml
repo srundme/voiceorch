@@ -38,6 +38,8 @@ tags:
     description: Auto-call campaign management
   - name: scheduling
     description: Native appointment scheduling engine
+  - name: admin-usage
+    description: Admin platform-wide STT/LLM/TTS usage monitoring
 
 paths:
   /healthz:
@@ -1977,6 +1979,29 @@ paths:
         "409":
           description: Slot already booked
 
+  # ── Admin Usage ──────────────────────────────────────────────────────────────
+  /admin/usage:
+    get:
+      operationId: adminGetUsage
+      tags: [admin-usage]
+      summary: Platform-wide STT/LLM/TTS usage breakdown by user
+      parameters:
+        - name: days
+          in: query
+          required: false
+          description: "Filter window in days. 0 = all time. Allowed: 0, 7, 30, 90. Defaults to 30."
+          schema:
+            type: integer
+            enum: [0, 7, 30, 90]
+            default: 30
+      responses:
+        "200":
+          description: Usage totals and per-user breakdown
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUsageResponse"
+
   # ── Admin Voices ─────────────────────────────────────────────────────────────
   /admin/voices/cartesia:
     get:
@@ -3799,3 +3824,49 @@ components:
                 type: string
               description:
                 type: string
+
+    AdminUsageRow:
+      type: object
+      required: [clerkId, email, callCount, sttCallCount, llmCallCount, ttsCallCount, totalDurationSeconds, totalCostCents]
+      properties:
+        clerkId:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        callCount:
+          type: integer
+        sttCallCount:
+          type: integer
+        avgSttLatencyMs:
+          type: ["integer", "null"]
+        llmCallCount:
+          type: integer
+        avgLlmLatencyMs:
+          type: ["integer", "null"]
+        ttsCallCount:
+          type: integer
+        avgTtsFirstChunkMs:
+          type: ["integer", "null"]
+        totalDurationSeconds:
+          type: number
+        totalCostCents:
+          type: number
+
+    AdminUsageResponse:
+      type: object
+      required: [totals, rows]
+      properties:
+        totals:
+          type: object
+          required: [totalSttCalls, totalLlmCalls, totalTtsCalls]
+          properties:
+            totalSttCalls:
+              type: integer
+            totalLlmCalls:
+              type: integer
+            totalTtsCalls:
+              type: integer
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminUsageRow"
