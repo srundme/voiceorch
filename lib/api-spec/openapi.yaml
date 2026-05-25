@@ -1977,6 +1977,68 @@ paths:
         "409":
           description: Slot already booked
 
+  # ── Admin Voices ─────────────────────────────────────────────────────────────
+  /admin/voices/cartesia:
+    get:
+      operationId: adminGetCartesiaVoices
+      tags: [admin-voices]
+      summary: Fetch all Cartesia voices (live) with current listed status
+      responses:
+        "200":
+          description: List of Cartesia voices with listed flag
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [voices]
+                properties:
+                  voices:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AdminVoice"
+        "503":
+          description: Cartesia key not configured
+
+  /admin/voices/listed:
+    get:
+      operationId: adminGetListedVoices
+      tags: [admin-voices]
+      summary: Return only the admin-whitelisted voices (used by dashboard)
+      responses:
+        "200":
+          description: Listed voices
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [voices]
+                properties:
+                  voices:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AdminVoice"
+    put:
+      operationId: adminSaveListedVoices
+      tags: [admin-voices]
+      summary: Save the whitelisted voice selection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminSaveListedVoicesInput"
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [saved]
+                properties:
+                  saved:
+                    type: integer
+
 components:
   schemas:
     HealthStatus:
@@ -3699,3 +3761,41 @@ components:
           type: string
           format: date-time
           description: New slot start when rescheduling
+
+    AdminVoice:
+      type: object
+      required: [id, name, gender, language, description, isListed]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        gender:
+          type: string
+        language:
+          type: string
+        description:
+          type: string
+        isListed:
+          type: boolean
+
+    AdminSaveListedVoicesInput:
+      type: object
+      required: [voices]
+      properties:
+        voices:
+          type: array
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+              gender:
+                type: string
+              language:
+                type: string
+              description:
+                type: string

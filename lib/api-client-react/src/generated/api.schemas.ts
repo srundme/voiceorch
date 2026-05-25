@@ -1463,6 +1463,27 @@ export interface BookingUpdate {
   slotStart?: string;
 }
 
+export interface AdminVoice {
+  id: string;
+  name: string;
+  gender: string;
+  language: string;
+  description: string;
+  isListed: boolean;
+}
+
+export type AdminSaveListedVoicesInputVoicesItem = {
+  id: string;
+  name: string;
+  gender?: string;
+  language?: string;
+  description?: string;
+};
+
+export interface AdminSaveListedVoicesInput {
+  voices: AdminSaveListedVoicesInputVoicesItem[];
+}
+
 export type ListCallsParams = {
 /**
  * @nullable
@@ -1596,5 +1617,17 @@ export type GetPublicSlotsParams = {
 slug: string;
 startDate: string;
 endDate: string;
+};
+
+export type AdminGetCartesiaVoices200 = {
+  voices: AdminVoice[];
+};
+
+export type AdminGetListedVoices200 = {
+  voices: AdminVoice[];
+};
+
+export type AdminSaveListedVoices200 = {
+  saved: number;
 };
 

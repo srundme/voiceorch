@@ -102,6 +102,44 @@ export function useSaveManagedKeys() {
   });
 }
 
+// Admin Voices
+export interface AdminVoice {
+  id: string;
+  name: string;
+  gender: string;
+  language: string;
+  description: string;
+  isListed: boolean;
+}
+
+export function useAdminCartesiaVoices() {
+  return useQuery({
+    queryKey: ["admin", "voices", "cartesia"],
+    queryFn: () => adminFetch<{ voices: AdminVoice[] }>("/voices/cartesia"),
+  });
+}
+
+export function useAdminListedVoices() {
+  return useQuery({
+    queryKey: ["admin", "voices", "listed"],
+    queryFn: () => adminFetch<{ voices: AdminVoice[] }>("/voices/listed"),
+  });
+}
+
+export function useSaveListedVoices() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (voices: Array<{ id: string; name: string; gender?: string; language?: string; description?: string }>) =>
+      adminFetch<{ saved: number }>("/voices/listed", {
+        method: "PUT",
+        body: JSON.stringify({ voices }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "voices"] });
+    },
+  });
+}
+
 // Growth
 export function useGrowthFunnel() {
   return useQuery({

@@ -2089,3 +2089,51 @@ export const CreatePublicBookingBody = zod.object({
 })
 
 
+/**
+ * @summary Fetch all Cartesia voices (live) with current listed status
+ */
+export const AdminGetCartesiaVoicesResponse = zod.object({
+  "voices": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "gender": zod.string(),
+  "language": zod.string(),
+  "description": zod.string(),
+  "isListed": zod.boolean()
+}))
+})
+
+
+/**
+ * @summary Return only the admin-whitelisted voices (used by dashboard)
+ */
+export const AdminGetListedVoicesResponse = zod.object({
+  "voices": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "gender": zod.string(),
+  "language": zod.string(),
+  "description": zod.string(),
+  "isListed": zod.boolean()
+}))
+})
+
+
+/**
+ * @summary Save the whitelisted voice selection
+ */
+export const AdminSaveListedVoicesBody = zod.object({
+  "voices": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "gender": zod.string().optional(),
+  "language": zod.string().optional(),
+  "description": zod.string().optional()
+}))
+})
+
+export const AdminSaveListedVoicesResponse = zod.object({
+  "saved": zod.number()
+})
+
+

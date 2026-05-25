@@ -13,6 +13,7 @@ import Finance from "@/pages/finance";
 import Platform from "@/pages/platform";
 import Growth from "@/pages/growth";
 import ManagedKeys from "@/pages/managed-keys";
+import Voices from "@/pages/voices";
 import AdminScheduling from "@/pages/scheduling";
 
 const queryClient = new QueryClient({
@@ -54,6 +55,7 @@ function Router() {
       <ProtectedRoute path="/platform" component={Platform} />
       <ProtectedRoute path="/growth" component={Growth} />
       <ProtectedRoute path="/managed-keys" component={ManagedKeys} />
+      <ProtectedRoute path="/voices" component={Voices} />
       <ProtectedRoute path="/scheduling" component={AdminScheduling} />
       <Route component={NotFound} />
     </Switch>

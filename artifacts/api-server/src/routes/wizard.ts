@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import type { Request, Response, NextFunction } from "express";
 import { db } from "@workspace/db";
-import { platformSettingsTable } from "@workspace/db";
+import { platformSettingsTable, platformListedVoicesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { logger } from "../lib/logger.js";
@@ -141,6 +141,30 @@ async function getSetting(key: string): Promise<string | null> {
 
 router.get("/wizard/voices", requireDbUser, async (req, res): Promise<void> => {
   const { language: langFilter } = req.query as { language?: string };
+
+  // ── Step 1: Check whitelist — if admin has listed voices, return only those ──
+  try {
+    const listedRows = await db
+      .select()
+      .from(platformListedVoicesTable)
+      .where(eq(platformListedVoicesTable.isListed, true));
+
+    if (listedRows.length > 0) {
+      const voices = listedRows.map(r => ({
+        id: r.voiceId,
+        name: r.voiceName,
+        gender: r.gender,
+        language: r.language,
+        description: r.description,
+      }));
+      res.json({ voices, source: "whitelist" });
+      return;
+    }
+  } catch (err) {
+    logger.warn({ err }, "Whitelist DB query failed — falling through to Cartesia fetch");
+  }
+
+  // ── Step 2: No whitelist — existing full-fetch + ranking fallback ─────────
   const cartesiaKey = await getSetting("managed_cartesia_key");
 
   if (!cartesiaKey) {

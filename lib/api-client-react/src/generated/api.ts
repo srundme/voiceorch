@@ -23,6 +23,10 @@ import type {
   AccountInfo,
   ActiveCall,
   ActivityLog,
+  AdminGetCartesiaVoices200,
+  AdminGetListedVoices200,
+  AdminSaveListedVoices200,
+  AdminSaveListedVoicesInput,
   Agent,
   AgentInput,
   AgentStats,
@@ -6676,5 +6680,230 @@ export const useCreatePublicBooking = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getCreatePublicBookingMutationOptions(options));
+    }
+
+export const getAdminGetCartesiaVoicesUrl = () => {
+
+
+
+
+  return `/api/admin/voices/cartesia`
+}
+
+/**
+ * @summary Fetch all Cartesia voices (live) with current listed status
+ */
+export const adminGetCartesiaVoices = async ( options?: RequestInit): Promise<AdminGetCartesiaVoices200> => {
+
+  return customFetch<AdminGetCartesiaVoices200>(getAdminGetCartesiaVoicesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getAdminGetCartesiaVoicesQueryKey = () => {
+    return [
+    `/api/admin/voices/cartesia`
+    ] as const;
+    }
+
+
+export const getAdminGetCartesiaVoicesQueryOptions = <TData = Awaited<ReturnType<typeof adminGetCartesiaVoices>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof adminGetCartesiaVoices>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminGetCartesiaVoicesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminGetCartesiaVoices>>> = ({ signal }) => adminGetCartesiaVoices({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminGetCartesiaVoices>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type AdminGetCartesiaVoicesQueryResult = NonNullable<Awaited<ReturnType<typeof adminGetCartesiaVoices>>>
+export type AdminGetCartesiaVoicesQueryError = ErrorType<void>
+
+
+/**
+ * @summary Fetch all Cartesia voices (live) with current listed status
+ */
+
+export function useAdminGetCartesiaVoices<TData = Awaited<ReturnType<typeof adminGetCartesiaVoices>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof adminGetCartesiaVoices>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getAdminGetCartesiaVoicesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getAdminGetListedVoicesUrl = () => {
+
+
+
+
+  return `/api/admin/voices/listed`
+}
+
+/**
+ * @summary Return only the admin-whitelisted voices (used by dashboard)
+ */
+export const adminGetListedVoices = async ( options?: RequestInit): Promise<AdminGetListedVoices200> => {
+
+  return customFetch<AdminGetListedVoices200>(getAdminGetListedVoicesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getAdminGetListedVoicesQueryKey = () => {
+    return [
+    `/api/admin/voices/listed`
+    ] as const;
+    }
+
+
+export const getAdminGetListedVoicesQueryOptions = <TData = Awaited<ReturnType<typeof adminGetListedVoices>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof adminGetListedVoices>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminGetListedVoicesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminGetListedVoices>>> = ({ signal }) => adminGetListedVoices({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminGetListedVoices>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type AdminGetListedVoicesQueryResult = NonNullable<Awaited<ReturnType<typeof adminGetListedVoices>>>
+export type AdminGetListedVoicesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Return only the admin-whitelisted voices (used by dashboard)
+ */
+
+export function useAdminGetListedVoices<TData = Awaited<ReturnType<typeof adminGetListedVoices>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof adminGetListedVoices>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getAdminGetListedVoicesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getAdminSaveListedVoicesUrl = () => {
+
+
+
+
+  return `/api/admin/voices/listed`
+}
+
+/**
+ * @summary Save the whitelisted voice selection
+ */
+export const adminSaveListedVoices = async (adminSaveListedVoicesInput: AdminSaveListedVoicesInput, options?: RequestInit): Promise<AdminSaveListedVoices200> => {
+
+  return customFetch<AdminSaveListedVoices200>(getAdminSaveListedVoicesUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      adminSaveListedVoicesInput,)
+  }
+);}
+
+
+
+
+export const getAdminSaveListedVoicesMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminSaveListedVoices>>, TError,{data: BodyType<AdminSaveListedVoicesInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminSaveListedVoices>>, TError,{data: BodyType<AdminSaveListedVoicesInput>}, TContext> => {
+
+const mutationKey = ['adminSaveListedVoices'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminSaveListedVoices>>, {data: BodyType<AdminSaveListedVoicesInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  adminSaveListedVoices(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminSaveListedVoicesMutationResult = NonNullable<Awaited<ReturnType<typeof adminSaveListedVoices>>>
+    export type AdminSaveListedVoicesMutationBody = BodyType<AdminSaveListedVoicesInput>
+    export type AdminSaveListedVoicesMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Save the whitelisted voice selection
+ */
+export const useAdminSaveListedVoices = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminSaveListedVoices>>, TError,{data: BodyType<AdminSaveListedVoicesInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof adminSaveListedVoices>>,
+        TError,
+        {data: BodyType<AdminSaveListedVoicesInput>},
+        TContext
+      > => {
+      return useMutation(getAdminSaveListedVoicesMutationOptions(options));
     }
 

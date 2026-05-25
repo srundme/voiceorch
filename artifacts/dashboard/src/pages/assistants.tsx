@@ -715,7 +715,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
   const [ttsVoice, setTtsVoice]                             = useState("");
   const [cartesiaVoices, setCartesiaVoices]                 = useState<CartesiaVoice[]>(CARTESIA_FALLBACK_VOICES);
   const [loadingCartesiaVoices, setLoadingCartesiaVoices]   = useState(false);
-  const [cartesiaVoiceSource, setCartesiaVoiceSource]       = useState<"cartesia" | "fallback">("fallback");
+  const [cartesiaVoiceSource, setCartesiaVoiceSource]       = useState<"cartesia" | "whitelist" | "fallback">("fallback");
   const [voicePlaying, setVoicePlaying]                     = useState<string | null>(null);
   const voiceAudioRef                                       = useRef<HTMLAudioElement | null>(null);
   const [telephony, setTelephony]                           = useState("");
@@ -741,16 +741,15 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
   // ── Cartesia voice loader ────────────────────────────────────────
   useEffect(() => {
     if (ttsProvider !== "cartesia") return;
-    if (cartesiaVoiceSource === "cartesia") return; // already loaded from API
+    if (cartesiaVoiceSource === "cartesia" || cartesiaVoiceSource === "whitelist") return; // already loaded
     setLoadingCartesiaVoices(true);
     apiFetch("/api/wizard/voices")
       .then(r => r.ok ? r.json() as Promise<{ voices: CartesiaVoice[]; source: string }> : null)
       .then(data => {
-        if (!data?.voices?.length) return;
-        const arushi = data.voices.find(v => v.name.toLowerCase().includes("arushi")) ?? ARUSHI_VOICE;
-        const rest   = data.voices.filter(v => v.id !== arushi.id);
-        setCartesiaVoices([arushi, ...rest]);
-        setCartesiaVoiceSource(data.source === "cartesia" ? "cartesia" : "fallback");
+        if (!data?.voices?.length) return; // keep local fallback
+        // Use server list as-is — never inject a local ARUSHI_VOICE so the admin whitelist is respected
+        setCartesiaVoices(data.voices);
+        setCartesiaVoiceSource(data.source === "whitelist" ? "whitelist" : data.source === "cartesia" ? "cartesia" : "fallback");
       })
       .catch(() => {})
       .finally(() => setLoadingCartesiaVoices(false));

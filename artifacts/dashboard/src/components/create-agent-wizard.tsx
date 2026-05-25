@@ -266,14 +266,15 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
       const res = await apiFetch(`/api/wizard/voices?language=${baseLang}`, { method: "GET" });
       if (res.ok) {
         const { voices, source } = await res.json() as { voices: CartesiaVoice[]; source: string };
+        if (voices.length === 0) return; // keep existing fallback
         // Auto-select: first voice whose language matches the agent's language,
-        // else fall back to Arushi (Indian English).
-        const langMatch  = voices.find(v => v.language === baseLang && baseLang !== "en");
-        const arushi     = voices.find(v => v.name.toLowerCase().includes("arushi")) ?? ARUSHI_VOICE;
-        const defaultVoice = langMatch ?? arushi;
-        const rest       = voices.filter(v => v.id !== defaultVoice.id);
+        // else the first voice in the server-returned list.
+        // Never inject a local ARUSHI_VOICE — respect the admin whitelist.
+        const langMatch    = voices.find(v => v.language === baseLang && baseLang !== "en");
+        const defaultVoice = langMatch ?? voices[0]!;
+        const rest         = voices.filter(v => v.id !== defaultVoice.id);
         update({ voices: [defaultVoice, ...rest], selectedVoiceId: defaultVoice.id });
-        setVoiceSource(source === "cartesia" ? "cartesia" : "browser");
+        setVoiceSource(source === "cartesia" || source === "whitelist" ? "cartesia" : "browser");
       }
     } finally { setLoadVoices(false); }
   }
