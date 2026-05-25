@@ -221,6 +221,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
   const [direction, setDirection]     = useState<"forward" | "back">("forward");
   const [isGenerating, setGenerating] = useState(false);
   const [generateError, setGenError]  = useState("");
+  const [detailsErrors, setDetailsErrors] = useState<{ agentName?: string; companyName?: string }>({});
   const [loadingVoices, setLoadVoices]= useState(false);
   const [voiceSource, setVoiceSource] = useState<"cartesia" | "browser">("browser");
   const [renderKey, setRenderKey]     = useState(0);
@@ -651,9 +652,15 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                       type="text"
                       placeholder="e.g. Arushi, Priya, Alex"
                       value={state.agentName}
-                      onChange={e => update({ agentName: e.target.value })}
-                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 text-gray-900 text-base placeholder:text-gray-300 focus:outline-none focus:border-violet-500/60 focus:bg-gray-100 transition-all"
+                      onChange={e => { update({ agentName: e.target.value }); if (e.target.value.trim()) setDetailsErrors(prev => ({ ...prev, agentName: undefined })); }}
+                      className={cn(
+                        "w-full bg-gray-50 border rounded-xl px-4 py-3.5 text-gray-900 text-base placeholder:text-gray-300 focus:outline-none focus:bg-gray-100 transition-all",
+                        detailsErrors.agentName ? "border-red-400 focus:border-red-400" : "border-gray-200 focus:border-violet-500/60",
+                      )}
                     />
+                    {detailsErrors.agentName && (
+                      <p className="mt-1.5 text-xs text-red-500">{detailsErrors.agentName}</p>
+                    )}
                   </div>
                   <div>
                     <label className="text-gray-500 text-xs uppercase tracking-[0.15em] block mb-2">Company name</label>
@@ -661,9 +668,15 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                       type="text"
                       placeholder="e.g. QuickPay, Acme Corp"
                       value={state.companyName}
-                      onChange={e => update({ companyName: e.target.value })}
-                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 text-gray-900 text-base placeholder:text-gray-300 focus:outline-none focus:border-violet-500/60 focus:bg-gray-100 transition-all"
+                      onChange={e => { update({ companyName: e.target.value }); if (e.target.value.trim()) setDetailsErrors(prev => ({ ...prev, companyName: undefined })); }}
+                      className={cn(
+                        "w-full bg-gray-50 border rounded-xl px-4 py-3.5 text-gray-900 text-base placeholder:text-gray-300 focus:outline-none focus:bg-gray-100 transition-all",
+                        detailsErrors.companyName ? "border-red-400 focus:border-red-400" : "border-gray-200 focus:border-violet-500/60",
+                      )}
                     />
+                    {detailsErrors.companyName && (
+                      <p className="mt-1.5 text-xs text-red-500">{detailsErrors.companyName}</p>
+                    )}
                   </div>
                   <div>
                     <label className="text-gray-500 text-xs uppercase tracking-[0.15em] block mb-3">Call direction</label>
@@ -1063,11 +1076,24 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
               null
             ) : (
               <button
-                onClick={() => go(1)}
-                disabled={currentStep === "use-case" && !state.useCase}
+                onClick={() => {
+                  if (currentStep === "details") {
+                    const errs: { agentName?: string; companyName?: string } = {};
+                    if (!state.agentName.trim()) errs.agentName = "Agent name is required";
+                    if (!state.companyName.trim()) errs.companyName = "Company name is required";
+                    if (Object.keys(errs).length > 0) { setDetailsErrors(errs); return; }
+                    setDetailsErrors({});
+                  }
+                  go(1);
+                }}
+                disabled={
+                  (currentStep === "use-case" && !state.useCase) ||
+                  (currentStep === "details" && (!state.agentName.trim() || !state.companyName.trim()))
+                }
                 className={cn(
                   "flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm transition-all",
-                  currentStep === "use-case" && !state.useCase
+                  (currentStep === "use-case" && !state.useCase) ||
+                  (currentStep === "details" && (!state.agentName.trim() || !state.companyName.trim()))
                     ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                     : "bg-gray-100 hover:bg-gray-200 text-gray-900 border border-gray-200",
                 )}
