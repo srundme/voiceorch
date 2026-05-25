@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { SnapServeLogo } from "@/components/logo";
 import { useLocation } from "wouter";
-import { useCompleteOnboarding, useGetOnboardingStatus } from "@workspace/api-client-react";
+import { useCompleteOnboarding, useGetOnboardingStatus, getGetOnboardingStatusQueryKey } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, ArrowRight } from "lucide-react";
 
@@ -428,6 +429,7 @@ function DoneScreen({ name }: { name: string }) {
 
 export default function OnboardingPage() {
   const [, setLocation] = useLocation();
+  const qc = useQueryClient();
   const { data: status, isLoading: statusLoading } = useGetOnboardingStatus();
   const { mutate: complete, isPending } = useCompleteOnboarding();
 
@@ -463,11 +465,16 @@ export default function OnboardingPage() {
         },
       },
       {
-        onSuccess: () => setStep(6),
-        onError:   () => setStep(6),   // non-blocking — still show done screen
+        onSuccess: (result) => {
+          // Update the cache directly so AppRoutes immediately sees completed=true
+          // without needing a network round-trip when the user clicks Go to Dashboard
+          qc.setQueryData(getGetOnboardingStatusQueryKey(), result);
+          setStep(6);
+        },
+        onError: () => setStep(6),   // non-blocking — still show done screen
       }
     );
-  }, [complete]);
+  }, [complete, qc]);
 
   if (statusLoading || step === 0) {
     return (
