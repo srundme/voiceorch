@@ -16,7 +16,7 @@ const activeCalls = new Map<string, number>();
 const MAX_CONCURRENT_CALLS = 5;
 
 // ── Tuning constants ─────────────────────────────────────────────────────────
-const VAD_SILENCE_MS        = 300;
+const VAD_SILENCE_MS        = 700;   // raised from 300ms — prevents splitting mid-sentence pauses into separate turns
 const SPEECH_RMS_THRESHOLD  = 400;    // normal VAD — user speaking (agent silent)
 const BARGE_IN_RMS          = 2000;   // much higher bar while agent is speaking to avoid false barge-ins from
                                        // ambient noise, TV, nearby conversation, or mic echo bleed
@@ -403,6 +403,16 @@ export async function handleWebCallWebSocket(
       history.push({ role: "assistant", content: cleanReply });
       sendStatus("speaking");
       speaking = true;
+
+      // Drop any audio that accumulated while the LLM was generating.
+      // Without this, speech spoken during the "thinking" phase would be
+      // replayed as a new user turn after the agent finishes speaking —
+      // causing the agent to answer a question the user already forgot they asked.
+      if (audioChunks.length > 0) {
+        logger.info({ callId, droppedChunks: audioChunks.length }, "Dropping pre-TTS buffered audio (thinking phase)");
+        audioChunks.splice(0);
+      }
+      bargeInFrames = 0;
 
       // 3. Pipelined sentence playback — barge-in checks at every frame
       let transcriptSent = false;
