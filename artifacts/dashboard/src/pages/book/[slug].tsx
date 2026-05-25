@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useRoute } from "wouter";
 import { format, parseISO } from "date-fns";
-import { Calendar, Clock, CheckCircle, AlertCircle } from "lucide-react";
+import { Calendar, Clock, CheckCircle, AlertCircle, Video } from "lucide-react";
 import {
   useGetPublicEventType,
   useGetPublicSlots,
@@ -37,6 +37,7 @@ export default function PublicBookingPage() {
   const [email, setEmail] = useState("");
   const [notes, setNotes] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [meetLink, setMeetLink] = useState<string | null>(null);
   const [bookingError, setBookingError] = useState<string | null>(null);
 
   const { data: eventType, isLoading: etLoading, error: etError } = useGetPublicEventType(slug);
@@ -50,13 +51,14 @@ export default function PublicBookingPage() {
     if (!selectedSlot || !name || !email) return;
     setBookingError(null);
     try {
-      await createMut.mutateAsync({ data: {
+      const booking = await createMut.mutateAsync({ data: {
         eventTypeSlug: slug,
         slotStart: selectedSlot,
         attendeeName: name,
         attendeeEmail: email,
         attendeeNotes: notes || undefined,
       }});
+      setMeetLink(booking.meetLink ?? null);
       setSubmitted(true);
     } catch (err: any) {
       setBookingError(err.message ?? "Booking failed. The slot may no longer be available.");
@@ -95,7 +97,7 @@ export default function PublicBookingPage() {
             <div className="p-4 rounded-full bg-emerald-50">
               <CheckCircle className="h-10 w-10 text-emerald-500" />
             </div>
-            <div>
+            <div className="w-full">
               <p className="font-semibold text-xl">Booking confirmed!</p>
               <p className="text-muted-foreground mt-2">
                 You'll receive a confirmation email at <strong>{email}</strong>.
@@ -104,6 +106,22 @@ export default function PublicBookingPage() {
                 <p className="text-sm text-muted-foreground mt-2">
                   {format(parseISO(selectedSlot), "EEEE, MMMM d, yyyy")} at {format(parseISO(selectedSlot), "h:mm a")}
                 </p>
+              )}
+              {meetLink && (
+                <div className="mt-5 p-4 rounded-lg bg-blue-50 border border-blue-200 flex flex-col items-center gap-2">
+                  <div className="flex items-center gap-2 text-blue-700 font-medium text-sm">
+                    <Video className="h-4 w-4" />
+                    Join with Google Meet
+                  </div>
+                  <a
+                    href={meetLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 underline underline-offset-2 text-sm break-all hover:text-blue-800"
+                  >
+                    {meetLink}
+                  </a>
+                </div>
               )}
             </div>
           </CardContent>
