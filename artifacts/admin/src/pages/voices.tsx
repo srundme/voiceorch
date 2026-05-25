@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useAdminCartesiaVoices, useSaveListedVoices, type AdminVoice } from "@/hooks/use-admin-api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Mic2, Save, RefreshCw, Loader2, Search, Info } from "lucide-react";
+import { Mic2, Save, RefreshCw, Loader2, Search, Info, Play, Square } from "lucide-react";
 
 export default function Voices() {
   const { data, isLoading, refetch, isRefetching } = useAdminCartesiaVoices();
@@ -24,6 +24,68 @@ export default function Voices() {
   const [search, setSearch] = useState("");
   const [langFilter, setLangFilter] = useState("all");
   const [genderFilter, setGenderFilter] = useState("all");
+  const [previewingId, setPreviewingId] = useState<string | null>(null);
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  async function previewVoice(voice: AdminVoice, e: React.MouseEvent) {
+    e.stopPropagation();
+
+    // Stop any currently playing audio
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current.src = "";
+      currentAudioRef.current = null;
+    }
+
+    // If clicking the same voice that's playing, just stop
+    if (previewingId === voice.id) {
+      setPreviewingId(null);
+      return;
+    }
+
+    setPreviewingId(voice.id);
+
+    try {
+      const token = localStorage.getItem("adminToken") ?? "";
+      const res = await fetch("/api/admin/voices/preview", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Admin-Token": token,
+        },
+        body: JSON.stringify({ voiceId: voice.id }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(errData.error ?? `HTTP ${res.status}`);
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      currentAudioRef.current = audio;
+
+      audio.onended = () => {
+        setPreviewingId(null);
+        currentAudioRef.current = null;
+        URL.revokeObjectURL(url);
+      };
+
+      audio.onerror = () => {
+        setPreviewingId(null);
+        currentAudioRef.current = null;
+        URL.revokeObjectURL(url);
+        toast({ title: "Playback failed", variant: "destructive" });
+      };
+
+      await audio.play();
+    } catch (err: any) {
+      setPreviewingId(null);
+      currentAudioRef.current = null;
+      toast({ title: err.message ?? "Preview failed", variant: "destructive" });
+    }
+  }
 
   const voices: AdminVoice[] = data?.voices ?? [];
 
@@ -214,6 +276,7 @@ export default function Voices() {
                     <th className="px-4 py-2.5 text-left font-semibold uppercase tracking-wider text-muted-foreground">Gender</th>
                     <th className="px-4 py-2.5 text-left font-semibold uppercase tracking-wider text-muted-foreground">Description</th>
                     <th className="px-4 py-2.5 text-left font-semibold uppercase tracking-wider text-muted-foreground">Status</th>
+                    <th className="w-12 px-4 py-2.5 text-left font-semibold uppercase tracking-wider text-muted-foreground">Preview</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -242,6 +305,22 @@ export default function Voices() {
                           ) : (
                             <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 text-muted-foreground">Hidden</Badge>
                           )}
+                        </td>
+                        <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-primary"
+                            aria-label={previewingId === voice.id ? `Stop ${voice.name}` : `Preview ${voice.name}`}
+                            disabled={previewingId !== null && previewingId !== voice.id}
+                            onClick={e => previewVoice(voice, e)}
+                          >
+                            {previewingId === voice.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Play className="h-3.5 w-3.5" />
+                            )}
+                          </Button>
                         </td>
                       </tr>
                     );

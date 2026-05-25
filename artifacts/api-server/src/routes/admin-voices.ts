@@ -86,6 +86,65 @@ router.get("/admin/voices/listed", requireAdmin, async (_req, res): Promise<void
   res.json({ voices });
 });
 
+// ── POST /admin/voices/preview ────────────────────────────────────────────────
+// Returns raw WAV audio for a voice so the admin can audition it before listing
+
+const PREVIEW_VALID_MODELS = new Set([
+  "sonic-3.5", "sonic-3.5-2026-05-04", "sonic-latest",
+  "sonic-3", "sonic-3-2026-01-12", "sonic-3-latest",
+  "sonic-2", "sonic-2-2025-03-07", "sonic-2-2025-04-16", "sonic-2-2025-05-08", "sonic-2-2025-06-11",
+  "sonic-turbo", "sonic-turbo-2025-03-07", "sonic-turbo-2025-06-04",
+  "sonic-english", "sonic-multilingual",
+]);
+
+router.post("/admin/voices/preview", requireAdmin, async (req, res): Promise<void> => {
+  const { voiceId, text, modelId } = req.body as { voiceId?: string; text?: string; modelId?: string };
+
+  if (!voiceId) {
+    res.status(400).json({ error: "voiceId required" });
+    return;
+  }
+
+  const cartesiaKey = await getCartesiaKey();
+  if (!cartesiaKey) {
+    res.status(503).json({ error: "Voice preview unavailable — Cartesia key not configured" });
+    return;
+  }
+
+  const previewText = text?.slice(0, 200) ?? "Hello! I am your AI voice assistant. I am here to help you today. How can I assist you?";
+  const model = (modelId && PREVIEW_VALID_MODELS.has(modelId)) ? modelId : "sonic-3.5";
+
+  try {
+    const response = await fetch("https://api.cartesia.ai/tts/bytes", {
+      method: "POST",
+      headers: {
+        "X-API-Key": cartesiaKey,
+        "Cartesia-Version": "2026-03-01",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model_id: model,
+        transcript: previewText,
+        voice: { mode: "id", id: voiceId },
+        output_format: { container: "wav", encoding: "pcm_f32le", sample_rate: 22050 },
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      res.status(502).json({ error: `Cartesia error: ${err}` });
+      return;
+    }
+
+    const audioBuffer = await response.arrayBuffer();
+    res.set("Content-Type", "audio/wav");
+    res.send(Buffer.from(audioBuffer));
+  } catch (err) {
+    logger.error({ err }, "Admin voice preview failed");
+    res.status(500).json({ error: "Voice preview failed" });
+  }
+});
+
 // ── PUT /admin/voices/listed ──────────────────────────────────────────────────
 // Accept a full list of selected voices and upsert them into the DB.
 // Voices not included in the new selection are marked is_listed = false.
