@@ -1,7 +1,108 @@
-import { useOverview } from "@/hooks/use-admin-api";
+import { useOverview, useSpikeAlerts, useDismissSpikeAlert } from "@/hooks/use-admin-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, PhoneCall, Activity, DollarSign, Clock, AlertCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Users, PhoneCall, Activity, DollarSign, Clock, AlertCircle, Bell, X, Mail } from "lucide-react";
 import { formatCentsToDollars } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
+import { Link } from "wouter";
+
+function SpikeAlertsPanel() {
+  const { data: alertsData, isLoading } = useSpikeAlerts();
+  const dismissAlert = useDismissSpikeAlert();
+  const { toast } = useToast();
+
+  const threshold = alertsData?.threshold ?? null;
+  const activeAlerts = alertsData?.alerts?.filter((a) => !a.dismissed) ?? [];
+  const dismissedAlerts = alertsData?.alerts?.filter((a) => a.dismissed) ?? [];
+
+  async function handleDismiss(clerkId: string | null) {
+    if (!clerkId) return;
+    try {
+      await dismissAlert.mutateAsync(clerkId);
+      toast({ title: "Alert dismissed", description: "This alert won't reappear today." });
+    } catch {
+      toast({ title: "Failed to dismiss", variant: "destructive" });
+    }
+  }
+
+  return (
+    <Card className="border-border shadow-sm">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <Bell className="h-4 w-4 text-amber-500" />
+            <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+              Usage Spike Alerts
+            </CardTitle>
+            {activeAlerts.length > 0 && (
+              <span className="inline-flex items-center justify-center rounded-full bg-destructive text-destructive-foreground text-xs font-bold w-5 h-5">
+                {activeAlerts.length}
+              </span>
+            )}
+          </div>
+          <Link
+            href="/settings"
+            className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+          >
+            {threshold != null ? `Threshold: ${threshold} calls/day` : "Configure in Settings"}
+          </Link>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {threshold === null ? (
+          <p className="text-xs text-muted-foreground py-2">
+            No threshold configured.{" "}
+            <Link href="/settings" className="underline underline-offset-2 hover:text-foreground">
+              Go to Settings
+            </Link>{" "}
+            to set a daily call threshold and enable spike alerts.
+          </p>
+        ) : isLoading ? (
+          <p className="text-xs text-muted-foreground animate-pulse py-2">Checking for spikes...</p>
+        ) : activeAlerts.length === 0 && dismissedAlerts.length === 0 ? (
+          <p className="text-xs text-muted-foreground py-2">No users have exceeded the threshold today.</p>
+        ) : (
+          <div className="space-y-2">
+            {activeAlerts.map((alert) => (
+              <div
+                key={alert.clerkId}
+                className="flex items-center justify-between rounded-sm border border-destructive/30 bg-destructive/5 px-3 py-2 gap-3"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <AlertCircle className="h-3.5 w-3.5 text-destructive shrink-0" />
+                  <span className="text-xs font-medium truncate">{alert.email ?? alert.clerkId ?? "Unknown user"}</span>
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    {alert.callCount} calls today
+                  </span>
+                  {alert.notified && (
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
+                      <Mail className="h-3 w-3" />
+                      notified
+                    </span>
+                  )}
+                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground shrink-0"
+                  onClick={() => handleDismiss(alert.clerkId)}
+                  disabled={dismissAlert.isPending}
+                >
+                  <X className="h-3 w-3 mr-1" />Dismiss
+                </Button>
+              </div>
+            ))}
+            {dismissedAlerts.length > 0 && (
+              <p className="text-xs text-muted-foreground pt-1">
+                {dismissedAlerts.length} alert{dismissedAlerts.length > 1 ? "s" : ""} dismissed today.
+              </p>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function Overview() {
   const { data: overview, isLoading, isError, error } = useOverview();
@@ -76,6 +177,8 @@ export default function Overview() {
           </Card>
         ))}
       </div>
+
+      <SpikeAlertsPanel />
     </div>
   );
 }

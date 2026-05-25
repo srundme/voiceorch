@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, usersTable, walletTransactionsTable, callsTable, agentsTable, scheduledCallbacksTable, bookingsTable, eventTypesTable, schedulingCalendarsTable } from "@workspace/db";
+import { db, usersTable, walletTransactionsTable, callsTable, agentsTable, scheduledCallbacksTable, bookingsTable, eventTypesTable, schedulingCalendarsTable, platformSettingsTable, usageSpikeDismissalsTable, usageSpikeNotificationsTable } from "@workspace/db";
 import { eq, sql, count, sum, desc, lt, gt, and, inArray } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { getAllSessions } from "../orchestration/session.js";
@@ -481,6 +481,161 @@ router.get("/admin/usage", async (req, res): Promise<void> => {
     });
   } catch (err) {
     req.log.error({ err }, "admin/usage failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── Spike Alert Settings ─────────────────────────────────────────────────────
+
+const SPIKE_THRESHOLD_KEY = "usage_spike_daily_threshold";
+const SPIKE_ALERT_EMAIL_KEY = "usage_spike_admin_email";
+
+router.get("/admin/settings/spike-threshold", async (req, res): Promise<void> => {
+  try {
+    const [row] = await db
+      .select({ value: platformSettingsTable.value })
+      .from(platformSettingsTable)
+      .where(eq(platformSettingsTable.key, SPIKE_THRESHOLD_KEY));
+    res.json({ threshold: row ? Number(row.value) : null });
+  } catch (err) {
+    req.log.error({ err }, "admin/settings/spike-threshold GET failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.put("/admin/settings/spike-threshold", async (req, res): Promise<void> => {
+  try {
+    const { threshold } = req.body as { threshold: number | null };
+    if (threshold === null || threshold === undefined) {
+      await db.delete(platformSettingsTable).where(eq(platformSettingsTable.key, SPIKE_THRESHOLD_KEY));
+      res.json({ threshold: null });
+      return;
+    }
+    if (typeof threshold !== "number" || !Number.isInteger(threshold) || threshold < 1) {
+      res.status(400).json({ error: "threshold must be a positive integer or null to clear" });
+      return;
+    }
+    await db
+      .insert(platformSettingsTable)
+      .values({ key: SPIKE_THRESHOLD_KEY, value: String(threshold) })
+      .onConflictDoUpdate({
+        target: platformSettingsTable.key,
+        set: { value: String(threshold), updatedAt: new Date() },
+      });
+    res.json({ threshold });
+  } catch (err) {
+    req.log.error({ err }, "admin/settings/spike-threshold PUT failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/admin/settings/spike-email", async (req, res): Promise<void> => {
+  try {
+    const [row] = await db
+      .select({ value: platformSettingsTable.value })
+      .from(platformSettingsTable)
+      .where(eq(platformSettingsTable.key, SPIKE_ALERT_EMAIL_KEY));
+    res.json({ email: row?.value ?? null });
+  } catch (err) {
+    req.log.error({ err }, "admin/settings/spike-email GET failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.put("/admin/settings/spike-email", async (req, res): Promise<void> => {
+  try {
+    const { email } = req.body as { email: string | null };
+    if (email === null || email === "") {
+      await db.delete(platformSettingsTable).where(eq(platformSettingsTable.key, SPIKE_ALERT_EMAIL_KEY));
+      res.json({ email: null });
+      return;
+    }
+    if (typeof email !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      res.status(400).json({ error: "email must be a valid email address or null" });
+      return;
+    }
+    await db
+      .insert(platformSettingsTable)
+      .values({ key: SPIKE_ALERT_EMAIL_KEY, value: email })
+      .onConflictDoUpdate({
+        target: platformSettingsTable.key,
+        set: { value: email, updatedAt: new Date() },
+      });
+    res.json({ email });
+  } catch (err) {
+    req.log.error({ err }, "admin/settings/spike-email PUT failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── Spike Alerts ─────────────────────────────────────────────────────────────
+
+router.get("/admin/alerts/spikes", async (req, res): Promise<void> => {
+  try {
+    const [thresholdRow] = await db
+      .select({ value: platformSettingsTable.value })
+      .from(platformSettingsTable)
+      .where(eq(platformSettingsTable.key, SPIKE_THRESHOLD_KEY));
+
+    const threshold = thresholdRow ? Number(thresholdRow.value) : null;
+    const todayStr = new Date().toISOString().slice(0, 10);
+
+    const spikes = await db
+      .select({
+        clerkId: callsTable.userId,
+        email: usersTable.email,
+        name: usersTable.name,
+        callCount: count(),
+      })
+      .from(callsTable)
+      .leftJoin(usersTable, eq(callsTable.userId, usersTable.clerkId))
+      .where(gt(callsTable.createdAt, sql`current_date::timestamptz`))
+      .groupBy(callsTable.userId, usersTable.email, usersTable.name)
+      .orderBy(desc(count()));
+
+    const [dismissals, notifications] = await Promise.all([
+      db
+        .select({ clerkId: usageSpikeDismissalsTable.clerkId })
+        .from(usageSpikeDismissalsTable)
+        .where(eq(usageSpikeDismissalsTable.dismissedDate, todayStr)),
+      db
+        .select({ clerkId: usageSpikeNotificationsTable.clerkId })
+        .from(usageSpikeNotificationsTable)
+        .where(eq(usageSpikeNotificationsTable.notifiedDate, todayStr)),
+    ]);
+
+    const dismissedSet = new Set(dismissals.map((d) => d.clerkId));
+    const notifiedSet = new Set(notifications.map((n) => n.clerkId));
+
+    const alerts = spikes
+      .filter((r) => threshold !== null && Number(r.callCount) >= threshold)
+      .map((r) => ({
+        clerkId: r.clerkId,
+        email: r.email,
+        name: r.name,
+        callCount: Number(r.callCount),
+        dismissed: dismissedSet.has(r.clerkId ?? ""),
+        notified: notifiedSet.has(r.clerkId ?? ""),
+      }));
+
+    res.json({ threshold, alerts });
+  } catch (err) {
+    req.log.error({ err }, "admin/alerts/spikes failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/admin/alerts/spikes/:clerkId/dismiss", async (req, res): Promise<void> => {
+  try {
+    const { clerkId } = req.params;
+    const todayStr = new Date().toISOString().slice(0, 10);
+    await db
+      .insert(usageSpikeDismissalsTable)
+      .values({ clerkId: clerkId!, dismissedDate: todayStr })
+      .onConflictDoNothing();
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "admin/alerts/spikes/:clerkId/dismiss failed");
     res.status(500).json({ error: "Internal server error" });
   }
 });

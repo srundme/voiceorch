@@ -11,6 +11,7 @@ import {
   Terminal,
   KeyRound,
   Mic2,
+  Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/growth", label: "Growth", icon: BarChart3 },
     { href: "/managed-keys", label: "Managed Keys", icon: KeyRound },
     { href: "/voices",       label: "Voices",       icon: Mic2 },
+    { href: "/settings",     label: "Settings",     icon: Settings },
   ];
 
   return (

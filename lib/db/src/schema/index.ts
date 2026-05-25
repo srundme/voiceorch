@@ -12,3 +12,5 @@ export * from "./platform-settings";
 export * from "./campaigns";
 export * from "./scheduling";
 export * from "./platform-listed-voices";
+export * from "./usage-spike-dismissals";
+export * from "./usage-spike-notifications";

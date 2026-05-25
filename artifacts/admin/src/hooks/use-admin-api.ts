@@ -171,6 +171,85 @@ export function useUsage(days: number) {
   });
 }
 
+// Spike Alerts
+export interface SpikeAlert {
+  clerkId: string | null;
+  email: string | null;
+  name: string | null;
+  callCount: number;
+  dismissed: boolean;
+  notified: boolean;
+}
+
+export interface SpikeAlertsData {
+  threshold: number | null;
+  alerts: SpikeAlert[];
+}
+
+export function useSpikeThreshold() {
+  return useQuery({
+    queryKey: ["admin", "settings", "spike-threshold"],
+    queryFn: () => adminFetch<{ threshold: number | null }>("/settings/spike-threshold"),
+  });
+}
+
+export function useSaveSpikeThreshold() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (threshold: number | null) =>
+      adminFetch<{ threshold: number | null }>("/settings/spike-threshold", {
+        method: "PUT",
+        body: JSON.stringify({ threshold }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "settings", "spike-threshold"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "alerts", "spikes"] });
+    },
+  });
+}
+
+export function useSpikeAlertEmail() {
+  return useQuery({
+    queryKey: ["admin", "settings", "spike-email"],
+    queryFn: () => adminFetch<{ email: string | null }>("/settings/spike-email"),
+  });
+}
+
+export function useSaveSpikeAlertEmail() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (email: string | null) =>
+      adminFetch<{ email: string | null }>("/settings/spike-email", {
+        method: "PUT",
+        body: JSON.stringify({ email }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "settings", "spike-email"] });
+    },
+  });
+}
+
+export function useSpikeAlerts() {
+  return useQuery({
+    queryKey: ["admin", "alerts", "spikes"],
+    queryFn: () => adminFetch<SpikeAlertsData>("/alerts/spikes"),
+    refetchInterval: 60000,
+  });
+}
+
+export function useDismissSpikeAlert() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (clerkId: string) =>
+      adminFetch<{ ok: boolean }>(`/alerts/spikes/${encodeURIComponent(clerkId)}/dismiss`, {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "alerts", "spikes"] });
+    },
+  });
+}
+
 // Growth
 export function useGrowthFunnel() {
   return useQuery({

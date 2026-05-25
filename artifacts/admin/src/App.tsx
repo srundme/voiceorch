@@ -15,6 +15,7 @@ import Growth from "@/pages/growth";
 import ManagedKeys from "@/pages/managed-keys";
 import Voices from "@/pages/voices";
 import Usage from "@/pages/usage";
+import PlatformSettings from "@/pages/settings";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -57,6 +58,7 @@ function Router() {
       <ProtectedRoute path="/managed-keys" component={ManagedKeys} />
       <ProtectedRoute path="/voices" component={Voices} />
       <ProtectedRoute path="/usage" component={Usage} />
+      <ProtectedRoute path="/settings" component={PlatformSettings} />
       <Route component={NotFound} />
     </Switch>
   );
