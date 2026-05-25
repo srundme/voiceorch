@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useAuth } from "@clerk/react";
 import { Link } from "wouter";
 import { Plus, Pencil, Trash2, MoreHorizontal, Calendar, ArrowLeft, Globe, Mail, Video, Loader2, CheckCircle2, Link2 } from "lucide-react";
 import {
@@ -401,18 +402,27 @@ export default function CalendarsPage({ embedded = false }: { embedded?: boolean
 
   const agentMap = new Map(agents?.map(a => [a.id, a.name]) ?? []);
 
+  const { getToken } = useAuth();
+
+  const authFetch = useCallback(async (url: string, init: RequestInit = {}): Promise<Response> => {
+    const token = await getToken();
+    const headers = new Headers(init.headers);
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    return fetch(url, { ...init, headers, credentials: "include" });
+  }, [getToken]);
+
   const loadGoogleData = useCallback(async () => {
     try {
       const [connsRes, linksRes] = await Promise.all([
-        fetch(`${API}/scheduling/google/connections`, { credentials: "include" }),
-        fetch(`${API}/scheduling/google/calendar-links`, { credentials: "include" }),
+        authFetch(`${API}/scheduling/google/connections`),
+        authFetch(`${API}/scheduling/google/calendar-links`),
       ]);
       if (connsRes.ok) setGoogleConnections(await connsRes.json());
       if (linksRes.ok) setCalendarLinks(await linksRes.json());
     } catch { /* non-fatal */ } finally {
       setGcalLoading(false);
     }
-  }, []);
+  }, [authFetch]);
 
   useEffect(() => { void loadGoogleData(); }, [loadGoogleData]);
 
@@ -434,17 +444,23 @@ export default function CalendarsPage({ embedded = false }: { embedded?: boolean
     }
   }, [toast, loadGoogleData]);
 
-  function handleConnect() {
+  async function handleConnect() {
     setConnecting(true);
-    window.location.href = `${API}/scheduling/google/connect?returnTo=calendar`;
+    try {
+      const r = await authFetch(`${API}/scheduling/google/connect-url?returnTo=calendar`);
+      if (!r.ok) throw new Error("Failed");
+      const { url } = await r.json() as { url: string };
+      (window.top ?? window).location.href = url;
+    } catch {
+      toast({ title: "Could not start Google sign-in", variant: "destructive" });
+      setConnecting(false);
+    }
   }
 
   async function handleRemoveGoogle(id: string) {
     setRemovingId(id);
     try {
-      const r = await fetch(`${API}/scheduling/google/connections/${id}`, {
-        method: "DELETE", credentials: "include",
-      });
+      const r = await authFetch(`${API}/scheduling/google/connections/${id}`, { method: "DELETE" });
       if (!r.ok) throw new Error("Failed");
       setGoogleConnections(prev => prev.filter(c => c.id !== id));
       toast({ title: "Google account disconnected" });
