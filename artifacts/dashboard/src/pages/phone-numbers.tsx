@@ -203,9 +203,9 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Buy a Phone Number</DialogTitle>
+          <DialogTitle>Claim a Phone Number</DialogTitle>
           <DialogDescription>
-            Numbers are $5.00 one-time. Inbound calls are routed to the agent you assign.
+            Pick from the platform's available number pool. $5.00 is deducted from your wallet and the number is routed to the agent you assign.
           </DialogDescription>
         </DialogHeader>
 
@@ -213,7 +213,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="text-xs">Country</Label>
-              <Select value={country} onValueChange={setCountry}>
+              <Select value={country} onValueChange={v => { setCountry(v); setSearched(false); setSelected(null); }}>
                 <SelectTrigger className="h-9">
                   <SelectValue />
                 </SelectTrigger>
@@ -225,36 +225,23 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Type</Label>
-              <Select value={numberType} onValueChange={v => setNumberType(v as typeof numberType)}>
-                <SelectTrigger className="h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="local">Local</SelectItem>
-                  <SelectItem value="mobile">Mobile</SelectItem>
-                  <SelectItem value="toll_free">Toll-Free</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label className="text-xs">Filter by digits</Label>
+              <div className="flex gap-2">
+                <Input
+                  className="h-9 font-mono text-sm flex-1"
+                  placeholder="e.g. 9122"
+                  value={pattern}
+                  onChange={e => setPattern(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && handleSearch()}
+                />
+              </div>
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs">Pattern (optional)</Label>
-            <div className="flex gap-2">
-              <Input
-                className="h-9 font-mono text-sm flex-1"
-                placeholder="e.g. 415"
-                value={pattern}
-                onChange={e => setPattern(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && handleSearch()}
-              />
-              <Button size="sm" className="h-9 gap-1.5" onClick={handleSearch} disabled={isFetching}>
-                {isFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
-                Search
-              </Button>
-            </div>
-          </div>
+          <Button size="sm" className="h-9 gap-1.5 w-full" onClick={handleSearch} disabled={isFetching}>
+            {isFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+            Show Available Numbers
+          </Button>
 
           {searched && (
             <div className="border border-border/60 rounded-lg overflow-hidden max-h-52 overflow-y-auto">
@@ -267,10 +254,9 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
                   <div className="flex items-start gap-2.5 text-amber-600">
                     <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
                     <div className="text-sm">
-                      <p className="font-medium">Carrier credentials not set up</p>
+                      <p className="font-medium">Platform not configured</p>
                       <p className="text-amber-600/70 mt-0.5 text-xs leading-relaxed">
-                        To provision real phone numbers, add <code className="font-mono bg-gray-100 px-1 rounded">VOBIZ_AUTH_ID</code> and{" "}
-                        <code className="font-mono bg-gray-100 px-1 rounded">VOBIZ_AUTH_TOKEN</code> as environment secrets in your Replit project.
+                        Carrier credentials are missing. Contact your platform administrator.
                       </p>
                     </div>
                   </div>
@@ -278,7 +264,8 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
               ) : !available || available.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-8 text-gray-400 text-sm">
                   <Globe className="h-8 w-8 mb-2 opacity-30" />
-                  No numbers available for this search.
+                  <p>No numbers available in platform inventory</p>
+                  <p className="text-xs mt-1 text-gray-300">for {country}{pattern ? ` matching "${pattern}"` : ""}. Try a different country.</p>
                 </div>
               ) : (
                 <div className="divide-y divide-border/40">
@@ -310,7 +297,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
             disabled={!selected}
             onClick={() => setConfirming(true)}
           >
-            <Plus className="h-3.5 w-3.5" /> Purchase — $5.00
+            <Plus className="h-3.5 w-3.5" /> Claim — $5.00
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -483,7 +470,7 @@ export default function PhoneNumbersPage() {
           className="h-8 gap-1.5 bg-black/85 hover:bg-black/90 text-gray-900"
           onClick={() => setBuyOpen(true)}
         >
-          <Plus className="h-3.5 w-3.5" /> Buy Number
+          <Plus className="h-3.5 w-3.5" /> Claim Number
         </Button>
       </div>
 
@@ -492,8 +479,8 @@ export default function PhoneNumbersPage() {
         <div className="flex items-start gap-3 p-4 rounded-xl border border-gray-200 bg-white">
           <Globe className="h-5 w-5 text-gray-700 mt-0.5 shrink-0" />
           <div className="text-sm text-gray-500 space-y-0.5">
-            <p className="text-gray-700 font-medium">Managed phone numbers</p>
-            <p>Purchase numbers from our carrier pool. No carrier account needed — assign a number to an agent and inbound calls are automatically routed to its pipeline. <span className="text-gray-400">$5.00 one-time per number.</span></p>
+            <p className="text-gray-700 font-medium">Platform-managed phone numbers</p>
+            <p>Numbers are pre-provisioned by the platform. Claim one from our inventory for $5.00, assign it to an agent, and inbound calls are automatically routed to its pipeline. <span className="text-gray-400">Releasing returns the number to the shared pool.</span></p>
           </div>
         </div>
 
