@@ -1,4 +1,4 @@
-import { usePlatformActive, usePlatformCallbacks, usePlatformFailedCalls } from "@/hooks/use-admin-api";
+import { usePlatformActive, usePlatformFailedCalls } from "@/hooks/use-admin-api";
 import { format } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -9,23 +9,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Activity, Clock, AlertTriangle } from "lucide-react";
+import { Activity, AlertTriangle } from "lucide-react";
 
 export default function Platform() {
   const { data: activeData, isLoading: loadingActive } = usePlatformActive();
-  const { data: callbacks, isLoading: loadingCallbacks } = usePlatformCallbacks();
   const { data: failedCalls, isLoading: loadingFailed } = usePlatformFailedCalls();
-
-  const getCallbackBadgeVariant = (status: string) => {
-    switch (status) {
-      case "pending": return "secondary";
-      case "triggering": return "default";
-      case "triggered": return "outline";
-      case "failed": return "destructive";
-      default: return "secondary";
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -70,85 +58,41 @@ export default function Platform() {
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card>
-            <CardHeader className="pb-3 border-b border-border bg-card">
-              <CardTitle className="text-sm font-medium uppercase tracking-wider flex items-center gap-2">
-                <Clock className="h-4 w-4" /> Callback Queue
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0 h-[400px] overflow-auto">
-              <Table>
-                <TableHeader className="sticky top-0 bg-card z-10">
-                  <TableRow>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Scheduled For</TableHead>
-                    <TableHead>Target</TableHead>
-                    <TableHead>Agent</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {loadingCallbacks ? (
-                    <TableRow><TableCell colSpan={4} className="text-center py-4">Loading...</TableCell></TableRow>
-                  ) : callbacks?.length === 0 ? (
-                    <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">Queue is empty</TableCell></TableRow>
-                  ) : (
-                    callbacks?.map((cb) => (
-                      <TableRow key={cb.id}>
-                        <TableCell>
-                          <Badge variant={getCallbackBadgeVariant(cb.status)} className="text-[10px] uppercase">
-                            {cb.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-xs font-mono">
-                          {cb.scheduledAt ? format(new Date(cb.scheduledAt), "MMM d HH:mm") : "-"}
-                        </TableCell>
-                        <TableCell className="text-xs font-mono text-muted-foreground">{cb.toNumber}</TableCell>
-                        <TableCell className="text-xs truncate max-w-[120px]">{cb.agentName || cb.agentId}</TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-
-          <Card className="border-destructive/20">
-            <CardHeader className="pb-3 border-b border-border bg-card">
-              <CardTitle className="text-sm font-medium uppercase tracking-wider flex items-center gap-2 text-destructive">
-                <AlertTriangle className="h-4 w-4" /> Recent Failed Calls
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0 h-[400px] overflow-auto">
-              <Table>
-                <TableHeader className="sticky top-0 bg-card z-10">
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>User</TableHead>
-                    <TableHead>Call ID</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {loadingFailed ? (
-                    <TableRow><TableCell colSpan={3} className="text-center py-4">Loading...</TableCell></TableRow>
-                  ) : failedCalls?.length === 0 ? (
-                    <TableRow><TableCell colSpan={3} className="text-center py-8 text-muted-foreground">No failed calls recently</TableCell></TableRow>
-                  ) : (
-                    failedCalls?.map((call) => (
-                      <TableRow key={call.id}>
-                        <TableCell className="text-xs font-mono text-muted-foreground">
-                          {call.createdAt ? format(new Date(call.createdAt), "MMM d HH:mm") : "-"}
-                        </TableCell>
-                        <TableCell className="text-xs truncate max-w-[120px]">{call.userId}</TableCell>
-                        <TableCell className="text-xs font-mono truncate max-w-[120px]" title={call.id}>{call.id}</TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </div>
+        <Card className="border-destructive/20">
+          <CardHeader className="pb-3 border-b border-border bg-card">
+            <CardTitle className="text-sm font-medium uppercase tracking-wider flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-4 w-4" /> Recent Failed Calls
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0 h-[400px] overflow-auto">
+            <Table>
+              <TableHeader className="sticky top-0 bg-card z-10">
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>User</TableHead>
+                  <TableHead>Call ID</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loadingFailed ? (
+                  <TableRow><TableCell colSpan={3} className="text-center py-4">Loading...</TableCell></TableRow>
+                ) : failedCalls?.length === 0 ? (
+                  <TableRow><TableCell colSpan={3} className="text-center py-8 text-muted-foreground">No failed calls recently</TableCell></TableRow>
+                ) : (
+                  failedCalls?.map((call) => (
+                    <TableRow key={call.id}>
+                      <TableCell className="text-xs font-mono text-muted-foreground">
+                        {call.createdAt ? format(new Date(call.createdAt), "MMM d HH:mm") : "-"}
+                      </TableCell>
+                      <TableCell className="text-xs truncate max-w-[120px]">{call.userId}</TableCell>
+                      <TableCell className="text-xs font-mono truncate max-w-[120px]" title={call.id}>{call.id}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
