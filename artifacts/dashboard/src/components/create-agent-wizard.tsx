@@ -579,7 +579,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                   <>
                     <p className="text-gray-400 text-xs uppercase tracking-[0.15em] mb-3">Additional regional languages <span className="text-gray-300 normal-case">(up to 2)</span></p>
                     <div className="grid grid-cols-3 gap-2 mb-4">
-                      {LANGUAGES.filter(l => l.code !== state.primaryLanguage && l.code !== "english").map(lang => {
+                      {LANGUAGES.filter(l => l.code !== state.primaryLanguage).map(lang => {
                         const sel   = state.additionalLanguages.includes(lang.code);
                         const maxed = state.additionalLanguages.length >= 2 && !sel;
                         return (
