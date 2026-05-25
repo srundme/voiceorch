@@ -43,6 +43,21 @@ router.get("/scheduling/google/connect", requireAuth, (req, res): void => {
   res.redirect(url);
 });
 
+// ── OAuth connect URL — returns the Google auth URL as JSON (for Bearer-token callers) ─
+
+router.get("/scheduling/google/connect-url", requireAuth, (req, res): void => {
+  const clerkId  = (req as any).clerkUserId as string;
+  const returnTo = (req.query["returnTo"] as string | undefined) ?? "conferencing";
+
+  if (!process.env["GOOGLE_CLIENT_ID"] || !process.env["GOOGLE_CLIENT_SECRET"]) {
+    res.status(503).json({ error: "Google OAuth not configured on this platform." });
+    return;
+  }
+
+  const url = getAuthUrl(clerkId, returnTo);
+  res.json({ url });
+});
+
 // ── OAuth callback — no requireAuth: Google redirects here ──────────────────
 // State is JSON { clerkId, returnTo } — tells us who connected and where to redirect.
 

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@clerk/react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const API = `${BASE}/api`;
@@ -14,28 +15,32 @@ type GoogleConnection = {
   connectedAt: string;
 };
 
-async function fetchConnections(): Promise<GoogleConnection[]> {
-  const r = await fetch(`${API}/scheduling/google/connections`, { credentials: "include" });
-  if (!r.ok) throw new Error("Failed");
-  return r.json();
-}
-
 export default function ConferencingPage({ embedded = false }: { embedded?: boolean }) {
   const [connections, setConnections] = useState<GoogleConnection[]>([]);
   const [loading, setLoading]         = useState(true);
   const [connecting, setConnecting]   = useState(false);
   const [removingId, setRemovingId]   = useState<string | null>(null);
   const { toast } = useToast();
+  const { getToken } = useAuth();
+
+  const authFetch = useCallback(async (url: string, init: RequestInit = {}): Promise<Response> => {
+    const token = await getToken();
+    const headers = new Headers(init.headers);
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    return fetch(url, { ...init, headers, credentials: "include" });
+  }, [getToken]);
 
   const load = useCallback(async () => {
     try {
-      setConnections(await fetchConnections());
+      const r = await authFetch(`${API}/scheduling/google/connections`);
+      if (!r.ok) throw new Error("Failed");
+      setConnections(await r.json());
     } catch {
       setConnections([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [authFetch]);
 
   // Handle OAuth return — ?gcal=connected or ?gcal=error
   useEffect(() => {
@@ -62,18 +67,23 @@ export default function ConferencingPage({ embedded = false }: { embedded?: bool
 
   useEffect(() => { void load(); }, [load]);
 
-  function handleConnect() {
+  async function handleConnect() {
     setConnecting(true);
-    window.location.href = `${API}/scheduling/google/connect`;
+    try {
+      const r = await authFetch(`${API}/scheduling/google/connect-url?returnTo=conferencing`);
+      if (!r.ok) throw new Error("Failed");
+      const { url } = await r.json() as { url: string };
+      window.location.href = url;
+    } catch {
+      toast({ title: "Could not start Google sign-in", variant: "destructive" });
+      setConnecting(false);
+    }
   }
 
   async function handleRemove(id: string) {
     setRemovingId(id);
     try {
-      const r = await fetch(`${API}/scheduling/google/connections/${id}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
+      const r = await authFetch(`${API}/scheduling/google/connections/${id}`, { method: "DELETE" });
       if (!r.ok) throw new Error("Failed");
       setConnections(prev => prev.filter(c => c.id !== id));
       toast({ title: "Google account disconnected" });
