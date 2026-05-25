@@ -15,12 +15,19 @@ export class CartesiaTTS implements TTSAdapter {
     this.key = apiKey;
     this.voiceId = voice ?? "a0e99841-438c-4a64-b679-ae501e7d6091"; // British Reading Lady
     // Normalise legacy / invalid model IDs to the supported set
-    const VALID = new Set(["sonic-2", "sonic-3", "sonic-turbo",
-      "sonic-2-2025-03-07", "sonic-2-2025-04-16", "sonic-2-2025-05-08", "sonic-2-2025-06-11",
-      "sonic-3-2026-01-12", "sonic-3-latest",
-      "sonic-turbo-2025-03-07", "sonic-turbo-2025-06-04",
-      "sonic-english", "sonic-multilingual"]);
-    this.modelId = model && VALID.has(model) ? model : "sonic-3";
+    const VALID = new Set([
+      // Sonic 3.5 (latest, May 2026) — 42 languages, industry-leading latency
+      "sonic-3.5", "sonic-3.5-2026-05-04", "sonic-latest",
+      // Sonic 3
+      "sonic-3", "sonic-3-2026-01-12", "sonic-3-latest",
+      // Sonic 2
+      "sonic-2", "sonic-2-2025-03-07", "sonic-2-2025-04-16", "sonic-2-2025-05-08", "sonic-2-2025-06-11",
+      // Sonic turbo
+      "sonic-turbo", "sonic-turbo-2025-03-07", "sonic-turbo-2025-06-04",
+      // Legacy aliases
+      "sonic-english", "sonic-multilingual",
+    ]);
+    this.modelId = model && VALID.has(model) ? model : "sonic-3.5";
     // Map BCP-47 to ISO 639-1 (e.g. "ta-IN" → "ta", "en-US" → "en")
     this.language = language ? language.split("-")[0] : null;
   }

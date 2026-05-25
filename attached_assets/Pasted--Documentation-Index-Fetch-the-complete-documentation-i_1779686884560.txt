@@ -1,0 +1,87 @@
+> ## Documentation Index
+> Fetch the complete documentation index at: https://docs.cartesia.ai/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# Sonic 3.5
+
+Sonic 3.5 is a streaming TTS model, with high naturalness, accurate transcript following, and industry-leading latency.
+
+Key Features:
+
+* **42 languages** supported, including English, Hindi, Spanish, French, German, Japanese, Hebrew, and more
+* **Natural, expressive speech** with strong pacing and emotional expression for conversational and support-style transcripts
+* **Clean audio quality** across all languages and voices
+* **Natural alphanumeric handling** — confirmation codes, order numbers, phone numbers, IDs, and emails sound natural without preprocessing, in every supported language
+* **Accurate English pronunciation in context**, including heteronyms like *read*, *bass*, and *bow*
+
+### Voice selection
+
+Choosing voices that work best for your use case is key to getting the best performance out of Sonic 3.5. The recommendations below are starting points carried over from Sonic 3 — they work as-is on Sonic 3.5. We'll be publishing 3.5-specific picks in the coming weeks.
+
+* **For voice agents**: We've found stable, realistic voices work better for voice agents. Example American English voices include Katie (ID: `f786b574-daa5-4673-aa0c-cbe3e8534c02`) and Jameson (ID: `a5136bf9-224c-4d76-b823-52bd5efcffcc`).
+
+For more information and recommendations, see [Choosing a Voice](/build-with-cartesia/capability-guides/choosing-a-voice).
+
+### Language support
+
+Sonic 3.5 supports the following languages:
+
+<table>
+  <tbody>
+    <tr><td>English (`en`)</td><td>French (`fr`)</td><td>German (`de`)</td><td>Spanish (`es`)</td></tr>
+    <tr><td>Portuguese (`pt`)</td><td>Chinese (`zh`)</td><td>Japanese (`ja`)</td><td>Hindi (`hi`)</td></tr>
+    <tr><td>Italian (`it`)</td><td>Korean (`ko`)</td><td>Dutch (`nl`)</td><td>Polish (`pl`)</td></tr>
+    <tr><td>Russian (`ru`)</td><td>Swedish (`sv`)</td><td>Turkish (`tr`)</td><td>Tagalog (`tl`)</td></tr>
+    <tr><td>Bulgarian (`bg`)</td><td>Romanian (`ro`)</td><td>Arabic (`ar`)</td><td>Czech (`cs`)</td></tr>
+    <tr><td>Greek (`el`)</td><td>Finnish (`fi`)</td><td>Croatian (`hr`)</td><td>Malay (`ms`)</td></tr>
+    <tr><td>Slovak (`sk`)</td><td>Danish (`da`)</td><td>Tamil (`ta`)</td><td>Ukrainian (`uk`)</td></tr>
+    <tr><td>Hungarian (`hu`)</td><td>Norwegian (`no`)</td><td>Vietnamese (`vi`)</td><td>Bengali (`bn`)</td></tr>
+    <tr><td>Thai (`th`)</td><td>Hebrew (`he`)</td><td>Georgian (`ka`)</td><td>Indonesian (`id`)</td></tr>
+    <tr><td>Telugu (`te`)</td><td>Gujarati (`gu`)</td><td>Kannada (`kn`)</td><td>Malayalam (`ml`)</td></tr>
+    <tr><td>Marathi (`mr`)</td><td>Punjabi (`pa`)</td><td /><td /></tr>
+  </tbody>
+</table>
+
+## Selecting a Model
+
+| Snapshot                                                                                   | Release Date | Languages                                                                                                                                                              | Status |
+| ------------------------------------------------------------------------------------------ | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| <Icon icon="circle" iconType="solid" color="#008000" size="10px" /> `sonic-3.5-2026-05-04` | May 4, 2026  | en, de, es, fr, ja, pt, zh, hi, ko, it, nl, pl, ru, sv, tr, tl, bg, ro, ar, cs, el, fi, hr, ms, sk, da, ta, uk, hu, no, vi, bn, th, he, ka, id, te, gu, kn, ml, mr, pa | Stable |
+
+<Icon icon="circle" size="10px" iconType="solid" color="#008000" /> the latest **stable** snapshot of the model
+
+When making API calls, you can specify either:
+
+```python lines theme={null}
+# Use the base model
+# (automatically routes to the latest stable snapshot)
+model_id = "sonic-3.5"
+
+# Or specify a particular snapshot for consistency
+model_id = "sonic-3.5-2026-05-04"
+
+# Try the latest (beta) model (can be 'hot swapped')
+model_id = "sonic-latest"
+```
+
+### Continuous updates and model snapshots
+
+All models have a base model name (e.g. `sonic-3.5`) and a dated snapshot (e.g. `sonic-3.5-2026-05-04`). Using the base model will automatically keep you up to date with the most recent stable snapshot of that model. If pinning a specific version is important for your use case, we recommend using the dated version.
+
+For testing our latest capabilities, we recommend using `sonic-latest`, which is a non-snapshotted version. `sonic-latest` can be updated with no notice, and is not recommended for production.
+
+To summarize:
+
+| **Model ID**           | Model update behavior                                       | Recommended for                                                                            |
+| ---------------------- | :---------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `sonic-3.5-YYYY-MM-DD` | Snapshotted, will never change                              | Customers who want to run internal evals before any updates                                |
+| `sonic-3.5`            | Will be updated to point to the most recent stable snapshot | Customers who want stable releases, but want to be up-to-date with the recent capabilities |
+| `sonic-latest`         | Will always be updated to our latest beta releases          | Testing purposes                                                                           |
+
+## Switching from Sonic 3?
+
+If you're already using Sonic 3, see [Migrating from Sonic 3 to Sonic 3.5](/build-with-cartesia/tts-models/sonic-3-to-sonic-3-5) for what's new and what to know before you switch.
+
+## Older Models
+
+For information on `sonic-3`, `sonic-2`, `sonic-turbo`, and `sonic`, see our page on [Older TTS Models](/build-with-cartesia/tts-models/older-models).

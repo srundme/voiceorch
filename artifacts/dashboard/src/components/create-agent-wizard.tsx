@@ -63,7 +63,7 @@ function getManagedStack(languages: string[]) {
     llmProvider:       (hasTamil || hasIndic) ? "google" : "sarvam",
     llmModel:          (hasTamil || hasIndic) ? "gemini-2.5-flash" : "sarvam-m",
     ttsProvider:       "cartesia",
-    ttsModel:          "sonic-3",
+    ttsModel:          "sonic-3.5",
     telephonyProvider: "vobiz",
   };
 }

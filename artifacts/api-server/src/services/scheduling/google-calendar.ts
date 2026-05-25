@@ -29,20 +29,27 @@ export function getAuthUrl(state?: string): string {
 export async function exchangeCode(code: string): Promise<{ accessToken: string; refreshToken: string; expiry: Date; email: string }> {
   const client = getOAuth2Client();
   const { tokens } = await client.getToken(code);
-  if (!tokens.access_token || !tokens.refresh_token) {
-    throw new Error("Missing tokens from Google OAuth response");
+  if (!tokens.access_token) {
+    throw new Error("Missing access_token from Google OAuth response");
   }
-  client.setCredentials(tokens);
+  // Fetch user email via direct fetch (avoids googleapis oauth2 client auth issues)
+  const userInfoRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+    headers: { Authorization: `Bearer ${tokens.access_token}` },
+  });
+  if (!userInfoRes.ok) {
+    throw new Error(`Failed to fetch Google user info: ${userInfoRes.status}`);
+  }
+  const userInfo = await userInfoRes.json() as { email?: string };
+  if (!userInfo.email) throw new Error("Could not fetch email from Google account");
 
-  const oauth2 = google.oauth2({ version: "v2", auth: client });
-  const { data } = await oauth2.userinfo.get();
-  if (!data.email) throw new Error("Could not fetch email from Google account");
+  // If no refresh_token (user already granted access before), load existing stored token
+  const refreshToken = tokens.refresh_token ?? null;
 
   return {
     accessToken: tokens.access_token,
-    refreshToken: tokens.refresh_token,
+    refreshToken: refreshToken ?? "",
     expiry: tokens.expiry_date ? new Date(tokens.expiry_date) : new Date(Date.now() + 3600_000),
-    email: data.email,
+    email: userInfo.email,
   };
 }
 
