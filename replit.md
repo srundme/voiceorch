@@ -51,13 +51,16 @@ AI voice agent orchestration SaaS platform — users bring their own provider AP
 
 ## Scheduling Architecture
 
-- 5 DB tables: `scheduling_calendars`, `event_types`, `availability_schedules`, `availability_overrides`, `bookings`
+- 6 DB tables: `scheduling_calendars`, `event_types`, `availability_schedules`, `availability_overrides`, `bookings`, `google_calendar_connections`
 - Slot engine (`services/scheduling/slot-engine.ts`): date-fns-tz aware, respects weekly schedules + overrides + existing bookings
 - Advisory lock (`services/scheduling/lock.ts`): `pg_try_advisory_xact_lock` prevents double-booking
 - Email (`services/scheduling/notifications.ts`): nodemailer/Gmail, gracefully skipped if env vars absent
 - Webhooks: `dispatchSchedulingWebhooks` in `routes/scheduling/webhooks.ts`
 - Public routes (no auth): `GET /api/scheduling/public/event-types/:slug`, `GET /api/scheduling/public/slots`, `POST /api/scheduling/public/bookings`
 - Env: `GMAIL_USER` + `GMAIL_APP_PASSWORD` (optional) for email notifications
+- **Google OAuth (SaaS-style):** Platform owns ONE Google OAuth app (`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` env vars). Users click "Connect with Google" — no developer setup. Multiple Google accounts per user supported. Each calendar can be mapped to a specific Google account via `google_calendar_connection_id`.
+- Google routes: `GET /api/scheduling/google/connect` (redirect), `GET /api/scheduling/google/callback` (no auth — uses `state` param), `GET/DELETE /api/scheduling/google/connections`, `GET /api/scheduling/google/calendar-links`, `PATCH /api/scheduling/calendars/:id/google-connection`
+- Tokens encrypted at rest via `encryptKey`/`decryptKey`; auto-refresh on expiry
 
 ## Supported providers
 

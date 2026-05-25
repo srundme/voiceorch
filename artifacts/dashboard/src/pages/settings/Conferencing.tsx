@@ -1,269 +1,231 @@
-import { useEffect, useState } from "react";
-import { Video, CheckCircle2, Loader2, Eye, EyeOff, ExternalLink, Trash2 } from "lucide-react";
+import { useEffect, useState, useCallback } from "react";
+import { Video, CheckCircle2, Loader2, Plus, Trash2, Link2, Unlink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const API = `${BASE}/api`;
 
-type GCalStatus = { connected: boolean; email: string | null; credentialsConfigured: boolean };
-type CredentialStatus = { configured: boolean; clientIdHint: string | null };
+type GoogleConnection = {
+  id: string;
+  email: string;
+  connectedAt: string;
+};
 
-async function fetchGCalStatus(): Promise<GCalStatus> {
-  const r = await fetch(`${API}/scheduling/google/status`, { credentials: "include" });
-  if (!r.ok) throw new Error("Failed");
-  return r.json();
-}
-
-async function fetchCredStatus(): Promise<CredentialStatus> {
-  const r = await fetch(`${API}/scheduling/google/credentials`, { credentials: "include" });
+async function fetchConnections(): Promise<GoogleConnection[]> {
+  const r = await fetch(`${API}/scheduling/google/connections`, { credentials: "include" });
   if (!r.ok) throw new Error("Failed");
   return r.json();
 }
 
 export default function ConferencingPage() {
-  const [status, setStatus] = useState<GCalStatus | null>(null);
-  const [credStatus, setCredStatus] = useState<CredentialStatus | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const [clientId, setClientId] = useState("");
-  const [clientSecret, setClientSecret] = useState("");
-  const [showSecret, setShowSecret] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [connecting, setConnecting] = useState(false);
-  const [disconnecting, setDisconnecting] = useState(false);
-
+  const [connections, setConnections] = useState<GoogleConnection[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [connecting, setConnecting]   = useState(false);
+  const [removingId, setRemovingId]   = useState<string | null>(null);
   const { toast } = useToast();
 
+  const load = useCallback(async () => {
+    try {
+      setConnections(await fetchConnections());
+    } catch {
+      setConnections([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Handle OAuth return — ?gcal=connected or ?gcal=error
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const gcal = params.get("gcal");
+    const gcal  = params.get("gcal");
+    const email = params.get("email");
     if (gcal === "connected") {
-      toast({ title: "Google Calendar connected!", description: "Meet links will be auto-generated for new bookings." });
+      toast({
+        title: "Google account connected!",
+        description: email
+          ? `${email} is now linked. Meet links will be created automatically.`
+          : "Your Google Calendar is now connected.",
+      });
       window.history.replaceState({}, "", window.location.pathname);
     } else if (gcal === "error") {
-      toast({ title: "Connection failed", description: "Something went wrong with Google OAuth. Check your credentials and try again.", variant: "destructive" });
+      toast({
+        title: "Connection failed",
+        description: "Something went wrong with Google sign-in. Please try again.",
+        variant: "destructive",
+      });
       window.history.replaceState({}, "", window.location.pathname);
     }
-  }, []);
+  }, [toast]);
 
-  useEffect(() => {
-    Promise.all([fetchGCalStatus(), fetchCredStatus()])
-      .then(([s, c]) => { setStatus(s); setCredStatus(c); })
-      .catch(() => { setStatus({ connected: false, email: null, credentialsConfigured: false }); setCredStatus({ configured: false, clientIdHint: null }); })
-      .finally(() => setLoading(false));
-  }, []);
-
-  async function handleSaveCredentials() {
-    if (!clientId.trim() || !clientSecret.trim()) {
-      toast({ title: "Both Client ID and Client Secret are required", variant: "destructive" });
-      return;
-    }
-    setSaving(true);
-    try {
-      const r = await fetch(`${API}/scheduling/google/credentials`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ clientId: clientId.trim(), clientSecret: clientSecret.trim() }),
-      });
-      if (!r.ok) throw new Error("Failed");
-      const hint = clientId.length > 8 ? `${clientId.slice(0, 8)}...${clientId.slice(-4)}` : clientId;
-      setCredStatus({ configured: true, clientIdHint: hint });
-      setClientId("");
-      setClientSecret("");
-      setStatus(s => s ? { ...s, credentialsConfigured: true } : s);
-      toast({ title: "Google OAuth credentials saved", description: "You can now connect your Google Calendar." });
-    } catch {
-      toast({ title: "Failed to save credentials", variant: "destructive" });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleRemoveCredentials() {
-    await fetch(`${API}/scheduling/google/credentials`, { method: "DELETE", credentials: "include" });
-    setCredStatus({ configured: false, clientIdHint: null });
-    setStatus(s => s ? { ...s, credentialsConfigured: false, connected: false, email: null } : s);
-    toast({ title: "Google OAuth credentials removed" });
-  }
+  useEffect(() => { void load(); }, [load]);
 
   function handleConnect() {
     setConnecting(true);
     window.location.href = `${API}/scheduling/google/connect`;
   }
 
-  async function handleDisconnect() {
-    setDisconnecting(true);
+  async function handleRemove(id: string) {
+    setRemovingId(id);
     try {
-      await fetch(`${API}/scheduling/google/disconnect`, { method: "DELETE", credentials: "include" });
-      setStatus(s => s ? { ...s, connected: false, email: null } : s);
-      toast({ title: "Google Calendar disconnected" });
+      const r = await fetch(`${API}/scheduling/google/connections/${id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!r.ok) throw new Error("Failed");
+      setConnections(prev => prev.filter(c => c.id !== id));
+      toast({ title: "Google account disconnected" });
     } catch {
       toast({ title: "Failed to disconnect", variant: "destructive" });
     } finally {
-      setDisconnecting(false);
+      setRemovingId(null);
     }
   }
 
-  const credConfigured = credStatus?.configured ?? false;
-  const calConnected = status?.connected ?? false;
+  const hasConnections = connections.length > 0;
 
   return (
     <div className="flex flex-col gap-6 p-6 max-w-3xl mx-auto">
       <div>
         <h1 className="text-xl font-semibold">Conferencing</h1>
         <p className="text-sm text-muted-foreground">
-          Connect a video conferencing tool — links are auto-generated and included in every booking email
+          Connect Google Calendar accounts — Meet links are auto-generated and included in every booking confirmation
         </p>
       </div>
 
       {/* Google Meet card */}
-      <Card className={calConnected ? "border-emerald-300 bg-emerald-50/20" : ""}>
+      <Card className={hasConnections ? "border-emerald-300 bg-emerald-50/20" : ""}>
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center shrink-0 border border-blue-200">
-                <Video className="h-5 w-5 text-blue-600" />
+              {/* Google color icon */}
+              <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shrink-0 border">
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                </svg>
               </div>
               <div>
                 <div className="flex items-center gap-2">
                   <CardTitle className="text-base">Google Meet</CardTitle>
-                  {calConnected && (
+                  {hasConnections && (
                     <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-xs">
-                      <CheckCircle2 className="h-3 w-3 mr-1" /> Connected
+                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                      {connections.length === 1 ? "1 account" : `${connections.length} accounts`}
                     </Badge>
                   )}
                 </div>
-                {calConnected && status?.email && (
-                  <p className="text-xs text-muted-foreground mt-0.5">{status.email}</p>
-                )}
+                <CardDescription className="text-xs mt-0.5">
+                  Automatically create Google Meet links when bookings are confirmed
+                </CardDescription>
               </div>
             </div>
-            <div className="shrink-0">
-              {loading ? (
-                <Button variant="outline" size="sm" disabled><Loader2 className="h-3.5 w-3.5 animate-spin" /></Button>
-              ) : calConnected ? (
-                <Button variant="outline" size="sm" onClick={handleDisconnect} disabled={disconnecting}
-                  className="text-destructive border-destructive/30 hover:bg-destructive/5">
-                  {disconnecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Disconnect"}
-                </Button>
-              ) : (
-                <Button size="sm" onClick={handleConnect} disabled={!credConfigured || connecting} className="gap-1.5">
-                  {connecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Video className="h-3.5 w-3.5" />}
-                  {connecting ? "Redirecting…" : "Connect"}
-                </Button>
-              )}
-            </div>
+
+            <Button
+              size="sm"
+              onClick={handleConnect}
+              disabled={connecting || loading}
+              className="shrink-0 gap-1.5"
+              variant={hasConnections ? "outline" : "default"}
+            >
+              {connecting
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : <Plus className="h-3.5 w-3.5" />}
+              {connecting ? "Redirecting…" : "Add account"}
+            </Button>
           </div>
         </CardHeader>
 
-        <CardContent className="pt-0 space-y-4">
-          <CardDescription className="text-sm">
-            Automatically create Google Meet video links when a booking is confirmed. Attendees and host both receive the link in their email.
-          </CardDescription>
-
-          {calConnected && (
-            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
-              <p className="text-xs text-emerald-700 font-medium">✓ Active — Google Meet links are created automatically for all new bookings</p>
-              <p className="text-xs text-emerald-600 mt-0.5">The Meet link is included in both the attendee confirmation and the host notification email.</p>
+        <CardContent className="pt-0 space-y-3">
+          {loading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading…
             </div>
-          )}
-
-          {/* Step 1 — OAuth App Credentials */}
-          <div className="border rounded-lg p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium flex items-center gap-2">
-                  <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-muted text-xs font-bold">1</span>
-                  Google OAuth App Credentials
-                </p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  From your{" "}
-                  <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer"
-                    className="underline underline-offset-2 inline-flex items-center gap-0.5">
-                    Google Cloud Console <ExternalLink className="h-3 w-3" />
-                  </a>
-                  {" "}— create an OAuth 2.0 Client ID (Web application type).
+          ) : hasConnections ? (
+            <>
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-700">
+                <p className="font-medium">✓ Active — Google Meet links are generated for new bookings</p>
+                <p className="mt-0.5 text-emerald-600">
+                  Assign a specific account to each calendar from the{" "}
+                  <a href={`${BASE}/app/scheduling/calendars`} className="underline underline-offset-2">Calendars</a>{" "}
+                  page. Unassigned calendars use the first connected account.
                 </p>
               </div>
-              {credConfigured && (
-                <Button variant="ghost" size="sm" onClick={handleRemoveCredentials} className="h-7 text-muted-foreground hover:text-destructive shrink-0">
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              )}
-            </div>
 
-            {credConfigured ? (
-              <div className="flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-3 py-2">
-                <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-                <span>Credentials saved — Client ID: <code className="font-mono">{credStatus?.clientIdHint}</code></span>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <div className="space-y-1">
-                  <Label className="text-xs">Client ID</Label>
-                  <Input
-                    placeholder="1234567890-abc123.apps.googleusercontent.com"
-                    value={clientId}
-                    onChange={e => setClientId(e.target.value)}
-                    className="text-sm font-mono"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Client Secret</Label>
-                  <div className="relative">
-                    <Input
-                      type={showSecret ? "text" : "password"}
-                      placeholder="GOCSPX-…"
-                      value={clientSecret}
-                      onChange={e => setClientSecret(e.target.value)}
-                      className="text-sm font-mono pr-9"
-                    />
-                    <Button variant="ghost" size="sm" type="button"
-                      className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6 p-0 text-muted-foreground"
-                      onClick={() => setShowSecret(v => !v)}>
-                      {showSecret ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+              <div className="space-y-2">
+                {connections.map(conn => (
+                  <div
+                    key={conn.id}
+                    className="flex items-center justify-between p-3 bg-background border rounded-lg"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
+                        <span className="text-xs font-semibold text-blue-700">
+                          {conn.email[0]?.toUpperCase()}
+                        </span>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{conn.email}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Connected {new Date(conn.connectedAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={removingId === conn.id}
+                      onClick={() => handleRemove(conn.id)}
+                      className="h-7 px-2 text-muted-foreground hover:text-destructive shrink-0"
+                    >
+                      {removingId === conn.id
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        : <Trash2 className="h-3.5 w-3.5" />}
                     </Button>
                   </div>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Add <code className="font-mono text-xs bg-muted px-1 rounded">{window.location.origin}/api/scheduling/google/callback</code> as an Authorized Redirect URI in your Google Cloud Console.
-                </p>
-                <Button size="sm" onClick={handleSaveCredentials} disabled={saving || !clientId.trim() || !clientSecret.trim()}>
-                  {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : null}
-                  Save credentials
-                </Button>
+                ))}
               </div>
-            )}
-          </div>
+            </>
+          ) : (
+            <div className="flex flex-col items-center gap-3 py-6 text-center">
+              <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+                <Link2 className="h-5 w-5 text-muted-foreground" />
+              </div>
+              <div>
+                <p className="text-sm font-medium">No Google accounts connected</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Click <strong>Add account</strong> to sign in with Google — no developer setup needed.
+                  <br />
+                  Your booking confirmations will include a Google Meet link automatically.
+                </p>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-          {/* Step 2 — Connect */}
-          <div className={`border rounded-lg p-4 space-y-2 ${!credConfigured ? "opacity-50" : ""}`}>
-            <p className="text-sm font-medium flex items-center gap-2">
-              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-muted text-xs font-bold">2</span>
-              Sign in with Google
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {calConnected
-                ? `Connected as ${status?.email}. Click Disconnect above to unlink.`
-                : credConfigured
-                  ? "Click Connect above to sign in with Google and authorize calendar access."
-                  : "Save your OAuth credentials first, then connect your Google account."}
-            </p>
-          </div>
+      {/* How it works */}
+      <Card className="bg-muted/30 border-dashed">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium text-muted-foreground">How it works</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0 text-xs text-muted-foreground space-y-1.5">
+          <p>1. Click <strong>Add account</strong> → sign in with Google → grant calendar access</p>
+          <p>2. Optionally assign specific Google accounts to individual calendars (for multi-tenant setups)</p>
+          <p>3. When a booking is confirmed, a Meet link is created on that Google account and emailed to both parties</p>
+          <p>4. You can connect multiple Google accounts — e.g. one per department or agent</p>
         </CardContent>
       </Card>
 
       {/* Coming soon */}
       {[
-        { name: "Zoom", desc: "Generate Zoom meeting links automatically on each booking. Requires a Zoom OAuth app." },
+        { name: "Zoom", desc: "Generate Zoom meeting links automatically on each booking." },
         { name: "Microsoft Teams", desc: "Generate Teams meeting links. Requires a Microsoft 365 work/school account." },
-        { name: "Jitsi Video", desc: "Free open-source video conferencing. No account required — a unique room is generated per booking." },
+        { name: "Jitsi Video", desc: "Free open-source video conferencing — unique room per booking, no account needed." },
       ].map(app => (
         <Card key={app.name} className="opacity-60">
           <CardHeader className="pb-2">
@@ -279,7 +241,8 @@ export default function ConferencingPage() {
       ))}
 
       <p className="text-xs text-muted-foreground border-t pt-4">
-        Conferencing links are generated at booking time and included in confirmation emails. Only one conferencing tool can be active per account.
+        Meet links are generated at booking time and included in all confirmation emails.
+        Disconnecting an account won't affect existing bookings.
       </p>
     </div>
   );

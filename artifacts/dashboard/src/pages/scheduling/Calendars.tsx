@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Link } from "wouter";
-import { Plus, Pencil, Trash2, MoreHorizontal, Calendar, ArrowLeft, Globe, Mail } from "lucide-react";
+import { Plus, Pencil, Trash2, MoreHorizontal, Calendar, ArrowLeft, Globe, Mail, Video } from "lucide-react";
 import {
   useListCalendars,
   useCreateCalendar,
@@ -34,6 +34,9 @@ import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+const API  = `${BASE}/api`;
+
+type GoogleConnection = { id: string; email: string };
 
 const TIMEZONES = [
   "UTC",
@@ -227,12 +230,25 @@ function CalendarFormDialog({
   );
 }
 
-function CalendarCard({ calendar, agentName }: { calendar: SchedulingCalendar; agentName?: string }) {
+function CalendarCard({
+  calendar,
+  agentName,
+  googleConnections,
+  linkedConnectionId,
+  onLinkChange,
+}: {
+  calendar: SchedulingCalendar;
+  agentName?: string;
+  googleConnections: GoogleConnection[];
+  linkedConnectionId: string | null;
+  onLinkChange: (calendarId: number, connectionId: string | null) => void;
+}) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const del = useDeleteCalendar();
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [linkingGcal, setLinkingGcal] = useState(false);
 
   async function confirmDelete() {
     try {
@@ -241,6 +257,26 @@ function CalendarCard({ calendar, agentName }: { calendar: SchedulingCalendar; a
       toast({ title: "Calendar deleted" });
     } catch {
       toast({ title: "Delete failed", variant: "destructive" });
+    }
+  }
+
+  async function handleGcalChange(value: string) {
+    const connectionId = value === "__none__" ? null : value;
+    setLinkingGcal(true);
+    try {
+      const r = await fetch(`${API}/scheduling/calendars/${calendar.id}/google-connection`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ connectionId }),
+      });
+      if (!r.ok) throw new Error("Failed");
+      onLinkChange(calendar.id, connectionId);
+      toast({ title: connectionId ? "Google account linked" : "Google account unlinked" });
+    } catch {
+      toast({ title: "Failed to update Google account", variant: "destructive" });
+    } finally {
+      setLinkingGcal(false);
     }
   }
 
@@ -280,6 +316,32 @@ function CalendarCard({ calendar, agentName }: { calendar: SchedulingCalendar; a
                 Created {formatDistanceToNow(new Date(calendar.createdAt), { addSuffix: true })}
               </span>
             </div>
+
+            {/* Google account assignment */}
+            {googleConnections.length > 0 && (
+              <div className="flex items-center gap-2 mt-2">
+                <Video className="h-3 w-3 text-muted-foreground shrink-0" />
+                <Select
+                  value={linkedConnectionId ?? "__none__"}
+                  onValueChange={handleGcalChange}
+                  disabled={linkingGcal}
+                >
+                  <SelectTrigger className="h-6 text-xs border-dashed w-auto min-w-[200px] gap-1 px-2">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__" className="text-xs text-muted-foreground">
+                      — Use default Google account
+                    </SelectItem>
+                    {googleConnections.map(c => (
+                      <SelectItem key={c.id} value={c.id} className="text-xs">
+                        {c.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
 
           <DropdownMenu>
@@ -330,7 +392,28 @@ export default function CalendarsPage() {
   const { data: calendars, isLoading } = useListCalendars();
   const { data: agents } = useListAgents();
 
+  const [googleConnections, setGoogleConnections] = useState<GoogleConnection[]>([]);
+  // calendarId → connectionId (or null)
+  const [calendarLinks, setCalendarLinks] = useState<Record<number, string | null>>({});
+
   const agentMap = new Map(agents?.map(a => [a.id, a.name]) ?? []);
+
+  const loadGoogleData = useCallback(async () => {
+    try {
+      const [connsRes, linksRes] = await Promise.all([
+        fetch(`${API}/scheduling/google/connections`, { credentials: "include" }),
+        fetch(`${API}/scheduling/google/calendar-links`, { credentials: "include" }),
+      ]);
+      if (connsRes.ok) setGoogleConnections(await connsRes.json());
+      if (linksRes.ok) setCalendarLinks(await linksRes.json());
+    } catch { /* non-fatal */ }
+  }, []);
+
+  useEffect(() => { void loadGoogleData(); }, [loadGoogleData]);
+
+  function handleLinkChange(calendarId: number, connectionId: string | null) {
+    setCalendarLinks(prev => ({ ...prev, [calendarId]: connectionId }));
+  }
 
   return (
     <div className="flex flex-col gap-6 p-6 max-w-3xl mx-auto">
@@ -351,6 +434,20 @@ export default function CalendarsPage() {
           </Button>
         </div>
       </div>
+
+      {/* Google Meet prompt (only if no connections) */}
+      {googleConnections.length === 0 && (calendars?.length ?? 0) > 0 && (
+        <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+          <p className="text-sm text-blue-800">
+            <strong>Connect Google Calendar</strong> to auto-generate Meet links for bookings
+          </p>
+          <Link href={`${BASE}/app/settings/conferencing`}>
+            <Button size="sm" variant="outline" className="border-blue-300 text-blue-700 hover:bg-blue-100 gap-1.5">
+              <Video className="h-3.5 w-3.5" /> Connect
+            </Button>
+          </Link>
+        </div>
+      )}
 
       {/* Setup guide (only shown when empty) */}
       {!isLoading && (!calendars || calendars.length === 0) && (
@@ -373,7 +470,14 @@ export default function CalendarsPage() {
           <div key={i} className="h-20 bg-muted/40 rounded-xl animate-pulse" />
         ))}
         {calendars?.map(cal => (
-          <CalendarCard key={cal.id} calendar={cal} agentName={agentMap.get(cal.agentId)} />
+          <CalendarCard
+            key={cal.id}
+            calendar={cal}
+            agentName={agentMap.get(cal.agentId)}
+            googleConnections={googleConnections}
+            linkedConnectionId={calendarLinks[cal.id] ?? null}
+            onLinkChange={handleLinkChange}
+          />
         ))}
       </div>
 

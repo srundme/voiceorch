@@ -61,6 +61,37 @@ router.patch("/scheduling/calendars/:id", requireAuth, async (req, res): Promise
   res.json(UpdateCalendarResponse.parse(row));
 });
 
+// ── Link / unlink a Google Calendar connection to a scheduling calendar ──────
+
+router.patch("/scheduling/calendars/:id/google-connection", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const { id } = req.params as { id: string };
+  const { connectionId } = req.body as { connectionId: string | null };
+
+  // Verify calendar ownership (id column is serial/integer)
+  const numericId = parseInt(id, 10);
+  if (isNaN(numericId)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [cal] = await db.select({ id: schedulingCalendarsTable.id })
+    .from(schedulingCalendarsTable)
+    .where(and(eq(schedulingCalendarsTable.id, numericId), eq(schedulingCalendarsTable.userId, clerkId)));
+  if (!cal) { res.status(404).json({ error: "Calendar not found" }); return; }
+
+  // If linking, verify the connection belongs to this user
+  if (connectionId) {
+    const { sql } = await import("drizzle-orm");
+    const rows = await db.execute(
+      sql`SELECT id FROM google_calendar_connections WHERE id = ${connectionId} AND user_id = ${clerkId}`
+    );
+    if (!rows.rows[0]) { res.status(403).json({ error: "Google connection not found or not yours" }); return; }
+  }
+
+  const { sql } = await import("drizzle-orm");
+  await db.execute(
+    sql`UPDATE scheduling_calendars SET google_calendar_connection_id = ${connectionId ?? null}, updated_at = NOW() WHERE id = ${id}`
+  );
+  res.sendStatus(204);
+});
+
 router.delete("/scheduling/calendars/:id", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = DeleteCalendarParams.safeParse(req.params);

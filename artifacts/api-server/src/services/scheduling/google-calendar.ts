@@ -1,3 +1,14 @@
+/**
+ * Google Calendar + Meet — SaaS multi-tenant OAuth
+ *
+ * Architecture:
+ *  - ONE platform-level Google OAuth app (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET env vars)
+ *  - End-users click "Connect with Google" — no developer setup needed
+ *  - Each connected Google account is stored in `google_calendar_connections`
+ *  - Multiple Google accounts per user are supported
+ *  - Scheduling calendars can be mapped to a specific connection via google_calendar_connection_id
+ */
+
 import { google } from "googleapis";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
@@ -10,6 +21,8 @@ const SCOPES = [
   "https://www.googleapis.com/auth/userinfo.email",
 ];
 
+// ── Platform-level OAuth client ──────────────────────────────────────────────
+
 function callbackUrl(): string {
   const domain = process.env["REPLIT_DOMAINS"]?.split(",")[0];
   return domain
@@ -17,69 +30,52 @@ function callbackUrl(): string {
     : "http://localhost:80/api/scheduling/google/callback";
 }
 
-export function makeOAuth2Client(clientId: string, clientSecret: string) {
+export function makePlatformOAuth2Client() {
+  const clientId     = process.env["GOOGLE_CLIENT_ID"];
+  const clientSecret = process.env["GOOGLE_CLIENT_SECRET"];
+  if (!clientId || !clientSecret) {
+    throw new Error("GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set in environment");
+  }
   return new google.auth.OAuth2(clientId, clientSecret, callbackUrl());
 }
 
-// ── Per-user credential store ────────────────────────────────────────────────
+// ── Auth URL generation ──────────────────────────────────────────────────────
 
-export async function getOAuthConfig(userId: string): Promise<{ clientId: string; clientSecret: string } | null> {
-  const rows = await db.execute(
-    sql`SELECT client_id, client_secret FROM user_google_oauth_config WHERE user_id = ${userId}`,
-  );
-  const row = rows.rows[0] as any;
-  if (!row) return null;
-  return { clientId: row.client_id, clientSecret: decryptKey(row.client_secret) };
-}
-
-export async function saveOAuthConfig(userId: string, clientId: string, clientSecret: string): Promise<void> {
-  const encrypted = encryptKey(clientSecret);
-  await db.execute(sql`
-    INSERT INTO user_google_oauth_config (user_id, client_id, client_secret)
-    VALUES (${userId}, ${clientId}, ${encrypted})
-    ON CONFLICT (user_id) DO UPDATE
-      SET client_id = EXCLUDED.client_id,
-          client_secret = EXCLUDED.client_secret,
-          updated_at = NOW()
-  `);
-}
-
-export async function deleteOAuthConfig(userId: string): Promise<void> {
-  await db.execute(sql`DELETE FROM user_google_oauth_config WHERE user_id = ${userId}`);
-}
-
-// ── Auth URL ────────────────────────────────────────────────────────────────
-
-export function getAuthUrl(clientId: string, clientSecret: string, state: string): string {
-  const client = makeOAuth2Client(clientId, clientSecret);
+/**
+ * Generate the Google OAuth consent screen URL.
+ * `state` encodes the user's Clerk ID so the callback can map the account.
+ */
+export function getAuthUrl(state: string): string {
+  const client = makePlatformOAuth2Client();
   return client.generateAuthUrl({
     access_type: "offline",
     scope: SCOPES,
-    prompt: "consent",
+    prompt: "consent",   // force refresh_token on every connect
     state,
   });
 }
 
 // ── Code exchange ────────────────────────────────────────────────────────────
 
-export async function exchangeCode(
-  clientId: string,
-  clientSecret: string,
-  code: string,
-): Promise<{ accessToken: string; refreshToken: string; expiry: Date; email: string }> {
-  const client = makeOAuth2Client(clientId, clientSecret);
+export async function exchangeCode(code: string): Promise<{
+  accessToken: string;
+  refreshToken: string;
+  expiry: Date;
+  email: string;
+}> {
+  const client = makePlatformOAuth2Client();
   const { tokens } = await client.getToken(code);
   if (!tokens.access_token) {
     throw new Error("Missing access_token from Google OAuth response");
   }
+
+  // Fetch email via direct Bearer fetch (most reliable)
   const userInfoRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
     headers: { Authorization: `Bearer ${tokens.access_token}` },
   });
-  if (!userInfoRes.ok) {
-    throw new Error(`Failed to fetch Google user info: ${userInfoRes.status}`);
-  }
+  if (!userInfoRes.ok) throw new Error(`Google userinfo error: ${userInfoRes.status}`);
   const userInfo = await userInfoRes.json() as { email?: string };
-  if (!userInfo.email) throw new Error("Could not fetch email from Google account");
+  if (!userInfo.email) throw new Error("No email returned from Google");
 
   return {
     accessToken: tokens.access_token,
@@ -89,80 +85,119 @@ export async function exchangeCode(
   };
 }
 
-// ── Token store ──────────────────────────────────────────────────────────────
+// ── Connection CRUD ──────────────────────────────────────────────────────────
 
-export async function getTokensForUser(userId: string): Promise<{ accessToken: string; refreshToken: string; email: string; clientId: string; clientSecret: string } | null> {
-  const config = await getOAuthConfig(userId);
-  if (!config) return null;
+export type GoogleConnection = {
+  id: string;
+  userId: string;
+  email: string;
+  tokenExpiry: Date | null;
+  createdAt: Date;
+};
 
+export async function listConnectionsForUser(userId: string): Promise<GoogleConnection[]> {
   const rows = await db.execute(
-    sql`SELECT access_token, refresh_token, token_expiry, email FROM google_calendar_tokens WHERE user_id = ${userId}`,
+    sql`SELECT id, user_id, email, token_expiry, created_at
+        FROM google_calendar_connections
+        WHERE user_id = ${userId}
+        ORDER BY created_at ASC`,
+  );
+  return (rows.rows as any[]).map(r => ({
+    id: r.id,
+    userId: r.user_id,
+    email: r.email,
+    tokenExpiry: r.token_expiry ? new Date(r.token_expiry) : null,
+    createdAt: new Date(r.created_at),
+  }));
+}
+
+export async function upsertConnection(
+  userId: string,
+  email: string,
+  accessToken: string,
+  refreshToken: string,
+  expiry: Date,
+): Promise<string> {
+  const encAccess  = encryptKey(accessToken);
+  const encRefresh = refreshToken ? encryptKey(refreshToken) : "";
+  const rows = await db.execute(sql`
+    INSERT INTO google_calendar_connections (user_id, email, access_token, refresh_token, token_expiry)
+    VALUES (${userId}, ${email}, ${encAccess}, ${encRefresh}, ${expiry})
+    ON CONFLICT (user_id, email) DO UPDATE
+      SET access_token  = EXCLUDED.access_token,
+          refresh_token = CASE WHEN EXCLUDED.refresh_token != '' THEN EXCLUDED.refresh_token ELSE google_calendar_connections.refresh_token END,
+          token_expiry  = EXCLUDED.token_expiry,
+          updated_at    = NOW()
+    RETURNING id
+  `);
+  return (rows.rows[0] as any).id as string;
+}
+
+/** Returns a valid access token for the connection, auto-refreshing if needed. */
+export async function getValidAccessToken(connectionId: string): Promise<{
+  accessToken: string;
+  email: string;
+} | null> {
+  const rows = await db.execute(
+    sql`SELECT id, user_id, email, access_token, refresh_token, token_expiry
+        FROM google_calendar_connections WHERE id = ${connectionId}`,
   );
   const row = rows.rows[0] as any;
   if (!row) return null;
 
-  const client = makeOAuth2Client(config.clientId, config.clientSecret);
-  client.setCredentials({
-    access_token: row.access_token,
-    refresh_token: row.refresh_token,
-    expiry_date: row.token_expiry ? new Date(row.token_expiry).getTime() : undefined,
-  });
+  const accessToken  = decryptKey(row.access_token);
+  const refreshToken = row.refresh_token ? decryptKey(row.refresh_token) : "";
 
-  const now = Date.now();
+  const now    = Date.now();
   const expiry = row.token_expiry ? new Date(row.token_expiry).getTime() : 0;
-  if (expiry - now < 5 * 60 * 1000) {
+
+  // Refresh if less than 5 minutes remaining
+  if (expiry - now < 5 * 60 * 1000 && refreshToken) {
     try {
+      const client = makePlatformOAuth2Client();
+      client.setCredentials({ refresh_token: refreshToken });
       const { credentials } = await client.refreshAccessToken();
       if (credentials.access_token) {
+        const encNew = encryptKey(credentials.access_token);
         await db.execute(sql`
-          UPDATE google_calendar_tokens
-          SET access_token = ${credentials.access_token},
+          UPDATE google_calendar_connections
+          SET access_token = ${encNew},
               token_expiry = ${credentials.expiry_date ? new Date(credentials.expiry_date) : null},
-              updated_at = NOW()
-          WHERE user_id = ${userId}
+              updated_at   = NOW()
+          WHERE id = ${connectionId}
         `);
-        return { accessToken: credentials.access_token, refreshToken: row.refresh_token, email: row.email, clientId: config.clientId, clientSecret: config.clientSecret };
+        return { accessToken: credentials.access_token, email: row.email };
       }
     } catch (err) {
-      logger.warn({ err, userId }, "Failed to refresh Google token");
+      logger.warn({ err, connectionId }, "Failed to refresh Google token");
     }
   }
 
-  return { accessToken: row.access_token, refreshToken: row.refresh_token, email: row.email, clientId: config.clientId, clientSecret: config.clientSecret };
+  return { accessToken, email: row.email };
 }
 
-export async function storeTokens(userId: string, accessToken: string, refreshToken: string, expiry: Date, email: string): Promise<void> {
-  await db.execute(sql`
-    INSERT INTO google_calendar_tokens (user_id, access_token, refresh_token, token_expiry, email)
-    VALUES (${userId}, ${accessToken}, ${refreshToken}, ${expiry}, ${email})
-    ON CONFLICT (user_id) DO UPDATE
-      SET access_token = EXCLUDED.access_token,
-          refresh_token = EXCLUDED.refresh_token,
-          token_expiry = EXCLUDED.token_expiry,
-          email = EXCLUDED.email,
-          updated_at = NOW()
-  `);
-}
-
-export async function revokeTokens(userId: string): Promise<void> {
+export async function revokeConnection(connectionId: string): Promise<void> {
   const rows = await db.execute(
-    sql`SELECT access_token FROM google_calendar_tokens WHERE user_id = ${userId}`,
+    sql`SELECT access_token FROM google_calendar_connections WHERE id = ${connectionId}`,
   );
   const row = rows.rows[0] as any;
   if (row?.access_token) {
-    const config = await getOAuthConfig(userId);
-    if (config) {
-      const client = makeOAuth2Client(config.clientId, config.clientSecret);
-      try { await client.revokeToken(row.access_token); } catch { /* best effort */ }
-    }
+    try {
+      const client = makePlatformOAuth2Client();
+      await client.revokeToken(decryptKey(row.access_token));
+    } catch { /* best effort */ }
   }
-  await db.execute(sql`DELETE FROM google_calendar_tokens WHERE user_id = ${userId}`);
+  await db.execute(sql`DELETE FROM google_calendar_connections WHERE id = ${connectionId}`);
 }
 
 // ── Calendar event creation ──────────────────────────────────────────────────
 
+/**
+ * Create a Google Calendar event with a Meet link on the specified connection.
+ * Returns null if the connection is missing or the API call fails.
+ */
 export async function createCalendarEvent(params: {
-  userId: string;
+  connectionId: string;
   summary: string;
   description?: string;
   startTime: Date;
@@ -172,20 +207,18 @@ export async function createCalendarEvent(params: {
   timezone: string;
   hostEmail?: string | null;
 }): Promise<{ meetLink: string | null; eventId: string } | null> {
-  const tokens = await getTokensForUser(params.userId);
+  const tokens = await getValidAccessToken(params.connectionId);
   if (!tokens) return null;
 
-  const client = makeOAuth2Client(tokens.clientId, tokens.clientSecret);
-  client.setCredentials({ access_token: tokens.accessToken, refresh_token: tokens.refreshToken });
+  const client = makePlatformOAuth2Client();
+  client.setCredentials({ access_token: tokens.accessToken });
 
   const calendar = google.calendar({ version: "v3", auth: client });
 
   const attendees: { email: string; displayName?: string }[] = [
     { email: params.attendeeEmail, displayName: params.attendeeName },
   ];
-  if (params.hostEmail) {
-    attendees.push({ email: params.hostEmail });
-  }
+  if (params.hostEmail) attendees.push({ email: params.hostEmail });
 
   try {
     const event = await calendar.events.insert({
@@ -195,7 +228,7 @@ export async function createCalendarEvent(params: {
         summary: params.summary,
         description: params.description,
         start: { dateTime: params.startTime.toISOString(), timeZone: params.timezone },
-        end: { dateTime: params.endTime.toISOString(), timeZone: params.timezone },
+        end:   { dateTime: params.endTime.toISOString(),   timeZone: params.timezone },
         attendees,
         conferenceData: {
           createRequest: {
@@ -208,24 +241,35 @@ export async function createCalendarEvent(params: {
     });
 
     const meetLink = event.data.conferenceData?.entryPoints?.find(e => e.entryPointType === "video")?.uri ?? null;
-    const eventId = event.data.id ?? "";
-    logger.info({ userId: params.userId, eventId, meetLink }, "Google Calendar event created");
+    const eventId  = event.data.id ?? "";
+    logger.info({ connectionId: params.connectionId, eventId, meetLink }, "Google Calendar event created");
     return { meetLink, eventId };
   } catch (err) {
-    logger.warn({ err, userId: params.userId }, "Failed to create Google Calendar event");
+    logger.warn({ err, connectionId: params.connectionId }, "Failed to create Google Calendar event");
     return null;
   }
 }
 
-export async function deleteCalendarEvent(userId: string, eventId: string): Promise<void> {
-  const tokens = await getTokensForUser(userId);
+export async function deleteCalendarEvent(connectionId: string, eventId: string): Promise<void> {
+  const tokens = await getValidAccessToken(connectionId);
   if (!tokens) return;
-  const client = makeOAuth2Client(tokens.clientId, tokens.clientSecret);
-  client.setCredentials({ access_token: tokens.accessToken, refresh_token: tokens.refreshToken });
+  const client = makePlatformOAuth2Client();
+  client.setCredentials({ access_token: tokens.accessToken });
   const calendar = google.calendar({ version: "v3", auth: client });
   try {
     await calendar.events.delete({ calendarId: "primary", eventId });
   } catch (err) {
-    logger.warn({ err, userId, eventId }, "Failed to delete Google Calendar event");
+    logger.warn({ err, connectionId, eventId }, "Failed to delete Google Calendar event");
   }
+}
+
+// ── Legacy helpers (keep for backward compat during migration) ──────────────
+
+/** Returns the first connection for a user, or null. Used as fallback. */
+export async function getFirstConnectionForUser(userId: string): Promise<{ id: string; email: string } | null> {
+  const rows = await db.execute(
+    sql`SELECT id, email FROM google_calendar_connections WHERE user_id = ${userId} ORDER BY created_at ASC LIMIT 1`,
+  );
+  const row = rows.rows[0] as any;
+  return row ? { id: row.id, email: row.email } : null;
 }

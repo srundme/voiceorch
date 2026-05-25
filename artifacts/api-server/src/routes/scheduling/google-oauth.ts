@@ -1,15 +1,11 @@
 import { Router, type IRouter } from "express";
 import { requireAuth } from "../../middlewares/requireAuth.js";
-import { db } from "@workspace/db";
-import { sql } from "drizzle-orm";
 import {
   getAuthUrl,
   exchangeCode,
-  storeTokens,
-  revokeTokens,
-  getOAuthConfig,
-  saveOAuthConfig,
-  deleteOAuthConfig,
+  upsertConnection,
+  listConnectionsForUser,
+  revokeConnection,
 } from "../../services/scheduling/google-calendar.js";
 import { logger } from "../../lib/logger.js";
 
@@ -20,102 +16,111 @@ const DASHBOARD_BASE = () => {
   return domain ? `https://${domain}` : "http://localhost:80";
 };
 
-// ── Credential management (per-user client_id + client_secret) ───────────────
+// ── List connected Google accounts ───────────────────────────────────────────
 
-router.get("/scheduling/google/credentials", requireAuth, async (req, res): Promise<void> => {
+router.get("/scheduling/google/connections", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
-  const config = await getOAuthConfig(clerkId);
-  if (!config) {
-    res.json({ configured: false, clientIdHint: null });
-    return;
-  }
-  const hint = config.clientId.length > 8
-    ? `${config.clientId.slice(0, 8)}...${config.clientId.slice(-4)}`
-    : config.clientId;
-  res.json({ configured: true, clientIdHint: hint });
+  const connections = await listConnectionsForUser(clerkId);
+  res.json(connections.map(c => ({
+    id: c.id,
+    email: c.email,
+    connectedAt: c.createdAt,
+  })));
 });
 
-router.put("/scheduling/google/credentials", requireAuth, async (req, res): Promise<void> => {
+// ── OAuth connect — redirect to Google consent screen ───────────────────────
+
+router.get("/scheduling/google/connect", requireAuth, (req, res): void => {
   const clerkId = (req as any).clerkUserId as string;
-  const { clientId, clientSecret } = req.body as { clientId?: string; clientSecret?: string };
-  if (!clientId?.trim() || !clientSecret?.trim()) {
-    res.status(400).json({ error: "clientId and clientSecret are required" });
+
+  if (!process.env["GOOGLE_CLIENT_ID"] || !process.env["GOOGLE_CLIENT_SECRET"]) {
+    res.status(503).json({ error: "Google OAuth not configured on this platform." });
     return;
   }
-  await saveOAuthConfig(clerkId, clientId.trim(), clientSecret.trim());
-  logger.info({ clerkId }, "Google OAuth credentials saved");
-  res.json({ ok: true });
-});
 
-router.delete("/scheduling/google/credentials", requireAuth, async (req, res): Promise<void> => {
-  const clerkId = (req as any).clerkUserId as string;
-  await deleteOAuthConfig(clerkId);
-  res.sendStatus(204);
-});
-
-// ── OAuth connect / callback ─────────────────────────────────────────────────
-
-router.get("/scheduling/google/connect", requireAuth, async (req, res): Promise<void> => {
-  const clerkId = (req as any).clerkUserId as string;
-  const config = await getOAuthConfig(clerkId);
-  if (!config) {
-    res.status(400).json({ error: "Google OAuth credentials not configured. Please save your client_id and client_secret first." });
-    return;
-  }
-  const url = getAuthUrl(config.clientId, config.clientSecret, clerkId);
+  const url = getAuthUrl(clerkId);
   res.redirect(url);
 });
 
-// Callback — no requireAuth: Google redirects here from outside, session cookie
-// may not be present. We identify the user via the `state` param (clerkId).
+// ── OAuth callback — no requireAuth: Google redirects here ──────────────────
+// We identify the user via the `state` param (= clerkId set in /connect).
+
 router.get("/scheduling/google/callback", async (req, res): Promise<void> => {
-  const { code, error, state: clerkId } = req.query as { code?: string; error?: string; state?: string };
+  const { code, error, state: clerkId } = req.query as {
+    code?: string; error?: string; state?: string;
+  };
   const redirectBase = `${DASHBOARD_BASE()}/app/settings/conferencing`;
 
   if (error || !code || !clerkId) {
-    logger.warn({ clerkId, error }, "Google OAuth callback error");
-    res.redirect(`${redirectBase}?gcal=error`);
-    return;
-  }
-
-  const config = await getOAuthConfig(clerkId);
-  if (!config) {
-    logger.warn({ clerkId }, "Google OAuth callback — no credentials stored for user");
+    logger.warn({ clerkId, error }, "Google OAuth callback error or missing params");
     res.redirect(`${redirectBase}?gcal=error`);
     return;
   }
 
   try {
-    const tokens = await exchangeCode(config.clientId, config.clientSecret, code);
-    await storeTokens(clerkId, tokens.accessToken, tokens.refreshToken, tokens.expiry, tokens.email);
+    const tokens = await exchangeCode(code);
+    await upsertConnection(
+      clerkId,
+      tokens.email,
+      tokens.accessToken,
+      tokens.refreshToken,
+      tokens.expiry,
+    );
     logger.info({ clerkId, email: tokens.email }, "Google Calendar connected");
-    res.redirect(`${redirectBase}?gcal=connected`);
+    res.redirect(`${redirectBase}?gcal=connected&email=${encodeURIComponent(tokens.email)}`);
   } catch (err) {
     logger.warn({ err, clerkId }, "Failed to exchange Google OAuth code");
     res.redirect(`${redirectBase}?gcal=error`);
   }
 });
 
-// ── Connection status / disconnect ───────────────────────────────────────────
+// ── Disconnect a specific Google account ─────────────────────────────────────
+
+router.delete("/scheduling/google/connections/:id", requireAuth, async (req, res): Promise<void> => {
+  const clerkId      = (req as any).clerkUserId as string;
+  const connectionId = req.params["id"] as string;
+
+  // Security: verify this connection belongs to the authenticated user
+  const connections = await listConnectionsForUser(clerkId);
+  const owns = connections.some(c => c.id === connectionId);
+  if (!owns) {
+    res.status(403).json({ error: "Not authorized to disconnect this account" });
+    return;
+  }
+
+  await revokeConnection(connectionId);
+  logger.info({ clerkId, connectionId }, "Google Calendar disconnected");
+  res.sendStatus(204);
+});
+
+// ── Calendar→connection mapping (which account is linked to which calendar) ──
+
+router.get("/scheduling/google/calendar-links", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const { db } = await import("@workspace/db");
+  const { sql } = await import("drizzle-orm");
+  const rows = await db.execute(
+    sql`SELECT id, google_calendar_connection_id FROM scheduling_calendars WHERE user_id = ${clerkId}`
+  );
+  const map: Record<number, string | null> = {};
+  for (const r of rows.rows as any[]) {
+    map[r.id] = r.google_calendar_connection_id ?? null;
+  }
+  res.json(map);
+});
+
+// ── Status (legacy single-account compat) ────────────────────────────────────
 
 router.get("/scheduling/google/status", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
-  const rows = await db.execute(
-    sql`SELECT email FROM google_calendar_tokens WHERE user_id = ${clerkId}`,
-  );
-  const row = rows.rows[0] as any;
-  const config = await getOAuthConfig(clerkId);
+  const connections = await listConnectionsForUser(clerkId);
   res.json({
-    connected: !!row,
-    email: row?.email ?? null,
-    credentialsConfigured: !!config,
+    connected: connections.length > 0,
+    connections: connections.map(c => ({ id: c.id, email: c.email })),
+    // Legacy compat
+    email: connections[0]?.email ?? null,
+    credentialsConfigured: true, // platform-level — always true
   });
-});
-
-router.delete("/scheduling/google/disconnect", requireAuth, async (req, res): Promise<void> => {
-  const clerkId = (req as any).clerkUserId as string;
-  await revokeTokens(clerkId);
-  res.sendStatus(204);
 });
 
 export default router;

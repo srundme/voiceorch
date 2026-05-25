@@ -20,7 +20,11 @@ import {
   sendBookingRescheduledEmail,
   sendBookingConfirmedEmail,
 } from "../../services/scheduling/notifications.js";
-import { createCalendarEvent, deleteCalendarEvent } from "../../services/scheduling/google-calendar.js";
+import {
+  createCalendarEvent,
+  deleteCalendarEvent,
+  getFirstConnectionForUser,
+} from "../../services/scheduling/google-calendar.js";
 import { dispatchSchedulingWebhooks } from "./webhooks.js";
 import { addMinutes, format } from "date-fns";
 
@@ -164,8 +168,15 @@ router.post("/scheduling/bookings", requireAuth, async (req, res): Promise<void>
   let meetLink: string | null = null;
   let googleEventId: string | null = null;
   try {
-    const gcalResult = await createCalendarEvent({
-      userId: clerkId,
+    // Resolve which Google connection to use: calendar-specific mapping, or fall back to first user connection
+    const calRow = await db.execute(
+      sql`SELECT google_calendar_connection_id FROM scheduling_calendars WHERE id = ${calendar.id}`
+    );
+    const calendarConnectionId = (calRow.rows[0] as any)?.google_calendar_connection_id as string | null;
+    const connectionId = calendarConnectionId ?? (await getFirstConnectionForUser(clerkId))?.id ?? null;
+
+    const gcalResult = connectionId ? await createCalendarEvent({
+      connectionId,
       summary: `${eventType.name} — ${booking.attendeeName}`,
       description: booking.attendeeNotes ?? undefined,
       startTime: booking.slotStart,
@@ -174,7 +185,7 @@ router.post("/scheduling/bookings", requireAuth, async (req, res): Promise<void>
       attendeeName: booking.attendeeName,
       timezone: calendar.timezone,
       hostEmail: calendar.hostEmail,
-    });
+    }) : null;
     if (gcalResult) {
       meetLink = gcalResult.meetLink;
       googleEventId = gcalResult.eventId;
