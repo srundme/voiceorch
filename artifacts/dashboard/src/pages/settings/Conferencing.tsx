@@ -20,7 +20,7 @@ async function fetchConnections(): Promise<GoogleConnection[]> {
   return r.json();
 }
 
-export default function ConferencingPage() {
+export default function ConferencingPage({ embedded = false }: { embedded?: boolean }) {
   const [connections, setConnections] = useState<GoogleConnection[]>([]);
   const [loading, setLoading]         = useState(true);
   const [connecting, setConnecting]   = useState(false);
@@ -87,13 +87,15 @@ export default function ConferencingPage() {
   const hasConnections = connections.length > 0;
 
   return (
-    <div className="flex flex-col gap-6 p-6 max-w-3xl mx-auto">
-      <div>
-        <h1 className="text-xl font-semibold">Conferencing</h1>
-        <p className="text-sm text-muted-foreground">
-          Connect Google Calendar accounts — Meet links are auto-generated and included in every booking confirmation
-        </p>
-      </div>
+    <div className="flex flex-col gap-6 max-w-3xl">
+      {!embedded && (
+        <div>
+          <h1 className="text-xl font-semibold">Conferencing</h1>
+          <p className="text-sm text-muted-foreground">
+            Connect Google Calendar accounts — Meet links are auto-generated and included in every booking confirmation
+          </p>
+        </div>
+      )}
 
       {/* Google Meet card */}
       <Card className={hasConnections ? "border-emerald-300 bg-emerald-50/20" : ""}>

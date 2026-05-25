@@ -1,9 +1,9 @@
 import React, { useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import {
   Phone, Copy, Check, ExternalLink, Zap, Key, BookOpen,
   ChevronDown, ChevronRight, AlertTriangle, CheckCircle2,
-  RefreshCw, Plus, Eye, EyeOff, Users, Video
+  RefreshCw, Plus, Eye, EyeOff, Users, Settings2, Calendar, Video
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,9 +12,12 @@ import { useListAgents, useListProviders, useGetAccount, useRegenerateApiKey, us
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import type { ProviderConfigProviderType } from "@workspace/api-client-react";
+import CalendarsPage from "@/pages/scheduling/Calendars";
+import ConferencingPage from "@/pages/settings/Conferencing";
 
 const BASE_DOMAIN = window.location.hostname;
 const BASE_URL = `https://${BASE_DOMAIN}`;
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -134,7 +137,7 @@ function MaskedKey({ value }: { value: string | null | undefined }) {
   );
 }
 
-export default function SettingsPage() {
+function GeneralTab() {
   const [expandedProvider, setExpandedProvider] = useState<string | null>("twilio");
   const [selectedAgentId, setSelectedAgentId] = useState<number>(1);
   const queryClient = useQueryClient();
@@ -148,23 +151,9 @@ export default function SettingsPage() {
 
   const providerTypes: ProviderConfigProviderType[] = ["asr", "llm", "tts", "telephony"];
   const configuredTypes = new Set(providers?.map(p => p.providerType) ?? []);
-  const allConfigured = providerTypes.every(t => configuredTypes.has(t));
 
   return (
-    <div className="h-full overflow-y-auto">
-    <div className="space-y-6 p-6 md:p-8 pt-6 max-w-5xl mx-auto">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Settings</h2>
-          <p className="text-muted-foreground">Configure your SnapServe integration and go live.</p>
-        </div>
-        <Link href="/app/settings/conferencing">
-          <Button variant="outline" size="sm" className="gap-1.5 shrink-0">
-            <Video className="h-3.5 w-3.5" /> Conferencing
-          </Button>
-        </Link>
-      </div>
-
+    <div className="space-y-6">
       {/* Readiness checklist */}
       <Card>
         <CardHeader>
@@ -234,7 +223,6 @@ export default function SettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
-          {/* Agent selector */}
           <div className="flex items-center gap-3 p-3 rounded-md bg-muted/40 border border-border/50">
             <Phone className="h-4 w-4 text-muted-foreground shrink-0" />
             <span className="text-sm text-muted-foreground shrink-0">Generate URLs for agent:</span>
@@ -249,7 +237,6 @@ export default function SettingsPage() {
             </select>
           </div>
 
-          {/* Provider guides */}
           {(["twilio", "plivo", "vobiz"] as const).map(provider => (
             <div key={provider} className="border border-border/60 rounded-lg overflow-hidden">
               <button
@@ -390,6 +377,63 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+type SettingsTab = "general" | "calendar" | "conferencing";
+
+const TABS: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
+  { id: "general",       label: "General",       icon: <Settings2 className="h-4 w-4" /> },
+  { id: "calendar",      label: "Calendar",      icon: <Calendar  className="h-4 w-4" /> },
+  { id: "conferencing",  label: "Conferencing",  icon: <Video     className="h-4 w-4" /> },
+];
+
+export default function SettingsPage() {
+  const [location, navigate] = useLocation();
+
+  const activeTab: SettingsTab =
+    location.includes("/settings/calendar")     ? "calendar"
+    : location.includes("/settings/conferencing") ? "conferencing"
+    : "general";
+
+  function goTab(tab: SettingsTab) {
+    if (tab === "general")      navigate(`${BASE}/app/settings`);
+    else if (tab === "calendar") navigate(`${BASE}/app/settings/calendar`);
+    else                         navigate(`${BASE}/app/settings/conferencing`);
+  }
+
+  return (
+    <div className="h-full overflow-y-auto">
+      <div className="space-y-6 p-6 md:p-8 pt-6 max-w-5xl mx-auto">
+        {/* Page header */}
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">Settings</h2>
+          <p className="text-muted-foreground">Configure your VoiceOrch integration and go live.</p>
+        </div>
+
+        {/* Tab bar */}
+        <div className="flex gap-1 border-b border-border/60">
+          {TABS.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => goTab(tab.id)}
+              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
+                activeTab === tab.id
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
+              }`}
+            >
+              {tab.icon}
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Tab content */}
+        {activeTab === "general"      && <GeneralTab />}
+        {activeTab === "calendar"     && <CalendarsPage embedded />}
+        {activeTab === "conferencing" && <ConferencingPage embedded />}
+      </div>
     </div>
   );
 }

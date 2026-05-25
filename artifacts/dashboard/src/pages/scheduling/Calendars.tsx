@@ -387,7 +387,7 @@ function CalendarCard({
   );
 }
 
-export default function CalendarsPage() {
+export default function CalendarsPage({ embedded = false }: { embedded?: boolean }) {
   const [createOpen, setCreateOpen] = useState(false);
   const { data: calendars, isLoading } = useListCalendars();
   const { data: agents } = useListAgents();
@@ -416,24 +416,35 @@ export default function CalendarsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6 max-w-3xl mx-auto">
-      {/* Back + header */}
-      <div>
-        <Link href={`${BASE}/app/scheduling`}>
-          <button className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4 transition-colors">
-            <ArrowLeft className="h-3.5 w-3.5" /> Scheduling
-          </button>
-        </Link>
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-semibold">Calendars</h1>
-            <p className="text-sm text-muted-foreground">One calendar per agent — links the agent to bookable event types</p>
+    <div className="flex flex-col gap-6 max-w-3xl">
+      {/* Back + header — hidden when embedded inside Settings tabs */}
+      {!embedded && (
+        <div>
+          <Link href={`${BASE}/app/scheduling`}>
+            <button className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4 transition-colors">
+              <ArrowLeft className="h-3.5 w-3.5" /> Scheduling
+            </button>
+          </Link>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-semibold">Calendars</h1>
+              <p className="text-sm text-muted-foreground">One calendar per agent — links the agent to bookable event types</p>
+            </div>
+            <Button size="sm" onClick={() => setCreateOpen(true)} className="gap-1.5">
+              <Plus className="h-4 w-4" /> New Calendar
+            </Button>
           </div>
+        </div>
+      )}
+
+      {embedded && (
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">One calendar per agent — links the agent to bookable event types</p>
           <Button size="sm" onClick={() => setCreateOpen(true)} className="gap-1.5">
             <Plus className="h-4 w-4" /> New Calendar
           </Button>
         </div>
-      </div>
+      )}
 
       {/* Google Meet prompt (only if no connections) */}
       {googleConnections.length === 0 && (calendars?.length ?? 0) > 0 && (

@@ -205,11 +205,12 @@ function AppRoutes() {
         <Route path="/app/campaigns/:id" component={CampaignDetailPage} />
         <Route path="/app/campaigns" component={CampaignsPage} />
         <Route path="/app/scheduling/bookings/:id" component={SchedulingBookingDetailPage} />
-        <Route path="/app/scheduling/calendars" component={SchedulingCalendarsPage} />
+        <Route path="/app/scheduling/calendars" component={() => <SchedulingCalendarsPage />} />
         <Route path="/app/scheduling/event-types" component={SchedulingEventTypesPage} />
         <Route path="/app/scheduling/availability" component={SchedulingAvailabilityPage} />
         <Route path="/app/scheduling" component={SchedulingPage} />
-        <Route path="/app/settings/conferencing" component={ConferencingPage} />
+        <Route path="/app/settings/calendar" component={Settings} />
+        <Route path="/app/settings/conferencing" component={Settings} />
         <Route path="/app/settings" component={Settings} />
         <Route component={NotFound} />
       </Switch>
