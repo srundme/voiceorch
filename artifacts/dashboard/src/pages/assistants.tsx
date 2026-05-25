@@ -768,7 +768,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
       const res = await apiFetch("/api/wizard/preview-voice", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ voiceId, text: PREVIEW_TEXT }),
+        body: JSON.stringify({ voiceId, text: PREVIEW_TEXT, modelId: ttsModel || "sonic-3.5" }),
       });
       if (!res.ok) throw new Error("preview failed");
       const blob = await res.blob();

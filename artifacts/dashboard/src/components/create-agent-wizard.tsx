@@ -158,7 +158,7 @@ function useVoicePreview(apiFetch: (path: string, init?: RequestInit) => Promise
     try {
       const res = await apiFetch("/api/wizard/preview-voice", {
         method: "POST",
-        body: JSON.stringify({ voiceId, text: PREVIEW_TEXT }),
+        body: JSON.stringify({ voiceId, text: PREVIEW_TEXT, modelId: "sonic-3.5" }),
       });
 
       if (res.ok) {

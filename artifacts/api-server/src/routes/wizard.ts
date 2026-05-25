@@ -209,8 +209,16 @@ router.get("/wizard/voices", requireDbUser, async (req, res): Promise<void> => {
 
 // ── POST /wizard/preview-voice ────────────────────────────────────────────────
 
+const PREVIEW_VALID_MODELS = new Set([
+  "sonic-3.5", "sonic-3.5-2026-05-04", "sonic-latest",
+  "sonic-3", "sonic-3-2026-01-12", "sonic-3-latest",
+  "sonic-2", "sonic-2-2025-03-07", "sonic-2-2025-04-16", "sonic-2-2025-05-08", "sonic-2-2025-06-11",
+  "sonic-turbo", "sonic-turbo-2025-03-07", "sonic-turbo-2025-06-04",
+  "sonic-english", "sonic-multilingual",
+]);
+
 router.post("/wizard/preview-voice", requireDbUser, async (req, res): Promise<void> => {
-  const { voiceId, text } = req.body as { voiceId?: string; text?: string };
+  const { voiceId, text, modelId } = req.body as { voiceId?: string; text?: string; modelId?: string };
 
   if (!voiceId) {
     res.status(400).json({ error: "voiceId required" });
@@ -224,17 +232,19 @@ router.post("/wizard/preview-voice", requireDbUser, async (req, res): Promise<vo
   }
 
   const previewText = text?.slice(0, 200) ?? "Hello! I am your AI voice assistant. I am here to help you today. How can I assist you?";
+  // Use the caller-supplied model (so the preview matches the agent's model), default to sonic-3.5
+  const model = (modelId && PREVIEW_VALID_MODELS.has(modelId)) ? modelId : "sonic-3.5";
 
   try {
     const response = await fetch("https://api.cartesia.ai/tts/bytes", {
       method: "POST",
       headers: {
         "X-API-Key": cartesiaKey,
-        "Cartesia-Version": "2024-06-10",
+        "Cartesia-Version": "2026-03-01",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model_id: "sonic-2",
+        model_id: model,
         transcript: previewText,
         voice: { mode: "id", id: voiceId },
         output_format: { container: "wav", encoding: "pcm_f32le", sample_rate: 22050 },
