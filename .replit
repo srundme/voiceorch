@@ -46,8 +46,8 @@ channel = "stable-25_05"
 
 [userenv.shared]
 ADMIN_TOKEN = "theaitel2025"
-GOOGLE_CLIENT_ID = "709589107531-0bai7anh6tvcuub726v9pdtc79ggia9j.apps.googleusercontent.com"
-GOOGLE_CLIENT_SECRET = "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"
+GOOGLE_CLIENT_ID = "1096607196585-5h3i54j6fiisvp3gaigvrdvg9tnk4h1r.apps.googleusercontent.com"
+GOOGLE_CLIENT_SECRET = "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"
 GOOGLE_REDIRECT_URI = "https://bolna-orchestrator.replit.app/api/scheduling/google/callback"
 
 [userenv.production]
