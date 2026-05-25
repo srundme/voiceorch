@@ -1,0 +1,176 @@
+This is the correct next-level architecture prompt for Replit based on your current system.
+
+We need to redesign and improve the Google Calendar + Google Meet integration architecture for our AI Voice Agent Scheduling Infrastructure.
+
+Current system status:
+
+BUILT FEATURES:
+
+* Scheduling engine
+* Calendars
+* Event types
+* Availability schedules
+* Public booking pages
+* Booking system
+* Email notifications
+* Google Meet integration
+
+CURRENT ISSUE:
+Right now users must manually enter:
+
+* Google Client ID
+* Google Client Secret
+
+This is NOT the desired architecture.
+
+====================================================
+
+NEW REQUIREMENT
+
+We are building a multi-tenant AI Voice Agent platform.
+
+Each customer should be able to connect THEIR OWN:
+
+* Google Calendar
+* Google Meet
+
+using ONLY Google OAuth login.
+
+NO manual Client ID / Client Secret entry should be required from end users.
+
+====================================================
+
+TARGET USER EXPERIENCE
+
+Example 1:
+Hospital AI Agent
+
+Customer:
+[zho_hospital@gmail.com](mailto:zho_hospital@gmail.com)
+
+Inside our platform:
+
+* user clicks "Connect Google Calendar"
+* Google OAuth popup opens
+* user logs into Google
+* grants permissions
+* their Google Calendar gets connected
+* Google Meet automatically works for bookings
+
+====================================================
+
+Example 2:
+Real Estate AI Agent
+
+Customer:
+[dra@gmail.com](mailto:dra@gmail.com)
+
+Inside our platform:
+
+* user clicks connect
+* logs into Google
+* their Google Calendar + Meet gets connected
+* bookings for that agent use THAT Google account
+
+====================================================
+
+IMPORTANT MULTI-TENANT REQUIREMENTS
+
+Different AI agents may use different Google accounts.
+
+Example:
+
+* Hospital agent → hospital calendar
+* Real estate agent → realtor calendar
+* Finance agent → finance calendar
+
+Each connected Google account must remain isolated and mapped correctly.
+
+====================================================
+
+WHAT WE WANT
+
+We want proper SaaS-style Google OAuth architecture.
+
+The platform owner (us) should:
+
+* create ONE Google OAuth app
+* configure OAuth once in Google Cloud
+
+End users should:
+
+* only login with Google
+* no developer setup
+* no Google Cloud Console usage
+* no Client ID / Secret handling
+
+====================================================
+
+ARCHITECTURE REQUIREMENTS
+
+Need proper implementation for:
+
+1. Multi-tenant Google OAuth
+2. Per-user token storage
+3. Secure token encryption
+4. Refresh token handling
+5. Auto token refresh
+6. Google Calendar API integration
+7. Google Meet link creation
+8. Disconnect / revoke integration
+9. Agent-level calendar mapping
+10. Support multiple calendars per organization in future
+
+====================================================
+
+IMPORTANT PRODUCT CONTEXT
+
+This scheduling system is part of an:
+AI Voice Agent Orchestration Platform.
+
+The AI agents will:
+
+* check availability
+* create bookings
+* create Google Meet links
+* manage appointments
+
+using connected Google accounts.
+
+====================================================
+
+WHAT I NEED FROM YOU
+
+Analyze the current implementation and redesign it professionally.
+
+Please provide:
+
+1. Recommended SaaS OAuth architecture
+2. Database schema changes required
+3. Best way to store Google tokens securely
+4. Token refresh architecture
+5. How to map Google accounts to AI agents
+6. Security best practices
+7. OAuth flow design
+8. Backend API design
+9. Frontend UX flow
+10. Future scalability considerations
+11. Multi-account support architecture
+12. Best practices for Google Calendar + Meet APIs
+
+IMPORTANT:
+Do NOT ask users for Client ID or Client Secret anymore.
+
+We want a true SaaS OAuth flow similar to:
+
+* Calendly
+* Cal.com
+* Notion integrations
+* Slack integrations
+
+where users simply click:
+"Continue with Google"
+
+and everything connects automatically.
+
+After architecture planning, help implement the full production-ready solution.

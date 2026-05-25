@@ -324,8 +324,44 @@ export async function handleWebCallWebSocket(
 
       // 3. LLM — stream tokens, queue TTS per sentence
       const sentenceJobs: Promise<Buffer>[] = [];
-      let tokenBuf  = "";
-      let fullReply = "";
+      let tokenBuf  = "";   // filtered text waiting to be split into sentences
+      let fullReply = "";   // raw LLM output (may include <think> blocks)
+
+      // ── Think-block filter (same as pipeline.ts) ──────────────────────────
+      let inThinkBlock = false;
+      let thinkBuf = "";
+
+      function filterThinkToken(token: string): string {
+        thinkBuf += token;
+        let out = "";
+        while (thinkBuf.length > 0) {
+          if (inThinkBlock) {
+            const closeIdx = thinkBuf.indexOf("</think>");
+            if (closeIdx !== -1) {
+              inThinkBlock = false;
+              thinkBuf = thinkBuf.slice(closeIdx + "</think>".length);
+            } else {
+              const tail = Math.max(0, thinkBuf.length - "</think>".length + 1);
+              thinkBuf = thinkBuf.slice(tail);
+              break;
+            }
+          } else {
+            const openIdx = thinkBuf.indexOf("<think>");
+            if (openIdx !== -1) {
+              out += thinkBuf.slice(0, openIdx);
+              inThinkBlock = true;
+              thinkBuf = thinkBuf.slice(openIdx + "<think>".length);
+            } else {
+              const tail = Math.max(0, thinkBuf.length - "<think>".length + 1);
+              out += thinkBuf.slice(0, tail);
+              thinkBuf = thinkBuf.slice(tail);
+              break;
+            }
+          }
+        }
+        return out;
+      }
+      // ──────────────────────────────────────────────────────────────────────
 
       function queueSentence(text: string) {
         const t = text.trim();
@@ -342,8 +378,10 @@ export async function handleWebCallWebSocket(
         history,
         resolvedSystemPrompt(),
         (token) => {
-          tokenBuf  += token;
-          fullReply += token;
+          fullReply += token;                        // keep raw (for cleaning later)
+          const filtered = filterThinkToken(token);  // strip <think>…</think>
+          if (!filtered) return;                     // token was entirely inside a think block
+          tokenBuf += filtered;
           const [sentences, rest] = extractSentences(tokenBuf);
           for (const s of sentences) queueSentence(s);
           tokenBuf = rest;
@@ -353,13 +391,16 @@ export async function handleWebCallWebSocket(
 
       if (tokenBuf.trim()) queueSentence(tokenBuf);
 
-      if (!fullReply.trim() || sentenceJobs.length === 0) {
+      // Clean the stored reply — strip think blocks from transcript + history
+      const cleanReply = fullReply.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+
+      if (!cleanReply || sentenceJobs.length === 0) {
         sendStatus("listening");
         processing = false;
         return;
       }
 
-      history.push({ role: "assistant", content: fullReply });
+      history.push({ role: "assistant", content: cleanReply });
       sendStatus("speaking");
       speaking = true;
 
@@ -373,7 +414,7 @@ export async function handleWebCallWebSocket(
         if (interrupted || closed) break;
 
         if (!transcriptSent) {
-          send({ type: "transcript", speaker: "agent", text: fullReply });
+          send({ type: "transcript", speaker: "agent", text: cleanReply });
           transcriptSent = true;
         }
 
