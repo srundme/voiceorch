@@ -246,6 +246,7 @@ function CalendarCard({
 }) {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { getToken } = useAuth();
   const del = useDeleteCalendar();
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -265,9 +266,12 @@ function CalendarCard({
     const connectionId = value === "__none__" ? null : value;
     setLinkingGcal(true);
     try {
+      const token = await getToken();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
       const r = await fetch(`${API}/scheduling/calendars/${calendar.id}/google-connection`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers,
         credentials: "include",
         body: JSON.stringify({ connectionId }),
       });
