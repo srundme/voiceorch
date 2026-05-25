@@ -26,6 +26,36 @@ const USE_CASES = [
   { id: "reminder",           label: "Reminder Agent",             desc: "Automate EMI, policy, and interview reminders",                             role: "reminder and follow-up specialist",   service: "automated reminders for EMI payments, policy renewals, and scheduled events", icon: Bell },
 ];
 
+/* ── Appointment Booking micro-wizard ───────────────────────────────────── */
+const MICRO_STEP_LABELS = [
+  "Business & Service", "Call Direction", "Customer Details", "Post Booking", "Escalation",
+];
+const CALL_DIRECTION_OPTS = [
+  "Inbound — customers calling us to book",
+  "Outbound — we call leads to book appointments",
+  "Both",
+];
+const CUSTOMER_DETAIL_OPTS = [
+  "Full Name", "Phone Number", "Email", "Reason for Visit",
+  "Preferred Date and Time", "Budget", "Location or Address",
+];
+const POST_BOOKING_OPTS = [
+  "Send WhatsApp confirmation",
+  "Transfer to a human agent",
+  "Send SMS confirmation",
+  "Just close the call",
+];
+interface MicroAnswers {
+  business: string;
+  callDirection: string;
+  customerDetails: string[];
+  postBooking: string;
+  escalation: string;
+}
+const MICRO_INIT: MicroAnswers = {
+  business: "", callDirection: "", customerDetails: [], postBooking: "", escalation: "",
+};
+
 /* ── Language catalogue ─────────────────────────────────────────────────── */
 const LANGUAGES = [
   { code: "english",   label: "English" },
@@ -223,6 +253,14 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
   const [loadingVoices, setLoadVoices]= useState(false);
   const [voiceSource, setVoiceSource] = useState<"cartesia" | "browser">("browser");
   const [renderKey, setRenderKey]     = useState(0);
+  /* micro-wizard (Appointment Booking) */
+  const [microActive, setMicroActive]       = useState(false);
+  const [microStep, setMicroStep]           = useState(0); // 0-4 = questions, 5 = summary
+  const [microDir, setMicroDir]             = useState<"forward" | "back">("forward");
+  const [microAnswers, setMicroAnswers]     = useState<MicroAnswers>(MICRO_INIT);
+  const [microRenderKey, setMicroRenderKey] = useState(0);
+  const updateMicro = useCallback((patch: Partial<MicroAnswers>) =>
+    setMicroAnswers(p => ({ ...p, ...patch })), []);
   const fileInputRef                  = useRef<HTMLInputElement>(null);
   const { toast }                     = useToast();
   const qc                            = useQueryClient();
@@ -246,7 +284,47 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
   useEffect(() => { setVoicesRef(state.voices); }, [state.voices]);
 
   /* close & reset */
-  function handleClose() { setState(INITIAL); setStepIdx(0); create.reset(); onClose(); }
+  function handleClose() {
+    setState(INITIAL); setStepIdx(0); create.reset();
+    setMicroActive(false); setMicroStep(0); setMicroAnswers(MICRO_INIT);
+    onClose();
+  }
+
+  /* micro-wizard: go to next/prev step */
+  function microGo(delta: 1 | -1) {
+    setMicroDir(delta === 1 ? "forward" : "back");
+    setMicroStep(s => s + delta);
+    setMicroRenderKey(k => k + 1);
+  }
+
+  /* micro-wizard: on Confirm — build callFlowDescription and advance to Language */
+  function handleMicroConfirm() {
+    let agentDir: AgentDirection = "inbound";
+    if (microAnswers.callDirection.startsWith("Outbound")) agentDir = "outbound";
+    else if (microAnswers.callDirection === "Both") agentDir = "both";
+    const desc = [
+      `Business: ${microAnswers.business}`,
+      `Call direction: ${microAnswers.callDirection}`,
+      `Collect from customer: ${microAnswers.customerDetails.join(", ") || "Not specified"}`,
+      `After booking confirmed: ${microAnswers.postBooking}`,
+      `Escalation / rejection rules: ${microAnswers.escalation.trim() || "None"}`,
+    ].join("\n");
+    update({ agentDirection: agentDir, callFlowDescription: desc });
+    setMicroActive(false);
+    setMicroAnswers(MICRO_INIT);
+    setMicroStep(0);
+    go(1);
+  }
+
+  /* micro: is current step answered? */
+  function microStepValid() {
+    if (microStep === 0) return microAnswers.business.trim().length > 0;
+    if (microStep === 1) return microAnswers.callDirection.length > 0;
+    if (microStep === 2) return microAnswers.customerDetails.length > 0;
+    if (microStep === 3) return microAnswers.postBooking.length > 0;
+    if (microStep === 4) return true; // escalation is optional (text)
+    return true; // summary
+  }
 
   /* keyboard: Esc */
   useEffect(() => {
@@ -372,7 +450,9 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
 
   const currentStep: ManagedStep | null = state.mode === "managed" ? (MANAGED_STEPS[stepIdx] ?? null) : null;
   const totalManagedSteps = MANAGED_STEPS.length;
-  const progress = state.mode === "managed"
+  const progress = microActive
+    ? ((microStep + 1) / 6) * 100
+    : state.mode === "managed"
     ? ((stepIdx + 1) / totalManagedSteps) * 100
     : state.mode === "byop" ? 100 : 0;
 
@@ -398,10 +478,13 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
       {/* Top bar */}
       <div className="flex items-center justify-between px-8 pt-5 pb-3 shrink-0">
         <div className="flex items-center gap-3">
-          {(state.mode !== null) && (
+          {(state.mode !== null || microActive) && (
             <button
               onClick={() => {
-                if (state.mode === "managed" && stepIdx > 0) go(-1);
+                if (microActive) {
+                  if (microStep > 0) microGo(-1);
+                  else { setMicroActive(false); setMicroRenderKey(k => k + 1); }
+                } else if (state.mode === "managed" && stepIdx > 0) go(-1);
                 else { setState(INITIAL); setStepIdx(0); setRenderKey(k => k + 1); }
               }}
               className="flex items-center gap-1.5 text-gray-400 hover:text-gray-700 transition-colors text-sm"
@@ -412,7 +495,14 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
         </div>
 
         <div className="flex items-center gap-4">
-          {state.mode === "managed" && currentStep && (
+          {microActive && (
+            <span className="text-gray-400 text-xs font-mono tracking-widest uppercase">
+              {microStep < 5
+                ? `${String(microStep + 1).padStart(2, "0")} / 05 — ${MICRO_STEP_LABELS[microStep]}`
+                : "Review — Summary"}
+            </span>
+          )}
+          {!microActive && state.mode === "managed" && currentStep && (
             <span className="text-gray-400 text-xs font-mono tracking-widest uppercase">
               {String(stepIdx + 1).padStart(2, "0")} / {String(totalManagedSteps).padStart(2, "0")} — {STEP_LABELS[currentStep]}
             </span>
@@ -426,6 +516,172 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
       {/* Main content area */}
       <div className="flex-1 overflow-y-auto px-6 py-8">
         <div className="w-full max-w-2xl mx-auto min-h-full flex flex-col justify-center">
+
+          {/* ── Appointment Booking micro-wizard ─────────────────────────── */}
+          {microActive && (
+            <SlideStep key={`micro-${microStep}-${microRenderKey}`} direction={microDir}>
+
+              {/* Step 1 — Business & Service */}
+              {microStep === 0 && (
+                <div>
+                  <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">01 / 05</p>
+                  <h2 className="text-3xl font-bold text-gray-900 mb-2">What is your business<br />and what service do you offer?</h2>
+                  <p className="text-gray-400 text-sm mb-8">Describe your business so the agent can introduce itself correctly.</p>
+                  <textarea
+                    autoFocus
+                    rows={4}
+                    placeholder="e.g. We are a physiotherapy clinic offering rehabilitation and pain relief sessions"
+                    value={microAnswers.business}
+                    onChange={e => updateMicro({ business: e.target.value })}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 text-gray-900 text-sm placeholder:text-gray-300 focus:outline-none focus:border-violet-500/60 transition-all resize-none leading-relaxed"
+                  />
+                </div>
+              )}
+
+              {/* Step 2 — Call Direction */}
+              {microStep === 1 && (
+                <div>
+                  <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">02 / 05</p>
+                  <h2 className="text-3xl font-bold text-gray-900 mb-2">Who are you calling —<br />inbound or outbound?</h2>
+                  <p className="text-gray-400 text-sm mb-8">This shapes how the agent opens the call.</p>
+                  <div className="flex flex-col gap-3">
+                    {CALL_DIRECTION_OPTS.map(opt => {
+                      const sel = microAnswers.callDirection === opt;
+                      return (
+                        <button
+                          key={opt}
+                          onClick={() => updateMicro({ callDirection: opt })}
+                          className={cn(
+                            "w-full text-left px-5 py-4 rounded-xl border transition-all duration-150 flex items-center justify-between gap-3",
+                            sel ? "border-violet-400 bg-violet-50 shadow-[0_0_0_1px_rgba(99,102,241,0.2)]"
+                               : "border-gray-200 bg-gray-50 hover:border-gray-300",
+                          )}
+                        >
+                          <span className={cn("font-medium text-sm", sel ? "text-gray-900" : "text-gray-500")}>{opt}</span>
+                          {sel && <Check className="h-4 w-4 text-violet-600 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Step 3 — Customer Details */}
+              {microStep === 2 && (
+                <div>
+                  <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">03 / 05</p>
+                  <h2 className="text-3xl font-bold text-gray-900 mb-2">What should the agent<br />collect before confirming?</h2>
+                  <p className="text-gray-400 text-sm mb-8">Select all the information the agent needs from the customer.</p>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    {CUSTOMER_DETAIL_OPTS.map(opt => {
+                      const sel = microAnswers.customerDetails.includes(opt);
+                      return (
+                        <button
+                          key={opt}
+                          onClick={() => {
+                            const next = sel
+                              ? microAnswers.customerDetails.filter(x => x !== opt)
+                              : [...microAnswers.customerDetails, opt];
+                            updateMicro({ customerDetails: next });
+                          }}
+                          className={cn(
+                            "text-left px-4 py-3.5 rounded-xl border transition-all duration-150 flex items-center gap-3",
+                            sel ? "border-violet-400 bg-violet-50 shadow-[0_0_0_1px_rgba(99,102,241,0.2)]"
+                               : "border-gray-200 bg-gray-50 hover:border-gray-300",
+                          )}
+                        >
+                          <div className={cn(
+                            "h-4 w-4 rounded border-2 shrink-0 flex items-center justify-center transition-colors",
+                            sel ? "border-violet-500 bg-violet-500" : "border-gray-300",
+                          )}>
+                            {sel && <Check className="h-2.5 w-2.5 text-white" />}
+                          </div>
+                          <span className={cn("text-sm font-medium", sel ? "text-gray-900" : "text-gray-500")}>{opt}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {microAnswers.customerDetails.length > 0 && (
+                    <p className="text-xs text-violet-600 mt-3 font-medium">
+                      {microAnswers.customerDetails.length} field{microAnswers.customerDetails.length !== 1 ? "s" : ""} selected
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Step 4 — Post Booking Action */}
+              {microStep === 3 && (
+                <div>
+                  <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">04 / 05</p>
+                  <h2 className="text-3xl font-bold text-gray-900 mb-2">What should the agent do<br />after booking is confirmed?</h2>
+                  <p className="text-gray-400 text-sm mb-8">Choose one action to take when the appointment is locked in.</p>
+                  <div className="flex flex-col gap-3">
+                    {POST_BOOKING_OPTS.map(opt => {
+                      const sel = microAnswers.postBooking === opt;
+                      return (
+                        <button
+                          key={opt}
+                          onClick={() => updateMicro({ postBooking: opt })}
+                          className={cn(
+                            "w-full text-left px-5 py-4 rounded-xl border transition-all duration-150 flex items-center justify-between gap-3",
+                            sel ? "border-violet-400 bg-violet-50 shadow-[0_0_0_1px_rgba(99,102,241,0.2)]"
+                               : "border-gray-200 bg-gray-50 hover:border-gray-300",
+                          )}
+                        >
+                          <span className={cn("font-medium text-sm", sel ? "text-gray-900" : "text-gray-500")}>{opt}</span>
+                          {sel && <Check className="h-4 w-4 text-violet-600 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Step 5 — Escalation & Rejection */}
+              {microStep === 4 && (
+                <div>
+                  <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">05 / 05</p>
+                  <h2 className="text-3xl font-bold text-gray-900 mb-2">When should the agent<br />reject or escalate?</h2>
+                  <p className="text-gray-400 text-sm mb-8">Optional — describe any conditions where the agent should not confirm the booking.</p>
+                  <textarea
+                    autoFocus
+                    rows={4}
+                    placeholder="e.g. Escalate if customer is outside service area, or if budget is below minimum, or if it is an emergency"
+                    value={microAnswers.escalation}
+                    onChange={e => updateMicro({ escalation: e.target.value })}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 text-gray-900 text-sm placeholder:text-gray-300 focus:outline-none focus:border-violet-500/60 transition-all resize-none leading-relaxed"
+                  />
+                  <p className="text-xs text-gray-300 mt-3">Leave blank if the agent should always confirm.</p>
+                </div>
+              )}
+
+              {/* Summary Screen */}
+              {microStep === 5 && (
+                <div>
+                  <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">Review</p>
+                  <h2 className="text-3xl font-bold text-gray-900 mb-2">Here's what your agent<br />will be built on</h2>
+                  <p className="text-gray-400 text-sm mb-8">Review your answers before we generate the agent.</p>
+                  <div className="space-y-3">
+                    {[
+                      { label: "01 / 05 — Business & Service",    value: microAnswers.business },
+                      { label: "02 / 05 — Call Direction",         value: microAnswers.callDirection },
+                      { label: "03 / 05 — Customer Details",       value: microAnswers.customerDetails.join(", ") || "—" },
+                      { label: "04 / 05 — Post Booking Action",    value: microAnswers.postBooking },
+                      { label: "05 / 05 — Escalation / Rejection", value: microAnswers.escalation.trim() || "None" },
+                    ].map(row => (
+                      <div key={row.label} className="p-4 rounded-xl border border-gray-200 bg-gray-50">
+                        <p className="text-gray-400 text-[10px] font-semibold uppercase tracking-[0.15em] mb-1.5">{row.label}</p>
+                        <p className="text-gray-700 text-sm leading-relaxed">{row.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+            </SlideStep>
+          )}
+
+          {!microActive && (
           <SlideStep key={`${state.mode}-${stepIdx}-${renderKey}`} direction={direction}>
 
             {/* ── Mode selection ── */}
@@ -1024,28 +1280,67 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
             )}
 
           </SlideStep>
+          )}
+
         </div>
       </div>
 
       {/* Bottom navigation */}
-      {state.mode !== null && (
+      {(state.mode !== null || microActive) && (
         <div className="px-8 py-5 border-t border-gray-200 shrink-0 flex items-center justify-between">
           <div className="flex gap-1.5">
-            {state.mode === "managed" && MANAGED_STEPS.map((_, i) => (
-              <div
-                key={i}
-                className={cn(
-                  "h-1 rounded-full transition-all duration-300",
-                  i < stepIdx ? "w-5 bg-gray-300"
-                  : i === stepIdx ? "w-5 bg-violet-400"
-                  : "w-2 bg-gray-100",
-                )}
-              />
-            ))}
+            {microActive
+              ? Array.from({ length: 6 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className={cn(
+                      "h-1 rounded-full transition-all duration-300",
+                      i < microStep ? "w-5 bg-gray-300"
+                      : i === microStep ? "w-5 bg-violet-400"
+                      : "w-2 bg-gray-100",
+                    )}
+                  />
+                ))
+              : state.mode === "managed" && MANAGED_STEPS.map((_, i) => (
+                  <div
+                    key={i}
+                    className={cn(
+                      "h-1 rounded-full transition-all duration-300",
+                      i < stepIdx ? "w-5 bg-gray-300"
+                      : i === stepIdx ? "w-5 bg-violet-400"
+                      : "w-2 bg-gray-100",
+                    )}
+                  />
+                ))}
           </div>
 
           <div className="flex items-center gap-3">
-            {state.mode === "managed" && currentStep === "knowledge" && (
+            {/* ── Micro-wizard navigation ── */}
+            {microActive && microStep === 5 && (
+              <button
+                onClick={handleMicroConfirm}
+                className="flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white shadow-lg shadow-violet-500/25 transition-all"
+              >
+                <Check className="h-4 w-4" /> Confirm &amp; Continue
+              </button>
+            )}
+            {microActive && microStep < 5 && (
+              <button
+                onClick={() => microGo(1)}
+                disabled={!microStepValid()}
+                className={cn(
+                  "flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm transition-all",
+                  !microStepValid()
+                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                    : "bg-gray-100 hover:bg-gray-200 text-gray-900 border border-gray-200",
+                )}
+              >
+                Continue <ChevronRight className="h-4 w-4" />
+              </button>
+            )}
+
+            {/* ── Normal wizard navigation ── */}
+            {!microActive && state.mode === "managed" && currentStep === "knowledge" && (
               <button
                 onClick={() => go(1)}
                 className="text-gray-400 hover:text-gray-500 text-sm flex items-center gap-1.5 transition-colors"
@@ -1054,7 +1349,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
               </button>
             )}
 
-            {state.mode === "byop" || currentStep === "skills" ? (
+            {!microActive && (state.mode === "byop" || currentStep === "skills") ? (
               <button
                 onClick={handleCreate}
                 disabled={create.isPending}
@@ -1070,10 +1365,9 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                   : <><Check className="h-4 w-4" /> Create Agent</>
                 }
               </button>
-            ) : currentStep === "requirements" ? (
-              /* requirements step has its own inline Continue buttons — show nothing here */
+            ) : !microActive && currentStep === "requirements" ? (
               null
-            ) : (
+            ) : !microActive ? (
               <button
                 onClick={() => {
                   if (currentStep === "details") {
@@ -1082,6 +1376,13 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                     if (!state.companyName.trim()) errs.companyName = "Company name is required";
                     if (Object.keys(errs).length > 0) { setDetailsErrors(errs); return; }
                     setDetailsErrors({});
+                  }
+                  if (currentStep === "use-case" && state.useCase === "appointment_booking") {
+                    setMicroActive(true);
+                    setMicroStep(0);
+                    setMicroDir("forward");
+                    setMicroRenderKey(k => k + 1);
+                    return;
                   }
                   go(1);
                 }}
@@ -1099,7 +1400,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
               >
                 Continue <ChevronRight className="h-4 w-4" />
               </button>
-            )}
+            ) : null}
           </div>
         </div>
       )}

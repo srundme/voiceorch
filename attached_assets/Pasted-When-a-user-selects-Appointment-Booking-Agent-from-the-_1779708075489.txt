@@ -1,0 +1,32 @@
+When a user selects "Appointment Booking Agent" from the use case selection screen in the Agent Wizard, launch a 5-step micro-wizard before proceeding to agent creation.
+The wizard should display one question at a time with a progress indicator showing 01/05, 02/05 and so on. Each question must have an input field or selectable options. The user must answer before the Continue button becomes active. Add a Back button to go to the previous question and a Continue button to advance.
+
+Step 1 — Business and Service
+Question: "What is your business and what service do you offer?"
+Input type: Text field
+Placeholder: "e.g. We are a physiotherapy clinic offering rehabilitation and pain relief sessions"
+
+Step 2 — Call Direction
+Question: "Who are you calling — inbound customers or outbound leads?"
+Input type: Single select
+Options: Inbound — customers calling us to book, Outbound — we call leads to book appointments, Both
+
+Step 3 — Customer Details
+Question: "What information should the agent collect before confirming the booking?"
+Input type: Multi-select checkboxes
+Options: Full Name, Phone Number, Email, Reason for Visit, Preferred Date and Time, Budget, Location or Address
+
+Step 4 — Post Booking Action
+Question: "What should the agent do after booking is confirmed?"
+Input type: Single select
+Options: Send WhatsApp confirmation, Transfer to a human agent, Send SMS confirmation, Just close the call
+
+Step 5 — Escalation and Rejection
+Question: "Is there any condition where the agent should reject or escalate the booking instead of confirming?"
+Input type: Text field
+Placeholder: "e.g. Escalate if customer is outside service area, or if budget is below minimum, or if it is an emergency"
+
+Summary Screen
+After Step 5, show a summary screen displaying all collected answers clearly. Add a Confirm and Create Agent button at the bottom. On confirm, pass all collected answers as a JSON object to the agent creation flow so it can be used to auto-generate the full detailed agent prompt.
+
+Keep the same Agent Wizard UI style, fonts, card design, and step numbering as the existing wizard. This micro-wizard should feel like a natural continuation of the existing flow.
