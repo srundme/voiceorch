@@ -665,7 +665,39 @@ export async function endSession(sessionId: string): Promise<void> {
             }
           }
 
-          // 3. Fire webhook with complete enriched payload
+          // 3. Evaluate call success against agent's success criteria (if configured)
+          const agentCfgForEval = (ag.agentConfig ?? {}) as Record<string, unknown>;
+          const successCriteria = agentCfgForEval["successCriteria"] as string | undefined;
+          if (successCriteria?.trim() && transcript && transcript.length > 50 && ag.userId) {
+            try {
+              const evalLlmProvs = await db.select().from(providersTable).where(
+                and(
+                  eq(providersTable.isActive, true),
+                  eq(providersTable.userId, ag.userId!),
+                  eq(providersTable.providerName, ag.llmProvider)
+                )
+              );
+              const evalLlmKey = evalLlmProvs[0]?.apiKey;
+              if (evalLlmKey) {
+                const evalLlm = createLLMAdapter(ag.llmProvider, evalLlmKey, ag.llmModel);
+                let evalRaw = "";
+                await evalLlm.chat(
+                  [{ role: "user", content: `Success criteria: ${successCriteria}\n\nCall transcript:\n${transcript.slice(0, 6000)}\n\nDid this call meet the success criteria? Reply with PASS or FAIL on the first line, then one sentence of explanation.` }],
+                  "You evaluate whether a voice call met predefined success criteria. Be objective and concise. Start your response with PASS or FAIL.",
+                  () => {},
+                  (full) => { evalRaw = full; }
+                );
+                if (evalRaw.trim()) {
+                  await db.update(callsTable).set({ successEvaluation: evalRaw.trim() }).where(eq(callsTable.id, session.callId));
+                  logger.info({ sessionId, verdict: evalRaw.trim().slice(0, 60) }, "Post-call success evaluation complete");
+                }
+              }
+            } catch (evalErr) {
+              logger.warn({ sessionId, evalErr }, "Post-call success evaluation failed");
+            }
+          }
+
+          // 4. Fire webhook with complete enriched payload
           if (ag.webhookUrl) {
             const webhookPayload = {
               callId:           session.callId,

@@ -90,6 +90,8 @@ export type AgentConfig = {
   bargeInEnergyThreshold?: number;
   bargeInMinFrames?: number;
   bargeInEchoGraceMs?: number;
+  // Post-call success evaluation
+  successCriteria?: string;  // Free-text criteria; LLM judges PASS/FAIL after each call
 };
 
 export const agentsTable = pgTable("agents", {

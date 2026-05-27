@@ -27,6 +27,8 @@ export const callsTable = pgTable("calls", {
   transferTarget: text("transfer_target"), // E.164 or SIP URI transferred to
   // P2-B: AMD / Voicemail Detection
   amdResult: text("amd_result"),         // "human" | "machine" | "unknown"
+  // Post-call analysis
+  successEvaluation: text("success_evaluation"), // "PASS / FAIL + reason" from LLM pass
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   endedAt: timestamp("ended_at", { withTimezone: true }),
 });

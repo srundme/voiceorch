@@ -881,23 +881,6 @@ export class OrchestrationPipeline {
       }
     }
 
-    // ── Backchanneling: short acknowledgement while LLM thinks ──
-    if (this.agent.backchannelingEnabled && !this.closed && !this.bargeInRequested) {
-      const freq = this.agent.backchannelingFrequency ?? 0.5;
-      if (Math.random() < freq) {
-        const phrase = BACKCHANNEL_PHRASES[Math.floor(Math.random() * BACKCHANNEL_PHRASES.length)]!;
-        this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
-      this.isPlaying = true;
-        try {
-          await this.playSentence(phrase);
-        } catch (err) {
-          logger.error({ callId: this.config.callId, err }, "Backchannel TTS error");
-        } finally {
-          this.isPlaying = false;
-        }
-      }
-    }
-
     // ── Build tool definitions from agent config ──
     const toolDefs: ToolDefinition[] = this.agent.tools.map((t): ToolDefinition => {
       if (t.type === "native_booking") {
@@ -965,56 +948,10 @@ export class OrchestrationPipeline {
     let triggeredToolArgs: Record<string, unknown> = {};
 
     // ── Think-block filter (streaming) ───────────────────────────────────────
-    // Reasoning models (DeepSeek-R1, Sarvam, etc.) emit <think>…</think> blocks
-    // before their answer.  We must strip these from the TTS stream so the agent
-    // doesn't read the internal reasoning out loud.
-    //
-    // State machine: track whether the current token position is inside a think
-    // block.  Tokens may straddle the <think> / </think> boundary so we handle
-    // partial tags correctly.
-    let inThinkBlock = false;
-    let thinkBuf = "";  // accumulates partial tag characters so we can detect straddled boundaries
-
-    /**
-     * Filters one streaming token: removes any <think>…</think> content.
-     * Returns the portion of the token that should flow to TTS / pendingText.
-     */
-    function filterThinkToken(token: string): string {
-      // Append to tag-detection buffer
-      thinkBuf += token;
-      let out = "";
-
-      while (thinkBuf.length > 0) {
-        if (inThinkBlock) {
-          // Looking for closing tag
-          const closeIdx = thinkBuf.indexOf("</think>");
-          if (closeIdx !== -1) {
-            inThinkBlock = false;
-            thinkBuf = thinkBuf.slice(closeIdx + "</think>".length);
-          } else {
-            // Might be a partial </think — keep tail in buffer, discard rest
-            const tail = Math.max(0, thinkBuf.length - "</think>".length + 1);
-            thinkBuf = thinkBuf.slice(tail); // keep only potential partial tag
-            break;
-          }
-        } else {
-          // Looking for opening tag
-          const openIdx = thinkBuf.indexOf("<think>");
-          if (openIdx !== -1) {
-            out += thinkBuf.slice(0, openIdx);
-            inThinkBlock = true;
-            thinkBuf = thinkBuf.slice(openIdx + "<think>".length);
-          } else {
-            // Might be a partial <think — keep tail, flush safe prefix
-            const tail = Math.max(0, thinkBuf.length - "<think>".length + 1);
-            out += thinkBuf.slice(0, tail);
-            thinkBuf = thinkBuf.slice(tail);
-            break;
-          }
-        }
-      }
-      return out;
-    }
+    // Strips <think>…</think> reasoning blocks from models like DeepSeek-R1.
+    // makeThinkFilter() returns a stateful per-turn closure (shared with
+    // continueWithToolResult via the same factory).
+    const filterThinkToken = makeThinkFilter();
 
     const sentenceQueue: string[] = [];
     let wakePlayer: (() => void) | null = null;
@@ -1051,6 +988,20 @@ export class OrchestrationPipeline {
     };
 
     const playPromise = playTask();
+
+    // ── Backchannel: enqueue filler CONCURRENT with LLM startup ──────────────
+    // By enqueuing before the LLM call, playTask immediately starts TTS-ing the
+    // filler phrase while KB retrieval + LLM warm up.  This fills the dead
+    // silence between the user finishing speaking and the first agent word —
+    // instead of sequentially awaiting playSentence (old approach, which added
+    // the filler duration as extra latency on top of LLM time).
+    if (this.agent.backchannelingEnabled && !this.closed && !this.bargeInRequested) {
+      const freq = this.agent.backchannelingFrequency ?? 0.5;
+      if (Math.random() < freq) {
+        const phrase = BACKCHANNEL_PHRASES[Math.floor(Math.random() * BACKCHANNEL_PHRASES.length)]!;
+        enqueue(phrase);
+      }
+    }
 
     // P1-B: KB context injection — retrieve semantically relevant chunks before LLM call
     let systemPromptForTurn = this.resolvedSystemPrompt();
@@ -1582,29 +1533,84 @@ export class OrchestrationPipeline {
    * After a native scheduling tool executes, push its structured result to
    * conversation history and run a follow-up LLM turn so the agent responds
    * naturally to the caller based on the outcome.
+   *
+   * Uses the same sentence-queue streaming pattern as processTurn so the first
+   * TTS chunk starts as soon as the LLM emits the first sentence boundary —
+   * not after the full response is buffered.
    */
   private async continueWithToolResult(toolName: string, result: string): Promise<void> {
     this.conversationHistory.push({ role: "user", content: `[Tool result for ${toolName}]: ${result}` });
 
     let llmResponse = "";
+    let pendingText = "";
+    let allEnqueued = false;
+
+    const filterThinkToken = makeThinkFilter();
+
+    const sentenceQueue: string[] = [];
+    let wakePlayer: (() => void) | null = null;
+
+    const enqueue = (text: string): void => {
+      sentenceQueue.push(text);
+      if (wakePlayer) { const w = wakePlayer; wakePlayer = null; w(); }
+    };
+
+    const playTask = async (): Promise<void> => {
+      let idx = 0;
+      while (true) {
+        if (idx < sentenceQueue.length) {
+          const text = sentenceQueue[idx++]!;
+          this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
+          this.isPlaying = true;
+          try { await this.playSentence(text); } catch (err) {
+            logger.error({ callId: this.config.callId, err, text: text.slice(0, 40) }, "continueWithToolResult TTS error");
+          }
+          if (this.bargeInRequested) break;
+        } else if (allEnqueued) {
+          break;
+        } else {
+          await new Promise<void>((r) => { wakePlayer = r; });
+        }
+      }
+      this.isPlaying = false;
+    };
+
+    const playPromise = playTask();
+
     try {
       await this.llm.chat(
         this.conversationHistory,
         this.resolvedSystemPrompt(),
-        () => {},
+        (token) => {
+          llmResponse += token;
+          const filtered = filterThinkToken(token);
+          if (!filtered) return;
+          pendingText += filtered;
+          const { sentences, remainder } = extractSentences(pendingText);
+          for (const s of sentences) enqueue(s);
+          pendingText = remainder;
+        },
         async (fullText) => { llmResponse = fullText; },
       );
     } catch (err) {
       logger.error({ callId: this.config.callId, err }, "continueWithToolResult LLM call failed");
+      allEnqueued = true;
+      const wErr = wakePlayer as (() => void) | null; wakePlayer = null; if (wErr) wErr();
+      await playPromise;
       return;
     }
 
-    if (llmResponse.trim()) {
-      const cleaned = llmResponse.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
-      this.conversationHistory.push({ role: "assistant", content: cleaned });
-      this.config.onTranscript("agent", cleaned);
+    const tail = pendingText.trim();
+    if (tail.length >= 2) enqueue(tail);
+    allEnqueued = true;
+    const wFinal = wakePlayer as (() => void) | null; wakePlayer = null; if (wFinal) wFinal();
+    await playPromise;
+
+    const cleanResponse = llmResponse.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+    if (cleanResponse) {
+      this.conversationHistory.push({ role: "assistant", content: cleanResponse });
+      this.config.onTranscript("agent", cleanResponse);
       this.config.onConversationUpdate?.(this.conversationHistory);
-      await this.speakRaw(cleaned);
     }
   }
 
@@ -1742,19 +1748,131 @@ function parsePreferredDate(
   return { searchStart: now };
 }
 
+/**
+ * Factory that returns a stateful streaming think-block filter.
+ * Strips <think>…</think> blocks emitted by reasoning models (DeepSeek-R1 etc.)
+ * from the token stream before text reaches TTS.  Returns a per-turn closure so
+ * each turn (and continueWithToolResult) has independent state.
+ */
+function makeThinkFilter(): (token: string) => string {
+  let inThinkBlock = false;
+  let thinkBuf = "";
+
+  return function filterThinkToken(token: string): string {
+    thinkBuf += token;
+    let out = "";
+
+    while (thinkBuf.length > 0) {
+      if (inThinkBlock) {
+        const closeIdx = thinkBuf.indexOf("</think>");
+        if (closeIdx !== -1) {
+          inThinkBlock = false;
+          thinkBuf = thinkBuf.slice(closeIdx + "</think>".length);
+        } else {
+          const tail = Math.max(0, thinkBuf.length - "</think>".length + 1);
+          thinkBuf = thinkBuf.slice(tail);
+          break;
+        }
+      } else {
+        const openIdx = thinkBuf.indexOf("<think>");
+        if (openIdx !== -1) {
+          out += thinkBuf.slice(0, openIdx);
+          inThinkBlock = true;
+          thinkBuf = thinkBuf.slice(openIdx + "<think>".length);
+        } else {
+          const tail = Math.max(0, thinkBuf.length - "<think>".length + 1);
+          out += thinkBuf.slice(0, tail);
+          thinkBuf = thinkBuf.slice(tail);
+          break;
+        }
+      }
+    }
+    return out;
+  };
+}
+
+/**
+ * Splits accumulated LLM streaming text into complete sentences ready for TTS.
+ *
+ * Improvements over the naive regex approach:
+ *  • "!" and "?" are always boundaries (they don't appear in abbreviations).
+ *  • "..." (ellipsis) is treated as a single boundary.
+ *  • "." is a boundary ONLY when followed by whitespace + an uppercase letter,
+ *    quote, or opening paren — this correctly skips:
+ *      - Abbreviations:   "Dr. Smith", "Mr. Lee", "e.g. this"  (word before "." ≤ 4 letters)
+ *      - Decimal numbers: "$1,200.50"  (period not followed by space)
+ *      - Domain names:    "google.com" (period not followed by space)
+ *  • Falls back to comma-clause dispatch for long responses with no boundary yet.
+ */
 function extractSentences(text: string): { sentences: string[]; remainder: string } {
   const sentences: string[] = [];
+  let i = 0;
+  let segStart = 0;
 
-  const re = /([^.!?]*[.!?]+)\s*/g;
-  let last = 0;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
-    const s = m[1].trim();
-    if (s.length >= 4) sentences.push(s);
-    last = re.lastIndex;
+  while (i < text.length) {
+    const ch = text[i]!;
+
+    if (ch === '!' || ch === '?') {
+      // Consume run of consecutive !/?
+      while (i + 1 < text.length && (text[i + 1] === '!' || text[i + 1] === '?')) i++;
+      const s = text.slice(segStart, i + 1).trim();
+      if (s.length >= 4) sentences.push(s);
+      i++;
+      while (i < text.length && text[i] === ' ') i++;
+      segStart = i;
+
+    } else if (ch === '.' && text[i + 1] === '.' && text[i + 2] === '.') {
+      // Ellipsis "..." — single boundary
+      const s = text.slice(segStart, i + 3).trim();
+      if (s.length >= 4) sentences.push(s);
+      i += 3;
+      while (i < text.length && text[i] === ' ') i++;
+      segStart = i;
+
+    } else if (ch === '.') {
+      const next = i + 1;
+      if (next >= text.length) {
+        // Period at end of string
+        const s = text.slice(segStart, i + 1).trim();
+        if (s.length >= 4) sentences.push(s);
+        i++;
+        segStart = i;
+      } else if (text[next] === ' ' || text[next] === '\n') {
+        // Look at first non-space character after the period
+        let j = next + 1;
+        while (j < text.length && text[j] === ' ') j++;
+        const afterSpace = j < text.length ? text[j] : undefined;
+
+        if (afterSpace !== undefined && /[A-Z"'(\u2018\u201C]/.test(afterSpace)) {
+          // Only split when word before the period is > 4 letters (not an abbreviation).
+          // A ≤4-letter all-alpha word (Mr, Mrs, Dr, Prof, vs, etc.) is almost
+          // certainly an abbreviation.  Digits/punctuation before "." mean we're
+          // NOT in an abbreviation (e.g. "cost $1,200.50. Next…").
+          const wordBefore = text.slice(segStart, i).match(/([A-Za-z]{1,4})$/)?.[1];
+          const isAbbrev = wordBefore !== undefined; // matched = 1–4 letter suffix = abbreviation
+          if (!isAbbrev) {
+            const s = text.slice(segStart, i + 1).trim();
+            if (s.length >= 4) sentences.push(s);
+            segStart = j;
+            i = j;
+          } else {
+            i++;
+          }
+        } else {
+          i++;
+        }
+      } else {
+        i++; // period not followed by space (decimal, URL, etc.)
+      }
+    } else {
+      i++;
+    }
   }
-  let remainder = text.slice(last);
 
+  let remainder = text.slice(segStart);
+
+  // Comma-clause fallback: keep TTS latency low on long list-heavy responses
+  // with no sentence boundary yet.
   if (sentences.length === 0 && remainder.length >= 60) {
     const commaIdx = remainder.lastIndexOf(", ");
     if (commaIdx >= 30) {
