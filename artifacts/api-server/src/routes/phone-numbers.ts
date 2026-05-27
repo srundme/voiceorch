@@ -16,8 +16,6 @@ import {
 
 const router: IRouter = Router();
 
-const PHONE_NUMBER_COST_CENTS = 500; // $5.00
-
 // ── Platform-level Vobiz credentials ────────────────────────────────────────
 function getPlatformVobizCreds() {
   const authId    = process.env["VOBIZ_AUTH_ID"];
@@ -25,7 +23,9 @@ function getPlatformVobizCreds() {
   return { authId, authToken, configured: !!(authId && authToken) };
 }
 
-const VOBIZ_PARTNER_BASE = "https://api.vobiz.ai/api/v1/partner";
+// Vobiz Account API base — used for live inventory, purchase, and release.
+// Each call uses the platform master account (MA_) credentials.
+const VOBIZ_ACCOUNT_BASE = "https://api.vobiz.ai/api/v1/Account";
 
 function vobizHeaders(authId: string, authToken: string) {
   return {
@@ -36,37 +36,96 @@ function vobizHeaders(authId: string, authToken: string) {
   };
 }
 
-interface VobizPartnerNumber {
+interface VobizInventoryNumber {
   id: string;
   e164: string;
   country: string;
   region?: string;
+  setup_fee?: number;
+  monthly_fee?: number;
+  currency?: string;
+  capabilities?: { voice?: boolean; sms?: boolean };
+  voice_enabled?: boolean;
+  status?: string;
+  is_trial_number?: boolean;
+  aadhaar_verification_required?: boolean;
+}
+
+interface VobizOwnedNumber {
+  id: string;
+  auth_id: string;
+  e164: string;
+  country: string;
+  region?: string;
+  setup_fee?: number;
   monthly_fee?: number;
   currency?: string;
   capabilities?: { voice?: boolean };
-  status?: string;
   voice_enabled?: boolean;
+  status?: string;
 }
 
-/** Fetch all numbers in the platform's Vobiz partner inventory (paginated). */
-async function fetchPartnerInventory(authId: string, authToken: string): Promise<VobizPartnerNumber[]> {
-  const headers = vobizHeaders(authId, authToken);
-  const all: VobizPartnerNumber[] = [];
-  let page = 1;
-  const perPage = 100;
-  while (true) {
-    const resp = await fetch(`${VOBIZ_PARTNER_BASE}/numbers?page=${page}&per_page=${perPage}`, { headers });
-    if (!resp.ok) {
-      const err = await resp.text();
-      throw new Error(`Vobiz partner numbers error ${resp.status}: ${err}`);
-    }
-    const data = await resp.json() as { items?: VobizPartnerNumber[]; numbers?: VobizPartnerNumber[]; total?: number };
-    const items = data.items ?? data.numbers ?? [];
-    all.push(...items);
-    if (all.length >= (data.total ?? 0) || items.length < perPage) break;
-    page++;
+/** Fetch available (unassigned) numbers from Vobiz inventory with optional filters. */
+async function fetchVobizInventory(
+  authId: string,
+  authToken: string,
+  opts: { country?: string; search?: string; page?: number; perPage?: number }
+): Promise<{ items: VobizInventoryNumber[]; total: number }> {
+  const params = new URLSearchParams();
+  if (opts.country)          params.set("country", opts.country);
+  if (opts.search)           params.set("search",  opts.search);
+  params.set("page",     String(opts.page ?? 1));
+  params.set("per_page", String(opts.perPage ?? 25));
+
+  const url = `${VOBIZ_ACCOUNT_BASE}/${authId}/inventory/numbers?${params}`;
+  const resp = await fetch(url, { headers: vobizHeaders(authId, authToken) });
+  if (!resp.ok) {
+    const err = await resp.text();
+    throw new Error(`Vobiz inventory error ${resp.status}: ${err}`);
   }
-  return all;
+  const data = await resp.json() as { items?: VobizInventoryNumber[]; total?: number };
+  return { items: data.items ?? [], total: data.total ?? 0 };
+}
+
+/** Purchase a number from Vobiz inventory and assign it to the platform account. */
+async function purchaseVobizNumber(
+  authId: string,
+  authToken: string,
+  e164: string
+): Promise<VobizOwnedNumber> {
+  const url = `${VOBIZ_ACCOUNT_BASE}/${authId}/numbers/purchase-from-inventory`;
+  const resp = await fetch(url, {
+    method:  "POST",
+    headers: vobizHeaders(authId, authToken),
+    body:    JSON.stringify({ e164, currency: "INR" }),
+  });
+  if (!resp.ok) {
+    const err = await resp.text();
+    throw new Error(`Vobiz purchase error ${resp.status}: ${err}`);
+  }
+  const data = await resp.json() as { number?: VobizOwnedNumber; message?: string };
+  if (!data.number) throw new Error("Vobiz purchase response missing number object");
+  return data.number;
+}
+
+/** Release a number back to Vobiz inventory. */
+async function releaseVobizNumber(
+  authId: string,
+  authToken: string,
+  e164: string
+): Promise<void> {
+  // Path parameter is the raw number without "+" per Vobiz docs
+  const e164Path = e164.startsWith("+") ? e164.slice(1) : e164;
+  const url = `${VOBIZ_ACCOUNT_BASE}/${authId}/numbers/${encodeURIComponent(e164Path)}`;
+  const resp = await fetch(url, {
+    method:  "DELETE",
+    headers: vobizHeaders(authId, authToken),
+  });
+  // 204 or 200 both indicate success; 404 means already released — treat as success
+  if (!resp.ok && resp.status !== 404) {
+    const err = await resp.text();
+    throw new Error(`Vobiz release error ${resp.status}: ${err}`);
+  }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -99,9 +158,7 @@ router.get("/phone-numbers", requireAuth, async (req, res): Promise<void> => {
 });
 
 // ── GET /phone-numbers/available ──────────────────────────────────────────────
-// Vobiz Partner API is read-only for numbers — the platform pre-purchases
-// numbers via the Vobiz Console. This endpoint returns platform inventory
-// numbers not yet claimed by any user.
+// Proxies Vobiz Account API inventory — live available numbers ready to purchase.
 
 router.get("/phone-numbers/available", requireAuth, async (req, res): Promise<void> => {
   const query = ListAvailablePhoneNumbersQueryParams.safeParse(req.query);
@@ -117,23 +174,17 @@ router.get("/phone-numbers/available", requireAuth, async (req, res): Promise<vo
   const { countryCode, pattern } = query.data;
 
   try {
-    // Fetch full platform inventory from Vobiz Partner API
-    const inventory = await fetchPartnerInventory(authId!, authToken!);
+    const { items } = await fetchVobizInventory(authId!, authToken!, {
+      country: countryCode || undefined,
+      search:  pattern     || undefined,
+      page:    1,
+      perPage: 50,
+    });
 
-    // Fetch numbers already claimed by any user
-    const claimed = await db.select({ number: phoneNumbersTable.number })
-      .from(phoneNumbersTable)
-      .where(eq(phoneNumbersTable.status, "active"));
-    const claimedSet = new Set(claimed.map(r => r.number));
-
-    // Filter: available (not claimed), voice-enabled, matching country/pattern
-    const available = inventory
+    const available = items
       .filter(n => {
-        if (claimedSet.has(n.e164)) return false;
         if (n.status && n.status !== "active") return false;
         if (!(n.voice_enabled ?? n.capabilities?.voice ?? true)) return false;
-        if (countryCode && n.country.toUpperCase() !== countryCode.toUpperCase()) return false;
-        if (pattern && !n.e164.includes(pattern)) return false;
         return true;
       })
       .map(n => ({
@@ -146,7 +197,7 @@ router.get("/phone-numbers/available", requireAuth, async (req, res): Promise<vo
 
     res.json(ListAvailablePhoneNumbersResponse.parse(available));
   } catch (err) {
-    req.log.error({ err }, "Failed to fetch available numbers from Vobiz partner inventory");
+    req.log.error({ err }, "Failed to fetch available numbers from Vobiz inventory");
     res.json([]);
   }
 });
@@ -160,13 +211,8 @@ router.post("/phone-numbers/purchase", requireAuth, async (req, res): Promise<vo
 
   const { number, countryCode, region, numberType } = parsed.data;
 
-  // Check balance
   const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
-  if (user.walletBalanceCents < PHONE_NUMBER_COST_CENTS) {
-    res.status(402).json({ error: "Insufficient balance. Top up your wallet to purchase a phone number ($5.00)." });
-    return;
-  }
 
   // Check not already claimed by another user
   const [existing] = await db.select({ id: phoneNumbersTable.id }).from(phoneNumbersTable)
@@ -175,39 +221,67 @@ router.post("/phone-numbers/purchase", requireAuth, async (req, res): Promise<vo
 
   const { authId, authToken, configured } = getPlatformVobizCreds();
 
-  // Verify the number is in the platform's Vobiz inventory (already purchased by platform operator)
-  if (configured) {
-    try {
-      const inventory = await fetchPartnerInventory(authId!, authToken!);
-      const inInventory = inventory.some(n => n.e164 === number);
-      if (!inInventory) {
-        res.status(404).json({ error: "This number is not available in the platform inventory. Contact support." });
-        return;
-      }
-    } catch (err) {
-      req.log.warn({ err, number }, "Could not verify number in Vobiz inventory — proceeding");
-    }
+  if (!configured) {
+    res.status(503).json({ error: "Platform carrier credentials not configured.", code: "PLATFORM_NOT_CONFIGURED" });
+    return;
   }
 
-  // Deduct wallet + create transaction
-  const newBalance = user.walletBalanceCents - PHONE_NUMBER_COST_CENTS;
-  await db.update(usersTable).set({ walletBalanceCents: newBalance }).where(eq(usersTable.id, user.id));
-  await db.insert(walletTransactionsTable).values({
-    userId:      user.id,
-    type:        "debit",
-    amountCents: -PHONE_NUMBER_COST_CENTS,
-    description: `Phone number ${number} purchased`,
-    status:      "completed",
-  });
+  // 1. Purchase number from Vobiz (deducts from platform master account balance)
+  let vobizNumber: VobizOwnedNumber;
+  try {
+    vobizNumber = await purchaseVobizNumber(authId!, authToken!, number);
+  } catch (err: any) {
+    const msg: string = err?.message ?? "";
+    if (msg.includes("404") || msg.toLowerCase().includes("not found")) {
+      res.status(404).json({ error: "This number is no longer available. Please search again." });
+    } else if (msg.includes("500") || msg.toLowerCase().includes("balance")) {
+      res.status(402).json({ error: "Platform balance insufficient to complete this purchase. Contact support." });
+    } else {
+      req.log.error({ err, number }, "Vobiz purchase failed");
+      res.status(502).json({ error: "Failed to provision number. Please try again." });
+    }
+    return;
+  }
+
+  // 2. Deduct cost from user's SnapServe wallet (setup_fee + monthly_fee in paisa → cents)
+  const setupCents   = Math.round((vobizNumber.setup_fee   ?? 0) * 100);
+  const monthlyCents = Math.round((vobizNumber.monthly_fee ?? 0) * 100);
+  const totalCents   = setupCents + monthlyCents;
+
+  if (totalCents > 0 && user.walletBalanceCents < totalCents) {
+    // Rollback: release the number back since we can't charge the user
+    try {
+      await releaseVobizNumber(authId!, authToken!, number);
+    } catch (rollbackErr) {
+      req.log.error({ rollbackErr, number }, "Failed to rollback Vobiz number after wallet check failure");
+    }
+    const totalDisplay = `$${(totalCents / 100).toFixed(2)}`;
+    res.status(402).json({ error: `Insufficient balance. This number costs ${totalDisplay} (setup + first month). Top up your wallet.` });
+    return;
+  }
+
+  // 3. Record in SnapServe DB
+  if (totalCents > 0) {
+    const newBalance = user.walletBalanceCents - totalCents;
+    await db.update(usersTable).set({ walletBalanceCents: newBalance }).where(eq(usersTable.id, user.id));
+    await db.insert(walletTransactionsTable).values({
+      userId:      user.id,
+      type:        "debit",
+      amountCents: -totalCents,
+      description: `Phone number ${number} purchased (setup + 1 month)`,
+      status:      "completed",
+    });
+  }
 
   const [row] = await db.insert(phoneNumbersTable).values({
-    userId:        clerkId,
+    userId:           clerkId,
     number,
-    countryCode:   countryCode.toUpperCase(),
-    region:        region ?? null,
-    numberType:    numberType ?? "local",
-    vobizNumberId: number,
-    status:        "active",
+    countryCode:      (vobizNumber.country ?? countryCode).toUpperCase(),
+    region:           vobizNumber.region ?? region ?? null,
+    numberType:       numberType ?? "local",
+    vobizNumberId:    vobizNumber.id,
+    status:           "active",
+    monthlyRateCents: Math.round((vobizNumber.monthly_fee ?? 0) * 100),
   }).returning();
 
   await logActivity({
@@ -215,10 +289,10 @@ router.post("/phone-numbers/purchase", requireAuth, async (req, res): Promise<vo
     eventType:    "phone_number.purchased",
     resourceType: "phone_number",
     resourceId:   String(row.id),
-    description:  `Phone number ${number} purchased ($5.00)`,
+    description:  `Phone number ${number} purchased${totalCents > 0 ? ` ($${(totalCents / 100).toFixed(2)})` : ""}`,
   });
 
-  req.log.info({ number, userId: clerkId }, "Phone number purchased");
+  req.log.info({ number, userId: clerkId, vobizId: vobizNumber.id }, "Phone number purchased from Vobiz");
   res.status(201).json(await enrichNumber(row));
 });
 
@@ -266,9 +340,16 @@ router.delete("/phone-numbers/:id", requireAuth, async (req, res): Promise<void>
 
   if (!existing) { res.status(404).json({ error: "Phone number not found" }); return; }
 
-  // Vobiz Partner API is read-only — releasing a number just returns it to the
-  // platform inventory pool. The platform operator manages actual Vobiz lifecycle
-  // via the Vobiz Partner Console.
+  const { authId, authToken, configured } = getPlatformVobizCreds();
+
+  // Release back to Vobiz inventory (live API call)
+  if (configured) {
+    try {
+      await releaseVobizNumber(authId!, authToken!, existing.number);
+    } catch (err) {
+      req.log.error({ err, number: existing.number }, "Vobiz release failed — marking released in DB anyway");
+    }
+  }
 
   await db
     .update(phoneNumbersTable)
@@ -280,13 +361,13 @@ router.delete("/phone-numbers/:id", requireAuth, async (req, res): Promise<void>
     eventType:    "phone_number.released",
     resourceType: "phone_number",
     resourceId:   String(existing.id),
-    description:  `Phone number ${existing.number} released`,
+    description:  `Phone number ${existing.number} released back to inventory`,
   });
 
   res.sendStatus(204);
 });
 
-// ── GET /phone-numbers/:id/routing-rules (P2-F) ───────────────────────────────
+// ── GET /phone-numbers/:id/routing-rules ─────────────────────────────────────
 
 router.get("/phone-numbers/:id/routing-rules", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
@@ -300,10 +381,7 @@ router.get("/phone-numbers/:id/routing-rules", requireAuth, async (req, res): Pr
   res.json({ routingRules: row.routingRules ?? [] });
 });
 
-// ── PATCH /phone-numbers/:id/routing-rules (P2-F) ─────────────────────────────
-// Update inbound routing rules for a managed phone number.
-// Rules are evaluated top-to-bottom; first match wins.
-// Pass routingRules: null to clear all rules.
+// ── PATCH /phone-numbers/:id/routing-rules ────────────────────────────────────
 
 router.patch("/phone-numbers/:id/routing-rules", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;

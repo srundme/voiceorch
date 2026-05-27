@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Phone, Plus, Trash2, Link2, Link2Off, Search, Loader2, Globe, AlertCircle, GitFork } from "lucide-react";
+import { Phone, Plus, Trash2, Link2, Link2Off, Search, Loader2, Globe, AlertCircle, GitFork, IndianRupee } from "lucide-react";
 import {
   useListPhoneNumbers,
   useListAvailablePhoneNumbers,
@@ -36,9 +36,9 @@ import { Label } from "@/components/ui/label";
 import type { PhoneNumber } from "@workspace/api-client-react";
 
 const COUNTRY_OPTIONS = [
+  { code: "IN", name: "India" },
   { code: "US", name: "United States" },
   { code: "GB", name: "United Kingdom" },
-  { code: "IN", name: "India" },
   { code: "AU", name: "Australia" },
   { code: "CA", name: "Canada" },
   { code: "DE", name: "Germany" },
@@ -46,6 +46,13 @@ const COUNTRY_OPTIONS = [
   { code: "SG", name: "Singapore" },
   { code: "AE", name: "UAE" },
 ];
+
+function formatPrice(cents: number): string {
+  if (cents === 0) return "Free";
+  return `₹${(cents / 100).toFixed(0)}`;
+}
+
+// ── Assign Dialog ────────────────────────────────────────────────────────────
 
 function AssignDialog({
   number,
@@ -114,19 +121,20 @@ function AssignDialog({
   );
 }
 
+// ── Buy Number Dialog ─────────────────────────────────────────────────────────
+
 function BuyNumberDialog({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [country, setCountry] = useState("US");
-  const [numberType, setNumberType] = useState<"local" | "toll_free" | "mobile">("local");
+  const [country, setCountry] = useState("IN");
   const [pattern, setPattern] = useState("");
   const [searched, setSearched] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
 
   const { data: available, isFetching, error: searchError, refetch } = useListAvailablePhoneNumbers(
-    { countryCode: country, numberType, pattern: pattern || undefined },
-    { query: { enabled: false, queryKey: getListAvailablePhoneNumbersQueryKey({ countryCode: country, numberType }), retry: false } }
+    { countryCode: country, pattern: pattern || undefined },
+    { query: { enabled: false, queryKey: getListAvailablePhoneNumbersQueryKey({ countryCode: country }), retry: false } }
   );
 
   const platformNotConfigured =
@@ -134,6 +142,9 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
     (searchError as any)?.response?.status === 503;
 
   const purchase = usePurchasePhoneNumber();
+
+  const selectedNum = available?.find(n => n.number === selected);
+  const totalCents = selectedNum ? (selectedNum.monthlyRateCents ?? 0) : 0;
 
   function handleSearch() {
     setSearched(true);
@@ -143,14 +154,13 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
 
   function handlePurchase() {
     if (!selected) return;
-    const num = available?.find(n => n.number === selected);
     purchase.mutate(
       {
         data: {
           number: selected,
           countryCode: country,
-          region: num?.region ?? undefined,
-          numberType: num?.numberType ?? numberType,
+          region: selectedNum?.region ?? undefined,
+          numberType: selectedNum?.numberType ?? "local",
         },
       },
       {
@@ -176,12 +186,27 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
             <DialogTitle>Confirm Purchase</DialogTitle>
             <DialogDescription>
               You are about to purchase <span className="font-mono text-foreground font-semibold">{selected}</span>.
-              This will deduct <span className="text-gray-700 font-semibold">$5.00</span> from your wallet.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex items-start gap-3 p-3 rounded-lg border border-amber-500/20 bg-amber-500/5 text-amber-600 text-sm">
+          <div className="rounded-lg border border-gray-200 bg-gray-50 divide-y divide-gray-100 text-sm">
+            <div className="flex justify-between px-4 py-2.5">
+              <span className="text-gray-500">Number</span>
+              <span className="font-mono font-medium text-gray-800">{selected}</span>
+            </div>
+            {selectedNum?.region && (
+              <div className="flex justify-between px-4 py-2.5">
+                <span className="text-gray-500">Region</span>
+                <span className="text-gray-700">{selectedNum.region}</span>
+              </div>
+            )}
+            <div className="flex justify-between px-4 py-2.5">
+              <span className="text-gray-500">Monthly fee</span>
+              <span className="font-semibold text-gray-800">{totalCents > 0 ? `₹${(totalCents / 100).toFixed(0)}/mo` : "Free"}</span>
+            </div>
+          </div>
+          <div className="flex items-start gap-3 p-3 rounded-lg border border-amber-500/20 bg-amber-500/5 text-amber-600 text-xs">
             <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-            This purchase is non-refundable once confirmed.
+            <span>Setup fee + first month's fee will be deducted from your wallet immediately. This action cannot be undone.</span>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirming(false)}>Back</Button>
@@ -191,7 +216,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
               disabled={purchase.isPending}
             >
               {purchase.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
-              Confirm — $5.00
+              Confirm Purchase
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -203,9 +228,9 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Claim a Phone Number</DialogTitle>
+          <DialogTitle>Get a Phone Number</DialogTitle>
           <DialogDescription>
-            Pick from the platform's available number pool. $5.00 is deducted from your wallet and the number is routed to the agent you assign.
+            Browse Vobiz's live number inventory. Pricing varies by country and number type — fees are deducted from your wallet.
           </DialogDescription>
         </DialogHeader>
 
@@ -226,28 +251,26 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Filter by digits</Label>
-              <div className="flex gap-2">
-                <Input
-                  className="h-9 font-mono text-sm flex-1"
-                  placeholder="e.g. 9122"
-                  value={pattern}
-                  onChange={e => setPattern(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && handleSearch()}
-                />
-              </div>
+              <Input
+                className="h-9 font-mono text-sm"
+                placeholder="e.g. 9122"
+                value={pattern}
+                onChange={e => setPattern(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && handleSearch()}
+              />
             </div>
           </div>
 
           <Button size="sm" className="h-9 gap-1.5 w-full" onClick={handleSearch} disabled={isFetching}>
             {isFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
-            Show Available Numbers
+            Search Available Numbers
           </Button>
 
           {searched && (
-            <div className="border border-border/60 rounded-lg overflow-hidden max-h-52 overflow-y-auto">
+            <div className="border border-border/60 rounded-lg overflow-hidden max-h-56 overflow-y-auto">
               {isFetching ? (
                 <div className="space-y-2 p-3">
-                  {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}
+                  {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
                 </div>
               ) : platformNotConfigured ? (
                 <div className="flex flex-col gap-2 p-4">
@@ -264,8 +287,8 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
               ) : !available || available.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-8 text-gray-400 text-sm">
                   <Globe className="h-8 w-8 mb-2 opacity-30" />
-                  <p>No numbers available in platform inventory</p>
-                  <p className="text-xs mt-1 text-gray-300">for {country}{pattern ? ` matching "${pattern}"` : ""}. Try a different country.</p>
+                  <p>No numbers available for {country}{pattern ? ` matching "${pattern}"` : ""}</p>
+                  <p className="text-xs mt-1 text-gray-300">Try a different country or remove the filter.</p>
                 </div>
               ) : (
                 <div className="divide-y divide-border/40">
@@ -277,9 +300,14 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
                         selected === n.number ? "bg-gray-50 border-l-2 border-emerald-500" : ""
                       }`}
                     >
-                      <span className="font-mono font-medium">{n.number}</span>
-                      <div className="flex items-center gap-2 text-xs text-gray-400">
-                        {n.region && <span>{n.region}</span>}
+                      <div className="flex items-center gap-3">
+                        <span className="font-mono font-medium text-gray-800">{n.number}</span>
+                        {n.region && <span className="text-xs text-gray-400">{n.region}</span>}
+                      </div>
+                      <div className="flex items-center gap-2 text-xs shrink-0">
+                        <span className="text-gray-700 font-medium">
+                          {(n.monthlyRateCents ?? 0) > 0 ? `₹${((n.monthlyRateCents ?? 0) / 100).toFixed(0)}/mo` : "Free"}
+                        </span>
                         <Badge variant="outline" className="text-[10px] capitalize">{n.numberType.replace("_", " ")}</Badge>
                       </div>
                     </button>
@@ -297,7 +325,10 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
             disabled={!selected}
             onClick={() => setConfirming(true)}
           >
-            <Plus className="h-3.5 w-3.5" /> Claim — $5.00
+            <Plus className="h-3.5 w-3.5" />
+            {selected && totalCents > 0
+              ? `Purchase — ₹${(totalCents / 100).toFixed(0)}/mo`
+              : "Purchase Number"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -305,7 +336,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-// ── P2-F: Routing Rules Dialog ────────────────────────────────────────────────
+// ── Routing Rules Dialog ──────────────────────────────────────────────────────
 
 type RoutingRule = {
   condition: "caller_prefix" | "time_range" | "always";
@@ -434,6 +465,8 @@ function RoutingRulesDialog({ number, onClose }: { number: PhoneNumber; onClose:
   );
 }
 
+// ── Main Page ─────────────────────────────────────────────────────────────────
+
 export default function PhoneNumbersPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -450,7 +483,7 @@ export default function PhoneNumbersPage() {
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getListPhoneNumbersQueryKey() });
-          toast({ title: "Number released", description: `${n.number} has been released.` });
+          toast({ title: "Number released", description: `${n.number} has been returned to inventory.` });
           setReleaseTarget(null);
         },
         onError: () => toast({ title: "Error", variant: "destructive", description: "Failed to release number" }),
@@ -464,13 +497,13 @@ export default function PhoneNumbersPage() {
       <div className="border-b border-gray-200 px-6 py-4 flex items-center gap-3 shrink-0">
         <Phone className="w-5 h-5 text-gray-700" />
         <h1 className="font-semibold text-gray-800 text-lg">Phone Numbers</h1>
-        <span className="text-xs text-gray-400 ml-auto">Platform-managed numbers · $5.00 / number</span>
+        <span className="text-xs text-gray-400 ml-auto">Powered by Vobiz · live inventory</span>
         <Button
           size="sm"
           className="h-8 gap-1.5 bg-black/85 hover:bg-black/90 text-gray-900"
           onClick={() => setBuyOpen(true)}
         >
-          <Plus className="h-3.5 w-3.5" /> Claim Number
+          <Plus className="h-3.5 w-3.5" /> Get Number
         </Button>
       </div>
 
@@ -479,8 +512,8 @@ export default function PhoneNumbersPage() {
         <div className="flex items-start gap-3 p-4 rounded-xl border border-gray-200 bg-white">
           <Globe className="h-5 w-5 text-gray-700 mt-0.5 shrink-0" />
           <div className="text-sm text-gray-500 space-y-0.5">
-            <p className="text-gray-700 font-medium">Platform-managed phone numbers</p>
-            <p>Numbers are pre-provisioned by the platform. Claim one from our inventory for $5.00, assign it to an agent, and inbound calls are automatically routed to its pipeline. <span className="text-gray-400">Releasing returns the number to the shared pool.</span></p>
+            <p className="text-gray-700 font-medium">Self-serve number provisioning</p>
+            <p>Search Vobiz's live inventory across 130+ countries. Purchase a number and it's immediately active — assign it to any agent and inbound calls route straight to its pipeline. <span className="text-gray-400">Releasing returns the number to Vobiz inventory.</span></p>
           </div>
         </div>
 
@@ -500,7 +533,7 @@ export default function PhoneNumbersPage() {
             <Phone className="w-12 h-12 mb-4 opacity-30" />
             <p className="text-sm mb-3">No phone numbers yet.</p>
             <Button size="sm" className="gap-1.5 bg-black/85 hover:bg-black/90 text-gray-900" onClick={() => setBuyOpen(true)}>
-              <Plus className="h-3.5 w-3.5" /> Buy your first number
+              <Plus className="h-3.5 w-3.5" /> Get your first number
             </Button>
           </div>
         ) : (
@@ -533,6 +566,13 @@ export default function PhoneNumbersPage() {
                   )}
                 </div>
 
+                {(n.monthlyRateCents ?? 0) > 0 && (
+                  <div className="flex items-center gap-0.5 text-xs text-gray-400 shrink-0">
+                    <IndianRupee className="h-3 w-3" />
+                    <span>{((n.monthlyRateCents ?? 0) / 100).toFixed(0)}/mo</span>
+                  </div>
+                )}
+
                 <div className="flex items-center gap-2 shrink-0">
                   {n.agentId && (
                     <Button
@@ -541,8 +581,7 @@ export default function PhoneNumbersPage() {
                       className="h-7 text-xs gap-1.5 text-gray-500 hover:text-gray-800"
                       onClick={() => setRoutingTarget(n)}
                     >
-                      <GitFork className="h-3 w-3" />
-                      Routing
+                      <GitFork className="h-3 w-3" /> Rules
                     </Button>
                   )}
                   <Button
@@ -551,17 +590,15 @@ export default function PhoneNumbersPage() {
                     className="h-7 text-xs gap-1.5 text-gray-500 hover:text-gray-800"
                     onClick={() => setAssignTarget(n)}
                   >
-                    <Link2 className="h-3 w-3" />
-                    {n.agentId ? "Reassign" : "Assign"}
+                    <Link2 className="h-3 w-3" /> {n.agentId ? "Reassign" : "Assign"}
                   </Button>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-7 text-xs gap-1.5 text-red-500 hover:text-red-300 hover:bg-red-50"
+                    className="h-7 text-xs gap-1.5 text-gray-400 hover:text-red-500"
                     onClick={() => setReleaseTarget(n)}
                   >
                     <Trash2 className="h-3 w-3" />
-                    Release
                   </Button>
                 </div>
               </div>
@@ -570,21 +607,25 @@ export default function PhoneNumbersPage() {
         )}
       </div>
 
+      {/* Dialogs */}
       {buyOpen && <BuyNumberDialog onClose={() => setBuyOpen(false)} />}
       {assignTarget && <AssignDialog number={assignTarget} onClose={() => setAssignTarget(null)} />}
       {routingTarget && <RoutingRulesDialog number={routingTarget} onClose={() => setRoutingTarget(null)} />}
 
-      {/* Release confirm dialog */}
+      {/* Release confirmation */}
       {releaseTarget && (
         <Dialog open onOpenChange={() => setReleaseTarget(null)}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-sm">
             <DialogHeader>
-              <DialogTitle>Release Number</DialogTitle>
+              <DialogTitle>Release number?</DialogTitle>
               <DialogDescription>
-                Are you sure you want to release <span className="font-mono text-foreground">{releaseTarget.number}</span>?
-                This cannot be undone and the number will be returned to the carrier pool.
+                <span className="font-mono text-foreground">{releaseTarget.number}</span> will be returned to Vobiz inventory. This cannot be undone — someone else may claim it.
               </DialogDescription>
             </DialogHeader>
+            <div className="flex items-start gap-2.5 p-3 rounded-lg border border-red-500/20 bg-red-500/5 text-red-600 text-xs">
+              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              Any active calls or agent assignments using this number will stop working.
+            </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setReleaseTarget(null)}>Cancel</Button>
               <Button

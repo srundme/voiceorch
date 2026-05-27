@@ -3011,6 +3011,9 @@ components:
         purchasedAt:
           type: string
           format: date-time
+        monthlyRateCents:
+          type: integer
+          description: Monthly cost in cents (from Vobiz, 0 = no recurring fee)
         releasedAt:
           type: ["string", "null"]
           format: date-time

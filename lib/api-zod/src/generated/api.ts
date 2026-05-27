@@ -1162,6 +1162,7 @@ export const ListPhoneNumbersResponseItem = zod.object({
   "agentName": zod.string().nullish(),
   "status": zod.enum(['active', 'released']),
   "purchasedAt": zod.coerce.date(),
+  "monthlyRateCents": zod.number().optional().describe('Monthly cost in cents (from Vobiz, 0 = no recurring fee)'),
   "releasedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
 })
@@ -1225,6 +1226,7 @@ export const AssignPhoneNumberResponse = zod.object({
   "agentName": zod.string().nullish(),
   "status": zod.enum(['active', 'released']),
   "purchasedAt": zod.coerce.date(),
+  "monthlyRateCents": zod.number().optional().describe('Monthly cost in cents (from Vobiz, 0 = no recurring fee)'),
   "releasedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
 })

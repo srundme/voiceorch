@@ -866,6 +866,8 @@ export interface PhoneNumber {
   agentName?: string | null;
   status: PhoneNumberStatus;
   purchasedAt: string;
+  /** Monthly cost in cents (from Vobiz, 0 = no recurring fee) */
+  monthlyRateCents?: number;
   /** @nullable */
   releasedAt?: string | null;
   createdAt: string;
