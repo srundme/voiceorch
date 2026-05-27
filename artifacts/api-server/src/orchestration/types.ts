@@ -112,7 +112,13 @@ export interface AgentConfig {
   backchannelingFrequency: number | null;
   webhookUrl: string | null;
   noiseCancellationEnabled: boolean;
+  ambientNoiseEnabled: boolean;
+  ambientNoiseTrack: string | null;
   inactivityMessage: string | null;
+  guardrailRoutes: Array<{ name: string; scoreThreshold: number; utterances: string; response: string }>;
+  ivrEnabled: boolean;
+  ivrGreeting: string | null;
+  ivrOptions: Array<{ digit: string; label: string; targetAgentId?: number }>;
 
   // Tier 2 — Transcriber Settings
   sttConfig: STTConfig;

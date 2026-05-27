@@ -101,7 +101,13 @@ export async function createSession(params: {
     backchannelingFrequency: agent.backchannelingFrequency ?? null,
     webhookUrl: agent.webhookUrl ?? null,
     noiseCancellationEnabled: agent.noiseCancellationEnabled ?? false,
+    ambientNoiseEnabled: (agentCfg["ambientNoiseEnabled"] as boolean | undefined) ?? false,
+    ambientNoiseTrack: (agentCfg["ambientNoiseTrack"] as string | undefined) ?? null,
     inactivityMessage: agent.inactivityMessage ?? null,
+    guardrailRoutes: (agentCfg["guardrailRoutes"] as Array<{ name: string; scoreThreshold: number; utterances: string; response: string }> | undefined) ?? [],
+    ivrEnabled: (agentCfg["ivrEnabled"] as boolean | undefined) ?? false,
+    ivrGreeting: (agentCfg["ivrGreeting"] as string | undefined) ?? null,
+    ivrOptions: (agentCfg["ivrOptions"] as Array<{ digit: string; label: string; targetAgentId?: number }> | undefined) ?? [],
     sttConfig: {
       language: agent.asrLanguage ?? null,
       backgroundDenoising: agent.asrBackgroundDenoising ?? false,

@@ -176,9 +176,17 @@ router.get("/analytics/agents/:id", requireAuth, async (req, res): Promise<void>
     .groupBy(sql`to_char(created_at at time zone 'UTC', 'YYYY-MM-DD')`)
     .orderBy(sql`to_char(created_at at time zone 'UTC', 'YYYY-MM-DD')`);
 
+  const [aiEvalRow] = await db.select({
+    aiPass:      sql<number>`count(*) filter (where success_evaluation ilike 'PASS%')::int`,
+    aiEvaluated: sql<number>`count(*) filter (where success_evaluation is not null)::int`,
+  }).from(callsTable).where(eq(callsTable.agentId, agentId));
+
   const total = totals?.totalCalls ?? 0;
   const successful = totals?.successfulCalls ?? 0;
   const successRate = total > 0 ? Math.round((successful / total) * 100) : 0;
+  const aiEvaluated = aiEvalRow?.aiEvaluated ?? 0;
+  const aiPassCount = aiEvalRow?.aiPass ?? 0;
+  const aiPassRate = aiEvaluated > 0 ? Math.round((aiPassCount / aiEvaluated) * 100) : null;
 
   res.json(GetAgentStatsResponse.parse({
     agentId,
@@ -187,6 +195,8 @@ router.get("/analytics/agents/:id", requireAuth, async (req, res): Promise<void>
     successfulCalls: successful,
     failedCalls: totals?.failedCalls ?? 0,
     successRate,
+    aiEvaluatedCalls: aiEvaluated,
+    aiPassRate,
     avgDurationSeconds: totals?.avgDuration ?? null,
     avgSttLatencyMs: totals?.avgStt ?? null,
     avgLlmLatencyMs: totals?.avgLlm ?? null,

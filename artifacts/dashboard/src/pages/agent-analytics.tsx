@@ -160,6 +160,28 @@ export default function AgentAnalyticsPage() {
           </div>
         </div>
 
+        {/* AI success evaluation */}
+        {(stats as any).aiEvaluatedCalls > 0 && (
+          <div className="p-4 rounded-lg bg-white border border-gray-200">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-medium text-gray-500">AI goal evaluation</p>
+              <span className="text-[10px] text-gray-400">{(stats as any).aiEvaluatedCalls} calls evaluated</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                <div
+                  className={`h-2 rounded-full transition-all ${(stats as any).aiPassRate >= 70 ? "bg-emerald-500" : (stats as any).aiPassRate >= 50 ? "bg-amber-500" : "bg-red-500"}`}
+                  style={{ width: `${(stats as any).aiPassRate ?? 0}%` }}
+                />
+              </div>
+              <span className={`text-sm font-bold tabular-nums min-w-[3rem] text-right ${(stats as any).aiPassRate >= 70 ? "text-emerald-600" : (stats as any).aiPassRate >= 50 ? "text-amber-600" : "text-red-500"}`}>
+                {(stats as any).aiPassRate ?? 0}%
+              </span>
+              <span className="text-[11px] text-gray-400">PASS</span>
+            </div>
+          </div>
+        )}
+
         {/* Daily volume chart */}
         {chartData.length > 0 && (
           <div className="p-4 rounded-lg bg-white border border-gray-200">

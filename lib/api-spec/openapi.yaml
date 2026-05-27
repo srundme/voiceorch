@@ -2542,6 +2542,9 @@ components:
         callSummary:
           type: ["string", "null"]
           description: AI-generated 3-line post-call summary
+        successEvaluation:
+          type: ["string", "null"]
+          description: "Post-call LLM evaluation — PASS or FAIL on first line, one-sentence reason on the second line"
         dispositionResult:
           type: ["object", "null"]
           description: Extracted disposition values keyed by field name
@@ -3143,6 +3146,12 @@ components:
         successRate:
           type: number
           description: Percentage 0-100
+        aiEvaluatedCalls:
+          type: integer
+          description: Number of calls that have an AI success evaluation result
+        aiPassRate:
+          type: ["number", "null"]
+          description: "Percentage 0-100 of AI-evaluated calls that were PASS; null when no calls have been AI-evaluated yet"
         avgDurationSeconds:
           type: ["integer", "null"]
         avgSttLatencyMs:

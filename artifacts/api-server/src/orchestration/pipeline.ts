@@ -2,6 +2,8 @@ import { createSTTAdapter } from "./adapters/stt/index.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { createTTSAdapter } from "./adapters/tts/index.js";
 import { encodeMulaw, upsample8to16, downsample16to8, decodeMulaw, hasSpeechEnergy } from "./audio.js";
+import { AmbientNoiseStream } from "./ambient.js";
+import { DtmfDetector } from "./dtmf.js";
 import { processAudioIn, processRawPcm8kIn, destroyAudioSession } from "./audioPool.js";
 import { RecordingBuffer } from "./recorder.js";
 import type { AudioProcessResult } from "./audioPool.js";
@@ -100,6 +102,15 @@ export class OrchestrationPipeline {
   private conversationHistory: ConversationTurn[] = [];
   private closed = false;
 
+  // Ambient noise
+  private ambientStream: AmbientNoiseStream | null = null;
+  private ambientInterval: ReturnType<typeof setInterval> | null = null;
+
+  // IVR / DTMF
+  private dtmfDetector: DtmfDetector | null = null;
+  private dtmfResolver: ((digit: string | null) => void) | null = null;
+  private dtmfTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
   // Gender detection
   // We accumulate the first ~1 s of caller PCM (16 000 bytes @ 8 kHz 16-bit),
   // detect once, then resolve {caller_salutation} in the system prompt.
@@ -150,6 +161,20 @@ export class OrchestrationPipeline {
 
     if (this.agent.noiseCancellationEnabled) {
       logger.info({ callId: config.callId }, "Noise cancellation enabled (audio worker pool)");
+    }
+
+    // Ambient noise — start looping silence-fill interval
+    if (this.agent.ambientNoiseEnabled && this.agent.ambientNoiseTrack) {
+      this.ambientStream = new AmbientNoiseStream(this.agent.ambientNoiseTrack);
+      // Send one 20 ms ambient chunk every 20 ms while the agent is silent.
+      // When isPlaying=true playSentence owns the timing, so we skip here to
+      // avoid interleaving two concurrent senders on the same WebSocket.
+      this.ambientInterval = setInterval(() => {
+        if (!this.closed && !this.isPlaying && this.ambientStream) {
+          this.config.onAudioOut(this.ambientStream.nextMulawChunk());
+        }
+      }, 20);
+      logger.info({ callId: config.callId, track: this.agent.ambientNoiseTrack }, "Ambient noise enabled");
     }
 
     logger.info({ callId: config.callId, agent: this.agent.name }, "Pipeline initialized");
@@ -383,6 +408,20 @@ export class OrchestrationPipeline {
   private handleProcessedAudio({ pcm8k, pcm16k, hasSpeech }: AudioProcessResult): void {
     if (this.closed) return;
 
+    // ── IVR DTMF detection ──
+    // Run on every incoming frame when an IVR interaction is active.
+    // Independent of speech/silence — DTMF tones are recognisable even during
+    // concurrent ambient audio.
+    if (this.dtmfDetector && this.dtmfResolver) {
+      const digit = this.dtmfDetector.feed(pcm8k);
+      if (digit !== null) {
+        const resolve = this.dtmfResolver;
+        this.dtmfResolver = null;
+        if (this.dtmfTimeoutId) { clearTimeout(this.dtmfTimeoutId); this.dtmfTimeoutId = null; }
+        resolve(digit);
+      }
+    }
+
     // Gender audio is now accumulated in onAudioIn / onRawPcm8kIn from raw
     // (pre-noise-cancellation) PCM so the bandpass filter does not strip
     // female fundamentals.  Here we only manage the handoff-silence timer.
@@ -444,6 +483,12 @@ export class OrchestrationPipeline {
     if (this.closed) return;
     this.isProcessing = true;
     try {
+      // IVR pre-filter: play menu, collect a digit, then fall through to normal greeting
+      if (this.agent.ivrEnabled && this.agent.ivrGreeting) {
+        const transferred = await this.runIvr();
+        if (transferred || this.closed) return; // call was routed away — do not greet
+      }
+
       let greeting = this.agent.greetingMessage ?? "";
 
       if (!greeting.trim()) {
@@ -539,7 +584,8 @@ export class OrchestrationPipeline {
           if (queue.length > 0) {
             const chunk = queue.shift()!;
             if (!this.firstAudioSentAt) this.firstAudioSentAt = Date.now();
-            this.config.onAudioOut(chunk);
+            const outChunk = this.ambientStream ? this.ambientStream.mixIntoMulaw(chunk) : chunk;
+            this.config.onAudioOut(outChunk);
             await new Promise<void>((r) => setTimeout(r, 20));
           } else if (ttsDone) {
             break; // queue drained and TTS finished — we're done
@@ -629,7 +675,9 @@ export class OrchestrationPipeline {
       for (let i = 0; i < ttsMusaw.length; i += CHUNK_SIZE_MULAW) {
         if (this.closed || this.bargeInRequested) break;
         if (!this.firstAudioSentAt) this.firstAudioSentAt = Date.now();
-        this.config.onAudioOut(ttsMusaw.slice(i, i + CHUNK_SIZE_MULAW));
+        const chunk = ttsMusaw.slice(i, i + CHUNK_SIZE_MULAW);
+        const outChunk = this.ambientStream ? this.ambientStream.mixIntoMulaw(chunk) : chunk;
+        this.config.onAudioOut(outChunk);
         await new Promise<void>((r) => setTimeout(r, 20));
       }
     }
@@ -861,6 +909,20 @@ export class OrchestrationPipeline {
     logger.info({ callId: this.config.callId, transcript, sttLatencyMs }, "Processing turn");
     this.config.onTranscript("user", transcript);
     this.conversationHistory.push({ role: "user", content: transcript });
+
+    // ── Guardrail route check ──
+    // Fast word-overlap classifier — runs before the main LLM to intercept
+    // sensitive or off-topic utterances and play a canned response instead.
+    const guardrailResponse = this.checkGuardrailRoutes(transcript);
+    if (guardrailResponse !== null) {
+      logger.info({ callId: this.config.callId, transcript }, "Guardrail route triggered");
+      this.conversationHistory.push({ role: "assistant", content: guardrailResponse });
+      this.config.onTranscript("agent", guardrailResponse);
+      this.config.onConversationUpdate?.(this.conversationHistory);
+      this.isPlaying = true;
+      try { await this.playSentence(guardrailResponse); } finally { this.isPlaying = false; }
+      return;
+    }
 
     // ── End-call phrase detection ──
     if (this.agent.endCallPhrases.length > 0) {
@@ -1614,13 +1676,135 @@ export class OrchestrationPipeline {
     }
   }
 
+  /**
+   * Plays the IVR greeting, collects one DTMF digit (or times out), and handles
+   * the routing decision.
+   *
+   * Returns `true` if the call was transferred to another agent (caller has been
+   * routed away and the current pipeline should stop), or `false` to continue
+   * with the normal agent greeting.
+   */
+  private async runIvr(): Promise<boolean> {
+    const options = this.agent.ivrOptions ?? [];
+    const ivrGreeting = this.agent.ivrGreeting!;
+
+    this.dtmfDetector = new DtmfDetector();
+    this.dtmfDetector.reset();
+
+    logger.info({ callId: this.config.callId, options: options.length }, "IVR: playing menu");
+    this.isPlaying = true;
+    try { await this.playSentence(ivrGreeting); }
+    finally { this.isPlaying = false; }
+
+    if (this.closed) { this.dtmfDetector = null; return false; }
+
+    // Wait up to 10 seconds for a keypress
+    const digit = await new Promise<string | null>((resolve) => {
+      this.dtmfResolver = resolve;
+      this.dtmfTimeoutId = setTimeout(() => {
+        this.dtmfResolver = null;
+        this.dtmfTimeoutId = null;
+        resolve(null);
+      }, 10_000);
+    });
+
+    this.dtmfDetector = null;
+
+    if (digit === null) {
+      logger.info({ callId: this.config.callId }, "IVR: no digit received — falling through to agent");
+      return false;
+    }
+
+    const opt = options.find(o => o.digit === digit);
+    logger.info({ callId: this.config.callId, digit, label: opt?.label ?? "(unknown)" }, "IVR digit received");
+
+    if (opt?.targetAgentId !== undefined) {
+      this.config.onCallTransfer?.(`agent:${opt.targetAgentId}`);
+      logger.info({ callId: this.config.callId, targetAgentId: opt.targetAgentId }, "IVR: call transferred to agent");
+      return true;
+    }
+
+    // No transfer — append the selection to the system prompt so the LLM knows
+    // which menu option the caller chose, then continue with normal greeting.
+    if (opt) {
+      this.agent.systemPrompt += `\n\n[IVR selection] The caller pressed ${digit}: "${opt.label}".`;
+    }
+    return false;
+  }
+
   async speakRaw(text: string): Promise<void> {
     if (!text.trim() || this.closed) return;
     await this.playSentence(text);
   }
 
+  /**
+   * Guardrail route classification using fast word-overlap (Jaccard similarity).
+   *
+   * For each configured route, we tokenize the caller transcript and each
+   * example utterance, compute |intersection| / |union| and compare against
+   * the route's scoreThreshold.  The first route whose threshold is met wins
+   * and its canned `response` text is returned.  Returns null when no route
+   * matches, meaning the turn falls through to the normal LLM pipeline.
+   *
+   * Why Jaccard over embeddings?
+   *  – Zero latency: no API call needed — runs in microseconds
+   *  – No extra API keys required
+   *  – Sufficient for intent matching when the admin has provided representative
+   *    example utterances (typically 3-10 per route)
+   */
+  private checkGuardrailRoutes(transcript: string): string | null {
+    const routes = this.agent.guardrailRoutes;
+    if (!routes || routes.length === 0) return null;
+
+    const transcriptTokens = guardrailTokenize(transcript);
+    if (transcriptTokens.size === 0) return null;
+
+    for (const route of routes) {
+      const threshold = route.scoreThreshold ?? 0.35;
+      const lines = route.utterances
+        .split(/[\n,]/)
+        .map(s => s.trim())
+        .filter(Boolean);
+
+      for (const utterance of lines) {
+        const uttTokens = guardrailTokenize(utterance);
+        if (uttTokens.size === 0) continue;
+
+        let intersection = 0;
+        for (const t of transcriptTokens) {
+          if (uttTokens.has(t)) intersection++;
+        }
+        const union = transcriptTokens.size + uttTokens.size - intersection;
+        const score = intersection / union;
+
+        if (score >= threshold) {
+          logger.info(
+            { callId: this.config.callId, route: route.name, score: score.toFixed(3), utterance },
+            "Guardrail route matched"
+          );
+          return route.response;
+        }
+      }
+    }
+    return null;
+  }
+
   close(): void {
     this.closed = true;
+    if (this.ambientInterval) {
+      clearInterval(this.ambientInterval);
+      this.ambientInterval = null;
+    }
+    // Unblock any pending IVR digit wait so the promise settles immediately
+    if (this.dtmfTimeoutId) {
+      clearTimeout(this.dtmfTimeoutId);
+      this.dtmfTimeoutId = null;
+    }
+    if (this.dtmfResolver) {
+      const r = this.dtmfResolver;
+      this.dtmfResolver = null;
+      r(null);
+    }
     if (this.silenceTimer) {
       clearTimeout(this.silenceTimer);
       this.silenceTimer = null;
@@ -1746,6 +1930,28 @@ function parsePreferredDate(
 
   // ── Fallback ──────────────────────────────────────────────────────────────
   return { searchStart: now };
+}
+
+/**
+ * Tokenize text for guardrail Jaccard scoring.
+ * Lowercases, strips punctuation, removes common stop-words, returns a Set.
+ */
+const GUARDRAIL_STOPWORDS = new Set([
+  "a","an","the","is","are","was","were","be","been","being","have","has","had",
+  "do","does","did","will","would","could","should","may","might","shall","can",
+  "i","you","he","she","it","we","they","me","him","her","us","them",
+  "my","your","his","its","our","their","this","that","these","those",
+  "and","but","or","nor","for","so","yet","to","of","in","on","at","by",
+  "up","out","off","over","into","with","about","after","before","from","not",
+]);
+
+function guardrailTokenize(text: string): Set<string> {
+  return new Set(
+    text.toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .filter(w => w.length > 1 && !GUARDRAIL_STOPWORDS.has(w))
+  );
 }
 
 /**

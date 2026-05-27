@@ -473,6 +473,11 @@ export interface Call {
      */
   callSummary?: string | null;
   /**
+     * Post-call LLM evaluation — PASS or FAIL on first line, one-sentence reason on the second line
+     * @nullable
+     */
+  successEvaluation?: string | null;
+  /**
      * Extracted disposition values keyed by field name
      * @nullable
      */
@@ -942,6 +947,13 @@ export interface AgentStats {
   failedCalls?: number;
   /** Percentage 0-100 */
   successRate: number;
+  /** Number of calls that have an AI success evaluation result */
+  aiEvaluatedCalls?: number;
+  /**
+     * Percentage 0-100 of AI-evaluated calls that were PASS; null when no calls have been AI-evaluated yet
+     * @nullable
+     */
+  aiPassRate?: number | null;
   /** @nullable */
   avgDurationSeconds: number | null;
   /** @nullable */

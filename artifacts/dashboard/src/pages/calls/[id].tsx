@@ -125,6 +125,11 @@ export default function CallDetail() {
   }
 
   const callSummary = (call as any).callSummary as string | null | undefined;
+  const rawEval = (call as any).successEvaluation as string | null | undefined;
+  const evalVerdict = rawEval ? rawEval.split(/\r?\n/)[0]?.trim().toUpperCase() : undefined;
+  const evalReason  = rawEval ? rawEval.split(/\r?\n/).slice(1).join(" ").trim() : undefined;
+  const evalIsPass  = evalVerdict?.startsWith("PASS");
+  const evalIsFail  = evalVerdict?.startsWith("FAIL");
 
   return (
     <div className="flex-1 space-y-6 p-6 md:p-8 pt-6 h-full flex flex-col">
@@ -184,6 +189,19 @@ export default function CallDetail() {
                   <h4 className="font-semibold text-sm">Call Failed</h4>
                   <p className="text-sm mt-1 opacity-90">{call.errorMessage}</p>
                 </div>
+              </div>
+            )}
+
+            {/* Success Evaluation */}
+            {(evalIsPass || evalIsFail) && (
+              <div className={`mx-4 mt-4 p-4 rounded-lg border ${evalIsPass ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}>
+                <div className={`flex items-center gap-2 mb-1 text-sm font-semibold ${evalIsPass ? "text-emerald-700" : "text-red-600"}`}>
+                  {evalIsPass ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
+                  AI Evaluation: {evalIsPass ? "PASS" : "FAIL"}
+                </div>
+                {evalReason && (
+                  <p className={`text-xs leading-relaxed ${evalIsPass ? "text-emerald-600" : "text-red-500"}`}>{evalReason}</p>
+                )}
               </div>
             )}
 

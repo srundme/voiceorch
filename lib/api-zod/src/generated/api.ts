@@ -485,6 +485,7 @@ export const ListCallsResponseItem = zod.object({
   "executionId": zod.string().nullish().describe('Unique execution identifier for this call (exec_xxxxxxxx)'),
   "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents'),
   "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary'),
+  "successEvaluation": zod.string().nullish().describe('Post-call LLM evaluation — PASS or FAIL on first line, one-sentence reason on the second line'),
   "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name')
 })
 export const ListCallsResponse = zod.array(ListCallsResponseItem)
@@ -528,6 +529,7 @@ export const GetCallResponse = zod.object({
   "executionId": zod.string().nullish().describe('Unique execution identifier for this call (exec_xxxxxxxx)'),
   "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents'),
   "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary'),
+  "successEvaluation": zod.string().nullish().describe('Post-call LLM evaluation — PASS or FAIL on first line, one-sentence reason on the second line'),
   "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name')
 })
 
@@ -568,6 +570,7 @@ export const UpdateCallResponse = zod.object({
   "executionId": zod.string().nullish().describe('Unique execution identifier for this call (exec_xxxxxxxx)'),
   "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents'),
   "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary'),
+  "successEvaluation": zod.string().nullish().describe('Post-call LLM evaluation — PASS or FAIL on first line, one-sentence reason on the second line'),
   "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name')
 })
 
@@ -616,6 +619,7 @@ export const TransferCallResponse = zod.object({
   "executionId": zod.string().nullish().describe('Unique execution identifier for this call (exec_xxxxxxxx)'),
   "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents'),
   "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary'),
+  "successEvaluation": zod.string().nullish().describe('Post-call LLM evaluation — PASS or FAIL on first line, one-sentence reason on the second line'),
   "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name')
 })
 
@@ -653,6 +657,7 @@ export const EndCallResponse = zod.object({
   "executionId": zod.string().nullish().describe('Unique execution identifier for this call (exec_xxxxxxxx)'),
   "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents'),
   "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary'),
+  "successEvaluation": zod.string().nullish().describe('Post-call LLM evaluation — PASS or FAIL on first line, one-sentence reason on the second line'),
   "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name')
 })
 
@@ -688,6 +693,7 @@ export const UpdateCallDispositionResponse = zod.object({
   "executionId": zod.string().nullish().describe('Unique execution identifier for this call (exec_xxxxxxxx)'),
   "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents'),
   "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary'),
+  "successEvaluation": zod.string().nullish().describe('Post-call LLM evaluation — PASS or FAIL on first line, one-sentence reason on the second line'),
   "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name')
 })
 
@@ -788,6 +794,7 @@ export const GetRecentCallsResponseItem = zod.object({
   "executionId": zod.string().nullish().describe('Unique execution identifier for this call (exec_xxxxxxxx)'),
   "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents'),
   "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary'),
+  "successEvaluation": zod.string().nullish().describe('Post-call LLM evaluation — PASS or FAIL on first line, one-sentence reason on the second line'),
   "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name')
 })
 export const GetRecentCallsResponse = zod.array(GetRecentCallsResponseItem)
@@ -1284,6 +1291,8 @@ export const GetAgentStatsResponse = zod.object({
   "successfulCalls": zod.number(),
   "failedCalls": zod.number().optional(),
   "successRate": zod.number().describe('Percentage 0-100'),
+  "aiEvaluatedCalls": zod.number().optional().describe('Number of calls that have an AI success evaluation result'),
+  "aiPassRate": zod.number().nullish().describe('Percentage 0-100 of AI-evaluated calls that were PASS; null when no calls have been AI-evaluated yet'),
   "avgDurationSeconds": zod.number().nullable(),
   "avgSttLatencyMs": zod.number().nullish(),
   "avgLlmLatencyMs": zod.number().nullish(),
