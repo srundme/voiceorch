@@ -1,0 +1,97 @@
+> ## Documentation Index
+> Fetch the complete documentation index at: https://docs.vobiz.ai/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# Partner API Authentication
+
+> Authenticate against the Vobiz Partner API using permanent X-Auth headers for server integrations or short-lived JWT tokens for interactive sessions.
+
+[← Partner API Reference](/partner/api)
+
+The Partner API supports two authentication mechanisms. Header-based authentication is recommended for all programmatic integrations. JWT login is available for interactive sessions only.
+
+<Info>
+  All Partner API requests must include `X-Auth-ID` and `X-Auth-Token` headers. The base URL is `{BASE}` which resolves to `https://api.vobiz.ai/api/v1/partner`.
+</Info>
+
+## Overview
+
+Every Partner API request requires your Partner credentials, obtained from the [Vobiz Partner Console](https://console.vobiz.ai). There are two ways to authenticate:
+
+### Header-Based Auth (Recommended)
+
+Pass `X-Auth-ID` and `X-Auth-Token` on every request. Best for server-to-server integrations, automation scripts, and production systems. Credentials never expire.
+
+### JWT Login (Interactive sessions)
+
+Exchange email + password for a temporary JWT access token. Expires after a set period. Suitable for dashboard UIs or short-lived sessions.
+
+## Header-Based Authentication
+
+Include the following headers on every request. These credentials are permanent and do not expire - rotate them manually if compromised.
+
+* **`X-Auth-ID`** *(required)* - Your permanent Partner ID. Retrieved from the Partner Console under **Settings → API Keys**. It does not change unless you request a new one.
+* **`X-Auth-Token`** *(required)* - Your secret API token. Rotate this immediately if you suspect it has been compromised. Issue a new token from the Partner Console.
+* **`Accept`** *(required on GET/POST)* - Tells the API to return JSON responses.
+* **`Content-Type`** *(required on POST/PUT with body)* - Set to `application/json` when sending a request body.
+
+```bash theme={null}
+curl -X GET \
+  "${BASE}/me" \
+  -H "X-Auth-ID: {your_partner_id}" \
+  -H "X-Auth-Token: {your_auth_token}" \
+  -H "Accept: application/json"
+```
+
+```bash theme={null}
+curl -X POST \
+  "${BASE}/accounts" \
+  -H "X-Auth-ID: {your_partner_id}" \
+  -H "X-Auth-Token: {your_auth_token}" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{ "name": "Acme Corp", "email": "admin@acme.com", "password": "Secure@123", "country": "IN" }'
+```
+
+## Partner Login (JWT)
+
+Exchanges your partner email and password for a temporary JWT access token. The Postman collection automatically captures the token into `partner_access_token` after a successful login. Use this for interactive sessions; use `X-Auth` headers for automation.
+
+### Request
+
+| Field      | Type   | Required | Description                        |
+| ---------- | ------ | -------- | ---------------------------------- |
+| `email`    | string | Required | Your partner account email address |
+| `password` | string | Required | Your partner account password      |
+
+```bash theme={null}
+curl -X POST \
+  "${BASE}/login" \
+  -H "X-Auth-ID: {your_partner_id}" \
+  -H "X-Auth-Token: {your_auth_token}" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "partner@example.com",
+    "password": "YourPassword123!"
+  }'
+```
+
+### Response
+
+```json theme={null}
+{
+  "tokens": {
+    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "token_type": "Bearer",
+    "expires_in": 3600
+  }
+}
+```
+
+```json theme={null}
+{
+  "error": "invalid_credentials",
+  "message": "The email or password you provided is incorrect."
+}
+```

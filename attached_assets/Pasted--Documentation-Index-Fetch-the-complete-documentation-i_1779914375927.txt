@@ -1,0 +1,93 @@
+> ## Documentation Index
+> Fetch the complete documentation index at: https://docs.vobiz.ai/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# Partner API Reference
+
+> Complete reference for the Vobiz Partner API - 21 endpoints across authentication, customer provisioning, billing, CDRs, DIDs, KYC sessions, and analytics for resellers.
+
+[← Partner Overview](/partner)
+
+Complete API reference for the Vobiz Partner Portal. Covers all 21 endpoints across 9 functional areas - authentication, customer management, billing, CDRs, KYC, and more.
+
+<Card title="End-to-end integration flow" icon="route" href="/partner/flow">
+  Follow the complete lifecycle from account creation to trunk setup.
+</Card>
+
+## Base URL & Authentication
+
+All Partner API endpoints share a single base URL:
+
+```
+https://api.vobiz.ai/api/v1/partner
+```
+
+Every request must include the headers `X-Auth-ID` and `X-Auth-Token`. See [Authentication](/partner/api/authentication) for full details.
+
+Do not have credentials yet? [Contact support@vobiz.ai](mailto:support@vobiz.ai) to enable Partner access.
+
+## API Sections
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key" href="/partner/api/authentication">
+    Header-based credentials and JWT login.
+  </Card>
+
+  <Card title="Profile" icon="id-card" href="/partner/api/profile">
+    Identity, balance, and GST configuration.
+  </Card>
+
+  <Card title="Dashboard & Analytics" icon="chart-line" href="/partner/api/analytics">
+    Live metrics and date-range performance reporting.
+  </Card>
+
+  <Card title="Customer Accounts" icon="users" href="/partner/api/customers">
+    Provision sub-accounts under your partner umbrella.
+  </Card>
+
+  <Card title="Balance Transfer" icon="wallet" href="/partner/api/balance">
+    Move credit from your master wallet to customers.
+  </Card>
+
+  <Card title="KYC Sessions" icon="id-badge" href="/partner/api/kyc-sessions">
+    Initiate and manage customer KYC verification.
+  </Card>
+
+  <Card title="Transactions" icon="receipt" href="/partner/api/transactions">
+    Per-customer and global financial ledgers.
+  </Card>
+
+  <Card title="CDRs" icon="phone" href="/partner/api/cdrs">
+    Call detail records for billing and troubleshooting.
+  </Card>
+
+  <Card title="Phone Numbers" icon="hashtag" href="/partner/api/numbers">
+    DID inventory across all customer accounts.
+  </Card>
+</CardGroup>
+
+## All Endpoints at a Glance
+
+| Method | Endpoint                                        | Description                                  | Docs                                      |
+| ------ | ----------------------------------------------- | -------------------------------------------- | ----------------------------------------- |
+| POST   | `/login`                                        | Exchange email/password for JWT access token | [Auth](/partner/api/authentication)       |
+| GET    | `/me`                                           | Retrieve partner profile and balance         | [Profile](/partner/api/profile)           |
+| GET    | `/dashboard`                                    | Live partner dashboard summary               | [Analytics](/partner/api/analytics)       |
+| GET    | `/analytics`                                    | Date-range aggregated call analytics         | [Analytics](/partner/api/analytics)       |
+| POST   | `/accounts`                                     | Create a customer sub-account                | [Customers](/partner/api/customers)       |
+| GET    | `/accounts`                                     | List all customer accounts                   | [Customers](/partner/api/customers)       |
+| GET    | `/accounts/{customer_auth_id}`                  | Get customer profile                         | [Customers](/partner/api/customers)       |
+| GET    | `/accounts/{customer_auth_id}/balance`          | Get customer wallet balance                  | [Customers](/partner/api/customers)       |
+| POST   | `/accounts/{customer_auth_id}/transfer-balance` | Transfer credit to a customer                | [Balance](/partner/api/balance)           |
+| POST   | `/kyc-sessions`                                 | Initiate KYC for a sub-account               | [KYC](/partner/api/kyc-sessions)          |
+| GET    | `/kyc-sessions`                                 | List KYC sessions (paginated)                | [KYC](/partner/api/kyc-sessions)          |
+| GET    | `/kyc-sessions/{session_id}`                    | Get a KYC session by ID                      | [KYC](/partner/api/kyc-sessions)          |
+| POST   | `/kyc-sessions/{session_id}/resend`             | Resend the KYC email                         | [KYC](/partner/api/kyc-sessions)          |
+| DELETE | `/kyc-sessions/{session_id}`                    | Revoke a KYC session                         | [KYC](/partner/api/kyc-sessions)          |
+| GET    | `/accounts/{customer_auth_id}/transactions`     | Customer transaction ledger                  | [Transactions](/partner/api/transactions) |
+| GET    | `/transactions`                                 | Global transaction ledger                    | [Transactions](/partner/api/transactions) |
+| GET    | `/accounts/{customer_auth_id}/cdrs`             | Customer CDR list                            | [CDRs](/partner/api/cdrs)                 |
+| GET    | `/accounts/{customer_auth_id}/cdrs/{call_uuid}` | Single CDR by UUID                           | [CDRs](/partner/api/cdrs)                 |
+| GET    | `/cdrs`                                         | Global CDR list                              | [CDRs](/partner/api/cdrs)                 |
+| GET    | `/accounts/{customer_auth_id}/numbers`          | Numbers assigned to a customer               | [Numbers](/partner/api/numbers)           |
+| GET    | `/numbers`                                      | Global number inventory                      | [Numbers](/partner/api/numbers)           |
