@@ -1241,6 +1241,18 @@ export const ReleasePhoneNumberParams = zod.object({
 
 
 /**
+ * @summary Get the authenticated user's KYC status and active session
+ */
+export const GetKycStatusResponse = zod.object({
+  "kycStatus": zod.string().describe('pending | completed | failed'),
+  "sessionId": zod.string().nullish(),
+  "sessionStatus": zod.string().nullish().describe('link_ready | opened | in_progress | kyc_completed | revoked | null'),
+  "widgetUrl": zod.string().nullish(),
+  "completedAt": zod.string().nullish()
+})
+
+
+/**
  * @summary List currently active (in-progress) calls for the authenticated user
  */
 export const ListActiveCallsResponseItem = zod.object({

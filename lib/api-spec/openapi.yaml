@@ -28,6 +28,8 @@ tags:
     description: Audit log of all platform events
   - name: phone-numbers
     description: Managed phone number provisioning (platform Vobiz account)
+  - name: kyc
+    description: KYC (Know Your Customer) identity verification via Vobiz
   - name: webhook-endpoints
     description: User-configured webhook endpoints for call event delivery
   - name: monitor
@@ -1018,6 +1020,39 @@ paths:
           description: Unauthorized
         "404":
           description: Phone number not found
+
+  # ── KYC ───────────────────────────────────────────────────────────────────
+  /kyc/status:
+    get:
+      operationId: getKycStatus
+      tags: [kyc]
+      summary: Get the authenticated user's KYC status and active session
+      responses:
+        "200":
+          description: KYC status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KycStatusResponse"
+        "401":
+          description: Unauthorized
+
+  /kyc/start:
+    post:
+      operationId: startKyc
+      tags: [kyc]
+      summary: Create a Vobiz sub-account (if needed) and start a redirect-flow KYC session
+      responses:
+        "201":
+          description: KYC session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KycStartResponse"
+        "401":
+          description: Unauthorized
+        "503":
+          description: Vobiz not configured
 
   # ── Active Call Monitor ───────────────────────────────────────────────────
   /calls/active:
@@ -3873,3 +3908,31 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AdminUsageRow"
+
+    KycStatusResponse:
+      type: object
+      required: [kycStatus]
+      properties:
+        kycStatus:
+          type: string
+          description: "pending | completed | failed"
+        sessionId:
+          type: ["string", "null"]
+        sessionStatus:
+          type: ["string", "null"]
+          description: "link_ready | opened | in_progress | kyc_completed | revoked | null"
+        widgetUrl:
+          type: ["string", "null"]
+        completedAt:
+          type: ["string", "null"]
+
+    KycStartResponse:
+      type: object
+      required: [sessionId, status]
+      properties:
+        sessionId:
+          type: string
+        status:
+          type: string
+        widgetUrl:
+          type: ["string", "null"]

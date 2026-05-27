@@ -72,6 +72,8 @@ import type {
   KnowledgeBaseDetail,
   KnowledgeBaseInput,
   KnowledgeBaseUpdate,
+  KycStartResponse,
+  KycStatusResponse,
   ListActivityLogsParams,
   ListAvailabilityOverridesParams,
   ListAvailabilityParams,
@@ -3530,6 +3532,153 @@ export const useReleasePhoneNumber = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getReleasePhoneNumberMutationOptions(options));
+    }
+
+export const getGetKycStatusUrl = () => {
+
+
+
+
+  return `/api/kyc/status`
+}
+
+/**
+ * @summary Get the authenticated user's KYC status and active session
+ */
+export const getKycStatus = async ( options?: RequestInit): Promise<KycStatusResponse> => {
+
+  return customFetch<KycStatusResponse>(getGetKycStatusUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetKycStatusQueryKey = () => {
+    return [
+    `/api/kyc/status`
+    ] as const;
+    }
+
+
+export const getGetKycStatusQueryOptions = <TData = Awaited<ReturnType<typeof getKycStatus>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getKycStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetKycStatusQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getKycStatus>>> = ({ signal }) => getKycStatus({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getKycStatus>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetKycStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getKycStatus>>>
+export type GetKycStatusQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get the authenticated user's KYC status and active session
+ */
+
+export function useGetKycStatus<TData = Awaited<ReturnType<typeof getKycStatus>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getKycStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetKycStatusQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getStartKycUrl = () => {
+
+
+
+
+  return `/api/kyc/start`
+}
+
+/**
+ * @summary Create a Vobiz sub-account (if needed) and start a redirect-flow KYC session
+ */
+export const startKyc = async ( options?: RequestInit): Promise<KycStartResponse> => {
+
+  return customFetch<KycStartResponse>(getStartKycUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getStartKycMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startKyc>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof startKyc>>, TError,void, TContext> => {
+
+const mutationKey = ['startKyc'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startKyc>>, void> = () => {
+
+
+          return  startKyc(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StartKycMutationResult = NonNullable<Awaited<ReturnType<typeof startKyc>>>
+
+    export type StartKycMutationError = ErrorType<void>
+
+    /**
+ * @summary Create a Vobiz sub-account (if needed) and start a redirect-flow KYC session
+ */
+export const useStartKyc = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startKyc>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof startKyc>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getStartKycMutationOptions(options));
     }
 
 export const getListActiveCallsUrl = () => {

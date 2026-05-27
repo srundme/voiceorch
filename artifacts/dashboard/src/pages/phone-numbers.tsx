@@ -1,5 +1,6 @@
-import React, { useState } from "react";
-import { Phone, Plus, Trash2, Link2, Link2Off, Search, Loader2, Globe, AlertCircle, GitFork, IndianRupee } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { useLocation } from "wouter";
+import { Phone, Plus, Trash2, Link2, Link2Off, Search, Loader2, Globe, AlertCircle, GitFork, IndianRupee, ShieldCheck, ShieldAlert, ExternalLink, CheckCircle2 } from "lucide-react";
 import {
   useListPhoneNumbers,
   useListAvailablePhoneNumbers,
@@ -7,9 +8,12 @@ import {
   useAssignPhoneNumber,
   useReleasePhoneNumber,
   useListAgents,
+  useGetKycStatus,
+  useStartKyc,
   getListPhoneNumbersQueryKey,
   getListAvailablePhoneNumbersQueryKey,
   getListAgentsQueryKey,
+  getGetKycStatusQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -47,9 +51,105 @@ const COUNTRY_OPTIONS = [
   { code: "AE", name: "UAE" },
 ];
 
-function formatPrice(cents: number): string {
-  if (cents === 0) return "Free";
-  return `₹${(cents / 100).toFixed(0)}`;
+// ── KYC Banner ────────────────────────────────────────────────────────────────
+
+function KycBanner() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { data: kycData, isLoading } = useGetKycStatus({ query: { queryKey: getGetKycStatusQueryKey() } });
+  const startKyc = useStartKyc();
+
+  // Refresh KYC status whenever the user returns to this tab
+  useEffect(() => {
+    function handleFocus() {
+      void queryClient.invalidateQueries({ queryKey: getGetKycStatusQueryKey() });
+    }
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [queryClient]);
+
+  if (isLoading) return null;
+  if (kycData?.kycStatus === "completed") {
+    return (
+      <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-emerald-500/20 bg-emerald-500/5 text-emerald-700 text-sm">
+        <ShieldCheck className="h-4 w-4 shrink-0" />
+        <span className="font-medium">Identity verified</span>
+        <span className="text-emerald-600/70 text-xs">— You can purchase Aadhaar-required Indian numbers.</span>
+      </div>
+    );
+  }
+
+  function handleStartKyc() {
+    startKyc.mutate(undefined, {
+      onSuccess: (data) => {
+        queryClient.invalidateQueries({ queryKey: getGetKycStatusQueryKey() });
+        if (data.widgetUrl) {
+          window.open(data.widgetUrl, "_blank", "noopener,noreferrer");
+          toast({
+            title: "KYC verification opened",
+            description: "Complete your identity verification in the new tab. Return here when done.",
+          });
+        } else if (data.status === "kyc_completed") {
+          toast({ title: "Already verified!", description: "Your identity is already verified." });
+        }
+      },
+      onError: (e: any) => {
+        const msg = e?.response?.data?.error ?? "Failed to start verification. Please try again.";
+        toast({ title: "Verification failed to start", description: msg, variant: "destructive" });
+      },
+    });
+  }
+
+  const hasActiveSession =
+    kycData?.sessionStatus &&
+    !["revoked", "kyc_completed"].includes(kycData.sessionStatus);
+
+  const isFailed = kycData?.kycStatus === "failed";
+
+  return (
+    <div className={`flex items-start gap-3 px-4 py-3 rounded-lg border text-sm ${
+      isFailed
+        ? "border-red-500/20 bg-red-500/5"
+        : "border-amber-500/20 bg-amber-500/5"
+    }`}>
+      {isFailed
+        ? <ShieldAlert className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+        : <ShieldAlert className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+      }
+      <div className="flex-1 space-y-1">
+        <p className={`font-medium ${isFailed ? "text-red-700" : "text-amber-700"}`}>
+          {isFailed
+            ? "Identity verification failed"
+            : hasActiveSession
+              ? "Identity verification in progress"
+              : "Identity verification required"}
+        </p>
+        <p className={`text-xs leading-relaxed ${isFailed ? "text-red-600/70" : "text-amber-600/70"}`}>
+          {isFailed
+            ? "Your KYC verification was unsuccessful. Common reasons include a name mismatch or OTP failure. Click below to try again."
+            : hasActiveSession
+              ? "A verification session is open. If you closed the tab, click 'Resume Verification' to start a fresh session."
+              : "Indian DID numbers require Aadhaar verification (PAN + Aadhaar OTP for individuals, PAN + GSTIN for businesses). No document uploads — Vobiz uses government APIs."}
+        </p>
+      </div>
+      <Button
+        size="sm"
+        className={`h-8 gap-1.5 shrink-0 text-xs ${
+          isFailed
+            ? "bg-red-600 hover:bg-red-700 text-white"
+            : "bg-amber-500 hover:bg-amber-600 text-white"
+        }`}
+        disabled={startKyc.isPending}
+        onClick={handleStartKyc}
+      >
+        {startKyc.isPending
+          ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          : <ExternalLink className="h-3.5 w-3.5" />
+        }
+        {hasActiveSession ? "Resume Verification" : "Verify Identity"}
+      </Button>
+    </div>
+  );
 }
 
 // ── Assign Dialog ────────────────────────────────────────────────────────────
@@ -171,8 +271,18 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
         },
         onError: (e: any) => {
           const msg = e?.response?.data?.error ?? e?.message ?? "Purchase failed";
-          toast({ title: "Purchase failed", description: msg, variant: "destructive" });
-          setConfirming(false);
+          const code = e?.response?.data?.code;
+          if (code === "KYC_REQUIRED") {
+            toast({
+              title: "Identity verification required",
+              description: "This number requires Aadhaar verification. Complete KYC first using the banner on the Phone Numbers page.",
+              variant: "destructive",
+            });
+            onClose();
+          } else {
+            toast({ title: "Purchase failed", description: msg, variant: "destructive" });
+            setConfirming(false);
+          }
         },
       }
     );
@@ -470,12 +580,43 @@ function RoutingRulesDialog({ number, onClose }: { number: PhoneNumber; onClose:
 export default function PhoneNumbersPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const [location, setLocation] = useLocation();
   const { data: numbers, isLoading } = useListPhoneNumbers({ query: { queryKey: getListPhoneNumbersQueryKey() } });
   const release = useReleasePhoneNumber();
   const [buyOpen, setBuyOpen] = useState(false);
   const [assignTarget, setAssignTarget] = useState<PhoneNumber | null>(null);
   const [releaseTarget, setReleaseTarget] = useState<PhoneNumber | null>(null);
   const [routingTarget, setRoutingTarget] = useState<PhoneNumber | null>(null);
+
+  // Handle return from Vobiz KYC widget redirect
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const kyc = params.get("kyc");
+    if (!kyc) return;
+
+    // Strip the query param so refreshing doesn't re-trigger
+    setLocation("/phone-numbers", { replace: true });
+
+    if (kyc === "kyc_completed" || kyc === "completed") {
+      queryClient.invalidateQueries({ queryKey: getGetKycStatusQueryKey() });
+      toast({
+        title: "Identity verified!",
+        description: (
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+            <span>Your Aadhaar verification is complete. You can now purchase Indian DID numbers.</span>
+          </div>
+        ) as any,
+      });
+    } else if (kyc === "failed" || kyc === "kyc_failed") {
+      queryClient.invalidateQueries({ queryKey: getGetKycStatusQueryKey() });
+      toast({
+        title: "Verification failed",
+        description: "Your KYC verification was unsuccessful. Try again from the banner below.",
+        variant: "destructive",
+      });
+    }
+  }, []);
 
   function handleRelease(n: PhoneNumber) {
     release.mutate(
@@ -508,6 +649,9 @@ export default function PhoneNumbersPage() {
       </div>
 
       <div className="p-6 max-w-4xl mx-auto space-y-4">
+        {/* KYC banner */}
+        <KycBanner />
+
         {/* Info banner */}
         <div className="flex items-start gap-3 p-4 rounded-xl border border-gray-200 bg-white">
           <Globe className="h-5 w-5 text-gray-700 mt-0.5 shrink-0" />

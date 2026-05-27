@@ -1516,6 +1516,29 @@ export interface AdminUsageResponse {
   rows: AdminUsageRow[];
 }
 
+export interface KycStatusResponse {
+  /** pending | completed | failed */
+  kycStatus: string;
+  /** @nullable */
+  sessionId?: string | null;
+  /**
+     * link_ready | opened | in_progress | kyc_completed | revoked | null
+     * @nullable
+     */
+  sessionStatus?: string | null;
+  /** @nullable */
+  widgetUrl?: string | null;
+  /** @nullable */
+  completedAt?: string | null;
+}
+
+export interface KycStartResponse {
+  sessionId: string;
+  status: string;
+  /** @nullable */
+  widgetUrl?: string | null;
+}
+
 export type ListCallsParams = {
 /**
  * @nullable
