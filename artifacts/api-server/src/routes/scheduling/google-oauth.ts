@@ -6,6 +6,7 @@ import {
   upsertConnection,
   listConnectionsForUser,
   revokeConnection,
+  listConnectionCalendars,
 } from "../../services/scheduling/google-calendar.js";
 import { logger } from "../../lib/logger.js";
 
@@ -170,6 +171,56 @@ router.get("/scheduling/google/calendar-links", requireAuth, async (req, res): P
     map[r.id] = r.google_calendar_connection_id ?? null;
   }
   res.json(map);
+});
+
+// ── List Google sub-calendars across all connected accounts ─────────────────
+// Returns one entry per Google sub-calendar (Personal, Work, etc.) the user
+// has writer access to, annotated with the linked internal scheduling
+// calendar id (if any). The dashboard uses this to drive the Book Appointment
+// tool's Calendar dropdown.
+
+router.get("/scheduling/google/calendars", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const connections = await listConnectionsForUser(clerkId);
+
+  // Map: connectionId -> schedulingCalendarId (first one wins; usually 1:1)
+  const { db } = await import("@workspace/db");
+  const { sql } = await import("drizzle-orm");
+  const linkRows = await db.execute(
+    sql`SELECT id, google_calendar_connection_id FROM scheduling_calendars WHERE user_id = ${clerkId} AND google_calendar_connection_id IS NOT NULL`,
+  );
+  const connToSchedCal = new Map<string, number>();
+  for (const r of linkRows.rows as any[]) {
+    if (!connToSchedCal.has(r.google_calendar_connection_id)) {
+      connToSchedCal.set(r.google_calendar_connection_id, r.id);
+    }
+  }
+
+  const out: Array<{
+    connectionId: string;
+    connectionEmail: string;
+    googleCalendarId: string;
+    summary: string;
+    primary: boolean;
+    schedulingCalendarId: number | null;
+  }> = [];
+
+  await Promise.all(connections.map(async conn => {
+    const cals = await listConnectionCalendars(conn.id);
+    if (!cals) return;
+    for (const c of cals) {
+      out.push({
+        connectionId: conn.id,
+        connectionEmail: conn.email,
+        googleCalendarId: c.googleCalendarId,
+        summary: c.summary,
+        primary: c.primary,
+        schedulingCalendarId: connToSchedCal.get(conn.id) ?? null,
+      });
+    }
+  }));
+
+  res.json(out);
 });
 
 // ── Status (legacy single-account compat) ────────────────────────────────────

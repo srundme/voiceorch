@@ -203,6 +203,39 @@ export async function revokeConnection(connectionId: string): Promise<void> {
   await db.execute(sql`DELETE FROM google_calendar_connections WHERE id = ${connectionId}`);
 }
 
+// ── Calendar listing ─────────────────────────────────────────────────────────
+
+/**
+ * List the sub-calendars (Personal, Work, etc.) visible to this Google account.
+ * Returns null on failure (token / API error).
+ */
+export async function listConnectionCalendars(connectionId: string): Promise<Array<{
+  googleCalendarId: string;
+  summary: string;
+  primary: boolean;
+  accessRole: string;
+  backgroundColor: string | null;
+}> | null> {
+  const tokens = await getValidAccessToken(connectionId);
+  if (!tokens) return null;
+  const client = makePlatformOAuth2Client();
+  client.setCredentials({ access_token: tokens.accessToken });
+  const calendar = google.calendar({ version: "v3", auth: client });
+  try {
+    const res = await calendar.calendarList.list({ minAccessRole: "writer", showHidden: false });
+    return (res.data.items ?? []).map(c => ({
+      googleCalendarId: c.id ?? "",
+      summary: c.summaryOverride ?? c.summary ?? "(Untitled)",
+      primary: Boolean(c.primary),
+      accessRole: c.accessRole ?? "reader",
+      backgroundColor: c.backgroundColor ?? null,
+    })).filter(c => c.googleCalendarId);
+  } catch (err) {
+    logger.warn({ err, connectionId }, "Failed to list Google calendars");
+    return null;
+  }
+}
+
 // ── Calendar event creation ──────────────────────────────────────────────────
 
 /**

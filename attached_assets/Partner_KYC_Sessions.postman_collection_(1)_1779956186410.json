@@ -1,0 +1,140 @@
+{
+  "info": {
+    "name": "VoBiz – Partner KYC Sessions",
+    "description": "Partner-facing endpoints to send the KYC email (and manage the session) for a customer account.\n\n**Auth:** Partner Bearer token (`{{partner_token}}`).\n\n**Base path:** `/api/v1/partner/kyc-sessions`\n\nFlow:\n1. **Create session (email flow)** → VoBiz sends the customer a signed KYC widget link by email.\n2. **Create session (redirect flow)** → No email; the response carries `widget_url` for you to redirect the customer.\n3. **Resend** the email if needed (rate-limited to 1 per 30 min per session).\n4. **List / Get / Revoke** sessions.\n\nThe Create requests save `session_id` and `widget_url` into collection variables, so the follow-up requests can be run without copy-paste.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      { "key": "token", "value": "{{partner_token}}", "type": "string" }
+    ]
+  },
+  "variable": [
+    { "key": "base_url", "value": "https://api.vobiz.ai", "type": "string" },
+    { "key": "partner_token", "value": "", "type": "string", "description": "Partner JWT (Bearer)" },
+    { "key": "customer_auth_id", "value": "MA_XXXXXXXX", "type": "string", "description": "Auth ID (MA_/SA_) of the customer being KYC'd" },
+    { "key": "customer_email", "value": "customer@example.com", "type": "string" },
+    { "key": "webhook_url", "value": "", "type": "string", "description": "Optional — fires on KYC completion" },
+    { "key": "redirect_url", "value": "https://your.app/kyc-done", "type": "string", "description": "Used by the redirect flow" },
+    { "key": "session_id", "value": "", "type": "string", "description": "Auto-populated by the Create requests" },
+    { "key": "widget_url", "value": "", "type": "string", "description": "Auto-populated by the redirect-flow Create" }
+  ],
+  "item": [
+    {
+      "name": "1. Create KYC session — email flow (sends email)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('201 Created', () => pm.expect(pm.response.code).to.equal(201));",
+              "const body = pm.response.json();",
+              "if (body.session_id) pm.collectionVariables.set('session_id', body.session_id);",
+              "pm.test('email dispatched', () => pm.expect(body.email_dispatched_to, 'email_dispatched_to').to.be.a('string'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/partner/kyc-sessions",
+          "host": [ "{{base_url}}" ],
+          "path": [ "api", "v1", "partner", "kyc-sessions" ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"account_auth_id\": \"{{customer_auth_id}}\",\n  \"flow_type\": \"email\",\n  \"customer_email\": \"{{customer_email}}\",\n  \"webhook_url\": \"{{webhook_url}}\"\n}"
+        },
+        "description": "Creates a hosted KYC session for the customer and emails them the signed widget link. `customer_email` is **required** for the email flow. `webhook_url` is optional; remove the field if you don't need it."
+      }
+    },
+    {
+      "name": "2. Create KYC session — redirect flow (no email; returns widget_url)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('201 Created', () => pm.expect(pm.response.code).to.equal(201));",
+              "const body = pm.response.json();",
+              "if (body.session_id) pm.collectionVariables.set('session_id', body.session_id);",
+              "if (body.widget_url) pm.collectionVariables.set('widget_url', body.widget_url);",
+              "pm.test('widget_url returned', () => pm.expect(body.widget_url, 'widget_url').to.be.a('string'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/partner/kyc-sessions",
+          "host": [ "{{base_url}}" ],
+          "path": [ "api", "v1", "partner", "kyc-sessions" ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"account_auth_id\": \"{{customer_auth_id}}\",\n  \"flow_type\": \"redirect\",\n  \"redirect_url\": \"{{redirect_url}}\",\n  \"webhook_url\": \"{{webhook_url}}\"\n}"
+        },
+        "description": "Creates a KYC session and returns `widget_url` in the response — **no email is sent**. You're responsible for redirecting the customer to that URL."
+      }
+    },
+    {
+      "name": "3. Resend KYC email (active session)",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/v1/partner/kyc-sessions/{{session_id}}/resend",
+          "host": [ "{{base_url}}" ],
+          "path": [ "api", "v1", "partner", "kyc-sessions", "{{session_id}}", "resend" ]
+        },
+        "description": "Re-sends the KYC widget email for an active email-flow session. Rate-limited to **1 resend per 30 minutes per session** (returns 409/429 otherwise). Not available for redirect-flow sessions."
+      }
+    },
+    {
+      "name": "4. List KYC sessions",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/v1/partner/kyc-sessions",
+          "host": [ "{{base_url}}" ],
+          "path": [ "api", "v1", "partner", "kyc-sessions" ]
+        },
+        "description": "List all KYC sessions created by this partner."
+      }
+    },
+    {
+      "name": "5. Get KYC session",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/v1/partner/kyc-sessions/{{session_id}}",
+          "host": [ "{{base_url}}" ],
+          "path": [ "api", "v1", "partner", "kyc-sessions", "{{session_id}}" ]
+        },
+        "description": "Fetch a single session (status, customer_email mask, expires_at, etc.)."
+      }
+    },
+    {
+      "name": "6. Revoke KYC session",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/v1/partner/kyc-sessions/{{session_id}}",
+          "host": [ "{{base_url}}" ],
+          "path": [ "api", "v1", "partner", "kyc-sessions", "{{session_id}}" ]
+        },
+        "description": "Revoke an active session (invalidates the widget link)."
+      }
+    }
+  ]
+}
