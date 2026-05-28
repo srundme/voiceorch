@@ -296,6 +296,7 @@ router.post("/wizard/generate-prompt", requireDbUser, async (req, res): Promise<
   const {
     useCase, role, companyName, agentName, serviceDescription,
     agentDirection, callFlowDescription, languages,
+    leadSourceType, leadFields, productDetails,
   } = req.body as {
     useCase?: string;
     role?: string;
@@ -305,6 +306,9 @@ router.post("/wizard/generate-prompt", requireDbUser, async (req, res): Promise<
     agentDirection?: string;
     callFlowDescription?: string;
     languages?: string[];
+    leadSourceType?: string;
+    leadFields?: string[];
+    productDetails?: string;
   };
 
   if (!callFlowDescription?.trim()) {
@@ -358,7 +362,7 @@ Write ONLY numbered call flow steps (5-10 steps). Each step should be clear, nat
     callFlowSteps = generateFallbackCallFlow(useCase ?? "general", agentDirection ?? "inbound", callFlowDescription);
   }
 
-  const prompt = MASTER_TEMPLATE
+  let basePrompt = MASTER_TEMPLATE
     .replace("{ROLE}", role ?? useCase ?? "AI assistant")
     .replace("{COMPANY_NAME}", companyName ?? "{COMPANY_NAME}")
     .replace("{AGENT_NAME}", agentName ?? "{AGENT_NAME}")
@@ -369,7 +373,23 @@ Write ONLY numbered call flow steps (5-10 steps). Each step should be clear, nat
     .replace("{FORBIDDEN_WORDS}", langValues.forbiddenWords)
     .replace("{CALL_FLOW_STEPS}", callFlowSteps.trim());
 
-  res.json({ prompt, callFlowSteps });
+  if (leadSourceType) {
+    const fields = Array.isArray(leadFields) && leadFields.length > 0 ? leadFields : ["name", "email", "message"];
+    const varList = fields.map(f => `{{lead_${f}}}`).join(", ");
+    const leadBlock = [
+      "",
+      "## Lead Source Context",
+      `This agent receives leads from ${leadSourceType.charAt(0).toUpperCase() + leadSourceType.slice(1)}. Each call will include the following lead variables that you can reference in your conversation:`,
+      fields.map(f => `- {{lead_${f}}} — the lead's ${f}`).join("\n"),
+      `Available lead variables: ${varList}`,
+      ...(productDetails?.trim()
+        ? ["", "## Product / Service Details", "Use the following context about what you are selling or offering:", productDetails.trim(), "", "This is also available as {{product_details}} in your call flow templates."]
+        : []),
+    ].join("\n");
+    basePrompt += leadBlock;
+  }
+
+  res.json({ prompt: basePrompt, callFlowSteps });
 });
 
 function generateFallbackCallFlow(useCase: string, direction: string, description: string): string {

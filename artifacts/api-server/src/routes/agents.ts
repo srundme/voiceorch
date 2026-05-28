@@ -15,8 +15,23 @@ import {
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logActivity } from "../lib/activity.js";
+import { encryptKey, decryptKey } from "../lib/crypto.js";
 
 const router: IRouter = Router();
+
+function maskLeadToken(token: string | null | undefined): string | null {
+  if (!token) return null;
+  const plain = decryptKey(token);
+  if (plain.length <= 4) return "****";
+  return "..." + plain.slice(-4);
+}
+
+function prepareAgentForResponse(agent: typeof agentsTable.$inferSelect) {
+  return {
+    ...agent,
+    leadSourceToken: maskLeadToken(agent.leadSourceToken),
+  };
+}
 
 router.get("/agents", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
@@ -25,7 +40,7 @@ router.get("/agents", requireAuth, async (req, res): Promise<void> => {
     .from(agentsTable)
     .where(eq(agentsTable.userId, clerkId))
     .orderBy(agentsTable.createdAt);
-  res.json(ListAgentsResponse.parse(agents));
+  res.json(ListAgentsResponse.parse(agents.map(prepareAgentForResponse)));
 });
 
 router.post("/agents", requireAuth, async (req, res): Promise<void> => {
@@ -37,9 +52,13 @@ router.post("/agents", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: "Validation failed", issues });
     return;
   }
+  const insertData = { ...parsed.data, userId: clerkId };
+  if (insertData.leadSourceToken) {
+    insertData.leadSourceToken = encryptKey(insertData.leadSourceToken);
+  }
   const [agent] = await db
     .insert(agentsTable)
-    .values({ ...parsed.data, userId: clerkId })
+    .values(insertData)
     .returning();
   await logActivity({ userId: clerkId, eventType: "agent.created", resourceType: "agent", resourceId: String(agent.id), description: `Agent "${agent.name}" created` });
   db.insert(schedulingCalendarsTable)
@@ -54,7 +73,7 @@ router.post("/agents", requireAuth, async (req, res): Promise<void> => {
     .catch((err) => {
       req.log.warn({ err, agentId: agent.id }, "Failed to auto-create scheduling calendar for agent");
     });
-  res.status(201).json(GetAgentResponse.parse(agent));
+  res.status(201).json(GetAgentResponse.parse(prepareAgentForResponse(agent)));
 });
 
 router.get("/agents/:id", requireAuth, async (req, res): Promise<void> => {
@@ -72,7 +91,7 @@ router.get("/agents/:id", requireAuth, async (req, res): Promise<void> => {
     res.status(404).json({ error: "Agent not found" });
     return;
   }
-  res.json(GetAgentResponse.parse(agent));
+  res.json(GetAgentResponse.parse(prepareAgentForResponse(agent)));
 });
 
 router.patch("/agents/:id", requireAuth, async (req, res): Promise<void> => {
@@ -87,16 +106,20 @@ router.patch("/agents/:id", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: "Validation failed", issues: parsed.error.issues });
     return;
   }
+  const updateData: Record<string, unknown> = { ...parsed.data };
+  if (updateData.leadSourceToken) {
+    updateData.leadSourceToken = encryptKey(updateData.leadSourceToken as string);
+  }
   const [agent] = await db
     .update(agentsTable)
-    .set({ ...parsed.data, updatedAt: new Date() })
+    .set({ ...updateData, updatedAt: new Date() })
     .where(and(eq(agentsTable.id, params.data.id), eq(agentsTable.userId, clerkId)))
     .returning();
   if (!agent) {
     res.status(404).json({ error: "Agent not found" });
     return;
   }
-  res.json(UpdateAgentResponse.parse(agent));
+  res.json(UpdateAgentResponse.parse(prepareAgentForResponse(agent)));
 });
 
 router.delete("/agents/:id", requireAuth, async (req, res): Promise<void> => {

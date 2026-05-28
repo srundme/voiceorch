@@ -150,6 +150,12 @@ export const agentsTable = pgTable("agents", {
     required?: boolean;
   }>>(),
 
+  // ── Lead Source ───────────────────────────────────────────────────────────────
+  leadSourceType: text("lead_source_type"),
+  leadSourceToken: text("lead_source_token"),
+  leadFields: json("lead_fields").$type<string[]>(),
+  productDetails: text("product_details"),
+
   // ── Usage Limits ─────────────────────────────────────────────────────────────
   maxConcurrentCalls: integer("max_concurrent_calls"),
   monthlySpendLimitCents: integer("monthly_spend_limit_cents"),

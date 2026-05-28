@@ -288,6 +288,26 @@ export interface Agent {
      * @nullable
      */
   agentConfig?: AgentAgentConfig;
+  /**
+     * Lead source platform (e.g. instagram)
+     * @nullable
+     */
+  leadSourceType?: string | null;
+  /**
+     * Masked hint of the lead source access token (last 4 chars)
+     * @nullable
+     */
+  leadSourceToken?: string | null;
+  /**
+     * Lead fields to capture per incoming lead (name, email, message)
+     * @nullable
+     */
+  leadFields?: string[] | null;
+  /**
+     * Product or service details the agent should know when calling leads
+     * @nullable
+     */
+  productDetails?: string | null;
   totalCalls?: number;
   successfulCalls?: number;
   /** @nullable */
@@ -353,6 +373,14 @@ export interface AgentInput {
   tools?: AgentTool[];
   /** Advanced per-tab configuration */
   agentConfig?: AgentInputAgentConfig;
+  /** Lead source platform (e.g. instagram) */
+  leadSourceType?: string;
+  /** Page Access Token for the lead source (encrypted at rest) */
+  leadSourceToken?: string;
+  /** Lead fields to capture per incoming lead */
+  leadFields?: string[];
+  /** Product or service details for the agent's context */
+  productDetails?: string;
 }
 
 /**
@@ -402,6 +430,14 @@ export interface AgentUpdate {
   dispositionSchema?: DispositionField[];
   /** Advanced per-tab configuration */
   agentConfig?: AgentUpdateAgentConfig;
+  /** Lead source platform (e.g. instagram) */
+  leadSourceType?: string;
+  /** Page Access Token for the lead source (encrypted at rest) */
+  leadSourceToken?: string;
+  /** Lead fields to capture per incoming lead */
+  leadFields?: string[];
+  /** Product or service details for the agent's context */
+  productDetails?: string;
 }
 
 export type CallStatus = typeof CallStatus[keyof typeof CallStatus];

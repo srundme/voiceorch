@@ -288,6 +288,13 @@ const LANG_LABEL: Record<string, string> = {
 interface CartesiaVoice { id: string; name: string; gender: string; description: string; language?: string }
 type AgentDirection = "inbound" | "outbound" | "both";
 
+interface LeadSourceState {
+  enabled: boolean;
+  type: "instagram";
+  token: string;
+  fields: string[];
+}
+
 interface WizardState {
   mode: "byop" | "managed" | null;
   useCase: string; useCaseRole: string; useCaseService: string;
@@ -298,6 +305,8 @@ interface WizardState {
   voices: CartesiaVoice[]; selectedVoiceId: string;
   callTransferEnabled: boolean; callTransferNumber: string;
   byopAsr: string; byopLlm: string; byopTts: string; byopTelephony: string; byopPrompt: string;
+  leadSource: LeadSourceState;
+  productDetails: string;
 }
 
 const INITIAL: WizardState = {
@@ -310,6 +319,8 @@ const INITIAL: WizardState = {
   callTransferEnabled: false, callTransferNumber: "",
   byopAsr: "deepgram", byopLlm: "openai", byopTts: "elevenlabs", byopTelephony: "twilio",
   byopPrompt: "You are a helpful AI voice assistant. Be concise and professional.",
+  leadSource: { enabled: false, type: "instagram", token: "", fields: ["name", "email", "message"] },
+  productDetails: "",
 };
 
 /* ── Voice preview ──────────────────────────────────────────────────────── */
@@ -391,6 +402,7 @@ export function buildCreateAgentPayload(state: WizardState) {
   const stack = getManagedStack(langs);
 
   if (isManaged) {
+    const leadEnabled = state.leadSource.enabled;
     return {
       name: state.agentName || `${STEP_LABELS["use-case"]} Agent`,
       language: LANG_CODE_MAP[state.primaryLanguage] ?? "en-US",
@@ -412,6 +424,12 @@ export function buildCreateAgentPayload(state: WizardState) {
       tools: state.callTransferEnabled && state.callTransferNumber.trim()
         ? [{ type: "call_transfer" as const, name: "transfer_to_human", description: "Transfer the call to a human agent when the caller requests it or when escalation is needed.", transferTo: state.callTransferNumber.trim() }]
         : [],
+      ...(leadEnabled && {
+        leadSourceType: state.leadSource.type,
+        ...(state.leadSource.token.trim() && { leadSourceToken: state.leadSource.token.trim() }),
+        leadFields: state.leadSource.fields,
+        ...(state.productDetails.trim() && { productDetails: state.productDetails.trim() }),
+      }),
     };
   }
 
@@ -594,6 +612,11 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
           agentName: state.agentName, serviceDescription: state.useCaseService,
           agentDirection: state.agentDirection, callFlowDescription: state.callFlowDescription,
           languages: langs,
+          ...(state.leadSource.enabled && {
+            leadSourceType: state.leadSource.type,
+            leadFields: state.leadSource.fields,
+            productDetails: state.productDetails.trim() || undefined,
+          }),
         }),
       });
       if (!res.ok) {
@@ -1047,6 +1070,114 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                         </button>
                       ))}
                     </div>
+                  </div>
+
+                  {/* ── Lead Source ─────────────────────────────────── */}
+                  <div className="rounded-xl border border-gray-200 overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => update({ leadSource: { ...state.leadSource, enabled: !state.leadSource.enabled } })}
+                      className="w-full flex items-center justify-between px-4 py-3.5 bg-gray-50 hover:bg-gray-100 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={cn(
+                          "w-2 h-2 rounded-full",
+                          state.leadSource.enabled ? "bg-violet-500" : "bg-gray-300",
+                        )} />
+                        <span className="text-gray-500 text-xs uppercase tracking-[0.15em] font-medium">Lead Source</span>
+                        {state.leadSource.enabled && (
+                          <span className="text-[10px] font-semibold uppercase tracking-wider text-violet-600 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded-full">On</span>
+                        )}
+                      </div>
+                      <span className="text-gray-400 text-xs">{state.leadSource.enabled ? "▲" : "▼"}</span>
+                    </button>
+
+                    {state.leadSource.enabled && (
+                      <div className="px-4 pb-4 pt-3 space-y-4 bg-white">
+                        {/* Source type */}
+                        <div>
+                          <label className="text-gray-500 text-xs uppercase tracking-[0.15em] block mb-2">Source</label>
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-1 px-4 py-2.5 rounded-xl border border-violet-300 bg-violet-50">
+                              <svg viewBox="0 0 24 24" className="h-4 w-4 text-violet-600 shrink-0" fill="currentColor">
+                                <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/>
+                              </svg>
+                              <span className="text-sm text-violet-700 font-medium">Instagram</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Page Access Token */}
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="text-gray-500 text-xs uppercase tracking-[0.15em]">Page Access Token</label>
+                            <a
+                              href="https://developers.facebook.com/docs/instagram-platform/instagram-api-with-facebook-login/get-access-tokens-and-permissions"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[11px] text-violet-500 hover:text-violet-700 underline"
+                            >
+                              Get token ↗
+                            </a>
+                          </div>
+                          <input
+                            type="password"
+                            placeholder="EAAxxxxxxxxxxxxxxxxxxxxxxxx"
+                            value={state.leadSource.token}
+                            onChange={e => update({ leadSource: { ...state.leadSource, token: e.target.value } })}
+                            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-sm placeholder:text-gray-300 focus:outline-none focus:border-violet-500/60 transition-all font-mono"
+                          />
+                        </div>
+
+                        {/* Lead fields checklist */}
+                        <div>
+                          <label className="text-gray-500 text-xs uppercase tracking-[0.15em] block mb-2">Lead Fields to Capture</label>
+                          <div className="flex gap-2 flex-wrap">
+                            {(["name", "email", "message"] as const).map(field => {
+                              const checked = state.leadSource.fields.includes(field);
+                              const varName = `{{lead_${field}}}`;
+                              return (
+                                <button
+                                  key={field}
+                                  type="button"
+                                  onClick={() => {
+                                    const next = checked
+                                      ? state.leadSource.fields.filter(f => f !== field)
+                                      : [...state.leadSource.fields, field];
+                                    update({ leadSource: { ...state.leadSource, fields: next } });
+                                  }}
+                                  className={cn(
+                                    "flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-medium transition-all",
+                                    checked
+                                      ? "border-violet-400 bg-violet-50 text-violet-700"
+                                      : "border-gray-200 bg-gray-50 text-gray-400 hover:border-gray-300",
+                                  )}
+                                >
+                                  <span className={cn("w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0", checked ? "border-violet-500 bg-violet-500" : "border-gray-300")}>
+                                    {checked && <Check className="h-2.5 w-2.5 text-white" />}
+                                  </span>
+                                  <span className="capitalize">{field}</span>
+                                  <span className={cn("font-mono text-[10px]", checked ? "text-violet-500" : "text-gray-300")}>{varName}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Product Details */}
+                        <div>
+                          <label className="text-gray-500 text-xs uppercase tracking-[0.15em] block mb-2">Product Details</label>
+                          <textarea
+                            placeholder="Describe what you're selling — e.g. 3BHK apartments in Whitefield starting ₹80L, ready to move in..."
+                            value={state.productDetails}
+                            onChange={e => update({ productDetails: e.target.value })}
+                            rows={3}
+                            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-sm placeholder:text-gray-300 focus:outline-none focus:border-violet-500/60 transition-all resize-none leading-relaxed"
+                          />
+                          <p className="mt-1.5 text-[11px] text-gray-400">Available as <code className="font-mono">&#123;&#123;product_details&#125;&#125;</code> in your agent's prompt.</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

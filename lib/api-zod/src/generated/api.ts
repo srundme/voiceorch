@@ -80,6 +80,10 @@ export const ListAgentsResponseItem = zod.object({
   "required": zod.boolean().optional().describe('Whether this field must always be filled')
 })).nullish().describe('User-defined fields to extract from each call via LLM'),
   "agentConfig": zod.record(zod.string(), zod.unknown()).nullish().describe('Advanced per-tab configuration (LLM params, engine, call, inbound, WhatsApp, analytics)'),
+  "leadSourceType": zod.string().nullish().describe('Lead source platform (e.g. instagram)'),
+  "leadSourceToken": zod.string().nullish().describe('Masked hint of the lead source access token (last 4 chars)'),
+  "leadFields": zod.array(zod.string()).nullish().describe('Lead fields to capture per incoming lead (name, email, message)'),
+  "productDetails": zod.string().nullish().describe('Product or service details the agent should know when calling leads'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -146,7 +150,11 @@ export const CreateAgentBody = zod.object({
   "eventTypeId": zod.number().optional().describe('(cal_com \/ native_booking) Event type ID'),
   "timezone": zod.string().optional().describe('(cal_com \/ send_sms) Default timezone for bookings (e.g. America\/New_York)')
 })).optional().describe('List of tools (functions) the LLM can invoke during a call'),
-  "agentConfig": zod.record(zod.string(), zod.unknown()).optional().describe('Advanced per-tab configuration')
+  "agentConfig": zod.record(zod.string(), zod.unknown()).optional().describe('Advanced per-tab configuration'),
+  "leadSourceType": zod.string().optional().describe('Lead source platform (e.g. instagram)'),
+  "leadSourceToken": zod.string().optional().describe('Page Access Token for the lead source (encrypted at rest)'),
+  "leadFields": zod.array(zod.string()).optional().describe('Lead fields to capture per incoming lead'),
+  "productDetails": zod.string().optional().describe('Product or service details for the agent\'s context')
 })
 
 
@@ -218,6 +226,10 @@ export const GetAgentResponse = zod.object({
   "required": zod.boolean().optional().describe('Whether this field must always be filled')
 })).nullish().describe('User-defined fields to extract from each call via LLM'),
   "agentConfig": zod.record(zod.string(), zod.unknown()).nullish().describe('Advanced per-tab configuration (LLM params, engine, call, inbound, WhatsApp, analytics)'),
+  "leadSourceType": zod.string().nullish().describe('Lead source platform (e.g. instagram)'),
+  "leadSourceToken": zod.string().nullish().describe('Masked hint of the lead source access token (last 4 chars)'),
+  "leadFields": zod.array(zod.string()).nullish().describe('Lead fields to capture per incoming lead (name, email, message)'),
+  "productDetails": zod.string().nullish().describe('Product or service details the agent should know when calling leads'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -295,7 +307,11 @@ export const UpdateAgentBody = zod.object({
   "options": zod.array(zod.string()).optional().describe('Allowed values for choice fields (e.g. [\"Interested\",\"Not Interested\"])'),
   "required": zod.boolean().optional().describe('Whether this field must always be filled')
 })).optional(),
-  "agentConfig": zod.record(zod.string(), zod.unknown()).optional().describe('Advanced per-tab configuration')
+  "agentConfig": zod.record(zod.string(), zod.unknown()).optional().describe('Advanced per-tab configuration'),
+  "leadSourceType": zod.string().optional().describe('Lead source platform (e.g. instagram)'),
+  "leadSourceToken": zod.string().optional().describe('Page Access Token for the lead source (encrypted at rest)'),
+  "leadFields": zod.array(zod.string()).optional().describe('Lead fields to capture per incoming lead'),
+  "productDetails": zod.string().optional().describe('Product or service details for the agent\'s context')
 })
 
 export const UpdateAgentResponse = zod.object({
@@ -359,6 +375,10 @@ export const UpdateAgentResponse = zod.object({
   "required": zod.boolean().optional().describe('Whether this field must always be filled')
 })).nullish().describe('User-defined fields to extract from each call via LLM'),
   "agentConfig": zod.record(zod.string(), zod.unknown()).nullish().describe('Advanced per-tab configuration (LLM params, engine, call, inbound, WhatsApp, analytics)'),
+  "leadSourceType": zod.string().nullish().describe('Lead source platform (e.g. instagram)'),
+  "leadSourceToken": zod.string().nullish().describe('Masked hint of the lead source access token (last 4 chars)'),
+  "leadFields": zod.array(zod.string()).nullish().describe('Lead fields to capture per incoming lead (name, email, message)'),
+  "productDetails": zod.string().nullish().describe('Product or service details the agent should know when calling leads'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -446,6 +466,10 @@ export const ToggleAgentResponse = zod.object({
   "required": zod.boolean().optional().describe('Whether this field must always be filled')
 })).nullish().describe('User-defined fields to extract from each call via LLM'),
   "agentConfig": zod.record(zod.string(), zod.unknown()).nullish().describe('Advanced per-tab configuration (LLM params, engine, call, inbound, WhatsApp, analytics)'),
+  "leadSourceType": zod.string().nullish().describe('Lead source platform (e.g. instagram)'),
+  "leadSourceToken": zod.string().nullish().describe('Masked hint of the lead source access token (last 4 chars)'),
+  "leadFields": zod.array(zod.string()).nullish().describe('Lead fields to capture per incoming lead (name, email, message)'),
+  "productDetails": zod.string().nullish().describe('Product or service details the agent should know when calling leads'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),

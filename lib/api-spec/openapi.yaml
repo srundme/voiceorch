@@ -2483,6 +2483,20 @@ components:
           type: ["object", "null"]
           description: Advanced per-tab configuration (LLM params, engine, call, inbound, WhatsApp, analytics)
           additionalProperties: true
+        leadSourceType:
+          type: ["string", "null"]
+          description: "Lead source platform (e.g. instagram)"
+        leadSourceToken:
+          type: ["string", "null"]
+          description: "Masked hint of the lead source access token (last 4 chars)"
+        leadFields:
+          type: ["array", "null"]
+          description: "Lead fields to capture per incoming lead (name, email, message)"
+          items:
+            type: string
+        productDetails:
+          type: ["string", "null"]
+          description: "Product or service details the agent should know when calling leads"
         totalCalls:
           type: integer
         successfulCalls:
@@ -2581,6 +2595,20 @@ components:
           type: object
           description: Advanced per-tab configuration
           additionalProperties: true
+        leadSourceType:
+          type: string
+          description: "Lead source platform (e.g. instagram)"
+        leadSourceToken:
+          type: string
+          description: "Page Access Token for the lead source (encrypted at rest)"
+        leadFields:
+          type: array
+          description: "Lead fields to capture per incoming lead"
+          items:
+            type: string
+        productDetails:
+          type: string
+          description: "Product or service details for the agent's context"
 
     AgentUpdate:
       type: object
@@ -2669,6 +2697,20 @@ components:
           type: object
           description: Advanced per-tab configuration
           additionalProperties: true
+        leadSourceType:
+          type: string
+          description: "Lead source platform (e.g. instagram)"
+        leadSourceToken:
+          type: string
+          description: "Page Access Token for the lead source (encrypted at rest)"
+        leadFields:
+          type: array
+          description: "Lead fields to capture per incoming lead"
+          items:
+            type: string
+        productDetails:
+          type: string
+          description: "Product or service details for the agent's context"
 
     # ── Call ───────────────────────────────────────────────────────────────────
     Call:
