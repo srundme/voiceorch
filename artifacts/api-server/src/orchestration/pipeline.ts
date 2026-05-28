@@ -1,4 +1,5 @@
 import { createSTTAdapter } from "./adapters/stt/index.js";
+import { toReadableError } from "./utils.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { createTTSAdapter } from "./adapters/tts/index.js";
 import { encodeMulaw, upsample8to16, downsample16to8, decodeMulaw, hasSpeechEnergy } from "./audio.js";
@@ -503,18 +504,25 @@ export class OrchestrationPipeline {
 
       if (!greeting.trim()) {
         // Fallback: ask the LLM to generate an opener
-        await this.llm.chat(
-          [], this.resolvedSystemPrompt(),
-          (token) => { greeting += token; },
-          (full) => { greeting = full; },
-          {
-            onUsage: (usage) => {
-              this.hasRealLlmUsage = true;
-              this.llmInputTokensTotal += usage.inputTokens;
-              this.llmOutputTokensTotal += usage.outputTokens;
-            },
-          }
-        );
+        try {
+          await this.llm.chat(
+            [], this.resolvedSystemPrompt(),
+            (token) => { greeting += token; },
+            (full) => { greeting = full; },
+            {
+              onUsage: (usage) => {
+                this.hasRealLlmUsage = true;
+                this.llmInputTokensTotal += usage.inputTokens;
+                this.llmOutputTokensTotal += usage.outputTokens;
+              },
+            }
+          );
+        } catch (llmErr) {
+          const reason = toReadableError(llmErr, "LLM error");
+          logger.error({ callId: this.config.callId, err: llmErr }, reason);
+          this.config.onFatalError?.(reason);
+          return;
+        }
         // Strip any <think>…</think> reasoning blocks that reasoning models emit
         greeting = greeting.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
       }
@@ -1081,7 +1089,9 @@ export class OrchestrationPipeline {
           try {
             await this.playSentence(text);
           } catch (err) {
-            logger.error({ callId: this.config.callId, err, text: text.slice(0, 40) }, "TTS error");
+            const reason = toReadableError(err, "TTS error");
+            logger.error({ callId: this.config.callId, err, text: text.slice(0, 40) }, reason);
+            this.config.onFatalError?.(reason);
           }
           if (this.bargeInRequested) break;
         } else if (allEnqueued) {
@@ -1130,41 +1140,52 @@ export class OrchestrationPipeline {
       systemPromptForTurn = `${systemPromptForTurn}\n\n## Relevant Knowledge Base Context\n\n${kbContext}`;
     }
 
-    await this.llm.chat(
-      this.conversationHistory,
-      systemPromptForTurn,
-      (token) => {
-        if (!llmFirstTokenAt) llmFirstTokenAt = Date.now();
-        llmResponse += token;                  // keep raw response (incl. think blocks)
-        const filtered = filterThinkToken(token);
-        if (!filtered) return;                 // token was entirely inside a think block
-        pendingText += filtered;
-        const { sentences, remainder } = extractSentences(pendingText);
-        for (const s of sentences) enqueue(s);
-        pendingText = remainder;
-      },
-      (fullText) => { llmResponse = fullText; },
-      toolDefs.length > 0
-        ? {
-            tools: toolDefs,
-            onToolCall: (name, args) => {
-              triggeredToolName = name;
-              triggeredToolArgs = args;
-            },
-            onUsage: (usage) => {
-              this.hasRealLlmUsage = true;
-              this.llmInputTokensTotal += usage.inputTokens;
-              this.llmOutputTokensTotal += usage.outputTokens;
-            },
-          }
-        : {
-            onUsage: (usage) => {
-              this.hasRealLlmUsage = true;
-              this.llmInputTokensTotal += usage.inputTokens;
-              this.llmOutputTokensTotal += usage.outputTokens;
-            },
-          }
-    );
+    try {
+      await this.llm.chat(
+        this.conversationHistory,
+        systemPromptForTurn,
+        (token) => {
+          if (!llmFirstTokenAt) llmFirstTokenAt = Date.now();
+          llmResponse += token;                  // keep raw response (incl. think blocks)
+          const filtered = filterThinkToken(token);
+          if (!filtered) return;                 // token was entirely inside a think block
+          pendingText += filtered;
+          const { sentences, remainder } = extractSentences(pendingText);
+          for (const s of sentences) enqueue(s);
+          pendingText = remainder;
+        },
+        (fullText) => { llmResponse = fullText; },
+        toolDefs.length > 0
+          ? {
+              tools: toolDefs,
+              onToolCall: (name, args) => {
+                triggeredToolName = name;
+                triggeredToolArgs = args;
+              },
+              onUsage: (usage) => {
+                this.hasRealLlmUsage = true;
+                this.llmInputTokensTotal += usage.inputTokens;
+                this.llmOutputTokensTotal += usage.outputTokens;
+              },
+            }
+          : {
+              onUsage: (usage) => {
+                this.hasRealLlmUsage = true;
+                this.llmInputTokensTotal += usage.inputTokens;
+                this.llmOutputTokensTotal += usage.outputTokens;
+              },
+            }
+      );
+    } catch (llmErr) {
+      const reason = toReadableError(llmErr, "LLM error");
+      logger.error({ callId: this.config.callId, err: llmErr }, reason);
+      this.config.onFatalError?.(reason);
+      allEnqueued = true;
+      const w = wakePlayer as (() => void) | null; wakePlayer = null;
+      if (w) w();
+      await playPromise;
+      throw llmErr;
+    }
 
     // ── If LLM called a tool, execute it and skip TTS ──
     if (triggeredToolName) {
@@ -1229,7 +1250,15 @@ export class OrchestrationPipeline {
       logger.info({ callId: this.config.callId, bytes: pcm16k.length }, "Sending to STT");
 
       const sttStart = Date.now();
-      const transcript = await this.stt.transcribe(pcm16k, 16000);
+      let transcript: string | null | undefined;
+      try {
+        transcript = await this.stt.transcribe(pcm16k, 16000);
+      } catch (sttErr) {
+        const reason = toReadableError(sttErr, "STT error");
+        logger.error({ callId: this.config.callId, err: sttErr }, reason);
+        this.config.onFatalError?.(reason);
+        return;
+      }
       const sttLatencyMs = Date.now() - sttStart;
 
       if (!transcript?.trim()) {

@@ -6,6 +6,7 @@ import { createLLMAdapter } from "../adapters/llm/index.js";
 import { createTTSAdapter } from "../adapters/tts/index.js";
 import { downsample16to8 } from "../audio.js";
 import { detectCallerGender, applyCallerSalutation, buildGenderInstruction } from "../genderDetection.js";
+import { toReadableError } from "../utils.js";
 import { logger } from "../../lib/logger.js";
 import { RecordingBuffer } from "../recorder.js";
 import type { ConversationTurn, STTConfig } from "../types.js";
@@ -337,7 +338,19 @@ export async function handleWebCallWebSocket(
 
     try {
       // 1. STT
-      const userText = await stt.transcribe(pcm, 16000);
+      let userText: string | null | undefined;
+      try {
+        userText = await stt.transcribe(pcm, 16000);
+      } catch (sttErr) {
+        const reason = toReadableError(sttErr, "STT error");
+        logger.error({ callId, err: sttErr }, reason);
+        send({ type: "error", message: reason });
+        speaking = false;
+        speakingEndedAt = Date.now();
+        processing = false;
+        if (!closed) void hangup("error", reason);
+        return;
+      }
       if (!userText?.trim()) { processing = false; return; }
 
       send({ type: "transcript", speaker: "user", text: userText });
@@ -413,7 +426,8 @@ export async function handleWebCallWebSocket(
         sentenceJobs.push(job);
       }
 
-      await llm.chat(
+      try {
+       await llm.chat(
         history,
         resolvedSystemPrompt(),
         (token) => {
@@ -427,6 +441,16 @@ export async function handleWebCallWebSocket(
         },
         (full) => { fullReply = full; }
       );
+      } catch (llmErr) {
+        const reason = toReadableError(llmErr, "LLM error");
+        logger.error({ callId, err: llmErr }, reason);
+        send({ type: "error", message: reason });
+        speaking = false;
+        speakingEndedAt = Date.now();
+        processing = false;
+        if (!closed) void hangup("error", reason);
+        return;
+      }
 
       if (tokenBuf.trim()) queueSentence(tokenBuf);
 
@@ -460,7 +484,19 @@ export async function handleWebCallWebSocket(
       for (let i = 0; i < sentenceJobs.length; i++) {
         if (closed || interrupted) break;
 
-        const pcmOut = await sentenceJobs[i]!;
+        let pcmOut: Buffer;
+        try {
+          pcmOut = await sentenceJobs[i]!;
+        } catch (ttsErr) {
+          const reason = toReadableError(ttsErr, "TTS error");
+          logger.error({ callId, err: ttsErr }, reason);
+          send({ type: "error", message: reason });
+          speaking = false;
+          speakingEndedAt = Date.now();
+          processing = false;
+          if (!closed) void hangup("error", reason);
+          return;
+        }
         if (interrupted || closed) break;
 
         if (!transcriptSent) {
@@ -536,13 +572,20 @@ export async function handleWebCallWebSocket(
     const transcript      = history.map(t => `${t.role === "user" ? "Caller" : "Agent"}: ${t.content}`).join("\n");
 
     const isFailed = reason === "error" || reason === "timeout";
-    const errorMessage = isFailed
-      ? (errorDetail instanceof Error
-          ? errorDetail.message
-          : errorDetail != null
-            ? String(errorDetail)
-            : reason)
-      : null;
+    let errorMessage: string | null = null;
+    if (reason === "timeout") {
+      errorMessage = "Call timeout";
+    } else if (reason === "error") {
+      if (typeof errorDetail === "string") {
+        errorMessage = errorDetail;
+      } else if (errorDetail instanceof Error) {
+        errorMessage = `Error: ${errorDetail.message}`;
+      } else if (errorDetail != null) {
+        errorMessage = `Error: ${String(errorDetail)}`;
+      } else {
+        errorMessage = "Error";
+      }
+    }
 
     try {
       // Finalize recording — upload to GCS then save the serving URL

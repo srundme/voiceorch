@@ -385,6 +385,9 @@ export async function createSession(params: {
     onConversationUpdate: (history) => {
       void saveConversation(callRecord.id, history, redisTtl);
     },
+    onFatalError: (reason) => {
+      void failSession(sessionId, reason);
+    },
   });
 
   sessions.set(sessionId, {

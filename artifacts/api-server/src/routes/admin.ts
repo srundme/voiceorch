@@ -318,12 +318,25 @@ router.get("/admin/platform/failed-calls/by-reason", async (req, res): Promise<v
         WHERE status = 'failed'
         ORDER BY created_at DESC
         LIMIT 100
+      ),
+      labelled AS (
+        SELECT
+          CASE
+            WHEN error_message ILIKE 'STT error%'       THEN 'STT error'
+            WHEN error_message ILIKE 'LLM error%'       THEN 'LLM error'
+            WHEN error_message ILIKE 'TTS error%'       THEN 'TTS error'
+            WHEN error_message ILIKE 'Telephony error%' THEN 'Telephony error'
+            WHEN error_message = 'Call timeout'
+              OR error_message ILIKE 'timeout%'         THEN 'Call timeout'
+            WHEN error_message IS NULL
+              OR trim(error_message) = ''               THEN 'Unknown'
+            ELSE coalesce(nullif(trim(left(error_message, 80)), ''), 'Unknown')
+          END AS reason
+        FROM recent_failed
       )
-      SELECT
-        coalesce(nullif(trim(left(error_message, 120)), ''), 'Unknown') AS reason,
-        count(*)::int AS count
-      FROM recent_failed
-      GROUP BY coalesce(nullif(trim(left(error_message, 120)), ''), 'Unknown')
+      SELECT reason, count(*)::int AS count
+      FROM labelled
+      GROUP BY reason
       ORDER BY count(*) DESC
       LIMIT 5
     `);

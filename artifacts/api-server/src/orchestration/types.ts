@@ -251,4 +251,6 @@ export interface SessionConfig {
   onMetrics?: (metrics: PipelineMetrics) => void;
   /** Called after every completed turn with the full conversation history — used to persist to Redis */
   onConversationUpdate?: (history: ConversationTurn[]) => void;
+  /** Called when a fatal pipeline error occurs (STT/LLM/TTS failure) so the caller can fail the session with a human-readable reason */
+  onFatalError?: (reason: string) => void;
 }

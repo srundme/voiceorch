@@ -1,5 +1,6 @@
 import type { WebSocket } from "ws";
 import { createSession, getSession, endSession, failSession } from "../session.js";
+import { toReadableError } from "../utils.js";
 import { logger } from "../../lib/logger.js";
 
 /**
@@ -122,7 +123,7 @@ export async function handleTwilioWebSocket(
 
   ws.on("error", async (err: unknown) => {
     logger.error({ sessionId, err }, "Twilio WS error");
-    if (sessionId) await failSession(sessionId, String(err));
+    if (sessionId) await failSession(sessionId, toReadableError(err, "Telephony error"));
   });
 }
 

@@ -1,6 +1,7 @@
 import type { WebSocket } from "ws";
 import { createSession, getSession, endSession, failSession } from "../session.js";
 import { decodeMulaw } from "../audio.js";
+import { toReadableError } from "../utils.js";
 import { logger } from "../../lib/logger.js";
 
 /**
@@ -155,7 +156,7 @@ export async function handleVobizWebSocket(
 
   ws.on("error", async (err: unknown) => {
     logger.error({ sessionId, err }, "Vobiz WS error");
-    if (sessionId) await failSession(sessionId, String(err));
+    if (sessionId) await failSession(sessionId, toReadableError(err, "Telephony error"));
   });
 }
 

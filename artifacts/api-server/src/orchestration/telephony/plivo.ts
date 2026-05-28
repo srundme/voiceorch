@@ -1,6 +1,7 @@
 import type { WebSocket } from "ws";
 import { createSession, getSession, endSession, failSession } from "../session.js";
 import { encodeMulaw, decodeMulaw } from "../audio.js";
+import { toReadableError } from "../utils.js";
 import { logger } from "../../lib/logger.js";
 
 /**
@@ -112,7 +113,8 @@ export async function handlePlivoWebSocket(
   });
 
   ws.on("error", async (err: unknown) => {
-    if (sessionId) await failSession(sessionId, String(err));
+    logger.error({ sessionId, err }, "Plivo WS error");
+    if (sessionId) await failSession(sessionId, toReadableError(err, "Telephony error"));
   });
 }
 

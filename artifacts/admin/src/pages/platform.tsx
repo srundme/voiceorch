@@ -19,11 +19,48 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Activity, AlertTriangle, BarChart2, ChevronLeft, ChevronRight, Search, X } from "lucide-react";
+import { Activity, AlertTriangle, BarChart2, ChevronLeft, ChevronRight, Search, X, Mic, Brain, Volume2, Phone, Clock } from "lucide-react";
 import { useState, useCallback } from "react";
 import { useDebounce } from "@/hooks/use-debounce";
 
 const PAGE_SIZE = 50;
+
+type ErrorCategory = "STT" | "LLM" | "TTS" | "Telephony" | "Timeout" | "other";
+
+function categoriseError(reason: string | null): ErrorCategory {
+  if (!reason) return "other";
+  const r = reason.toLowerCase();
+  if (r.startsWith("stt error")) return "STT";
+  if (r.startsWith("llm error")) return "LLM";
+  if (r.startsWith("tts error")) return "TTS";
+  if (r.startsWith("telephony error")) return "Telephony";
+  if (r === "call timeout" || r.startsWith("timeout")) return "Timeout";
+  return "other";
+}
+
+const CATEGORY_META: Record<ErrorCategory, {
+  label: string;
+  icon: React.ReactNode;
+  className: string;
+}> = {
+  STT:       { label: "STT",       icon: <Mic className="h-3 w-3" />,    className: "bg-orange-500/15 text-orange-600 border-orange-500/30" },
+  LLM:       { label: "LLM",       icon: <Brain className="h-3 w-3" />,  className: "bg-purple-500/15 text-purple-600 border-purple-500/30" },
+  TTS:       { label: "TTS",       icon: <Volume2 className="h-3 w-3" />, className: "bg-blue-500/15 text-blue-600 border-blue-500/30" },
+  Telephony: { label: "Telephony", icon: <Phone className="h-3 w-3" />,  className: "bg-yellow-500/15 text-yellow-700 border-yellow-500/30" },
+  Timeout:   { label: "Timeout",   icon: <Clock className="h-3 w-3" />,  className: "bg-slate-500/15 text-slate-600 border-slate-500/30" },
+  other:     { label: "",          icon: null,                            className: "" },
+};
+
+function ErrorCategoryBadge({ reason }: { reason: string | null }) {
+  const cat = categoriseError(reason);
+  if (cat === "other") return null;
+  const meta = CATEGORY_META[cat];
+  return (
+    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-semibold shrink-0 ${meta.className}`}>
+      {meta.icon}{meta.label}
+    </span>
+  );
+}
 
 function hasActiveFilters(filters: FailedCallsFilters): boolean {
   return !!(filters.agentId || filters.userId || filters.reason);
@@ -289,7 +326,10 @@ export default function Platform() {
                             {reason ? (
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <span className="block truncate text-destructive/90">{reason}</span>
+                                  <span className="flex items-center gap-1.5 min-w-0">
+                                    <ErrorCategoryBadge reason={reason} />
+                                    <span className="truncate text-destructive/90">{reason}</span>
+                                  </span>
                                 </TooltipTrigger>
                                 <TooltipContent className="max-w-[500px] whitespace-pre-wrap break-words">{reason}</TooltipContent>
                               </Tooltip>
