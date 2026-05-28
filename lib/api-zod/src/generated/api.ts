@@ -2105,12 +2105,16 @@ export const GetPublicSlotsResponse = zod.array(GetPublicSlotsResponseItem)
  */
 
 
+export const createPublicBookingBodyEventTypeSlugRegExp = new RegExp('\\S');
+
+
+export const createPublicBookingBodyAttendeeNameRegExp = new RegExp('\\S');
 
 
 export const CreatePublicBookingBody = zod.object({
-  "eventTypeSlug": zod.string().min(1),
+  "eventTypeSlug": zod.string().min(1).regex(createPublicBookingBodyEventTypeSlugRegExp),
   "slotStart": zod.coerce.date(),
-  "attendeeName": zod.string().min(1),
+  "attendeeName": zod.string().min(1).regex(createPublicBookingBodyAttendeeNameRegExp),
   "attendeeEmail": zod.string().email(),
   "attendeeNotes": zod.string().optional()
 })

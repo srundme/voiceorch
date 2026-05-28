@@ -1455,10 +1455,16 @@ export interface BookingInput {
 }
 
 export interface PublicBookingInput {
-  /** @minLength 1 */
+  /**
+     * @minLength 1
+     * @pattern \S
+     */
   eventTypeSlug: string;
   slotStart: string;
-  /** @minLength 1 */
+  /**
+     * @minLength 1
+     * @pattern \S
+     */
   attendeeName: string;
   attendeeEmail: string;
   attendeeNotes?: string;

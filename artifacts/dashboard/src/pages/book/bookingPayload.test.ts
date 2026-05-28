@@ -73,9 +73,45 @@ describe("buildBookingPayload", () => {
     expect(result.success).toBe(false);
   });
 
+  it("rejects a whitespace-only attendeeName", () => {
+    const payload = buildBookingPayload({
+      eventTypeSlug: "intro-call",
+      slotStart: VALID_SLOT,
+      attendeeName: "   ",
+      attendeeEmail: "jane@example.com",
+    });
+
+    const result = CreatePublicBookingBody.safeParse(payload);
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a tab-only attendeeName", () => {
+    const payload = buildBookingPayload({
+      eventTypeSlug: "intro-call",
+      slotStart: VALID_SLOT,
+      attendeeName: "\t\t",
+      attendeeEmail: "jane@example.com",
+    });
+
+    const result = CreatePublicBookingBody.safeParse(payload);
+    expect(result.success).toBe(false);
+  });
+
   it("rejects an empty eventTypeSlug", () => {
     const payload = buildBookingPayload({
       eventTypeSlug: "",
+      slotStart: VALID_SLOT,
+      attendeeName: "Jane Smith",
+      attendeeEmail: "jane@example.com",
+    });
+
+    const result = CreatePublicBookingBody.safeParse(payload);
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a whitespace-only eventTypeSlug", () => {
+    const payload = buildBookingPayload({
+      eventTypeSlug: "   ",
       slotStart: VALID_SLOT,
       attendeeName: "Jane Smith",
       attendeeEmail: "jane@example.com",

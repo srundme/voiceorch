@@ -3993,12 +3993,14 @@ components:
         eventTypeSlug:
           type: string
           minLength: 1
+          pattern: '\S'
         slotStart:
           type: string
           format: date-time
         attendeeName:
           type: string
           minLength: 1
+          pattern: '\S'
         attendeeEmail:
           type: string
           format: email
