@@ -309,8 +309,17 @@ router.get("/admin/platform/callbacks", async (req, res): Promise<void> => {
 router.get("/admin/platform/failed-calls", async (req, res): Promise<void> => {
   try {
     const failed = await db
-      .select()
+      .select({
+        id: callsTable.id,
+        userId: callsTable.userId,
+        agentId: callsTable.agentId,
+        agentName: agentsTable.name,
+        status: callsTable.status,
+        errorMessage: callsTable.errorMessage,
+        createdAt: callsTable.createdAt,
+      })
       .from(callsTable)
+      .leftJoin(agentsTable, eq(callsTable.agentId, agentsTable.id))
       .where(eq(callsTable.status, "failed"))
       .orderBy(desc(callsTable.createdAt))
       .limit(100);

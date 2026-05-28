@@ -9,6 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Activity, AlertTriangle } from "lucide-react";
 
 export default function Platform() {
@@ -67,34 +68,74 @@ export default function Platform() {
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0 h-[400px] overflow-auto">
-            <Table>
-              <TableHeader className="sticky top-0 bg-card z-10">
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>User</TableHead>
-                  <TableHead>Call ID</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loadingFailed ? (
-                  <TableRow><TableCell colSpan={3} className="text-center py-4">Loading...</TableCell></TableRow>
-                ) : failedError ? (
-                  <TableRow><TableCell colSpan={3} className="text-center py-8 text-destructive">Failed to load failed calls: {(failedErr as Error)?.message}</TableCell></TableRow>
-                ) : failedCalls?.length === 0 ? (
-                  <TableRow><TableCell colSpan={3} className="text-center py-8 text-muted-foreground">No failed calls recently</TableCell></TableRow>
-                ) : (
-                  failedCalls?.map((call) => (
-                    <TableRow key={call.id}>
-                      <TableCell className="text-xs font-mono text-muted-foreground">
-                        {call.createdAt ? format(new Date(call.createdAt), "MMM d HH:mm") : "-"}
-                      </TableCell>
-                      <TableCell className="text-xs truncate max-w-[120px]">{call.userId}</TableCell>
-                      <TableCell className="text-xs font-mono truncate max-w-[120px]" title={call.id}>{call.id}</TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+            <TooltipProvider delayDuration={200}>
+              <Table className="table-fixed w-full">
+                <TableHeader className="sticky top-0 bg-card z-10">
+                  <TableRow>
+                    <TableHead className="w-[110px]">Date</TableHead>
+                    <TableHead className="w-[140px]">User</TableHead>
+                    <TableHead className="w-[80px]">Call ID</TableHead>
+                    <TableHead className="w-[160px]">Agent</TableHead>
+                    <TableHead>Reason</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loadingFailed ? (
+                    <TableRow><TableCell colSpan={5} className="text-center py-4">Loading...</TableCell></TableRow>
+                  ) : failedError ? (
+                    <TableRow><TableCell colSpan={5} className="text-center py-8 text-destructive">Failed to load failed calls: {(failedErr as Error)?.message}</TableCell></TableRow>
+                  ) : failedCalls?.length === 0 ? (
+                    <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No failed calls recently</TableCell></TableRow>
+                  ) : (
+                    failedCalls?.map((call: any) => {
+                      const agentLabel = call.agentName ?? (call.agentId != null ? `Agent #${call.agentId}` : "—");
+                      const reason = call.errorMessage ?? null;
+                      return (
+                        <TableRow
+                          key={call.id}
+                          className="cursor-pointer hover:bg-muted/50"
+                          onClick={() => window.open(`/app/calls/${call.id}`, "_blank", "noopener,noreferrer")}
+                          data-testid={`row-failed-call-${call.id}`}
+                        >
+                          <TableCell className="text-xs font-mono text-muted-foreground">
+                            {call.createdAt ? format(new Date(call.createdAt), "MMM d HH:mm") : "-"}
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="block truncate">{call.userId ?? "—"}</span>
+                              </TooltipTrigger>
+                              {call.userId && <TooltipContent className="max-w-[400px] break-all">{call.userId}</TooltipContent>}
+                            </Tooltip>
+                          </TableCell>
+                          <TableCell className="text-xs font-mono truncate" title={String(call.id)}>{call.id}</TableCell>
+                          <TableCell className="text-xs">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="block truncate">{agentLabel}</span>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-[400px] break-all">{agentLabel}</TooltipContent>
+                            </Tooltip>
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            {reason ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="block truncate text-destructive/90">{reason}</span>
+                                </TooltipTrigger>
+                                <TooltipContent className="max-w-[500px] whitespace-pre-wrap break-words">{reason}</TooltipContent>
+                              </Tooltip>
+                            ) : (
+                              <span className="text-muted-foreground italic">Unknown</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </TooltipProvider>
           </CardContent>
         </Card>
       </div>
