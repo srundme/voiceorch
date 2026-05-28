@@ -105,16 +105,16 @@ describe("buildCreateAgentPayload", () => {
   });
 
   it("managed stack models are always valid — no provider/model mismatch in managed mode", () => {
-    const englishPayload = buildCreateAgentPayload(BASE_MANAGED);
-    expect(getModelError(englishPayload.asrProvider!, englishPayload.asrModel, ASR_MODELS)).toBeNull();
-    expect(getModelError(englishPayload.llmProvider!, englishPayload.llmModel, LLM_MODELS)).toBeNull();
+    const englishPayload = buildCreateAgentPayload(BASE_MANAGED) as any;
+    expect(getModelError(englishPayload.asrProvider, englishPayload.asrModel, ASR_MODELS)).toBeNull();
+    expect(getModelError(englishPayload.llmProvider, englishPayload.llmModel, LLM_MODELS)).toBeNull();
   });
 
   it("managed stack for Indic — sarvam+gemini combination is valid", () => {
     const state = { ...BASE_MANAGED, additionalLanguages: ["hindi"] };
-    const payload = buildCreateAgentPayload(state);
-    expect(getModelError(payload.asrProvider!, payload.asrModel, ASR_MODELS)).toBeNull();
-    expect(getModelError(payload.llmProvider!, payload.llmModel, LLM_MODELS)).toBeNull();
+    const payload = buildCreateAgentPayload(state) as any;
+    expect(getModelError(payload.asrProvider, payload.asrModel, ASR_MODELS)).toBeNull();
+    expect(getModelError(payload.llmProvider, payload.llmModel, LLM_MODELS)).toBeNull();
   });
 });
 
