@@ -12,32 +12,40 @@ const mockState = vi.hoisted(() => {
     slackWebhook: null as string | null,
     minSeverity: "warning" as string,
     cooldownMinutes: 10 as number,
-    dbCallIdx: 0,
+    lastEqKey: null as string | null,
     createTransport,
     sendMail,
   };
 });
+
+vi.mock("drizzle-orm", () => ({
+  eq: vi.fn((_col: unknown, val: unknown) => { mockState.lastEqKey = String(val); }),
+  sql: vi.fn(() => ({})),
+}));
 
 vi.mock("@workspace/db", () => ({
   db: {
     select: vi.fn(() => ({
       from: vi.fn(() => ({
         where: vi.fn(() => {
-          const order: Array<keyof typeof mockState> = [
-            "email",
-            "slackWebhook",
-            "minSeverity",
-            "cooldownMinutes",
-          ];
-          const key = order[mockState.dbCallIdx++] as keyof typeof mockState;
-          const val = mockState[key];
+          const key = mockState.lastEqKey;
+          const settingsMap: Record<string, () => string | null> = {
+            alert_notification_email: () => mockState.email,
+            alert_slack_webhook_url: () => mockState.slackWebhook,
+            alert_min_severity: () => mockState.minSeverity,
+            alert_notification_cooldown_minutes: () => String(mockState.cooldownMinutes),
+          };
+          const getter = settingsMap[key ?? ""];
+          if (!getter) return Promise.resolve([]);
+          const val = getter();
           if (val === null || val === undefined) return Promise.resolve([]);
-          return Promise.resolve([{ value: String(val) }]);
+          return Promise.resolve([{ value: val }]);
         }),
       })),
     })),
   },
   platformSettingsTable: { key: "key", value: "value" },
+  alertNotificationLogTable: {},
   eq: vi.fn(),
 }));
 
@@ -71,7 +79,6 @@ function setupSettings(settings: {
   mockState.slackWebhook = settings.slackWebhook ?? null;
   mockState.minSeverity = settings.minSeverity ?? "warning";
   mockState.cooldownMinutes = settings.cooldownMinutes ?? 10;
-  mockState.dbCallIdx = 0;
 }
 
 beforeEach(() => {
