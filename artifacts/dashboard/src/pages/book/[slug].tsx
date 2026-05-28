@@ -8,6 +8,7 @@ import {
   useGetPublicSlots,
   useCreatePublicBooking,
 } from "@workspace/api-client-react";
+import { CreatePublicBookingBody } from "@workspace/api-zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,6 +41,8 @@ export default function PublicBookingPage() {
   const [submitted, setSubmitted] = useState(false);
   const [meetLink, setMeetLink] = useState<string | null>(null);
   const [bookingError, setBookingError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{ name?: string; email?: string }>({});
+  const [touched, setTouched] = useState<{ name?: boolean; email?: boolean }>({});
 
   const { data: eventType, isLoading: etLoading, error: etError } = useGetPublicEventType(slug);
 
@@ -47,9 +50,40 @@ export default function PublicBookingPage() {
 
   const createMut = useCreatePublicBooking();
 
+  function validateFields(fields: { name: string; email: string }) {
+    const result = CreatePublicBookingBody.safeParse({
+      eventTypeSlug: slug || "placeholder",
+      slotStart: selectedSlot ?? new Date().toISOString(),
+      attendeeName: fields.name,
+      attendeeEmail: fields.email,
+    });
+    const errors: { name?: string; email?: string } = {};
+    if (!result.success) {
+      for (const issue of result.error.issues) {
+        const field = issue.path[0];
+        if (field === "attendeeName" && !errors.name) {
+          errors.name = "Name is required";
+        }
+        if (field === "attendeeEmail" && !errors.email) {
+          errors.email = fields.email.trim() === "" ? "Email is required" : "Please enter a valid email address";
+        }
+      }
+    }
+    return errors;
+  }
+
+  function handleBlur(field: "name" | "email") {
+    setTouched(prev => ({ ...prev, [field]: true }));
+    const errors = validateFields({ name, email });
+    setFieldErrors(errors);
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedSlot || !name || !email) return;
+    setTouched({ name: true, email: true });
+    const errors = validateFields({ name, email });
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0 || !selectedSlot) return;
     setBookingError(null);
     try {
       const booking = await createMut.mutateAsync({
@@ -202,11 +236,22 @@ export default function PublicBookingPage() {
                 <Input
                   id="name"
                   value={name}
-                  onChange={e => setName(e.target.value)}
-                  required
+                  onChange={e => {
+                    setName(e.target.value);
+                    if (touched.name) {
+                      const errors = validateFields({ name: e.target.value, email });
+                      setFieldErrors(prev => ({ ...prev, name: errors.name }));
+                    }
+                  }}
+                  onBlur={() => handleBlur("name")}
+                  aria-invalid={touched.name && !!fieldErrors.name}
+                  aria-describedby={fieldErrors.name ? "name-error" : undefined}
                   placeholder="Jane Smith"
-                  className="bg-white"
+                  className={`bg-white ${touched.name && fieldErrors.name ? "border-destructive focus-visible:ring-destructive" : ""}`}
                 />
+                {touched.name && fieldErrors.name && (
+                  <p id="name-error" className="text-sm text-destructive">{fieldErrors.name}</p>
+                )}
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="email">Email <span className="text-destructive">*</span></Label>
@@ -214,11 +259,22 @@ export default function PublicBookingPage() {
                   id="email"
                   type="email"
                   value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  required
+                  onChange={e => {
+                    setEmail(e.target.value);
+                    if (touched.email) {
+                      const errors = validateFields({ name, email: e.target.value });
+                      setFieldErrors(prev => ({ ...prev, email: errors.email }));
+                    }
+                  }}
+                  onBlur={() => handleBlur("email")}
+                  aria-invalid={touched.email && !!fieldErrors.email}
+                  aria-describedby={fieldErrors.email ? "email-error" : undefined}
                   placeholder="jane@example.com"
-                  className="bg-white"
+                  className={`bg-white ${touched.email && fieldErrors.email ? "border-destructive focus-visible:ring-destructive" : ""}`}
                 />
+                {touched.email && fieldErrors.email && (
+                  <p id="email-error" className="text-sm text-destructive">{fieldErrors.email}</p>
+                )}
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="notes">Notes</Label>
