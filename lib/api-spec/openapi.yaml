@@ -2539,8 +2539,8 @@ components:
       properties:
         type:
           type: string
-          enum: [call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel]
-          description: "Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, or native_cancel"
+          enum: [call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability]
+          description: "Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, or native_check_availability"
         name:
           type: string
           description: LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)
@@ -2579,10 +2579,19 @@ components:
           description: (cal_com) Cal.com API key
         eventTypeId:
           type: integer
-          description: (cal_com / native_booking) Event type ID
+          description: (cal_com / native_booking / native_check_availability) Event type ID
+        calendarId:
+          type: integer
+          description: (native_booking / native_check_availability) Calendar the event type belongs to — UI hint for cascading selects
         timezone:
           type: string
-          description: (cal_com / send_sms) Default timezone for bookings (e.g. America/New_York)
+          description: (cal_com / send_sms / native_booking / native_check_availability) Default timezone for bookings (e.g. America/New_York)
+        taskName:
+          type: string
+          description: (native_booking) Friendly task name shown in the agent UI; mirrors `name` by default
+        preToolMessage:
+          type: string
+          description: (native_booking) Optional sentence the agent should say just before invoking the booking tool
 
     # ── Agent ──────────────────────────────────────────────────────────────────
     Agent:

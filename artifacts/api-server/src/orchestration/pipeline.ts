@@ -12,7 +12,7 @@ import { detectCallerGender, applyCallerSalutation, buildGenderInstruction } fro
 import { retrieveKbContext } from "./kb-retrieval.js";
 import { logger } from "../lib/logger.js";
 import { format, addMinutes } from "date-fns";
-import { toZonedTime } from "date-fns-tz";
+import { toZonedTime, formatInTimeZone } from "date-fns-tz";
 import { db, bookingsTable, eventTypesTable, schedulingCalendarsTable, agentsTable } from "@workspace/db";
 import { eq, and, or, sql } from "drizzle-orm";
 import { getAvailableSlots } from "../services/scheduling/slot-engine.js";
@@ -739,6 +739,8 @@ export class OrchestrationPipeline {
       return await this.executeNativeReschedule(tool, args);
     } else if (tool.type === "native_cancel") {
       return await this.executeNativeCancel(tool, args);
+    } else if (tool.type === "native_check_availability") {
+      return await this.executeNativeCheckAvailability(tool, args);
     }
     return undefined;
   }
@@ -1013,6 +1015,19 @@ export class OrchestrationPipeline {
               booking_id: { type: "string", description: "The booking reference ID to cancel" },
             },
             required: ["booking_id"],
+          },
+        };
+      }
+      if (t.type === "native_check_availability") {
+        return {
+          name: t.name,
+          description: t.description,
+          parameters: {
+            type: "object",
+            properties: {
+              preferred_date: { type: "string", description: "Optional preferred date or time of day to check availability for, e.g. 'next Tuesday', '2025-06-10', 'tomorrow morning'. Defaults to the next 7 days." },
+            },
+            required: [],
           },
         };
       }
@@ -1652,6 +1667,63 @@ export class OrchestrationPipeline {
     } catch (err) {
       logger.error({ callId: this.config.callId, err }, "Native cancel tool execution failed");
       return "error: cancellation failed due to a technical issue";
+    }
+  }
+
+  private async executeNativeCheckAvailability(tool: AgentTool & { type: "native_check_availability" }, args: Record<string, unknown>): Promise<string> {
+    logger.info({ callId: this.config.callId, eventTypeId: tool.eventTypeId }, "Native check-availability tool invoked");
+    const preferredRaw = args["preferred_date"] != null ? String(args["preferred_date"]) : null;
+
+    try {
+      // ── Authorization: resolve owning userId for this agent ──
+      const [agentCalendar] = await db
+        .select({ userId: schedulingCalendarsTable.userId })
+        .from(schedulingCalendarsTable)
+        .where(eq(schedulingCalendarsTable.agentId, this.agent.id));
+      let authorizedUserId: string | null = null;
+      if (agentCalendar) {
+        authorizedUserId = agentCalendar.userId;
+      } else {
+        const [agentRow] = await db
+          .select({ userId: agentsTable.userId })
+          .from(agentsTable)
+          .where(eq(agentsTable.id, this.agent.id));
+        authorizedUserId = agentRow?.userId ?? null;
+      }
+
+      const [eventType] = await db.select().from(eventTypesTable).where(eq(eventTypesTable.id, tool.eventTypeId));
+      if (!eventType || !eventType.isActive) {
+        return "error: the appointment type is unavailable";
+      }
+      const [calendar] = await db.select().from(schedulingCalendarsTable).where(eq(schedulingCalendarsTable.id, eventType.calendarId));
+      if (!calendar || !calendar.isActive) {
+        return "error: the calendar is unavailable";
+      }
+      if (authorizedUserId && calendar.userId !== authorizedUserId) {
+        logger.warn({ callId: this.config.callId, eventTypeId: tool.eventTypeId }, "Native check-availability: ownership mismatch — rejected");
+        return "error: the appointment type is unavailable";
+      }
+
+      const { searchStart, minSlotStart, timeFilter } = preferredRaw
+        ? parsePreferredDate(preferredRaw, calendar.timezone)
+        : { searchStart: new Date(), minSlotStart: undefined, timeFilter: undefined };
+      const searchEnd = new Date(searchStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+      let slots = await getAvailableSlots(tool.eventTypeId, format(searchStart, "yyyy-MM-dd"), format(searchEnd, "yyyy-MM-dd"));
+      if (minSlotStart) slots = slots.filter(s => s.slotStart >= minSlotStart);
+      if (timeFilter)   slots = slots.filter(timeFilter);
+
+      if (slots.length === 0) {
+        const rangeDesc = preferredRaw ? `on or after "${preferredRaw}"` : "in the next 7 days";
+        return `no_availability: no available slots ${rangeDesc}`;
+      }
+
+      // Return up to the first 5 slots formatted for the LLM to read back (in calendar timezone)
+      const tz = tool.timezone || calendar.timezone || "UTC";
+      const preview = slots.slice(0, 5).map(s => formatInTimeZone(s.slotStart, tz, "EEE MMM d 'at' h:mm a")).join("; ");
+      return `available_slots: count=${slots.length}, event="${eventType.name}", duration_mins=${eventType.durationMinutes}, timezone="${tz}", next="${preview}"`;
+    } catch (err) {
+      logger.error({ callId: this.config.callId, err }, "Native check-availability tool execution failed");
+      return "error: availability check failed due to a technical issue";
     }
   }
 

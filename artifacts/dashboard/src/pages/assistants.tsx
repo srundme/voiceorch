@@ -7,7 +7,7 @@ import {
   Check, Copy, Loader2, ChevronDown, Sparkles, PhoneOutgoing,
   BarChart2, Clock, CheckCircle2, XCircle, BookOpen,
   AlertTriangle, Target, AlignLeft, Zap, RefreshCw, ClipboardList, X,
-  PhoneForwarded, Globe, CalendarPlus, CalendarClock, CalendarX,
+  PhoneForwarded, Globe, CalendarPlus, CalendarClock, CalendarX, CalendarCheck, Wrench,
 } from "lucide-react";
 import { CreateAgentWizard } from "@/components/create-agent-wizard";
 import {
@@ -21,6 +21,7 @@ import {
   useListKnowledgeBases,
   useInitiateOutboundCall,
   useListEventTypes,
+  useListCalendars,
   getListAgentsQueryKey,
   getGetAgentQueryKey,
   getListCallsQueryKey,
@@ -590,6 +591,10 @@ type AgentToolLocal =
       name: string;
       description: string;
       eventTypeId: number;
+      calendarId?: number;
+      timezone?: string;
+      taskName?: string;
+      preToolMessage?: string;
     }
   | {
       type: "native_reschedule";
@@ -600,6 +605,14 @@ type AgentToolLocal =
       type: "native_cancel";
       name: string;
       description: string;
+    }
+  | {
+      type: "native_check_availability";
+      name: string;
+      description: string;
+      eventTypeId: number;
+      calendarId?: number;
+      timezone?: string;
     };
 
 function SliderRow({ label, desc, value, onChange, min, max, step, unit = "" }: {
@@ -685,6 +698,28 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
   const initiateOutbound = useInitiateOutboundCall();
   const { data: kbs } = useListKnowledgeBases();
   const { data: eventTypes } = useListEventTypes();
+  const { data: calendars } = useListCalendars();
+
+  // ── Booking-tool modal state (Tools tab) ───────────────────────────────
+  const [bookingModal, setBookingModal] = useState<null | {
+    editIdx: number | null;
+    calendarId: number | null;
+    eventTypeId: number | null;
+    timezone: string;
+    taskName: string;
+    description: string;
+    preToolMessage: string;
+  }>(null);
+  const modalParams = bookingModal?.calendarId ? { calendarId: bookingModal.calendarId } : undefined;
+  const { data: modalEventTypes, isLoading: modalEventTypesLoading } = useListEventTypes(
+    modalParams,
+    {
+      query: {
+        enabled: bookingModal !== null && bookingModal.calendarId !== null,
+        queryKey: ["modal-event-types", modalParams?.calendarId ?? null],
+      },
+    },
+  );
 
   // ── Tab 1 — Agent ───────────────────────────────────────────────
   const [agentName, setAgentName]                           = useState("");
@@ -912,7 +947,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
             const secondaryLanguages = cfg.secondaryLanguages ?? (cfg.secondaryLanguage ? [cfg.secondaryLanguage] : []);
             return { ...cfg, secondaryLanguages, secondaryLanguage: secondaryLanguages[0] ?? undefined };
           })(),
-          tools: agentTools as Parameters<typeof update.mutate>[0]["data"]["tools"],
+          tools: agentTools,
         } as Parameters<typeof update.mutate>[0]["data"],
       },
       {
@@ -2056,11 +2091,19 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
               </button>
               <button
                 type="button"
-                onClick={() => { setAgentTools(prev => [...prev, { type: "native_booking", name: "book_appointment", description: "Book an appointment using the platform's scheduling engine when the caller wants to schedule a meeting.", eventTypeId: 0 }]); setDirty(true); }}
+                onClick={() => setBookingModal({ editIdx: null, calendarId: null, eventTypeId: null, timezone: "UTC", taskName: "book_appointment", description: "Book an appointment using the platform's scheduling engine when the caller wants to schedule a meeting.", preToolMessage: "" })}
                 className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50 rounded-lg px-3 py-2 transition-colors"
               >
                 <CalendarPlus className="h-3.5 w-3.5 text-zinc-500" />
                 Book Appointment
+              </button>
+              <button
+                type="button"
+                onClick={() => { setAgentTools(prev => [...prev, { type: "native_check_availability", name: "check_availability", description: "Check available appointment slots when the caller asks what times are open.", eventTypeId: 0 }]); setDirty(true); }}
+                className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50 rounded-lg px-3 py-2 transition-colors"
+              >
+                <CalendarCheck className="h-3.5 w-3.5 text-zinc-500" />
+                Calendar Availability
               </button>
               <button
                 type="button"
@@ -2083,8 +2126,8 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                 onClick={() => { setAgentTools(prev => [...prev, { type: "webhook", name: "custom_action", description: "Invoke this when the caller requests a specific action.", url: "", method: "POST" }]); setDirty(true); }}
                 className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50 rounded-lg px-3 py-2 transition-colors"
               >
-                <Globe className="h-3.5 w-3.5 text-gray-500" />
-                Add Webhook
+                <Wrench className="h-3.5 w-3.5 text-gray-500" />
+                Add Custom Function
               </button>
             </div>
 
@@ -2111,6 +2154,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                     {tool.type === "native_booking"   && <CalendarPlus    className="h-4 w-4 text-zinc-500" />}
                     {tool.type === "native_reschedule" && <CalendarClock  className="h-4 w-4 text-zinc-500" />}
                     {tool.type === "native_cancel"    && <CalendarX       className="h-4 w-4 text-zinc-500" />}
+                    {tool.type === "native_check_availability" && <CalendarCheck className="h-4 w-4 text-zinc-500" />}
                     <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
                       {tool.type === "call_transfer"   ? "Call Transfer"
                         : tool.type === "send_sms"       ? "Send SMS"
@@ -2119,7 +2163,8 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                         : tool.type === "native_booking" ? "Book Appointment"
                         : tool.type === "native_reschedule" ? "Reschedule Appointment"
                         : tool.type === "native_cancel"  ? "Cancel Appointment"
-                        : "Webhook"}
+                        : tool.type === "native_check_availability" ? "Calendar Availability"
+                        : "Custom Function"}
                     </span>
                   </div>
                   <button
@@ -2250,33 +2295,55 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                   </>
                 )}
 
-                {/* ── Native Booking fields ── */}
-                {tool.type === "native_booking" && (
-                  <>
-                    <div className="space-y-1">
-                      <p className="text-xs text-gray-500">Event Type</p>
-                      <Select
-                        value={tool.eventTypeId ? String(tool.eventTypeId) : ""}
-                        onValueChange={v => { const next = [...agentTools]; next[idx] = { ...tool, eventTypeId: parseInt(v) || 0 }; setAgentTools(next); setDirty(true); }}
+                {/* ── Native Booking summary + Edit ── */}
+                {tool.type === "native_booking" && (() => {
+                  const cal = (calendars ?? []).find(c => c.id === tool.calendarId);
+                  const et  = (eventTypes ?? []).find(e => e.id === tool.eventTypeId);
+                  return (
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <div>
+                          <p className="text-gray-500 mb-0.5">Calendar</p>
+                          <p className="text-gray-700 truncate">{cal?.name ?? <span className="text-gray-400 italic">Not selected</span>}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500 mb-0.5">Event Type</p>
+                          <p className="text-gray-700 truncate">
+                            {et ? `${et.name} (${et.durationMinutes} min)` : <span className="text-gray-400 italic">Not selected</span>}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500 mb-0.5">Timezone</p>
+                          <p className="text-gray-700 truncate">{tool.timezone || "UTC"}</p>
+                        </div>
+                        {tool.preToolMessage && (
+                          <div>
+                            <p className="text-gray-500 mb-0.5">Pre-tool message</p>
+                            <p className="text-gray-700 truncate">{tool.preToolMessage}</p>
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setBookingModal({
+                          editIdx: idx,
+                          calendarId: tool.calendarId ?? null,
+                          eventTypeId: tool.eventTypeId || null,
+                          timezone: tool.timezone ?? "UTC",
+                          taskName: tool.taskName ?? tool.name,
+                          description: tool.description,
+                          preToolMessage: tool.preToolMessage ?? "",
+                        })}
+                        className="text-xs text-gray-700 underline underline-offset-2 hover:text-gray-900"
                       >
-                        <SelectTrigger className="bg-white border-gray-200 text-gray-700 text-xs h-8">
-                          <SelectValue placeholder="Select an event type…" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(eventTypes ?? []).map(et => (
-                            <SelectItem key={et.id} value={String(et.id)}>
-                              {et.name} ({et.durationMinutes} min)
-                            </SelectItem>
-                          ))}
-                          {(eventTypes ?? []).length === 0 && (
-                            <SelectItem value="0" disabled>No event types found — create one in Scheduling</SelectItem>
-                          )}
-                        </SelectContent>
-                      </Select>
+                        Edit configuration
+                      </button>
+                      {!tool.eventTypeId && (
+                        <p className="text-[10px] text-amber-600">⚠ Event type not selected — booking will fail at runtime.</p>
+                      )}
                     </div>
-                    <p className="text-[10px] text-gray-400">The AI will collect the caller's name and email, then book the first available slot for this event type.</p>
-                  </>
-                )}
+                  );
+                })()}
 
                 {/* ── Native Reschedule fields ── */}
                 {tool.type === "native_reschedule" && (
@@ -2286,6 +2353,56 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                 {/* ── Native Cancel fields ── */}
                 {tool.type === "native_cancel" && (
                   <p className="text-[10px] text-gray-400">The AI will ask the caller for their booking reference ID and cancel the appointment.</p>
+                )}
+
+                {/* ── Calendar Availability fields ── */}
+                {tool.type === "native_check_availability" && (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <p className="text-xs text-gray-500">Calendar</p>
+                        <Select
+                          value={tool.calendarId ? String(tool.calendarId) : ""}
+                          onValueChange={v => { const next = [...agentTools]; next[idx] = { ...tool, calendarId: parseInt(v) || undefined, eventTypeId: 0 }; setAgentTools(next); setDirty(true); }}
+                        >
+                          <SelectTrigger className="bg-white border-gray-200 text-gray-700 text-xs h-8">
+                            <SelectValue placeholder="Select calendar…" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(calendars ?? []).map(c => (
+                              <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+                            ))}
+                            {(calendars ?? []).length === 0 && (
+                              <SelectItem value="0" disabled>No calendars — create one in Scheduling</SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs text-gray-500">Event Type</p>
+                        <Select
+                          value={tool.eventTypeId ? String(tool.eventTypeId) : ""}
+                          onValueChange={v => { const next = [...agentTools]; next[idx] = { ...tool, eventTypeId: parseInt(v) || 0 }; setAgentTools(next); setDirty(true); }}
+                          disabled={!tool.calendarId}
+                        >
+                          <SelectTrigger className="bg-white border-gray-200 text-gray-700 text-xs h-8">
+                            <SelectValue placeholder={tool.calendarId ? "Select event type…" : "Pick a calendar first"} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(eventTypes ?? []).filter(et => !tool.calendarId || et.calendarId === tool.calendarId).map(et => (
+                              <SelectItem key={et.id} value={String(et.id)}>
+                                {et.name} ({et.durationMinutes} min)
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-gray-400">The AI returns up to 5 available slots so the caller can pick one before booking.</p>
+                    {!tool.eventTypeId && (
+                      <p className="text-[10px] text-amber-600">⚠ Event type not selected — availability checks will fail at runtime.</p>
+                    )}
+                  </>
                 )}
 
                 {/* ── Webhook fields ── */}
@@ -2337,6 +2454,152 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
               </p>
             )}
           </div>
+
+          {/* ── Book Appointment configuration modal ── */}
+          <Dialog open={bookingModal !== null} onOpenChange={(open) => { if (!open) setBookingModal(null); }}>
+            <DialogContent className="sm:max-w-lg">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <CalendarPlus className="h-4 w-4 text-zinc-500" />
+                  {bookingModal?.editIdx == null ? "Add Book Appointment Tool" : "Edit Book Appointment Tool"}
+                </DialogTitle>
+                <DialogDescription>
+                  Configure how the AI books appointments using your inbuilt calendar.
+                </DialogDescription>
+              </DialogHeader>
+
+              {bookingModal && (
+                <div className="space-y-3 py-1">
+                  {/* Calendar */}
+                  <div className="space-y-1">
+                    <Label className="text-xs">Calendar <span className="text-red-500">*</span></Label>
+                    <Select
+                      value={bookingModal.calendarId ? String(bookingModal.calendarId) : ""}
+                      onValueChange={(v) => setBookingModal({ ...bookingModal, calendarId: parseInt(v) || null, eventTypeId: null })}
+                    >
+                      <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select a calendar…" /></SelectTrigger>
+                      <SelectContent>
+                        {(calendars ?? []).map((c) => (
+                          <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+                        ))}
+                        {(calendars ?? []).length === 0 && (
+                          <SelectItem value="__none" disabled>No calendars — create one in Scheduling first</SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Event Type — cascades from calendar */}
+                  <div className="space-y-1">
+                    <Label className="text-xs">Event Type <span className="text-red-500">*</span></Label>
+                    <Select
+                      value={bookingModal.eventTypeId ? String(bookingModal.eventTypeId) : ""}
+                      onValueChange={(v) => setBookingModal({ ...bookingModal, eventTypeId: parseInt(v) || null })}
+                      disabled={!bookingModal.calendarId || modalEventTypesLoading}
+                    >
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue placeholder={
+                          !bookingModal.calendarId ? "Pick a calendar first"
+                          : modalEventTypesLoading ? "Loading event types…"
+                          : "Select an event type…"
+                        } />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(modalEventTypes ?? []).map((et) => (
+                          <SelectItem key={et.id} value={String(et.id)}>{et.name} ({et.durationMinutes} min)</SelectItem>
+                        ))}
+                        {bookingModal.calendarId && !modalEventTypesLoading && (modalEventTypes ?? []).length === 0 && (
+                          <SelectItem value="__none" disabled>No event types for this calendar</SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Timezone */}
+                  <div className="space-y-1">
+                    <Label className="text-xs">Timezone</Label>
+                    <Select value={bookingModal.timezone} onValueChange={(v) => setBookingModal({ ...bookingModal, timezone: v })}>
+                      <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {["UTC", "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "Europe/London", "Europe/Paris", "Asia/Kolkata", "Asia/Singapore", "Asia/Tokyo", "Australia/Sydney"].map((tz) => (
+                          <SelectItem key={tz} value={tz}>{tz}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Task Name */}
+                  <div className="space-y-1">
+                    <Label className="text-xs">Task Name</Label>
+                    <Input
+                      value={bookingModal.taskName}
+                      onChange={(e) => setBookingModal({ ...bookingModal, taskName: e.target.value })}
+                      placeholder="book_appointment"
+                      className="h-9 text-sm"
+                    />
+                    <p className="text-[10px] text-gray-400">Function name exposed to the AI (snake_case recommended).</p>
+                  </div>
+
+                  {/* Description */}
+                  <div className="space-y-1">
+                    <Label className="text-xs">Description</Label>
+                    <Textarea
+                      value={bookingModal.description}
+                      onChange={(e) => setBookingModal({ ...bookingModal, description: e.target.value })}
+                      rows={2}
+                      placeholder="Tells the AI when to call this tool."
+                      className="text-sm resize-none"
+                    />
+                  </div>
+
+                  {/* Pre-tool message */}
+                  <div className="space-y-1">
+                    <Label className="text-xs">Pre-tool Message</Label>
+                    <Input
+                      value={bookingModal.preToolMessage}
+                      onChange={(e) => setBookingModal({ ...bookingModal, preToolMessage: e.target.value })}
+                      placeholder="e.g. Sure, let me book that for you…"
+                      className="h-9 text-sm"
+                    />
+                    <p className="text-[10px] text-gray-400">Hint for the AI to say before completing the booking (optional).</p>
+                  </div>
+                </div>
+              )}
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setBookingModal(null)}>Cancel</Button>
+                <Button
+                  onClick={() => {
+                    if (!bookingModal) return;
+                    if (!bookingModal.calendarId) { toast({ title: "Calendar is required", variant: "destructive" }); return; }
+                    if (!bookingModal.eventTypeId) { toast({ title: "Event type is required", variant: "destructive" }); return; }
+                    const taskName = (bookingModal.taskName || "book_appointment").trim();
+                    const next: AgentToolLocal = {
+                      type: "native_booking",
+                      name: taskName,
+                      description: bookingModal.description || "Book an appointment when the caller wants to schedule a meeting.",
+                      eventTypeId: bookingModal.eventTypeId,
+                      calendarId: bookingModal.calendarId,
+                      timezone: bookingModal.timezone,
+                      taskName,
+                      preToolMessage: bookingModal.preToolMessage || undefined,
+                    };
+                    setAgentTools(prev => {
+                      if (bookingModal.editIdx == null) return [...prev, next];
+                      const copy = [...prev];
+                      copy[bookingModal.editIdx] = next;
+                      return copy;
+                    });
+                    setDirty(true);
+                    setBookingModal(null);
+                    toast({ title: bookingModal.editIdx == null ? "Booking tool added" : "Booking tool updated" });
+                  }}
+                >
+                  Save Configuration
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         {/* ── Tab 7: Analytics ── */}

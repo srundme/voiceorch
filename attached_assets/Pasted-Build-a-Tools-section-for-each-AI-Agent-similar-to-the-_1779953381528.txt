@@ -1,0 +1,83 @@
+Build a “Tools” section for each AI Agent similar to the Bolna reference UI.
+
+Requirements:
+
+1. Each agent should have a separate “Tools” tab.
+2. Inside the Tools section, show:
+   - Calendar Availability
+   - Book Appointment
+   - Transfer Call
+   - Custom Function
+
+3. Unlike Bolna:
+   - DO NOT use external Cal.com API key input.
+   - We already have an inbuilt calendar system.
+
+4. For “Book Appointment” tool:
+   - When user clicks “Add”
+   - Open a modal/popup configuration window.
+
+5. In the modal:
+   Remove:
+   - API Key field
+   - External Cal.com configuration
+
+6. Instead add:
+   - Select Calendar dropdown
+   - Select Event Type dropdown
+   - Timezone dropdown
+   - Task Name input
+   - Description textarea
+   - Pre-tool message field
+
+7. Flow:
+   - User selects Calendar first
+   - Based on selected calendar, fetch available event types dynamically
+   - Populate Event Type dropdown
+   - Save selected calendar_id and event_type_id in tool configuration
+
+8. Backend Requirements:
+   - Create API endpoint to fetch calendars
+   - Create API endpoint to fetch event types by calendar
+   - Store selected tool configuration in database
+
+9. UI Requirements:
+   - Keep UI clean and modern
+   - Similar layout to Bolna reference
+   - Use card-based tool layout
+   - Modal should be responsive
+   - Use loading states while fetching calendars/events
+
+10. Validation:
+   - Calendar selection required
+   - Event type selection required
+   - Prevent saving empty configuration
+
+11. Tech Stack:
+   - Use React + Tailwind
+   - Use reusable modal component
+   - Use async API calls
+   - Proper error handling and toast notifications
+
+12. Example User Flow:
+   Agent → Tools → Book Appointment → Add
+   → Modal opens
+   → Select Calendar
+   → Select Event Type
+   → Save Configuration
+
+13. Database Schema Example:
+   tool_configurations:
+   - id
+   - agent_id
+   - tool_type
+   - calendar_id
+   - event_type_id
+   - timezone
+   - task_name
+   - description
+   - pre_tool_message
+   - created_at
+
+14. Important:
+   The system should support multiple calendars and multiple event types dynamically for future scalability.

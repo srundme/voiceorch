@@ -56,7 +56,7 @@ export const ListAgentsResponseItem = zod.object({
   "inactivityMessage": zod.string().nullish().describe('Message spoken to the caller before hanging up due to silence timeout'),
   "knowledgeBaseId": zod.number().nullish().describe('ID of an attached knowledge base for RAG context injection'),
   "tools": zod.array(zod.object({
-  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, or native_cancel'),
+  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, or native_check_availability'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
   "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
   "transferTo": zod.string().optional().describe('(call_transfer) E.164 phone number to transfer the call to (e.g. +12125551234)'),
@@ -68,8 +68,11 @@ export const ListAgentsResponseItem = zod.object({
   "messageTemplate": zod.string().optional().describe('(send_sms) SMS body to send to the caller — supports plain text'),
   "goodbyeMessage": zod.string().optional().describe('(end_call) Optional message spoken to the caller before hanging up'),
   "apiKey": zod.string().optional().describe('(cal_com) Cal.com API key'),
-  "eventTypeId": zod.number().optional().describe('(cal_com \/ native_booking) Event type ID'),
-  "timezone": zod.string().optional().describe('(cal_com \/ send_sms) Default timezone for bookings (e.g. America\/New_York)')
+  "eventTypeId": zod.number().optional().describe('(cal_com \/ native_booking \/ native_check_availability) Event type ID'),
+  "calendarId": zod.number().optional().describe('(native_booking \/ native_check_availability) Calendar the event type belongs to — UI hint for cascading selects'),
+  "timezone": zod.string().optional().describe('(cal_com \/ send_sms \/ native_booking \/ native_check_availability) Default timezone for bookings (e.g. America\/New_York)'),
+  "taskName": zod.string().optional().describe('(native_booking) Friendly task name shown in the agent UI; mirrors `name` by default'),
+  "preToolMessage": zod.string().optional().describe('(native_booking) Optional sentence the agent should say just before invoking the booking tool')
 })).nullish().describe('List of tools (functions) the LLM can invoke during a call'),
   "maxConcurrentCalls": zod.number().nullish().describe('Per-agent concurrent call cap (null = use account limit)'),
   "monthlySpendLimitCents": zod.number().nullish().describe('Monthly spend cap in cents (null = no limit)'),
@@ -139,7 +142,7 @@ export const CreateAgentBody = zod.object({
   "noiseCancellationEnabled": zod.boolean().optional(),
   "inactivityMessage": zod.string().optional(),
   "tools": zod.array(zod.object({
-  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, or native_cancel'),
+  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, or native_check_availability'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
   "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
   "transferTo": zod.string().optional().describe('(call_transfer) E.164 phone number to transfer the call to (e.g. +12125551234)'),
@@ -151,8 +154,11 @@ export const CreateAgentBody = zod.object({
   "messageTemplate": zod.string().optional().describe('(send_sms) SMS body to send to the caller — supports plain text'),
   "goodbyeMessage": zod.string().optional().describe('(end_call) Optional message spoken to the caller before hanging up'),
   "apiKey": zod.string().optional().describe('(cal_com) Cal.com API key'),
-  "eventTypeId": zod.number().optional().describe('(cal_com \/ native_booking) Event type ID'),
-  "timezone": zod.string().optional().describe('(cal_com \/ send_sms) Default timezone for bookings (e.g. America\/New_York)')
+  "eventTypeId": zod.number().optional().describe('(cal_com \/ native_booking \/ native_check_availability) Event type ID'),
+  "calendarId": zod.number().optional().describe('(native_booking \/ native_check_availability) Calendar the event type belongs to — UI hint for cascading selects'),
+  "timezone": zod.string().optional().describe('(cal_com \/ send_sms \/ native_booking \/ native_check_availability) Default timezone for bookings (e.g. America\/New_York)'),
+  "taskName": zod.string().optional().describe('(native_booking) Friendly task name shown in the agent UI; mirrors `name` by default'),
+  "preToolMessage": zod.string().optional().describe('(native_booking) Optional sentence the agent should say just before invoking the booking tool')
 })).optional().describe('List of tools (functions) the LLM can invoke during a call'),
   "agentConfig": zod.record(zod.string(), zod.unknown()).optional().describe('Advanced per-tab configuration'),
   "leadSourceType": zod.string().optional().describe('Lead source platform (e.g. instagram)'),
@@ -207,7 +213,7 @@ export const GetAgentResponse = zod.object({
   "inactivityMessage": zod.string().nullish().describe('Message spoken to the caller before hanging up due to silence timeout'),
   "knowledgeBaseId": zod.number().nullish().describe('ID of an attached knowledge base for RAG context injection'),
   "tools": zod.array(zod.object({
-  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, or native_cancel'),
+  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, or native_check_availability'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
   "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
   "transferTo": zod.string().optional().describe('(call_transfer) E.164 phone number to transfer the call to (e.g. +12125551234)'),
@@ -219,8 +225,11 @@ export const GetAgentResponse = zod.object({
   "messageTemplate": zod.string().optional().describe('(send_sms) SMS body to send to the caller — supports plain text'),
   "goodbyeMessage": zod.string().optional().describe('(end_call) Optional message spoken to the caller before hanging up'),
   "apiKey": zod.string().optional().describe('(cal_com) Cal.com API key'),
-  "eventTypeId": zod.number().optional().describe('(cal_com \/ native_booking) Event type ID'),
-  "timezone": zod.string().optional().describe('(cal_com \/ send_sms) Default timezone for bookings (e.g. America\/New_York)')
+  "eventTypeId": zod.number().optional().describe('(cal_com \/ native_booking \/ native_check_availability) Event type ID'),
+  "calendarId": zod.number().optional().describe('(native_booking \/ native_check_availability) Calendar the event type belongs to — UI hint for cascading selects'),
+  "timezone": zod.string().optional().describe('(cal_com \/ send_sms \/ native_booking \/ native_check_availability) Default timezone for bookings (e.g. America\/New_York)'),
+  "taskName": zod.string().optional().describe('(native_booking) Friendly task name shown in the agent UI; mirrors `name` by default'),
+  "preToolMessage": zod.string().optional().describe('(native_booking) Optional sentence the agent should say just before invoking the booking tool')
 })).nullish().describe('List of tools (functions) the LLM can invoke during a call'),
   "maxConcurrentCalls": zod.number().nullish().describe('Per-agent concurrent call cap (null = use account limit)'),
   "monthlySpendLimitCents": zod.number().nullish().describe('Monthly spend cap in cents (null = no limit)'),
@@ -294,7 +303,7 @@ export const UpdateAgentBody = zod.object({
   "inactivityMessage": zod.string().optional(),
   "knowledgeBaseId": zod.number().optional().describe('ID of an attached knowledge base for RAG context injection'),
   "tools": zod.array(zod.object({
-  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, or native_cancel'),
+  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, or native_check_availability'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
   "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
   "transferTo": zod.string().optional().describe('(call_transfer) E.164 phone number to transfer the call to (e.g. +12125551234)'),
@@ -306,8 +315,11 @@ export const UpdateAgentBody = zod.object({
   "messageTemplate": zod.string().optional().describe('(send_sms) SMS body to send to the caller — supports plain text'),
   "goodbyeMessage": zod.string().optional().describe('(end_call) Optional message spoken to the caller before hanging up'),
   "apiKey": zod.string().optional().describe('(cal_com) Cal.com API key'),
-  "eventTypeId": zod.number().optional().describe('(cal_com \/ native_booking) Event type ID'),
-  "timezone": zod.string().optional().describe('(cal_com \/ send_sms) Default timezone for bookings (e.g. America\/New_York)')
+  "eventTypeId": zod.number().optional().describe('(cal_com \/ native_booking \/ native_check_availability) Event type ID'),
+  "calendarId": zod.number().optional().describe('(native_booking \/ native_check_availability) Calendar the event type belongs to — UI hint for cascading selects'),
+  "timezone": zod.string().optional().describe('(cal_com \/ send_sms \/ native_booking \/ native_check_availability) Default timezone for bookings (e.g. America\/New_York)'),
+  "taskName": zod.string().optional().describe('(native_booking) Friendly task name shown in the agent UI; mirrors `name` by default'),
+  "preToolMessage": zod.string().optional().describe('(native_booking) Optional sentence the agent should say just before invoking the booking tool')
 })).optional().describe('List of tools (functions) the LLM can invoke during a call'),
   "status": zod.string().optional(),
   "maxConcurrentCalls": zod.number().optional(),
@@ -363,7 +375,7 @@ export const UpdateAgentResponse = zod.object({
   "inactivityMessage": zod.string().nullish().describe('Message spoken to the caller before hanging up due to silence timeout'),
   "knowledgeBaseId": zod.number().nullish().describe('ID of an attached knowledge base for RAG context injection'),
   "tools": zod.array(zod.object({
-  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, or native_cancel'),
+  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, or native_check_availability'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
   "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
   "transferTo": zod.string().optional().describe('(call_transfer) E.164 phone number to transfer the call to (e.g. +12125551234)'),
@@ -375,8 +387,11 @@ export const UpdateAgentResponse = zod.object({
   "messageTemplate": zod.string().optional().describe('(send_sms) SMS body to send to the caller — supports plain text'),
   "goodbyeMessage": zod.string().optional().describe('(end_call) Optional message spoken to the caller before hanging up'),
   "apiKey": zod.string().optional().describe('(cal_com) Cal.com API key'),
-  "eventTypeId": zod.number().optional().describe('(cal_com \/ native_booking) Event type ID'),
-  "timezone": zod.string().optional().describe('(cal_com \/ send_sms) Default timezone for bookings (e.g. America\/New_York)')
+  "eventTypeId": zod.number().optional().describe('(cal_com \/ native_booking \/ native_check_availability) Event type ID'),
+  "calendarId": zod.number().optional().describe('(native_booking \/ native_check_availability) Calendar the event type belongs to — UI hint for cascading selects'),
+  "timezone": zod.string().optional().describe('(cal_com \/ send_sms \/ native_booking \/ native_check_availability) Default timezone for bookings (e.g. America\/New_York)'),
+  "taskName": zod.string().optional().describe('(native_booking) Friendly task name shown in the agent UI; mirrors `name` by default'),
+  "preToolMessage": zod.string().optional().describe('(native_booking) Optional sentence the agent should say just before invoking the booking tool')
 })).nullish().describe('List of tools (functions) the LLM can invoke during a call'),
   "maxConcurrentCalls": zod.number().nullish().describe('Per-agent concurrent call cap (null = use account limit)'),
   "monthlySpendLimitCents": zod.number().nullish().describe('Monthly spend cap in cents (null = no limit)'),
@@ -455,7 +470,7 @@ export const ToggleAgentResponse = zod.object({
   "inactivityMessage": zod.string().nullish().describe('Message spoken to the caller before hanging up due to silence timeout'),
   "knowledgeBaseId": zod.number().nullish().describe('ID of an attached knowledge base for RAG context injection'),
   "tools": zod.array(zod.object({
-  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, or native_cancel'),
+  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, or native_check_availability'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
   "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
   "transferTo": zod.string().optional().describe('(call_transfer) E.164 phone number to transfer the call to (e.g. +12125551234)'),
@@ -467,8 +482,11 @@ export const ToggleAgentResponse = zod.object({
   "messageTemplate": zod.string().optional().describe('(send_sms) SMS body to send to the caller — supports plain text'),
   "goodbyeMessage": zod.string().optional().describe('(end_call) Optional message spoken to the caller before hanging up'),
   "apiKey": zod.string().optional().describe('(cal_com) Cal.com API key'),
-  "eventTypeId": zod.number().optional().describe('(cal_com \/ native_booking) Event type ID'),
-  "timezone": zod.string().optional().describe('(cal_com \/ send_sms) Default timezone for bookings (e.g. America\/New_York)')
+  "eventTypeId": zod.number().optional().describe('(cal_com \/ native_booking \/ native_check_availability) Event type ID'),
+  "calendarId": zod.number().optional().describe('(native_booking \/ native_check_availability) Calendar the event type belongs to — UI hint for cascading selects'),
+  "timezone": zod.string().optional().describe('(cal_com \/ send_sms \/ native_booking \/ native_check_availability) Default timezone for bookings (e.g. America\/New_York)'),
+  "taskName": zod.string().optional().describe('(native_booking) Friendly task name shown in the agent UI; mirrors `name` by default'),
+  "preToolMessage": zod.string().optional().describe('(native_booking) Optional sentence the agent should say just before invoking the booking tool')
 })).nullish().describe('List of tools (functions) the LLM can invoke during a call'),
   "maxConcurrentCalls": zod.number().nullish().describe('Per-agent concurrent call cap (null = use account limit)'),
   "monthlySpendLimitCents": zod.number().nullish().describe('Monthly spend cap in cents (null = no limit)'),

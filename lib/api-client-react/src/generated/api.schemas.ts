@@ -82,7 +82,7 @@ export interface DispositionField {
 }
 
 /**
- * Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, or native_cancel
+ * Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, or native_check_availability
  */
 export type AgentToolType = typeof AgentToolType[keyof typeof AgentToolType];
 
@@ -96,6 +96,7 @@ export const AgentToolType = {
   native_booking: 'native_booking',
   native_reschedule: 'native_reschedule',
   native_cancel: 'native_cancel',
+  native_check_availability: 'native_check_availability',
 } as const;
 
 /**
@@ -115,7 +116,7 @@ export const AgentToolMethod = {
 export type AgentToolHeaders = {[key: string]: string};
 
 export interface AgentTool {
-  /** Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, or native_cancel */
+  /** Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, or native_check_availability */
   type: AgentToolType;
   /** LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human) */
   name: string;
@@ -139,10 +140,16 @@ export interface AgentTool {
   goodbyeMessage?: string;
   /** (cal_com) Cal.com API key */
   apiKey?: string;
-  /** (cal_com / native_booking) Event type ID */
+  /** (cal_com / native_booking / native_check_availability) Event type ID */
   eventTypeId?: number;
-  /** (cal_com / send_sms) Default timezone for bookings (e.g. America/New_York) */
+  /** (native_booking / native_check_availability) Calendar the event type belongs to — UI hint for cascading selects */
+  calendarId?: number;
+  /** (cal_com / send_sms / native_booking / native_check_availability) Default timezone for bookings (e.g. America/New_York) */
   timezone?: string;
+  /** (native_booking) Friendly task name shown in the agent UI; mirrors `name` by default */
+  taskName?: string;
+  /** (native_booking) Optional sentence the agent should say just before invoking the booking tool */
+  preToolMessage?: string;
 }
 
 /**

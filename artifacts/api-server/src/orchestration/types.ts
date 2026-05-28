@@ -46,6 +46,14 @@ export interface NativeBookingTool {
   name: string;
   description: string;
   eventTypeId: number;
+  /** Optional: parent calendar id (used by UI for cascading dropdowns; runtime resolves from event type) */
+  calendarId?: number;
+  /** Optional default timezone for confirmation messages */
+  timezone?: string;
+  /** Optional display label shown in the UI (mirrors `name`) */
+  taskName?: string;
+  /** Optional message spoken to the caller right before the booking executes (advisory; LLM-driven) */
+  preToolMessage?: string;
 }
 
 export interface NativeRescheduleTool {
@@ -60,7 +68,18 @@ export interface NativeCancelTool {
   description: string;
 }
 
-export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | EndCallTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool;
+export interface NativeCheckAvailabilityTool {
+  type: "native_check_availability";
+  name: string;
+  description: string;
+  eventTypeId: number;
+  /** Optional: parent calendar id (UI only) */
+  calendarId?: number;
+  /** Optional timezone used when phrasing slot times back to the caller */
+  timezone?: string;
+}
+
+export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | EndCallTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool | NativeCheckAvailabilityTool;
 
 /** JSON Schema-compatible tool definition passed to LLM providers */
 export interface ToolDefinition {
