@@ -504,7 +504,7 @@ type AgentCfg = {
   presencePenalty?: number; frequencyPenalty?: number;
   requestJsonResponse?: boolean;
   guardrailRoutes?: Array<{ name: string; scoreThreshold: number; utterances: string; response: string }>;
-  secondaryLanguage?: string; ttsStream?: boolean; ttsSamplingRate?: number;
+  secondaryLanguage?: string; secondaryLanguages?: string[]; ttsStream?: boolean; ttsSamplingRate?: number;
   ttsEncoding?: string; ttsAudioFormat?: string;
   wordsForInterruption?: number; incrementalDelay?: number;
   backchannelingStartDelay?: number; ambientNoiseEnabled?: boolean; ambientNoiseTrack?: string;
@@ -908,7 +908,10 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
               required: f.required,
               options: f.type === "choice" && f.options ? f.options.split(",").map(s => s.trim()).filter(Boolean) : undefined,
             })),
-          agentConfig,
+          agentConfig: (() => {
+            const secondaryLanguages = cfg.secondaryLanguages ?? (cfg.secondaryLanguage ? [cfg.secondaryLanguage] : []);
+            return { ...cfg, secondaryLanguages, secondaryLanguage: secondaryLanguages[0] ?? undefined };
+          })(),
           tools: agentTools as Parameters<typeof update.mutate>[0]["data"]["tools"],
         } as Parameters<typeof update.mutate>[0]["data"],
       },
@@ -1349,27 +1352,55 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
         {/* ── Tab 3: Audio ── */}
         <TabsContent value="audio" className="flex-1 overflow-y-auto m-0 px-5 py-4">
           <div className="max-w-2xl space-y-5">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-gray-50 border border-gray-100 rounded-xl p-3.5 space-y-2">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Primary Language</p>
-                <Select value={asrLanguage} onValueChange={mark(setAsrLanguage)}>
-                  <SelectTrigger className="h-7 text-xs bg-white border-gray-200 text-gray-700"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-white border-gray-200 max-h-60">
-                    {LANGUAGES.map(l => <SelectItem key={l.value} value={l.value} className="text-gray-700 text-xs">{l.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="bg-gray-50 border border-gray-100 rounded-xl p-3.5 space-y-2">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Secondary Language</p>
-                <Select value={cfg.secondaryLanguage ?? "none"} onValueChange={v => setCfg({ secondaryLanguage: v === "none" ? undefined : v })}>
-                  <SelectTrigger className="h-7 text-xs bg-white border-gray-200 text-gray-700"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-white border-gray-200 max-h-60">
-                    <SelectItem value="none" className="text-gray-500 text-xs">— None —</SelectItem>
-                    {LANGUAGES.map(l => <SelectItem key={l.value} value={l.value} className="text-gray-700 text-xs">{l.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+            {(() => {
+              const effectiveSecondary: string[] = cfg.secondaryLanguages
+                ?? (cfg.secondaryLanguage ? [cfg.secondaryLanguage] : []);
+              const displaySecondary: string[] = effectiveSecondary.length >= 2
+                ? effectiveSecondary.slice(0, 2)
+                : effectiveSecondary.length === 1
+                  ? [effectiveSecondary[0]]
+                  : [""];
+              const hasTwoSlots = displaySecondary.length === 2;
+              const cols = hasTwoSlots ? "grid-cols-3" : "grid-cols-2";
+
+              function updateSecondary(index: number, value: string) {
+                const next = [...displaySecondary];
+                next[index] = value === "none" ? "" : value;
+                const filtered = next.filter(Boolean);
+                setCfg({
+                  secondaryLanguages: filtered,
+                  secondaryLanguage: filtered[0] ?? undefined,
+                });
+              }
+
+              return (
+                <div className={`grid ${cols} gap-3`}>
+                  <div className="bg-gray-50 border border-gray-100 rounded-xl p-3.5 space-y-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Primary Language</p>
+                    <Select value={asrLanguage} onValueChange={mark(setAsrLanguage)}>
+                      <SelectTrigger className="h-7 text-xs bg-white border-gray-200 text-gray-700"><SelectValue /></SelectTrigger>
+                      <SelectContent className="bg-white border-gray-200 max-h-60">
+                        {LANGUAGES.map(l => <SelectItem key={l.value} value={l.value} className="text-gray-700 text-xs">{l.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {displaySecondary.map((lang, idx) => (
+                    <div key={idx} className="bg-gray-50 border border-gray-100 rounded-xl p-3.5 space-y-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">
+                        {hasTwoSlots ? `Secondary Language ${idx + 1}` : "Secondary Language"}
+                      </p>
+                      <Select value={lang || "none"} onValueChange={v => updateSecondary(idx, v)}>
+                        <SelectTrigger className="h-7 text-xs bg-white border-gray-200 text-gray-700"><SelectValue /></SelectTrigger>
+                        <SelectContent className="bg-white border-gray-200 max-h-60">
+                          <SelectItem value="none" className="text-gray-500 text-xs">— None —</SelectItem>
+                          {LANGUAGES.map(l => <SelectItem key={l.value} value={l.value} className="text-gray-700 text-xs">{l.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
             <div className="bg-gray-50 border border-gray-200/40 rounded-xl p-4 space-y-4">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Transcriber</p>
               <div className="grid grid-cols-2 gap-3">

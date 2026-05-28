@@ -425,6 +425,8 @@ export function buildCreateAgentPayload(state: WizardState) {
       agentConfig: {
         summarizationEnabled: true,
         summarizationPrompt: "Summarize this call in 3 bullet points: 1) caller intent, 2) key information exchanged, 3) outcome or next step.",
+        secondaryLanguages: state.additionalLanguages.map(l => ASR_LANG_CODE_MAP[l] ?? l),
+        ...(state.additionalLanguages[0] && { secondaryLanguage: ASR_LANG_CODE_MAP[state.additionalLanguages[0]] ?? state.additionalLanguages[0] }),
       } as Record<string, unknown>,
       tools: state.callTransferEnabled && state.callTransferNumber.trim()
         ? [{ type: "call_transfer" as const, name: "transfer_to_human", description: "Transfer the call to a human agent when the caller requests it or when escalation is needed.", transferTo: state.callTransferNumber.trim() }]
@@ -446,6 +448,10 @@ export function buildCreateAgentPayload(state: WizardState) {
     telephonyProvider: state.byopTelephony,
     systemPrompt: state.byopPrompt,
     maxDuration: 300,
+    agentConfig: {
+      secondaryLanguages: state.additionalLanguages.map(l => ASR_LANG_CODE_MAP[l] ?? l),
+      ...(state.additionalLanguages[0] && { secondaryLanguage: ASR_LANG_CODE_MAP[state.additionalLanguages[0]] ?? state.additionalLanguages[0] }),
+    } as Record<string, unknown>,
   };
 }
 

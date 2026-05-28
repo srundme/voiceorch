@@ -15,6 +15,7 @@ export type AgentConfig = {
   guardrailRoutes?: Array<{ name: string; scoreThreshold: number; utterances: string; response: string }>;
   // Tab 3 — Audio
   secondaryLanguage?: string;
+  secondaryLanguages?: string[];
   ttsStream?: boolean;
   ttsSamplingRate?: number;
   ttsEncoding?: string;
