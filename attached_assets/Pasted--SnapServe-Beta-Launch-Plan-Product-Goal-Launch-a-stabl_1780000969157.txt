@@ -1,0 +1,416 @@
+# SnapServe Beta Launch Plan
+
+## Product Goal
+
+Launch a stable beta version of SnapServe focused on:
+
+* AI voice agents
+* outbound calling
+* lead automation
+* phone number provisioning
+* wallet billing
+* appointment booking
+
+The beta should focus only on:
+
+* core monetizable workflows
+* reliable calling
+* smooth onboarding
+* scalable architecture
+
+Avoid experimental or non-essential features during beta.
+
+---
+
+# PHASE 1 — LANDING + ONBOARDING
+
+## Landing Page
+
+Create a professional SaaS landing page with:
+
+* Hero section
+* Product explanation
+* AI calling demo
+* Supported providers
+* Outbound campaign section
+* Meta lead automation section
+* Pricing
+* FAQ
+* CTA
+
+Primary CTA:
+
+* Start Free Beta
+
+---
+
+## User Signup Flow
+
+After signup:
+
+* create user account
+* create wallet automatically
+* allocate $5 free trial credits
+* redirect to onboarding dashboard
+
+---
+
+# PHASE 2 — AGENT CREATION
+
+Users should be able to create AI voice agents using two methods.
+
+---
+
+## Option A — Managed Agent
+
+Guided wizard flow:
+
+1. Select use case
+2. Enter business details
+3. Select language
+4. Configure workflow
+5. Generate system prompt
+6. Select voice
+7. Enable capabilities
+
+Capabilities:
+
+* call transfer
+* appointment booking
+* outbound calling
+* voicemail handling
+* knowledge base
+
+---
+
+## Option B — BYOP (Bring Your Own Providers)
+
+Manual configuration flow:
+
+* select ASR provider
+* select LLM provider
+* select TTS provider
+* select telephony provider
+* enter API keys
+* configure system prompt manually
+
+This mode is intended for advanced users.
+
+---
+
+# PHASE 3 — PROVIDER MANAGEMENT
+
+Users can:
+
+* add provider API keys
+* manage providers
+* rotate keys
+* remove keys
+
+Provider groups:
+
+* speech-to-text
+* LLM
+* text-to-speech
+* telephony
+
+API keys must remain hidden and encrypted.
+
+---
+
+# PHASE 4 — PHONE NUMBER SYSTEM
+
+Users should be able to:
+
+* purchase phone numbers
+* assign numbers to agents
+* use numbers for inbound/outbound calling
+
+---
+
+## KYC Requirement
+
+Users must complete verification before:
+
+* purchasing numbers
+* launching campaigns
+
+---
+
+## Shared Testing Numbers
+
+For beta testing:
+
+* provide shared managed numbers from admin account
+* users can test agents using shared numbers
+* users CANNOT launch campaigns using shared numbers
+
+Campaigns require:
+
+* verified KYC
+* owned number
+
+---
+
+# PHASE 5 — KYC FLOW
+
+Current beta architecture:
+
+* create isolated VoBiz sub-account per user
+* create hosted KYC session
+* embed KYC widget in modal/iframe
+* fallback to new tab if blocked
+* receive webhook updates
+* sync status to platform
+
+Statuses:
+
+* pending
+* completed
+* failed
+* revoked
+
+Do NOT build fully custom KYC frontend during beta.
+
+---
+
+# PHASE 6 — OUTBOUND CAMPAIGNS
+
+Users should be able to:
+
+* upload CSV contacts
+* select AI agent
+* select phone number
+* launch outbound campaigns
+
+---
+
+## Campaign Features
+
+* retry failed calls
+* pause/resume campaign
+* concurrency controls
+* call status tracking
+* campaign analytics
+
+---
+
+## CSV Variables
+
+CSV fields should automatically become prompt variables.
+
+Example:
+CSV:
+
+* name
+* city
+* product
+
+Prompt variables:
+
+* {{name}}
+* {{city}}
+* {{product}}
+
+AI agent must dynamically personalize calls using these variables.
+
+---
+
+# PHASE 7 — META LEAD ADS AUTOMATION
+
+Users should be able to:
+
+* connect Meta Lead Ads
+* select page/form
+* assign AI agent
+* assign phone number
+
+---
+
+## Lead Automation Flow
+
+1. Meta sends webhook lead
+2. System stores lead
+3. AI agent automatically calls lead
+4. Lead form fields become prompt variables
+
+Example:
+If lead contains:
+
+* customer_name
+* course
+* budget
+
+Then prompt variables become:
+
+* {{lead.customer_name}}
+* {{lead.course}}
+* {{lead.budget}}
+
+This enables fully personalized AI outbound calls.
+
+---
+
+# PHASE 8 — CALL TRANSFER
+
+Implement warm transfer only.
+
+Flow:
+
+1. AI agent handles call
+2. AI generates conversation summary
+3. Human agent receives summary
+4. Human joins live call
+
+Features:
+
+* transfer queue
+* transfer number
+* supervisor controls
+* transfer logs
+
+Do NOT implement cold transfer.
+
+---
+
+# PHASE 9 — APPOINTMENT BOOKING
+
+Users should be able to:
+
+* create availability schedules
+* define appointment types
+* create booking pages
+* sync calendars
+
+AI agents should support:
+
+* checking availability
+* booking appointments during calls
+* rescheduling
+* cancellation
+
+---
+
+# PHASE 10 — WALLET + BILLING
+
+Wallet-based billing system.
+
+Users should:
+
+* receive trial credits
+* top up credits
+* pay per minute usage
+
+Credits should deduct for:
+
+* telephony minutes
+* orchestration usage
+* optional managed provider usage
+
+If balance becomes insufficient:
+
+* stop new outbound calls
+* block campaign launches
+
+---
+
+# PHASE 11 — API KEYS
+
+Each user receives:
+
+* personal API key
+* API usage tracking
+* rate limits
+* regeneration support
+
+---
+
+# PHASE 12 — CALL MONITORING
+
+Required dashboards:
+
+* agents
+* calls
+* campaigns
+* wallet
+* analytics
+* phone numbers
+
+Call logs should include:
+
+* transcript
+* recording
+* duration
+* call outcome
+* transfer details
+* cost breakdown
+
+---
+
+# PHASE 13 — STABILITY PRIORITIES
+
+The beta should prioritize:
+
+* stable calling
+* low latency
+* webhook reliability
+* resumable sessions
+* scalable orchestration
+* secure key handling
+
+---
+
+# REMOVE FROM BETA
+
+Do NOT build these now:
+
+* gender detection
+* sentiment analysis
+* emotion AI
+* voice cloning
+* AI coaching
+* advanced observability
+* predictive analytics
+* enterprise governance features
+* overcomplicated dashboards
+
+These increase complexity without improving beta validation.
+
+---
+
+# FINAL BETA USER FLOW
+
+1. User signs up
+2. Receives free credits
+3. Creates AI agent
+4. Adds provider keys or uses managed setup
+5. Completes KYC
+6. Purchases number OR uses shared testing number
+7. Assigns number to agent
+8. Uploads CSV OR connects Meta lead forms
+9. AI agent calls leads automatically
+10. AI books appointments or transfers calls
+11. Usage deducts credits automatically
+12. User tops up wallet to continue
+
+---
+
+# PRIMARY BETA SUCCESS METRICS
+
+The beta is successful if users can:
+
+* onboard quickly
+* create agents easily
+* launch campaigns reliably
+* auto-call leads successfully
+* complete transfers smoothly
+* book appointments during calls
+* understand billing clearly
+
+Focus on:
+
+* shipping fast
+* reducing friction
+* stable infrastructure
+* monetizable workflows
+* operational simplicity
