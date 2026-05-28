@@ -1,5 +1,11 @@
 export type CustomFetchOptions = RequestInit & {
   responseType?: "json" | "text" | "blob" | "auto";
+  /**
+   * Abort the request after this many milliseconds and throw a
+   * `RequestTimeoutError`.  Defaults to 30 000 ms (30 s).
+   * Pass `0` or `Infinity` to disable the timeout.
+   */
+  timeoutMs?: number;
 };
 
 export type ErrorType<T = unknown> = ApiError<T>;
@@ -10,6 +16,16 @@ export type AuthTokenGetter = () => Promise<string | null> | string | null;
 
 const NO_BODY_STATUS = new Set([204, 205, 304]);
 const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
+const DEFAULT_TIMEOUT_MS = 30_000;
+
+export class RequestTimeoutError extends Error {
+  readonly name = "TimeoutError";
+
+  constructor(timeoutMs: number) {
+    super(`Request timed out after ${timeoutMs} ms — please try again`);
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Module-level configuration
@@ -123,6 +139,39 @@ function hasNoBody(response: Response, method: string): boolean {
   if (response.headers.get("content-length") === "0") return true;
   if (response.body === null) return true;
   return false;
+}
+
+/**
+ * Combine two AbortSignals so that aborting either one aborts the merged
+ * signal.  Uses `AbortSignal.any` when available (Node 20+, modern browsers)
+ * and falls back to a manual event-listener approach for older runtimes such
+ * as React Native.
+ */
+function mergeAbortSignals(a: AbortSignal, b: AbortSignal): AbortSignal {
+  if (typeof AbortSignal.any === "function") {
+    return AbortSignal.any([a, b]);
+  }
+
+  // Fallback: forward the first abort to a new controller.
+  const controller = new AbortController();
+
+  function forward(this: AbortSignal) {
+    controller.abort((this as AbortSignal).reason);
+  }
+
+  if (a.aborted) {
+    controller.abort(a.reason);
+    return controller.signal;
+  }
+  if (b.aborted) {
+    controller.abort(b.reason);
+    return controller.signal;
+  }
+
+  a.addEventListener("abort", forward, { once: true });
+  b.addEventListener("abort", forward, { once: true });
+
+  return controller.signal;
 }
 
 function stripBom(text: string): string {
@@ -327,7 +376,7 @@ export async function customFetch<T = unknown>(
   options: CustomFetchOptions = {},
 ): Promise<T> {
   input = applyBaseUrl(input);
-  const { responseType = "auto", headers: headersInit, ...init } = options;
+  const { responseType = "auto", headers: headersInit, timeoutMs = DEFAULT_TIMEOUT_MS, ...init } = options;
 
   const method = resolveMethod(input, init.method);
 
@@ -360,12 +409,40 @@ export async function customFetch<T = unknown>(
 
   const requestInfo = { method, url: resolveUrl(input) };
 
-  const response = await fetch(input, { ...init, method, headers });
+  // Set up a per-request timeout via AbortController.
+  const useTimeout = timeoutMs > 0 && isFinite(timeoutMs);
+  const timeoutController = useTimeout ? new AbortController() : null;
+  const timeoutId = timeoutController
+    ? setTimeout(() => timeoutController.abort(), timeoutMs)
+    : null;
 
-  if (!response.ok) {
-    const errorData = await parseErrorBody(response, method);
-    throw new ApiError(response, errorData, requestInfo);
+  const signal =
+    timeoutController === null
+      ? (init.signal ?? null)
+      : init.signal
+        ? mergeAbortSignals(init.signal, timeoutController.signal)
+        : timeoutController.signal;
+
+  try {
+    const response = await fetch(input, { ...init, method, headers, signal: signal ?? undefined });
+
+    if (!response.ok) {
+      const errorData = await parseErrorBody(response, method);
+      throw new ApiError(response, errorData, requestInfo);
+    }
+
+    return (await parseSuccessBody(response, responseType, requestInfo)) as T;
+  } catch (err) {
+    // Re-wrap abort errors that originated from our own timeout controller.
+    if (
+      timeoutController?.signal.aborted &&
+      err instanceof Error &&
+      (err.name === "AbortError" || err.name === "TimeoutError")
+    ) {
+      throw new RequestTimeoutError(timeoutMs);
+    }
+    throw err;
+  } finally {
+    if (timeoutId !== null) clearTimeout(timeoutId);
   }
-
-  return (await parseSuccessBody(response, responseType, requestInfo)) as T;
 }

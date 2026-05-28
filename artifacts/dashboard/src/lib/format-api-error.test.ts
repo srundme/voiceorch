@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ApiError } from "@workspace/api-client-react";
+import { ApiError, RequestTimeoutError } from "@workspace/api-client-react";
 import { formatApiError } from "./format-api-error";
 
 function makeResponse(status = 400, statusText = "Bad Request"): Response {
@@ -77,7 +77,25 @@ describe("formatApiError", () => {
     });
   });
 
-  describe("plain Error (network failures, timeouts)", () => {
+  describe("timeout and abort errors", () => {
+    it("returns the timeout message for RequestTimeoutError", () => {
+      const err = new RequestTimeoutError(30_000);
+      expect(formatApiError(err)).toBe("Request timed out — please try again");
+    });
+
+    it("returns the timeout message for an AbortError (browser DOMException)", () => {
+      const err = new DOMException("The user aborted a request.", "AbortError");
+      expect(err.name).toBe("AbortError");
+      expect(formatApiError(err)).toBe("Request timed out — please try again");
+    });
+
+    it("returns the timeout message for a generic Error with name TimeoutError", () => {
+      const err = Object.assign(new Error("timed out"), { name: "TimeoutError" });
+      expect(formatApiError(err)).toBe("Request timed out — please try again");
+    });
+  });
+
+  describe("plain Error (network failures)", () => {
     it("returns the message from a generic Error", () => {
       const err = new Error("Something went wrong");
       expect(formatApiError(err)).toBe("Something went wrong");
