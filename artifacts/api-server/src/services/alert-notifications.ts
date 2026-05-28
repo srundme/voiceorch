@@ -13,14 +13,26 @@ const ALERT_LAST_NOTIFIED_SEVERITY_KEY = "alert_last_notified_severity";
 const DEFAULT_COOLDOWN_MINUTES = 10;
 
 /**
- * In-process cooldown state. Seeded from DB on first dispatch (lazy, one-time).
+ * TTL for the in-process cooldown-state cache (ms).
+ * Within this window, `loadCooldownState` skips the DB and returns the in-memory values.
+ * After the TTL, the next dispatch re-reads from DB so changes made by another process
+ * (e.g. a second server instance writing a newer `alert_last_notified_at`) are eventually
+ * reflected without requiring a full server restart.
+ */
+const COOLDOWN_STATE_CACHE_TTL_MS = 60_000;
+
+/**
+ * In-process cooldown state. Seeded from DB on first dispatch (lazy).
  * Always holds the most recent known timestamp regardless of DB write success.
  */
 let _lastNotifiedAt: number | null = null;
 /** Severity of the most recently dispatched notification. Used to detect severity escalation. */
 let _lastNotifiedSeverity: string | null = null;
-/** Whether we've loaded persisted cooldown state from the DB yet. */
-let _cooldownStateLoaded = false;
+/**
+ * Wall-clock time (ms) of the last successful DB read of cooldown state.
+ * 0 = never loaded. Used to enforce the COOLDOWN_STATE_CACHE_TTL_MS window.
+ */
+let _cooldownStateCachedAt = 0;
 
 /** Count of notifications suppressed by the cooldown rate limiter since last reset. */
 let _suppressedCount = 0;
@@ -43,6 +55,7 @@ export function __resetCooldownState(): void {
   _lastNotifiedAt = null;
   _lastNotifiedSeverity = null;
   _suppressedCount = 0;
+  _cooldownStateCachedAt = 0;
 }
 
 const SEVERITY_RANK: Record<string, number> = {
@@ -97,12 +110,23 @@ async function getNotificationSettings(): Promise<{
 }
 
 /**
- * Loads persisted cooldown state from the DB into in-process variables.
- * Called lazily on the first dispatch attempt so restarts pick up where they left off.
+ * Loads persisted cooldown state (`alert_last_notified_at` + `alert_last_notified_severity`)
+ * from the DB into in-process variables.
+ *
+ * Results are cached in memory for COOLDOWN_STATE_CACHE_TTL_MS (60 s). Within that window,
+ * subsequent calls return immediately without touching the DB, eliminating redundant reads
+ * during alert-heavy periods. After the TTL, the DB is re-queried so the in-memory state
+ * stays eventually consistent with any external writes (e.g. another server instance).
+ *
+ * The in-memory values are always authoritative for notifications dispatched by *this*
+ * process — `persistCooldownState` updates them immediately on every successful dispatch,
+ * so the cache never goes stale due to local writes.
  */
 async function loadCooldownState(): Promise<void> {
-  if (_cooldownStateLoaded) return;
-  _cooldownStateLoaded = true;
+  const now = Date.now();
+  if (_cooldownStateCachedAt !== 0 && now - _cooldownStateCachedAt < COOLDOWN_STATE_CACHE_TTL_MS) {
+    return;
+  }
 
   try {
     const [atRow, severityRow] = await Promise.all([
@@ -128,6 +152,7 @@ async function loadCooldownState(): Promise<void> {
       _lastNotifiedSeverity = severityRow.value;
     }
 
+    _cooldownStateCachedAt = now;
     logger.info(
       { lastNotifiedAt: _lastNotifiedAt, lastNotifiedSeverity: _lastNotifiedSeverity },
       "Alert cooldown state loaded from DB",
@@ -139,6 +164,8 @@ async function loadCooldownState(): Promise<void> {
 
 /**
  * Persists the current cooldown state to the DB so it survives server restarts.
+ * Also refreshes the local cache timestamp so the next dispatch does not trigger
+ * a redundant DB read of stale data that was just written.
  */
 async function persistCooldownState(lastNotifiedAt: number, lastNotifiedSeverity: string): Promise<void> {
   await Promise.all([
@@ -157,6 +184,7 @@ async function persistCooldownState(lastNotifiedAt: number, lastNotifiedSeverity
         set: { value: lastNotifiedSeverity, updatedAt: sql`now()` },
       }),
   ]);
+  _cooldownStateCachedAt = Date.now();
 }
 
 function formatAlertEmail(opts: {
