@@ -12,7 +12,10 @@ const ALERT_LAST_NOTIFIED_AT_KEY = "alert_last_notified_at";
 const ALERT_LAST_NOTIFIED_SEVERITY_KEY = "alert_last_notified_severity";
 const DEFAULT_COOLDOWN_MINUTES = 10;
 
-/** In-process cooldown: tracks the last time a notification was dispatched (across all channels). */
+/**
+ * In-process cooldown state. Seeded from DB on first dispatch (lazy, one-time).
+ * Always holds the most recent known timestamp regardless of DB write success.
+ */
 let _lastNotifiedAt: number | null = null;
 /** Severity of the most recently dispatched notification. Used to detect severity escalation. */
 let _lastNotifiedSeverity: string | null = null;
@@ -347,6 +350,9 @@ export async function dispatchAlertNotification(opts: {
 
     const { subject, text, html } = formatAlertEmail(opts);
 
+    let emailSent = false;
+    let slackSent = false;
+
     const emailP = settings.email
       ? (async () => {
           const transporter = getTransporter();
@@ -363,6 +369,7 @@ export async function dispatchAlertNotification(opts: {
               text,
               html,
             });
+            emailSent = true;
             logger.info({ severity: opts.severity, type: opts.type, to: settings.email }, "Alert email sent");
             await logDelivery("email", "sent", opts.alertId);
           } catch (err) {
@@ -377,6 +384,7 @@ export async function dispatchAlertNotification(opts: {
       ? (async () => {
           try {
             await sendSlackNotification(settings.slackWebhook!, opts);
+            slackSent = true;
             await logDelivery("slack", "sent", opts.alertId);
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
@@ -386,17 +394,17 @@ export async function dispatchAlertNotification(opts: {
         })()
       : Promise.resolve();
 
-    const now = Date.now();
-    _lastNotifiedAt = now;
-    _lastNotifiedSeverity = opts.severity;
+    await Promise.all([emailP, slackP]);
 
-    await Promise.all([
-      emailP,
-      slackP,
-      persistCooldownState(now, opts.severity).catch((err) =>
+    const channelsConfigured = Boolean(settings.email) || Boolean(settings.slackWebhook);
+    if (!channelsConfigured || emailSent || slackSent) {
+      const notifiedAt = Date.now();
+      _lastNotifiedAt = notifiedAt;
+      _lastNotifiedSeverity = opts.severity;
+      persistCooldownState(notifiedAt, opts.severity).catch((err) =>
         logger.warn({ err }, "Failed to persist alert cooldown state to DB"),
-      ),
-    ]);
+      );
+    }
   } catch (err) {
     logger.warn({ err, type: opts.type }, "dispatchAlertNotification unexpected error");
   }
