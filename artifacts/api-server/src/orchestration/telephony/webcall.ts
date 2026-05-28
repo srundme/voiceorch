@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { db, agentsTable, callsTable, providersTable, usersTable, walletTransactionsTable } from "@workspace/db";
+import { db, agentsTable, callsTable, providersTable, usersTable, walletTransactionsTable, platformSettingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { createSTTAdapter } from "../adapters/stt/index.js";
 import { createLLMAdapter } from "../adapters/llm/index.js";
@@ -130,6 +130,31 @@ export async function handleWebCallWebSocket(
   const providerRows = await db.select().from(providersTable).where(eq(providersTable.isActive, true));
   const providerKeys = new Map<string, string>();
   for (const row of providerRows) providerKeys.set(row.providerName.toLowerCase(), decryptKey(row.apiKey));
+
+  // Managed platform key fallback — same map as session.ts
+  const MANAGED: Record<string, string> = {
+    google:   "managed_gemini_key",
+    deepgram: "managed_deepgram_key",
+    sarvam:   "managed_sarvam_key",
+    cartesia:  "managed_cartesia_key",
+    openai:   "managed_openai_key",
+  };
+
+  const requiredProviders = [
+    agent.asrProvider?.toLowerCase(),
+    agent.llmProvider?.toLowerCase(),
+    agent.ttsProvider?.toLowerCase(),
+  ].filter((p): p is string => !!p);
+
+  for (const providerName of requiredProviders) {
+    if (!providerKeys.has(providerName) && MANAGED[providerName]) {
+      const [row] = await db.select().from(platformSettingsTable).where(eq(platformSettingsTable.key, MANAGED[providerName]!));
+      if (row?.value) {
+        providerKeys.set(providerName, row.value);
+        logger.info({ providerName }, "webcall: using platform managed key for provider");
+      }
+    }
+  }
 
   const sttKey = providerKeys.get(agent.asrProvider);
   const llmKey = providerKeys.get(agent.llmProvider);
