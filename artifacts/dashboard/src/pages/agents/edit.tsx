@@ -35,7 +35,7 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { formatApiError } from "@/lib/format-api-error";
+import { formatApiError, mapApiErrors } from "@/lib/format-api-error";
 import {
   ASR_PROVIDERS,
   LLM_PROVIDERS,
@@ -251,7 +251,16 @@ export default function AgentEdit() {
           setLocation(`/agents/${id}`);
         },
         onError: (err: unknown) => {
-          toast({ title: "Error", description: formatApiError(err), variant: "destructive" });
+          const fieldErrors = mapApiErrors(err);
+          const fieldKeys = Object.keys(fieldErrors);
+          if (fieldKeys.length > 0) {
+            for (const [field, message] of Object.entries(fieldErrors)) {
+              form.setError(field as Parameters<typeof form.setError>[0], { type: "server", message });
+            }
+            toast({ title: "Validation Error", description: "Please fix the highlighted fields.", variant: "destructive" });
+          } else {
+            toast({ title: "Error", description: formatApiError(err), variant: "destructive" });
+          }
         },
       }
     );

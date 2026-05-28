@@ -33,7 +33,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { formatApiError } from "@/lib/format-api-error";
+import { formatApiError, mapApiErrors } from "@/lib/format-api-error";
 
 /* ── Provider → model/voice catalogue ────────────────────────────────────── */
 
@@ -386,7 +386,16 @@ export default function AgentNew() {
         setLocation(`/agents/${agent.id}`);
       },
       onError: (err: unknown) => {
-        toast({ title: "Error", description: formatApiError(err), variant: "destructive" });
+        const fieldErrors = mapApiErrors(err);
+        const fieldKeys = Object.keys(fieldErrors);
+        if (fieldKeys.length > 0) {
+          for (const [field, message] of Object.entries(fieldErrors)) {
+            form.setError(field as Parameters<typeof form.setError>[0], { type: "server", message });
+          }
+          toast({ title: "Validation Error", description: "Please fix the highlighted fields.", variant: "destructive" });
+        } else {
+          toast({ title: "Error", description: formatApiError(err), variant: "destructive" });
+        }
       },
     });
   };

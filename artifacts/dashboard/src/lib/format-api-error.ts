@@ -34,3 +34,28 @@ export function formatApiError(err: unknown): string {
   if (err instanceof Error) return err.message;
   return "An unexpected error occurred.";
 }
+
+/**
+ * Maps Zod validation issues from an API error to a flat record of
+ * `fieldPath → errorMessage`. Nested paths (e.g. `["tools", 0, "name"]`) are
+ * joined with dots so they match react-hook-form field names.
+ *
+ * Returns an empty object when the error carries no structured issues.
+ */
+export function mapApiErrors(err: unknown): Record<string, string> {
+  if (err instanceof ApiError) {
+    const data = err.data as ApiErrorData | null;
+    const issues = data?.issues;
+    if (issues && issues.length > 0) {
+      const map: Record<string, string> = {};
+      for (const issue of issues) {
+        if (issue.path && issue.path.length > 0) {
+          const key = issue.path.join(".");
+          if (!map[key]) map[key] = issue.message;
+        }
+      }
+      return map;
+    }
+  }
+  return {};
+}
