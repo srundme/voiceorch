@@ -26,6 +26,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { formatApiError } from "@/lib/format-api-error";
 import {
   ArrowLeft, Copy, Check, Clock, Calendar, Settings, Zap, AlertTriangle,
   Link2, Layers, ExternalLink, Trash2, Plus, Loader2, CheckCircle2,
@@ -222,18 +223,22 @@ export default function EventTypeDetailPage() {
       await qc.invalidateQueries({ queryKey: getListEventTypesQueryKey({}) });
       setDirty(false);
       toast({ title: "Saved" });
-    } catch (e: any) {
-      toast({ title: "Save failed", description: e.message, variant: "destructive" });
+    } catch (e) {
+      toast({ title: "Save failed", description: formatApiError(e), variant: "destructive" });
     } finally {
       setSaving(false);
     }
   }
 
   async function handleDelete() {
-    await deleteMut.mutateAsync({ id });
-    await qc.invalidateQueries({ queryKey: getListEventTypesQueryKey({}) });
-    navigate(`${BASE}/app/scheduling/event-types`);
-    toast({ title: "Event type deleted" });
+    try {
+      await deleteMut.mutateAsync({ id });
+      await qc.invalidateQueries({ queryKey: getListEventTypesQueryKey({}) });
+      navigate(`${BASE}/app/scheduling/event-types`);
+      toast({ title: "Event type deleted" });
+    } catch (e) {
+      toast({ title: "Delete failed", description: formatApiError(e), variant: "destructive" });
+    }
   }
 
   const calendar = calendars?.find(c => c.id === et?.calendarId);

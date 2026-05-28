@@ -22,6 +22,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { formatApiError } from "@/lib/format-api-error";
 import {
   Plus, Clock, Copy, Check, LinkIcon, ChevronRight,
   Pencil, Trash2, Calendar, ArrowLeft,
@@ -106,8 +107,8 @@ function QuickCreateDialog({
       await qc.invalidateQueries({ queryKey: getListEventTypesQueryKey({}) });
       handleClose();
       navigate(`${BASE}/app/scheduling/event-types/${created.id}`);
-    } catch (e: any) {
-      toast({ title: "Error creating event type", description: e.message, variant: "destructive" });
+    } catch (e) {
+      toast({ title: "Error creating event type", description: formatApiError(e), variant: "destructive" });
     }
   }
 
@@ -276,8 +277,8 @@ export default function EventTypesPage() {
       await qc.invalidateQueries({ queryKey: getListEventTypesQueryKey({}) });
       setDeleteId(null);
       toast({ title: "Event type deleted" });
-    } catch (e: any) {
-      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } catch (e) {
+      toast({ title: "Error", description: formatApiError(e), variant: "destructive" });
     }
   }
 

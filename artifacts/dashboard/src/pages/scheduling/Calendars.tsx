@@ -32,6 +32,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { formatApiError } from "@/lib/format-api-error";
 import { formatDistanceToNow } from "date-fns";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -135,8 +136,8 @@ function CalendarFormDialog({
       }
       await qc.invalidateQueries({ queryKey: getListCalendarsQueryKey() });
       onClose();
-    } catch (e: any) {
-      toast({ title: "Error", description: e?.message ?? "Something went wrong", variant: "destructive" });
+    } catch (e) {
+      toast({ title: "Error", description: formatApiError(e), variant: "destructive" });
     }
   }
 
@@ -256,8 +257,8 @@ function CalendarCard({
       await del.mutateAsync({ id: calendar.id });
       await qc.invalidateQueries({ queryKey: getListCalendarsQueryKey() });
       toast({ title: "Calendar deleted" });
-    } catch {
-      toast({ title: "Delete failed", variant: "destructive" });
+    } catch (e) {
+      toast({ title: "Delete failed", description: formatApiError(e), variant: "destructive" });
     }
   }
 

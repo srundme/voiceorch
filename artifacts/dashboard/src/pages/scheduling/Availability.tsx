@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { formatApiError } from "@/lib/format-api-error";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -185,8 +186,8 @@ export default function AvailabilityPage() {
       await createMut.mutateAsync({ data: { calendarId, dayOfWeek: parseInt(newDay), startTime: newStart, endTime: newEnd } });
       await qc.invalidateQueries({ queryKey: getListAvailabilityQueryKey({ calendarId }) });
       toast({ title: "Availability added" });
-    } catch (e: any) {
-      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } catch (e) {
+      toast({ title: "Error", description: formatApiError(e), variant: "destructive" });
     }
   }
 
@@ -194,8 +195,8 @@ export default function AvailabilityPage() {
     try {
       await updateMut.mutateAsync({ id, data: { isActive } });
       await qc.invalidateQueries({ queryKey: getListAvailabilityQueryKey({ calendarId: calendarId! }) });
-    } catch (e: any) {
-      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } catch (e) {
+      toast({ title: "Error", description: formatApiError(e), variant: "destructive" });
     }
   }
 
@@ -204,8 +205,8 @@ export default function AvailabilityPage() {
       await updateMut.mutateAsync({ id, data: { startTime, endTime } });
       await qc.invalidateQueries({ queryKey: getListAvailabilityQueryKey({ calendarId: calendarId! }) });
       toast({ title: "Time updated" });
-    } catch (e: any) {
-      toast({ title: "Update failed", description: e.message, variant: "destructive" });
+    } catch (e) {
+      toast({ title: "Update failed", description: formatApiError(e), variant: "destructive" });
       throw e;
     }
   }
@@ -215,8 +216,8 @@ export default function AvailabilityPage() {
       await deleteMut.mutateAsync({ id });
       await qc.invalidateQueries({ queryKey: getListAvailabilityQueryKey({ calendarId: calendarId! }) });
       toast({ title: "Removed" });
-    } catch (e: any) {
-      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } catch (e) {
+      toast({ title: "Error", description: formatApiError(e), variant: "destructive" });
     }
   }
 
@@ -231,8 +232,8 @@ export default function AvailabilityPage() {
       }
       await qc.invalidateQueries({ queryKey: getListAvailabilityQueryKey({ calendarId }) });
       toast({ title: `Applied to ${missing.length} more day${missing.length === 1 ? "" : "s"}` });
-    } catch (e: any) {
-      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } catch (e) {
+      toast({ title: "Error", description: formatApiError(e), variant: "destructive" });
     }
   }
 
@@ -248,8 +249,8 @@ export default function AvailabilityPage() {
       await qc.invalidateQueries({ queryKey: getListAvailabilityOverridesQueryKey({ calendarId }) });
       setOverrideDate("");
       toast({ title: "Override added" });
-    } catch (e: any) {
-      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } catch (e) {
+      toast({ title: "Error", description: formatApiError(e), variant: "destructive" });
     }
   }
 
@@ -257,8 +258,8 @@ export default function AvailabilityPage() {
     try {
       await deleteOverrideMut.mutateAsync({ id });
       await qc.invalidateQueries({ queryKey: getListAvailabilityOverridesQueryKey({ calendarId: calendarId! }) });
-    } catch (e: any) {
-      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } catch (e) {
+      toast({ title: "Error", description: formatApiError(e), variant: "destructive" });
     }
   }
 

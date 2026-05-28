@@ -18,6 +18,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { formatApiError } from "@/lib/format-api-error";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -52,8 +53,8 @@ export default function BookingDetailPage() {
       await qc.invalidateQueries({ queryKey: getListBookingsQueryKey() });
       setShowCancel(false);
       toast({ title: "Booking cancelled" });
-    } catch (e: any) {
-      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } catch (e) {
+      toast({ title: "Error", description: formatApiError(e), variant: "destructive" });
     }
   }
 
@@ -62,8 +63,8 @@ export default function BookingDetailPage() {
       await updateMut.mutateAsync({ id, data: { status: "confirmed" } });
       await qc.invalidateQueries({ queryKey: getListBookingsQueryKey() });
       toast({ title: "Booking confirmed" });
-    } catch (e: any) {
-      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } catch (e) {
+      toast({ title: "Error", description: formatApiError(e), variant: "destructive" });
     }
   }
 
@@ -78,8 +79,8 @@ export default function BookingDetailPage() {
       await qc.invalidateQueries({ queryKey: getListBookingsQueryKey() });
       setShowReschedule(false);
       toast({ title: "Booking rescheduled" });
-    } catch (e: any) {
-      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } catch (e) {
+      toast({ title: "Error", description: formatApiError(e), variant: "destructive" });
     }
   }
 
