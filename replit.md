@@ -80,6 +80,7 @@ AI voice agent orchestration SaaS platform — users bring their own provider AP
 - Provider `apiKey` is encrypted at rest (AES-256-GCM, key derived from `SESSION_SECRET`)
 - **Migration:** existing provider keys added before this change are still plaintext in the DB (decryptKey passes them through transparently). Re-save each provider in the Providers page to encrypt them.
 - `pnpm run typecheck:libs` must run after adding new schema files to `lib/db/src/schema/` for the api-server to pick up the new types
+- **Short-lived `platform_settings` keys:** Any code that writes transient/rate-limit rows to `platform_settings` must call `registerTransientKey({ prefix, windowMs })` from `services/rate-limit-cleanup.ts` at startup so the hourly cleanup sweep deletes them automatically. Do NOT add a separate cleanup loop.
 
 ## Pointers
 
