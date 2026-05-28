@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRoute } from "wouter";
 import { format, parseISO } from "date-fns";
 import { Calendar, Clock, CheckCircle, AlertCircle, Video } from "lucide-react";
@@ -38,6 +38,17 @@ export default function PublicBookingPage() {
   const [touched, setTouched] = useState<{ name?: boolean; email?: boolean }>({});
 
   const { data: eventType, isLoading: etLoading, error: etError } = useGetPublicEventType(slug);
+
+  useEffect(() => {
+    if (eventType?.name) {
+      document.title = `${eventType.name} — powered by SnapServe`;
+    } else {
+      document.title = "Book a meeting · SnapServe";
+    }
+    return () => {
+      document.title = "SnapServe";
+    };
+  }, [eventType?.name]);
 
   const { data: slots, isLoading: slotsLoading } = useGetPublicSlots({ slug, startDate, endDate });
 
@@ -95,6 +106,24 @@ export default function PublicBookingPage() {
     }
   }
 
+  const BrandHeader = () => (
+    <div className="flex justify-center mb-8">
+      <div className="flex items-center gap-2">
+        <img
+          src={`${BASE}/snapserve-icon.png`}
+          alt=""
+          aria-hidden
+          className="h-7 w-7 shrink-0 select-none"
+        />
+        <img
+          src={`${BASE}/snapserve-wordmark.png`}
+          alt="SnapServe"
+          className="h-5 select-none"
+        />
+      </div>
+    </div>
+  );
+
   if (etLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
@@ -106,15 +135,18 @@ export default function PublicBookingPage() {
   if (etError || !eventType) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
-        <Card className="max-w-md w-full">
-          <CardContent className="flex flex-col items-center gap-4 py-12">
-            <AlertCircle className="h-10 w-10 text-destructive" />
-            <div className="text-center">
-              <p className="font-semibold text-lg">Page not found</p>
-              <p className="text-muted-foreground text-sm mt-1">This booking link is invalid or has been removed.</p>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="max-w-md w-full">
+          <BrandHeader />
+          <Card>
+            <CardContent className="flex flex-col items-center gap-4 py-12">
+              <AlertCircle className="h-10 w-10 text-destructive" />
+              <div className="text-center">
+                <p className="font-semibold text-lg">Page not found</p>
+                <p className="text-muted-foreground text-sm mt-1">This booking link is invalid or has been removed.</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     );
   }
@@ -122,40 +154,44 @@ export default function PublicBookingPage() {
   if (submitted) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
-        <Card className="max-w-md w-full">
-          <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
-            <div className="p-4 rounded-full bg-emerald-50">
-              <CheckCircle className="h-10 w-10 text-emerald-500" />
-            </div>
-            <div className="w-full">
-              <p className="font-semibold text-xl">Booking confirmed!</p>
-              <p className="text-muted-foreground mt-2">
-                You'll receive a confirmation email at <strong>{email}</strong>.
-              </p>
-              {selectedSlot && (
-                <p className="text-sm text-muted-foreground mt-2">
-                  {format(parseISO(selectedSlot), "EEEE, MMMM d, yyyy")} at {format(parseISO(selectedSlot), "h:mm a")}
+        <div className="max-w-md w-full">
+          <BrandHeader />
+          <Card>
+            <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
+              <div className="p-4 rounded-full bg-emerald-50">
+                <CheckCircle className="h-10 w-10 text-emerald-500" />
+              </div>
+              <div className="w-full">
+                <p className="font-semibold text-xl">Booking confirmed!</p>
+                <p className="text-muted-foreground mt-2">
+                  You'll receive a confirmation email at <strong>{email}</strong>.
                 </p>
-              )}
-              {meetLink && (
-                <div className="mt-5 p-4 rounded-lg bg-blue-50 border border-blue-200 flex flex-col items-center gap-2">
-                  <div className="flex items-center gap-2 text-blue-700 font-medium text-sm">
-                    <Video className="h-4 w-4" />
-                    Join with Google Meet
+                {selectedSlot && (
+                  <p className="text-sm text-muted-foreground mt-2">
+                    {format(parseISO(selectedSlot), "EEEE, MMMM d, yyyy")} at {format(parseISO(selectedSlot), "h:mm a")}
+                  </p>
+                )}
+                {meetLink && (
+                  <div className="mt-5 p-4 rounded-lg bg-blue-50 border border-blue-200 flex flex-col items-center gap-2">
+                    <div className="flex items-center gap-2 text-blue-700 font-medium text-sm">
+                      <Video className="h-4 w-4" />
+                      Join with Google Meet
+                    </div>
+                    <a
+                      href={meetLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 underline underline-offset-2 text-sm break-all hover:text-blue-800"
+                    >
+                      {meetLink}
+                    </a>
                   </div>
-                  <a
-                    href={meetLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 underline underline-offset-2 text-sm break-all hover:text-blue-800"
-                  >
-                    {meetLink}
-                  </a>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+          <p className="text-center text-xs text-muted-foreground mt-4">Powered by SnapServe</p>
+        </div>
       </div>
     );
   }
@@ -165,6 +201,7 @@ export default function PublicBookingPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4 sm:p-8">
       <div className="max-w-3xl mx-auto">
+        <BrandHeader />
         <div className="mb-8 text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-sm font-medium mb-4">
             <Clock className="h-3.5 w-3.5" />
@@ -297,6 +334,7 @@ export default function PublicBookingPage() {
             </form>
           </div>
         </div>
+        <p className="text-center text-xs text-muted-foreground mt-8">Powered by SnapServe</p>
       </div>
     </div>
   );
