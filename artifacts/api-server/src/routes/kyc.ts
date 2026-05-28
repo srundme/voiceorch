@@ -257,7 +257,7 @@ router.get("/kyc/callback", async (req, res): Promise<void> => {
   }
 
   const outcome = status === "kyc_completed" ? "completed" : (status ?? "pending");
-  res.redirect(`/phone-numbers?kyc=${outcome}`);
+  res.redirect(`/app/kyc?kyc=${outcome}`);
 });
 
 // ── POST /kyc/webhook ─────────────────────────────────────────────────────
