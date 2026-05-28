@@ -12,6 +12,8 @@ const DEFAULT_COOLDOWN_MINUTES = 10;
 
 /** In-process cooldown: tracks the last time a notification was dispatched (across all channels). */
 let _lastNotifiedAt: number | null = null;
+/** Severity of the most recently dispatched notification. Used to detect severity escalation. */
+let _lastNotifiedSeverity: string | null = null;
 
 const SEVERITY_RANK: Record<string, number> = {
   info: 0,
@@ -214,11 +216,19 @@ export async function dispatchAlertNotification(opts: {
     if (cooldownMs > 0 && _lastNotifiedAt !== null) {
       const elapsed = Date.now() - _lastNotifiedAt;
       if (elapsed < cooldownMs) {
+        const lastRank = SEVERITY_RANK[_lastNotifiedSeverity ?? ""] ?? -1;
+        const isEscalation = alertRank > lastRank;
+        if (!isEscalation) {
+          logger.info(
+            { type: opts.type, elapsedMs: elapsed, cooldownMs, severity: opts.severity, lastSeverity: _lastNotifiedSeverity },
+            "Alert notification suppressed by cooldown rate limit",
+          );
+          return;
+        }
         logger.info(
-          { type: opts.type, elapsedMs: elapsed, cooldownMs },
-          "Alert notification suppressed by cooldown rate limit",
+          { type: opts.type, severity: opts.severity, lastSeverity: _lastNotifiedSeverity },
+          "Alert severity escalated — bypassing cooldown and dispatching immediately",
         );
-        return;
       }
     }
 
@@ -249,6 +259,7 @@ export async function dispatchAlertNotification(opts: {
       : Promise.resolve();
 
     _lastNotifiedAt = Date.now();
+    _lastNotifiedSeverity = opts.severity;
     await Promise.all([emailP, slackP]);
   } catch (err) {
     logger.warn({ err, type: opts.type }, "dispatchAlertNotification unexpected error");
