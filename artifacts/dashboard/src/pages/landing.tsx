@@ -1,682 +1,681 @@
 import { Link } from "wouter";
 import { useEffect, useRef, useState } from "react";
-import { BrandMark } from "@/components/logo";
-import { ArrowRight, Check } from "lucide-react";
+import { SnapServeIcon } from "@/components/logo";
+import {
+  ArrowRight, Check, Brain, Zap, Globe, CalendarCheck,
+  BarChart3, Users, Phone, Volume2, Activity, Shield,
+  BookOpen, ChevronRight,
+} from "lucide-react";
 
-const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-/* ─── 3D Perspective Pipeline Canvas ────────────────────────────────────── */
-function PipelineScene() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const rafRef    = useRef<number>(0);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    let t = 0;
-
-    const resize = () => {
-      canvas.width  = canvas.offsetWidth  * devicePixelRatio;
-      canvas.height = canvas.offsetHeight * devicePixelRatio;
-    };
-    resize();
-    const ro = new ResizeObserver(resize);
-    ro.observe(canvas);
-
-    // project() defined outside draw so it's not inside a try block
-    const COLS = 14, ROWS = 22;
-    const GW = 420, GH = 420;
-
-    const draw = () => {
-      const W = canvas.offsetWidth;
-      const H = canvas.offsetHeight;
-
-      // Skip frame until canvas has real dimensions
-      if (W < 1 || H < 1) {
-        t += 0.8;
-        rafRef.current = requestAnimationFrame(draw);
-        return;
-      }
-
-      const cx = W * 0.5;
-      const cy = H * 0.52;
-      const fov = 340;
-      const tilt = Math.sin(t * 0.0004) * 0.018;
-
-      const project = (x: number, z: number): [number, number, number] => {
-        const rx = x * Math.cos(tilt) - z * Math.sin(tilt);
-        const rz = x * Math.sin(tilt) + z * Math.cos(tilt);
-        const scale = fov / (fov + rz + 220);
-        return [cx + rx * scale, cy + rz * scale * 0.55, scale];
-      };
-
-      try {
-        ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
-        ctx.clearRect(0, 0, W, H);
-
-        /* ── Perspective grid ── */
-        ctx.save();
-        const gridFade = ctx.createRadialGradient(cx, cy + 40, 10, cx, cy + 40, GW * 0.85);
-        gridFade.addColorStop(0,   "#E5E7EB");
-        gridFade.addColorStop(0.7, "#FAFAFA");
-        gridFade.addColorStop(1,   "rgba(255,255,255,0)");
-
-        for (let i = 0; i <= COLS; i++) {
-          const gx = (i / COLS - 0.5) * GW;
-          ctx.beginPath();
-          ctx.strokeStyle = gridFade;
-          ctx.lineWidth = 0.5;
-          for (let j = 0; j <= ROWS; j++) {
-            const gz = (j / ROWS - 0.5) * GH + (t * 0.025 % (GH / ROWS));
-            const [px, py] = project(gx, gz);
-            j === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
-          }
-          ctx.stroke();
-        }
-        for (let j = 0; j <= ROWS; j++) {
-          const gz = (j / ROWS - 0.5) * GH + (t * 0.025 % (GH / ROWS));
-          ctx.beginPath();
-          ctx.strokeStyle = gridFade;
-          ctx.lineWidth = 0.5;
-          for (let i = 0; i <= COLS; i++) {
-            const gx = (i / COLS - 0.5) * GW;
-            const [px, py] = project(gx, gz);
-            i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
-          }
-          ctx.stroke();
-        }
-        ctx.restore();
-
-        /* ── Pipeline nodes ── */
-        const nodes = [
-          { label: "ASR", sub: "Deepgram Nova-3",  x: -130, z: -80, col: [220, 220, 220] as [number,number,number], r: 28 },
-          { label: "LLM", sub: "GPT-4o mini",      x:    0, z:  20, col: [240, 240, 240] as [number,number,number], r: 34 },
-          { label: "TTS", sub: "Cartesia Sonic-2", x:  130, z: -80, col: [200, 200, 200] as [number,number,number], r: 28 },
-        ];
-
-        const floatY = Math.sin(t * 0.0012) * 6;
-        const projected = nodes.map(n => project(n.x, n.z));
-
-        // Connection lines
-        for (let i = 0; i < projected.length - 1; i++) {
-          const [x1, y1] = projected[i]!;
-          const [x2, y2] = projected[i + 1]!;
-          if (Math.abs(x2 - x1) < 0.01 && Math.abs(y2 - y1) < 0.01) continue;
-          const c1 = nodes[i]!.col;
-          const c2 = nodes[i + 1]!.col;
-          const grad = ctx.createLinearGradient(x1, y1, x2, y2);
-          grad.addColorStop(0,   `rgba(${c1[0]},${c1[1]},${c1[2]},0.5)`);
-          grad.addColorStop(0.5, "rgba(220,220,220,0.3)");
-          grad.addColorStop(1,   `rgba(${c2[0]},${c2[1]},${c2[2]},0.5)`);
-          ctx.beginPath();
-          ctx.strokeStyle = grad;
-          ctx.lineWidth = 1.5;
-          ctx.setLineDash([6, 6]);
-          ctx.lineDashOffset = -(t * 0.12);
-          ctx.moveTo(x1, y1 + floatY);
-          ctx.lineTo(x2, y2 + floatY);
-          ctx.stroke();
-          ctx.setLineDash([]);
-        }
-
-        // IN node
-        const [inX, inY, inSc] = project(-210, -130);
-        ctx.save();
-        ctx.globalAlpha = 0.55;
-        ctx.beginPath();
-        ctx.arc(inX, inY + floatY, 18 * inSc, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(120,120,120,0.3)";
-        ctx.strokeStyle = "rgba(180,180,180,0.3)";
-        ctx.lineWidth = 1;
-        ctx.fill(); ctx.stroke();
-        ctx.font = `${Math.round(8 * inSc)}px monospace`;
-        ctx.fillStyle = "rgba(220,220,220,0.5)";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText("IN", inX, inY + floatY);
-        ctx.restore();
-
-        // OUT node
-        const [outX, outY, outSc] = project(210, -130);
-        ctx.save();
-        ctx.globalAlpha = 0.55;
-        ctx.beginPath();
-        ctx.arc(outX, outY + floatY, 18 * outSc, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(120,120,120,0.3)";
-        ctx.strokeStyle = "rgba(200,200,200,0.3)";
-        ctx.lineWidth = 1;
-        ctx.fill(); ctx.stroke();
-        ctx.font = `${Math.round(8 * outSc)}px monospace`;
-        ctx.fillStyle = "rgba(220,220,220,0.6)";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText("OUT", outX, outY + floatY);
-        ctx.restore();
-
-        // Pipeline nodes
-        nodes.forEach(({ label, sub, x, z, col, r }, idx) => {
-          const [px, py, sc] = project(x, z);
-          const fy = py + floatY + Math.sin(t * 0.0012 + idx * 1.2) * 4;
-          const [cr, cg, cb] = col;
-          const radius = r * sc;
-
-          const glow = ctx.createRadialGradient(px, fy, 0, px, fy, radius * 3.2);
-          glow.addColorStop(0,   `rgba(${cr},${cg},${cb},0.18)`);
-          glow.addColorStop(0.4, `rgba(${cr},${cg},${cb},0.08)`);
-          glow.addColorStop(1,   `rgba(${cr},${cg},${cb},0)`);
-          ctx.beginPath();
-          ctx.arc(px, fy, radius * 3.2, 0, Math.PI * 2);
-          ctx.fillStyle = glow;
-          ctx.fill();
-
-          const body = ctx.createRadialGradient(px - radius * 0.25, fy - radius * 0.25, 0, px, fy, radius);
-          body.addColorStop(0, `rgba(${cr},${cg},${cb},0.35)`);
-          body.addColorStop(1, `rgba(${Math.round(cr*0.3)},${Math.round(cg*0.3)},${Math.round(cb*0.3)},0.6)`);
-          ctx.beginPath();
-          ctx.arc(px, fy, radius, 0, Math.PI * 2);
-          ctx.fillStyle = body;
-          ctx.fill();
-
-          ctx.beginPath();
-          ctx.arc(px, fy, radius, 0, Math.PI * 2);
-          ctx.strokeStyle = `rgba(${cr},${cg},${cb},0.55)`;
-          ctx.lineWidth = 1.5 * sc;
-          ctx.stroke();
-
-          ctx.font = `bold ${Math.round(10 * sc)}px ui-monospace, monospace`;
-          ctx.fillStyle = `rgba(${cr},${cg},${cb},0.95)`;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText(label, px, fy);
-
-          ctx.font = `${Math.round(7.5 * sc)}px ui-sans-serif, sans-serif`;
-          ctx.fillStyle = "#9CA3AF";
-          ctx.fillText(sub, px, fy + radius + 12 * sc);
-        });
-
-        // Latency badge above LLM node
-        const [lx, ly] = project(0, 20);
-        const badgeTag = "184ms total";
-        const [bcr, bcg, bcb] = [220, 220, 220];
-        const bx = lx, by = ly + floatY - 60;
-        ctx.save();
-        ctx.font = "bold 11px ui-monospace, monospace";
-        const bw = ctx.measureText(badgeTag).width;
-        const brx = bx - bw / 2 - 8, bry = by - 10, brw = bw + 16, brh = 20, brr = 10;
-        ctx.beginPath();
-        ctx.moveTo(brx + brr, bry);
-        ctx.lineTo(brx + brw - brr, bry);
-        ctx.arcTo(brx + brw, bry, brx + brw, bry + brr, brr);
-        ctx.lineTo(brx + brw, bry + brh - brr);
-        ctx.arcTo(brx + brw, bry + brh, brx + brw - brr, bry + brh, brr);
-        ctx.lineTo(brx + brr, bry + brh);
-        ctx.arcTo(brx, bry + brh, brx, bry + brh - brr, brr);
-        ctx.lineTo(brx, bry + brr);
-        ctx.arcTo(brx, bry, brx + brr, bry, brr);
-        ctx.closePath();
-        ctx.fillStyle = `rgba(${bcr},${bcg},${bcb},0.12)`;
-        ctx.strokeStyle = `rgba(${bcr},${bcg},${bcb},0.35)`;
-        ctx.lineWidth = 1;
-        ctx.fill(); ctx.stroke();
-        ctx.fillStyle = `rgba(${bcr},${bcg},${bcb},0.9)`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(badgeTag, bx, by);
-        ctx.restore();
-
-        t += 0.8;
-      } catch (_) { /* guard against any remaining canvas API edge cases */ }
-
-      rafRef.current = requestAnimationFrame(draw);
-    };
-
-    rafRef.current = requestAnimationFrame(draw);
-    return () => {
-      cancelAnimationFrame(rafRef.current);
-      ro.disconnect();
-    };
-  }, []);
-
-  return <canvas ref={canvasRef} className="w-full h-full" />;
-}
-
-/* ─── Animated counter ───────────────────────────────────────────────────── */
+/* ── Animated counter ────────────────────────────────────────────────────── */
 function Counter({ to, suffix = "", prefix = "" }: { to: number; suffix?: string; prefix?: string }) {
   const [n, setN] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
+    const el = ref.current; if (!el) return;
     const obs = new IntersectionObserver(([e]) => {
-      if (!e?.isIntersecting) return;
-      obs.disconnect();
+      if (!e?.isIntersecting) return; obs.disconnect();
       const dur = 1600, s = performance.now();
       const tick = (now: number) => {
         const p = Math.min((now - s) / dur, 1);
         setN(Math.floor((1 - Math.pow(1 - p, 4)) * to));
-        if (p < 1) requestAnimationFrame(tick);
-        else setN(to);
+        if (p < 1) requestAnimationFrame(tick); else setN(to);
       };
       requestAnimationFrame(tick);
     }, { threshold: 0.5 });
-    obs.observe(el);
-    return () => obs.disconnect();
+    obs.observe(el); return () => obs.disconnect();
   }, [to]);
   return <div ref={ref}>{prefix}{n.toLocaleString()}{suffix}</div>;
 }
 
-/* ─── Reusable section label ─────────────────────────────────────────────── */
-function Label({ text }: { text: string }) {
-  return (
-    <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-foreground mb-4">{text}</p>
-  );
-}
+/* ── Memory retrieval visual ─────────────────────────────────────────────── */
+function MemoryCard() {
+  const [phase, setPhase] = useState<0|1|2|3>(0);
 
-/* ─── Feature row ────────────────────────────────────────────────────────── */
-function FeatureRow({ label, title, body, visual }: {
-  label: string; title: string; body: string; visual: React.ReactNode;
-}) {
+  useEffect(() => {
+    const cycle = () => {
+      setPhase(0);
+      const t1 = setTimeout(() => setPhase(1), 600);
+      const t2 = setTimeout(() => setPhase(2), 1800);
+      const t3 = setTimeout(() => setPhase(3), 3400);
+      return [t1, t2, t3];
+    };
+    const timers = cycle();
+    const iv = setInterval(() => { cycle(); }, 7500);
+    return () => { timers.forEach(clearTimeout); clearInterval(iv); };
+  }, []);
+
+  const memories = [
+    { label: "Last call",   value: "3 days ago",    color: "#a1a1aa" },
+    { label: "Intent",      value: "Premium plan",  color: "#86efac" },
+    { label: "Language",    value: "Tamil",          color: "#93c5fd" },
+    { label: "Objection",   value: "Price sensitive",color: "#fca5a5" },
+    { label: "Company",     value: "Acme Corp",      color: "#d4d4d8" },
+  ];
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center py-20 border-b border-border">
-      <div>
-        <Label text={label} />
-        <h2 className="text-[40px] sm:text-[52px] font-black tracking-tight leading-[1.0] text-foreground mb-6">{title}</h2>
-        <p className="text-[15px] text-muted-foreground leading-[1.75] max-w-md">{body}</p>
+    <div className="relative w-full max-w-[340px] mx-auto rounded-2xl overflow-hidden"
+      style={{ background: "#111", border: "1px solid rgba(255,255,255,0.07)" }}>
+
+      {/* Call header */}
+      <div className="flex items-center gap-3 px-5 py-4 border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+        <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
+          style={{ background: "#1a1a1a", border: "1px solid rgba(255,255,255,0.07)" }}>
+          <Phone className="h-4 w-4 text-zinc-400" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-[13px] font-semibold text-white">+91 98765 ·····</div>
+          <div className="text-[10px] text-zinc-600">
+            {phase === 0 ? "Waiting…" : phase === 1 ? "Incoming call" : phase === 2 ? "Retrieving memory…" : "Live · Agent responding"}
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 px-2 py-1 rounded-full text-[9px] font-bold transition-all duration-500"
+          style={{
+            background: phase === 3 ? "rgba(134,239,172,0.1)" : "rgba(161,161,170,0.08)",
+            border: `1px solid ${phase === 3 ? "rgba(134,239,172,0.2)" : "rgba(161,161,170,0.12)"}`,
+            color: phase === 3 ? "#86efac" : "#71717a",
+          }}>
+          <div className="w-1.5 h-1.5 rounded-full animate-pulse"
+            style={{ background: phase === 3 ? "#86efac" : "#52525b" }} />
+          {phase === 3 ? "LIVE" : phase === 2 ? "RECALL" : "IDLE"}
+        </div>
       </div>
-      <div className="rounded-2xl border border-border bg-card/[0.02] overflow-hidden aspect-[4/3] flex items-center justify-center">
-        {visual}
+
+      {/* Memory chips */}
+      <div className="px-5 py-4 space-y-2">
+        <div className="flex items-center gap-2 mb-3">
+          <Brain className="h-3 w-3 text-zinc-600" />
+          <span className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-600">Memory Retrieved</span>
+        </div>
+        {memories.map((m, i) => (
+          <div key={m.label}
+            className="flex items-center justify-between rounded-xl px-3 py-2.5 transition-all duration-500"
+            style={{
+              background: "#191919",
+              opacity: phase >= 2 ? 1 : 0,
+              transform: phase >= 2 ? "translateY(0)" : "translateY(6px)",
+              transitionDelay: `${i * 70}ms`,
+            }}>
+            <span className="text-[11px] text-zinc-600">{m.label}</span>
+            <span className="text-[11px] font-semibold" style={{ color: m.color }}>{m.value}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Agent waveform */}
+      <div className="px-5 pb-4 transition-all duration-500" style={{ opacity: phase === 3 ? 1 : 0 }}>
+        <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl" style={{ background: "#191919" }}>
+          <Volume2 className="h-3 w-3 text-zinc-600 shrink-0" />
+          <div className="flex items-center gap-px h-5 flex-1">
+            {Array.from({ length: 24 }, (_, i) => (
+              <div key={i} className="flex-1 rounded-full"
+                style={{
+                  background: "#3f3f46",
+                  height: `${25 + Math.sin(i * 0.7) * 60}%`,
+                  animation: phase === 3 ? `lbar 0.8s ease-in-out ${(i * 53) % 800}ms infinite alternate` : "none",
+                }} />
+            ))}
+          </div>
+          <span className="text-[10px] text-zinc-700 shrink-0 ml-1">speaking</span>
+        </div>
       </div>
     </div>
   );
 }
 
-/* ─── Code-block visual ──────────────────────────────────────────────────── */
-function CodeBlock({ lines }: { lines: { t: string; c: string }[] }) {
+/* ── Pipeline latency visual ─────────────────────────────────────────────── */
+function PipelineCard() {
+  const stages = [
+    { label: "ASR",   sub: "Deepgram Nova-3",  ms: 62,  pct: 34, col: "#d4d4d8" },
+    { label: "LLM",   sub: "GPT-4o mini",      ms: 94,  pct: 51, col: "#a1a1aa" },
+    { label: "TTS",   sub: "Cartesia Sonic-2", ms: 28,  pct: 15, col: "#e4e4e7" },
+  ];
   return (
-    <div className="w-full h-full flex flex-col gap-0 p-6 font-mono text-[12px]">
-      <div className="flex items-center gap-1.5 mb-4">
-        {["#c45454","#a1a1aa","#a1a1aa"].map(c => (
-          <div key={c} className="w-3 h-3 rounded-full" style={{ background: c }} />
-        ))}
+    <div className="w-full max-w-[360px] mx-auto rounded-2xl p-6 space-y-5"
+      style={{ background: "#111", border: "1px solid rgba(255,255,255,0.07)" }}>
+      <div className="flex items-center gap-2 mb-1">
+        <Activity className="h-3.5 w-3.5 text-zinc-600" />
+        <span className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-600">Pipeline Breakdown</span>
       </div>
-      {lines.map(({ t, c }, i) => (
-        <div key={i} className="flex gap-4 leading-6">
-          <span className="text-white/15 w-4 text-right shrink-0">{i + 1}</span>
-          <span style={{ color: c }}>{t}</span>
+      {stages.map(({ label, sub, ms, pct, col }) => (
+        <div key={label} className="space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-black" style={{ color: col }}>{label}</span>
+              <span className="text-[10px] text-zinc-700">{sub}</span>
+            </div>
+            <span className="text-[11px] font-mono font-bold text-zinc-300">{ms}ms</span>
+          </div>
+          <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "#1e1e1e" }}>
+            <div className="h-full rounded-full" style={{ width: `${pct}%`, background: col, opacity: 0.5 }} />
+          </div>
+        </div>
+      ))}
+      <div className="flex items-center justify-between pt-3" style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+        <span className="text-[11px] text-zinc-600">Total latency</span>
+        <span className="text-[15px] font-black font-mono text-white">184ms</span>
+      </div>
+    </div>
+  );
+}
+
+/* ── Live call flow diagram ───────────────────────────────────────────────── */
+function FlowVisual() {
+  const nodes = [
+    { label: "Greeting", sub: "Personalized from memory" },
+    { label: "Discovery", sub: "Context-aware questions" },
+    { label: "Objection", sub: "Handled with history", branch: true },
+    { label: "Close", sub: "Book or escalate" },
+  ];
+  return (
+    <div className="w-full max-w-[300px] mx-auto space-y-1.5">
+      {nodes.map((n, i) => (
+        <div key={n.label}>
+          <div className="flex items-center gap-3 px-4 py-3 rounded-xl"
+            style={{ background: "#111", border: "1px solid rgba(255,255,255,0.07)" }}>
+            <div className="w-5 h-5 rounded-md flex items-center justify-center shrink-0"
+              style={{ background: "#1e1e1e" }}>
+              <span className="text-[9px] font-black text-zinc-500">{i + 1}</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[12px] font-semibold text-white">{n.label}</div>
+              <div className="text-[10px] text-zinc-600">{n.sub}</div>
+            </div>
+            {n.branch && (
+              <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-md text-amber-400"
+                style={{ background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.15)" }}>
+                BRANCH
+              </span>
+            )}
+          </div>
+          {i < nodes.length - 1 && (
+            <div className="flex justify-center">
+              <div className="w-px h-3" style={{ background: "rgba(255,255,255,0.06)" }} />
+            </div>
+          )}
         </div>
       ))}
     </div>
   );
 }
 
-/* ─── Use case card ──────────────────────────────────────────────────────── */
-function UCCard({ title, kpi, body }: { title: string; kpi: string; body: string }) {
+/* ── Feature card ────────────────────────────────────────────────────────── */
+function FCard({ icon: Icon, title, body, accent = "#71717a" }: {
+  icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
+  title: string; body: string; accent?: string;
+}) {
   return (
-    <div className="group flex flex-col gap-3 p-6 rounded-2xl border border-border hover:border-white/[0.1] bg-card/[0.01] hover:bg-card/[0.03] transition-all duration-300">
-      <div className="flex items-start justify-between gap-2">
-        <h3 className="text-[14px] font-bold text-foreground group-hover:text-foreground transition-colors">{title}</h3>
-        <span className="shrink-0 text-[10px] font-black text-zinc-300 bg-muted border border-zinc-500/20 px-2 py-0.5 rounded-full">{kpi}</span>
+    <div className="group p-6 rounded-2xl transition-all duration-300"
+      style={{ background: "#0c0c0c", border: "1px solid rgba(255,255,255,0.06)" }}
+      onMouseEnter={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)")}
+      onMouseLeave={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)")}>
+      <div className="h-9 w-9 rounded-xl flex items-center justify-center mb-5"
+        style={{ background: `${accent}14` }}>
+        <Icon className="h-4 w-4" style={{ color: accent }} />
       </div>
-      <p className="text-[12px] text-muted-foreground leading-[1.7]">{body}</p>
+      <h3 className="text-[14px] font-bold text-white mb-2">{title}</h3>
+      <p className="text-[12px] leading-[1.75]" style={{ color: "#52525b" }}>{body}</p>
     </div>
   );
 }
 
-/* ─── Pricing card ───────────────────────────────────────────────────────── */
-function PCard({ plan, price, per, note, items, cta, hot }: {
+/* ── Step ────────────────────────────────────────────────────────────────── */
+function Step({ n, title, body, last }: { n: string; title: string; body: string; last?: boolean }) {
+  return (
+    <div className="flex gap-6">
+      <div className="flex flex-col items-center">
+        <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
+          style={{ background: "#111", border: "1px solid rgba(255,255,255,0.08)" }}>
+          <span className="text-[11px] font-black text-zinc-500">{n}</span>
+        </div>
+        {!last && <div className="w-px flex-1 mt-3" style={{ background: "rgba(255,255,255,0.05)" }} />}
+      </div>
+      <div className={last ? "pb-0" : "pb-12"}>
+        <h3 className="text-[17px] font-bold text-white mb-2 mt-1.5">{title}</h3>
+        <p className="text-[13px] leading-[1.8] max-w-md" style={{ color: "#52525b" }}>{body}</p>
+      </div>
+    </div>
+  );
+}
+
+/* ── Pricing card ────────────────────────────────────────────────────────── */
+function PCard({ plan, price, per, note, items, cta, featured }: {
   plan: string; price: string; per: string; note: string;
-  items: string[]; cta: string; hot?: boolean;
+  items: string[]; cta: string; featured?: boolean;
 }) {
   return (
-    <div className={`relative flex flex-col gap-6 p-6 rounded-2xl border transition-all ${hot ? "border-border bg-zinc-500/5" : "border-border bg-card/[0.015]"}`}>
-      {hot && (
-        <div className="absolute -top-3 left-6">
-          <span className="text-[9px] font-black uppercase tracking-widest bg-zinc-600 text-foreground px-3 py-1 rounded-full">
+    <div className="relative flex flex-col gap-5 p-7 rounded-2xl"
+      style={{ background: featured ? "#111" : "#090909", border: `1px solid ${featured ? "rgba(255,255,255,0.13)" : "rgba(255,255,255,0.06)"}` }}>
+      {featured && (
+        <div className="absolute -top-3.5 left-6">
+          <span className="text-[9px] font-black uppercase tracking-widest bg-white text-black px-3 py-1.5 rounded-full">
             Most popular
           </span>
         </div>
       )}
       <div className="pt-1">
-        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-5">{plan}</p>
-        <div className="flex items-end gap-1.5 mb-1">
-          <span className="text-[36px] font-black text-foreground leading-none">{price}</span>
-          {per && <span className="text-[13px] text-muted-foreground mb-1.5">{per}</span>}
+        <p className="text-[9px] font-black uppercase tracking-[0.22em] mb-5" style={{ color: "#52525b" }}>{plan}</p>
+        <div className="flex items-end gap-1.5 mb-1.5">
+          <span className="text-[42px] font-black text-white leading-none">{price}</span>
+          {per && <span className="text-[13px] mb-2" style={{ color: "#52525b" }}>{per}</span>}
         </div>
-        <p className="text-[12px] text-muted-foreground">{note}</p>
+        <p className="text-[12px]" style={{ color: "#3f3f46" }}>{note}</p>
       </div>
-      <div className="h-px bg-card/[0.06]" />
-      <ul className="flex flex-col gap-3 flex-1">
+      <div className="h-px" style={{ background: "rgba(255,255,255,0.05)" }} />
+      <ul className="flex flex-col gap-3.5 flex-1">
         {items.map(item => (
-          <li key={item} className="flex items-start gap-2.5 text-[13px] text-muted-foreground">
-            <Check className="h-3.5 w-3.5 text-foreground mt-0.5 shrink-0" />
+          <li key={item} className="flex items-start gap-3 text-[13px]" style={{ color: "#71717a" }}>
+            <Check className="h-3.5 w-3.5 text-zinc-400 mt-0.5 shrink-0" />
             {item}
           </li>
         ))}
       </ul>
-      <Link href={`${basePath}/sign-up`}>
-        <button className={`w-full py-3 rounded-full text-[13px] font-bold transition-all duration-200 ${hot
-          ? "bg-card text-black hover:bg-card/90"
-          : "border border-white/[0.1] text-muted-foreground hover:border-white/[0.2] hover:text-muted-foreground"
-        }`}>{cta}</button>
+      <Link href={`${BASE}/sign-up`}>
+        <button className={`w-full py-3 rounded-full text-[13px] font-bold transition-all duration-200 ${
+          featured ? "bg-white text-black hover:bg-white/90"
+          : "text-zinc-500 hover:text-zinc-300"
+        }`}
+          style={!featured ? { border: "1px solid rgba(255,255,255,0.08)" } : undefined}>
+          {cta}
+        </button>
       </Link>
     </div>
   );
 }
 
-/* ─── Provider chip ──────────────────────────────────────────────────────── */
-function Chip({ name, tag }: { name: string; tag: string }) {
-  return (
-    <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border bg-card/[0.02] hover:border-white/[0.1] transition-colors cursor-default">
-      <div className="h-5 w-5 rounded-md bg-card/[0.07] flex items-center justify-center shrink-0">
-        <span className="text-[8px] font-black text-muted-foreground">{name.slice(0, 2).toUpperCase()}</span>
-      </div>
-      <div>
-        <div className="text-[11px] font-semibold text-white/65 leading-none">{name}</div>
-        <div className="text-[9px] text-muted-foreground mt-0.5">{tag}</div>
-      </div>
-    </div>
-  );
-}
+/* ── Marquee track ───────────────────────────────────────────────────────── */
+const PROVIDERS = [
+  { name: "Deepgram",   type: "ASR" },
+  { name: "OpenAI",     type: "LLM · TTS" },
+  { name: "ElevenLabs", type: "TTS" },
+  { name: "Twilio",     type: "Telephony" },
+  { name: "Anthropic",  type: "LLM" },
+  { name: "Cartesia",   type: "TTS" },
+  { name: "Sarvam",     type: "ASR · TTS" },
+  { name: "Azure",      type: "ASR · TTS" },
+  { name: "Groq",       type: "LLM" },
+  { name: "Plivo",      type: "Telephony" },
+  { name: "Mistral",    type: "LLM" },
+  { name: "Gemini",     type: "LLM" },
+  { name: "DeepSeek",   type: "LLM" },
+  { name: "AWS Polly",  type: "TTS" },
+  { name: "Vonage",     type: "Telephony" },
+  { name: "VoBiz",      type: "Telephony" },
+];
 
-/* ─── Main ───────────────────────────────────────────────────────────────── */
+/* ── Main ────────────────────────────────────────────────────────────────── */
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-black text-foreground antialiased overflow-x-hidden">
+    <div className="min-h-screen text-white antialiased overflow-x-hidden" style={{ background: "#050505" }}>
+      <style>{`
+        @keyframes lbar  { 0%{transform:scaleY(.25)} 100%{transform:scaleY(1)} }
+        @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+        @keyframes mq    { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
+        @keyframes pulse-ring { 0%{transform:scale(1);opacity:.6} 100%{transform:scale(1.9);opacity:0} }
+        @keyframes orb   { 0%,100%{transform:scale(1) translate(0,0)} 50%{transform:scale(1.06) translate(8px,-6px)} }
+        @keyframes slide-up { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+        .float-anim  { animation: float 5s ease-in-out infinite; }
+        .marquee-run { animation: mq 32s linear infinite; }
+        .orb-anim    { animation: orb 10s ease-in-out infinite; }
+      `}</style>
 
-      {/* ── Nav ───────────────────────────────────────────────────── */}
-      <header className="fixed top-0 inset-x-0 z-50 flex items-center justify-between px-8 h-14 border-b border-border bg-black/60 backdrop-blur-xl">
-        <Link href={`${basePath}/`}>
-          <span className="inline-flex items-center cursor-pointer">
-            <BrandMark iconSize={20} wordmarkHeight={14} />
+      {/* Background orbs */}
+      <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 0 }}>
+        <div className="orb-anim absolute -top-40 -right-40 w-[700px] h-[700px] rounded-full"
+          style={{ background: "radial-gradient(circle, rgba(255,255,255,0.035) 0%, transparent 65%)" }} />
+        <div className="orb-anim absolute -bottom-40 -left-40 w-[600px] h-[600px] rounded-full"
+          style={{ background: "radial-gradient(circle, rgba(255,255,255,0.025) 0%, transparent 65%)", animationDelay: "4s" }} />
+        {/* Grid overlay */}
+        <div className="absolute inset-0 opacity-[0.015]" style={{
+          backgroundImage: "linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)",
+          backgroundSize: "60px 60px",
+        }} />
+      </div>
+
+      {/* ── Nav ──────────────────────────────────────────────────────────── */}
+      <header className="fixed top-0 inset-x-0 z-50 flex items-center justify-between px-8 h-14"
+        style={{ background: "rgba(5,5,5,0.85)", backdropFilter: "blur(24px)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+        <Link href={`${BASE}/`}>
+          <span className="inline-flex items-center gap-2 cursor-pointer">
+            <SnapServeIcon size={22} className="text-white shrink-0" />
+            <span className="text-[14px] text-white leading-none select-none"
+              style={{ fontFamily: "'Tex Gyre Heros', Helvetica, Arial, sans-serif", letterSpacing: "-0.01em" }}>
+              <span style={{ fontWeight: 700 }}>Snap</span><span style={{ fontWeight: 400 }}>Serve</span>
+            </span>
           </span>
         </Link>
 
-        <nav className="hidden md:flex items-center gap-7">
-          {[["Product", "#product"], ["Use Cases", "#use-cases"], ["Pricing", "#pricing"], ["Docs", "#"]].map(([l, h]) => (
-            <a key={l} href={h}
-              className="text-[13px] font-medium text-muted-foreground hover:text-foreground transition-colors">
-              {l}
-            </a>
+        <nav className="hidden md:flex items-center gap-8">
+          {[["Features","#features"],["How it works","#how"],["Pricing","#pricing"]].map(([l,h]) => (
+            <a key={l} href={h} className="text-[13px] transition-colors"
+              style={{ color: "#52525b" }}
+              onMouseEnter={e => (e.currentTarget.style.color = "#fff")}
+              onMouseLeave={e => (e.currentTarget.style.color = "#52525b")}>{l}</a>
           ))}
         </nav>
 
         <div className="flex items-center gap-3">
-          <Link href={`${basePath}/sign-in`}>
-            <button className="text-[13px] font-medium text-muted-foreground hover:text-muted-foreground transition-colors px-3 py-1.5">
-              Sign in
-            </button>
+          <Link href={`${BASE}/sign-in`}>
+            <button className="text-[13px] px-3 py-1.5 transition-colors" style={{ color: "#52525b" }}
+              onMouseEnter={e => (e.currentTarget.style.color = "#fff")}
+              onMouseLeave={e => (e.currentTarget.style.color = "#52525b")}>Sign in</button>
           </Link>
-          <Link href={`${basePath}/sign-up`}>
-            <button className="flex items-center gap-1.5 bg-card text-black text-[13px] font-bold px-4 py-1.5 rounded-full hover:bg-card/90 transition-all">
+          <Link href={`${BASE}/sign-up`}>
+            <button className="flex items-center gap-1.5 bg-white text-black text-[13px] font-bold px-4 py-1.5 rounded-full transition-all hover:bg-white/90">
               Get started <ArrowRight className="h-3.5 w-3.5" />
             </button>
           </Link>
         </div>
       </header>
 
-      {/* ── Hero ──────────────────────────────────────────────────── */}
-      <section className="relative min-h-screen grid grid-cols-1 lg:grid-cols-2 pt-14">
+      {/* ── Hero ─────────────────────────────────────────────────────────── */}
+      <section className="relative min-h-screen grid grid-cols-1 lg:grid-cols-2 pt-14" style={{ zIndex: 1 }}>
 
-        {/* Left: text */}
-        <div className="flex flex-col justify-center px-10 lg:px-16 py-20 lg:py-0">
-          <div className="inline-flex items-center gap-2 mb-8 w-fit px-3 py-1 rounded-full border border-white/[0.1] text-[11px] font-semibold text-muted-foreground">
-            <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 animate-pulse" />
-            From $0.03 / min &mdash; BYOK or Managed
+        {/* Left */}
+        <div className="flex flex-col justify-center px-10 lg:px-16 xl:px-20 py-24 lg:py-0">
+          <div className="inline-flex items-center gap-2 mb-8 w-fit px-3 py-1.5 rounded-full text-[11px] font-semibold"
+            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#71717a" }}>
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full rounded-full opacity-75"
+                style={{ background: "#52525b", animation: "pulse-ring 1.4s ease-out infinite" }} />
+              <span className="relative inline-flex rounded-full h-2 w-2" style={{ background: "#71717a" }} />
+            </span>
+            Beta · Now live
           </div>
 
-          <h1 className="text-[52px] sm:text-[64px] lg:text-[72px] font-black tracking-[-0.035em] leading-[0.95] mb-8 text-foreground">
-            AI voice<br />agents,<br />
-            <span className="text-muted-foreground">built to</span><br />
-            <span style={{
-              background: "linear-gradient(90deg, #a1a1aa 0%, #a1a1aa 40%, #a1a1aa 100%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-            }}>deploy.</span>
+          <h1 className="text-[56px] sm:text-[70px] lg:text-[82px] font-black leading-[0.9] tracking-[-0.04em] mb-8">
+            Voice agents<br />
+            <span style={{ color: "#3f3f46" }}>that never</span><br />
+            forget.
           </h1>
 
-          <p className="text-[15px] text-muted-foreground leading-[1.75] max-w-sm mb-10">
-            Real-time orchestration infrastructure. Connect your ASR, LLM, and TTS providers — or use ours.
-            We handle the pipeline so you ship the agent.
+          <p className="text-[15px] leading-[1.85] mb-10 max-w-[360px]" style={{ color: "#52525b" }}>
+            Build AI voice agents with persistent caller memory, real-time pipeline orchestration, and complete provider freedom. Ship in minutes, not months.
           </p>
 
-          <div className="flex items-center gap-3 flex-wrap">
-            <Link href={`${basePath}/sign-up`}>
-              <button className="flex items-center gap-2 bg-card text-black text-[14px] font-bold px-6 py-3 rounded-full hover:bg-card/90 transition-all">
-                Get started <ArrowRight className="h-4 w-4" />
+          <div className="flex flex-wrap items-center gap-3 mb-6">
+            <Link href={`${BASE}/sign-up`}>
+              <button className="flex items-center gap-2 bg-white text-black text-[14px] font-bold px-7 py-3.5 rounded-full transition-all hover:bg-white/90 hover:gap-2.5">
+                Start building free <ArrowRight className="h-4 w-4" />
               </button>
             </Link>
-            <a href="#product">
-              <button className="text-[14px] font-medium text-muted-foreground border border-white/[0.1] px-6 py-3 rounded-full hover:border-white/[0.2] hover:text-muted-foreground transition-all">
-                See how it works
+            <a href="#features">
+              <button className="text-[14px] px-7 py-3.5 rounded-full transition-all"
+                style={{ color: "#52525b", border: "1px solid rgba(255,255,255,0.07)" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.14)"; (e.currentTarget as HTMLElement).style.color = "#a1a1aa"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.07)"; (e.currentTarget as HTMLElement).style.color = "#52525b"; }}>
+                See features
               </button>
             </a>
           </div>
-
-          <p className="text-[11px] text-muted-foreground mt-5">$5 credit on signup — no card required</p>
+          <p className="text-[11px]" style={{ color: "#3a3a3a" }}>$5 free credit · No card required</p>
         </div>
 
-        {/* Right: 3D pipeline visual */}
-        <div className="relative hidden lg:flex items-center justify-center overflow-hidden">
-          {/* Radial fade from right edge */}
-          <div className="absolute inset-0 bg-gradient-to-l from-black/0 via-black/0 to-black/60 z-10 pointer-events-none" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/0 to-black/20 z-10 pointer-events-none" />
-
-          <PipelineScene />
-
-          {/* Floating stat cards */}
-          <div className="absolute top-1/4 right-8 z-20 flex flex-col gap-2">
-            {[
-              { label: "ASR", value: "62ms",  col: "#d4d4d8" },
-              { label: "LLM", value: "94ms",  col: "#d4d4d8" },
-              { label: "TTS", value: "28ms",  col: "#e4e4e7" },
-            ].map(({ label, value, col }) => (
-              <div key={label} className="flex items-center gap-2.5 bg-card/[0.04] border border-border backdrop-blur-sm px-3 py-2 rounded-xl">
-                <span className="text-[10px] font-bold" style={{ color: col }}>{label}</span>
-                <span className="text-[12px] font-black text-foreground font-mono">{value}</span>
-              </div>
-            ))}
+        {/* Right — memory card */}
+        <div className="relative hidden lg:flex items-center justify-center px-12 py-20">
+          <div className="absolute inset-0 pointer-events-none"
+            style={{ background: "radial-gradient(ellipse at center, rgba(255,255,255,0.018) 0%, transparent 65%)" }} />
+          <div className="float-anim w-full">
+            <MemoryCard />
           </div>
 
-          {/* Bottom live indicator */}
-          <div className="absolute bottom-8 right-8 z-20 flex items-center gap-2 bg-card/[0.03] border border-border px-3 py-1.5 rounded-full">
-            <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 animate-pulse" />
-            <span className="text-[11px] font-semibold text-muted-foreground">Live session active</span>
+          {/* Floating pills */}
+          <div className="absolute top-1/3 right-6 flex flex-col gap-2 z-10">
+            {[
+              { t: "Memory", v: "< 50ms", c: "#86efac" },
+              { t: "ASR",    v: "62ms",   c: "#d4d4d8" },
+              { t: "LLM",    v: "94ms",   c: "#a1a1aa" },
+            ].map(({ t, v, c }) => (
+              <div key={t} className="flex items-center gap-2.5 px-3 py-2 rounded-xl"
+                style={{ background: "rgba(17,17,17,0.9)", border: "1px solid rgba(255,255,255,0.07)", backdropFilter: "blur(12px)" }}>
+                <span className="text-[10px] font-bold" style={{ color: c }}>{t}</span>
+                <span className="text-[12px] font-black font-mono text-white">{v}</span>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* ── Metrics ───────────────────────────────────────────────── */}
-      <section className="border-y border-border">
-        <div className="max-w-5xl mx-auto grid grid-cols-2 md:grid-cols-4 divide-x divide-border">
+      {/* ── Metrics strip ────────────────────────────────────────────────── */}
+      <section style={{ borderTop: "1px solid rgba(255,255,255,0.06)", borderBottom: "1px solid rgba(255,255,255,0.06)", position: "relative", zIndex: 1 }}>
+        <div className="max-w-5xl mx-auto grid grid-cols-2 md:grid-cols-4 divide-x" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
           {[
-            { to: 10,  s: "M+",   p: "",  l: "Minutes processed" },
-            { to: 184, s: "ms",   p: "<", l: "Pipeline latency" },
-            { to: 15,  s: "+",    p: "",  l: "Provider integrations" },
-            { to: 99,  s: ".9%",  p: "",  l: "Uptime SLA" },
+            { to: 184, s: "ms", p: "<", l: "Pipeline latency" },
+            { to: 15,  s: "+",  p: "",  l: "Provider integrations" },
+            { to: 20,  s: "+",  p: "",  l: "Languages supported" },
+            { to: 99,  s: ".9%",p: "",  l: "Uptime SLA" },
           ].map(({ to, s, p, l }) => (
-            <div key={l} className="flex flex-col items-center py-10 gap-1.5">
-              <div className="text-[30px] font-black text-foreground tabular-nums">
+            <div key={l} className="flex flex-col items-center py-10 gap-2">
+              <div className="text-[32px] font-black text-white tabular-nums">
                 <Counter to={to} suffix={s} prefix={p} />
               </div>
-              <p className="text-[11px] text-muted-foreground font-medium">{l}</p>
+              <p className="text-[11px] font-medium" style={{ color: "#3f3f46" }}>{l}</p>
             </div>
           ))}
         </div>
       </section>
 
-      {/* ── Feature rows ──────────────────────────────────────────── */}
-      <section id="product" className="max-w-5xl mx-auto px-8 lg:px-10">
-        <FeatureRow
-          label="Pipeline"
-          title={"Sub-200ms,\nend-to-end."}
-          body="Streaming ASR with token-level LLM output and parallel TTS synthesis. Callers hear a response before generation finishes. Every millisecond instrumented."
-          visual={
-            <div className="w-full h-full p-6 flex flex-col gap-3 font-mono text-[12px]">
+      {/* ── Memory section ───────────────────────────────────────────────── */}
+      <section className="max-w-5xl mx-auto px-8 py-32" style={{ position: "relative", zIndex: 1 }}>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-20 items-center">
+          <div>
+            <p className="text-[9px] font-black uppercase tracking-[0.28em] mb-6" style={{ color: "#3f3f46" }}>Memory</p>
+            <h2 className="text-[46px] sm:text-[58px] font-black tracking-[-0.035em] leading-[0.92] text-white mb-8">
+              Every caller.<br />
+              <span style={{ color: "#3f3f46" }}>Remembered.</span>
+            </h2>
+            <p className="text-[15px] leading-[1.85] mb-10 max-w-md" style={{ color: "#52525b" }}>
+              Your agent automatically recalls past interactions — deal history, objections raised, language preferences, intent signals — and uses them to personalize every call from the very first word.
+            </p>
+            <ul className="space-y-3.5">
               {[
-                { stage: "CALLER IN",  ms: "0ms",    bar: 2,   col: "#94a3b8" },
-                { stage: "ASR",        ms: "62ms",   bar: 33,  col: "#d4d4d8" },
-                { stage: "LLM TTFT",   ms: "94ms",   bar: 50,  col: "#d4d4d8" },
-                { stage: "TTS",        ms: "28ms",   bar: 15,  col: "#e4e4e7" },
-                { stage: "TOTAL",      ms: "184ms",  bar: 100, col: "#a1a1aa" },
-              ].map(({ stage, ms, bar, col }) => (
-                <div key={stage} className="flex items-center gap-3">
-                  <span className="w-20 text-right text-muted-foreground text-[10px]">{stage}</span>
-                  <div className="flex-1 h-1.5 bg-card/[0.05] rounded-full overflow-hidden">
-                    <div className="h-full rounded-full transition-all" style={{ width: `${bar}%`, background: col, boxShadow: `0 0 8px ${col}` }} />
-                  </div>
-                  <span className="w-10 text-[11px] font-bold" style={{ color: col }}>{ms}</span>
-                </div>
+                "Caller history recalled in under 50ms",
+                "Stores intent, objections, and preferences",
+                "Context-aware from the first second of every call",
+                "Per-agent memory configuration and isolation",
+              ].map(item => (
+                <li key={item} className="flex items-start gap-3 text-[13px]" style={{ color: "#71717a" }}>
+                  <ChevronRight className="h-4 w-4 shrink-0 mt-0.5" style={{ color: "#3f3f46" }} />
+                  {item}
+                </li>
               ))}
-            </div>
-          }
-        />
+            </ul>
+          </div>
 
-        <FeatureRow
-          label="Flexibility"
-          title={"BYOK or\nmanaged."}
-          body="Bring your own Deepgram, OpenAI, Twilio credentials for full cost control and zero lock-in. Or flip a switch and use our managed keys at $0.035/min — same API, zero setup."
-          visual={
-            <CodeBlock lines={[
-              { t: "# Use your own keys", c: "#6b7280" },
-              { t: 'asr_provider: "deepgram"', c: "#d4d4d8" },
-              { t: 'asr_key: "dg-xxxxxxxxxxxx"', c: "#d4d4d8" },
-              { t: "", c: "" },
-              { t: "# Or use managed", c: "#6b7280" },
-              { t: 'asr_provider: "deepgram"', c: "#d4d4d8" },
-              { t: 'asr_key: "managed"', c: "#e4e4e7" },
-              { t: "", c: "" },
-              { t: "# Same config. Zero setup.", c: "#6b7280" },
-            ]} />
-          }
-        />
-
-        <FeatureRow
-          label="Languages"
-          title={"Multilingual\nout of the box."}
-          body="Hindi, Tamil, Telugu, Malayalam, Bengali, English and more. Sarvam ASR for Indic languages, multilingual LLM routing, and Indian-accent TTS voices built in."
-          visual={
-            <div className="w-full h-full p-6 flex flex-col justify-center gap-3">
-              {[
-                { lang: "Hindi",     code: "hi-IN", active: true },
-                { lang: "Tamil",     code: "ta-IN", active: true },
-                { lang: "Telugu",    code: "te-IN", active: true },
-                { lang: "Malayalam", code: "ml-IN", active: false },
-                { lang: "English",   code: "en-IN", active: true },
-              ].map(({ lang, code, active }) => (
-                <div key={lang} className="flex items-center justify-between px-4 py-2.5 rounded-xl border border-border bg-card/[0.02]">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-2 h-2 rounded-full ${active ? "bg-zinc-400" : "bg-card/20"}`} />
-                    <span className="text-[13px] font-semibold text-muted-foreground">{lang}</span>
-                  </div>
-                  <span className="text-[10px] font-mono text-muted-foreground">{code}</span>
-                </div>
-              ))}
-            </div>
-          }
-        />
-      </section>
-
-      {/* ── Provider grid ─────────────────────────────────────────── */}
-      <section className="border-y border-border py-16">
-        <div className="max-w-5xl mx-auto px-8 lg:px-10">
-          <Label text="Integrations" />
-          <h2 className="text-[36px] font-black tracking-tight text-foreground mb-2">Your stack. Your choice.</h2>
-          <p className="text-[13px] text-muted-foreground mb-10">Every major provider across the full pipeline.</p>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
-            {[
-              { name: "Deepgram",   tag: "ASR" },
-              { name: "Sarvam",     tag: "ASR · LLM" },
-              { name: "Whisper",    tag: "ASR" },
-              { name: "OpenAI",     tag: "LLM · TTS" },
-              { name: "Anthropic",  tag: "LLM" },
-              { name: "Google",     tag: "LLM" },
-              { name: "Groq",       tag: "LLM" },
-              { name: "DeepSeek",   tag: "LLM" },
-              { name: "Mistral",    tag: "LLM" },
-              { name: "ElevenLabs", tag: "TTS" },
-              { name: "Cartesia",   tag: "TTS" },
-              { name: "AWS Polly",  tag: "TTS" },
-              { name: "Twilio",     tag: "Telephony" },
-              { name: "Plivo",      tag: "Telephony" },
-              { name: "VoBiz",      tag: "Telephony" },
-              { name: "Vonage",     tag: "Telephony" },
-            ].map(p => <Chip key={p.name} {...p} />)}
-            <div className="flex items-center justify-center px-3 py-2 rounded-xl border border-dashed border-border text-[10px] text-white/18">
-              + more
-            </div>
+          <div className="flex items-center justify-center rounded-2xl aspect-[4/3]"
+            style={{ background: "#080808", border: "1px solid rgba(255,255,255,0.06)" }}>
+            <MemoryCard />
           </div>
         </div>
       </section>
 
-      {/* ── Use cases ─────────────────────────────────────────────── */}
-      <section id="use-cases" className="max-w-5xl mx-auto px-8 lg:px-10 py-20">
-        <Label text="Use cases" />
-        <h2 className="text-[36px] font-black tracking-tight text-foreground mb-10">What teams ship</h2>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          <UCCard title="Customer Support"        kpi="24/7"         body="Handle FAQs, status updates, complaints. Escalate to human only when needed." />
-          <UCCard title="Sales Outreach"           kpi="3× lift"      body="Qualify leads, pitch the product, book demos at scale — no SDR time wasted." />
-          <UCCard title="Collections & Reminders"  kpi="40% recovery" body="Automate EMI nudges, overdue follow-ups, and payment reminders in any language." />
-          <UCCard title="Appointment Scheduling"   kpi="Zero no-shows" body="Confirm, reschedule, remind patients, clients, or candidates ahead of time." />
-          <UCCard title="COD Confirmation"         kpi="99% accuracy"  body="Confirm orders before dispatch, reduce RTO, save last-mile cost." />
-          <UCCard title="Lead Qualification"       kpi="5× pipeline"  body="Run qualification instantly on form submit. Score and route to the right rep." />
-        </div>
-      </section>
-
-      {/* ── Pricing ───────────────────────────────────────────────── */}
-      <section id="pricing" className="border-t border-border py-20">
-        <div className="max-w-5xl mx-auto px-8 lg:px-10">
-          <Label text="Pricing" />
-          <h2 className="text-[36px] font-black tracking-tight text-foreground mb-2">Usage-based. No surprises.</h2>
-          <p className="text-[13px] text-muted-foreground mb-12">No seats. No monthly minimums. Pay per minute.</p>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <PCard plan="Starter" price="$0.03" per="/ min" note="Bring your own provider keys"
-              items={["Full BYOK — total cost control", "Unlimited agents", "Call transcripts + analytics", "Deepgram, OpenAI, Twilio", "$5 credit on signup"]}
-              cta="Start free" />
-            <PCard plan="Managed" price="$0.035" per="/ min" note="We manage all provider keys"
-              items={["Zero setup — keys managed by us", "Indian language support", "Cartesia voices included", "Priority routing + SLA uptime", "Real-time monitoring dashboard"]}
-              cta="Get started" hot />
-            <PCard plan="Enterprise" price="Custom" per="" note="High-volume or on-premise"
-              items={["Dedicated infrastructure", "Custom SLA + support tier", "On-premise deployment", "SSO + advanced security", "Dedicated success engineer"]}
-              cta="Talk to us" />
+      {/* ── Features grid ────────────────────────────────────────────────── */}
+      <section id="features" style={{ borderTop: "1px solid rgba(255,255,255,0.06)", position: "relative", zIndex: 1 }}>
+        <div className="max-w-5xl mx-auto px-8 py-32">
+          <div className="mb-16">
+            <p className="text-[9px] font-black uppercase tracking-[0.28em] mb-6" style={{ color: "#3f3f46" }}>Capabilities</p>
+            <h2 className="text-[42px] font-black tracking-[-0.03em] leading-[1.0] text-white max-w-xl">
+              Everything you need to ship voice AI at scale.
+            </h2>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <FCard icon={Brain} accent="#86efac" title="Persistent Memory"
+              body="Agents recall caller history, preferences, and past objections. Every conversation continues exactly where the last one ended." />
+            <FCard icon={Zap} accent="#fbbf24" title="Real-time Pipeline"
+              body="Sub-200ms ASR→LLM→TTS orchestration with streaming output. Callers hear a response before generation even finishes." />
+            <FCard icon={Globe} accent="#93c5fd" title="Bring Your Own Providers"
+              body="Deepgram, OpenAI, ElevenLabs, Twilio — or 12 more. You pay providers directly. Zero markup, zero lock-in." />
+            <FCard icon={CalendarCheck} accent="#a5f3fc" title="In-call Scheduling"
+              body="Book, reschedule, and cancel appointments during live calls. Native calendar engine with Google Calendar sync." />
+            <FCard icon={Users} accent="#c4b5fd" title="Outbound Campaigns"
+              body="Run AI-powered campaigns. Import leads from Meta Lead Ads, CSV, or CRM and launch outbound at scale." />
+            <FCard icon={BarChart3} accent="#fb923c" title="Call Analytics"
+              body="Full transcripts, disposition fields, success rates, and auto-summarization after every call. No setup required." />
+            <FCard icon={BookOpen} accent="#f9a8d4" title="Knowledge Base"
+              body="Upload documents, FAQs, or product catalogs. Your agent answers from your data — not generic training." />
+            <FCard icon={Activity} accent="#6ee7b7" title="Multi-language"
+              body="20+ languages including Hindi, Tamil, Telugu, and 8 other Indic languages. Sarvam ASR built in." />
+            <FCard icon={Shield} accent="#d4d4d8" title="Encrypted Keys"
+              body="Provider API keys encrypted at rest with AES-256-GCM. Only last-4-char hint ever shown in the UI." />
           </div>
         </div>
       </section>
 
-      {/* ── Final CTA ─────────────────────────────────────────────── */}
-      <section className="py-24 px-8">
-        <div className="max-w-3xl mx-auto text-center">
-          <h2 className="text-[48px] sm:text-[60px] font-black tracking-[-0.03em] leading-[1.0] text-foreground mb-5">
-            First agent live<br />
-            <span className="text-muted-foreground">in under 10 minutes.</span>
-          </h2>
-          <p className="text-[14px] text-muted-foreground mb-8 max-w-md mx-auto leading-[1.75]">
-            No WebSocket code. No infra to manage. Write a prompt, pick a voice, connect a number.
+      {/* ── Pipeline perf section ─────────────────────────────────────────── */}
+      <section style={{ borderTop: "1px solid rgba(255,255,255,0.06)", position: "relative", zIndex: 1 }}>
+        <div className="max-w-5xl mx-auto px-8 py-32 grid grid-cols-1 lg:grid-cols-2 gap-20 items-center">
+          <div className="flex items-center justify-center rounded-2xl aspect-[4/3]"
+            style={{ background: "#080808", border: "1px solid rgba(255,255,255,0.06)" }}>
+            <PipelineCard />
+          </div>
+          <div>
+            <p className="text-[9px] font-black uppercase tracking-[0.28em] mb-6" style={{ color: "#3f3f46" }}>Performance</p>
+            <h2 className="text-[46px] sm:text-[58px] font-black tracking-[-0.035em] leading-[0.92] text-white mb-8">
+              Sub-200ms,<br />
+              <span style={{ color: "#3f3f46" }}>every time.</span>
+            </h2>
+            <p className="text-[15px] leading-[1.85] max-w-md" style={{ color: "#52525b" }}>
+              Streaming ASR with token-level LLM output and parallel TTS synthesis. Callers hear a response before generation finishes. Every millisecond is instrumented and logged.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* ── AI call flow section ─────────────────────────────────────────── */}
+      <section style={{ borderTop: "1px solid rgba(255,255,255,0.06)", position: "relative", zIndex: 1 }}>
+        <div className="max-w-5xl mx-auto px-8 py-32 grid grid-cols-1 lg:grid-cols-2 gap-20 items-center">
+          <div>
+            <p className="text-[9px] font-black uppercase tracking-[0.28em] mb-6" style={{ color: "#3f3f46" }}>Wizard</p>
+            <h2 className="text-[46px] sm:text-[58px] font-black tracking-[-0.035em] leading-[0.92] text-white mb-8">
+              From idea<br />
+              <span style={{ color: "#3f3f46" }}>to agent in 10 min.</span>
+            </h2>
+            <p className="text-[15px] leading-[1.85] mb-8 max-w-md" style={{ color: "#52525b" }}>
+              Describe your use case, answer 5 questions, and our AI generates a complete call flow — greeting, objections, branches, and closing — all ready to review and launch.
+            </p>
+            <Link href={`${BASE}/sign-up`}>
+              <button className="flex items-center gap-2 text-[13px] font-bold transition-all"
+                style={{ color: "#a1a1aa" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "#fff")}
+                onMouseLeave={e => (e.currentTarget.style.color = "#a1a1aa")}>
+                Try the wizard <ArrowRight className="h-4 w-4" />
+              </button>
+            </Link>
+          </div>
+          <div className="flex items-center justify-center rounded-2xl py-10"
+            style={{ background: "#080808", border: "1px solid rgba(255,255,255,0.06)" }}>
+            <FlowVisual />
+          </div>
+        </div>
+      </section>
+
+      {/* ── How it works ─────────────────────────────────────────────────── */}
+      <section id="how" style={{ borderTop: "1px solid rgba(255,255,255,0.06)", position: "relative", zIndex: 1 }}>
+        <div className="max-w-5xl mx-auto px-8 py-32 grid grid-cols-1 lg:grid-cols-2 gap-20">
+          <div>
+            <p className="text-[9px] font-black uppercase tracking-[0.28em] mb-6" style={{ color: "#3f3f46" }}>How it works</p>
+            <h2 className="text-[42px] font-black tracking-[-0.03em] leading-[1.0] text-white">
+              Agent live in<br />three steps.
+            </h2>
+          </div>
+          <div>
+            <Step n="01" title="Describe your use case"
+              body="Choose from sales, support, recruitment, healthcare, or debt recovery. Answer 5 questions — our AI generates a complete call flow with decision branches in seconds." />
+            <Step n="02" title="Connect your providers"
+              body="Plug in your own ASR, LLM, TTS, and telephony keys. Or use our managed stack. All keys are encrypted at rest — never exposed to the frontend." />
+            <Step n="03" title="Test, deploy, and scale" last
+              body="Test with a live webcall right in the browser. Deploy to your phone number. Monitor calls, transcripts, and memory in real time." />
+          </div>
+        </div>
+      </section>
+
+      {/* ── Provider marquee ─────────────────────────────────────────────── */}
+      <section style={{ borderTop: "1px solid rgba(255,255,255,0.06)", borderBottom: "1px solid rgba(255,255,255,0.06)", position: "relative", zIndex: 1 }}>
+        <div className="py-12 overflow-hidden">
+          <p className="text-center text-[9px] font-black uppercase tracking-[0.28em] mb-9" style={{ color: "#2a2a2a" }}>
+            Works with your providers
           </p>
-          <Link href={`${basePath}/sign-up`}>
-            <button className="inline-flex items-center gap-2 bg-card text-black text-[14px] font-bold px-8 py-3.5 rounded-full hover:bg-card/90 transition-all">
-              Start building free <ArrowRight className="h-4 w-4" />
+          <div className="relative">
+            <div className="marquee-run flex gap-4 w-max">
+              {[...PROVIDERS, ...PROVIDERS].map((p, i) => (
+                <div key={i} className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl shrink-0"
+                  style={{ background: "#0d0d0d", border: "1px solid rgba(255,255,255,0.06)" }}>
+                  <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0"
+                    style={{ background: "#1a1a1a" }}>
+                    <span className="text-[8px] font-black" style={{ color: "#52525b" }}>{p.name.slice(0,2).toUpperCase()}</span>
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-semibold" style={{ color: "#a1a1aa" }}>{p.name}</div>
+                    <div className="text-[9px]" style={{ color: "#3f3f46" }}>{p.type}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="absolute inset-y-0 left-0 w-24 pointer-events-none" style={{ background: "linear-gradient(to right, #050505, transparent)" }} />
+            <div className="absolute inset-y-0 right-0 w-24 pointer-events-none" style={{ background: "linear-gradient(to left, #050505, transparent)" }} />
+          </div>
+        </div>
+      </section>
+
+      {/* ── Pricing ──────────────────────────────────────────────────────── */}
+      <section id="pricing" style={{ position: "relative", zIndex: 1 }}>
+        <div className="max-w-5xl mx-auto px-8 py-32">
+          <div className="text-center mb-16">
+            <p className="text-[9px] font-black uppercase tracking-[0.28em] mb-6" style={{ color: "#3f3f46" }}>Pricing</p>
+            <h2 className="text-[42px] font-black tracking-[-0.03em] leading-[1.0] text-white">
+              Simple, usage-based pricing.
+            </h2>
+            <p className="mt-4 text-[14px]" style={{ color: "#3f3f46" }}>
+              You pay your providers directly. We charge only for orchestration.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <PCard plan="Starter" price="$0" per="" note="$5 free credit included" cta="Get started free"
+              items={["5 agents","500 minutes / month","3 providers per agent","Call logs & transcripts","Email support"]} />
+            <PCard plan="Growth" price="$49" per="/mo" note="+ $0.03 / min orchestration" cta="Start free trial" featured
+              items={["Unlimited agents","10,000 minutes / month","All providers included","Persistent call memory","Scheduling & campaigns","Priority support"]} />
+            <PCard plan="Enterprise" price="Custom" per="" note="Volume pricing available" cta="Talk to us"
+              items={["Unlimited everything","Dedicated infrastructure","Custom SLA","SSO & audit logs","White-label available","Dedicated CSM"]} />
+          </div>
+        </div>
+      </section>
+
+      {/* ── Final CTA ────────────────────────────────────────────────────── */}
+      <section style={{ borderTop: "1px solid rgba(255,255,255,0.06)", position: "relative", zIndex: 1 }}>
+        <div className="max-w-2xl mx-auto px-8 py-36 text-center">
+          <h2 className="text-[52px] sm:text-[68px] font-black tracking-[-0.04em] leading-[0.9] text-white mb-8">
+            Ship your first<br />agent today.
+          </h2>
+          <p className="text-[15px] leading-[1.8] mb-12" style={{ color: "#52525b" }}>
+            $5 free credit. No card required.<br />Agent live in under 10 minutes.
+          </p>
+          <Link href={`${BASE}/sign-up`}>
+            <button className="inline-flex items-center gap-2.5 bg-white text-black text-[15px] font-bold px-9 py-4 rounded-full transition-all hover:bg-white/90 hover:gap-3.5">
+              Create your agent <ArrowRight className="h-5 w-5" />
             </button>
           </Link>
-          <p className="text-[11px] text-white/18 mt-4">$5 credit included — no card required</p>
         </div>
       </section>
 
-      {/* ── Footer ────────────────────────────────────────────────── */}
-      <footer className="border-t border-border py-7 px-8">
-        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <BrandMark iconSize={20} wordmarkHeight={12} />
-          <p className="text-[11px] text-white/15">AI Voice Agent Orchestration Platform</p>
-          <div className="flex items-center gap-5">
-            {["Privacy", "Terms", "Docs", "Status"].map(l => (
-              <a key={l} href="#" className="text-[11px] text-muted-foreground hover:text-muted-foreground transition-colors">{l}</a>
+      {/* ── Footer ───────────────────────────────────────────────────────── */}
+      <footer style={{ borderTop: "1px solid rgba(255,255,255,0.05)", position: "relative", zIndex: 1 }}>
+        <div className="max-w-5xl mx-auto px-8 py-10 flex flex-col sm:flex-row items-center justify-between gap-6">
+          <div className="flex items-center gap-2">
+            <SnapServeIcon size={18} className="shrink-0 text-[#2a2a2a]" />
+            <span className="text-[13px] leading-none" style={{ fontFamily: "'Tex Gyre Heros', Helvetica, Arial, sans-serif", color: "#2a2a2a" }}>
+              <span style={{ fontWeight: 700 }}>Snap</span><span style={{ fontWeight: 400 }}>Serve</span>
+            </span>
+          </div>
+          <div className="flex items-center gap-7">
+            {["Privacy","Terms","Docs","Status"].map(l => (
+              <a key={l} href="#" className="text-[12px] transition-colors" style={{ color: "#2a2a2a" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "#71717a")}
+                onMouseLeave={e => (e.currentTarget.style.color = "#2a2a2a")}>{l}</a>
             ))}
           </div>
+          <p className="text-[12px]" style={{ color: "#1e1e1e" }}>© 2026 SnapServe. All rights reserved.</p>
         </div>
       </footer>
     </div>
