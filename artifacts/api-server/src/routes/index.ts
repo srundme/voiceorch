@@ -22,6 +22,7 @@ import campaignsRouter from "./campaigns.js";
 import campaignWebhookRouter from "./campaign-webhook.js";
 import schedulingRouter from "./scheduling/index.js";
 import kycRouter from "./kyc.js";
+import assistantRouter from "./assistant.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
 const router: IRouter = Router();
@@ -54,5 +55,6 @@ router.use(wizardRouter);
 router.use(campaignsRouter);
 router.use(schedulingRouter);
 router.use(kycRouter);
+router.use(assistantRouter);
 
 export default router;
