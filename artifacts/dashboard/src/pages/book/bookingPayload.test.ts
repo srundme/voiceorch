@@ -61,7 +61,7 @@ describe("buildBookingPayload", () => {
     expect(result.success).toBe(false);
   });
 
-  it("currently allows an empty attendeeName (schema uses zod.string() without .min(1))", () => {
+  it("rejects an empty attendeeName", () => {
     const payload = buildBookingPayload({
       eventTypeSlug: "intro-call",
       slotStart: VALID_SLOT,
@@ -70,12 +70,10 @@ describe("buildBookingPayload", () => {
     });
 
     const result = CreatePublicBookingBody.safeParse(payload);
-    // zod.string() accepts empty strings — add .min(1) to the schema to reject them
-    expect(result.success).toBe(true);
-    expect(result.data?.attendeeName).toBe("");
+    expect(result.success).toBe(false);
   });
 
-  it("currently allows an empty eventTypeSlug (schema uses zod.string() without .min(1))", () => {
+  it("rejects an empty eventTypeSlug", () => {
     const payload = buildBookingPayload({
       eventTypeSlug: "",
       slotStart: VALID_SLOT,
@@ -84,9 +82,7 @@ describe("buildBookingPayload", () => {
     });
 
     const result = CreatePublicBookingBody.safeParse(payload);
-    // zod.string() accepts empty strings — add .min(1) to the schema to reject them
-    expect(result.success).toBe(true);
-    expect(result.data?.eventTypeSlug).toBe("");
+    expect(result.success).toBe(false);
   });
 
   it("accepts a UTC ISO timestamp (timezone edge case)", () => {

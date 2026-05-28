@@ -2103,10 +2103,14 @@ export const GetPublicSlotsResponse = zod.array(GetPublicSlotsResponseItem)
 /**
  * @summary Create a booking via public form (unauthenticated)
  */
+
+
+
+
 export const CreatePublicBookingBody = zod.object({
-  "eventTypeSlug": zod.string(),
+  "eventTypeSlug": zod.string().min(1),
   "slotStart": zod.coerce.date(),
-  "attendeeName": zod.string(),
+  "attendeeName": zod.string().min(1),
   "attendeeEmail": zod.string().email(),
   "attendeeNotes": zod.string().optional()
 })

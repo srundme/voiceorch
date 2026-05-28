@@ -3812,11 +3812,13 @@ components:
       properties:
         eventTypeSlug:
           type: string
+          minLength: 1
         slotStart:
           type: string
           format: date-time
         attendeeName:
           type: string
+          minLength: 1
         attendeeEmail:
           type: string
           format: email
