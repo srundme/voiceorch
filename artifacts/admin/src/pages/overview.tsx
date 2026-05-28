@@ -1,4 +1,4 @@
-import { useOverview, useSpikeAlerts, useDismissSpikeAlert } from "@/hooks/use-admin-api";
+import { useOverview, useSpikeAlerts, useDismissSpikeAlert, usePromptTemplates } from "@/hooks/use-admin-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Users, PhoneCall, Activity, DollarSign, Clock, AlertCircle, Bell, X, Mail } from "lucide-react";
@@ -6,6 +6,7 @@ import { formatCentsToDollars } from "@/lib/api";
 import { formatApiError } from "@/lib/format-api-error";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
+import { NoActiveTemplateBanner } from "@/components/no-active-template-banner";
 
 function SpikeAlertsPanel() {
   const { data: alertsData, isLoading } = useSpikeAlerts();
@@ -107,6 +108,8 @@ function SpikeAlertsPanel() {
 
 export default function Overview() {
   const { data: overview, isLoading, isError, error } = useOverview();
+  const { data: templates } = usePromptTemplates();
+  const hasActiveTemplate = templates === undefined || templates.some((t) => t.isActive);
 
   if (isLoading) {
     return <div className="p-8 text-muted-foreground animate-pulse">Loading platform metrics...</div>;
@@ -163,6 +166,8 @@ export default function Overview() {
 
   return (
     <div className="space-y-6">
+      {!hasActiveTemplate && <NoActiveTemplateBanner />}
+
       {/* Cartesia-style status strip */}
       <div className="flex items-center gap-5 flex-wrap text-[11px] uppercase tracking-[0.14em] text-muted-foreground border border-border rounded-md px-4 py-2 bg-card">
         <span className="font-semibold text-foreground">Call Center</span>

@@ -378,6 +378,25 @@ export function useAlertNotificationLog(limit = 50) {
   });
 }
 
+// Prompt Templates
+export interface PromptTemplateRow {
+  id: number;
+  version: number;
+  filename: string;
+  mimeType: string;
+  uploadedBy: string;
+  uploadedAt: string;
+  isActive: boolean;
+}
+
+export function usePromptTemplates() {
+  return useQuery({
+    queryKey: ["admin", "prompt-templates"],
+    queryFn: () => adminFetch<PromptTemplateRow[]>("/prompt-templates"),
+    staleTime: 30000,
+  });
+}
+
 // Growth
 export function useGrowthFunnel() {
   return useQuery({
