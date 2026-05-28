@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
 
 /**
  * Hoisted mock state.
@@ -28,10 +28,23 @@ vi.mock("../lib/logger.js", () => ({
 }));
 
 import { db } from "@workspace/db";
-import { __pruneTransientRows, __resetRegistry } from "./rate-limit-cleanup.js";
+import {
+  __pruneTransientRows,
+  __resetRegistry,
+  __getRegistry,
+  registerTransientKey,
+} from "./rate-limit-cleanup.js";
 
 const WINDOW_MS = 60_000;
 const PREFIX = "test_prefix:";
+
+// Capture the registry snapshot immediately at module load time (before any
+// beforeEach can reset it).  A file-level beforeAll runs before any
+// beforeEach, so this faithfully reflects the state after import.
+let registryAtModuleLoad: ReturnType<typeof __getRegistry>;
+beforeAll(() => {
+  registryAtModuleLoad = __getRegistry();
+});
 
 function makeRow(key: string, timestamps: number[]): { key: string; value: string } {
   return { key, value: JSON.stringify(timestamps) };
@@ -240,5 +253,27 @@ describe("pruneTransientRows — no rows returned for a prefix", () => {
     await __pruneTransientRows();
 
     expect(vi.mocked(db.delete)).not.toHaveBeenCalled();
+  });
+});
+
+describe("registerTransientKey — built-in entry is pre-registered at module load", () => {
+  it("includes the built-in test_notif_rate_limit: prefix after module load", () => {
+    expect(
+      registryAtModuleLoad.some((e) => e.prefix === "test_notif_rate_limit:"),
+    ).toBe(true);
+  });
+});
+
+describe("registerTransientKey — accumulates entries rather than replacing them", () => {
+  it("appends a second entry to the registry without removing the first", () => {
+    __resetRegistry([]);
+
+    registerTransientKey({ prefix: "first_prefix:", windowMs: 10_000 });
+    registerTransientKey({ prefix: "second_prefix:", windowMs: 20_000 });
+
+    const registry = __getRegistry();
+    expect(registry).toHaveLength(2);
+    expect(registry[0]).toEqual({ prefix: "first_prefix:", windowMs: 10_000 });
+    expect(registry[1]).toEqual({ prefix: "second_prefix:", windowMs: 20_000 });
   });
 });

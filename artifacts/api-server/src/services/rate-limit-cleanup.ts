@@ -97,3 +97,8 @@ export function __resetRegistry(entries: TransientKeyConfig[] = []): void {
   transientKeyRegistry.length = 0;
   for (const e of entries) transientKeyRegistry.push(e);
 }
+
+/** @internal Exposed for unit tests only — returns a snapshot of the current registry. */
+export function __getRegistry(): TransientKeyConfig[] {
+  return [...transientKeyRegistry];
+}
