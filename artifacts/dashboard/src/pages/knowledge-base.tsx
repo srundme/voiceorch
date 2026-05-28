@@ -39,7 +39,7 @@ function DocStatusBadge({ status }: { status: string }) {
   if (status === "ready")
     return <Badge className="bg-gray-50 text-gray-700 border-gray-200 text-[10px] gap-1"><CheckCircle2 className="w-2.5 h-2.5" />Ready</Badge>;
   if (status === "processing")
-    return <Badge className="bg-blue-500/15 text-blue-400 border-blue-500/30 text-[10px] gap-1"><Loader2 className="w-2.5 h-2.5 animate-spin" />Processing</Badge>;
+    return <Badge className="bg-zinc-500/15 text-zinc-400 border-zinc-500/30 text-[10px] gap-1"><Loader2 className="w-2.5 h-2.5 animate-spin" />Processing</Badge>;
   if (status === "error")
     return <Badge className="bg-red-500/15 text-red-500 border-red-500/30 text-[10px] gap-1"><XCircle className="w-2.5 h-2.5" />Error</Badge>;
   return <Badge className="bg-gray-50 text-gray-500 border-[#ACADB1] text-[10px] gap-1"><Clock className="w-2.5 h-2.5" />Pending</Badge>;
@@ -372,7 +372,7 @@ function KbDetailPanel({ kbId, onClose }: { kbId: number; onClose: () => void })
                   <div key={doc.id} className="bg-gray-50 border border-gray-100 rounded-xl p-3 space-y-2">
                     <div className="flex items-start gap-2">
                       {doc.sourceType === "url"
-                        ? <Globe className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
+                        ? <Globe className="w-3.5 h-3.5 text-zinc-400 shrink-0 mt-0.5" />
                         : <FileText className="w-3.5 h-3.5 text-gray-500 shrink-0 mt-0.5" />}
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-medium text-gray-700 truncate">{doc.name}</p>
@@ -497,7 +497,7 @@ export default function KnowledgeBasePage() {
               <div
                 key={kb.id}
                 onClick={() => setSelectedId(kb.id === selectedId ? null : kb.id)}
-                className={`mx-2 my-0.5 px-3 py-2.5 rounded-lg cursor-pointer transition-colors group ${selectedId === kb.id ? "bg-violet-50 border border-violet-100" : "hover:bg-gray-50"}`}
+                className={`mx-2 my-0.5 px-3 py-2.5 rounded-lg cursor-pointer transition-colors group ${selectedId === kb.id ? "bg-zinc-50 border border-zinc-100" : "hover:bg-gray-50"}`}
               >
                 <div className="flex items-start gap-2">
                   <BookOpen className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${selectedId === kb.id ? "text-gray-700" : "text-gray-400"}`} />

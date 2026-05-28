@@ -24,10 +24,10 @@ const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 function statusBadge(status: string) {
   switch (status) {
-    case "confirmed":   return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200">{status}</Badge>;
-    case "pending":     return <Badge className="bg-amber-50 text-amber-700 border-amber-200">{status}</Badge>;
+    case "confirmed":   return <Badge className="bg-zinc-50 text-zinc-700 border-zinc-200">{status}</Badge>;
+    case "pending":     return <Badge className="bg-zinc-50 text-zinc-700 border-zinc-200">{status}</Badge>;
     case "cancelled":   return <Badge className="bg-red-50 text-red-600 border-red-200">{status}</Badge>;
-    case "rescheduled": return <Badge className="bg-blue-50 text-blue-700 border-blue-200">{status}</Badge>;
+    case "rescheduled": return <Badge className="bg-zinc-50 text-zinc-700 border-zinc-200">{status}</Badge>;
     default:            return <Badge variant="outline">{status}</Badge>;
   }
 }
@@ -134,7 +134,7 @@ export default function BookingDetailPage() {
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               {booking.bookedVia === "agent" ? (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200 font-medium">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-50 text-zinc-700 border border-zinc-200 font-medium">
                   <Bot className="h-3 w-3" />Agent Call
                 </span>
               ) : (
@@ -159,7 +159,7 @@ export default function BookingDetailPage() {
       {isEditable && (
         <div className="flex gap-3">
           {booking.status === "pending" && (
-            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleConfirm} disabled={updateMut.isPending}>
+            <Button size="sm" className="bg-zinc-600 hover:bg-zinc-700 text-white" onClick={handleConfirm} disabled={updateMut.isPending}>
               <Check className="h-3.5 w-3.5 mr-1" />Confirm
             </Button>
           )}

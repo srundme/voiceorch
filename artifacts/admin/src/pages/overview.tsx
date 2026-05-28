@@ -31,7 +31,7 @@ function SpikeAlertsPanel() {
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
-            <Bell className="h-4 w-4 text-amber-500" />
+            <Bell className="h-4 w-4 text-zinc-500" />
             <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
               Usage Spike Alerts
             </CardTitle>
@@ -172,7 +172,7 @@ export default function Overview() {
           <span>{activeCount} Live</span>
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+          <span className="h-1.5 w-1.5 rounded-full bg-zinc-400" />
           <span>{pendingCount} Queue</span>
         </span>
         <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/40 px-2.5 py-0.5 text-[10px] font-semibold text-foreground">

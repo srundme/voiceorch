@@ -271,7 +271,7 @@ function Counter({ to, suffix = "", prefix = "" }: { to: number; suffix?: string
 /* ─── Reusable section label ─────────────────────────────────────────────── */
 function Label({ text }: { text: string }) {
   return (
-    <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-violet-600 mb-4">{text}</p>
+    <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-zinc-600 mb-4">{text}</p>
   );
 }
 
@@ -298,7 +298,7 @@ function CodeBlock({ lines }: { lines: { t: string; c: string }[] }) {
   return (
     <div className="w-full h-full flex flex-col gap-0 p-6 font-mono text-[12px]">
       <div className="flex items-center gap-1.5 mb-4">
-        {["#FF5F57","#FEBC2E","#28C840"].map(c => (
+        {["#c45454","#a1a1aa","#a1a1aa"].map(c => (
           <div key={c} className="w-3 h-3 rounded-full" style={{ background: c }} />
         ))}
       </div>
@@ -318,7 +318,7 @@ function UCCard({ title, kpi, body }: { title: string; kpi: string; body: string
     <div className="group flex flex-col gap-3 p-6 rounded-2xl border border-gray-200 hover:border-white/[0.1] bg-white/[0.01] hover:bg-white/[0.03] transition-all duration-300">
       <div className="flex items-start justify-between gap-2">
         <h3 className="text-[14px] font-bold text-gray-700 group-hover:text-gray-900 transition-colors">{title}</h3>
-        <span className="shrink-0 text-[10px] font-black text-violet-300 bg-violet-50 border border-violet-500/20 px-2 py-0.5 rounded-full">{kpi}</span>
+        <span className="shrink-0 text-[10px] font-black text-zinc-300 bg-zinc-50 border border-zinc-500/20 px-2 py-0.5 rounded-full">{kpi}</span>
       </div>
       <p className="text-[12px] text-gray-400 leading-[1.7]">{body}</p>
     </div>
@@ -331,10 +331,10 @@ function PCard({ plan, price, per, note, items, cta, hot }: {
   items: string[]; cta: string; hot?: boolean;
 }) {
   return (
-    <div className={`relative flex flex-col gap-6 p-6 rounded-2xl border transition-all ${hot ? "border-violet-500/40 bg-violet-500/5" : "border-gray-200 bg-white/[0.015]"}`}>
+    <div className={`relative flex flex-col gap-6 p-6 rounded-2xl border transition-all ${hot ? "border-zinc-500/40 bg-zinc-500/5" : "border-gray-200 bg-white/[0.015]"}`}>
       {hot && (
         <div className="absolute -top-3 left-6">
-          <span className="text-[9px] font-black uppercase tracking-widest bg-violet-600 text-gray-900 px-3 py-1 rounded-full">
+          <span className="text-[9px] font-black uppercase tracking-widest bg-zinc-600 text-gray-900 px-3 py-1 rounded-full">
             Most popular
           </span>
         </div>
@@ -351,7 +351,7 @@ function PCard({ plan, price, per, note, items, cta, hot }: {
       <ul className="flex flex-col gap-3 flex-1">
         {items.map(item => (
           <li key={item} className="flex items-start gap-2.5 text-[13px] text-gray-500">
-            <Check className="h-3.5 w-3.5 text-violet-600 mt-0.5 shrink-0" />
+            <Check className="h-3.5 w-3.5 text-zinc-600 mt-0.5 shrink-0" />
             {item}
           </li>
         ))}
@@ -389,7 +389,7 @@ export default function LandingPage() {
       {/* ── Nav ───────────────────────────────────────────────────── */}
       <header className="fixed top-0 inset-x-0 z-50 flex items-center justify-between px-8 h-14 border-b border-gray-100 bg-gray-800 backdrop-blur-xl">
         <div className="flex items-center gap-2">
-          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-violet-600">
+          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-zinc-600">
             <SnapServeIcon size={13} className="text-gray-900" />
           </div>
           <SnapServeLogo size="sm" className="text-gray-900" />
@@ -424,7 +424,7 @@ export default function LandingPage() {
         {/* Left: text */}
         <div className="flex flex-col justify-center px-10 lg:px-16 py-20 lg:py-0">
           <div className="inline-flex items-center gap-2 mb-8 w-fit px-3 py-1 rounded-full border border-white/[0.1] text-[11px] font-semibold text-gray-500">
-            <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />
+            <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 animate-pulse" />
             From $0.03 / min &mdash; BYOK or Managed
           </div>
 
@@ -432,7 +432,7 @@ export default function LandingPage() {
             AI voice<br />agents,<br />
             <span className="text-gray-400">built to</span><br />
             <span style={{
-              background: "linear-gradient(90deg, #a78bfa 0%, #818cf8 40%, #60a5fa 100%)",
+              background: "linear-gradient(90deg, #a1a1aa 0%, #a1a1aa 40%, #a1a1aa 100%)",
               WebkitBackgroundClip: "text",
               WebkitTextFillColor: "transparent",
             }}>deploy.</span>
@@ -470,9 +470,9 @@ export default function LandingPage() {
           {/* Floating stat cards */}
           <div className="absolute top-1/4 right-8 z-20 flex flex-col gap-2">
             {[
-              { label: "ASR", value: "62ms",  col: "#67e8f9" },
-              { label: "LLM", value: "94ms",  col: "#c4b5fd" },
-              { label: "TTS", value: "28ms",  col: "#6ee7b7" },
+              { label: "ASR", value: "62ms",  col: "#d4d4d8" },
+              { label: "LLM", value: "94ms",  col: "#d4d4d8" },
+              { label: "TTS", value: "28ms",  col: "#e4e4e7" },
             ].map(({ label, value, col }) => (
               <div key={label} className="flex items-center gap-2.5 bg-white/[0.04] border border-gray-200 backdrop-blur-sm px-3 py-2 rounded-xl">
                 <span className="text-[10px] font-bold" style={{ color: col }}>{label}</span>
@@ -483,7 +483,7 @@ export default function LandingPage() {
 
           {/* Bottom live indicator */}
           <div className="absolute bottom-8 right-8 z-20 flex items-center gap-2 bg-white/[0.03] border border-gray-200 px-3 py-1.5 rounded-full">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 animate-pulse" />
             <span className="text-[11px] font-semibold text-gray-400">Live session active</span>
           </div>
         </div>
@@ -518,10 +518,10 @@ export default function LandingPage() {
             <div className="w-full h-full p-6 flex flex-col gap-3 font-mono text-[12px]">
               {[
                 { stage: "CALLER IN",  ms: "0ms",    bar: 2,   col: "#94a3b8" },
-                { stage: "ASR",        ms: "62ms",   bar: 33,  col: "#67e8f9" },
-                { stage: "LLM TTFT",   ms: "94ms",   bar: 50,  col: "#c4b5fd" },
-                { stage: "TTS",        ms: "28ms",   bar: 15,  col: "#6ee7b7" },
-                { stage: "TOTAL",      ms: "184ms",  bar: 100, col: "#a78bfa" },
+                { stage: "ASR",        ms: "62ms",   bar: 33,  col: "#d4d4d8" },
+                { stage: "LLM TTFT",   ms: "94ms",   bar: 50,  col: "#d4d4d8" },
+                { stage: "TTS",        ms: "28ms",   bar: 15,  col: "#e4e4e7" },
+                { stage: "TOTAL",      ms: "184ms",  bar: 100, col: "#a1a1aa" },
               ].map(({ stage, ms, bar, col }) => (
                 <div key={stage} className="flex items-center gap-3">
                   <span className="w-20 text-right text-gray-400 text-[10px]">{stage}</span>
@@ -542,12 +542,12 @@ export default function LandingPage() {
           visual={
             <CodeBlock lines={[
               { t: "# Use your own keys", c: "#6b7280" },
-              { t: 'asr_provider: "deepgram"', c: "#c4b5fd" },
-              { t: 'asr_key: "dg-xxxxxxxxxxxx"', c: "#f9a8d4" },
+              { t: 'asr_provider: "deepgram"', c: "#d4d4d8" },
+              { t: 'asr_key: "dg-xxxxxxxxxxxx"', c: "#d4d4d8" },
               { t: "", c: "" },
               { t: "# Or use managed", c: "#6b7280" },
-              { t: 'asr_provider: "deepgram"', c: "#c4b5fd" },
-              { t: 'asr_key: "managed"', c: "#6ee7b7" },
+              { t: 'asr_provider: "deepgram"', c: "#d4d4d8" },
+              { t: 'asr_key: "managed"', c: "#e4e4e7" },
               { t: "", c: "" },
               { t: "# Same config. Zero setup.", c: "#6b7280" },
             ]} />
@@ -569,7 +569,7 @@ export default function LandingPage() {
               ].map(({ lang, code, active }) => (
                 <div key={lang} className="flex items-center justify-between px-4 py-2.5 rounded-xl border border-gray-200 bg-white/[0.02]">
                   <div className="flex items-center gap-3">
-                    <div className={`w-2 h-2 rounded-full ${active ? "bg-emerald-400" : "bg-white/20"}`} />
+                    <div className={`w-2 h-2 rounded-full ${active ? "bg-zinc-400" : "bg-white/20"}`} />
                     <span className="text-[13px] font-semibold text-gray-600">{lang}</span>
                   </div>
                   <span className="text-[10px] font-mono text-gray-400">{code}</span>
@@ -672,7 +672,7 @@ export default function LandingPage() {
       <footer className="border-t border-gray-100 py-7 px-8">
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <div className="flex h-5 w-5 items-center justify-center rounded-md bg-violet-600/70">
+            <div className="flex h-5 w-5 items-center justify-center rounded-md bg-zinc-600/70">
               <SnapServeIcon size={11} className="text-gray-900" />
             </div>
             <span className="text-[12px] font-bold text-gray-400">SnapServe</span>

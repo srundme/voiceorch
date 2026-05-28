@@ -11,11 +11,11 @@ import { formatApiError } from "@/lib/format-api-error";
 
 const SEVERITY: Record<string, string> = {
   critical: "border-red-500/30 bg-red-500/10 text-red-400",
-  high: "border-orange-500/30 bg-orange-500/10 text-orange-400",
-  warning: "border-yellow-500/30 bg-yellow-500/10 text-yellow-400",
-  medium: "border-yellow-500/30 bg-yellow-500/10 text-yellow-400",
-  info: "border-blue-500/30 bg-blue-500/10 text-blue-400",
-  low: "border-blue-500/30 bg-blue-500/10 text-blue-400",
+  high: "border-zinc-500/30 bg-zinc-500/10 text-zinc-400",
+  warning: "border-zinc-500/30 bg-zinc-500/10 text-zinc-400",
+  medium: "border-zinc-500/30 bg-zinc-500/10 text-zinc-400",
+  info: "border-zinc-500/30 bg-zinc-500/10 text-zinc-400",
+  low: "border-zinc-500/30 bg-zinc-500/10 text-zinc-400",
 };
 
 const TYPE_LABEL: Record<string, string> = {
@@ -57,7 +57,7 @@ export default function AlertsPage() {
             <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
           ) : alerts.length === 0 ? (
             <div className="py-12 text-center">
-              <Check className="mx-auto h-8 w-8 text-green-400" />
+              <Check className="mx-auto h-8 w-8 text-zinc-400" />
               <p className="mt-2 text-sm text-muted-foreground">All clear — no alerts.</p>
             </div>
           ) : (

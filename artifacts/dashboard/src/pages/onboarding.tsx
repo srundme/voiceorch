@@ -109,7 +109,7 @@ function NameStep({ value, onChange, onNext }: { value: string; onChange: (v: st
 
   return (
     <div className="w-full max-w-xl">
-      <p className="text-[13px] font-semibold text-emerald-600 tracking-widest uppercase mb-4">Question 1</p>
+      <p className="text-[13px] font-semibold text-zinc-600 tracking-widest uppercase mb-4">Question 1</p>
       <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 leading-tight mb-2">
         What's your name? <span className="text-black/75">*</span>
       </h2>
@@ -154,7 +154,7 @@ function RoleStep({
 
   return (
     <div className="w-full max-w-xl">
-      <p className="text-[13px] font-semibold text-emerald-600 tracking-widest uppercase mb-4">Question 2</p>
+      <p className="text-[13px] font-semibold text-zinc-600 tracking-widest uppercase mb-4">Question 2</p>
       <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 leading-tight mb-2">
         Are you a student or a professional?
       </h2>
@@ -221,7 +221,7 @@ function ReferralStep({
 
   return (
     <div className="w-full max-w-xl">
-      <p className="text-[13px] font-semibold text-emerald-600 tracking-widest uppercase mb-4">Question 3</p>
+      <p className="text-[13px] font-semibold text-zinc-600 tracking-widest uppercase mb-4">Question 3</p>
       <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 leading-tight mb-2">
         How did you hear about us?
       </h2>
@@ -275,7 +275,7 @@ function VoiceAgentStep({
 
   return (
     <div className="w-full max-w-xl">
-      <p className="text-[13px] font-semibold text-emerald-600 tracking-widest uppercase mb-4">Question 4</p>
+      <p className="text-[13px] font-semibold text-zinc-600 tracking-widest uppercase mb-4">Question 4</p>
       <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 leading-tight mb-2">
         Have you ever used AI voice agents before?
       </h2>
@@ -316,9 +316,9 @@ function PlatformsStep({ value, onChange, onNext, loading }: {
   loading: boolean;
 }) {
   const options: { id: PriorPlatform; label: string; desc: string; color: string }[] = [
-    { id: "vapi",   label: "Vapi.ai",   desc: "Voice AI infrastructure",    color: "bg-purple-50 border-purple-200" },
-    { id: "retell", label: "Retell.ai",  desc: "AI calling platform",        color: "bg-blue-50 border-blue-200" },
-    { id: "bolna",  label: "Bolna.ai",   desc: "Open-source voice agents",   color: "bg-emerald-50 border-emerald-200" },
+    { id: "vapi",   label: "Vapi.ai",   desc: "Voice AI infrastructure",    color: "bg-zinc-50 border-zinc-200" },
+    { id: "retell", label: "Retell.ai",  desc: "AI calling platform",        color: "bg-zinc-50 border-zinc-200" },
+    { id: "bolna",  label: "Bolna.ai",   desc: "Open-source voice agents",   color: "bg-zinc-50 border-zinc-200" },
     { id: "other",  label: "Other",      desc: "Something else",             color: "bg-gray-50 border-gray-200" },
   ];
 
@@ -339,7 +339,7 @@ function PlatformsStep({ value, onChange, onNext, loading }: {
 
   return (
     <div className="w-full max-w-xl">
-      <p className="text-[13px] font-semibold text-emerald-600 tracking-widest uppercase mb-4">Question 5</p>
+      <p className="text-[13px] font-semibold text-zinc-600 tracking-widest uppercase mb-4">Question 5</p>
       <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 leading-tight mb-2">
         Which platforms have you used?
       </h2>

@@ -118,25 +118,25 @@ function WalletBadge() {
           className={
             "flex h-7 w-7 items-center justify-center rounded-lg shrink-0 border " +
             (isLow
-              ? "bg-amber-500/15 border-amber-500/40"
+              ? "bg-zinc-500/15 border-zinc-500/40"
               : "bg-muted border-border")
           }
         >
-          <Zap className={`w-3.5 h-3.5 ${isLow ? "text-amber-500" : "text-muted-foreground"}`} />
+          <Zap className={`w-3.5 h-3.5 ${isLow ? "text-zinc-500" : "text-muted-foreground"}`} />
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
             Balance
           </p>
           {wallet ? (
-            <p className={`text-[13.5px] font-bold tabular-nums leading-tight ${isLow ? "text-amber-500" : "text-foreground"}`}>
+            <p className={`text-[13.5px] font-bold tabular-nums leading-tight ${isLow ? "text-zinc-500" : "text-foreground"}`}>
               ${(wallet.balanceCents / 100).toFixed(2)}
             </p>
           ) : (
             <div className="h-4 w-14 rounded-md animate-pulse mt-0.5 bg-muted" />
           )}
         </div>
-        {isLow && <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
+        {isLow && <AlertCircle className="w-3.5 h-3.5 text-zinc-500 shrink-0" />}
       </div>
     </Link>
   );
@@ -224,15 +224,15 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
       <div className="flex items-center gap-2 px-4 h-14 shrink-0 border-b border-sidebar-border">
         <Link href="/app" onClick={onNavClick} className="flex items-center gap-2">
           <img
-            src={`${import.meta.env.BASE_URL}snapserve-icon.png`}
+            src={`${import.meta.env.BASE_URL}snapserve-icon-light.png`}
             alt=""
             aria-hidden
-            className="h-6 w-6 shrink-0 select-none dark:invert"
+            className="h-6 w-6 shrink-0 select-none"
           />
           <img
-            src={`${import.meta.env.BASE_URL}snapserve-wordmark.png`}
+            src={`${import.meta.env.BASE_URL}snapserve-wordmark-light.png`}
             alt="SnapServe"
-            className="h-4 select-none dark:invert"
+            className="h-4 select-none"
           />
         </Link>
         <span
@@ -283,15 +283,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </SheetTrigger>
           <Link href="/app" className="ml-3 flex items-center gap-2">
             <img
-              src={`${import.meta.env.BASE_URL}snapserve-icon.png`}
+              src={`${import.meta.env.BASE_URL}snapserve-icon-light.png`}
               alt=""
               aria-hidden
-              className="h-5 w-5 shrink-0 select-none dark:invert"
+              className="h-5 w-5 shrink-0 select-none"
             />
             <img
-              src={`${import.meta.env.BASE_URL}snapserve-wordmark.png`}
+              src={`${import.meta.env.BASE_URL}snapserve-wordmark-light.png`}
               alt="SnapServe"
-              className="h-3.5 select-none dark:invert"
+              className="h-3.5 select-none"
             />
           </Link>
         </div>

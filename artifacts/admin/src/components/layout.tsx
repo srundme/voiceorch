@@ -20,17 +20,15 @@ function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
     <Link href="/" className="flex items-center gap-2 group">
       <img
-        src={`${import.meta.env.BASE_URL}snapserve-icon.png`}
+        src={`${import.meta.env.BASE_URL}snapserve-icon-light.png`}
         alt=""
         aria-hidden
         className={cn("shrink-0 select-none", compact ? "h-5 w-5" : "h-6 w-6")}
-        style={{ filter: "brightness(0) invert(1)" }}
       />
       <img
-        src={`${import.meta.env.BASE_URL}snapserve-wordmark.png`}
+        src={`${import.meta.env.BASE_URL}snapserve-wordmark-light.png`}
         alt="SnapServe"
         className={cn("select-none", compact ? "h-3.5" : "h-4")}
-        style={{ filter: "brightness(0) invert(1)" }}
       />
       <span
         className="text-[9px] font-semibold uppercase tracking-[0.14em] px-1.5 py-0.5 rounded-sm border"

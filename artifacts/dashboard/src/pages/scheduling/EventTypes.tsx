@@ -42,7 +42,7 @@ function SlugCopy({ slug }: { slug: string }) {
       className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
       onClick={e => { e.preventDefault(); void navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
     >
-      {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <LinkIcon className="h-3 w-3" />}
+      {copied ? <Check className="h-3 w-3 text-zinc-500" /> : <LinkIcon className="h-3 w-3" />}
       <span className="font-mono">/book/{slug}</span>
     </button>
   );
@@ -293,8 +293,8 @@ export default function EventTypesPage() {
         </Link>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-emerald-50">
-              <Calendar className="h-4 w-4 text-emerald-600" />
+            <div className="p-2 rounded-lg bg-zinc-50">
+              <Calendar className="h-4 w-4 text-zinc-600" />
             </div>
             <div>
               <h1 className="text-base font-semibold">Event Types</h1>

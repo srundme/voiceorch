@@ -255,10 +255,10 @@ function ModelSelect({
 /* ── Page ─────────────────────────────────────────────────────────────────── */
 
 const CATEGORY_COLORS: Record<string, string> = {
-  support:  "bg-blue-500/15 text-blue-400 border-blue-500/30",
-  sales:    "bg-amber-500/15 text-amber-600 border-amber-500/30",
+  support:  "bg-zinc-500/15 text-zinc-300 border-zinc-500/30",
+  sales:    "bg-zinc-500/15 text-zinc-300 border-zinc-500/30",
   booking:  "bg-muted text-muted-foreground border-border",
-  survey:   "bg-purple-500/15 text-purple-400 border-purple-500/30",
+  survey:   "bg-zinc-500/15 text-zinc-300 border-zinc-500/30",
   general:  "bg-muted text-muted-foreground border-border",
 };
 
@@ -416,7 +416,7 @@ export default function AgentNew() {
           <p className="text-muted-foreground">Configure a new AI voice agent pipeline.</p>
         </div>
         <Button type="button" variant="outline" onClick={() => setTemplatesOpen(true)} className="gap-2">
-          <Sparkles className="h-4 w-4 text-amber-600" />
+          <Sparkles className="h-4 w-4 text-zinc-600" />
           Use Template
         </Button>
       </div>
@@ -426,7 +426,7 @@ export default function AgentNew() {
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-amber-600" /> Start from a template
+              <Sparkles className="h-4 w-4 text-zinc-600" /> Start from a template
             </DialogTitle>
             <DialogDescription className="text-gray-400">
               Pick a template to prefill the form. You can customise everything afterwards.

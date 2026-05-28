@@ -36,8 +36,8 @@ import { formatDistanceToNow } from "date-fns";
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 function statusColor(status: string) {
-  if (status === "active")  return "bg-emerald-50 text-emerald-700 border-emerald-200";
-  if (status === "paused")  return "bg-amber-50 text-amber-700 border-amber-200";
+  if (status === "active")  return "bg-zinc-50 text-zinc-700 border-zinc-200";
+  if (status === "paused")  return "bg-zinc-50 text-zinc-700 border-zinc-200";
   return "bg-gray-50 text-gray-500 border-gray-200";
 }
 
@@ -55,7 +55,7 @@ function CopiedToken({ token }: { token: string }) {
       className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700 transition-colors font-mono"
       title="Click to copy webhook URL"
     >
-      {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+      {copied ? <Check className="h-3 w-3 text-zinc-500" /> : <Copy className="h-3 w-3" />}
       <span className="truncate max-w-[200px]">/webhooks/lead/{token.slice(0, 8)}…</span>
     </button>
   );
@@ -251,7 +251,7 @@ function CampaignCard({ campaign }: { campaign: Campaign }) {
         <div className="group bg-white border border-gray-100 rounded-2xl p-5 hover:shadow-md transition-all cursor-pointer">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="p-2.5 rounded-xl bg-violet-50 text-violet-600 shrink-0">
+              <div className="p-2.5 rounded-xl bg-zinc-50 text-zinc-600 shrink-0">
                 <Megaphone className="h-4 w-4" />
               </div>
               <div className="min-w-0">
@@ -366,7 +366,7 @@ export default function CampaignsPage() {
         </div>
       ) : !campaigns?.length ? (
         <div className="flex flex-col items-center justify-center py-24 text-center">
-          <div className="p-4 rounded-2xl bg-violet-50 text-violet-400 mb-4">
+          <div className="p-4 rounded-2xl bg-zinc-50 text-zinc-400 mb-4">
             <Megaphone className="h-8 w-8" />
           </div>
           <h3 className="text-lg font-semibold text-gray-700 mb-1">No campaigns yet</h3>

@@ -57,7 +57,7 @@ function CooldownStatusBadge({
     const until = new Date(cooldownUntil);
     const timeStr = until.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     return (
-      <span className="inline-flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 font-medium">
+      <span className="inline-flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400 font-medium">
         <ShieldOff className="h-3.5 w-3.5" />
         Suppressed — next alert can fire at {timeStr}
         {lastNotifiedSeverity && (
@@ -71,7 +71,7 @@ function CooldownStatusBadge({
 
   if (lastNotifiedAt) {
     return (
-      <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+      <span className="inline-flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400 font-medium">
         <ShieldCheck className="h-3.5 w-3.5" />
         Ready — cooldown has passed
       </span>
@@ -79,7 +79,7 @@ function CooldownStatusBadge({
   }
 
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+    <span className="inline-flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400 font-medium">
       <ShieldCheck className="h-3.5 w-3.5" />
       Ready — no notifications sent yet
     </span>
@@ -114,7 +114,7 @@ function DeliveryStatusBadge({ lastSentAt, lastFailedAt }: { lastSentAt: string 
   }
 
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+    <span className="inline-flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400 font-medium">
       <CheckCircle2 className="h-3.5 w-3.5" />
       Last sent {formatRelative(lastSentAt)}
       {hasFailed && <span className="text-muted-foreground font-normal ml-1">· Last failed {formatRelative(lastFailedAt)}</span>}
@@ -149,7 +149,7 @@ function NotificationLogTable({ entries }: { entries: AlertNotificationLogEntry[
               <td className="px-3 py-1.5 capitalize">{entry.channel}</td>
               <td className="px-3 py-1.5">
                 {entry.status === "sent" ? (
-                  <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
+                  <span className="inline-flex items-center gap-1 text-zinc-600 dark:text-zinc-400 font-medium">
                     <CheckCircle2 className="h-3 w-3" />
                     Sent
                   </span>
@@ -438,7 +438,7 @@ export default function PlatformSettings() {
               <div className="mt-3 flex items-center gap-3 rounded-md border border-border bg-muted/40 px-3 py-2">
                 <div className="flex-1">
                   {cooldownStats.suppressedCount > 0 ? (
-                    <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">
+                    <p className="text-xs text-zinc-700 dark:text-zinc-400 font-medium">
                       {cooldownStats.suppressedCount} notification{cooldownStats.suppressedCount === 1 ? "" : "s"} silenced by rate limiter
                       {cooldownStats.cooldownExpiresAt != null && cooldownStats.cooldownExpiresAt > Date.now()
                         ? ` · cooldown resets ${new Date(cooldownStats.cooldownExpiresAt).toLocaleTimeString()}`

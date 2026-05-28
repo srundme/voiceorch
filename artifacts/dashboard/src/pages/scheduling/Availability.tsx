@@ -95,7 +95,7 @@ function ScheduleRow({
           <Button
             size="icon"
             variant="ghost"
-            className="h-7 w-7 text-emerald-600 hover:text-emerald-700"
+            className="h-7 w-7 text-zinc-600 hover:text-zinc-700"
             onClick={() => void save()}
             disabled={saving}
           >

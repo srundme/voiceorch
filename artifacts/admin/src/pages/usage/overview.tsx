@@ -26,12 +26,12 @@ const RANGE_OPTIONS = [
 ];
 
 const SERVICE_META: Record<string, { label: string; icon: React.ElementType; color: string }> = {
-  stt: { label: "Speech to Text", icon: Mic, color: "#60a5fa" },
-  llm: { label: "Language Model", icon: Brain, color: "#a78bfa" },
-  tts: { label: "Text to Speech", icon: Volume2, color: "#34d399" },
+  stt: { label: "Speech to Text", icon: Mic, color: "#a1a1aa" },
+  llm: { label: "Language Model", icon: Brain, color: "#a1a1aa" },
+  tts: { label: "Text to Speech", icon: Volume2, color: "#d4d4d8" },
 };
 
-const PIE_COLORS = ["#60a5fa", "#a78bfa", "#34d399", "#f472b6", "#facc15", "#fb7185", "#22d3ee", "#fbbf24"];
+const PIE_COLORS = ["#a1a1aa", "#a1a1aa", "#d4d4d8", "#a1a1aa", "#d4d4d8", "#c45454", "#a1a1aa", "#d4d4d8"];
 
 export default function UsageOverviewPage() {
   const [days, setDays] = useState(30);
@@ -169,9 +169,9 @@ export default function UsageOverviewPage() {
                 <YAxis tick={{ fontSize: 11 }} />
                 <Tooltip />
                 <Legend />
-                <Area type="monotone" dataKey="stt" stackId="1" stroke="#60a5fa" fill="#60a5fa" fillOpacity={0.5} />
-                <Area type="monotone" dataKey="llm" stackId="1" stroke="#a78bfa" fill="#a78bfa" fillOpacity={0.5} />
-                <Area type="monotone" dataKey="tts" stackId="1" stroke="#34d399" fill="#34d399" fillOpacity={0.5} />
+                <Area type="monotone" dataKey="stt" stackId="1" stroke="#a1a1aa" fill="#a1a1aa" fillOpacity={0.5} />
+                <Area type="monotone" dataKey="llm" stackId="1" stroke="#a1a1aa" fill="#a1a1aa" fillOpacity={0.5} />
+                <Area type="monotone" dataKey="tts" stackId="1" stroke="#d4d4d8" fill="#d4d4d8" fillOpacity={0.5} />
               </AreaChart>
             </ResponsiveContainer>
           </CardContent>

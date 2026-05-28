@@ -8,15 +8,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 const EVENT_META: Record<string, { label: string; color: string; icon: React.ElementType }> = {
   "agent.created":                 { label: "Agent Created",          color: "bg-gray-50 text-gray-700 border-gray-200",  icon: Bot },
   "agent.deleted":                 { label: "Agent Deleted",          color: "bg-red-50 text-red-500 border-red-500/20",              icon: Bot },
-  "agent.toggled":                 { label: "Agent Toggled",          color: "bg-blue-500/10 text-blue-400 border-blue-500/20",           icon: Bot },
-  "call.started":                  { label: "Call Started",           color: "bg-violet-50 text-violet-600 border-violet-500/20",     icon: Phone },
+  "agent.toggled":                 { label: "Agent Toggled",          color: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",           icon: Bot },
+  "call.started":                  { label: "Call Started",           color: "bg-zinc-50 text-zinc-600 border-zinc-500/20",     icon: Phone },
   "call.ended":                    { label: "Call Ended",             color: "bg-gray-50 text-gray-500 border-gray-100",           icon: Phone },
   "provider.added":                { label: "Provider Added",         color: "bg-gray-50 text-gray-700 border-gray-200",  icon: Key },
   "provider.deleted":              { label: "Provider Deleted",       color: "bg-red-50 text-red-500 border-red-500/20",              icon: Key },
-  "knowledge_base.created":        { label: "KB Created",             color: "bg-amber-500/10 text-amber-600 border-amber-500/20",        icon: BookOpen },
+  "knowledge_base.created":        { label: "KB Created",             color: "bg-zinc-500/10 text-zinc-600 border-zinc-500/20",        icon: BookOpen },
   "knowledge_base.deleted":        { label: "KB Deleted",             color: "bg-red-50 text-red-500 border-red-500/20",              icon: BookOpen },
-  "account.api_key_regenerated":   { label: "API Key Regenerated",    color: "bg-orange-500/10 text-orange-400 border-orange-500/20",     icon: RefreshCw },
-  "account.concurrent_slot_added": { label: "Concurrent Slot Added",  color: "bg-blue-500/10 text-blue-400 border-blue-500/20",           icon: Settings },
+  "account.api_key_regenerated":   { label: "API Key Regenerated",    color: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",     icon: RefreshCw },
+  "account.concurrent_slot_added": { label: "Concurrent Slot Added",  color: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",           icon: Settings },
   "wallet.topup":                  { label: "Wallet Top-up",          color: "bg-gray-50 text-gray-700 border-gray-200",  icon: Wallet },
 };
 

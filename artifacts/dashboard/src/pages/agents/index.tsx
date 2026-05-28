@@ -176,11 +176,11 @@ export default function AgentsList() {
                       <div className="flex items-center gap-2 mb-1">
                         <h3 className="font-semibold text-lg leading-none">{agent.name}</h3>
                         {agent.status === 'active' ? (
-                          <span className="flex h-2 w-2 rounded-full bg-green-500" title="Active" />
+                          <span className="flex h-2 w-2 rounded-full bg-zinc-500" title="Active" />
                         ) : agent.status === 'inactive' ? (
                           <span className="flex h-2 w-2 rounded-full bg-muted-foreground" title="Inactive" />
                         ) : (
-                          <span className="flex h-2 w-2 rounded-full bg-yellow-500" title="Draft" />
+                          <span className="flex h-2 w-2 rounded-full bg-zinc-500" title="Draft" />
                         )}
                       </div>
                       <p className="text-sm text-muted-foreground line-clamp-2 min-h-[40px]">
@@ -215,7 +215,7 @@ export default function AgentsList() {
                           </DropdownMenuItem>
                         </Link>
                         <DropdownMenuItem
-                          className="cursor-pointer text-emerald-600 dark:text-gray-700 focus:text-emerald-600 dark:focus:text-gray-700"
+                          className="cursor-pointer text-zinc-600 dark:text-gray-700 focus:text-zinc-600 dark:focus:text-gray-700"
                           onClick={() => { setOutboundAgent({ id: agent.id, name: agent.name }); setToNumber(""); }}
                         >
                           <PhoneCall className="mr-2 h-4 w-4" />

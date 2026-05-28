@@ -322,7 +322,7 @@ function GeneralTab() {
                 {item.done ? (
                   <CheckCircle2 className="h-4 w-4 text-gray-700 shrink-0" />
                 ) : (
-                  <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                  <AlertTriangle className="h-4 w-4 text-zinc-600 shrink-0" />
                 )}
                 <span className={`text-sm ${item.done ? "text-foreground" : "text-muted-foreground"}`}>{item.label}</span>
               </div>
@@ -490,10 +490,10 @@ function GeneralTab() {
                 variant="outline"
                 className={`text-[10px] font-mono shrink-0 w-12 justify-center ${
                   ep.method === "WS"
-                    ? "bg-violet-50 text-violet-600 border-violet-500/20"
+                    ? "bg-zinc-50 text-zinc-600 border-zinc-500/20"
                     : ep.method === "GET"
-                    ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
-                    : "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                    ? "bg-zinc-500/10 text-zinc-400 border-zinc-500/20"
+                    : "bg-zinc-500/10 text-zinc-600 border-zinc-500/20"
                 }`}
               >
                 {ep.method}

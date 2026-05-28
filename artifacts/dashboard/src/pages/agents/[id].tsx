@@ -208,7 +208,7 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
   useEffect(() => () => { cleanup(); }, []);
 
   // ── Widget embed code ──────────────────────────────────────────────────────
-  const embedCode = `<script src="${location.protocol}//${location.host}/api/widget.js"\n        data-agent-id="${agentId}"\n        data-name="${agentName}"\n        data-color="#0ea5e9">\n</script>`;
+  const embedCode = `<script src="${location.protocol}//${location.host}/api/widget.js"\n        data-agent-id="${agentId}"\n        data-name="${agentName}"\n        data-color="#a1a1aa">\n</script>`;
 
   const copyEmbed = () => {
     navigator.clipboard.writeText(embedCode);
@@ -219,10 +219,10 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
   // ── Status display ─────────────────────────────────────────────────────────
   const statusConfig: Record<CallStatus, { label: string; color: string; pulse: boolean }> = {
     idle:       { label: "Ready to test",    color: "bg-black/25",   pulse: false },
-    connecting: { label: "Connecting…",      color: "bg-amber-400",  pulse: true  },
-    listening:  { label: "Listening…",       color: "bg-emerald-400",pulse: true  },
-    thinking:   { label: "Thinking…",        color: "bg-amber-400",  pulse: true  },
-    speaking:   { label: "Speaking…",        color: "bg-sky-400",    pulse: true  },
+    connecting: { label: "Connecting…",      color: "bg-zinc-400",  pulse: true  },
+    listening:  { label: "Listening…",       color: "bg-zinc-400",pulse: true  },
+    thinking:   { label: "Thinking…",        color: "bg-zinc-400",  pulse: true  },
+    speaking:   { label: "Speaking…",        color: "bg-zinc-400",    pulse: true  },
     ended:      { label: "Call ended",       color: "bg-black/25",   pulse: false },
   };
   const sc = statusConfig[status];
@@ -383,7 +383,7 @@ export default function AgentDetail() {
     switch (status) {
       case "completed":  return <Badge className="bg-primary/20 text-primary border-transparent">Completed</Badge>;
       case "failed":     return <Badge className="bg-destructive/20 text-destructive border-transparent">Failed</Badge>;
-      case "in_progress":return <Badge className="bg-yellow-500/20 text-yellow-400 border-transparent">In Progress</Badge>;
+      case "in_progress":return <Badge className="bg-zinc-500/20 text-zinc-400 border-transparent">In Progress</Badge>;
       case "pending":    return <Badge variant="outline" className="text-muted-foreground">Pending</Badge>;
       default:           return <Badge variant="outline">{status}</Badge>;
     }
@@ -462,9 +462,9 @@ export default function AgentDetail() {
         </Link>
         <div className="flex items-center gap-3 flex-1">
           <h2 className="text-3xl font-bold tracking-tight">{agent.name}</h2>
-          {agent.status === "active"   && <Badge className="bg-green-500 hover:bg-green-600">Active</Badge>}
+          {agent.status === "active"   && <Badge className="bg-zinc-500 hover:bg-zinc-600">Active</Badge>}
           {agent.status === "inactive" && <Badge variant="secondary">Inactive</Badge>}
-          {agent.status === "draft"    && <Badge variant="outline" className="text-yellow-500 border-yellow-500">Draft</Badge>}
+          {agent.status === "draft"    && <Badge variant="outline" className="text-zinc-500 border-zinc-500">Draft</Badge>}
         </div>
         <div className="flex items-center gap-2 ml-auto">
           <Link href={`/agents/${id}/edit`}>

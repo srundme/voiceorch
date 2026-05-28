@@ -12,7 +12,7 @@ import {
   PieChart, Pie, Cell, Legend,
 } from "recharts";
 
-const PIE_COLORS = ["#60a5fa", "#a78bfa", "#34d399", "#f59e0b", "#f87171", "#22d3ee", "#e879f9", "#84cc16"];
+const PIE_COLORS = ["#a1a1aa", "#a1a1aa", "#d4d4d8", "#a1a1aa", "#c45454", "#a1a1aa", "#a1a1aa", "#a1a1aa"];
 
 const RANGE_OPTIONS = [
   { label: "7 days", value: 7 },
@@ -21,9 +21,9 @@ const RANGE_OPTIONS = [
 ];
 
 const META: Record<ServiceKey, { label: string; description: string; icon: React.ElementType; color: string }> = {
-  stt: { label: "STT", description: "Speech to Text provider & model breakdown", icon: Mic, color: "#60a5fa" },
-  llm: { label: "LLM", description: "Language model usage by provider & model", icon: Brain, color: "#a78bfa" },
-  tts: { label: "TTS", description: "Text to Speech voices & providers", icon: Volume2, color: "#34d399" },
+  stt: { label: "STT", description: "Speech to Text provider & model breakdown", icon: Mic, color: "#a1a1aa" },
+  llm: { label: "LLM", description: "Language model usage by provider & model", icon: Brain, color: "#a1a1aa" },
+  tts: { label: "TTS", description: "Text to Speech voices & providers", icon: Volume2, color: "#d4d4d8" },
 };
 
 export default function ServicePage({ service }: { service: ServiceKey }) {

@@ -15,13 +15,12 @@ function StatCard({
   value: string | number;
   sub?: string;
   icon: React.ElementType;
-  accent?: "emerald" | "blue" | "amber" | "red" | "zinc";
+  accent?: "zinc" | "zinc" | "zinc" | "red";
 }) {
   const colors: Record<string, string> = {
-    emerald: "text-gray-700 bg-gray-50",
-    blue:    "text-blue-400 bg-blue-500/10",
-    amber:   "text-amber-600 bg-amber-500/10",
-    red:     "text-red-500 bg-red-50",
+    blue:    "text-gray-400 bg-gray-500/10",
+    amber:   "text-gray-400 bg-gray-500/10",
+    red:     "text-gray-400 bg-gray-500/10",
     zinc:    "text-gray-500 bg-gray-100",
   };
   return (
@@ -40,7 +39,7 @@ function StatCard({
 
 function LatencyPill({ label, ms }: { label: string; ms: number | null | undefined }) {
   if (ms == null) return null;
-  const color = ms < 200 ? "text-gray-700" : ms < 500 ? "text-amber-600" : "text-red-500";
+  const color = ms < 200 ? "text-gray-700" : ms < 500 ? "text-zinc-600" : "text-red-500";
   return (
     <div className="flex items-center justify-between py-2 border-b border-gray-200 last:border-0">
       <span className="text-xs text-gray-400">{label}</span>
@@ -113,7 +112,7 @@ export default function AgentAnalyticsPage() {
           <h1 className="text-base font-semibold text-gray-800">{stats.name}</h1>
           <p className="text-xs text-gray-400">Agent analytics · last 30 days</p>
         </div>
-        <Badge className={`ml-auto text-[10px] ${stats.successRate >= 90 ? "bg-gray-50 text-gray-700 border-gray-200" : stats.successRate >= 70 ? "bg-amber-500/15 text-amber-600 border-amber-500/30" : "bg-red-500/15 text-red-500 border-red-500/30"}`}>
+        <Badge className={`ml-auto text-[10px] ${stats.successRate >= 90 ? "bg-gray-50 text-gray-700 border-gray-200" : stats.successRate >= 70 ? "bg-zinc-500/15 text-zinc-600 border-zinc-500/30" : "bg-red-500/15 text-red-500 border-red-500/30"}`}>
           {stats.successRate}% success
         </Badge>
       </div>
@@ -122,7 +121,7 @@ export default function AgentAnalyticsPage() {
         {/* KPI grid */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <StatCard label="Total calls" value={stats.totalCalls} icon={Phone} accent="zinc" />
-          <StatCard label="This week" value={stats.callsThisWeek} sub={`${stats.callsThisMonth} this month`} icon={TrendingUp} accent="blue" />
+          <StatCard label="This week" value={stats.callsThisWeek} sub={`${stats.callsThisMonth} this month`} icon={TrendingUp} accent="zinc" />
           <StatCard
             label="Avg duration"
             value={stats.avgDurationSeconds != null ? `${Math.floor(stats.avgDurationSeconds / 60)}m ${stats.avgDurationSeconds % 60}s` : "—"}
@@ -134,7 +133,7 @@ export default function AgentAnalyticsPage() {
             value={`$${(stats.totalSpendCents / 100).toFixed(2)}`}
             sub="platform fees"
             icon={DollarSign}
-            accent="amber"
+            accent="zinc"
           />
         </div>
 
@@ -170,11 +169,11 @@ export default function AgentAnalyticsPage() {
             <div className="flex items-center gap-3">
               <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
                 <div
-                  className={`h-2 rounded-full transition-all ${(stats as any).aiPassRate >= 70 ? "bg-emerald-500" : (stats as any).aiPassRate >= 50 ? "bg-amber-500" : "bg-red-500"}`}
+                  className={`h-2 rounded-full transition-all ${(stats as any).aiPassRate >= 70 ? "bg-zinc-500" : (stats as any).aiPassRate >= 50 ? "bg-zinc-500" : "bg-red-500"}`}
                   style={{ width: `${(stats as any).aiPassRate ?? 0}%` }}
                 />
               </div>
-              <span className={`text-sm font-bold tabular-nums min-w-[3rem] text-right ${(stats as any).aiPassRate >= 70 ? "text-emerald-600" : (stats as any).aiPassRate >= 50 ? "text-amber-600" : "text-red-500"}`}>
+              <span className={`text-sm font-bold tabular-nums min-w-[3rem] text-right ${(stats as any).aiPassRate >= 70 ? "text-zinc-600" : (stats as any).aiPassRate >= 50 ? "text-zinc-600" : "text-red-500"}`}>
                 {(stats as any).aiPassRate ?? 0}%
               </span>
               <span className="text-[11px] text-gray-400">PASS</span>
@@ -193,7 +192,7 @@ export default function AgentAnalyticsPage() {
                 <YAxis tick={{ fontSize: 10, fill: "#71717a" }} tickLine={false} axisLine={false} width={24} />
                 <Tooltip content={<CustomTooltip />} />
                 <Legend wrapperStyle={{ fontSize: 11, color: "#71717a" }} />
-                <Bar dataKey="Completed" fill="#10b981" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="Completed" fill="#a1a1aa" radius={[3, 3, 0, 0]} />
                 <Bar dataKey="Failed" fill="#ef4444" radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>

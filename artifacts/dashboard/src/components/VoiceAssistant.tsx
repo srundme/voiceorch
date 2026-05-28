@@ -231,8 +231,8 @@ export function VoiceAssistant() {
           <Bot className="h-6 w-6 text-white" />
           {/* Live indicator */}
           <span className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex h-3.5 w-3.5 rounded-full bg-emerald-500" />
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-zinc-400 opacity-75" />
+            <span className="relative inline-flex h-3.5 w-3.5 rounded-full bg-zinc-500" />
           </span>
         </button>
       )}
@@ -246,7 +246,7 @@ export function VoiceAssistant() {
           <div className="flex items-center gap-3 px-4 py-3 border-b shrink-0"
             style={{ borderColor: "#1e293b" }}>
             <div className="flex h-8 w-8 items-center justify-center rounded-full shrink-0"
-              style={{ background: "linear-gradient(135deg, #3b82f6, #8b5cf6)" }}>
+              style={{ background: "linear-gradient(135deg, #a1a1aa, #a1a1aa)" }}>
               <Bot className="h-4 w-4 text-white" />
             </div>
             <div className="flex-1 min-w-0">
@@ -255,10 +255,10 @@ export function VoiceAssistant() {
             </div>
             <div className="flex items-center gap-1.5">
               {phase === "speaking" && (
-                <Volume2 className="h-4 w-4 animate-pulse" style={{ color: "#3b82f6" }} />
+                <Volume2 className="h-4 w-4 animate-pulse" style={{ color: "#a1a1aa" }} />
               )}
               {phase === "thinking" && (
-                <Loader2 className="h-4 w-4 animate-spin" style={{ color: "#3b82f6" }} />
+                <Loader2 className="h-4 w-4 animate-spin" style={{ color: "#a1a1aa" }} />
               )}
             </div>
             <button onClick={handleClose}
@@ -278,13 +278,13 @@ export function VoiceAssistant() {
               <div className="flex gap-2 items-start">
                 <div className="flex h-6 w-6 items-center justify-center rounded-full shrink-0"
                   style={{ background: "#1e293b" }}>
-                  <Bot className="h-3.5 w-3.5" style={{ color: "#3b82f6" }} />
+                  <Bot className="h-3.5 w-3.5" style={{ color: "#a1a1aa" }} />
                 </div>
                 <div className="rounded-2xl rounded-tl-sm px-3 py-2" style={{ background: "#1e293b" }}>
                   <div className="flex gap-1 items-center h-4">
                     {[0, 1, 2].map(i => (
                       <span key={i} className="h-1.5 w-1.5 rounded-full animate-bounce"
-                        style={{ background: "#3b82f6", animationDelay: `${i * 0.15}s` }} />
+                        style={{ background: "#a1a1aa", animationDelay: `${i * 0.15}s` }} />
                     ))}
                   </div>
                 </div>
@@ -296,7 +296,7 @@ export function VoiceAssistant() {
                 {m.role === "assistant" && (
                   <div className="flex h-6 w-6 items-center justify-center rounded-full shrink-0"
                     style={{ background: "#1e293b" }}>
-                    <Bot className="h-3.5 w-3.5" style={{ color: "#3b82f6" }} />
+                    <Bot className="h-3.5 w-3.5" style={{ color: "#a1a1aa" }} />
                   </div>
                 )}
                 <div className={cn(
@@ -305,7 +305,7 @@ export function VoiceAssistant() {
                     ? "rounded-tl-sm text-white"
                     : "rounded-tr-sm text-white",
                 )}
-                  style={{ background: m.role === "assistant" ? "#1e293b" : "#2563eb" }}>
+                  style={{ background: m.role === "assistant" ? "#1e293b" : "#52525b" }}>
                   {m.content}
                 </div>
               </div>
@@ -316,13 +316,13 @@ export function VoiceAssistant() {
               <div className="flex gap-2 items-start">
                 <div className="flex h-6 w-6 items-center justify-center rounded-full shrink-0"
                   style={{ background: "#1e293b" }}>
-                  <Bot className="h-3.5 w-3.5" style={{ color: "#3b82f6" }} />
+                  <Bot className="h-3.5 w-3.5" style={{ color: "#a1a1aa" }} />
                 </div>
                 <div className="rounded-2xl rounded-tl-sm px-3 py-2" style={{ background: "#1e293b" }}>
                   <div className="flex gap-1 items-center h-4">
                     {[0, 1, 2].map(i => (
                       <span key={i} className="h-1.5 w-1.5 rounded-full animate-bounce"
-                        style={{ background: "#3b82f6", animationDelay: `${i * 0.15}s` }} />
+                        style={{ background: "#a1a1aa", animationDelay: `${i * 0.15}s` }} />
                     ))}
                   </div>
                 </div>
@@ -340,7 +340,7 @@ export function VoiceAssistant() {
               </p>
             )}
             {phase === "speaking" && (
-              <p className="text-xs" style={{ color: "#3b82f6" }}>🔊 Speaking…</p>
+              <p className="text-xs" style={{ color: "#a1a1aa" }}>🔊 Speaking…</p>
             )}
             {phase === "thinking" && (
               <p className="text-xs" style={{ color: "#64748b" }}>Thinking…</p>
@@ -375,7 +375,7 @@ export function VoiceAssistant() {
                   ? "#ef4444"
                   : isBusy
                     ? "#1e293b"
-                    : "linear-gradient(135deg, #2563eb, #7c3aed)",
+                    : "linear-gradient(135deg, #52525b, #52525b)",
                 boxShadow: phase === "listening" ? "0 0 0 8px rgba(239,68,68,0.2)" : undefined,
               }}
               title={phase === "listening" ? "Release to send" : "Hold to speak"}

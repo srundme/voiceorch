@@ -271,9 +271,9 @@ function providerTag(p: string) {
 }
 
 function statusDot(status: string) {
-  if (status === "active")   return <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0" />;
+  if (status === "active")   return <span className="h-1.5 w-1.5 rounded-full bg-zinc-400 shrink-0" />;
   if (status === "inactive") return <span className="h-1.5 w-1.5 rounded-full bg-gray-200 shrink-0" />;
-  return <span className="h-1.5 w-1.5 rounded-full bg-yellow-400 shrink-0" />;
+  return <span className="h-1.5 w-1.5 rounded-full bg-zinc-400 shrink-0" />;
 }
 
 /* ── Web Call Panel ──────────────────────────────────────────────────────── */
@@ -383,14 +383,14 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
 
   useEffect(() => () => { cleanup(); }, []);
 
-  const embedCode = `<script src="${location.protocol}//${location.host}/api/widget.js"\n        data-agent-id="${agentId}"\n        data-name="${agentName}"\n        data-color="#10b981">\n</script>`;
+  const embedCode = `<script src="${location.protocol}//${location.host}/api/widget.js"\n        data-agent-id="${agentId}"\n        data-name="${agentName}"\n        data-color="#a1a1aa">\n</script>`;
 
   const sc: Record<CallStatus, { label: string; color: string; pulse: boolean }> = {
     idle:       { label: "Ready to test",  color: "bg-gray-200",    pulse: false },
-    connecting: { label: "Connecting…",    color: "bg-amber-400",   pulse: true  },
-    listening:  { label: "Listening…",     color: "bg-emerald-400", pulse: true  },
-    thinking:   { label: "Thinking…",      color: "bg-amber-400",   pulse: true  },
-    speaking:   { label: "Speaking…",      color: "bg-sky-400",     pulse: true  },
+    connecting: { label: "Connecting…",    color: "bg-zinc-400",   pulse: true  },
+    listening:  { label: "Listening…",     color: "bg-zinc-400", pulse: true  },
+    thinking:   { label: "Thinking…",      color: "bg-zinc-400",   pulse: true  },
+    speaking:   { label: "Speaking…",      color: "bg-zinc-400",     pulse: true  },
     ended:      { label: "Call ended",     color: "bg-gray-200",    pulse: false },
   };
   const s = sc[status];
@@ -1027,8 +1027,8 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
       <div className="flex items-center gap-3 px-6 py-3 shrink-0" style={{ borderBottom: "1px solid #F3F4F6", background: "#FAFAFA" }}>
         {[
           { icon: Phone,         val: String(agent.totalCalls ?? 0),                                                label: "calls",   color: "#4B5563" },
-          { icon: CheckCircle2,  val: `${successRate}%`,                                                             label: "success", color: "#10B981" },
-          ...(agent.avgDurationSeconds != null ? [{ icon: Clock, val: `~${agent.avgDurationSeconds}s`, label: "avg", color: "#F59E0B" }] : []),
+          { icon: CheckCircle2,  val: `${successRate}%`,                                                             label: "success", color: "#a1a1aa" },
+          ...(agent.avgDurationSeconds != null ? [{ icon: Clock, val: `~${agent.avgDurationSeconds}s`, label: "avg", color: "#a1a1aa" }] : []),
         ].map(({ icon: Icon, val, label, color }) => (
           <div key={label} className="flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ background: "#F9FAFB", border: "1px solid #F3F4F6" }}>
             <Icon className="h-3 w-3 shrink-0" style={{ color }} />
@@ -1137,10 +1137,10 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                   <div className="flex flex-wrap gap-2 mt-3">
                     <span className="text-[11px] self-center" style={{ color: "#9CA3AF" }}>Insert variable:</span>
                     {[
-                      { var: "{caller_salutation}", tip: "sir / ma'am — requires Gender Detection in Engine tab", color: "violet" },
-                      { var: "{caller_number}",     tip: "Caller's phone number",                                color: "sky"    },
-                      { var: "{agent_name}",         tip: "This agent's name",                                   color: "emerald"},
-                      { var: "{date}",               tip: "Current date",                                        color: "amber"  },
+                      { var: "{caller_salutation}", tip: "sir / ma'am — requires Gender Detection in Engine tab", color: "zinc" },
+                      { var: "{caller_number}",     tip: "Caller's phone number",                                color: "zinc"    },
+                      { var: "{agent_name}",         tip: "This agent's name",                                   color: "zinc"},
+                      { var: "{date}",               tip: "Current date",                                        color: "zinc"  },
                     ].map(chip => (
                       <button
                         key={chip.var}
@@ -1148,10 +1148,10 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                         title={chip.tip}
                         onClick={() => { setSystemPrompt(p => p + " " + chip.var); setDirty(true); }}
                         className={`text-[11px] rounded-lg border px-2.5 py-1 font-mono transition-all ${
-                          chip.color === "violet" ? "bg-gray-100 border-gray-300 text-gray-600 hover:border-gray-400" :
-                          chip.color === "sky"    ? "bg-sky-950/50 border-sky-700/40 text-sky-300 hover:border-sky-600/60" :
-                          chip.color === "emerald"? "bg-emerald-950/50 border-emerald-700/40 text-emerald-300 hover:border-emerald-600/60" :
-                                                    "bg-amber-950/50 border-amber-700/40 text-amber-300 hover:border-amber-600/60"
+                          chip.color === "zinc" ? "bg-gray-100 border-gray-300 text-gray-600 hover:border-gray-400" :
+                          chip.color === "zinc"    ? "bg-zinc-950/50 border-zinc-700/40 text-zinc-300 hover:border-zinc-600/60" :
+                          chip.color === "zinc"? "bg-zinc-950/50 border-zinc-700/40 text-zinc-300 hover:border-zinc-600/60" :
+                                                    "bg-zinc-950/50 border-zinc-700/40 text-zinc-300 hover:border-zinc-600/60"
                         }`}
                       >
                         {chip.var}
@@ -1201,16 +1201,16 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                 style={{ background: "#F9FAFB", border: "1px solid #E5E7EB" }}>
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "#6B7280" }}>Agent Status</span>
-                  <span className={`flex items-center gap-1.5 text-[11px] font-semibold ${agent.status === "active" ? "text-emerald-600" : "text-gray-400"}`}>
-                    <span className={`h-1.5 w-1.5 rounded-full ${agent.status === "active" ? "bg-emerald-500" : "bg-gray-300"}`} />
+                  <span className={`flex items-center gap-1.5 text-[11px] font-semibold ${agent.status === "active" ? "text-zinc-600" : "text-gray-400"}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${agent.status === "active" ? "bg-zinc-500" : "bg-gray-300"}`} />
                     {agent.status === "active" ? "Active" : "Inactive"}
                   </span>
                 </div>
                 <div className="space-y-2.5">
                   {[
                     { label: "Total calls",  value: String(agent.totalCalls ?? 0), accent: "#4B5563" },
-                    { label: "Success rate", value: `${successRate}%`,              accent: "#10B981" },
-                    { label: "Avg duration", value: agent.avgDurationSeconds != null ? `~${agent.avgDurationSeconds}s` : "—", accent: "#F59E0B" },
+                    { label: "Success rate", value: `${successRate}%`,              accent: "#a1a1aa" },
+                    { label: "Avg duration", value: agent.avgDurationSeconds != null ? `~${agent.avgDurationSeconds}s` : "—", accent: "#a1a1aa" },
                   ].map(row => (
                     <div key={row.label}>
                       <div className="flex items-center justify-between mb-1">
@@ -1219,7 +1219,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                       </div>
                       {row.label === "Success rate" && (
                         <div className="h-1 rounded-full overflow-hidden" style={{ background: "#F3F4F6" }}>
-                          <div className="h-full rounded-full transition-all" style={{ width: `${successRate}%`, background: "linear-gradient(90deg, #10B981, #34D399)" }} />
+                          <div className="h-full rounded-full transition-all" style={{ width: `${successRate}%`, background: "linear-gradient(90deg, #a1a1aa, #d4d4d8)" }} />
                         </div>
                       )}
                     </div>
@@ -1233,10 +1233,10 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                 <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "#6B7280" }}>Provider Stack</span>
                 <div className="space-y-2">
                   {[
-                    { label: "ASR",       value: agent.asrProvider,       color: "#60A5FA" },
-                    { label: "LLM",       value: agent.llmProvider,       color: "#A78BFA" },
-                    { label: "TTS",       value: agent.ttsProvider,       color: "#34D399" },
-                    { label: "Telephony", value: agent.telephonyProvider, color: "#FBBF24" },
+                    { label: "ASR",       value: agent.asrProvider,       color: "#a1a1aa" },
+                    { label: "LLM",       value: agent.llmProvider,       color: "#a1a1aa" },
+                    { label: "TTS",       value: agent.ttsProvider,       color: "#d4d4d8" },
+                    { label: "Telephony", value: agent.telephonyProvider, color: "#d4d4d8" },
                   ].map(row => (
                     <div key={row.label} className="flex items-center justify-between py-1.5 px-3 rounded-lg"
                       style={{ background: "#FAFAFA" }}>
@@ -1266,7 +1266,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                           {call.fromNumber ?? `#${call.id}`}
                         </span>
                         <span className={`text-[11px] font-bold shrink-0 px-1.5 py-0.5 rounded ${
-                          call.status === "completed" ? "text-emerald-600 bg-emerald-50" :
+                          call.status === "completed" ? "text-zinc-600 bg-zinc-50" :
                           call.status === "failed"    ? "text-red-500 bg-red-50" :
                                                         "text-gray-400 bg-gray-100"
                         }`}>
@@ -1318,7 +1318,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
               <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Guardrail Routes</p>
                 <button type="button" onClick={() => setCfg({ guardrailRoutes: [...(cfg.guardrailRoutes ?? []), { name: "", scoreThreshold: 0.8, utterances: "", response: "" }] })}
-                  className="text-[11px] text-gray-700 hover:text-emerald-300 flex items-center gap-1">
+                  className="text-[11px] text-gray-700 hover:text-zinc-300 flex items-center gap-1">
                   <Plus className="h-3 w-3" /> Add Route
                 </button>
               </div>
@@ -1518,7 +1518,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                       </button>
                     </div>
                     {cartesiaVoiceSource === "fallback" && !loadingCartesiaVoices && (
-                      <p className="text-[10px] text-amber-600/70 mt-1">Configure Cartesia key in Admin → Managed Keys to see all Indian voices</p>
+                      <p className="text-[10px] text-zinc-600/70 mt-1">Configure Cartesia key in Admin → Managed Keys to see all Indian voices</p>
                     )}
                     {ttsVoice && cartesiaVoiceSource === "cartesia" && (
                       <p className="text-[10px] text-gray-400 mt-1 font-mono truncate">{ttsVoice}</p>
@@ -1553,13 +1553,13 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
               )}
               {/* ── Auto-config banner ── */}
               {telephony && TELEPHONY_AUDIO_DEFAULTS[telephony] ? (
-                <div className="rounded-lg bg-emerald-950/40 border border-emerald-800/50 px-3 py-2.5 flex items-start gap-2.5">
+                <div className="rounded-lg bg-zinc-950/40 border border-zinc-800/50 px-3 py-2.5 flex items-start gap-2.5">
                   <Check className="h-3.5 w-3.5 text-gray-700 mt-0.5 shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs text-emerald-300 font-medium">
+                    <p className="text-xs text-zinc-300 font-medium">
                       Auto-configured for {TELEPHONY_PROVIDERS.find(p => p.value === telephony)?.label}
                     </p>
-                    <p className="text-[11px] text-emerald-600 mt-0.5">
+                    <p className="text-[11px] text-zinc-600 mt-0.5">
                       {TELEPHONY_AUDIO_DEFAULTS[telephony]!.label} · {TELEPHONY_AUDIO_DEFAULTS[telephony]!.note}
                     </p>
                   </div>
@@ -1693,8 +1693,8 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
             {/* ── Gender Detection ── */}
             <div className="bg-gray-50 border border-gray-200/40 rounded-xl p-4 space-y-4">
               <div className="flex items-start gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-violet-950/60 border border-violet-800/40 flex items-center justify-center shrink-0">
-                  <span className="text-sm font-bold text-violet-300">G</span>
+                <div className="w-8 h-8 rounded-lg bg-zinc-950/60 border border-zinc-800/40 flex items-center justify-center shrink-0">
+                  <span className="text-sm font-bold text-zinc-300">G</span>
                 </div>
                 <div>
                   <p className="text-xs font-semibold text-gray-700">Caller Gender Detection</p>
@@ -1744,7 +1744,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                         className="h-7 text-xs bg-white border-gray-200 text-gray-700 placeholder:text-gray-400" />
                     </div>
                   </div>
-                  <div className="rounded-lg bg-violet-950/30 border border-violet-800/40 px-3 py-2.5 space-y-1">
+                  <div className="rounded-lg bg-zinc-950/30 border border-zinc-800/40 px-3 py-2.5 space-y-1">
                     <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">How to use in your prompt</p>
                     <p className="text-[11px] text-gray-500 leading-relaxed">
                       Add <code className="bg-gray-100 text-gray-600 rounded px-1">{"{caller_salutation}"}</code> anywhere in your Agent Prompt. At call start it will be replaced with the detected value.
@@ -2027,7 +2027,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                 onClick={() => { setAgentTools(prev => [...prev, { type: "call_transfer", name: "transfer_to_human", description: "Transfer the call to a human agent when the caller requests escalation or needs specialist help.", transferTo: "", warmHandoffMessage: "" }]); setDirty(true); }}
                 className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50 rounded-lg px-3 py-2 transition-colors"
               >
-                <PhoneForwarded className="h-3.5 w-3.5 text-violet-500" />
+                <PhoneForwarded className="h-3.5 w-3.5 text-zinc-500" />
                 Add Call Transfer
               </button>
               <button
@@ -2035,7 +2035,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                 onClick={() => { setAgentTools(prev => [...prev, { type: "send_sms", name: "send_sms", description: "Send a text message to the caller with a confirmation, link, or summary.", messageTemplate: "" }]); setDirty(true); }}
                 className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50 rounded-lg px-3 py-2 transition-colors"
               >
-                <Zap className="h-3.5 w-3.5 text-emerald-500" />
+                <Zap className="h-3.5 w-3.5 text-zinc-500" />
                 Add Send SMS
               </button>
               <button
@@ -2051,7 +2051,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                 onClick={() => { setAgentTools(prev => [...prev, { type: "cal_com", name: "book_appointment", description: "Book an appointment on Cal.com when the caller wants to schedule a meeting.", apiKey: "", eventTypeId: 0, timezone: "UTC" }]); setDirty(true); }}
                 className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50 rounded-lg px-3 py-2 transition-colors"
               >
-                <Clock className="h-3.5 w-3.5 text-blue-400" />
+                <Clock className="h-3.5 w-3.5 text-zinc-400" />
                 Add Cal.com
               </button>
               <button
@@ -2059,7 +2059,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                 onClick={() => { setAgentTools(prev => [...prev, { type: "native_booking", name: "book_appointment", description: "Book an appointment using the platform's scheduling engine when the caller wants to schedule a meeting.", eventTypeId: 0 }]); setDirty(true); }}
                 className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50 rounded-lg px-3 py-2 transition-colors"
               >
-                <CalendarPlus className="h-3.5 w-3.5 text-indigo-500" />
+                <CalendarPlus className="h-3.5 w-3.5 text-zinc-500" />
                 Book Appointment
               </button>
               <button
@@ -2067,7 +2067,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                 onClick={() => { setAgentTools(prev => [...prev, { type: "native_reschedule", name: "reschedule_appointment", description: "Reschedule an existing booking when the caller provides their booking reference and wants a new time." }]); setDirty(true); }}
                 className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50 rounded-lg px-3 py-2 transition-colors"
               >
-                <CalendarClock className="h-3.5 w-3.5 text-amber-500" />
+                <CalendarClock className="h-3.5 w-3.5 text-zinc-500" />
                 Reschedule Appointment
               </button>
               <button
@@ -2075,7 +2075,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                 onClick={() => { setAgentTools(prev => [...prev, { type: "native_cancel", name: "cancel_appointment", description: "Cancel an existing booking when the caller provides their booking reference and wants to cancel." }]); setDirty(true); }}
                 className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50 rounded-lg px-3 py-2 transition-colors"
               >
-                <CalendarX className="h-3.5 w-3.5 text-rose-500" />
+                <CalendarX className="h-3.5 w-3.5 text-zinc-500" />
                 Cancel Appointment
               </button>
               <button
@@ -2103,14 +2103,14 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                 {/* Card header */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    {tool.type === "call_transfer"   && <PhoneForwarded className="h-4 w-4 text-violet-500" />}
-                    {tool.type === "send_sms"        && <Zap            className="h-4 w-4 text-emerald-500" />}
+                    {tool.type === "call_transfer"   && <PhoneForwarded className="h-4 w-4 text-zinc-500" />}
+                    {tool.type === "send_sms"        && <Zap            className="h-4 w-4 text-zinc-500" />}
                     {tool.type === "end_call"         && <PhoneOff        className="h-4 w-4 text-red-400" />}
-                    {tool.type === "cal_com"          && <Clock           className="h-4 w-4 text-blue-400" />}
+                    {tool.type === "cal_com"          && <Clock           className="h-4 w-4 text-zinc-400" />}
                     {tool.type === "webhook"          && <Globe           className="h-4 w-4 text-gray-500" />}
-                    {tool.type === "native_booking"   && <CalendarPlus    className="h-4 w-4 text-indigo-500" />}
-                    {tool.type === "native_reschedule" && <CalendarClock  className="h-4 w-4 text-amber-500" />}
-                    {tool.type === "native_cancel"    && <CalendarX       className="h-4 w-4 text-rose-500" />}
+                    {tool.type === "native_booking"   && <CalendarPlus    className="h-4 w-4 text-zinc-500" />}
+                    {tool.type === "native_reschedule" && <CalendarClock  className="h-4 w-4 text-zinc-500" />}
+                    {tool.type === "native_cancel"    && <CalendarX       className="h-4 w-4 text-zinc-500" />}
                     <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
                       {tool.type === "call_transfer"   ? "Call Transfer"
                         : tool.type === "send_sms"       ? "Send SMS"
@@ -2362,7 +2362,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                   <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Disposition Fields</p>
                 </div>
                 <button type="button" onClick={() => { setDispositionSchema(prev => [...prev, { key: "", label: "", type: "text", required: false, options: "" }]); setDirty(true); }}
-                  className="text-[11px] text-gray-700 hover:text-emerald-300 flex items-center gap-1">
+                  className="text-[11px] text-gray-700 hover:text-zinc-300 flex items-center gap-1">
                   <Plus className="h-3 w-3" /> Add Field
                 </button>
               </div>
@@ -2517,7 +2517,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                 <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
                   <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Outcome Messages</p>
                   <button type="button" onClick={() => setCfg({ whatsappOutcomeMessages: [...(cfg.whatsappOutcomeMessages ?? []), { outcome: "interested", templateName: "", language: "en" }] })}
-                    className="text-[11px] text-gray-700 hover:text-emerald-300 flex items-center gap-1"><Plus className="h-3 w-3" /> Add</button>
+                    className="text-[11px] text-gray-700 hover:text-zinc-300 flex items-center gap-1"><Plus className="h-3 w-3" /> Add</button>
                 </div>
                 {!(cfg.whatsappOutcomeMessages?.length) ? (
                   <p className="text-[11px] text-gray-400 px-4 py-3">No outcome messages configured.</p>
@@ -2579,7 +2579,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                     <td className="px-4 py-2.5">
                       {call.status === "completed"   && <span className="text-gray-700">completed</span>}
                       {call.status === "failed"      && <span className="text-red-500">failed</span>}
-                      {call.status === "in_progress" && <span className="text-amber-600">in progress</span>}
+                      {call.status === "in_progress" && <span className="text-zinc-600">in progress</span>}
                       {!["completed","failed","in_progress"].includes(call.status) && <span className="text-gray-400">{call.status}</span>}
                     </td>
                     <td className="px-4 py-2.5 text-gray-500 font-mono text-[11px]">{call.toNumber || "—"}</td>

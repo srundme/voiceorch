@@ -13,17 +13,17 @@ interface AgentMetricsBarProps {
 }
 
 const COST_COLORS = {
-  asr:       { bg: "bg-teal-400",    text: "text-teal-600",    label: "ASR" },
-  llm:       { bg: "bg-violet-400",  text: "text-violet-600",  label: "LLM" },
-  tts:       { bg: "bg-orange-400",  text: "text-orange-600",  label: "TTS" },
-  telephony: { bg: "bg-blue-400",    text: "text-blue-600",    label: "Tel" },
-  platform:  { bg: "bg-emerald-400", text: "text-emerald-600", label: "Fee" },
+  asr:       { bg: "bg-zinc-400",    text: "text-zinc-600",    label: "ASR" },
+  llm:       { bg: "bg-zinc-400",  text: "text-zinc-600",  label: "LLM" },
+  tts:       { bg: "bg-zinc-400",  text: "text-zinc-600",  label: "TTS" },
+  telephony: { bg: "bg-zinc-400",    text: "text-zinc-600",    label: "Tel" },
+  platform:  { bg: "bg-zinc-400", text: "text-zinc-600", label: "Fee" },
 };
 
 const LATENCY_COLORS = {
-  stt: { bg: "bg-sky-400",    text: "text-sky-600",    label: "STT" },
-  llm: { bg: "bg-violet-400", text: "text-violet-600", label: "LLM" },
-  tts: { bg: "bg-amber-400",  text: "text-amber-600",  label: "TTS" },
+  stt: { bg: "bg-zinc-400",    text: "text-zinc-600",    label: "STT" },
+  llm: { bg: "bg-zinc-400", text: "text-zinc-600", label: "LLM" },
+  tts: { bg: "bg-zinc-400",  text: "text-zinc-600",  label: "TTS" },
 };
 
 function SegmentBar({

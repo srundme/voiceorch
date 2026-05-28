@@ -74,7 +74,7 @@ export default function CallsList() {
     switch(status) {
       case "completed": return <Badge variant="default" className="bg-primary/20 text-primary hover:bg-primary/30 border-transparent">Completed</Badge>;
       case "failed": return <Badge variant="destructive" className="bg-destructive/20 text-destructive hover:bg-destructive/30 border-transparent">Failed</Badge>;
-      case "in_progress": return <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-500/30 border-transparent">In Progress</Badge>;
+      case "in_progress": return <Badge variant="secondary" className="bg-zinc-500/20 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-500/30 border-transparent">In Progress</Badge>;
       case "pending": return <Badge variant="outline" className="text-muted-foreground">Pending</Badge>;
       case "cancelled": return <Badge variant="outline" className="bg-muted text-muted-foreground border-transparent">Cancelled</Badge>;
       default: return <Badge variant="outline">{status}</Badge>;
@@ -83,8 +83,8 @@ export default function CallsList() {
 
   const getLatencyColor = (ms: number | null | undefined, thresholds: [number, number]) => {
     if (ms == null) return "text-muted-foreground";
-    if (ms <= thresholds[0]) return "text-emerald-600 dark:text-gray-700";
-    if (ms <= thresholds[1]) return "text-yellow-600 dark:text-yellow-400";
+    if (ms <= thresholds[0]) return "text-zinc-600 dark:text-gray-700";
+    if (ms <= thresholds[1]) return "text-zinc-600 dark:text-zinc-400";
     return "text-red-600 dark:text-red-500";
   };
 
@@ -151,9 +151,9 @@ export default function CallsList() {
                     <TooltipTrigger className="cursor-default">Latency (avg)</TooltipTrigger>
                     <TooltipContent side="top" className="text-xs max-w-[220px]">
                       <p className="mb-1 font-semibold">Per-call averages across all turns</p>
-                      <p><span className="text-blue-400">STT</span> — speech-to-text round-trip</p>
-                      <p><span className="text-violet-600">LLM</span> — time to first token</p>
-                      <p><span className="text-orange-400">TTS</span> — time to first audio chunk</p>
+                      <p><span className="text-zinc-400">STT</span> — speech-to-text round-trip</p>
+                      <p><span className="text-zinc-600">LLM</span> — time to first token</p>
+                      <p><span className="text-zinc-400">TTS</span> — time to first audio chunk</p>
                     </TooltipContent>
                   </Tooltip>
                 </TableHead>
@@ -249,7 +249,7 @@ export default function CallsList() {
                       </TableCell>
                       <TableCell className="font-mono text-xs">
                         {(call as any).costCents != null && (call as any).costCents > 0 ? (
-                          <span className="flex items-center gap-0.5 text-amber-500 dark:text-amber-600">
+                          <span className="flex items-center gap-0.5 text-zinc-500 dark:text-zinc-600">
                             <DollarSign className="h-3 w-3" />
                             {((call as any).costCents / 100).toFixed(3)}
                           </span>

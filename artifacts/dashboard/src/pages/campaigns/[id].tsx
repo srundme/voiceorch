@@ -72,10 +72,10 @@ function parseCsv(text: string): { headers: string[]; rows: Record<string, strin
 function statusBadge(status: string) {
   const map: Record<string, string> = {
     pending:   "bg-gray-50 text-gray-600 border-gray-200",
-    calling:   "bg-blue-50 text-blue-700 border-blue-200",
-    completed: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    calling:   "bg-zinc-50 text-zinc-700 border-zinc-200",
+    completed: "bg-zinc-50 text-zinc-700 border-zinc-200",
     failed:    "bg-red-50 text-red-700 border-red-200",
-    skipped:   "bg-amber-50 text-amber-700 border-amber-200",
+    skipped:   "bg-zinc-50 text-zinc-700 border-zinc-200",
   };
   return map[status] ?? "bg-gray-50 text-gray-500 border-gray-200";
 }
@@ -95,20 +95,20 @@ function WebhookUrlBox({ token }: { token: string }) {
     setTimeout(() => setCopied(false), 2000);
   }
   return (
-    <div className="border border-dashed border-violet-200 rounded-xl bg-violet-50/50 p-4">
-      <p className="text-xs font-semibold text-violet-700 mb-2 flex items-center gap-1.5">
+    <div className="border border-dashed border-zinc-200 rounded-xl bg-zinc-50/50 p-4">
+      <p className="text-xs font-semibold text-zinc-700 mb-2 flex items-center gap-1.5">
         <Megaphone className="h-3.5 w-3.5" /> Webhook URL
       </p>
       <div className="flex items-center gap-2">
-        <code className="text-xs font-mono text-violet-900 flex-1 truncate">{url}</code>
+        <code className="text-xs font-mono text-zinc-900 flex-1 truncate">{url}</code>
         <button
           onClick={copy}
-          className="shrink-0 p-1.5 rounded-lg hover:bg-violet-100 text-violet-600 transition-colors"
+          className="shrink-0 p-1.5 rounded-lg hover:bg-zinc-100 text-zinc-600 transition-colors"
         >
-          {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+          {copied ? <Check className="h-3.5 w-3.5 text-zinc-500" /> : <Copy className="h-3.5 w-3.5" />}
         </button>
       </div>
-      <p className="text-[11px] text-violet-600/70 mt-2">
+      <p className="text-[11px] text-zinc-600/70 mt-2">
         POST JSON leads here — or use as Meta Lead Ads webhook URL (GET for verification, POST for leads).
       </p>
     </div>
@@ -203,7 +203,7 @@ function UploadCsvModal({
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Upload className="h-4 w-4 text-violet-600" /> Upload CSV
+            <Upload className="h-4 w-4 text-zinc-600" /> Upload CSV
           </DialogTitle>
           <DialogDescription>
             Upload a CSV file to bulk-import leads into this campaign.
@@ -214,26 +214,26 @@ function UploadCsvModal({
         {result ? (
           <div className="space-y-4">
             <div className="flex flex-col items-center gap-3 py-6 text-center">
-              <div className="p-3 rounded-full bg-emerald-50 text-emerald-600">
+              <div className="p-3 rounded-full bg-zinc-50 text-zinc-600">
                 <CheckCircle2 className="h-8 w-8" />
               </div>
               <div>
                 <p className="text-lg font-bold text-gray-900">Import complete</p>
                 <p className="text-sm text-gray-500 mt-0.5">
-                  <span className="font-semibold text-emerald-700">{result.imported} leads imported</span>
+                  <span className="font-semibold text-zinc-700">{result.imported} leads imported</span>
                   {result.skipped > 0 && (
-                    <span className="text-amber-600">, {result.skipped} rows skipped</span>
+                    <span className="text-zinc-600">, {result.skipped} rows skipped</span>
                   )}
                 </p>
               </div>
               {(result.errors ?? []).length > 0 && (
-                <div className="w-full bg-amber-50 border border-amber-200 rounded-lg p-3 text-left">
-                  <p className="text-xs font-semibold text-amber-700 mb-1.5 flex items-center gap-1">
+                <div className="w-full bg-zinc-50 border border-zinc-200 rounded-lg p-3 text-left">
+                  <p className="text-xs font-semibold text-zinc-700 mb-1.5 flex items-center gap-1">
                     <AlertCircle className="h-3.5 w-3.5" /> Skipped rows
                   </p>
                   <ul className="space-y-0.5">
                     {(result.errors ?? []).map((e, i) => (
-                      <li key={i} className="text-xs text-amber-700 font-mono">{e}</li>
+                      <li key={i} className="text-xs text-zinc-700 font-mono">{e}</li>
                     ))}
                   </ul>
                 </div>
@@ -257,12 +257,12 @@ function UploadCsvModal({
                   <div key={role} className="flex items-center gap-1.5 bg-white border border-gray-200 rounded px-2 py-1">
                     <span className="text-gray-400">{role}</span>
                     <span className="text-gray-300">←</span>
-                    <code className="font-mono text-violet-700">{field}</code>
+                    <code className="font-mono text-zinc-700">{field}</code>
                   </div>
                 ))}
               </div>
               <p className="text-gray-400 mt-1.5">
-                Make sure your CSV has a column named exactly <code className="font-mono text-violet-700">{phoneField}</code>.
+                Make sure your CSV has a column named exactly <code className="font-mono text-zinc-700">{phoneField}</code>.
               </p>
             </div>
 
@@ -275,11 +275,11 @@ function UploadCsvModal({
                 onClick={() => fileInputRef.current?.click()}
                 className={`border-2 border-dashed rounded-xl p-10 flex flex-col items-center gap-3 cursor-pointer transition-colors ${
                   dragging
-                    ? "border-violet-400 bg-violet-50"
-                    : "border-gray-200 hover:border-violet-300 hover:bg-gray-50"
+                    ? "border-zinc-400 bg-zinc-50"
+                    : "border-gray-200 hover:border-zinc-300 hover:bg-gray-50"
                 }`}
               >
-                <div className="p-3 rounded-full bg-violet-50 text-violet-400">
+                <div className="p-3 rounded-full bg-zinc-50 text-zinc-400">
                   <FileText className="h-7 w-7" />
                 </div>
                 <div className="text-center">
@@ -301,17 +301,17 @@ function UploadCsvModal({
             ) : (
               <div className="space-y-3">
                 {/* File name + clear */}
-                <div className="flex items-center justify-between bg-violet-50 border border-violet-200 rounded-lg px-3 py-2">
+                <div className="flex items-center justify-between bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-2">
                   <div className="flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-violet-500" />
-                    <span className="text-sm font-medium text-violet-800">{fileName}</span>
-                    <span className="text-xs text-violet-500">
+                    <FileText className="h-4 w-4 text-zinc-500" />
+                    <span className="text-sm font-medium text-zinc-800">{fileName}</span>
+                    <span className="text-xs text-zinc-500">
                       {parsed.rows.length.toLocaleString()} rows detected
                     </span>
                   </div>
                   <button
                     onClick={reset}
-                    className="text-violet-400 hover:text-violet-700 transition-colors"
+                    className="text-zinc-400 hover:text-zinc-700 transition-colors"
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -335,9 +335,9 @@ function UploadCsvModal({
                 )}
 
                 {phoneDetected && (
-                  <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-                    <p className="text-xs text-emerald-700">
+                  <div className="flex items-center gap-2 bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-2">
+                    <CheckCircle2 className="h-4 w-4 text-zinc-500 shrink-0" />
+                    <p className="text-xs text-zinc-700">
                       Phone column <code className="font-mono font-bold">{phoneField}</code> detected —{" "}
                       ready to import <strong>{parsed.rows.length.toLocaleString()}</strong> leads
                     </p>
@@ -359,21 +359,21 @@ function UploadCsvModal({
                                 key={h}
                                 className={`px-3 py-2 text-left font-medium ${
                                   h === phoneField
-                                    ? "text-violet-700 bg-violet-50"
+                                    ? "text-zinc-700 bg-zinc-50"
                                     : h === nameField || h === emailField
-                                    ? "text-blue-600"
+                                    ? "text-zinc-600"
                                     : "text-gray-400"
                                 }`}
                               >
                                 {h}
                                 {h === phoneField && (
-                                  <span className="ml-1 text-[9px] bg-violet-100 text-violet-600 px-1 rounded">phone</span>
+                                  <span className="ml-1 text-[9px] bg-zinc-100 text-zinc-600 px-1 rounded">phone</span>
                                 )}
                                 {h === nameField && h !== phoneField && (
-                                  <span className="ml-1 text-[9px] bg-blue-100 text-blue-600 px-1 rounded">name</span>
+                                  <span className="ml-1 text-[9px] bg-zinc-100 text-zinc-600 px-1 rounded">name</span>
                                 )}
                                 {h === emailField && h !== phoneField && (
-                                  <span className="ml-1 text-[9px] bg-blue-100 text-blue-600 px-1 rounded">email</span>
+                                  <span className="ml-1 text-[9px] bg-zinc-100 text-zinc-600 px-1 rounded">email</span>
                                 )}
                               </th>
                             ))}
@@ -471,7 +471,7 @@ function LeadRow({ lead, onRetry }: { lead: CampaignLead; onRetry: () => void })
         </td>
       </tr>
       {open && (
-        <tr className="bg-violet-50/30">
+        <tr className="bg-zinc-50/30">
           <td colSpan={6} className="px-4 py-3">
             <div className="grid grid-cols-2 gap-4 text-xs">
               {lead.email && (
@@ -593,7 +593,7 @@ export default function CampaignDetailPage() {
       {/* Header */}
       <div className="flex items-start justify-between gap-4 mb-6">
         <div className="flex items-center gap-3">
-          <div className="p-3 rounded-xl bg-violet-50 text-violet-600">
+          <div className="p-3 rounded-xl bg-zinc-50 text-zinc-600">
             <Megaphone className="h-5 w-5" />
           </div>
           <div>
@@ -643,7 +643,7 @@ export default function CampaignDetailPage() {
             <div key={role} className="flex items-center gap-1.5 bg-gray-50 rounded-lg px-3 py-1.5 text-xs">
               <span className="font-medium text-gray-700">{role}</span>
               <span className="text-gray-300">←</span>
-              <code className="font-mono text-violet-700">{field}</code>
+              <code className="font-mono text-zinc-700">{field}</code>
             </div>
           ))}
         </div>

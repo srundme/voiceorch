@@ -31,8 +31,8 @@ function centsToUsd(cents: number): string {
 function txTypeLabel(type: string): { label: string; color: string; icon: React.ReactNode } {
   switch (type) {
     case "free_credit": return { label: "Free Credit", color: "text-gray-700", icon: <Zap className="w-3.5 h-3.5" /> };
-    case "topup":       return { label: "Top-up",       color: "text-blue-400",    icon: <ArrowDownLeft className="w-3.5 h-3.5" /> };
-    case "auto_topup":  return { label: "Auto Top-up",  color: "text-blue-400",    icon: <RefreshCw className="w-3.5 h-3.5" /> };
+    case "topup":       return { label: "Top-up",       color: "text-zinc-400",    icon: <ArrowDownLeft className="w-3.5 h-3.5" /> };
+    case "auto_topup":  return { label: "Auto Top-up",  color: "text-zinc-400",    icon: <RefreshCw className="w-3.5 h-3.5" /> };
     case "call_debit":  return { label: "Call Usage",   color: "text-gray-500",    icon: <ArrowUpRight className="w-3.5 h-3.5" /> };
     default:            return { label: type,            color: "text-gray-500",    icon: null };
   }
@@ -72,7 +72,7 @@ export default function WalletPage() {
         order_id: order.orderId,
         name: "SnapServe",
         description: `Wallet top-up — ${centsToUsd(amountCents)}`,
-        theme: { color: "#10b981" },
+        theme: { color: "#ededed" },
         handler: async (response: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => {
           try {
             await verifyPayment({
@@ -127,7 +127,7 @@ export default function WalletPage() {
         <div className="max-w-4xl mx-auto space-y-6">
 
           {/* Balance Card */}
-          <div className={`rounded-xl border p-6 ${balanceLow ? "border-amber-500/30 bg-amber-500/5" : "border-gray-200 bg-white"}`}>
+          <div className={`rounded-xl border p-6 ${balanceLow ? "border-zinc-500/30 bg-zinc-500/5" : "border-gray-200 bg-white"}`}>
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-xs text-gray-400 uppercase tracking-widest mb-1">Available Balance</p>
@@ -144,7 +144,7 @@ export default function WalletPage() {
                 </p>
               </div>
               {balanceLow && (
-                <div className="flex items-center gap-1.5 text-amber-600 text-xs bg-amber-400/10 border border-amber-400/20 rounded-lg px-3 py-1.5">
+                <div className="flex items-center gap-1.5 text-zinc-600 text-xs bg-zinc-400/10 border border-zinc-400/20 rounded-lg px-3 py-1.5">
                   <AlertCircle className="w-3.5 h-3.5" />
                   Low balance — top up to continue making calls
                 </div>
@@ -283,7 +283,7 @@ export default function WalletPage() {
                         <p className={`text-sm font-medium tabular-nums ${isCredit ? "text-gray-700" : "text-gray-500"}`}>
                           {isCredit ? "+" : ""}{centsToUsd(txn.amountCents)}
                         </p>
-                        <Badge variant="outline" className={`text-[10px] ${txn.status === "completed" ? "border-gray-200 text-gray-700" : txn.status === "pending" ? "border-amber-500/30 text-amber-600" : "border-red-500/30 text-red-500"}`}>
+                        <Badge variant="outline" className={`text-[10px] ${txn.status === "completed" ? "border-gray-200 text-gray-700" : txn.status === "pending" ? "border-zinc-500/30 text-zinc-600" : "border-red-500/30 text-red-500"}`}>
                           {txn.status}
                         </Badge>
                       </div>

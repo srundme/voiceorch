@@ -24,10 +24,10 @@ const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 function statusBadge(status: string) {
   switch (status) {
-    case "confirmed":   return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-50">{status}</Badge>;
-    case "pending":     return <Badge className="bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-50">{status}</Badge>;
+    case "confirmed":   return <Badge className="bg-zinc-50 text-zinc-700 border-zinc-200 hover:bg-zinc-50">{status}</Badge>;
+    case "pending":     return <Badge className="bg-zinc-50 text-zinc-700 border-zinc-200 hover:bg-zinc-50">{status}</Badge>;
     case "cancelled":   return <Badge className="bg-red-50 text-red-600 border-red-200 hover:bg-red-50">{status}</Badge>;
-    case "rescheduled": return <Badge className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-50">{status}</Badge>;
+    case "rescheduled": return <Badge className="bg-zinc-50 text-zinc-700 border-zinc-200 hover:bg-zinc-50">{status}</Badge>;
     default:            return <Badge variant="outline">{status}</Badge>;
   }
 }
@@ -35,7 +35,7 @@ function statusBadge(status: string) {
 function sourceBadge(bookedVia: string) {
   if (bookedVia === "agent") {
     return (
-      <Badge className="bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-50 gap-1">
+      <Badge className="bg-zinc-50 text-zinc-700 border-zinc-200 hover:bg-zinc-50 gap-1">
         <Bot className="h-3 w-3" />Agent Call
       </Badge>
     );
@@ -69,8 +69,8 @@ export default function SchedulingPage() {
     <div className="flex flex-col gap-6 p-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-xl bg-emerald-50">
-            <Calendar className="h-5 w-5 text-emerald-600" />
+          <div className="p-2 rounded-xl bg-zinc-50">
+            <Calendar className="h-5 w-5 text-zinc-600" />
           </div>
           <div>
             <h1 className="text-xl font-semibold text-foreground">Scheduling</h1>

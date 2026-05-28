@@ -48,8 +48,8 @@ const getStatusBadge = (status: string) => {
   switch (status) {
     case "completed":
       return (
-        <span className={`${base} bg-emerald-500/10 text-emerald-500 border border-emerald-500/20`}>
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Completed
+        <span className={`${base} bg-zinc-500/10 text-zinc-300 border border-zinc-500/20`}>
+          <span className="h-1.5 w-1.5 rounded-full bg-zinc-300" />Completed
         </span>
       );
     case "failed":
@@ -60,8 +60,8 @@ const getStatusBadge = (status: string) => {
       );
     case "in_progress":
       return (
-        <span className={`${base} bg-amber-500/10 text-amber-500 border border-amber-500/20`}>
-          <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />In Progress
+        <span className={`${base} bg-zinc-500/10 text-zinc-300 border border-zinc-500/20`}>
+          <span className="h-1.5 w-1.5 rounded-full bg-zinc-300 animate-pulse" />In Progress
         </span>
       );
     case "pending":
@@ -80,11 +80,11 @@ const getStatusBadge = (status: string) => {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  completed:   "#22c55e",
-  failed:      "#EF4444",
-  in_progress: "#F59E0B",
-  pending:     "#6b7280",
-  cancelled:   "#6b7280",
+  completed:   "#d4d4d8",
+  failed:      "#ef4444",
+  in_progress: "#a1a1aa",
+  pending:     "#71717a",
+  cancelled:   "#52525b",
 };
 
 /* ── Stat cards ──────────────────────────────────────────────────────────── */

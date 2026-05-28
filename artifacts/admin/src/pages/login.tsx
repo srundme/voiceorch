@@ -32,17 +32,15 @@ export default function Login() {
         <CardHeader className="space-y-4 pb-6 text-center border-b border-border/50 mb-6">
           <div className="mx-auto flex items-center justify-center gap-2.5 mb-1">
             <img
-              src={`${import.meta.env.BASE_URL}snapserve-icon.png`}
+              src={`${import.meta.env.BASE_URL}snapserve-icon-light.png`}
               alt=""
               aria-hidden
               className="h-8 w-8 select-none"
-              style={{ filter: "brightness(0) invert(1)" }}
             />
             <img
-              src={`${import.meta.env.BASE_URL}snapserve-wordmark.png`}
+              src={`${import.meta.env.BASE_URL}snapserve-wordmark-light.png`}
               alt="SnapServe"
               className="h-5 select-none"
-              style={{ filter: "brightness(0) invert(1)" }}
             />
           </div>
           <CardTitle className="text-xl font-bold tracking-tight">System Access</CardTitle>

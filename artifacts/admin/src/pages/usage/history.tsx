@@ -107,7 +107,7 @@ export default function UsageHistoryPage() {
                     <TableCell className="text-right">{microsToUsd(r.estimatedCostMicros)}</TableCell>
                     <TableCell className="text-right">
                       {r.success ? (
-                        <Badge variant="outline" className="border-green-500/30 bg-green-500/10 text-green-400">ok</Badge>
+                        <Badge variant="outline" className="border-zinc-500/30 bg-zinc-500/10 text-zinc-400">ok</Badge>
                       ) : (
                         <Badge variant="outline" className="border-red-500/30 bg-red-500/10 text-red-400">failed</Badge>
                       )}

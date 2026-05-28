@@ -13,7 +13,7 @@ export default function NotFound() {
           <p className="mt-1 text-sm text-gray-400">The page you are looking for does not exist.</p>
         </div>
         <Link href="/app">
-          <button className="text-[13px] text-violet-600 hover:text-violet-300 transition-colors">
+          <button className="text-[13px] text-zinc-600 hover:text-zinc-300 transition-colors">
             Back to dashboard
           </button>
         </Link>

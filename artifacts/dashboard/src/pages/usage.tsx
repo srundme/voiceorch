@@ -19,9 +19,9 @@ function microsToUsdShort(micros: number): string {
 }
 
 const SERVICE_META: Record<string, { label: string; icon: React.ElementType; color: string; bg: string }> = {
-  stt: { label: "Speech-to-Text", icon: Mic,           color: "#6366F1", bg: "#EEF2FF" },
-  llm: { label: "Language Model", icon: MessageSquare,  color: "#10B981", bg: "#ECFDF5" },
-  tts: { label: "Text-to-Speech", icon: Volume2,        color: "#F59E0B", bg: "#FFFBEB" },
+  stt: { label: "Speech-to-Text", icon: Mic,           color: "#71717a", bg: "#f4f4f5" },
+  llm: { label: "Language Model", icon: MessageSquare,  color: "#a1a1aa", bg: "#f4f4f5" },
+  tts: { label: "Text-to-Speech", icon: Volume2,        color: "#a1a1aa", bg: "#f4f4f5" },
 };
 
 function ServiceCard({
@@ -119,7 +119,7 @@ function EventRow({
       <td className="py-2.5 pr-3">
         <div className="flex items-center gap-2">
           {event.success
-            ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+            ? <CheckCircle2 className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
             : <XCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />}
           <span className="text-xs text-gray-500 whitespace-nowrap">
             {format(parseISO(event.createdAt), "MMM d, HH:mm")}
@@ -205,7 +205,7 @@ export default function UsagePage() {
                       style={
                         (data.totalRemainingMicros ?? 0) <= 0
                           ? { background: "#FEF2F2", color: "#DC2626", border: "1px solid #FECACA" }
-                          : { background: "#F0FDF4", color: "#15803D", border: "1px solid #BBF7D0" }
+                          : { background: "#f4f4f5", color: "#52525b", border: "1px solid #e4e4e7" }
                       }
                     >
                       {(data.totalRemainingMicros ?? 0) > 0
@@ -272,7 +272,7 @@ export default function UsagePage() {
                           <td className="py-2.5 pl-4 pr-3">
                             <div className="flex items-center gap-2">
                               {e.success
-                                ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                                ? <CheckCircle2 className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
                                 : <XCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />}
                               <span className="text-xs text-gray-500 whitespace-nowrap">
                                 {format(parseISO(e.createdAt), "MMM d, HH:mm")}

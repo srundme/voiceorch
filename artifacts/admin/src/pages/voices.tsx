@@ -210,18 +210,18 @@ export default function Voices() {
         const msg = (error as Error)?.message ?? "";
         const isKeyMissing = msg.includes("Cartesia key not configured");
         return (
-          <div className={`rounded-md border p-4 flex items-start gap-3 ${isKeyMissing ? "border-amber-500/30 bg-amber-500/5" : "border-destructive/30 bg-destructive/5"}`}>
+          <div className={`rounded-md border p-4 flex items-start gap-3 ${isKeyMissing ? "border-zinc-500/30 bg-zinc-500/5" : "border-destructive/30 bg-destructive/5"}`}>
             {isKeyMissing ? (
-              <KeyRound className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+              <KeyRound className="h-4 w-4 text-zinc-500 mt-0.5 shrink-0" />
             ) : (
               <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
             )}
             <div className="text-sm">
               {isKeyMissing ? (
                 <>
-                  <strong className="text-amber-600 dark:text-amber-400">Cartesia key not configured</strong>
+                  <strong className="text-zinc-600 dark:text-zinc-400">Cartesia key not configured</strong>
                   <span className="text-muted-foreground"> — add it on the </span>
-                  <Link href="/managed-keys" className="underline text-amber-600 dark:text-amber-400 hover:opacity-80">Managed Keys</Link>
+                  <Link href="/managed-keys" className="underline text-zinc-600 dark:text-zinc-400 hover:opacity-80">Managed Keys</Link>
                   <span className="text-muted-foreground"> page to load voices.</span>
                 </>
               ) : (

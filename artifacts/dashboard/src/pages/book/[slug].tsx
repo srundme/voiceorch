@@ -158,8 +158,8 @@ export default function PublicBookingPage() {
           <BrandHeader />
           <Card>
             <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
-              <div className="p-4 rounded-full bg-emerald-50">
-                <CheckCircle className="h-10 w-10 text-emerald-500" />
+              <div className="p-4 rounded-full bg-zinc-50">
+                <CheckCircle className="h-10 w-10 text-zinc-500" />
               </div>
               <div className="w-full">
                 <p className="font-semibold text-xl">Booking confirmed!</p>
@@ -172,8 +172,8 @@ export default function PublicBookingPage() {
                   </p>
                 )}
                 {meetLink && (
-                  <div className="mt-5 p-4 rounded-lg bg-blue-50 border border-blue-200 flex flex-col items-center gap-2">
-                    <div className="flex items-center gap-2 text-blue-700 font-medium text-sm">
+                  <div className="mt-5 p-4 rounded-lg bg-zinc-50 border border-zinc-200 flex flex-col items-center gap-2">
+                    <div className="flex items-center gap-2 text-zinc-700 font-medium text-sm">
                       <Video className="h-4 w-4" />
                       Join with Google Meet
                     </div>
@@ -181,7 +181,7 @@ export default function PublicBookingPage() {
                       href={meetLink}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-blue-600 underline underline-offset-2 text-sm break-all hover:text-blue-800"
+                      className="text-zinc-600 underline underline-offset-2 text-sm break-all hover:text-zinc-800"
                     >
                       {meetLink}
                     </a>
@@ -203,7 +203,7 @@ export default function PublicBookingPage() {
       <div className="max-w-3xl mx-auto">
         <BrandHeader />
         <div className="mb-8 text-center">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-sm font-medium mb-4">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-100 text-zinc-700 text-sm font-medium mb-4">
             <Clock className="h-3.5 w-3.5" />
             {eventType.durationMinutes} min
           </div>
@@ -238,8 +238,8 @@ export default function PublicBookingPage() {
                         onClick={() => setSelectedSlot(slot)}
                         className={`px-3 py-2 rounded-lg border text-sm font-medium transition-all ${
                           selectedSlot === slot
-                            ? "bg-emerald-600 border-emerald-600 text-white"
-                            : "bg-white border-slate-200 text-slate-700 hover:border-emerald-400 hover:bg-emerald-50"
+                            ? "bg-zinc-600 border-zinc-600 text-white"
+                            : "bg-white border-slate-200 text-slate-700 hover:border-zinc-400 hover:bg-zinc-50"
                         }`}
                       >
                         {format(parseISO(slot), "h:mm a")}
@@ -313,7 +313,7 @@ export default function PublicBookingPage() {
               </div>
 
               {selectedSlot && (
-                <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-800">
+                <div className="p-3 rounded-lg bg-zinc-50 border border-zinc-200 text-sm text-zinc-800">
                   <strong>Selected:</strong> {format(parseISO(selectedSlot), "EEEE, MMMM d")} at {format(parseISO(selectedSlot), "h:mm a")}
                 </div>
               )}
@@ -326,7 +326,7 @@ export default function PublicBookingPage() {
 
               <Button
                 type="submit"
-                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                className="bg-zinc-600 hover:bg-zinc-700 text-white"
                 disabled={!selectedSlot || !name || !email || createMut.isPending}
               >
                 {createMut.isPending ? "Booking..." : "Confirm booking"}

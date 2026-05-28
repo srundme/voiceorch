@@ -28,7 +28,7 @@ const ALL_EVENTS = ["call.started", "call.ended", "call.failed"] as const;
 function EventBadge({ event }: { event: string }) {
   const colors: Record<string, string> = {
     "call.started": "bg-gray-50 text-gray-700 border-gray-200",
-    "call.ended":   "bg-blue-500/15 text-blue-400 border-blue-500/30",
+    "call.ended":   "bg-zinc-500/15 text-zinc-400 border-zinc-500/30",
     "call.failed":  "bg-red-500/15 text-red-500 border-red-500/30",
   };
   return (

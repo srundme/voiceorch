@@ -745,7 +745,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
       {/* Progress bar */}
       <div className="h-0.5 bg-gray-100 shrink-0">
         <div
-          className="h-full bg-gradient-to-r from-violet-500 to-indigo-400 transition-all duration-500 ease-out"
+          className="h-full bg-gradient-to-r from-zinc-500 to-zinc-400 transition-all duration-500 ease-out"
           style={{ width: `${progress}%` }}
         />
       </div>
@@ -814,8 +814,8 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                       <div className="mb-5">
                         <p className="text-gray-500 text-xs uppercase tracking-[0.15em] mb-3 font-semibold">Option A — Upload JD file</p>
                         {microAnswers.jdFileName ? (
-                          <div className="p-4 rounded-xl border border-emerald-300 bg-emerald-50 flex items-center gap-3">
-                            <FileText className="h-5 w-5 text-emerald-600 shrink-0" />
+                          <div className="p-4 rounded-xl border border-zinc-300 bg-zinc-50 flex items-center gap-3">
+                            <FileText className="h-5 w-5 text-zinc-600 shrink-0" />
                             <div className="flex-1 min-w-0">
                               <p className="text-gray-700 text-sm font-semibold truncate">{microAnswers.jdFileName}</p>
                               <p className="text-gray-400 text-xs">Uploaded — add any extra notes in Option B if needed</p>
@@ -856,7 +856,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                               next[0] = e.target.value;
                               updateMicro({ answers: next });
                             }}
-                            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 pt-3.5 pb-11 text-gray-900 text-sm placeholder:text-gray-300 focus:outline-none focus:border-violet-500/60 transition-all resize-none leading-relaxed"
+                            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 pt-3.5 pb-11 text-gray-900 text-sm placeholder:text-gray-300 focus:outline-none focus:border-zinc-500/60 transition-all resize-none leading-relaxed"
                           />
                           <VoiceInputButton
                             onTranscript={text => {
@@ -892,7 +892,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                           next[microStep] = e.target.value;
                           updateMicro({ answers: next });
                         }}
-                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 pt-3.5 pb-11 text-gray-900 text-sm placeholder:text-gray-300 focus:outline-none focus:border-violet-500/60 transition-all resize-none leading-relaxed"
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 pt-3.5 pb-11 text-gray-900 text-sm placeholder:text-gray-300 focus:outline-none focus:border-zinc-500/60 transition-all resize-none leading-relaxed"
                       />
                       <VoiceInputButton
                         onTranscript={text => {
@@ -926,7 +926,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                         rows={14}
                         value={flowEditText}
                         onChange={e => setFlowEditText(e.target.value)}
-                        className="w-full bg-gray-50 border border-violet-300 rounded-xl px-4 py-3.5 text-gray-900 text-sm font-mono placeholder:text-gray-300 focus:outline-none focus:border-violet-500/60 transition-all resize-none leading-relaxed"
+                        className="w-full bg-gray-50 border border-zinc-300 rounded-xl px-4 py-3.5 text-gray-900 text-sm font-mono placeholder:text-gray-300 focus:outline-none focus:border-zinc-500/60 transition-all resize-none leading-relaxed"
                       />
                     </div>
                   );
@@ -947,7 +947,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                         <div key={i} className={cn("relative mb-5 last:mb-0", node.branch && "ml-5")}>
                           <div className={cn(
                             "absolute -left-5 top-[7px] h-2.5 w-2.5 rounded-full border-2",
-                            node.branch ? "border-gray-200 bg-white" : "border-violet-400 bg-violet-400",
+                            node.branch ? "border-gray-200 bg-white" : "border-zinc-400 bg-zinc-400",
                           )} />
                           <div className="pl-3">
                             <p className={cn(
@@ -957,7 +957,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                               {node.label}
                             </p>
                             {node.badge && (
-                              <span className="inline-block mt-1.5 px-2.5 py-0.5 text-[10px] font-semibold rounded-full bg-violet-50 text-violet-600 border border-violet-200 leading-normal">
+                              <span className="inline-block mt-1.5 px-2.5 py-0.5 text-[10px] font-semibold rounded-full bg-zinc-50 text-zinc-600 border border-zinc-200 leading-normal">
                                 {node.badge}
                               </span>
                             )}
@@ -985,19 +985,19 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                 <div className="grid grid-cols-2 gap-4">
                   <button
                     onClick={() => { update({ mode: "managed" }); setDirection("forward"); setRenderKey(k => k + 1); }}
-                    className="group relative text-left p-6 rounded-2xl border border-gray-200 bg-gray-50 hover:bg-gray-100 hover:border-violet-500/60 transition-all duration-200"
+                    className="group relative text-left p-6 rounded-2xl border border-gray-200 bg-gray-50 hover:bg-gray-100 hover:border-zinc-500/60 transition-all duration-200"
                   >
-                    <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-violet-100/60 to-indigo-50/40 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-zinc-100/60 to-zinc-50/40 opacity-0 group-hover:opacity-100 transition-opacity" />
                     <div className="relative">
-                      <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center mb-4 shadow-lg shadow-violet-500/30">
+                      <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-zinc-500 to-zinc-600 flex items-center justify-center mb-4 shadow-lg shadow-zinc-500/30">
                         <Wand2 className="h-5 w-5 text-white" />
                       </div>
                       <div className="flex items-center gap-2 mb-1.5">
                         <span className="font-bold text-gray-900 text-lg">Managed</span>
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-violet-100 text-violet-600 font-semibold border border-violet-300">Recommended</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600 font-semibold border border-zinc-300">Recommended</span>
                       </div>
                       <p className="text-gray-500 text-sm leading-relaxed">We handle the full AI stack. Just describe what your agent should do.</p>
-                      <div className="mt-4 flex items-center gap-1.5 text-violet-600 text-sm font-medium group-hover:gap-2.5 transition-all">
+                      <div className="mt-4 flex items-center gap-1.5 text-zinc-600 text-sm font-medium group-hover:gap-2.5 transition-all">
                         Get started <ChevronRight className="h-4 w-4" />
                       </div>
                     </div>
@@ -1047,13 +1047,13 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                         className={cn(
                           "text-left p-4 rounded-xl border transition-all duration-200 flex items-center gap-3 group",
                           sel
-                            ? "border-violet-400 bg-violet-50 shadow-[0_0_0_1px_rgba(99,102,241,0.3)]"
+                            ? "border-zinc-400 bg-zinc-50 shadow-[0_0_0_1px_rgba(99,102,241,0.3)]"
                             : "border-gray-200 bg-gray-50 hover:border-gray-200 hover:bg-gray-50",
                         )}
                       >
                         <div className={cn(
                           "h-9 w-9 rounded-lg flex items-center justify-center shrink-0 transition-colors",
-                          sel ? "bg-violet-500 text-white" : "bg-gray-100 text-gray-500",
+                          sel ? "bg-zinc-500 text-white" : "bg-gray-100 text-gray-500",
                         )}>
                           <Icon className="h-4 w-4" />
                         </div>
@@ -1061,7 +1061,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                           <div className={cn("font-semibold text-sm", sel ? "text-gray-900" : "text-gray-600")}>{uc.label}</div>
                           <div className="text-xs text-gray-400 mt-0.5 leading-tight truncate">{uc.desc}</div>
                         </div>
-                        {sel && <Check className="h-4 w-4 text-violet-600 shrink-0 ml-auto" />}
+                        {sel && <Check className="h-4 w-4 text-zinc-600 shrink-0 ml-auto" />}
                       </button>
                     );
                   })}
@@ -1086,7 +1086,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                       onChange={e => { update({ agentName: e.target.value }); if (e.target.value.trim()) setDetailsErrors(prev => ({ ...prev, agentName: undefined })); }}
                       className={cn(
                         "w-full bg-gray-50 border rounded-xl px-4 py-3.5 text-gray-900 text-base placeholder:text-gray-300 focus:outline-none focus:bg-gray-100 transition-all",
-                        detailsErrors.agentName ? "border-red-400 focus:border-red-400" : "border-gray-200 focus:border-violet-500/60",
+                        detailsErrors.agentName ? "border-red-400 focus:border-red-400" : "border-gray-200 focus:border-zinc-500/60",
                       )}
                     />
                     {detailsErrors.agentName && (
@@ -1102,7 +1102,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                       onChange={e => { update({ companyName: e.target.value }); if (e.target.value.trim()) setDetailsErrors(prev => ({ ...prev, companyName: undefined })); }}
                       className={cn(
                         "w-full bg-gray-50 border rounded-xl px-4 py-3.5 text-gray-900 text-base placeholder:text-gray-300 focus:outline-none focus:bg-gray-100 transition-all",
-                        detailsErrors.companyName ? "border-red-400 focus:border-red-400" : "border-gray-200 focus:border-violet-500/60",
+                        detailsErrors.companyName ? "border-red-400 focus:border-red-400" : "border-gray-200 focus:border-zinc-500/60",
                       )}
                     />
                     {detailsErrors.companyName && (
@@ -1119,7 +1119,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                           className={cn(
                             "flex-1 py-3 px-4 rounded-xl border font-medium text-sm capitalize transition-all",
                             state.agentDirection === dir
-                              ? "border-violet-400 bg-violet-50 text-gray-900"
+                              ? "border-zinc-400 bg-zinc-50 text-gray-900"
                               : "border-gray-200 bg-gray-50 text-gray-400 hover:border-gray-300",
                           )}
                         >
@@ -1139,11 +1139,11 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                       <div className="flex items-center gap-3">
                         <div className={cn(
                           "w-2 h-2 rounded-full",
-                          state.leadSource.enabled ? "bg-violet-500" : "bg-gray-300",
+                          state.leadSource.enabled ? "bg-zinc-500" : "bg-gray-300",
                         )} />
                         <span className="text-gray-500 text-xs uppercase tracking-[0.15em] font-medium">Lead Source</span>
                         {state.leadSource.enabled && (
-                          <span className="text-[10px] font-semibold uppercase tracking-wider text-violet-600 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded-full">On</span>
+                          <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600 bg-zinc-50 border border-zinc-200 px-1.5 py-0.5 rounded-full">On</span>
                         )}
                       </div>
                       <span className="text-gray-400 text-xs">{state.leadSource.enabled ? "▲" : "▼"}</span>
@@ -1155,11 +1155,11 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                         <div>
                           <label className="text-gray-500 text-xs uppercase tracking-[0.15em] block mb-2">Source</label>
                           <div className="flex items-center gap-2">
-                            <div className="flex items-center gap-2 flex-1 px-4 py-2.5 rounded-xl border border-violet-300 bg-violet-50">
-                              <svg viewBox="0 0 24 24" className="h-4 w-4 text-violet-600 shrink-0" fill="currentColor">
+                            <div className="flex items-center gap-2 flex-1 px-4 py-2.5 rounded-xl border border-zinc-300 bg-zinc-50">
+                              <svg viewBox="0 0 24 24" className="h-4 w-4 text-zinc-600 shrink-0" fill="currentColor">
                                 <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/>
                               </svg>
-                              <span className="text-sm text-violet-700 font-medium">Instagram</span>
+                              <span className="text-sm text-zinc-700 font-medium">Instagram</span>
                             </div>
                           </div>
                         </div>
@@ -1172,7 +1172,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                               href="https://developers.facebook.com/docs/instagram-platform/instagram-api-with-facebook-login/get-access-tokens-and-permissions"
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-[11px] text-violet-500 hover:text-violet-700 underline"
+                              className="text-[11px] text-zinc-500 hover:text-zinc-700 underline"
                             >
                               Get token ↗
                             </a>
@@ -1182,7 +1182,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                             placeholder="EAAxxxxxxxxxxxxxxxxxxxxxxxx"
                             value={state.leadSource.token}
                             onChange={e => update({ leadSource: { ...state.leadSource, token: e.target.value } })}
-                            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-sm placeholder:text-gray-300 focus:outline-none focus:border-violet-500/60 transition-all font-mono"
+                            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-sm placeholder:text-gray-300 focus:outline-none focus:border-zinc-500/60 transition-all font-mono"
                           />
                         </div>
 
@@ -1207,15 +1207,15 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                                   className={cn(
                                     "flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-medium transition-all",
                                     checked
-                                      ? "border-violet-400 bg-violet-50 text-violet-700"
+                                      ? "border-zinc-400 bg-zinc-50 text-zinc-700"
                                       : "border-gray-200 bg-gray-50 text-gray-400 hover:border-gray-300",
                                   )}
                                 >
-                                  <span className={cn("w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0", checked ? "border-violet-500 bg-violet-500" : "border-gray-300")}>
+                                  <span className={cn("w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0", checked ? "border-zinc-500 bg-zinc-500" : "border-gray-300")}>
                                     {checked && <Check className="h-2.5 w-2.5 text-white" />}
                                   </span>
                                   <span className="capitalize">{field}</span>
-                                  <span className={cn("font-mono text-[10px]", checked ? "text-violet-500" : "text-gray-300")}>{varName}</span>
+                                  <span className={cn("font-mono text-[10px]", checked ? "text-zinc-500" : "text-gray-300")}>{varName}</span>
                                 </button>
                               );
                             })}
@@ -1230,7 +1230,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                                   className={cn(
                                     "flex items-center gap-1.5 pl-3 pr-2 py-2 rounded-xl border text-xs font-medium transition-all",
                                     checked
-                                      ? "border-violet-400 bg-violet-50 text-violet-700"
+                                      ? "border-zinc-400 bg-zinc-50 text-zinc-700"
                                       : "border-gray-200 bg-gray-50 text-gray-400",
                                   )}
                                 >
@@ -1243,12 +1243,12 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                                         : [...state.leadSource.fields, field];
                                       update({ leadSource: { ...state.leadSource, fields: next } });
                                     }}
-                                    className={cn("w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 transition-colors", checked ? "border-violet-500 bg-violet-500" : "border-gray-300 hover:border-gray-400")}
+                                    className={cn("w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 transition-colors", checked ? "border-zinc-500 bg-zinc-500" : "border-gray-300 hover:border-gray-400")}
                                   >
                                     {checked && <Check className="h-2.5 w-2.5 text-white" />}
                                   </button>
                                   <span className="capitalize">{displayName}</span>
-                                  <span className={cn("font-mono text-[10px]", checked ? "text-violet-500" : "text-gray-300")}>{varName}</span>
+                                  <span className={cn("font-mono text-[10px]", checked ? "text-zinc-500" : "text-gray-300")}>{varName}</span>
                                   {/* remove button */}
                                   <button
                                     type="button"
@@ -1279,12 +1279,12 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                               value={addFieldInput}
                               onChange={e => { setAddFieldInput(e.target.value); setAddFieldError(""); }}
                               onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleAddLeadField(); } }}
-                              className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-gray-900 text-xs placeholder:text-gray-300 focus:outline-none focus:border-violet-500/60 transition-all"
+                              className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-gray-900 text-xs placeholder:text-gray-300 focus:outline-none focus:border-zinc-500/60 transition-all"
                             />
                             <button
                               type="button"
                               onClick={handleAddLeadField}
-                              className="px-3 py-2 rounded-xl border border-violet-300 bg-violet-50 text-violet-700 text-xs font-medium hover:bg-violet-100 transition-colors shrink-0"
+                              className="px-3 py-2 rounded-xl border border-zinc-300 bg-zinc-50 text-zinc-700 text-xs font-medium hover:bg-zinc-100 transition-colors shrink-0"
                             >
                               Add field
                             </button>
@@ -1302,7 +1302,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                             value={state.productDetails}
                             onChange={e => update({ productDetails: e.target.value })}
                             rows={3}
-                            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-sm placeholder:text-gray-300 focus:outline-none focus:border-violet-500/60 transition-all resize-none leading-relaxed"
+                            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-sm placeholder:text-gray-300 focus:outline-none focus:border-zinc-500/60 transition-all resize-none leading-relaxed"
                           />
                           <p className="mt-1.5 text-[11px] text-gray-400">Available as <code className="font-mono">&#123;&#123;product_details&#125;&#125;</code> in your agent's prompt.</p>
                         </div>
@@ -1332,15 +1332,15 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                         onClick={() => update({ isMultilingual: opt.value, additionalLanguages: [] })}
                         className={cn(
                           "flex-1 p-4 rounded-xl border transition-all flex items-start gap-3",
-                          sel ? "border-violet-400 bg-violet-50" : "border-gray-200 bg-gray-50 hover:border-gray-200",
+                          sel ? "border-zinc-400 bg-zinc-50" : "border-gray-200 bg-gray-50 hover:border-gray-200",
                         )}
                       >
-                        {opt.value ? <Languages className={cn("h-5 w-5 mt-0.5 shrink-0", sel ? "text-violet-600" : "text-gray-400")} /> : <Volume2 className={cn("h-5 w-5 mt-0.5 shrink-0", sel ? "text-violet-600" : "text-gray-400")} />}
+                        {opt.value ? <Languages className={cn("h-5 w-5 mt-0.5 shrink-0", sel ? "text-zinc-600" : "text-gray-400")} /> : <Volume2 className={cn("h-5 w-5 mt-0.5 shrink-0", sel ? "text-zinc-600" : "text-gray-400")} />}
                         <div className="text-left">
                           <div className={cn("font-semibold text-sm", sel ? "text-gray-900" : "text-gray-500")}>{opt.label}</div>
                           <div className="text-xs text-gray-400 mt-0.5">{opt.sub}</div>
                         </div>
-                        {sel && <Check className="h-4 w-4 text-violet-600 ml-auto mt-0.5" />}
+                        {sel && <Check className="h-4 w-4 text-zinc-600 ml-auto mt-0.5" />}
                       </button>
                     );
                   })}
@@ -1356,11 +1356,11 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                         onClick={() => update({ primaryLanguage: lang.code })}
                         className={cn(
                           "p-3 rounded-xl border flex items-center gap-2.5 transition-all",
-                          sel ? "border-violet-400 bg-violet-50" : "border-gray-200 bg-gray-50 hover:border-gray-200",
+                          sel ? "border-zinc-400 bg-zinc-50" : "border-gray-200 bg-gray-50 hover:border-gray-200",
                         )}
                       >
                         <span className={cn("font-medium text-sm", sel ? "text-gray-900" : "text-gray-500")}>{lang.label}</span>
-                        {sel && <Check className="h-3.5 w-3.5 text-violet-600 ml-auto" />}
+                        {sel && <Check className="h-3.5 w-3.5 text-zinc-600 ml-auto" />}
                       </button>
                     );
                   })}
@@ -1385,13 +1385,13 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                             }}
                             className={cn(
                               "p-3 rounded-xl border flex items-center gap-2.5 transition-all",
-                              sel    ? "border-violet-400 bg-violet-50"
+                              sel    ? "border-zinc-400 bg-zinc-50"
                               : maxed ? "border-gray-100 opacity-30 cursor-not-allowed"
                               : "border-gray-200 bg-gray-50 hover:border-gray-200",
                             )}
                           >
                             <span className={cn("font-medium text-sm", sel ? "text-gray-900" : "text-gray-500")}>{lang.label}</span>
-                            {sel && <Check className="h-3.5 w-3.5 text-violet-600 ml-auto" />}
+                            {sel && <Check className="h-3.5 w-3.5 text-zinc-600 ml-auto" />}
                           </button>
                         );
                       })}
@@ -1417,7 +1417,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                           <div key={item.l} className="text-center p-2.5 rounded-lg bg-gray-50 border border-gray-100">
                             <div className="text-gray-400 text-[9px] uppercase tracking-widest">{item.l}</div>
                             <div className="text-gray-700 text-xs font-semibold capitalize mt-0.5">{item.v}</div>
-                            {item.note && <div className="text-violet-600/70 text-[9px] mt-0.5">{item.note}</div>}
+                            {item.note && <div className="text-zinc-600/70 text-[9px] mt-0.5">{item.note}</div>}
                           </div>
                         ))}
                       </div>
@@ -1441,7 +1441,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                   value={state.callFlowDescription}
                   onChange={e => { update({ callFlowDescription: e.target.value }); setGenError(""); }}
                   rows={7}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 text-gray-900 text-sm placeholder:text-gray-300 focus:outline-none focus:border-violet-500/60 transition-all resize-none leading-relaxed mb-3"
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 text-gray-900 text-sm placeholder:text-gray-300 focus:outline-none focus:border-zinc-500/60 transition-all resize-none leading-relaxed mb-3"
                 />
 
                 <button
@@ -1451,7 +1451,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                     "w-full flex items-center justify-center gap-2.5 py-3.5 rounded-xl font-semibold text-sm transition-all mb-3",
                     !state.callFlowDescription.trim() || isGenerating
                       ? "bg-gray-50 text-gray-400 cursor-not-allowed"
-                      : "bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white shadow-lg shadow-violet-500/20",
+                      : "bg-gradient-to-r from-zinc-600 to-zinc-600 hover:from-zinc-500 hover:to-zinc-500 text-white shadow-lg shadow-zinc-500/20",
                   )}
                 >
                   {isGenerating
@@ -1461,10 +1461,10 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                 </button>
 
                 {generateError && (
-                  <div className="flex items-start gap-2.5 p-3.5 rounded-xl border border-rose-300 bg-rose-50 mb-3">
-                    <X className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
+                  <div className="flex items-start gap-2.5 p-3.5 rounded-xl border border-zinc-300 bg-zinc-50 mb-3">
+                    <X className="h-4 w-4 text-zinc-500 shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-rose-500 text-xs font-semibold mb-0.5">Generation failed</p>
+                      <p className="text-zinc-500 text-xs font-semibold mb-0.5">Generation failed</p>
                       <p className="text-gray-400 text-xs">{generateError}</p>
                     </div>
                   </div>
@@ -1519,8 +1519,8 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                     />
                   </div>
                 ) : (
-                  <div className="p-4 rounded-xl border border-emerald-300 bg-emerald-50 flex items-center gap-3 mb-4">
-                    <FileText className="h-5 w-5 text-emerald-600 shrink-0" />
+                  <div className="p-4 rounded-xl border border-zinc-300 bg-zinc-50 flex items-center gap-3 mb-4">
+                    <FileText className="h-5 w-5 text-zinc-600 shrink-0" />
                     <div className="flex-1 min-w-0">
                       <p className="text-gray-700 text-sm font-semibold truncate">{state.kbFileName || "Pasted content"}</p>
                       <p className="text-gray-400 text-xs">{state.kbContent.length.toLocaleString()} characters</p>
@@ -1538,7 +1538,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                   value={state.kbContent && !state.kbFileName ? state.kbContent : ""}
                   onChange={e => update({ kbContent: e.target.value, kbFileName: "" })}
                   rows={5}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 text-gray-900 text-sm placeholder:text-gray-300 focus:outline-none focus:border-violet-500/60 transition-all resize-none leading-relaxed"
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 text-gray-900 text-sm placeholder:text-gray-300 focus:outline-none focus:border-zinc-500/60 transition-all resize-none leading-relaxed"
                 />
 
                 <div className="mt-4 p-3.5 rounded-xl border border-gray-200 bg-gray-50 flex items-center gap-2.5">
@@ -1555,12 +1555,12 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                 <h2 className="text-3xl font-bold text-gray-900 mb-2">Choose your<br />agent's voice</h2>
                 <p className="text-gray-400 text-sm mb-8">
                   {state.primaryLanguage !== "english"
-                    ? <><span className="text-violet-600 font-medium">A native {state.primaryLanguage} voice is pre-selected</span> — voices with a matching language badge work best.{" "}</>
-                    : <><span className="text-violet-600 font-medium">Arushi</span> is pre-selected — warm Indian English female.{" "}</>
+                    ? <><span className="text-zinc-600 font-medium">A native {state.primaryLanguage} voice is pre-selected</span> — voices with a matching language badge work best.{" "}</>
+                    : <><span className="text-zinc-600 font-medium">Arushi</span> is pre-selected — warm Indian English female.{" "}</>
                   }
                   {voiceSource === "cartesia"
                     ? "Press ▶ to hear any voice."
-                    : <span className="text-amber-500">Preview plays your browser's built-in voice (Cartesia key not configured).</span>}
+                    : <span className="text-zinc-500">Preview plays your browser's built-in voice (Cartesia key not configured).</span>}
                 </p>
 
                 {loadingVoices ? (
@@ -1580,20 +1580,20 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                           className={cn(
                             "p-4 rounded-xl border cursor-pointer transition-all duration-200 flex items-center gap-3 group",
                             sel
-                              ? "border-violet-400 bg-violet-50"
+                              ? "border-zinc-400 bg-zinc-50"
                               : "border-gray-200 bg-gray-50 hover:border-gray-200 hover:bg-gray-50",
                           )}
                         >
                           <div className={cn(
                             "h-11 w-11 rounded-full flex items-center justify-center text-sm font-bold shrink-0",
-                            voice.gender === "Female" ? "bg-rose-500/20 text-rose-500" : "bg-blue-100 text-blue-600",
+                            voice.gender === "Female" ? "bg-zinc-500/20 text-zinc-500" : "bg-zinc-100 text-zinc-600",
                           )}>
                             {voice.name.charAt(0)}
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className={cn("font-semibold text-sm", sel ? "text-gray-900" : "text-gray-600")}>{voice.name}</span>
-                              {isArushi && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-600 font-semibold">Default</span>}
+                              {isArushi && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-zinc-100 text-zinc-600 font-semibold">Default</span>}
                               {voice.language && (
                                 <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-400 font-medium">
                                   {LANG_LABEL[voice.language] ?? voice.language.toUpperCase()}
@@ -1606,12 +1606,12 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                             onClick={e => { e.stopPropagation(); void preview(voice.id); }}
                             className={cn(
                               "h-8 w-8 rounded-full flex items-center justify-center shrink-0 transition-all",
-                              isPlay ? "bg-violet-500 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700",
+                              isPlay ? "bg-zinc-500 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700",
                             )}
                           >
                             {isPlay ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
                           </button>
-                          {sel && <Check className="h-4 w-4 text-violet-600 shrink-0" />}
+                          {sel && <Check className="h-4 w-4 text-zinc-600 shrink-0" />}
                         </div>
                       );
                     })}
@@ -1631,11 +1631,11 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                   {/* Call Transfer */}
                   <div className={cn(
                     "p-5 rounded-xl border transition-all",
-                    state.callTransferEnabled ? "border-violet-200 bg-violet-50/60" : "border-gray-200 bg-white",
+                    state.callTransferEnabled ? "border-zinc-200 bg-zinc-50/60" : "border-gray-200 bg-white",
                   )}>
                     <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-2.5">
-                        <PhoneForwarded className={cn("h-4 w-4", state.callTransferEnabled ? "text-violet-600" : "text-gray-400")} />
+                        <PhoneForwarded className={cn("h-4 w-4", state.callTransferEnabled ? "text-zinc-600" : "text-gray-400")} />
                         <span className="font-semibold text-gray-800 text-sm">Call Transfer</span>
                       </div>
                       <Switch
@@ -1650,20 +1650,20 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                         placeholder="+91 9876543210"
                         value={state.callTransferNumber}
                         onChange={e => update({ callTransferNumber: e.target.value })}
-                        className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2.5 text-gray-900 text-sm placeholder:text-gray-400 focus:outline-none focus:border-violet-400 transition-all"
+                        className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2.5 text-gray-900 text-sm placeholder:text-gray-400 focus:outline-none focus:border-zinc-400 transition-all"
                       />
                     )}
                   </div>
 
                   {/* Auto Summarize — always on */}
-                  <div className="p-5 rounded-xl border border-emerald-200 bg-emerald-50 flex items-start gap-3">
-                    <div className="h-8 w-8 rounded-lg bg-emerald-100 flex items-center justify-center shrink-0 mt-0.5">
-                      <Check className="h-4 w-4 text-emerald-600" />
+                  <div className="p-5 rounded-xl border border-zinc-200 bg-zinc-50 flex items-start gap-3">
+                    <div className="h-8 w-8 rounded-lg bg-zinc-100 flex items-center justify-center shrink-0 mt-0.5">
+                      <Check className="h-4 w-4 text-zinc-600" />
                     </div>
                     <div>
                       <div className="flex items-center gap-2 mb-0.5">
                         <span className="font-semibold text-gray-700 text-sm">Auto-Summarize Calls</span>
-                        <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-600 font-semibold border border-emerald-200">Always On</span>
+                        <span className="text-[9px] px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600 font-semibold border border-zinc-200">Always On</span>
                       </div>
                       <p className="text-gray-400 text-xs leading-relaxed">After each call, AI generates a 3-bullet summary — caller intent, key info exchanged, and outcome.</p>
                     </div>
@@ -1715,7 +1715,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                   <div>
                     <label className="text-gray-500 text-xs uppercase tracking-widest block mb-2">Agent Name</label>
                     <input type="text" placeholder="My Assistant" value={state.agentName} onChange={e => update({ agentName: e.target.value })}
-                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-violet-500/60 transition-all" />
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-zinc-500/60 transition-all" />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     {[
@@ -1729,7 +1729,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                         <select
                           value={(state as any)[field.key]}
                           onChange={e => update({ [field.key]: e.target.value } as any)}
-                          className="w-full bg-gray-100 border border-gray-200 rounded-lg text-xs text-gray-600 py-2 px-2.5 focus:outline-none focus:border-violet-500/60"
+                          className="w-full bg-gray-100 border border-gray-200 rounded-lg text-xs text-gray-600 py-2 px-2.5 focus:outline-none focus:border-zinc-500/60"
                         >
                           {field.opts.map(o => <option key={`${field.key}-${o.value}`} value={o.value} className="bg-white">{o.label}</option>)}
                         </select>
@@ -1740,7 +1740,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                     <label className="text-gray-500 text-xs uppercase tracking-widest block mb-2">System Prompt</label>
                     <textarea
                       value={state.byopPrompt} onChange={e => update({ byopPrompt: e.target.value })} rows={6}
-                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-700 text-sm focus:outline-none focus:border-violet-500/60 transition-all resize-none"
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-700 text-sm focus:outline-none focus:border-zinc-500/60 transition-all resize-none"
                     />
                   </div>
                 </div>
@@ -1764,7 +1764,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                     className={cn(
                       "h-1 rounded-full transition-all duration-300",
                       i < microStep ? "w-5 bg-gray-300"
-                      : i === microStep ? "w-5 bg-violet-400"
+                      : i === microStep ? "w-5 bg-zinc-400"
                       : "w-2 bg-gray-100",
                     )}
                   />
@@ -1775,7 +1775,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                     className={cn(
                       "h-1 rounded-full transition-all duration-300",
                       i < stepIdx ? "w-5 bg-gray-300"
-                      : i === stepIdx ? "w-5 bg-violet-400"
+                      : i === stepIdx ? "w-5 bg-zinc-400"
                       : "w-2 bg-gray-100",
                     )}
                   />
@@ -1800,7 +1800,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                 {/* Looks good, continue button */}
                 <button
                   onClick={handleMicroConfirm}
-                  className="flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white shadow-lg shadow-violet-500/25 transition-all"
+                  className="flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm bg-gradient-to-r from-zinc-600 to-zinc-600 hover:from-zinc-500 hover:to-zinc-500 text-white shadow-lg shadow-zinc-500/25 transition-all"
                 >
                   Looks good, continue <ChevronRight className="h-4 w-4" />
                 </button>
@@ -1815,7 +1815,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                   if (parsed.length > 0) setConfirmedFlowNodes(parsed);
                   setFlowEditMode(false);
                 }}
-                className="flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white shadow-lg shadow-violet-500/25 transition-all"
+                className="flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm bg-gradient-to-r from-zinc-600 to-zinc-600 hover:from-zinc-500 hover:to-zinc-500 text-white shadow-lg shadow-zinc-500/25 transition-all"
               >
                 <Check className="h-4 w-4" /> Apply changes
               </button>
@@ -1855,7 +1855,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                   "flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm transition-all",
                   create.isPending
                     ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                    : "bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white shadow-lg shadow-violet-500/25",
+                    : "bg-gradient-to-r from-zinc-600 to-zinc-600 hover:from-zinc-500 hover:to-zinc-500 text-white shadow-lg shadow-zinc-500/25",
                 )}
               >
                 {create.isPending

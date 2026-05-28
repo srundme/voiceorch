@@ -72,10 +72,10 @@ function KycBanner() {
   if (isLoading) return null;
   if (kycData?.kycStatus === "completed") {
     return (
-      <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-emerald-500/20 bg-emerald-500/5 text-emerald-700 text-sm">
+      <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-zinc-500/20 bg-zinc-500/5 text-zinc-700 text-sm">
         <ShieldCheck className="h-4 w-4 shrink-0" />
         <span className="font-medium">Identity verified</span>
-        <span className="text-emerald-600/70 text-xs">— You can purchase Aadhaar-required Indian numbers.</span>
+        <span className="text-zinc-600/70 text-xs">— You can purchase Aadhaar-required Indian numbers.</span>
       </div>
     );
   }
@@ -110,21 +110,21 @@ function KycBanner() {
     <div className={`flex items-start gap-3 px-4 py-3 rounded-lg border text-sm ${
       isFailed
         ? "border-red-500/20 bg-red-500/5"
-        : "border-amber-500/20 bg-amber-500/5"
+        : "border-zinc-500/20 bg-zinc-500/5"
     }`}>
       {isFailed
         ? <ShieldAlert className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
-        : <ShieldAlert className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+        : <ShieldAlert className="h-4 w-4 text-zinc-500 mt-0.5 shrink-0" />
       }
       <div className="flex-1 space-y-1">
-        <p className={`font-medium ${isFailed ? "text-red-700" : "text-amber-700"}`}>
+        <p className={`font-medium ${isFailed ? "text-red-700" : "text-zinc-700"}`}>
           {isFailed
             ? "Identity verification failed"
             : hasActiveSession
               ? "Identity verification in progress"
               : "Identity verification required"}
         </p>
-        <p className={`text-xs leading-relaxed ${isFailed ? "text-red-600/70" : "text-amber-600/70"}`}>
+        <p className={`text-xs leading-relaxed ${isFailed ? "text-red-600/70" : "text-zinc-600/70"}`}>
           {isFailed
             ? "Your KYC verification was unsuccessful. Common reasons include a name mismatch or OTP failure. Click below to try again."
             : hasActiveSession
@@ -137,7 +137,7 @@ function KycBanner() {
         className={`h-8 gap-1.5 shrink-0 text-xs ${
           isFailed
             ? "bg-red-600 hover:bg-red-700 text-white"
-            : "bg-amber-500 hover:bg-amber-600 text-white"
+            : "bg-zinc-500 hover:bg-zinc-600 text-white"
         }`}
         disabled={startKyc.isPending}
         onClick={handleStartKyc}
@@ -313,7 +313,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
               <span className="font-semibold text-gray-800">{totalCents > 0 ? `₹${(totalCents / 100).toFixed(0)}/mo` : "Free"}</span>
             </div>
           </div>
-          <div className="flex items-start gap-3 p-3 rounded-lg border border-amber-500/20 bg-amber-500/5 text-amber-600 text-xs">
+          <div className="flex items-start gap-3 p-3 rounded-lg border border-zinc-500/20 bg-zinc-500/5 text-zinc-600 text-xs">
             <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
             <span>Setup fee + first month's fee will be deducted from your wallet immediately. This action cannot be undone.</span>
           </div>
@@ -383,11 +383,11 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
                 </div>
               ) : platformNotConfigured ? (
                 <div className="flex flex-col gap-2 p-4">
-                  <div className="flex items-start gap-2.5 text-amber-600">
+                  <div className="flex items-start gap-2.5 text-zinc-600">
                     <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
                     <div className="text-sm">
                       <p className="font-medium">Platform not configured</p>
-                      <p className="text-amber-600/70 mt-0.5 text-xs leading-relaxed">
+                      <p className="text-zinc-600/70 mt-0.5 text-xs leading-relaxed">
                         Carrier credentials are missing. Contact your platform administrator.
                       </p>
                     </div>
@@ -406,7 +406,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
                       key={n.number}
                       onClick={() => setSelected(n.number)}
                       className={`w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-muted/50 transition-colors text-left ${
-                        selected === n.number ? "bg-gray-50 border-l-2 border-emerald-500" : ""
+                        selected === n.number ? "bg-gray-50 border-l-2 border-zinc-500" : ""
                       }`}
                     >
                       <div className="flex items-center gap-3">
@@ -602,7 +602,7 @@ export default function PhoneNumbersPage() {
         title: "Identity verified!",
         description: (
           <div className="flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+            <CheckCircle2 className="h-4 w-4 text-zinc-500 shrink-0" />
             <span>Your Aadhaar verification is complete. You can now purchase Indian DID numbers.</span>
           </div>
         ) as any,
