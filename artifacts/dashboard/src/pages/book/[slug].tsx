@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useRoute } from "wouter";
 import { format, parseISO } from "date-fns";
 import { Calendar, Clock, CheckCircle, AlertCircle, Video } from "lucide-react";
+import { buildBookingPayload } from "./bookingPayload";
 import {
   useGetPublicEventType,
   useGetPublicSlots,
@@ -51,13 +52,15 @@ export default function PublicBookingPage() {
     if (!selectedSlot || !name || !email) return;
     setBookingError(null);
     try {
-      const booking = await createMut.mutateAsync({ data: {
-        eventTypeSlug: slug,
-        slotStart: selectedSlot,
-        attendeeName: name,
-        attendeeEmail: email,
-        attendeeNotes: notes || undefined,
-      }});
+      const booking = await createMut.mutateAsync({
+        data: buildBookingPayload({
+          eventTypeSlug: slug,
+          slotStart: selectedSlot,
+          attendeeName: name,
+          attendeeEmail: email,
+          attendeeNotes: notes,
+        }),
+      });
       setMeetLink(booking.meetLink ?? null);
       setSubmitted(true);
     } catch (err: any) {
