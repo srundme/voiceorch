@@ -16,7 +16,7 @@ import {
   Megaphone, Building2, Wand2, Globe,
   ChevronLeft, ChevronRight, Check, X, Loader2, Sparkles,
   Play, Pause, Volume2, Upload, FileText, PhoneForwarded,
-  Languages, SkipForward, Phone, Pencil,
+  Languages, SkipForward, Phone, Pencil, RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
@@ -609,20 +609,22 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
           ...(microAnswers.jdFileName && { jdFileName: microAnswers.jdFileName }),
         }),
       });
-      if (!res.ok) { setFlowFallback("network"); return; }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { reason?: string };
+        setFlowFallback(body?.reason ?? "network");
+        return;
+      }
       const data = await res.json() as {
-        source: "gemini" | "fallback";
         nodes: FlowNode[] | null;
         flowText?: string;
-        reason?: string;
       };
-      if (data.source === "gemini" && Array.isArray(data.nodes) && data.nodes.length > 0) {
+      if (Array.isArray(data.nodes) && data.nodes.length > 0) {
         setConfirmedFlowNodes(data.nodes);
       } else {
-        setFlowFallback(data.reason ?? "fallback");
+        setFlowFallback("gemini_parse_failed");
       }
     } catch {
-      setFlowFallback("error");
+      setFlowFallback("network");
     } finally {
       setFlowFetching(false);
     }
@@ -652,9 +654,9 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
 
   /* micro-wizard: confirmed call flow → pre-fill requirements textarea, advance */
   function handleMicroConfirm() {
-    const nodes = confirmedFlowNodes ?? buildCallFlowNodes(
-      state.useCase, microAnswers.answers, state.agentName, state.companyName,
-    );
+    // Guard: never advance without a Gemini-generated (or user-edited) flow.
+    if (!confirmedFlowNodes || confirmedFlowNodes.length === 0) return;
+    const nodes = confirmedFlowNodes;
     const flowText = nodesToText(nodes);
     // Persist the raw micro-answers (paired with the question text) so the
     // final agent prompt generation gets the same answers the call flow used.
@@ -825,10 +827,9 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
     ? ((stepIdx + 1) / totalManagedSteps) * 100
     : state.mode === "byop" ? 100 : 0;
 
-  /* current call flow nodes for preview */
-  const currentFlowNodes = confirmedFlowNodes ?? buildCallFlowNodes(
-    state.useCase, microAnswers.answers, state.agentName, state.companyName,
-  );
+  /* current call flow nodes for preview — only what Gemini returned (or the
+   * user-edited version). No silent rule-based fallback. */
+  const currentFlowNodes: FlowNode[] = confirmedFlowNodes ?? [];
 
   /* ────────────────────────────────────────────────────────────────────── */
   return createPortal(
@@ -1045,11 +1046,43 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                       </div>
                     )}
 
-                    {!flowFetching && flowFallback && (
-                      <div className="mb-5 px-4 py-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-700 text-xs leading-relaxed">
-                        Showing a generic preview — AI generation is unavailable right now. You can still edit each step manually.
-                      </div>
-                    )}
+                    {!flowFetching && flowFallback && (() => {
+                      const COPY: Record<string, { title: string; body: string }> = {
+                        gemini_key_missing: {
+                          title: "AI call-flow generation isn't configured",
+                          body: "The Gemini API key is not set on the server. Ask an administrator to add the GEMINI_API_KEY environment variable so the wizard can generate a contextual call flow.",
+                        },
+                        no_active_template: {
+                          title: "Master prompt template is missing",
+                          body: "No active master prompt template is configured. An administrator needs to upload and activate a master template before the call flow can be generated.",
+                        },
+                        gemini_request_failed: {
+                          title: "Gemini request failed",
+                          body: "We couldn't reach the Gemini API to build your call flow. This may be a transient network or upstream issue — please retry.",
+                        },
+                        gemini_parse_failed: {
+                          title: "Couldn't parse Gemini's response",
+                          body: "Gemini returned a response we couldn't read as a valid call flow. Please retry — most retries succeed.",
+                        },
+                        network: {
+                          title: "Couldn't reach the server",
+                          body: "The request to generate your call flow failed. Check your connection and retry.",
+                        },
+                      };
+                      const c = COPY[flowFallback] ?? COPY.network!;
+                      return (
+                        <div className="mb-5 px-4 py-4 rounded-xl border border-red-200 bg-red-50 text-red-800 text-sm leading-relaxed">
+                          <p className="font-semibold mb-1">{c.title}</p>
+                          <p className="text-red-700 text-xs mb-3">{c.body}</p>
+                          <button
+                            onClick={() => { void generateCallFlowFromAnswers(); }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold transition-colors"
+                          >
+                            <RefreshCw className="h-3.5 w-3.5" /> Retry
+                          </button>
+                        </div>
+                      );
+                    })()}
 
                     {/* Flow nodes */}
                     <div className={cn("relative pl-5", flowFetching && "opacity-40 pointer-events-none")}>
@@ -1896,41 +1929,50 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
           <div className="flex items-center gap-3">
 
             {/* ── Micro-wizard navigation ── */}
-            {microActive && microStep === 5 && !flowEditMode && (
-              <>
-                {/* Edit this flow button */}
-                <button
-                  onClick={() => {
-                    setFlowEditText(nodesToText(currentFlowNodes));
-                    setFlowEditMode(true);
-                  }}
-                  disabled={flowFetching}
-                  className={cn(
-                    "flex items-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm border transition-all",
-                    flowFetching
-                      ? "border-border bg-muted text-muted-foreground/60 cursor-not-allowed"
-                      : "border-border bg-card text-muted-foreground hover:border-border hover:text-foreground",
+            {microActive && microStep === 5 && !flowEditMode && (() => {
+              const hasFlow = confirmedFlowNodes !== null && confirmedFlowNodes.length > 0;
+              const inError = !flowFetching && flowFallback !== null;
+              const continueDisabled = flowFetching || inError || !hasFlow;
+              return (
+                <>
+                  {/* Edit this flow button — hidden in error states (nothing to edit) */}
+                  {!inError && (
+                    <button
+                      onClick={() => {
+                        setFlowEditText(nodesToText(currentFlowNodes));
+                        setFlowEditMode(true);
+                      }}
+                      disabled={flowFetching || !hasFlow}
+                      className={cn(
+                        "flex items-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm border transition-all",
+                        (flowFetching || !hasFlow)
+                          ? "border-border bg-muted text-muted-foreground/60 cursor-not-allowed"
+                          : "border-border bg-card text-muted-foreground hover:border-border hover:text-foreground",
+                      )}
+                    >
+                      <Pencil className="h-3.5 w-3.5" /> Edit this flow
+                    </button>
                   )}
-                >
-                  <Pencil className="h-3.5 w-3.5" /> Edit this flow
-                </button>
-                {/* Looks good, continue button */}
-                <button
-                  onClick={handleMicroConfirm}
-                  disabled={flowFetching}
-                  className={cn(
-                    "flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm transition-all",
-                    flowFetching
-                      ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                      : "bg-gradient-to-r from-zinc-600 to-zinc-600 hover:from-zinc-500 hover:to-zinc-500 text-white shadow-lg shadow-zinc-500/25",
+                  {/* Looks good, continue button — hidden in error states */}
+                  {!inError && (
+                    <button
+                      onClick={handleMicroConfirm}
+                      disabled={continueDisabled}
+                      className={cn(
+                        "flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm transition-all",
+                        continueDisabled
+                          ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                          : "bg-gradient-to-r from-zinc-600 to-zinc-600 hover:from-zinc-500 hover:to-zinc-500 text-white shadow-lg shadow-zinc-500/25",
+                      )}
+                    >
+                      {flowFetching
+                        ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating…</>
+                        : <>Looks good, continue <ChevronRight className="h-4 w-4" /></>}
+                    </button>
                   )}
-                >
-                  {flowFetching
-                    ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating…</>
-                    : <>Looks good, continue <ChevronRight className="h-4 w-4" /></>}
-                </button>
-              </>
-            )}
+                </>
+              );
+            })()}
 
             {/* Edit mode: Apply changes button */}
             {microActive && microStep === 5 && flowEditMode && (

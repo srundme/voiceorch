@@ -263,10 +263,10 @@ Write ONLY numbered call flow steps (5-10 steps). Each step should be clear, nat
 // ── POST /wizard/generate-call-flow ──────────────────────────────────────────
 //
 // Generates a contextual call flow from the wizard's 5 micro-answers + the
-// currently active admin master template (via Gemini). Returns
-// { source: "gemini" | "fallback", nodes, flowText, reason? }. On any missing
-// dependency or parse failure, returns source: "fallback" so the client can
-// render its built-in rule-based preview.
+// currently active admin master template (via Gemini). On success returns
+// { nodes, flowText }. On failure returns a non-2xx status with a structured
+// { error, reason } payload distinguishing: gemini_key_missing,
+// no_active_template, gemini_request_failed, gemini_parse_failed.
 
 router.post("/wizard/generate-call-flow", requireDbUser, async (req, res): Promise<void> => {
   const {
@@ -298,20 +298,26 @@ router.post("/wizard/generate-call-flow", requireDbUser, async (req, res): Promi
 
   const nonEmpty = cleaned.filter((a) => a.answer.length > 0);
 
-  const [activeTemplate, geminiKey] = await Promise.all([
-    getActiveTemplate().catch((err) => {
-      logger.warn({ err }, "getActiveTemplate failed during call-flow generation");
-      return null;
-    }),
-    getSetting("managed_gemini_key"),
-  ]);
-
-  if (!activeTemplate) {
-    res.json({ source: "fallback", reason: "no_active_template", nodes: null, flowText: "" });
+  const geminiKey = (process.env.GEMINI_API_KEY ?? "").trim();
+  if (!geminiKey) {
+    req.log.warn("GEMINI_API_KEY env var is not set — call-flow preview unavailable");
+    res.status(503).json({
+      error: "Gemini API key is not configured on the server.",
+      reason: "gemini_key_missing",
+    });
     return;
   }
-  if (!geminiKey) {
-    res.json({ source: "fallback", reason: "no_gemini_key", nodes: null, flowText: "" });
+
+  const activeTemplate = await getActiveTemplate().catch((err) => {
+    req.log.warn({ err }, "getActiveTemplate failed during call-flow generation");
+    return null;
+  });
+
+  if (!activeTemplate) {
+    res.status(503).json({
+      error: "No active master prompt template is configured.",
+      reason: "no_active_template",
+    });
     return;
   }
 
@@ -350,7 +356,11 @@ router.post("/wizard/generate-call-flow", requireDbUser, async (req, res): Promi
     return nodes.length >= 3 ? nodes : null;
   }
 
-  async function callGemini(extraEmphasis: string): Promise<FlowNode[] | null> {
+  type GeminiResult =
+    | { ok: true; nodes: FlowNode[] }
+    | { ok: false; reason: "gemini_request_failed" | "gemini_parse_failed"; detail: string };
+
+  async function callGemini(extraEmphasis: string): Promise<GeminiResult> {
     const systemInstruction = `You are a senior AI voice agent call-flow designer.
 Use the MASTER TEMPLATE below as the STRUCTURAL guide — the ordering and intent of sections (greeting → purpose / qualification → data collection → confirmation → close, or whatever the template prescribes) must be respected.
 Produce a concrete, contextual call flow as a JSON array of 5-10 step objects.
@@ -381,67 +391,90 @@ ${activeTemplate!.extractedText}
       ),
     ].filter(Boolean).join("\n");
 
-    const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(geminiKey!)}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemInstruction }] },
-          contents: [{ role: "user", parts: [{ text: userBlock }] }],
-          generationConfig: {
-            temperature: 0.6,
-            maxOutputTokens: 2048,
-            responseMimeType: "application/json",
-          },
-        }),
-      },
-    );
+    let r: globalThis.Response;
+    try {
+      r = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(geminiKey)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: systemInstruction }] },
+            contents: [{ role: "user", parts: [{ text: userBlock }] }],
+            generationConfig: {
+              temperature: 0.6,
+              maxOutputTokens: 2048,
+              responseMimeType: "application/json",
+            },
+          }),
+        },
+      );
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      req.log.warn({ err }, "Gemini call-flow fetch threw");
+      return { ok: false, reason: "gemini_request_failed", detail };
+    }
     if (!r.ok) {
       const errText = await r.text().catch(() => "");
-      logger.warn({ status: r.status, errText: errText.slice(0, 300) }, "Gemini call-flow request failed");
-      return null;
+      req.log.warn({ status: r.status, errText: errText.slice(0, 300) }, "Gemini call-flow request failed");
+      return { ok: false, reason: "gemini_request_failed", detail: `HTTP ${r.status}` };
     }
-    const data = (await r.json()) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    };
+    let data: { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+    try {
+      data = (await r.json()) as typeof data;
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      req.log.warn({ err }, "Gemini call-flow JSON envelope parse failed");
+      return { ok: false, reason: "gemini_parse_failed", detail };
+    }
     const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
-    if (!text) return null;
-    return parseGeminiNodes(text);
-  }
-
-  try {
-    let nodes = await callGemini("");
-
-    if (nodes && nonEmpty.length > 0) {
-      const haystack = nodes.map((n) => n.label).join(" ").toLowerCase();
-      const missing = nonEmpty.filter((a) => {
-        const ans = a.answer.toLowerCase();
-        const token =
-          ans.split(/\s+/).find((w) => w.length >= 4 && /^[a-z0-9]+$/i.test(w)) ??
-          ans.slice(0, Math.min(8, ans.length));
-        return token.length > 0 && !haystack.includes(token);
-      });
-      if (missing.length > 0) {
-        const retry = await callGemini(
-          `\nCRITICAL: a previous attempt dropped these answers — every one MUST appear (verbatim or recognisably paraphrased) in the next output: ${missing
-            .map((m) => JSON.stringify(m.answer))
-            .join(", ")}.`,
-        );
-        if (retry) nodes = retry;
-      }
+    if (!text) {
+      req.log.warn("Gemini call-flow returned empty text");
+      return { ok: false, reason: "gemini_parse_failed", detail: "empty response" };
     }
-
+    const nodes = parseGeminiNodes(text);
     if (!nodes) {
-      res.json({ source: "fallback", reason: "gemini_parse_failed", nodes: null, flowText: "" });
-      return;
+      req.log.warn({ preview: text.slice(0, 300) }, "Gemini call-flow response failed to parse as nodes");
+      return { ok: false, reason: "gemini_parse_failed", detail: "could not parse nodes" };
     }
-
-    res.json({ source: "gemini", nodes, flowText: nodesToFlowText(nodes) });
-  } catch (err) {
-    logger.warn({ err }, "Call-flow generation threw — returning fallback");
-    res.json({ source: "fallback", reason: "gemini_call_failed", nodes: null, flowText: "" });
+    return { ok: true, nodes };
   }
+
+  const first = await callGemini("");
+  if (!first.ok) {
+    const status = first.reason === "gemini_request_failed" ? 502 : 502;
+    res.status(status).json({
+      error: first.reason === "gemini_request_failed"
+        ? "Gemini API request failed."
+        : "Gemini returned a response we could not parse.",
+      reason: first.reason,
+    });
+    return;
+  }
+
+  let nodes = first.nodes;
+  if (nonEmpty.length > 0) {
+    const haystack = nodes.map((n) => n.label).join(" ").toLowerCase();
+    const missing = nonEmpty.filter((a) => {
+      const ans = a.answer.toLowerCase();
+      const token =
+        ans.split(/\s+/).find((w) => w.length >= 4 && /^[a-z0-9]+$/i.test(w)) ??
+        ans.slice(0, Math.min(8, ans.length));
+      return token.length > 0 && !haystack.includes(token);
+    });
+    if (missing.length > 0) {
+      const retry = await callGemini(
+        `\nCRITICAL: a previous attempt dropped these answers — every one MUST appear (verbatim or recognisably paraphrased) in the next output: ${missing
+          .map((m) => JSON.stringify(m.answer))
+          .join(", ")}.`,
+      );
+      if (retry.ok) nodes = retry.nodes;
+      // If the retry fails we keep the first attempt's nodes — first attempt
+      // already returned a valid (if imperfect) flow, no need to error out.
+    }
+  }
+
+  res.json({ nodes, flowText: nodesToFlowText(nodes) });
 });
 
 function generateFallbackCallFlow(useCase: string, direction: string, description: string): string {
