@@ -269,16 +269,19 @@ router.get("/admin/usage/services/:service", async (req, res): Promise<void> => 
 
 async function trendQuery(where: any, bucket: "day" | "week" | "month") {
   const fmt = bucket === "day" ? "YYYY-MM-DD" : bucket === "week" ? "IYYY-IW" : "YYYY-MM";
+  const bucketLit = sql.raw(`'${bucket}'`);
+  const fmtLit = sql.raw(`'${fmt}'`);
+  const truncExpr = sql`date_trunc(${bucketLit}, ${usageEventsTable.createdAt})`;
   const rows = await db
     .select({
-      bucket: sql<string>`to_char(date_trunc(${bucket}, ${usageEventsTable.createdAt}), ${fmt})`,
+      bucket: sql<string>`to_char(${truncExpr}, ${fmtLit})`,
       costMicros: sql<string>`coalesce(sum(${usageEventsTable.estimatedCostMicros}), 0)`,
       eventCount: sql<string>`count(*)`,
     })
     .from(usageEventsTable)
     .where(where)
-    .groupBy(sql`date_trunc(${bucket}, ${usageEventsTable.createdAt})`)
-    .orderBy(asc(sql`date_trunc(${bucket}, ${usageEventsTable.createdAt})`));
+    .groupBy(truncExpr)
+    .orderBy(asc(truncExpr));
   return rows.map((r) => ({
     bucket: r.bucket,
     costMicros: Number(r.costMicros),
