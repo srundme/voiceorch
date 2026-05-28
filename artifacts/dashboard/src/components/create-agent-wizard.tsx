@@ -4,6 +4,7 @@ import { useAuth } from "@clerk/react";
 import { useCreateAgent, getListAgentsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { formatApiError } from "@/lib/format-api-error";
 import {
   Users, Target, Headphones, Bell,
   Megaphone, Building2, Wand2, Globe,
@@ -641,12 +642,8 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
         setState(INITIAL); setStepIdx(0);
         onCreated(created.id);
       },
-      onError: (err: any) => {
-        const data = err?.data;
-        const issue = data?.issues?.[0];
-        const detail = issue
-          ? `${(issue.path ?? []).join(".") || "request"}: ${issue.message}`
-          : data?.error || err?.message;
+      onError: (err: unknown) => {
+        const detail = formatApiError(err);
         toast({
           title: "Create failed",
           description: detail || undefined,

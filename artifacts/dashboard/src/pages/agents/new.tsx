@@ -33,6 +33,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { formatApiError } from "@/lib/format-api-error";
 
 /* ── Provider → model/voice catalogue ────────────────────────────────────── */
 
@@ -384,8 +385,8 @@ export default function AgentNew() {
         toast({ title: "Agent Created", description: "Your new voice agent has been created." });
         setLocation(`/agents/${agent.id}`);
       },
-      onError: () => {
-        toast({ title: "Error", description: "Failed to create agent. Please try again.", variant: "destructive" });
+      onError: (err: unknown) => {
+        toast({ title: "Error", description: formatApiError(err), variant: "destructive" });
       },
     });
   };

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Phone, RefreshCw, Radio, Clock, PhoneForwarded, X } from "lucide-react";
 import { toast } from "sonner";
+import { formatApiError } from "@/lib/format-api-error";
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -34,8 +35,8 @@ function TransferDialog({
           toast.success(`Call #${callId} transferred to ${target}`);
           onClose();
         },
-        onError: (err: any) => {
-          toast.error(err?.message ?? "Transfer failed");
+        onError: (err: unknown) => {
+          toast.error(formatApiError(err));
         },
       },
     );

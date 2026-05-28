@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { useListAgents, useListProviders, useGetAccount, useRegenerateApiKey, useAddConcurrentSlot, getListAgentsQueryKey, getListProvidersQueryKey, getGetAccountQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { formatApiError } from "@/lib/format-api-error";
 import type { ProviderConfigProviderType } from "@workspace/api-client-react";
 import CalendarsPage from "@/pages/scheduling/Calendars";
 import ConferencingPage from "@/pages/settings/Conferencing";
@@ -286,7 +287,7 @@ function GeneralTab() {
                     disabled={regenerate.isPending}
                     onClick={() => regenerate.mutate(undefined, {
                       onSuccess: () => { queryClient.invalidateQueries({ queryKey: getGetAccountQueryKey() }); toast({ title: "API key regenerated" }); },
-                      onError: () => toast({ title: "Error", variant: "destructive", description: "Failed to regenerate key" }),
+                      onError: (err: unknown) => toast({ title: "Error", variant: "destructive", description: formatApiError(err) }),
                     })}
                   >
                     <RefreshCw className={`h-3 w-3 ${regenerate.isPending ? "animate-spin" : ""}`} /> Regenerate
@@ -317,7 +318,7 @@ function GeneralTab() {
                     disabled={addSlot.isPending}
                     onClick={() => addSlot.mutate(undefined, {
                       onSuccess: () => { queryClient.invalidateQueries({ queryKey: getGetAccountQueryKey() }); toast({ title: "Concurrent slot added", description: "Your limit has been increased by 1." }); },
-                      onError: (e: any) => toast({ title: "Error", variant: "destructive", description: e?.message ?? "Insufficient balance" }),
+                      onError: (err: unknown) => toast({ title: "Error", variant: "destructive", description: formatApiError(err) }),
                     })}
                   >
                     <Plus className="h-3.5 w-3.5" /> Add Slot ($5)

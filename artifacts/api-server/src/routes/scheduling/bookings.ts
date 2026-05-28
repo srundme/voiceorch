@@ -46,7 +46,7 @@ function formatBooking(b: typeof bookingsTable.$inferSelect) {
 router.get("/scheduling/bookings", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const qp = ListBookingsQueryParams.safeParse(req.query);
-  if (!qp.success) { res.status(400).json({ error: qp.error.message }); return; }
+  if (!qp.success) { res.status(400).json({ error: "Validation failed", issues: qp.error.issues }); return; }
 
   const conditions: any[] = [eq(bookingsTable.userId, clerkId)];
   if (qp.data.status) conditions.push(eq(bookingsTable.status, qp.data.status));
@@ -64,7 +64,7 @@ router.get("/scheduling/bookings", requireAuth, async (req, res): Promise<void> 
 router.post("/scheduling/bookings", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const parsed = CreateBookingBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
 
   const [eventType] = await db.select().from(eventTypesTable)
     .where(and(eq(eventTypesTable.id, parsed.data.eventTypeId), eq(eventTypesTable.userId, clerkId)));
@@ -217,7 +217,7 @@ router.post("/scheduling/bookings", requireAuth, async (req, res): Promise<void>
 router.get("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = GetBookingParams.safeParse(req.params);
-  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }
   const [row] = await db.select().from(bookingsTable)
     .where(and(eq(bookingsTable.id, params.data.id), eq(bookingsTable.userId, clerkId)));
   if (!row) { res.status(404).json({ error: "Booking not found" }); return; }
@@ -227,9 +227,9 @@ router.get("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<vo
 router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = UpdateBookingParams.safeParse(req.params);
-  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }
   const parsed = UpdateBookingBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
 
   const [existing] = await db.select().from(bookingsTable)
     .where(and(eq(bookingsTable.id, params.data.id), eq(bookingsTable.userId, clerkId)));

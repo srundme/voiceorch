@@ -75,7 +75,7 @@ router.post("/campaigns", async (req, res): Promise<void> => {
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
   const parsed = CreateCampaignBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
 
   if (!parsed.data.fieldMappings["phone"]) {
     res.status(400).json({ error: "fieldMappings must include a 'phone' key" });
@@ -118,7 +118,7 @@ router.patch("/campaigns/:id", async (req, res): Promise<void> => {
 
   const id = parseInt(req.params["id"]!, 10);
   const parsed = UpdateCampaignBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
 
   // If toggling isActive, also sync status field
   const { fieldMappings: rawMappings, ...rest } = parsed.data;

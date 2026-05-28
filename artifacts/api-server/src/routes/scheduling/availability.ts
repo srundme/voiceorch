@@ -28,7 +28,7 @@ async function assertCalendarOwner(calendarId: number, userId: string): Promise<
 router.get("/scheduling/availability", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const qp = ListAvailabilityQueryParams.safeParse(req.query);
-  if (!qp.success) { res.status(400).json({ error: qp.error.message }); return; }
+  if (!qp.success) { res.status(400).json({ error: "Validation failed", issues: qp.error.issues }); return; }
   if (!(await assertCalendarOwner(qp.data.calendarId, clerkId))) {
     res.status(404).json({ error: "Calendar not found" }); return;
   }
@@ -40,7 +40,7 @@ router.get("/scheduling/availability", requireAuth, async (req, res): Promise<vo
 router.post("/scheduling/availability", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const parsed = CreateAvailabilityBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
   if (!(await assertCalendarOwner(parsed.data.calendarId, clerkId))) {
     res.status(404).json({ error: "Calendar not found" }); return;
   }
@@ -51,9 +51,9 @@ router.post("/scheduling/availability", requireAuth, async (req, res): Promise<v
 router.patch("/scheduling/availability/:id", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = UpdateAvailabilityParams.safeParse(req.params);
-  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }
   const parsed = UpdateAvailabilityBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
 
   const [existing] = await db.select().from(availabilitySchedulesTable)
     .where(eq(availabilitySchedulesTable.id, params.data.id));
@@ -71,7 +71,7 @@ router.patch("/scheduling/availability/:id", requireAuth, async (req, res): Prom
 router.delete("/scheduling/availability/:id", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = DeleteAvailabilityParams.safeParse(req.params);
-  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }
   const [existing] = await db.select().from(availabilitySchedulesTable)
     .where(eq(availabilitySchedulesTable.id, params.data.id));
   if (!existing) { res.status(404).json({ error: "Availability not found" }); return; }
@@ -85,7 +85,7 @@ router.delete("/scheduling/availability/:id", requireAuth, async (req, res): Pro
 router.get("/scheduling/overrides", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const qp = ListAvailabilityOverridesQueryParams.safeParse(req.query);
-  if (!qp.success) { res.status(400).json({ error: qp.error.message }); return; }
+  if (!qp.success) { res.status(400).json({ error: "Validation failed", issues: qp.error.issues }); return; }
   if (!(await assertCalendarOwner(qp.data.calendarId, clerkId))) {
     res.status(404).json({ error: "Calendar not found" }); return;
   }
@@ -97,7 +97,7 @@ router.get("/scheduling/overrides", requireAuth, async (req, res): Promise<void>
 router.post("/scheduling/overrides", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const parsed = CreateAvailabilityOverrideBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
   if (!(await assertCalendarOwner(parsed.data.calendarId, clerkId))) {
     res.status(404).json({ error: "Calendar not found" }); return;
   }
@@ -111,7 +111,7 @@ router.post("/scheduling/overrides", requireAuth, async (req, res): Promise<void
 router.delete("/scheduling/overrides/:id", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = DeleteAvailabilityOverrideParams.safeParse(req.params);
-  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }
   const [existing] = await db.select().from(availabilityOverridesTable)
     .where(eq(availabilityOverridesTable.id, params.data.id));
   if (!existing) { res.status(404).json({ error: "Override not found" }); return; }

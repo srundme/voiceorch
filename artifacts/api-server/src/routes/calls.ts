@@ -87,7 +87,7 @@ import { triggerTransfer } from "../orchestration/session.js";
 router.post("/calls/outbound", async (req, res): Promise<void> => {
   const parsed = InitiateOutboundCallBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    res.status(400).json({ error: "Validation failed", issues: parsed.error.issues });
     return;
   }
   const { agentId, toNumber, webhookBaseUrl } = parsed.data;
@@ -245,7 +245,7 @@ router.get("/calls", async (req, res): Promise<void> => {
 router.post("/calls", async (req, res): Promise<void> => {
   const parsed = InitiateCallBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    res.status(400).json({ error: "Validation failed", issues: parsed.error.issues });
     return;
   }
 
@@ -287,7 +287,7 @@ router.post("/calls", async (req, res): Promise<void> => {
 router.get("/calls/:id", async (req, res): Promise<void> => {
   const params = GetCallParams.safeParse(req.params);
   if (!params.success) {
-    res.status(400).json({ error: params.error.message });
+    res.status(400).json({ error: "Validation failed", issues: params.error.issues });
     return;
   }
   const [call] = await db.select().from(callsTable).where(eq(callsTable.id, params.data.id));
@@ -302,12 +302,12 @@ router.get("/calls/:id", async (req, res): Promise<void> => {
 router.patch("/calls/:id", async (req, res): Promise<void> => {
   const params = UpdateCallParams.safeParse(req.params);
   if (!params.success) {
-    res.status(400).json({ error: params.error.message });
+    res.status(400).json({ error: "Validation failed", issues: params.error.issues });
     return;
   }
   const parsed = UpdateCallBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    res.status(400).json({ error: "Validation failed", issues: parsed.error.issues });
     return;
   }
 
@@ -410,7 +410,7 @@ router.post("/calls/:id/transfer", requireAuth, async (req, res): Promise<void> 
 router.patch("/calls/:id/end", async (req, res): Promise<void> => {
   const params = EndCallParams.safeParse(req.params);
   if (!params.success) {
-    res.status(400).json({ error: params.error.message });
+    res.status(400).json({ error: "Validation failed", issues: params.error.issues });
     return;
   }
 
@@ -533,12 +533,12 @@ router.patch("/calls/:id/end", async (req, res): Promise<void> => {
 router.patch("/calls/:id/disposition", requireAuth, async (req, res): Promise<void> => {
   const params = UpdateCallDispositionParams.safeParse(req.params);
   if (!params.success) {
-    res.status(400).json({ error: params.error.message });
+    res.status(400).json({ error: "Validation failed", issues: params.error.issues });
     return;
   }
   const parsed = UpdateCallDispositionBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    res.status(400).json({ error: "Validation failed", issues: parsed.error.issues });
     return;
   }
   const [call] = await db

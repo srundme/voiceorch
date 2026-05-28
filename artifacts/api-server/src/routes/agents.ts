@@ -61,7 +61,7 @@ router.get("/agents/:id", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = GetAgentParams.safeParse(req.params);
   if (!params.success) {
-    res.status(400).json({ error: params.error.message });
+    res.status(400).json({ error: "Validation failed", issues: params.error.issues });
     return;
   }
   const [agent] = await db
@@ -79,12 +79,12 @@ router.patch("/agents/:id", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = UpdateAgentParams.safeParse(req.params);
   if (!params.success) {
-    res.status(400).json({ error: params.error.message });
+    res.status(400).json({ error: "Validation failed", issues: params.error.issues });
     return;
   }
   const parsed = UpdateAgentBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    res.status(400).json({ error: "Validation failed", issues: parsed.error.issues });
     return;
   }
   const [agent] = await db
@@ -103,7 +103,7 @@ router.delete("/agents/:id", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = DeleteAgentParams.safeParse(req.params);
   if (!params.success) {
-    res.status(400).json({ error: params.error.message });
+    res.status(400).json({ error: "Validation failed", issues: params.error.issues });
     return;
   }
   const [deleted] = await db
@@ -122,7 +122,7 @@ router.patch("/agents/:id/toggle", requireAuth, async (req, res): Promise<void> 
   const clerkId = (req as any).clerkUserId as string;
   const params = ToggleAgentParams.safeParse(req.params);
   if (!params.success) {
-    res.status(400).json({ error: params.error.message });
+    res.status(400).json({ error: "Validation failed", issues: params.error.issues });
     return;
   }
   const [existing] = await db

@@ -29,6 +29,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { formatApiError } from "@/lib/format-api-error";
 
 export default function AgentsList() {
   const [search, setSearch] = useState("");
@@ -57,9 +58,8 @@ export default function AgentsList() {
           setOutboundAgent(null);
           setToNumber("");
         },
-        onError: (err: any) => {
-          const msg = err?.response?.data?.error ?? "Failed to initiate outbound call.";
-          toast({ title: "Error", description: msg, variant: "destructive" });
+        onError: (err: unknown) => {
+          toast({ title: "Error", description: formatApiError(err), variant: "destructive" });
         },
       }
     );
@@ -76,10 +76,10 @@ export default function AgentsList() {
             description: `Agent is now ${currentStatus === 'active' ? 'inactive' : 'active'}.`,
           });
         },
-        onError: () => {
+        onError: (err: unknown) => {
           toast({
             title: "Error",
-            description: "Failed to update agent status.",
+            description: formatApiError(err),
             variant: "destructive",
           });
         }
@@ -99,10 +99,10 @@ export default function AgentsList() {
               description: "The agent has been removed.",
             });
           },
-          onError: () => {
+          onError: (err: unknown) => {
             toast({
               title: "Error",
-              description: "Failed to delete agent.",
+              description: formatApiError(err),
               variant: "destructive",
             });
           }

@@ -47,7 +47,7 @@ router.post("/providers", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const parsed = CreateProviderBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    res.status(400).json({ error: "Validation failed", issues: parsed.error.issues });
     return;
   }
   const [provider] = await db
@@ -62,12 +62,12 @@ router.patch("/providers/:id", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = UpdateProviderParams.safeParse(req.params);
   if (!params.success) {
-    res.status(400).json({ error: params.error.message });
+    res.status(400).json({ error: "Validation failed", issues: params.error.issues });
     return;
   }
   const parsed = UpdateProviderBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    res.status(400).json({ error: "Validation failed", issues: parsed.error.issues });
     return;
   }
   const updateData = { ...parsed.data };
@@ -88,7 +88,7 @@ router.delete("/providers/:id", requireAuth, async (req, res): Promise<void> => 
   const clerkId = (req as any).clerkUserId as string;
   const params = DeleteProviderParams.safeParse(req.params);
   if (!params.success) {
-    res.status(400).json({ error: params.error.message });
+    res.status(400).json({ error: "Validation failed", issues: params.error.issues });
     return;
   }
   const [deleted] = await db

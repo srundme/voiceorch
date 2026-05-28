@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { formatApiError } from "@/lib/format-api-error";
 
 export default function CallDetail() {
   const params = useParams();
@@ -70,7 +71,7 @@ export default function CallDetail() {
           setEditing(false);
           toast({ title: "Disposition saved" });
         },
-        onError: () => toast({ title: "Failed to save", variant: "destructive" }),
+        onError: (err: unknown) => toast({ title: "Failed to save", description: formatApiError(err), variant: "destructive" }),
       }
     );
   };

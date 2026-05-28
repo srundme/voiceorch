@@ -26,7 +26,7 @@ router.get("/scheduling/calendars", requireAuth, async (req, res): Promise<void>
 router.post("/scheduling/calendars", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const parsed = CreateCalendarBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
   // Verify the referenced agent belongs to the caller
   const [agent] = await db.select({ id: agentsTable.id }).from(agentsTable)
     .where(and(eq(agentsTable.id, parsed.data.agentId), eq(agentsTable.userId, clerkId)));
@@ -40,7 +40,7 @@ router.post("/scheduling/calendars", requireAuth, async (req, res): Promise<void
 router.get("/scheduling/calendars/:id", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = GetCalendarParams.safeParse(req.params);
-  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }
   const [row] = await db.select().from(schedulingCalendarsTable)
     .where(and(eq(schedulingCalendarsTable.id, params.data.id), eq(schedulingCalendarsTable.userId, clerkId)));
   if (!row) { res.status(404).json({ error: "Calendar not found" }); return; }
@@ -50,9 +50,9 @@ router.get("/scheduling/calendars/:id", requireAuth, async (req, res): Promise<v
 router.patch("/scheduling/calendars/:id", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = UpdateCalendarParams.safeParse(req.params);
-  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }
   const parsed = UpdateCalendarBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
   const [row] = await db.update(schedulingCalendarsTable)
     .set({ ...parsed.data, updatedAt: new Date() })
     .where(and(eq(schedulingCalendarsTable.id, params.data.id), eq(schedulingCalendarsTable.userId, clerkId)))
@@ -95,7 +95,7 @@ router.patch("/scheduling/calendars/:id/google-connection", requireAuth, async (
 router.delete("/scheduling/calendars/:id", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params = DeleteCalendarParams.safeParse(req.params);
-  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }
   const [row] = await db.delete(schedulingCalendarsTable)
     .where(and(eq(schedulingCalendarsTable.id, params.data.id), eq(schedulingCalendarsTable.userId, clerkId)))
     .returning();

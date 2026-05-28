@@ -35,6 +35,7 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { formatApiError } from "@/lib/format-api-error";
 
 /* ── Provider → model/voice catalogue (kept in sync with new.tsx) ─────────── */
 
@@ -326,8 +327,8 @@ export default function AgentEdit() {
           toast({ title: "Agent updated", description: "Changes saved successfully." });
           setLocation(`/agents/${id}`);
         },
-        onError: () => {
-          toast({ title: "Error", description: "Failed to save changes.", variant: "destructive" });
+        onError: (err: unknown) => {
+          toast({ title: "Error", description: formatApiError(err), variant: "destructive" });
         },
       }
     );

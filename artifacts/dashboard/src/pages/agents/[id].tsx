@@ -26,6 +26,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { formatApiError } from "@/lib/format-api-error";
 
 /* ── Web Call Panel ───────────────────────────────────────────────────────── */
 
@@ -365,8 +366,7 @@ export default function AgentDetail() {
           setToNumber("");
         },
         onError: (err: unknown) => {
-          const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Failed to initiate call.";
-          toast({ title: "Call failed", description: msg, variant: "destructive" });
+          toast({ title: "Call failed", description: formatApiError(err), variant: "destructive" });
         },
       }
     );

@@ -38,7 +38,7 @@ router.post("/webhook-endpoints", requireAuth, async (req, res): Promise<void> =
   const clerkId = (req as any).clerkUserId as string;
   const parsed = CreateWebhookEndpointBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    res.status(400).json({ error: "Validation failed", issues: parsed.error.issues });
     return;
   }
   const secret = parsed.data.secret ?? `whsec_${randomBytes(24).toString("hex")}`;
@@ -59,7 +59,7 @@ router.patch("/webhook-endpoints/:id", requireAuth, async (req, res): Promise<vo
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const parsed = UpdateWebhookEndpointBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
 
   const updates: Record<string, unknown> = {};
   if (parsed.data.url !== undefined) updates.url = parsed.data.url;

@@ -30,6 +30,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { formatApiError } from "@/lib/format-api-error";
 import { format } from "date-fns";
 
 /* ── Status badges ───────────────────────────────────────────────────────── */
@@ -69,7 +70,7 @@ function NewKbDialog({ open, onClose, onCreated }: {
           onClose();
           onCreated(kb.id);
         },
-        onError: () => toast({ title: "Error", description: "Failed to create KB", variant: "destructive" }),
+        onError: (err: unknown) => toast({ title: "Error", description: formatApiError(err), variant: "destructive" }),
       }
     );
   }
@@ -156,7 +157,7 @@ function AddDocumentForm({ kbId, onDone }: { kbId: number; onDone: () => void })
           setName(""); setContent(""); setSourceUrl("");
           onDone();
         },
-        onError: () => toast({ title: "Error", description: "Failed to add document", variant: "destructive" }),
+        onError: (err: unknown) => toast({ title: "Error", description: formatApiError(err), variant: "destructive" }),
       }
     );
   }
@@ -236,8 +237,7 @@ function QueryPanel({ kbId }: { kbId: number }) {
       {
         onSuccess: (res) => setResults(res),
         onError: (err: unknown) => {
-          const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Query failed";
-          toast({ title: "Error", description: msg, variant: "destructive" });
+          toast({ title: "Error", description: formatApiError(err), variant: "destructive" });
         },
       }
     );

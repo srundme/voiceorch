@@ -47,6 +47,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { useToast } from "@/hooks/use-toast";
+import { formatApiError } from "@/lib/format-api-error";
 import { format } from "date-fns";
 import { AgentMetricsBar } from "@/components/agent-metrics-bar";
 
@@ -918,7 +919,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
           setDirty(false);
           toast({ title: "Saved", description: "Assistant updated." });
         },
-        onError: () => toast({ title: "Error", description: "Failed to save.", variant: "destructive" }),
+        onError: (err: unknown) => toast({ title: "Error", description: formatApiError(err), variant: "destructive" }),
       }
     );
   }
@@ -2602,8 +2603,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                       setToNumber("");
                     },
                     onError: (err: unknown) => {
-                      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Failed to initiate call.";
-                      toast({ title: "Call failed", description: msg, variant: "destructive" });
+                      toast({ title: "Call failed", description: formatApiError(err), variant: "destructive" });
                     },
                   }
                 );
@@ -2657,7 +2657,7 @@ function NewAgentPanel({ onCreated }: { onCreated: (id: number) => void }) {
           toast({ title: "Assistant created" });
           onCreated(created.id);
         },
-        onError: () => toast({ title: "Error", description: "Failed to create assistant.", variant: "destructive" }),
+        onError: (err: unknown) => toast({ title: "Error", description: formatApiError(err), variant: "destructive" }),
       }
     );
   }

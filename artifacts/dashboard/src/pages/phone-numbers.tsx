@@ -17,6 +17,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { formatApiError } from "@/lib/format-api-error";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -93,9 +94,8 @@ function KycBanner() {
           toast({ title: "Already verified!", description: "Your identity is already verified." });
         }
       },
-      onError: (e: any) => {
-        const msg = e?.response?.data?.error ?? "Failed to start verification. Please try again.";
-        toast({ title: "Verification failed to start", description: msg, variant: "destructive" });
+      onError: (err: unknown) => {
+        toast({ title: "Verification failed to start", description: formatApiError(err), variant: "destructive" });
       },
     });
   }
@@ -181,7 +181,7 @@ function AssignDialog({
           toast({ title: "Assignment updated" });
           onClose();
         },
-        onError: () => toast({ title: "Error", variant: "destructive", description: "Failed to update assignment" }),
+        onError: (err: unknown) => toast({ title: "Error", variant: "destructive", description: formatApiError(err) }),
       }
     );
   }
@@ -269,9 +269,8 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
           toast({ title: "Phone number purchased!", description: `${selected} is now in your account.` });
           onClose();
         },
-        onError: (e: any) => {
-          const msg = e?.response?.data?.error ?? e?.message ?? "Purchase failed";
-          const code = e?.response?.data?.code;
+        onError: (err: unknown) => {
+          const code = (err as { data?: { code?: string } })?.data?.code;
           if (code === "KYC_REQUIRED") {
             toast({
               title: "Identity verification required",
@@ -280,7 +279,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
             });
             onClose();
           } else {
-            toast({ title: "Purchase failed", description: msg, variant: "destructive" });
+            toast({ title: "Purchase failed", description: formatApiError(err), variant: "destructive" });
             setConfirming(false);
           }
         },
@@ -627,7 +626,7 @@ export default function PhoneNumbersPage() {
           toast({ title: "Number released", description: `${n.number} has been returned to inventory.` });
           setReleaseTarget(null);
         },
-        onError: () => toast({ title: "Error", variant: "destructive", description: "Failed to release number" }),
+        onError: (err: unknown) => toast({ title: "Error", variant: "destructive", description: formatApiError(err) }),
       }
     );
   }

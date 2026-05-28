@@ -207,7 +207,7 @@ router.get("/phone-numbers/available", requireAuth, async (req, res): Promise<vo
 router.post("/phone-numbers/purchase", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const parsed = PurchasePhoneNumberBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
 
   const { number, countryCode, region, numberType } = parsed.data;
 
@@ -301,9 +301,9 @@ router.post("/phone-numbers/purchase", requireAuth, async (req, res): Promise<vo
 router.patch("/phone-numbers/:id/assign", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params  = AssignPhoneNumberParams.safeParse(req.params);
-  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }
   const body = AssignPhoneNumberBody.safeParse(req.body);
-  if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
+  if (!body.success) { res.status(400).json({ error: "Validation failed", issues: body.error.issues }); return; }
 
   const [row] = await db
     .update(phoneNumbersTable)
@@ -331,7 +331,7 @@ router.patch("/phone-numbers/:id/assign", requireAuth, async (req, res): Promise
 router.delete("/phone-numbers/:id", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const params  = ReleasePhoneNumberParams.safeParse(req.params);
-  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }
 
   const [existing] = await db
     .select()

@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { formatApiError } from "@/lib/format-api-error";
 
 /* ── Provider definitions ─────────────────────────────────────────────────── */
 
@@ -228,8 +229,8 @@ export default function ProvidersList() {
           setExtraFieldValues({});
           toast({ title: "Provider added", description: "Your credentials have been securely saved." });
         },
-        onError: () => {
-          toast({ title: "Error", description: "Failed to save provider.", variant: "destructive" });
+        onError: (err: unknown) => {
+          toast({ title: "Error", description: formatApiError(err), variant: "destructive" });
         }
       }
     );
@@ -244,8 +245,8 @@ export default function ProvidersList() {
             queryClient.invalidateQueries({ queryKey: getListProvidersQueryKey() });
             toast({ title: "Provider deleted" });
           },
-          onError: () => {
-            toast({ title: "Error", description: "Failed to delete provider.", variant: "destructive" });
+          onError: (err: unknown) => {
+            toast({ title: "Error", description: formatApiError(err), variant: "destructive" });
           }
         }
       );

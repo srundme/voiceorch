@@ -22,7 +22,7 @@ const router: IRouter = Router();
 
 router.get("/scheduling/public/event-types/:slug", async (req, res): Promise<void> => {
   const params = GetPublicEventTypeParams.safeParse(req.params);
-  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }
 
   const [eventType] = await db.select().from(eventTypesTable)
     .where(eq(eventTypesTable.slug, params.data.slug));
@@ -64,7 +64,7 @@ router.get("/scheduling/public/slots", async (req, res): Promise<void> => {
 
 router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
   const parsed = CreatePublicBookingBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
 
   const [eventType] = await db.select().from(eventTypesTable)
     .where(eq(eventTypesTable.slug, parsed.data.eventTypeSlug));

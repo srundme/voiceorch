@@ -133,7 +133,7 @@ router.get("/analytics/calls/daily", async (req, res): Promise<void> => {
 
 router.get("/analytics/agents/:id", requireAuth, async (req, res): Promise<void> => {
   const params = GetAgentStatsParams.safeParse(req.params);
-  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }
 
   const clerkId = (req as any).clerkUserId as string;
   const agentId = params.data.id;
