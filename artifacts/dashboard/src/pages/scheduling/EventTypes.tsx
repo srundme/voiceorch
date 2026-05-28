@@ -1,34 +1,37 @@
 import { useState } from "react";
-import { format } from "date-fns";
-import { Plus, Pencil, Trash2, Copy, Check, LinkIcon, Clock, MoreHorizontal } from "lucide-react";
+import { Link, useLocation } from "wouter";
 import {
   useListEventTypes,
   useCreateEventType,
-  useUpdateEventType,
   useDeleteEventType,
   useListCalendars,
   getListEventTypesQueryKey,
 } from "@workspace/api-client-react";
-import type { EventType, EventTypeInput } from "@workspace/api-client-react";
+import type { EventType } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import {
+  Plus, Clock, Copy, Check, LinkIcon, ChevronRight,
+  Pencil, Trash2, Calendar,
+} from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+function toSlug(name: string) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+}
 
 function SlugCopy({ slug }: { slug: string }) {
   const [copied, setCopied] = useState(false);
@@ -36,104 +39,236 @@ function SlugCopy({ slug }: { slug: string }) {
   return (
     <button
       className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-      onClick={() => { void navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+      onClick={e => { e.preventDefault(); void navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
     >
       {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <LinkIcon className="h-3 w-3" />}
-      <span className="font-mono">{slug}</span>
+      <span className="font-mono">/book/{slug}</span>
     </button>
   );
 }
 
-type FormState = {
-  calendarId: number | null;
-  name: string;
-  slug: string;
-  description: string;
-  durationMinutes: number;
-  bufferBeforeMins: number;
-  bufferAfterMins: number;
-  confirmationMode: "instant" | "manual";
-  maxBookingsPerSlot: number;
-  isActive: boolean;
-};
+function QuickCreateDialog({
+  open,
+  onClose,
+  defaultCalendarId,
+}: {
+  open: boolean;
+  onClose: () => void;
+  defaultCalendarId: number | null;
+}) {
+  const [, navigate] = useLocation();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const createMut = useCreateEventType();
+  const { data: calendars } = useListCalendars();
 
-const defaultForm: FormState = {
-  calendarId: null, name: "", slug: "", description: "",
-  durationMinutes: 30, bufferBeforeMins: 0, bufferAfterMins: 0,
-  confirmationMode: "instant", maxBookingsPerSlot: 1, isActive: true,
-};
+  const [name, setName]               = useState("");
+  const [slugEdited, setSlugEdited]   = useState(false);
+  const [slug, setSlug]               = useState("");
+  const [description, setDescription] = useState("");
+  const [duration, setDuration]       = useState(30);
+  const [calendarId, setCalendarId]   = useState<number | null>(defaultCalendarId);
+
+  if (calendarId === null && defaultCalendarId !== null) setCalendarId(defaultCalendarId);
+
+  function handleNameChange(v: string) {
+    setName(v);
+    if (!slugEdited) setSlug(toSlug(v));
+  }
+
+  function handleSlugChange(v: string) {
+    setSlugEdited(true);
+    setSlug(toSlug(v));
+  }
+
+  function reset() {
+    setName(""); setSlug(""); setSlugEdited(false);
+    setDescription(""); setDuration(30);
+  }
+
+  function handleClose() { reset(); onClose(); }
+
+  async function handleContinue() {
+    if (!name.trim())       { toast({ title: "Title is required",    variant: "destructive" }); return; }
+    if (!slug.trim())       { toast({ title: "URL slug is required", variant: "destructive" }); return; }
+    if (!calendarId)        { toast({ title: "Select a calendar",    variant: "destructive" }); return; }
+
+    try {
+      const created = await createMut.mutateAsync({
+        data: {
+          calendarId,
+          name: name.trim(),
+          slug: slug.trim(),
+          description: description.trim() || undefined,
+          durationMinutes: duration,
+        },
+      });
+      await qc.invalidateQueries({ queryKey: getListEventTypesQueryKey({}) });
+      handleClose();
+      navigate(`${BASE}/app/scheduling/event-types/${created.id}`);
+    } catch (e: any) {
+      toast({ title: "Error creating event type", description: e.message, variant: "destructive" });
+    }
+  }
+
+  const previewUrl = `${window.location.origin}${BASE}/book/${slug || "…"}`;
+  const busy = createMut.isPending;
+
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) handleClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-xl font-bold">Add a new event type</DialogTitle>
+          <DialogDescription className="text-sm text-muted-foreground">
+            Set up event types to offer different types of meetings.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-1">
+          {/* Calendar selector (only when user has multiple) */}
+          {calendars && calendars.length > 1 && (
+            <div className="space-y-1.5">
+              <Label>Calendar</Label>
+              <select
+                className="w-full border border-input bg-background rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                value={calendarId ?? ""}
+                onChange={e => setCalendarId(parseInt(e.target.value))}
+              >
+                {calendars.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Title */}
+          <div className="space-y-1.5">
+            <Label>Title</Label>
+            <Input
+              value={name}
+              onChange={e => handleNameChange(e.target.value)}
+              placeholder="Quick chat"
+              autoFocus
+              onKeyDown={e => { if (e.key === "Enter") void handleContinue(); }}
+            />
+          </div>
+
+          {/* URL */}
+          <div className="space-y-1.5">
+            <Label>URL</Label>
+            <div className="flex items-center rounded-md border border-input overflow-hidden bg-background focus-within:ring-1 focus-within:ring-ring">
+              <span className="px-3 py-2 text-xs text-muted-foreground bg-muted border-r border-input whitespace-nowrap">
+                {window.location.origin}{BASE}/book/
+              </span>
+              <input
+                className="flex-1 px-3 py-2 text-sm font-mono bg-transparent outline-none"
+                value={slug}
+                onChange={e => handleSlugChange(e.target.value)}
+                placeholder="quick-chat"
+              />
+            </div>
+            {slug && (
+              <p className="text-[11px] text-muted-foreground truncate">{previewUrl}</p>
+            )}
+          </div>
+
+          {/* Description */}
+          <div className="space-y-1.5">
+            <Label>Description</Label>
+            <textarea
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="For one to one booking"
+              rows={3}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
+            />
+          </div>
+
+          {/* Duration */}
+          <div className="space-y-1.5">
+            <Label>Duration</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                min={5}
+                max={1440}
+                value={duration}
+                onChange={e => setDuration(parseInt(e.target.value) || 30)}
+                className="w-28"
+              />
+              <span className="text-sm text-muted-foreground">minutes</span>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2 mt-2">
+          <Button variant="outline" onClick={handleClose} disabled={busy}>Close</Button>
+          <Button onClick={() => void handleContinue()} disabled={busy || !name || !slug || !calendarId}>
+            {busy ? "Creating…" : "Continue"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EventTypeRow({ et, onDelete }: { et: EventType; onDelete: (id: number) => void }) {
+  const [, navigate] = useLocation();
+
+  return (
+    <div
+      className="group flex items-center gap-4 px-4 py-3.5 border-b last:border-0 hover:bg-muted/40 transition-colors cursor-pointer"
+      onClick={() => navigate(`${BASE}/app/scheduling/event-types/${et.id}`)}
+    >
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-medium text-sm">{et.name}</span>
+          <SlugCopy slug={et.slug} />
+        </div>
+        <div className="flex items-center gap-1.5 mt-1">
+          <Clock className="h-3 w-3 text-muted-foreground" />
+          <span className="text-xs text-muted-foreground">{et.durationMinutes}m</span>
+          {!et.isActive && (
+            <Badge variant="outline" className="text-[10px] ml-1">Hidden</Badge>
+          )}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+        <Button
+          variant="ghost" size="icon" className="h-7 w-7"
+          onClick={e => { e.stopPropagation(); navigate(`${BASE}/app/scheduling/event-types/${et.id}`); }}
+          title="Edit"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive"
+          onClick={e => { e.stopPropagation(); onDelete(et.id); }}
+          title="Delete"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+
+      <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+    </div>
+  );
+}
 
 export default function EventTypesPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
+
   const { data: calendars } = useListCalendars();
   const { data: eventTypes, isLoading } = useListEventTypes({}, { query: { queryKey: getListEventTypesQueryKey({}) } });
-  const createMut = useCreateEventType();
-  const updateMut = useUpdateEventType();
   const deleteMut = useDeleteEventType();
 
-  const [showDialog, setShowDialog] = useState(false);
-  const [editing, setEditing] = useState<EventType | null>(null);
-  const [form, setForm] = useState<FormState>(defaultForm);
+  const [createOpen, setCreateOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
+  const deleteTarget = eventTypes?.find(et => et.id === deleteId);
 
-  function openCreate() {
-    setEditing(null);
-    setForm({ ...defaultForm, calendarId: calendars?.[0]?.id ?? null });
-    setShowDialog(true);
-  }
-
-  function openEdit(et: EventType) {
-    setEditing(et);
-    setForm({
-      calendarId: et.calendarId,
-      name: et.name,
-      slug: et.slug,
-      description: et.description ?? "",
-      durationMinutes: et.durationMinutes,
-      bufferBeforeMins: et.bufferBeforeMins,
-      bufferAfterMins: et.bufferAfterMins,
-      confirmationMode: et.confirmationMode,
-      maxBookingsPerSlot: et.maxBookingsPerSlot,
-      isActive: et.isActive,
-    });
-    setShowDialog(true);
-  }
-
-  async function handleSave() {
-    if (!form.calendarId || !form.name || !form.slug) {
-      toast({ title: "Missing fields", description: "Calendar, name, and slug are required.", variant: "destructive" });
-      return;
-    }
-    try {
-      if (editing) {
-        await updateMut.mutateAsync({ id: editing.id, data: {
-          name: form.name, description: form.description || undefined,
-          durationMinutes: form.durationMinutes, bufferBeforeMins: form.bufferBeforeMins,
-          bufferAfterMins: form.bufferAfterMins, confirmationMode: form.confirmationMode,
-          maxBookingsPerSlot: form.maxBookingsPerSlot, isActive: form.isActive,
-        }});
-      } else {
-        await createMut.mutateAsync({ data: {
-          calendarId: form.calendarId,
-          name: form.name,
-          slug: form.slug,
-          description: form.description || undefined,
-          durationMinutes: form.durationMinutes,
-          bufferBeforeMins: form.bufferBeforeMins,
-          bufferAfterMins: form.bufferAfterMins,
-          confirmationMode: form.confirmationMode,
-          maxBookingsPerSlot: form.maxBookingsPerSlot,
-          isActive: form.isActive,
-        }});
-      }
-      await qc.invalidateQueries({ queryKey: getListEventTypesQueryKey({}) });
-      setShowDialog(false);
-      toast({ title: editing ? "Event type updated" : "Event type created" });
-    } catch (e: any) {
-      toast({ title: "Error", description: e.message, variant: "destructive" });
-    }
-  }
+  const defaultCalendarId = calendars?.[0]?.id ?? null;
 
   async function handleDelete(id: number) {
     try {
@@ -147,142 +282,98 @@ export default function EventTypesPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold">Event Types</h1>
-          <p className="text-sm text-muted-foreground">Define meeting types that can be booked</p>
-        </div>
-        <Button size="sm" onClick={openCreate}>
-          <Plus className="h-4 w-4 mr-1" /> New Event Type
-        </Button>
-      </div>
-
-      <div className="grid gap-4">
-        {isLoading && <div className="text-muted-foreground text-sm animate-pulse">Loading...</div>}
-        {!isLoading && (!eventTypes || eventTypes.length === 0) && (
-          <Card><CardContent className="py-12 text-center text-muted-foreground">No event types yet. Create one to start accepting bookings.</CardContent></Card>
-        )}
-        {eventTypes?.map(et => (
-          <Card key={et.id} className="transition-all hover:shadow-sm">
-            <CardContent className="flex items-center gap-4 py-4">
-              <div className="p-2 rounded-lg bg-muted">
-                <Clock className="h-4 w-4 text-muted-foreground" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium text-sm">{et.name}</span>
-                  {!et.isActive && <Badge variant="outline" className="text-xs">Inactive</Badge>}
-                  <Badge variant="outline" className="text-xs">{et.durationMinutes} min</Badge>
-                  <Badge variant="outline" className="text-xs capitalize">{et.confirmationMode}</Badge>
-                </div>
-                <SlugCopy slug={et.slug} />
-              </div>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8">
-                    <MoreHorizontal className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => openEdit(et)}><Pencil className="h-3.5 w-3.5 mr-2" />Edit</DropdownMenuItem>
-                  <DropdownMenuItem className="text-destructive" onClick={() => setDeleteId(et.id)}>
-                    <Trash2 className="h-3.5 w-3.5 mr-2" />Delete
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{editing ? "Edit Event Type" : "New Event Type"}</DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col gap-4 py-2">
-            {!editing && (
-              <div className="flex flex-col gap-1.5">
-                <Label>Calendar</Label>
-                <Select value={String(form.calendarId ?? "")} onValueChange={v => setForm(f => ({ ...f, calendarId: parseInt(v) }))}>
-                  <SelectTrigger><SelectValue placeholder="Select calendar" /></SelectTrigger>
-                  <SelectContent>
-                    {calendars?.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex flex-col gap-1.5">
-                <Label>Name</Label>
-                <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="30-min Demo" />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label>Slug</Label>
-                <Input value={form.slug} onChange={e => setForm(f => ({ ...f, slug: e.target.value.toLowerCase().replace(/\s+/g, "-") }))} placeholder="30-min-demo" disabled={!!editing} />
-              </div>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>Description</Label>
-              <Input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Optional description" />
-            </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="flex flex-col gap-1.5">
-                <Label>Duration (min)</Label>
-                <Input type="number" value={form.durationMinutes} onChange={e => setForm(f => ({ ...f, durationMinutes: parseInt(e.target.value) || 30 }))} />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label>Buffer before</Label>
-                <Input type="number" value={form.bufferBeforeMins} onChange={e => setForm(f => ({ ...f, bufferBeforeMins: parseInt(e.target.value) || 0 }))} />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label>Buffer after</Label>
-                <Input type="number" value={form.bufferAfterMins} onChange={e => setForm(f => ({ ...f, bufferAfterMins: parseInt(e.target.value) || 0 }))} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex flex-col gap-1.5">
-                <Label>Confirmation</Label>
-                <Select value={form.confirmationMode} onValueChange={v => setForm(f => ({ ...f, confirmationMode: v as "instant" | "manual" }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="instant">Instant</SelectItem>
-                    <SelectItem value="manual">Manual approval</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label>Max per slot</Label>
-                <Input type="number" value={form.maxBookingsPerSlot} onChange={e => setForm(f => ({ ...f, maxBookingsPerSlot: parseInt(e.target.value) || 1 }))} />
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Switch checked={form.isActive} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} />
-              <Label>Active</Label>
-            </div>
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Header */}
+      <div className="border-b px-6 py-4 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-emerald-50">
+            <Calendar className="h-4 w-4 text-emerald-600" />
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button>
-            <Button onClick={handleSave} disabled={createMut.isPending || updateMut.isPending}>
-              {editing ? "Save changes" : "Create"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          <div>
+            <h1 className="text-base font-semibold">Event Types</h1>
+            <p className="text-xs text-muted-foreground">Configure different events for people to book on your calendar.</p>
+          </div>
+        </div>
+        {(calendars?.length ?? 0) > 0 && (
+          <Button size="sm" onClick={() => setCreateOpen(true)} className="gap-1.5">
+            <Plus className="h-3.5 w-3.5" /> New
+          </Button>
+        )}
+      </div>
 
-      <Dialog open={deleteId !== null} onOpenChange={v => !v && setDeleteId(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete event type?</DialogTitle>
-            <DialogDescription>This will permanently delete the event type and cannot be undone.</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteId(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={() => deleteId && handleDelete(deleteId)} disabled={deleteMut.isPending}>Delete</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto">
+        {isLoading ? (
+          <div className="p-6 space-y-3">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="h-14 rounded-lg bg-muted animate-pulse" />
+            ))}
+          </div>
+        ) : !calendars?.length ? (
+          <div className="flex flex-col items-center justify-center py-24 text-center px-6">
+            <div className="p-4 rounded-2xl bg-muted mb-4">
+              <Calendar className="h-8 w-8 text-muted-foreground" />
+            </div>
+            <h3 className="text-base font-semibold text-foreground mb-1">No calendar set up</h3>
+            <p className="text-sm text-muted-foreground max-w-sm mb-5">
+              Create a calendar first, then you can add event types to it.
+            </p>
+            <Link href={`${BASE}/app/scheduling/calendars`}>
+              <Button variant="outline" className="gap-1.5">
+                <Calendar className="h-4 w-4" /> Go to Calendars
+              </Button>
+            </Link>
+          </div>
+        ) : !eventTypes?.length ? (
+          <div className="flex flex-col items-center justify-center py-24 text-center px-6">
+            <div className="p-4 rounded-2xl bg-muted mb-4">
+              <Clock className="h-8 w-8 text-muted-foreground" />
+            </div>
+            <h3 className="text-base font-semibold text-foreground mb-1">No event types yet</h3>
+            <p className="text-sm text-muted-foreground max-w-sm mb-5">
+              Create your first event type so people can start booking time with you.
+            </p>
+            <Button onClick={() => setCreateOpen(true)} className="gap-1.5">
+              <Plus className="h-4 w-4" /> New event type
+            </Button>
+          </div>
+        ) : (
+          <div className="divide-y border-0">
+            {eventTypes.map(et => (
+              <EventTypeRow key={et.id} et={et} onDelete={id => setDeleteId(id)} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Quick-create dialog */}
+      <QuickCreateDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        defaultCalendarId={defaultCalendarId}
+      />
+
+      {/* Delete confirm */}
+      <AlertDialog open={deleteId !== null} onOpenChange={v => !v && setDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete "{deleteTarget?.name}"?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete this event type and its booking page at <code className="font-mono">/book/{deleteTarget?.slug}</code>. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive hover:bg-destructive/90"
+              onClick={() => deleteId && void handleDelete(deleteId)}
+              disabled={deleteMut.isPending}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
