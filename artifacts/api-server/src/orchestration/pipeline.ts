@@ -2106,6 +2106,14 @@ function extractSentences(text: string): { sentences: string[]; remainder: strin
       while (i < text.length && text[i] === ' ') i++;
       segStart = i;
 
+    } else if (ch === '\u0964') {
+      // Devanagari / Indic danda (।) — sentence boundary in Hindi, Tamil-mixed, etc.
+      const s = text.slice(segStart, i + 1).trim();
+      if (s.length >= 4) sentences.push(s);
+      i++;
+      while (i < text.length && text[i] === ' ') i++;
+      segStart = i;
+
     } else if (ch === '.') {
       const next = i + 1;
       if (next >= text.length) {
@@ -2115,16 +2123,24 @@ function extractSentences(text: string): { sentences: string[]; remainder: strin
         i++;
         segStart = i;
       } else if (text[next] === ' ' || text[next] === '\n') {
-        // Look at first non-space character after the period
+        // Look at first non-space/newline character after the period
         let j = next + 1;
-        while (j < text.length && text[j] === ' ') j++;
+        while (j < text.length && (text[j] === ' ' || text[j] === '\n')) j++;
         const afterSpace = j < text.length ? text[j] : undefined;
 
-        if (afterSpace !== undefined && /[A-Z"'(\u2018\u201C]/.test(afterSpace)) {
+        // Split when:
+        //  a) next real char is uppercase/quote (English sentence start), OR
+        //  b) nothing follows — period+whitespace is at the tail of the current
+        //     streaming chunk (handles Tamil/Indic responses that end with ". ")
+        const shouldSplit = afterSpace === undefined || /[A-Z"'(\u2018\u201C]/.test(afterSpace);
+
+        if (shouldSplit) {
           // Only split when word before the period is > 4 letters (not an abbreviation).
           // A ≤4-letter all-alpha word (Mr, Mrs, Dr, Prof, vs, etc.) is almost
           // certainly an abbreviation.  Digits/punctuation before "." mean we're
           // NOT in an abbreviation (e.g. "cost $1,200.50. Next…").
+          // Non-Latin scripts (Tamil, Hindi etc.) won't match the Latin regex so
+          // isAbbrev will be false — they always split correctly.
           const wordBefore = text.slice(segStart, i).match(/([A-Za-z]{1,4})$/)?.[1];
           const isAbbrev = wordBefore !== undefined; // matched = 1–4 letter suffix = abbreviation
           if (!isAbbrev) {
