@@ -292,7 +292,8 @@ interface LeadSourceState {
   enabled: boolean;
   type: "instagram";
   token: string;
-  fields: string[];
+  fields: string[];       // checked fields — sent to backend
+  customFields: string[]; // user-added slugs that exist (may or may not be checked)
 }
 
 interface WizardState {
@@ -309,6 +310,8 @@ interface WizardState {
   productDetails: string;
 }
 
+const DEFAULT_LEAD_FIELDS = ["name", "email", "message"] as const;
+
 const INITIAL: WizardState = {
   mode: null, useCase: "", useCaseRole: "", useCaseService: "",
   isMultilingual: false, primaryLanguage: "english", additionalLanguages: [],
@@ -319,7 +322,7 @@ const INITIAL: WizardState = {
   callTransferEnabled: false, callTransferNumber: "",
   byopAsr: "deepgram", byopLlm: "openai", byopTts: "elevenlabs", byopTelephony: "twilio",
   byopPrompt: "You are a helpful AI voice assistant. Be concise and professional.",
-  leadSource: { enabled: false, type: "instagram", token: "", fields: ["name", "email", "message"] },
+  leadSource: { enabled: false, type: "instagram", token: "", fields: [...DEFAULT_LEAD_FIELDS], customFields: [] },
   productDetails: "",
 };
 
@@ -491,6 +494,30 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
   const [flowEditMode, setFlowEditMode]         = useState(false);
   const [flowEditText, setFlowEditText]         = useState("");
   const [confirmedFlowNodes, setConfirmedFlowNodes] = useState<FlowNode[] | null>(null);
+
+  /* lead field add state */
+  const [addFieldInput, setAddFieldInput] = useState("");
+  const [addFieldError, setAddFieldError] = useState("");
+
+  function handleAddLeadField() {
+    const raw = addFieldInput.trim();
+    if (!raw) { setAddFieldError("Field name cannot be blank."); return; }
+    const slug = raw.toLowerCase().replace(/\s+/g, "_");
+    const allKnown = [...(DEFAULT_LEAD_FIELDS as readonly string[]), ...state.leadSource.customFields];
+    if (allKnown.includes(slug)) {
+      setAddFieldError(`"${slug}" is already in the list.`);
+      return;
+    }
+    update({
+      leadSource: {
+        ...state.leadSource,
+        customFields: [...state.leadSource.customFields, slug],
+        fields: [...state.leadSource.fields, slug], // start checked
+      },
+    });
+    setAddFieldInput("");
+    setAddFieldError("");
+  }
 
   const updateMicro = useCallback((patch: Partial<MicroAnswers>) =>
     setMicroAnswers(p => ({ ...p, ...patch })), []);
@@ -1132,8 +1159,9 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                         {/* Lead fields checklist */}
                         <div>
                           <label className="text-gray-500 text-xs uppercase tracking-[0.15em] block mb-2">Lead Fields to Capture</label>
-                          <div className="flex gap-2 flex-wrap">
-                            {(["name", "email", "message"] as const).map(field => {
+                          <div className="flex gap-2 flex-wrap mb-3">
+                            {/* Default fields — always visible, togglable on/off */}
+                            {(DEFAULT_LEAD_FIELDS as readonly string[]).map(field => {
                               const checked = state.leadSource.fields.includes(field);
                               const varName = `{{lead_${field}}}`;
                               return (
@@ -1161,7 +1189,79 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                                 </button>
                               );
                             })}
+                            {/* Custom fields — togglable + removable */}
+                            {state.leadSource.customFields.map(field => {
+                              const checked = state.leadSource.fields.includes(field);
+                              const varName = `{{lead_${field}}}`;
+                              const displayName = field.replace(/_/g, " ");
+                              return (
+                                <span
+                                  key={field}
+                                  className={cn(
+                                    "flex items-center gap-1.5 pl-3 pr-2 py-2 rounded-xl border text-xs font-medium transition-all",
+                                    checked
+                                      ? "border-violet-400 bg-violet-50 text-violet-700"
+                                      : "border-gray-200 bg-gray-50 text-gray-400",
+                                  )}
+                                >
+                                  {/* toggle button */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const next = checked
+                                        ? state.leadSource.fields.filter(f => f !== field)
+                                        : [...state.leadSource.fields, field];
+                                      update({ leadSource: { ...state.leadSource, fields: next } });
+                                    }}
+                                    className={cn("w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 transition-colors", checked ? "border-violet-500 bg-violet-500" : "border-gray-300 hover:border-gray-400")}
+                                  >
+                                    {checked && <Check className="h-2.5 w-2.5 text-white" />}
+                                  </button>
+                                  <span className="capitalize">{displayName}</span>
+                                  <span className={cn("font-mono text-[10px]", checked ? "text-violet-500" : "text-gray-300")}>{varName}</span>
+                                  {/* remove button */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      update({
+                                        leadSource: {
+                                          ...state.leadSource,
+                                          customFields: state.leadSource.customFields.filter(f => f !== field),
+                                          fields: state.leadSource.fields.filter(f => f !== field),
+                                        },
+                                      });
+                                    }}
+                                    className="ml-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center shrink-0 text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                    title={`Remove ${displayName}`}
+                                  >
+                                    <X className="h-2.5 w-2.5" />
+                                  </button>
+                                </span>
+                              );
+                            })}
                           </div>
+
+                          {/* Add custom field */}
+                          <div className="flex gap-2 items-center">
+                            <input
+                              type="text"
+                              placeholder="e.g. Phone Number"
+                              value={addFieldInput}
+                              onChange={e => { setAddFieldInput(e.target.value); setAddFieldError(""); }}
+                              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleAddLeadField(); } }}
+                              className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-gray-900 text-xs placeholder:text-gray-300 focus:outline-none focus:border-violet-500/60 transition-all"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleAddLeadField}
+                              className="px-3 py-2 rounded-xl border border-violet-300 bg-violet-50 text-violet-700 text-xs font-medium hover:bg-violet-100 transition-colors shrink-0"
+                            >
+                              Add field
+                            </button>
+                          </div>
+                          {addFieldError && (
+                            <p className="mt-1.5 text-[11px] text-red-500">{addFieldError}</p>
+                          )}
                         </div>
 
                         {/* Product Details */}

@@ -27,7 +27,7 @@ const BASE_MANAGED = {
   byopTts: "elevenlabs",
   byopTelephony: "twilio",
   byopPrompt: "You are a helpful AI voice assistant.",
-  leadSource: { enabled: false, type: "instagram" as const, token: "", fields: ["name", "email", "message"] },
+  leadSource: { enabled: false, type: "instagram" as const, token: "", fields: ["name", "email", "message"], customFields: [] as string[] },
   productDetails: "",
 };
 
