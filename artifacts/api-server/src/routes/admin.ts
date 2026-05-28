@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, usersTable, walletTransactionsTable, callsTable, agentsTable, scheduledCallbacksTable, bookingsTable, eventTypesTable, schedulingCalendarsTable, platformSettingsTable, usageSpikeDismissalsTable, usageSpikeNotificationsTable, alertNotificationLogTable } from "@workspace/db";
-import { eq, sql, count, sum, desc, lt, gt, and, inArray } from "drizzle-orm";
+import { eq, sql, count, sum, desc, lt, gt, and, inArray, ilike, like } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { getAllSessions } from "../orchestration/session.js";
 import { logger } from "../lib/logger.js";
@@ -337,25 +337,76 @@ router.get("/admin/platform/failed-calls/by-reason", async (req, res): Promise<v
 
 router.get("/admin/platform/failed-calls", async (req, res): Promise<void> => {
   try {
-    const failed = await db
-      .select({
-        id: callsTable.id,
-        userId: callsTable.userId,
-        agentId: callsTable.agentId,
-        agentName: agentsTable.name,
-        status: callsTable.status,
-        errorMessage: callsTable.errorMessage,
-        createdAt: callsTable.createdAt,
-      })
-      .from(callsTable)
-      .leftJoin(agentsTable, eq(callsTable.agentId, agentsTable.id))
-      .where(eq(callsTable.status, "failed"))
-      .orderBy(desc(callsTable.createdAt))
-      .limit(100);
+    const pageSize = Math.min(Math.max(Number(req.query["limit"] ?? 50), 1), 200);
+    const page = Math.max(Number(req.query["page"] ?? 1), 1);
+    const offset = (page - 1) * pageSize;
 
-    res.json(failed);
+    const agentIdRaw = req.query["agentId"];
+    const userIdRaw = req.query["userId"];
+    const reasonRaw = req.query["reason"];
+
+    const agentId = agentIdRaw ? Number(agentIdRaw) : null;
+    const userId = typeof userIdRaw === "string" && userIdRaw.trim() ? userIdRaw.trim() : null;
+    const reason = typeof reasonRaw === "string" && reasonRaw.trim() ? reasonRaw.trim() : null;
+
+    const conditions = [eq(callsTable.status, "failed")];
+    if (agentId !== null && !isNaN(agentId)) {
+      conditions.push(eq(callsTable.agentId, agentId));
+    }
+    if (userId !== null) {
+      conditions.push(ilike(callsTable.userId, `%${userId}%`));
+    }
+    if (reason !== null) {
+      conditions.push(ilike(callsTable.errorMessage, `%${reason}%`));
+    }
+
+    const where = and(...conditions);
+
+    const [failed, [{ total }]] = await Promise.all([
+      db
+        .select({
+          id: callsTable.id,
+          userId: callsTable.userId,
+          agentId: callsTable.agentId,
+          agentName: agentsTable.name,
+          status: callsTable.status,
+          errorMessage: callsTable.errorMessage,
+          createdAt: callsTable.createdAt,
+        })
+        .from(callsTable)
+        .leftJoin(agentsTable, eq(callsTable.agentId, agentsTable.id))
+        .where(where)
+        .orderBy(desc(callsTable.createdAt))
+        .limit(pageSize)
+        .offset(offset),
+      db
+        .select({ total: count() })
+        .from(callsTable)
+        .where(where),
+    ]);
+
+    res.json({ data: failed, total, page, pageSize });
   } catch (err) {
     req.log.error({ err }, "admin/platform/failed-calls failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/admin/platform/failed-calls/agents", async (req, res): Promise<void> => {
+  try {
+    const agents = await db
+      .selectDistinct({
+        id: agentsTable.id,
+        name: agentsTable.name,
+      })
+      .from(callsTable)
+      .innerJoin(agentsTable, eq(callsTable.agentId, agentsTable.id))
+      .where(eq(callsTable.status, "failed"))
+      .orderBy(agentsTable.name);
+
+    res.json(agents);
+  } catch (err) {
+    req.log.error({ err }, "admin/platform/failed-calls/agents failed");
     res.status(500).json({ error: "Internal server error" });
   }
 });

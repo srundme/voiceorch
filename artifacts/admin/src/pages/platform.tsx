@@ -1,4 +1,4 @@
-import { usePlatformActive, usePlatformFailedCalls, usePlatformFailedCallsByReason } from "@/hooks/use-admin-api";
+import { usePlatformActive, usePlatformFailedCalls, usePlatformFailedCallsByReason, useFailedCallsAgents, type FailedCallsFilters } from "@/hooks/use-admin-api";
 import { format } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -10,12 +10,78 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Activity, AlertTriangle, BarChart2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Activity, AlertTriangle, BarChart2, ChevronLeft, ChevronRight, Search, X } from "lucide-react";
+import { useState, useCallback } from "react";
+import { useDebounce } from "@/hooks/use-debounce";
+
+const PAGE_SIZE = 50;
+
+function hasActiveFilters(filters: FailedCallsFilters): boolean {
+  return !!(filters.agentId || filters.userId || filters.reason);
+}
 
 export default function Platform() {
   const { data: activeData, isLoading: loadingActive, isError: activeError, error: activeErr } = usePlatformActive();
-  const { data: failedCalls, isLoading: loadingFailed, isError: failedError, error: failedErr } = usePlatformFailedCalls();
   const { data: byReason, isLoading: loadingByReason, isError: byReasonError } = usePlatformFailedCallsByReason();
+  const { data: agentsData } = useFailedCallsAgents();
+
+  const [agentId, setAgentId] = useState<number | null>(null);
+  const [userIdInput, setUserIdInput] = useState("");
+  const [reasonInput, setReasonInput] = useState("");
+  const [page, setPage] = useState(1);
+
+  const debouncedUserId = useDebounce(userIdInput, 400);
+  const debouncedReason = useDebounce(reasonInput, 400);
+
+  const filters: FailedCallsFilters = {
+    agentId: agentId ?? undefined,
+    userId: debouncedUserId || undefined,
+    reason: debouncedReason || undefined,
+    page,
+    limit: PAGE_SIZE,
+  };
+
+  const { data: failedData, isLoading: loadingFailed, isError: failedError, error: failedErr } = usePlatformFailedCalls(filters);
+
+  const failedCalls = failedData?.data ?? [];
+  const total = failedData?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const filtersActive = hasActiveFilters(filters);
+
+  const resetFilters = useCallback(() => {
+    setAgentId(null);
+    setUserIdInput("");
+    setReasonInput("");
+    setPage(1);
+  }, []);
+
+  const handleAgentChange = (val: string) => {
+    setAgentId(val === "all" ? null : Number(val));
+    setPage(1);
+  };
+
+  const handleUserIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setUserIdInput(e.target.value);
+    setPage(1);
+  };
+
+  const handleReasonChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setReasonInput(e.target.value);
+    setPage(1);
+  };
+
+  const emptyMessage = filtersActive
+    ? "No failed calls match the current filters"
+    : "No failed calls recently";
 
   return (
     <div className="space-y-6">
@@ -112,9 +178,54 @@ export default function Platform() {
 
         <Card className="border-destructive/20">
           <CardHeader className="pb-3 border-b border-border bg-card">
-            <CardTitle className="text-sm font-medium uppercase tracking-wider flex items-center gap-2 text-destructive">
-              <AlertTriangle className="h-4 w-4" /> Recent Failed Calls
-            </CardTitle>
+            <div className="flex items-center justify-between mb-3">
+              <CardTitle className="text-sm font-medium uppercase tracking-wider flex items-center gap-2 text-destructive">
+                <AlertTriangle className="h-4 w-4" /> Failed Calls
+                {total > 0 && (
+                  <span className="text-muted-foreground font-normal normal-case text-xs ml-1">
+                    ({total.toLocaleString()} total)
+                  </span>
+                )}
+              </CardTitle>
+              {filtersActive && (
+                <Button variant="ghost" size="sm" onClick={resetFilters} className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground">
+                  <X className="h-3 w-3" /> Clear filters
+                </Button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Select value={agentId != null ? String(agentId) : "all"} onValueChange={handleAgentChange}>
+                <SelectTrigger className="h-8 text-xs w-[180px]">
+                  <SelectValue placeholder="All agents" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All agents</SelectItem>
+                  {agentsData?.map((a) => (
+                    <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                <Input
+                  className="h-8 text-xs pl-6 w-[180px]"
+                  placeholder="Filter by user / Clerk ID"
+                  value={userIdInput}
+                  onChange={handleUserIdChange}
+                />
+              </div>
+
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                <Input
+                  className="h-8 text-xs pl-6 w-[200px]"
+                  placeholder="Search error text"
+                  value={reasonInput}
+                  onChange={handleReasonChange}
+                />
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="p-0 h-[400px] overflow-auto">
             <TooltipProvider delayDuration={200}>
@@ -133,10 +244,14 @@ export default function Platform() {
                     <TableRow><TableCell colSpan={5} className="text-center py-4">Loading...</TableCell></TableRow>
                   ) : failedError ? (
                     <TableRow><TableCell colSpan={5} className="text-center py-8 text-destructive">Failed to load failed calls: {(failedErr as Error)?.message}</TableCell></TableRow>
-                  ) : failedCalls?.length === 0 ? (
-                    <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No failed calls recently</TableCell></TableRow>
+                  ) : failedCalls.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                        {emptyMessage}
+                      </TableCell>
+                    </TableRow>
                   ) : (
-                    failedCalls?.map((call: any) => {
+                    failedCalls.map((call: any) => {
                       const agentLabel = call.agentName ?? (call.agentId != null ? `Agent #${call.agentId}` : "—");
                       const reason = call.errorMessage ?? null;
                       return (
@@ -186,6 +301,33 @@ export default function Platform() {
               </Table>
             </TooltipProvider>
           </CardContent>
+          {total > PAGE_SIZE && (
+            <div className="flex items-center justify-between px-4 py-2 border-t border-border text-xs text-muted-foreground">
+              <span>
+                Page {page} of {totalPages} &middot; {total.toLocaleString()} results
+              </span>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </Card>
       </div>
     </div>

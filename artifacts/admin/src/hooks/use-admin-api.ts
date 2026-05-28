@@ -73,10 +73,39 @@ export function usePlatformCallbacks() {
   });
 }
 
-export function usePlatformFailedCalls() {
+export interface FailedCallsFilters {
+  agentId?: number | null;
+  userId?: string;
+  reason?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface FailedCallsResponse {
+  data: any[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export function usePlatformFailedCalls(filters: FailedCallsFilters = {}) {
+  const params = new URLSearchParams();
+  if (filters.agentId != null) params.set("agentId", String(filters.agentId));
+  if (filters.userId) params.set("userId", filters.userId);
+  if (filters.reason) params.set("reason", filters.reason);
+  if (filters.page) params.set("page", String(filters.page));
+  if (filters.limit) params.set("limit", String(filters.limit));
+  const qs = params.toString();
   return useQuery({
-    queryKey: ["admin", "platform", "failed-calls"],
-    queryFn: () => adminFetch<any[]>("/platform/failed-calls"),
+    queryKey: ["admin", "platform", "failed-calls", filters],
+    queryFn: () => adminFetch<FailedCallsResponse>(`/platform/failed-calls${qs ? `?${qs}` : ""}`),
+  });
+}
+
+export function useFailedCallsAgents() {
+  return useQuery({
+    queryKey: ["admin", "platform", "failed-calls-agents"],
+    queryFn: () => adminFetch<{ id: number; name: string }[]>("/platform/failed-calls/agents"),
   });
 }
 
