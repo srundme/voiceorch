@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { formatApiError } from "@/lib/format-api-error";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -89,8 +90,8 @@ export default function PublicBookingPage() {
       });
       setMeetLink(booking.meetLink ?? null);
       setSubmitted(true);
-    } catch (err: any) {
-      setBookingError(err.message ?? "Booking failed. The slot may no longer be available.");
+    } catch (err: unknown) {
+      setBookingError(formatApiError(err));
     }
   }
 

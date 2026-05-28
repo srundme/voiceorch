@@ -61,19 +61,31 @@ describe("formatApiError", () => {
   });
 
   describe("ApiError with no structured body", () => {
-    it("falls back to err.message when data is null", () => {
+    it("returns a friendly 5xx message when data is null", () => {
       const err = makeApiError(null, 500, "Internal Server Error");
-      expect(formatApiError(err)).toBe("HTTP 500 Internal Server Error");
+      expect(formatApiError(err)).toBe("Something went wrong on our end — please try again.");
     });
 
-    it("falls back to err.message when data has no error or issues", () => {
+    it("returns a friendly 4xx message when data has no error or issues", () => {
       const err = makeApiError({}, 404, "Not Found");
-      expect(formatApiError(err)).toBe("HTTP 404 Not Found");
+      expect(formatApiError(err)).toBe("Something went wrong with your request.");
     });
 
-    it("falls back to err.message for a 500 with no body", () => {
-      const err = makeApiError(null, 500, "Internal Server Error");
-      expect(formatApiError(err)).toContain("500");
+    it("returns a friendly 5xx message for any 5xx status", () => {
+      const err = makeApiError(null, 503, "Service Unavailable");
+      expect(formatApiError(err)).toBe("Something went wrong on our end — please try again.");
+    });
+
+    it("returns a friendly 4xx message for a 422 with no body", () => {
+      const err = makeApiError(null, 422, "Unprocessable Entity");
+      expect(formatApiError(err)).toBe("Something went wrong with your request.");
+    });
+
+    it("does not expose raw HTTP status strings to the user", () => {
+      const err500 = makeApiError(null, 500, "Internal Server Error");
+      const err404 = makeApiError({}, 404, "Not Found");
+      expect(formatApiError(err500)).not.toMatch(/HTTP \d+/);
+      expect(formatApiError(err404)).not.toMatch(/HTTP \d+/);
     });
   });
 

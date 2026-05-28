@@ -17,8 +17,9 @@ interface ApiErrorData {
  *  1. Timeout / abort — "Request timed out — please try again"
  *  2. First Zod issue from `ApiError.data.issues` — formatted as "field: message"
  *  3. `ApiError.data.error` — server-supplied error string
- *  4. `err.message` — the HTTP status message built by the fetch client
- *  5. Generic fallback
+ *  4. HTTP status normalisation — friendly copy based on 4xx/5xx range
+ *  5. `err.message` — message from a plain Error (e.g. network failure)
+ *  6. Generic fallback
  */
 export function formatApiError(err: unknown): string {
   if (err instanceof RequestTimeoutError) {
@@ -40,7 +41,10 @@ export function formatApiError(err: unknown): string {
       return field ? `${field}: ${issue.message}` : issue.message;
     }
     if (data?.error) return data.error;
-    return err.message;
+    // No structured body — avoid surfacing raw "HTTP 500 …" strings
+    if (err.status >= 500) return "Something went wrong on our end — please try again.";
+    if (err.status >= 400) return "Something went wrong with your request.";
+    return "An unexpected error occurred.";
   }
 
   if (err instanceof Error) return err.message;
