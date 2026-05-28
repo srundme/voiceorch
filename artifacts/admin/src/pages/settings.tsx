@@ -7,6 +7,7 @@ import {
   useAlertNotificationCooldown, useSaveAlertNotificationCooldown,
   useSendTestAlertNotification,
   useAlertNotificationLog,
+  useAlertCooldownStatus,
   type AlertNotificationLogEntry,
   useAlertCooldownStats, useResetAlertSuppressedCount,
 } from "@/hooks/use-admin-api";
@@ -25,7 +26,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Settings, Bell, Mail, Check, AlertTriangle, Slack, Send, CheckCircle2, XCircle, Clock, RotateCcw } from "lucide-react";
+import { Settings, Bell, Mail, Check, AlertTriangle, Slack, Send, CheckCircle2, XCircle, Clock, RotateCcw, ShieldCheck, ShieldOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
 
@@ -41,6 +42,48 @@ function formatRelative(dateStr: string | null): string {
   if (diffHour < 24) return `${diffHour}h ago`;
   const diffDay = Math.floor(diffHour / 24);
   return `${diffDay}d ago`;
+}
+
+function CooldownStatusBadge({
+  cooldownUntil,
+  lastNotifiedAt,
+  lastNotifiedSeverity,
+}: {
+  cooldownUntil: string | null;
+  lastNotifiedAt: string | null;
+  lastNotifiedSeverity: string | null;
+}) {
+  if (cooldownUntil) {
+    const until = new Date(cooldownUntil);
+    const timeStr = until.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 font-medium">
+        <ShieldOff className="h-3.5 w-3.5" />
+        Suppressed — next alert can fire at {timeStr}
+        {lastNotifiedSeverity && (
+          <span className="text-muted-foreground font-normal ml-0.5">
+            (last: {lastNotifiedSeverity})
+          </span>
+        )}
+      </span>
+    );
+  }
+
+  if (lastNotifiedAt) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+        <ShieldCheck className="h-3.5 w-3.5" />
+        Ready — cooldown has passed
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+      <ShieldCheck className="h-3.5 w-3.5" />
+      Ready — no notifications sent yet
+    </span>
+  );
 }
 
 function DeliveryStatusBadge({ lastSentAt, lastFailedAt }: { lastSentAt: string | null; lastFailedAt: string | null }) {
@@ -139,6 +182,7 @@ export default function PlatformSettings() {
   const { data: alertSeverityData, isLoading: loadingAlertSeverity } = useAlertMinSeverity();
   const { data: alertCooldownData, isLoading: loadingAlertCooldown } = useAlertNotificationCooldown();
   const { data: cooldownStats } = useAlertCooldownStats();
+  const { data: cooldownStatus } = useAlertCooldownStatus();
   const saveAlertEmail = useSaveAlertEmail();
   const saveAlertSlack = useSaveAlertSlackWebhook();
   const saveAlertSeverity = useSaveAlertMinSeverity();
@@ -381,6 +425,15 @@ export default function PlatformSettings() {
                 Save
               </Button>
             </div>
+            {cooldownStatus && (
+              <div className="mt-1">
+                <CooldownStatusBadge
+                  cooldownUntil={cooldownStatus.cooldownUntil}
+                  lastNotifiedAt={cooldownStatus.lastNotifiedAt}
+                  lastNotifiedSeverity={cooldownStatus.lastNotifiedSeverity}
+                />
+              </div>
+            )}
             {cooldownStats != null && (
               <div className="mt-3 flex items-center gap-3 rounded-md border border-border bg-muted/40 px-3 py-2">
                 <div className="flex-1">

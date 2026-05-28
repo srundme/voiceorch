@@ -4,7 +4,7 @@ import { eq, sql, count, sum, desc, lt, gt, and, inArray } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { getAllSessions } from "../orchestration/session.js";
 import { logger } from "../lib/logger.js";
-import { sendTestAlertNotification, getAlertCooldownStats, resetAlertSuppressedCount } from "../services/alert-notifications.js";
+import { sendTestAlertNotification, getAlertCooldownStats, resetAlertSuppressedCount, getAlertCooldownStatus } from "../services/alert-notifications.js";
 
 const router = Router();
 
@@ -788,6 +788,18 @@ router.post("/admin/alerts/spikes/:clerkId/dismiss", async (req, res): Promise<v
     res.json({ ok: true });
   } catch (err) {
     req.log.error({ err }, "admin/alerts/spikes/:clerkId/dismiss failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── Alert Cooldown Status ────────────────────────────────────────────────────
+
+router.get("/admin/alerts/cooldown-status", async (req, res): Promise<void> => {
+  try {
+    const status = await getAlertCooldownStatus();
+    res.json(status);
+  } catch (err) {
+    req.log.error({ err }, "admin/alerts/cooldown-status GET failed");
     res.status(500).json({ error: "Internal server error" });
   }
 });

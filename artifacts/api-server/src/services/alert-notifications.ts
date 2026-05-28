@@ -324,6 +324,32 @@ export async function sendTestAlertNotification(): Promise<{ email: boolean; sla
 }
 
 /**
+ * Returns the current cooldown status without mutating any state.
+ * Loads persisted state from DB if this is the first call after a restart.
+ */
+export async function getAlertCooldownStatus(): Promise<{
+  lastNotifiedAt: string | null;
+  lastNotifiedSeverity: string | null;
+  cooldownUntil: string | null;
+}> {
+  await loadCooldownState();
+  const settings = await getNotificationSettings();
+
+  const lastNotifiedAt = _lastNotifiedAt ? new Date(_lastNotifiedAt).toISOString() : null;
+  const lastNotifiedSeverity = _lastNotifiedSeverity;
+
+  let cooldownUntil: string | null = null;
+  if (_lastNotifiedAt !== null && settings.cooldownMinutes > 0) {
+    const until = _lastNotifiedAt + settings.cooldownMinutes * 60 * 1000;
+    if (until > Date.now()) {
+      cooldownUntil = new Date(until).toISOString();
+    }
+  }
+
+  return { lastNotifiedAt, lastNotifiedSeverity, cooldownUntil };
+}
+
+/**
  * Dispatches email and/or Slack notifications for a newly-fired alert.
  * Best-effort: never throws — caller must not block on this.
  *

@@ -315,6 +315,20 @@ export function useResetAlertSuppressedCount() {
   });
 }
 
+export interface AlertCooldownStatus {
+  lastNotifiedAt: string | null;
+  lastNotifiedSeverity: string | null;
+  cooldownUntil: string | null;
+}
+
+export function useAlertCooldownStatus() {
+  return useQuery({
+    queryKey: ["admin", "alerts", "cooldown-status"],
+    queryFn: () => adminFetch<AlertCooldownStatus>("/alerts/cooldown-status"),
+    refetchInterval: 15000,
+  });
+}
+
 export function useSpikeAlerts() {
   return useQuery({
     queryKey: ["admin", "alerts", "spikes"],
