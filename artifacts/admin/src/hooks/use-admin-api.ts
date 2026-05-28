@@ -314,6 +314,34 @@ export function useDismissSpikeAlert() {
   });
 }
 
+// Alert Notification Delivery Log
+export interface AlertNotificationLogEntry {
+  id: number;
+  alertId: number | null;
+  channel: "email" | "slack";
+  status: "sent" | "failed";
+  errorMessage: string | null;
+  createdAt: string;
+}
+
+export interface AlertNotificationLogSummary {
+  email: { lastSentAt: string | null; lastFailedAt: string | null };
+  slack: { lastSentAt: string | null; lastFailedAt: string | null };
+}
+
+export interface AlertNotificationLogData {
+  summary: AlertNotificationLogSummary;
+  entries: AlertNotificationLogEntry[];
+}
+
+export function useAlertNotificationLog(limit = 50) {
+  return useQuery({
+    queryKey: ["admin", "alert-notification-log", limit],
+    queryFn: () => adminFetch<AlertNotificationLogData>(`/alert-notification-log?limit=${limit}`),
+    refetchInterval: 30000,
+  });
+}
+
 // Growth
 export function useGrowthFunnel() {
   return useQuery({

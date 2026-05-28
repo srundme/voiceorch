@@ -6,15 +6,116 @@ import {
   useAlertMinSeverity, useSaveAlertMinSeverity,
   useAlertNotificationCooldown, useSaveAlertNotificationCooldown,
   useSendTestAlertNotification,
+  useAlertNotificationLog,
+  type AlertNotificationLogEntry,
 } from "@/hooks/use-admin-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Settings, Bell, Mail, Check, AlertTriangle, Slack, Send } from "lucide-react";
+import { Settings, Bell, Mail, Check, AlertTriangle, Slack, Send, CheckCircle2, XCircle, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
+
+function formatRelative(dateStr: string | null): string {
+  if (!dateStr) return "Never";
+  const date = new Date(dateStr);
+  const diffMs = Date.now() - date.getTime();
+  const diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 60) return "Just now";
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHour = Math.floor(diffMin / 60);
+  if (diffHour < 24) return `${diffHour}h ago`;
+  const diffDay = Math.floor(diffHour / 24);
+  return `${diffDay}d ago`;
+}
+
+function DeliveryStatusBadge({ lastSentAt, lastFailedAt }: { lastSentAt: string | null; lastFailedAt: string | null }) {
+  const hasSent = !!lastSentAt;
+  const hasFailed = !!lastFailedAt;
+
+  if (!hasSent && !hasFailed) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Clock className="h-3.5 w-3.5" />
+        No deliveries yet
+      </span>
+    );
+  }
+
+  const sentTime = lastSentAt ? new Date(lastSentAt).getTime() : 0;
+  const failedTime = lastFailedAt ? new Date(lastFailedAt).getTime() : 0;
+  const mostRecentIsFailed = failedTime > sentTime;
+
+  if (mostRecentIsFailed) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs text-destructive font-medium">
+        <XCircle className="h-3.5 w-3.5" />
+        Last failed {formatRelative(lastFailedAt)}
+        {hasSent && <span className="text-muted-foreground font-normal ml-1">· Last sent {formatRelative(lastSentAt)}</span>}
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+      <CheckCircle2 className="h-3.5 w-3.5" />
+      Last sent {formatRelative(lastSentAt)}
+      {hasFailed && <span className="text-muted-foreground font-normal ml-1">· Last failed {formatRelative(lastFailedAt)}</span>}
+    </span>
+  );
+}
+
+function NotificationLogTable({ entries }: { entries: AlertNotificationLogEntry[] }) {
+  if (entries.length === 0) {
+    return (
+      <p className="text-xs text-muted-foreground py-3 text-center">No delivery attempts recorded yet.</p>
+    );
+  }
+
+  return (
+    <div className="overflow-auto max-h-48 rounded border border-border">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="border-b border-border bg-muted/40 text-muted-foreground">
+            <th className="text-left px-3 py-2 font-medium w-36">Time</th>
+            <th className="text-left px-3 py-2 font-medium w-16">Channel</th>
+            <th className="text-left px-3 py-2 font-medium w-16">Status</th>
+            <th className="text-left px-3 py-2 font-medium">Error</th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries.map((entry) => (
+            <tr key={entry.id} className="border-b border-border last:border-0 hover:bg-muted/20">
+              <td className="px-3 py-1.5 text-muted-foreground whitespace-nowrap">
+                {new Date(entry.createdAt).toLocaleString()}
+              </td>
+              <td className="px-3 py-1.5 capitalize">{entry.channel}</td>
+              <td className="px-3 py-1.5">
+                {entry.status === "sent" ? (
+                  <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
+                    <CheckCircle2 className="h-3 w-3" />
+                    Sent
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-destructive font-medium">
+                    <XCircle className="h-3 w-3" />
+                    Failed
+                  </span>
+                )}
+              </td>
+              <td className="px-3 py-1.5 text-muted-foreground truncate max-w-xs" title={entry.errorMessage ?? ""}>
+                {entry.errorMessage ?? "—"}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 export default function PlatformSettings() {
   const { data: thresholdData, isLoading: loadingThreshold } = useSpikeThreshold();
@@ -31,6 +132,9 @@ export default function PlatformSettings() {
   const saveAlertSeverity = useSaveAlertMinSeverity();
   const saveAlertCooldown = useSaveAlertNotificationCooldown();
   const sendTestNotification = useSendTestAlertNotification();
+
+  const { data: logData, isLoading: loadingLog } = useAlertNotificationLog(50);
+  const [showLog, setShowLog] = useState(false);
 
   const { toast } = useToast();
 
@@ -169,6 +273,10 @@ export default function PlatformSettings() {
     }
   }
 
+  const emailSummary = logData?.summary.email;
+  const slackSummary = logData?.summary.slack;
+  const logEntries = logData?.entries ?? [];
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
@@ -272,6 +380,12 @@ export default function PlatformSettings() {
                 Save
               </Button>
             </div>
+            {!loadingLog && emailSummary && (
+              <DeliveryStatusBadge
+                lastSentAt={emailSummary.lastSentAt}
+                lastFailedAt={emailSummary.lastFailedAt}
+              />
+            )}
           </div>
 
           <div className="space-y-2 max-w-sm border-t border-border pt-5">
@@ -298,6 +412,28 @@ export default function PlatformSettings() {
                 Save
               </Button>
             </div>
+            {!loadingLog && slackSummary && (
+              <DeliveryStatusBadge
+                lastSentAt={slackSummary.lastSentAt}
+                lastFailedAt={slackSummary.lastFailedAt}
+              />
+            )}
+          </div>
+
+          <div className="border-t border-border pt-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Delivery Log</p>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs h-6 px-2"
+                onClick={() => setShowLog((v) => !v)}
+                disabled={loadingLog}
+              >
+                {showLog ? "Hide" : "Show"} recent deliveries
+              </Button>
+            </div>
+            {showLog && <NotificationLogTable entries={logEntries} />}
           </div>
         </CardContent>
       </Card>

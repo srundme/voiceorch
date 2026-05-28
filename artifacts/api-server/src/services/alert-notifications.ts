@@ -1,5 +1,5 @@
 import nodemailer from "nodemailer";
-import { db, platformSettingsTable } from "@workspace/db";
+import { db, platformSettingsTable, alertNotificationLogTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 import type { AlertType } from "./usage/alert-engine.js";
@@ -142,6 +142,19 @@ async function sendSlackNotification(
   }
 }
 
+async function logDelivery(channel: "email" | "slack", status: "sent" | "failed", alertId?: number | null, errorMessage?: string): Promise<void> {
+  try {
+    await db.insert(alertNotificationLogTable).values({
+      alertId: alertId ?? null,
+      channel,
+      status,
+      errorMessage: errorMessage ?? null,
+    });
+  } catch (err) {
+    logger.warn({ err }, "Failed to write alert_notification_log entry");
+  }
+}
+
 /**
  * Sends a synthetic test notification to all configured channels.
  * Unlike dispatchAlertNotification, this bypasses severity filtering and throws on failure.
@@ -196,6 +209,7 @@ export async function sendTestAlertNotification(): Promise<{ email: boolean; sla
  * Rate-limited by `alert_notification_cooldown_minutes` platform setting (default 10 min).
  * At most one notification batch is dispatched within the cooldown window regardless of
  * how many alerts fire simultaneously (prevents inbox flooding during outages).
+ * Logs each delivery attempt (sent / failed) to alert_notification_log.
  */
 export async function dispatchAlertNotification(opts: {
   type: AlertType;
@@ -204,6 +218,7 @@ export async function dispatchAlertNotification(opts: {
   message: string;
   service?: string | null;
   provider?: string | null;
+  alertId?: number | null;
 }): Promise<void> {
   try {
     const settings = await getNotificationSettings();
@@ -239,23 +254,38 @@ export async function dispatchAlertNotification(opts: {
           const transporter = getTransporter();
           if (!transporter) {
             logger.warn("GMAIL_USER or GMAIL_APP_PASSWORD not set — skipping alert email");
+            await logDelivery("email", "failed", opts.alertId, "GMAIL_USER or GMAIL_APP_PASSWORD not configured");
             return;
           }
-          await transporter.sendMail({
-            from: process.env["GMAIL_USER"],
-            to: settings.email!,
-            subject,
-            text,
-            html,
-          });
-          logger.info({ severity: opts.severity, type: opts.type, to: settings.email }, "Alert email sent");
-        })().catch((err) => logger.warn({ err, type: opts.type }, "Alert email send failed"))
+          try {
+            await transporter.sendMail({
+              from: process.env["GMAIL_USER"],
+              to: settings.email!,
+              subject,
+              text,
+              html,
+            });
+            logger.info({ severity: opts.severity, type: opts.type, to: settings.email }, "Alert email sent");
+            await logDelivery("email", "sent", opts.alertId);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            logger.warn({ err, type: opts.type }, "Alert email send failed");
+            await logDelivery("email", "failed", opts.alertId, msg);
+          }
+        })()
       : Promise.resolve();
 
     const slackP = settings.slackWebhook
-      ? sendSlackNotification(settings.slackWebhook, opts).catch((err) =>
-          logger.warn({ err, type: opts.type }, "Alert Slack notification failed"),
-        )
+      ? (async () => {
+          try {
+            await sendSlackNotification(settings.slackWebhook!, opts);
+            await logDelivery("slack", "sent", opts.alertId);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            logger.warn({ err, type: opts.type }, "Alert Slack notification failed");
+            await logDelivery("slack", "failed", opts.alertId, msg);
+          }
+        })()
       : Promise.resolve();
 
     _lastNotifiedAt = Date.now();

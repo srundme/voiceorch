@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, usersTable, walletTransactionsTable, callsTable, agentsTable, scheduledCallbacksTable, bookingsTable, eventTypesTable, schedulingCalendarsTable, platformSettingsTable, usageSpikeDismissalsTable, usageSpikeNotificationsTable } from "@workspace/db";
+import { db, usersTable, walletTransactionsTable, callsTable, agentsTable, scheduledCallbacksTable, bookingsTable, eventTypesTable, schedulingCalendarsTable, platformSettingsTable, usageSpikeDismissalsTable, usageSpikeNotificationsTable, alertNotificationLogTable } from "@workspace/db";
 import { eq, sql, count, sum, desc, lt, gt, and, inArray } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { getAllSessions } from "../orchestration/session.js";
@@ -740,6 +740,37 @@ router.post("/admin/alerts/spikes/:clerkId/dismiss", async (req, res): Promise<v
     res.json({ ok: true });
   } catch (err) {
     req.log.error({ err }, "admin/alerts/spikes/:clerkId/dismiss failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── Alert Notification Delivery Log ─────────────────────────────────────────
+
+router.get("/admin/alert-notification-log", async (req, res): Promise<void> => {
+  try {
+    const limitParam = req.query["limit"];
+    const limit = Math.min(Number(limitParam) || 50, 200);
+
+    const rows = await db
+      .select()
+      .from(alertNotificationLogTable)
+      .orderBy(desc(alertNotificationLogTable.createdAt))
+      .limit(limit);
+
+    const lastSentEmail = rows.find((r) => r.channel === "email" && r.status === "sent")?.createdAt ?? null;
+    const lastFailedEmail = rows.find((r) => r.channel === "email" && r.status === "failed")?.createdAt ?? null;
+    const lastSentSlack = rows.find((r) => r.channel === "slack" && r.status === "sent")?.createdAt ?? null;
+    const lastFailedSlack = rows.find((r) => r.channel === "slack" && r.status === "failed")?.createdAt ?? null;
+
+    res.json({
+      summary: {
+        email: { lastSentAt: lastSentEmail, lastFailedAt: lastFailedEmail },
+        slack: { lastSentAt: lastSentSlack, lastFailedAt: lastFailedSlack },
+      },
+      entries: rows,
+    });
+  } catch (err) {
+    req.log.error({ err }, "admin/alert-notification-log GET failed");
     res.status(500).json({ error: "Internal server error" });
   }
 });
