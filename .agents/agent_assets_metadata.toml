@@ -6,3 +6,9 @@ id = "hmY5jeC4AiGMAhvfrpCn9"
 uri = "file://VOICEORCH_FEATURES.md"
 type = "text"
 title = "VoiceOrch — AI Agent Feature Reference"
+
+[[outputs]]
+id = "ueDK8vYnu2MUNJttsQHHr"
+uri = "file://.local/agent-features-doc.md"
+type = "text"
+title = "Agent Creation & Features Reference"
