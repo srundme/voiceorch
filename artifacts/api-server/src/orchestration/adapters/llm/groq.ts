@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import type { ConversationTurn, LLMAdapter, ToolDefinition } from "../../types.js";
+import type { ConversationTurn, LLMAdapter, LLMUsage, ToolDefinition } from "../../types.js";
 
 /**
  * Groq — OpenAI-compatible API with ultra-fast inference
@@ -45,10 +45,11 @@ export class GroqLLM implements LLMAdapter {
     messages: ConversationTurn[],
     systemPrompt: string,
     onToken: (token: string) => void,
-    onDone: (fullText: string) => void,
+    onDone: (fullText: string, usage?: LLMUsage) => void,
     options?: {
       tools?: ToolDefinition[];
       onToolCall?: (name: string, args: Record<string, unknown>) => void;
+      onUsage?: (usage: LLMUsage) => void;
     }
   ): Promise<void> {
     // Only pass tools when the model supports function calling
@@ -67,6 +68,7 @@ export class GroqLLM implements LLMAdapter {
     const stream = await this.client.chat.completions.create({
       model: this.model,
       stream: true,
+      stream_options: { include_usage: true },
       messages: [
         { role: "system", content: systemPrompt },
         ...messages.map((m) => ({ role: m.role, content: m.content })),
@@ -78,8 +80,13 @@ export class GroqLLM implements LLMAdapter {
     let toolCallName = "";
     let toolCallArgs = "";
     let isToolCall = false;
+    let usage: LLMUsage | undefined;
 
     for await (const chunk of stream) {
+      if (chunk.usage) {
+        usage = { inputTokens: chunk.usage.prompt_tokens, outputTokens: chunk.usage.completion_tokens };
+      }
+
       const delta = chunk.choices[0]?.delta;
       if (!delta) continue;
 
@@ -98,6 +105,8 @@ export class GroqLLM implements LLMAdapter {
       }
     }
 
+    if (usage) options?.onUsage?.(usage);
+
     if (isToolCall && toolCallName && options?.onToolCall) {
       let args: Record<string, unknown> = {};
       try {
@@ -107,7 +116,7 @@ export class GroqLLM implements LLMAdapter {
       }
       options.onToolCall(toolCallName, args);
     } else {
-      onDone(full);
+      onDone(full, usage);
     }
   }
 }

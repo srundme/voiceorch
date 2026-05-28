@@ -7,7 +7,7 @@ import { DtmfDetector } from "./dtmf.js";
 import { processAudioIn, processRawPcm8kIn, destroyAudioSession } from "./audioPool.js";
 import { RecordingBuffer } from "./recorder.js";
 import type { AudioProcessResult } from "./audioPool.js";
-import type { AgentConfig, AgentTool, ConversationTurn, SessionConfig, StreamSTT, ToolDefinition } from "./types.js";
+import type { AgentConfig, AgentTool, ConversationTurn, LLMUsage, SessionConfig, StreamSTT, ToolDefinition } from "./types.js";
 import { detectCallerGender, applyCallerSalutation, buildGenderInstruction } from "./genderDetection.js";
 import { retrieveKbContext } from "./kb-retrieval.js";
 import { logger } from "../lib/logger.js";
@@ -95,6 +95,16 @@ export class OrchestrationPipeline {
 
   // Metrics
   private firstAudioSentAt: number | null = null;
+
+  // Usage accumulators — updated on every LLM call and every TTS synthesis.
+  // Exposed via getUsageTotals() so session.ts can pass real values to recordUsage().
+  private llmInputTokensTotal = 0;
+  private llmOutputTokensTotal = 0;
+  private ttsCharactersTotal = 0;
+  // True once any LLM adapter returned real token counts.  Stays false for
+  // providers that don't expose usage (e.g. Sarvam) so session.ts can fall back
+  // to its turn-count heuristic for LLM tokens while still using exact TTS chars.
+  private hasRealLlmUsage = false;
 
   // Recording — stereo WAV of both sides (caller=L, agent=R)
   private recording = new RecordingBuffer(8000);
@@ -496,7 +506,14 @@ export class OrchestrationPipeline {
         await this.llm.chat(
           [], this.resolvedSystemPrompt(),
           (token) => { greeting += token; },
-          (full)  => { greeting = full; }
+          (full) => { greeting = full; },
+          {
+            onUsage: (usage) => {
+              this.hasRealLlmUsage = true;
+              this.llmInputTokensTotal += usage.inputTokens;
+              this.llmOutputTokensTotal += usage.outputTokens;
+            },
+          }
         );
         // Strip any <think>…</think> reasoning blocks that reasoning models emit
         greeting = greeting.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
@@ -570,6 +587,12 @@ export class OrchestrationPipeline {
   private async playSentence(text: string): Promise<void> {
     if (this.bargeInRequested) return;
 
+    // Meter characters at request-dispatch time — TTS providers charge for the
+    // text submitted when the HTTP request is sent, not when audio delivery
+    // completes.  Counting here ensures barge-in aborts and stream timeouts
+    // don't under-report usage even though the provider already billed.
+    this.ttsCharactersTotal += text.length;
+
     if (this.tts.synthesizeStream) {
       // Producer-consumer pacing: the TTS stream callback pushes mulaw chunks
       // into a queue; a concurrent drain loop sends them at exactly real-time
@@ -638,6 +661,12 @@ export class OrchestrationPipeline {
       // as soon as the first chunk arrives (preserves low-latency streaming).
       const drainPromise = drainLoop();
 
+      // ttsOnDone: called by the adapter when synthesis is complete.
+      // Characters were already counted at dispatch time above; this just flushes remaining audio.
+      const ttsOnDone = (_characters: number): void => {
+        flush();
+      };
+
       try {
         await this.tts.synthesizeStream(
           text,
@@ -649,7 +678,7 @@ export class OrchestrationPipeline {
             accumSize += chunk.length;
             if (accumSize >= STREAM_ACCUM_BYTES) flush();
           },
-          flush,
+          ttsOnDone,
           ttsAbort.signal
         );
       } catch (err) {
@@ -661,12 +690,12 @@ export class OrchestrationPipeline {
         clearInterval(closedWatcher);
       }
 
-      flush(); // flush any leftover accumulator bytes after stream ends / aborts
+      flush(); // flush any leftover accumulator bytes after aborts (ttsOnDone already called on success)
 
       ttsDone = true;
       await drainPromise;
     } else {
-      const ttsPcm16k = await this.tts.synthesize(text);
+      const { audio: ttsPcm16k } = await this.tts.synthesize(text);
       if (this.bargeInRequested) return;
       const ttsPcm8k  = downsample16to8(ttsPcm16k);
       // Record agent audio
@@ -1099,7 +1128,7 @@ export class OrchestrationPipeline {
         for (const s of sentences) enqueue(s);
         pendingText = remainder;
       },
-      async (fullText) => { llmResponse = fullText; },
+      (fullText) => { llmResponse = fullText; },
       toolDefs.length > 0
         ? {
             tools: toolDefs,
@@ -1107,8 +1136,19 @@ export class OrchestrationPipeline {
               triggeredToolName = name;
               triggeredToolArgs = args;
             },
+            onUsage: (usage) => {
+              this.hasRealLlmUsage = true;
+              this.llmInputTokensTotal += usage.inputTokens;
+              this.llmOutputTokensTotal += usage.outputTokens;
+            },
           }
-        : undefined
+        : {
+            onUsage: (usage) => {
+              this.hasRealLlmUsage = true;
+              this.llmInputTokensTotal += usage.inputTokens;
+              this.llmOutputTokensTotal += usage.outputTokens;
+            },
+          }
     );
 
     // ── If LLM called a tool, execute it and skip TTS ──
@@ -1194,6 +1234,21 @@ export class OrchestrationPipeline {
 
   getHistory(): ConversationTurn[] {
     return this.conversationHistory;
+  }
+
+  /**
+   * Returns exact usage totals accumulated during this session.
+   * - ttsCharacters: always exact (counted per text.length before each synthesis call)
+   * - llmInputTokens / llmOutputTokens: present only when the active LLM adapter
+   *   returned real token counts; undefined when the provider doesn't expose them
+   *   (e.g. Sarvam), allowing session.ts to fall back to turn-count heuristics.
+   */
+  getUsageTotals(): { llmInputTokens?: number; llmOutputTokens?: number; ttsCharacters: number } {
+    return {
+      llmInputTokens: this.hasRealLlmUsage ? this.llmInputTokensTotal : undefined,
+      llmOutputTokens: this.hasRealLlmUsage ? this.llmOutputTokensTotal : undefined,
+      ttsCharacters: this.ttsCharactersTotal,
+    };
   }
 
   getTranscript(): string {
@@ -1661,7 +1716,14 @@ export class OrchestrationPipeline {
           for (const s of sentences) enqueue(s);
           pendingText = remainder;
         },
-        async (fullText) => { llmResponse = fullText; },
+        (fullText) => { llmResponse = fullText; },
+        {
+          onUsage: (usage) => {
+            this.hasRealLlmUsage = true;
+            this.llmInputTokensTotal += usage.inputTokens;
+            this.llmOutputTokensTotal += usage.outputTokens;
+          },
+        },
       );
     } catch (err) {
       logger.error({ callId: this.config.callId, err }, "continueWithToolResult LLM call failed");

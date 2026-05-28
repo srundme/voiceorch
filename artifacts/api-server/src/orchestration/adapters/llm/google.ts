@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 import type { FunctionDeclarationSchema, FunctionDeclarationSchemaProperty } from "@google/generative-ai";
-import type { ConversationTurn, LLMAdapter, ToolDefinition } from "../../types.js";
+import type { ConversationTurn, LLMAdapter, LLMUsage, ToolDefinition } from "../../types.js";
 
 /**
  * Google Gemini — streaming generative AI with function calling
@@ -25,10 +25,11 @@ export class GoogleLLM implements LLMAdapter {
     messages: ConversationTurn[],
     systemPrompt: string,
     onToken: (token: string) => void,
-    onDone: (fullText: string) => void,
+    onDone: (fullText: string, usage?: LLMUsage) => void,
     options?: {
       tools?: ToolDefinition[];
       onToolCall?: (name: string, args: Record<string, unknown>) => void;
+      onUsage?: (usage: LLMUsage) => void;
     }
   ): Promise<void> {
     // Convert our ToolDefinition[] to Gemini's FunctionDeclaration format.
@@ -92,11 +93,18 @@ export class GoogleLLM implements LLMAdapter {
     const response = await result.response;
     const functionCalls = response.functionCalls();
 
+    const meta = response.usageMetadata;
+    const usage: LLMUsage | undefined = meta
+      ? { inputTokens: meta.promptTokenCount ?? 0, outputTokens: meta.candidatesTokenCount ?? 0 }
+      : undefined;
+
+    if (usage) options?.onUsage?.(usage);
+
     if (functionCalls?.length && options?.onToolCall) {
       const fc = functionCalls[0];
       options.onToolCall(fc.name, (fc.args ?? {}) as Record<string, unknown>);
     } else {
-      onDone(full);
+      onDone(full, usage);
     }
   }
 }

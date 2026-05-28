@@ -47,7 +47,7 @@ export class CartesiaTTS implements TTSAdapter {
     return JSON.stringify(body);
   }
 
-  async synthesize(text: string): Promise<Buffer> {
+  async synthesize(text: string): Promise<{ audio: Buffer; characters: number }> {
     const resp = await fetch("https://api.cartesia.ai/tts/bytes", {
       method: "POST",
       headers: {
@@ -63,7 +63,7 @@ export class CartesiaTTS implements TTSAdapter {
       throw new Error(`Cartesia TTS error ${resp.status}: ${err}`);
     }
 
-    return Buffer.from(await resp.arrayBuffer());
+    return { audio: Buffer.from(await resp.arrayBuffer()), characters: text.length };
   }
 
   /**
@@ -74,7 +74,7 @@ export class CartesiaTTS implements TTSAdapter {
   async synthesizeStream(
     text: string,
     onChunk: (pcm16k: Buffer) => void,
-    onDone: () => void,
+    onDone: (characters: number) => void,
     signal?: AbortSignal
   ): Promise<void> {
     const resp = await fetch("https://api.cartesia.ai/tts/bytes", {
@@ -105,6 +105,6 @@ export class CartesiaTTS implements TTSAdapter {
     } finally {
       reader.releaseLock();
     }
-    onDone();
+    onDone(text.length);
   }
 }

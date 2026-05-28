@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import type { ConversationTurn, LLMAdapter, ToolDefinition } from "../../types.js";
+import type { ConversationTurn, LLMAdapter, LLMUsage, ToolDefinition } from "../../types.js";
 
 /**
  * OpenAI — streaming chat completions with native function/tool calling
@@ -18,10 +18,11 @@ export class OpenAILLM implements LLMAdapter {
     messages: ConversationTurn[],
     systemPrompt: string,
     onToken: (token: string) => void,
-    onDone: (fullText: string) => void,
+    onDone: (fullText: string, usage?: LLMUsage) => void,
     options?: {
       tools?: ToolDefinition[];
       onToolCall?: (name: string, args: Record<string, unknown>) => void;
+      onUsage?: (usage: LLMUsage) => void;
     }
   ): Promise<void> {
     const openAiTools = options?.tools?.length
@@ -38,6 +39,7 @@ export class OpenAILLM implements LLMAdapter {
     const stream = await this.client.chat.completions.create({
       model: this.model,
       stream: true,
+      stream_options: { include_usage: true },
       messages: [
         { role: "system", content: systemPrompt },
         ...messages.map((m) => ({ role: m.role, content: m.content })),
@@ -49,8 +51,16 @@ export class OpenAILLM implements LLMAdapter {
     let toolCallName = "";
     let toolCallArgs = "";
     let isToolCall = false;
+    let usage: LLMUsage | undefined;
 
     for await (const chunk of stream) {
+      if (chunk.usage) {
+        usage = {
+          inputTokens: chunk.usage.prompt_tokens,
+          outputTokens: chunk.usage.completion_tokens,
+        };
+      }
+
       const delta = chunk.choices[0]?.delta;
       if (!delta) continue;
 
@@ -71,6 +81,8 @@ export class OpenAILLM implements LLMAdapter {
       }
     }
 
+    if (usage) options?.onUsage?.(usage);
+
     if (isToolCall && toolCallName && options?.onToolCall) {
       let args: Record<string, unknown> = {};
       try {
@@ -80,7 +92,7 @@ export class OpenAILLM implements LLMAdapter {
       }
       options.onToolCall(toolCallName, args);
     } else {
-      onDone(full);
+      onDone(full, usage);
     }
   }
 }

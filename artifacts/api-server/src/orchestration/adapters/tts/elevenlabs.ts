@@ -27,7 +27,7 @@ export class ElevenLabsTTS implements TTSAdapter {
     });
   }
 
-  async synthesize(text: string): Promise<Buffer> {
+  async synthesize(text: string): Promise<{ audio: Buffer; characters: number }> {
     const resp = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}`,
       {
@@ -46,7 +46,7 @@ export class ElevenLabsTTS implements TTSAdapter {
       throw new Error(`ElevenLabs TTS error ${resp.status}: ${err}`);
     }
 
-    return Buffer.from(await resp.arrayBuffer());
+    return { audio: Buffer.from(await resp.arrayBuffer()), characters: text.length };
   }
 
   /**
@@ -56,7 +56,7 @@ export class ElevenLabsTTS implements TTSAdapter {
   async synthesizeStream(
     text: string,
     onChunk: (pcm16k: Buffer) => void,
-    onDone: () => void,
+    onDone: (characters: number) => void,
     signal?: AbortSignal
   ): Promise<void> {
     const resp = await fetch(
@@ -90,6 +90,6 @@ export class ElevenLabsTTS implements TTSAdapter {
     } finally {
       reader.releaseLock();
     }
-    onDone();
+    onDone(text.length);
   }
 }

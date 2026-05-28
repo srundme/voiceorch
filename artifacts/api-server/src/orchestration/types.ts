@@ -174,25 +174,38 @@ export interface StreamSTT {
   close(): void;
 }
 
+export interface LLMUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
 export interface LLMAdapter {
   chat(
     messages: ConversationTurn[],
     systemPrompt: string,
     onToken: (token: string) => void,
-    onDone: (fullText: string) => void,
+    onDone: (fullText: string, usage?: LLMUsage) => void,
     options?: {
       tools?: ToolDefinition[];
       onToolCall?: (name: string, args: Record<string, unknown>) => void;
+      /** Called once per chat() invocation with token counts when the provider
+       *  returns them — fires on BOTH text turns and tool-call turns so the
+       *  pipeline accumulates usage regardless of whether a tool was invoked. */
+      onUsage?: (usage: LLMUsage) => void;
     }
   ): Promise<void>;
 }
 
 export interface TTSAdapter {
-  synthesize(text: string): Promise<Buffer>;
+  /** Returns synthesized PCM audio together with the character count that was
+   *  submitted to the provider (always equals text.length for all providers). */
+  synthesize(text: string): Promise<{ audio: Buffer; characters: number }>;
   synthesizeStream?(
     text: string,
     onChunk: (chunk: Buffer) => void,
-    onDone: () => void,
+    /** Called once when synthesis is complete; receives the character count
+     *  submitted to the provider so the pipeline can accumulate usage. */
+    onDone: (characters: number) => void,
     signal?: AbortSignal
   ): Promise<void>;
 }

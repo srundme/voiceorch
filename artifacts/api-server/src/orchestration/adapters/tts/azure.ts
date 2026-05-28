@@ -42,7 +42,7 @@ export class AzureTTS implements TTSAdapter {
     this.region = region;
   }
 
-  async synthesize(text: string): Promise<Buffer> {
+  async synthesize(text: string): Promise<{ audio: Buffer; characters: number }> {
     const lang = detectLang(this.voice);
     const ssml = buildSsml(text, this.voice, lang);
 
@@ -59,6 +59,6 @@ export class AzureTTS implements TTSAdapter {
     });
 
     if (!resp.ok) throw new Error(`Azure TTS ${resp.status}: ${await resp.text()}`);
-    return Buffer.from(await resp.arrayBuffer());
+    return { audio: Buffer.from(await resp.arrayBuffer()), characters: text.length };
   }
 }

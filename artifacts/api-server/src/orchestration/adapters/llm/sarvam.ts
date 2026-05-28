@@ -1,4 +1,4 @@
-import type { ConversationTurn, LLMAdapter, ToolDefinition } from "../../types.js";
+import type { ConversationTurn, LLMAdapter, LLMUsage, ToolDefinition } from "../../types.js";
 
 /**
  * Sarvam AI — Chat completions (OpenAI-compatible endpoint)
@@ -59,7 +59,7 @@ export class SarvamLLM implements LLMAdapter {
     messages: ConversationTurn[],
     systemPrompt: string,
     onToken: (token: string) => void,
-    onDone: (fullText: string) => void,
+    onDone: (fullText: string, usage?: LLMUsage) => void,
     options?: {
       tools?: ToolDefinition[];
       onToolCall?: (name: string, args: Record<string, unknown>) => void;

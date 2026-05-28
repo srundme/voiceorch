@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import type { ConversationTurn, LLMAdapter, ToolDefinition } from "../../types.js";
+import type { ConversationTurn, LLMAdapter, LLMUsage, ToolDefinition } from "../../types.js";
 
 /**
  * Cohere — OpenAI-compatible endpoint
@@ -25,9 +25,10 @@ export class CohereLLM implements LLMAdapter {
     messages: ConversationTurn[],
     systemPrompt: string,
     onToken: (token: string) => void,
-    onDone: (fullText: string) => void,
+    onDone: (fullText: string, usage?: LLMUsage) => void,
     options?: {
       tools?: ToolDefinition[];
+      onUsage?: (usage: LLMUsage) => void;
       onToolCall?: (name: string, args: Record<string, unknown>) => void;
     }
   ): Promise<void> {
@@ -41,6 +42,7 @@ export class CohereLLM implements LLMAdapter {
     const stream = await this.client.chat.completions.create({
       model: this.model,
       stream: true,
+      stream_options: { include_usage: true },
       messages: [
         { role: "system", content: systemPrompt },
         ...messages.map((m) => ({ role: m.role, content: m.content })),
@@ -52,8 +54,12 @@ export class CohereLLM implements LLMAdapter {
     let toolCallName = "";
     let toolCallArgs = "";
     let isToolCall = false;
+    let usage: LLMUsage | undefined;
 
     for await (const chunk of stream) {
+      if (chunk.usage) {
+        usage = { inputTokens: chunk.usage.prompt_tokens, outputTokens: chunk.usage.completion_tokens };
+      }
       const delta = chunk.choices[0]?.delta;
       if (!delta) continue;
       const token = delta.content ?? "";
@@ -67,12 +73,14 @@ export class CohereLLM implements LLMAdapter {
       }
     }
 
+    if (usage) options?.onUsage?.(usage);
+
     if (isToolCall && toolCallName && options?.onToolCall) {
       let args: Record<string, unknown> = {};
       try { args = JSON.parse(toolCallArgs || "{}") as Record<string, unknown>; } catch { /* ignore */ }
       options.onToolCall(toolCallName, args);
     } else {
-      onDone(full);
+      onDone(full, usage);
     }
   }
 }

@@ -1,4 +1,4 @@
-import type { ConversationTurn, LLMAdapter, ToolDefinition } from "../../types.js";
+import type { ConversationTurn, LLMAdapter, LLMUsage, ToolDefinition } from "../../types.js";
 
 /**
  * Anthropic Claude — native Messages API with SSE streaming
@@ -14,6 +14,8 @@ interface AnthropicStreamEvent {
   index?: number;
   delta?: { type: string; text?: string; partial_json?: string };
   content_block?: { type: string; name?: string };
+  message?: { usage?: { input_tokens?: number; output_tokens?: number } };
+  usage?: { input_tokens?: number; output_tokens?: number };
 }
 
 export class AnthropicLLM implements LLMAdapter {
@@ -29,10 +31,11 @@ export class AnthropicLLM implements LLMAdapter {
     messages: ConversationTurn[],
     systemPrompt: string,
     onToken: (token: string) => void,
-    onDone: (fullText: string) => void,
+    onDone: (fullText: string, usage?: LLMUsage) => void,
     options?: {
       tools?: ToolDefinition[];
       onToolCall?: (name: string, args: Record<string, unknown>) => void;
+      onUsage?: (usage: LLMUsage) => void;
     }
   ): Promise<void> {
     const body: Record<string, unknown> = {
@@ -68,6 +71,8 @@ export class AnthropicLLM implements LLMAdapter {
     let toolName = "";
     let toolJson = "";
     let inToolUse = false;
+    let inputTokens = 0;
+    let outputTokens = 0;
 
     const reader = resp.body.getReader();
     const decoder = new TextDecoder();
@@ -87,6 +92,16 @@ export class AnthropicLLM implements LLMAdapter {
           if (!raw || raw === "[DONE]") continue;
           let ev: AnthropicStreamEvent;
           try { ev = JSON.parse(raw) as AnthropicStreamEvent; } catch { continue; }
+
+          // message_start carries the initial input token count
+          if (ev.type === "message_start" && ev.message?.usage) {
+            inputTokens = ev.message.usage.input_tokens ?? 0;
+          }
+
+          // message_delta carries the final output token count
+          if (ev.type === "message_delta" && ev.usage) {
+            outputTokens = ev.usage.output_tokens ?? 0;
+          }
 
           if (ev.type === "content_block_start" && ev.content_block?.type === "tool_use") {
             inToolUse = true;
@@ -108,12 +123,18 @@ export class AnthropicLLM implements LLMAdapter {
       reader.releaseLock();
     }
 
+    const usage: LLMUsage | undefined = (inputTokens > 0 || outputTokens > 0)
+      ? { inputTokens, outputTokens }
+      : undefined;
+
+    if (usage) options?.onUsage?.(usage);
+
     if (inToolUse && toolName && options?.onToolCall) {
       let args: Record<string, unknown> = {};
       try { args = JSON.parse(toolJson || "{}") as Record<string, unknown>; } catch { /* ignore */ }
       options.onToolCall(toolName, args);
     } else {
-      onDone(full);
+      onDone(full, usage);
     }
   }
 }

@@ -19,7 +19,7 @@ export class DeepgramTTS implements TTSAdapter {
     this.model = voice ?? DEFAULT_MODEL;
   }
 
-  async synthesize(text: string): Promise<Buffer> {
+  async synthesize(text: string): Promise<{ audio: Buffer; characters: number }> {
     const url = new URL("https://api.deepgram.com/v1/speak");
     url.searchParams.set("model", this.model);
     url.searchParams.set("encoding", "linear16");
@@ -36,13 +36,13 @@ export class DeepgramTTS implements TTSAdapter {
     });
 
     if (!resp.ok) throw new Error(`Deepgram TTS ${resp.status}: ${await resp.text()}`);
-    return Buffer.from(await resp.arrayBuffer());
+    return { audio: Buffer.from(await resp.arrayBuffer()), characters: text.length };
   }
 
   async synthesizeStream(
     text: string,
     onChunk: (chunk: Buffer) => void,
-    onDone: () => void,
+    onDone: (characters: number) => void,
     signal?: AbortSignal
   ): Promise<void> {
     const url = new URL("https://api.deepgram.com/v1/speak");
@@ -74,6 +74,6 @@ export class DeepgramTTS implements TTSAdapter {
     } finally {
       reader.releaseLock();
     }
-    onDone();
+    onDone(text.length);
   }
 }

@@ -39,7 +39,7 @@ export class OpenAITTS implements TTSAdapter {
     this.model = model ?? DEFAULT_MODEL;
   }
 
-  async synthesize(text: string): Promise<Buffer> {
+  async synthesize(text: string): Promise<{ audio: Buffer; characters: number }> {
     const resp = await this.client.audio.speech.create({
       model: this.model,
       voice: this.voice as "alloy",
@@ -47,6 +47,6 @@ export class OpenAITTS implements TTSAdapter {
       response_format: "pcm",
     });
     const pcm24k = Buffer.from(await resp.arrayBuffer());
-    return downsample24to16(pcm24k);
+    return { audio: downsample24to16(pcm24k), characters: text.length };
   }
 }

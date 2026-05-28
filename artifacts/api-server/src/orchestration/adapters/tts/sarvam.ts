@@ -40,7 +40,7 @@ export class SarvamTTS implements TTSAdapter {
     this.model = "bulbul:v2";
   }
 
-  async synthesize(text: string): Promise<Buffer> {
+  async synthesize(text: string): Promise<{ audio: Buffer; characters: number }> {
     const resp = await fetch("https://api.sarvam.ai/text-to-speech", {
       method: "POST",
       headers: {
@@ -67,6 +67,6 @@ export class SarvamTTS implements TTSAdapter {
 
     // Audios are base64-encoded WAV; strip the WAV header (44 bytes) to get raw PCM
     const wav = Buffer.from(json.audios[0], "base64");
-    return wav.slice(44); // strip WAV header → raw PCM s16le at 16kHz
+    return { audio: wav.slice(44), characters: text.length }; // strip WAV header → raw PCM s16le at 16kHz
   }
 }

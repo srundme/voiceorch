@@ -366,7 +366,8 @@ export async function handleWebCallWebSocket(
       function queueSentence(text: string) {
         const t = text.trim();
         if (!t) return;
-        const job = tts.synthesize(t);
+        // synthesize() now returns { audio, characters }; extract just the audio for playback.
+        const job = tts.synthesize(t).then(({ audio }) => audio);
         // Attach a no-op catch immediately so Node.js doesn't fire
         // unhandledRejection before the for-loop below awaits the job.
         // The rejection still propagates when we await in the loop.
