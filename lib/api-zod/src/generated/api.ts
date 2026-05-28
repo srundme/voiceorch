@@ -1195,6 +1195,26 @@ export const AddConcurrentSlotResponse = zod.object({
 
 
 /**
+ * @summary Get the user's saved preferences (theme, etc.)
+ */
+export const GetPreferencesResponse = zod.object({
+  "theme": zod.union([zod.literal('light'),zod.literal('dark'),zod.literal('system'),zod.literal(null)]).nullable().describe('Dashboard colour scheme preference')
+})
+
+
+/**
+ * @summary Update one or more user preferences
+ */
+export const UpdatePreferencesBody = zod.object({
+  "theme": zod.enum(['light', 'dark', 'system']).optional().describe('Dashboard colour scheme preference')
+})
+
+export const UpdatePreferencesResponse = zod.object({
+  "theme": zod.union([zod.literal('light'),zod.literal('dark'),zod.literal('system'),zod.literal(null)]).nullable().describe('Dashboard colour scheme preference')
+})
+
+
+/**
  * @summary List audit log events for the authenticated user
  */
 export const listActivityLogsQueryLimitDefault = 100;

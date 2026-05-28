@@ -875,6 +875,40 @@ paths:
         "401":
           description: Unauthorized
 
+  /account/preferences:
+    get:
+      operationId: getPreferences
+      tags: [account]
+      summary: Get the user's saved preferences (theme, etc.)
+      responses:
+        "200":
+          description: User preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserPreferences"
+        "401":
+          description: Unauthorized
+    patch:
+      operationId: updatePreferences
+      tags: [account]
+      summary: Update one or more user preferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserPreferencesUpdate"
+      responses:
+        "200":
+          description: Updated user preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserPreferences"
+        "401":
+          description: Unauthorized
+
   # ── Activity Logs ─────────────────────────────────────────────────────────────
   /activity-logs:
     get:
@@ -3165,6 +3199,23 @@ components:
         walletId:
           type: integer
           description: Internal wallet / user ID
+
+    UserPreferences:
+      type: object
+      required: [theme]
+      properties:
+        theme:
+          type: ["string", "null"]
+          enum: ["light", "dark", "system", null]
+          description: Dashboard colour scheme preference
+
+    UserPreferencesUpdate:
+      type: object
+      properties:
+        theme:
+          type: string
+          enum: ["light", "dark", "system"]
+          description: Dashboard colour scheme preference
 
     # ── Activity Log ───────────────────────────────────────────────────────────
     ActivityLog:

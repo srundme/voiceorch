@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { db, usersTable, walletTransactionsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logActivity } from "../lib/activity.js";
+import { GetPreferencesResponse, UpdatePreferencesBody } from "@workspace/api-zod";
 
 const router: IRouter = Router();
 
@@ -76,6 +77,32 @@ router.post("/account/add-concurrent", requireAuth, async (req, res): Promise<vo
   });
 
   res.json(toAccountInfo(updated));
+});
+
+router.get("/account/preferences", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
+  if (!user) { res.status(404).json({ error: "User not found" }); return; }
+  const prefs = user.preferences ?? {};
+  res.json(GetPreferencesResponse.parse({ theme: prefs.theme ?? null }));
+});
+
+router.patch("/account/preferences", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const parsed = UpdatePreferencesBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Invalid preferences" }); return; }
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
+  if (!user) { res.status(404).json({ error: "User not found" }); return; }
+  type PrefsShape = { theme?: "light" | "dark" | "system" };
+  const current: PrefsShape = (user.preferences as PrefsShape | null) ?? {};
+  const merged: PrefsShape = { ...current, ...(parsed.data as PrefsShape) };
+  const [updated] = await db
+    .update(usersTable)
+    .set({ preferences: merged })
+    .where(eq(usersTable.clerkId, clerkId))
+    .returning();
+  const updatedPrefs: PrefsShape = (updated.preferences as PrefsShape | null) ?? {};
+  res.json(GetPreferencesResponse.parse({ theme: updatedPrefs.theme ?? null }));
 });
 
 export { generateApiKey, generateOrgKey };

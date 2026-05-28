@@ -8,6 +8,7 @@ import { setAuthTokenGetter, setDefaultTimeoutMs, useGetOnboardingStatus } from 
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
+import { ThemeSync } from "@/components/theme-sync";
 
 import { Layout } from "@/components/layout";
 import { SnapServeLoader, SnapServeIcon } from "@/components/logo";
@@ -268,6 +269,7 @@ function Router() {
       <QueryClientProvider client={queryClient}>
         <ClerkAuthSync />
         <ClerkQueryClientCacheInvalidator />
+        <ThemeSync />
         <Switch>
           <Route path="/" component={HomeRedirect} />
           <Route path="/sign-in/*?" component={SignInPage} />

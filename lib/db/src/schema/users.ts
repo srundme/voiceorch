@@ -17,6 +17,7 @@ export const usersTable = pgTable("users", {
   concurrentLimit: integer("concurrent_limit").notNull().default(2),
   onboardingCompleted: boolean("onboarding_completed").notNull().default(false),
   onboardingData: jsonb("onboarding_data"),
+  preferences: jsonb("preferences").$type<{ theme?: "light" | "dark" | "system" }>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

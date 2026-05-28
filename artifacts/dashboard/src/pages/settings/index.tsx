@@ -116,7 +116,7 @@ function AppearanceCard() {
           Appearance
         </CardTitle>
         <CardDescription>
-          Choose how the dashboard looks. Your preference is saved in this browser.
+          Choose how the dashboard looks. Your preference is synced to your account across devices.
         </CardDescription>
       </CardHeader>
       <CardContent>

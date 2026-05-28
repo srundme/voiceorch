@@ -757,6 +757,44 @@ export interface AccountInfo {
   walletId: number;
 }
 
+/**
+ * Dashboard colour scheme preference
+ * @nullable
+ */
+export type UserPreferencesTheme = typeof UserPreferencesTheme[keyof typeof UserPreferencesTheme] | null;
+
+
+export const UserPreferencesTheme = {
+  light: 'light',
+  dark: 'dark',
+  system: 'system',
+} as const;
+
+export interface UserPreferences {
+  /**
+     * Dashboard colour scheme preference
+     * @nullable
+     */
+  theme: UserPreferencesTheme;
+}
+
+/**
+ * Dashboard colour scheme preference
+ */
+export type UserPreferencesUpdateTheme = typeof UserPreferencesUpdateTheme[keyof typeof UserPreferencesUpdateTheme];
+
+
+export const UserPreferencesUpdateTheme = {
+  light: 'light',
+  dark: 'dark',
+  system: 'system',
+} as const;
+
+export interface UserPreferencesUpdate {
+  /** Dashboard colour scheme preference */
+  theme?: UserPreferencesUpdateTheme;
+}
+
 export interface ActivityLog {
   id: number;
   /** e.g. agent.created, call.started, provider.added */
