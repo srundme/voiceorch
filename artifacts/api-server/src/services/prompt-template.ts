@@ -14,6 +14,11 @@ export interface WizardInputs {
   leadSourceType?: string;
   leadFields?: string[];
   productDetails?: string;
+  /** Ordered question/answer pairs collected by the 5-question micro-wizard. */
+  microAnswers?: Array<{ question: string; answer: string }>;
+  /** Raw text content of any uploaded job description (candidate screening use case). */
+  jdFileContent?: string;
+  jdFileName?: string;
   // additional free-form fields
   [key: string]: unknown;
 }
@@ -126,7 +131,7 @@ export async function generateAgentPrompt(
     );
   }
 
-  const systemInstruction = `You are a senior AI voice agent prompt engineer. Use the master template below as the exact structure for the system prompt you produce. Substitute placeholders with the user's inputs, expand the call-flow section into a clear, natural multi-step flow, and keep the rest of the structure intact. Output only the final system prompt, with no surrounding commentary or markdown fences.
+  const systemInstruction = `You are a senior AI voice agent prompt engineer. Use the master template below as the exact structure for the system prompt you produce. Substitute placeholders with the user's inputs, expand the call-flow section into a clear, natural multi-step flow, and keep the rest of the structure intact. If the wizard inputs include a "microAnswers" array (the user's raw answers to the 5 wizard micro-questions), EVERY non-empty answer MUST be reflected in the final prompt using the user's actual words or recognisably paraphrased — do not drop or replace them with generic filler. Output only the final system prompt, with no surrounding commentary or markdown fences.
 
 === MASTER TEMPLATE ===
 ${templateText}

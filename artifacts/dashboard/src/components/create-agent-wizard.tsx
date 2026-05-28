@@ -309,6 +309,9 @@ interface WizardState {
   byopAsr: string; byopLlm: string; byopTts: string; byopTelephony: string; byopPrompt: string;
   leadSource: LeadSourceState;
   productDetails: string;
+  microAnswers?: Array<{ question: string; answer: string }>;
+  jdFileContent?: string;
+  jdFileName?: string;
 }
 
 const DEFAULT_LEAD_FIELDS = ["name", "email", "message"] as const;
@@ -417,6 +420,9 @@ export function buildCreateAgentPayload(state: WizardState) {
       languages: [state.primaryLanguage, ...state.additionalLanguages],
       callFlowDescription: state.callFlowDescription,
       productDetails: state.productDetails,
+      ...(state.microAnswers && state.microAnswers.length > 0 && { microAnswers: state.microAnswers }),
+      ...(state.jdFileContent && { jdFileContent: state.jdFileContent }),
+      ...(state.jdFileName && { jdFileName: state.jdFileName }),
       ...(leadEnabled && {
         leadSourceType: state.leadSource.type,
         leadFields: state.leadSource.fields,
@@ -518,6 +524,8 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
   const [flowEditMode, setFlowEditMode]         = useState(false);
   const [flowEditText, setFlowEditText]         = useState("");
   const [confirmedFlowNodes, setConfirmedFlowNodes] = useState<FlowNode[] | null>(null);
+  const [flowFetching, setFlowFetching]         = useState(false);
+  const [flowFallback, setFlowFallback]         = useState<string | null>(null);
 
   /* lead field add state */
   const [addFieldInput, setAddFieldInput] = useState("");
@@ -572,12 +580,67 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
     setState(INITIAL); setStepIdx(0); create.reset();
     setMicroActive(false); setMicroStep(0); setMicroAnswers(MICRO_INIT);
     setFlowEditMode(false); setFlowEditText(""); setConfirmedFlowNodes(null);
+    setFlowFetching(false); setFlowFallback(null);
     onClose();
+  }
+
+  /* call Gemini-backed call flow endpoint */
+  async function generateCallFlowFromAnswers() {
+    setFlowFetching(true);
+    setFlowFallback(null);
+    setConfirmedFlowNodes(null);
+    try {
+      const questions = MICRO_QUESTIONS[state.useCase] ?? [];
+      const microQA = questions.map((q, i) => ({
+        question: q.q,
+        answer: (microAnswers.answers[i] ?? "").trim(),
+      }));
+      const res = await apiFetch("/api/wizard/generate-call-flow", {
+        method: "POST",
+        body: JSON.stringify({
+          useCase: state.useCase,
+          role: state.useCaseRole,
+          companyName: state.companyName,
+          agentName: state.agentName,
+          agentDirection: state.agentDirection,
+          languages: [state.primaryLanguage, ...state.additionalLanguages],
+          microAnswers: microQA,
+          ...(microAnswers.jdFileContent && { jdFileContent: microAnswers.jdFileContent }),
+          ...(microAnswers.jdFileName && { jdFileName: microAnswers.jdFileName }),
+        }),
+      });
+      if (!res.ok) { setFlowFallback("network"); return; }
+      const data = await res.json() as {
+        source: "gemini" | "fallback";
+        nodes: FlowNode[] | null;
+        flowText?: string;
+        reason?: string;
+      };
+      if (data.source === "gemini" && Array.isArray(data.nodes) && data.nodes.length > 0) {
+        setConfirmedFlowNodes(data.nodes);
+      } else {
+        setFlowFallback(data.reason ?? "fallback");
+      }
+    } catch {
+      setFlowFallback("error");
+    } finally {
+      setFlowFetching(false);
+    }
   }
 
   /* micro-wizard: go to next/prev step */
   function microGo(delta: 1 | -1) {
     if (delta === -1 && flowEditMode) { setFlowEditMode(false); return; }
+    // Entering Step 5 (preview) from Q5 → kick off Gemini call flow generation.
+    if (delta === 1 && microStep === 4) {
+      setMicroDir("forward");
+      setMicroStep(5);
+      setMicroRenderKey(k => k + 1);
+      setFlowEditMode(false);
+      setFlowEditText("");
+      void generateCallFlowFromAnswers();
+      return;
+    }
     setMicroDir(delta === 1 ? "forward" : "back");
     setMicroStep(s => s + delta);
     setMicroRenderKey(k => k + 1);
@@ -593,13 +656,27 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
       state.useCase, microAnswers.answers, state.agentName, state.companyName,
     );
     const flowText = nodesToText(nodes);
-    update({ callFlowDescription: flowText });
+    // Persist the raw micro-answers (paired with the question text) so the
+    // final agent prompt generation gets the same answers the call flow used.
+    const questions = MICRO_QUESTIONS[state.useCase] ?? [];
+    const microQA = questions.map((q, i) => ({
+      question: q.q,
+      answer: (microAnswers.answers[i] ?? "").trim(),
+    }));
+    update({
+      callFlowDescription: flowText,
+      microAnswers: microQA,
+      jdFileContent: microAnswers.jdFileContent,
+      jdFileName: microAnswers.jdFileName,
+    });
     setMicroActive(false);
     setMicroStep(0);
     setMicroAnswers(MICRO_INIT);
     setConfirmedFlowNodes(null);
     setFlowEditMode(false);
     setFlowEditText("");
+    setFlowFetching(false);
+    setFlowFallback(null);
     go(1);
   }
 
@@ -961,8 +1038,21 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                       This call flow was built from your answers. Review it carefully — click <strong className="text-muted-foreground">Edit this flow</strong> to make changes, or continue when it looks right.
                     </p>
 
+                    {flowFetching && (
+                      <div className="mb-6 flex items-center gap-3 text-gray-500 text-sm">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Generating your call flow from your answers…
+                      </div>
+                    )}
+
+                    {!flowFetching && flowFallback && (
+                      <div className="mb-5 px-4 py-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-700 text-xs leading-relaxed">
+                        Showing a generic preview — AI generation is unavailable right now. You can still edit each step manually.
+                      </div>
+                    )}
+
                     {/* Flow nodes */}
-                    <div className="relative pl-5">
+                    <div className={cn("relative pl-5", flowFetching && "opacity-40 pointer-events-none")}>
                       <div className="absolute left-0 top-2 bottom-2 w-px bg-muted" />
                       {currentFlowNodes.map((node, i) => (
                         <div key={i} className={cn("relative mb-5 last:mb-0", node.branch && "ml-5")}>
@@ -1814,16 +1904,30 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                     setFlowEditText(nodesToText(currentFlowNodes));
                     setFlowEditMode(true);
                   }}
-                  className="flex items-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm border border-border bg-card text-muted-foreground hover:border-border hover:text-foreground transition-all"
+                  disabled={flowFetching}
+                  className={cn(
+                    "flex items-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm border transition-all",
+                    flowFetching
+                      ? "border-border bg-muted text-muted-foreground/60 cursor-not-allowed"
+                      : "border-border bg-card text-muted-foreground hover:border-border hover:text-foreground",
+                  )}
                 >
                   <Pencil className="h-3.5 w-3.5" /> Edit this flow
                 </button>
                 {/* Looks good, continue button */}
                 <button
                   onClick={handleMicroConfirm}
-                  className="flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm bg-gradient-to-r from-zinc-600 to-zinc-600 hover:from-zinc-500 hover:to-zinc-500 text-white shadow-lg shadow-zinc-500/25 transition-all"
+                  disabled={flowFetching}
+                  className={cn(
+                    "flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm transition-all",
+                    flowFetching
+                      ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                      : "bg-gradient-to-r from-zinc-600 to-zinc-600 hover:from-zinc-500 hover:to-zinc-500 text-white shadow-lg shadow-zinc-500/25",
+                  )}
                 >
-                  Looks good, continue <ChevronRight className="h-4 w-4" />
+                  {flowFetching
+                    ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating…</>
+                    : <>Looks good, continue <ChevronRight className="h-4 w-4" /></>}
                 </button>
               </>
             )}

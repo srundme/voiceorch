@@ -2884,7 +2884,7 @@ components:
         wizardInputs:
           type: object
           additionalProperties: true
-          description: "Raw wizard answers passed from the dashboard. When present, the server generates the agent's system prompt server-side using the active admin master template (Gemini) and stores the result. Never returned in responses."
+          description: "Raw wizard answers passed from the dashboard. May include the ordered micro-question/answer pairs (microAnswers) and any uploaded job description content (jdFileContent, jdFileName). When present, the server generates the agent's system prompt server-side using the active admin master template (Gemini) and stores the result. Never returned in responses."
 
     AgentUpdate:
       type: object

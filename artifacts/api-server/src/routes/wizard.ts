@@ -5,6 +5,9 @@ import { platformSettingsTable, platformListedVoicesTable } from "@workspace/db"
 import { eq } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { logger } from "../lib/logger.js";
+import { getActiveTemplate } from "../services/prompt-template.js";
+
+interface FlowNode { label: string; badge?: string; branch?: boolean }
 
 const router: IRouter = Router();
 
@@ -255,6 +258,190 @@ Write ONLY numbered call flow steps (5-10 steps). Each step should be clear, nat
   // prompt is generated server-side from the admin master template at agent
   // create time and is never exposed to dashboard users.
   res.json({ callFlowSteps: callFlowSteps.trim() });
+});
+
+// ── POST /wizard/generate-call-flow ──────────────────────────────────────────
+//
+// Generates a contextual call flow from the wizard's 5 micro-answers + the
+// currently active admin master template (via Gemini). Returns
+// { source: "gemini" | "fallback", nodes, flowText, reason? }. On any missing
+// dependency or parse failure, returns source: "fallback" so the client can
+// render its built-in rule-based preview.
+
+router.post("/wizard/generate-call-flow", requireDbUser, async (req, res): Promise<void> => {
+  const {
+    useCase, role, companyName, agentName, agentDirection,
+    languages, microAnswers, jdFileContent, jdFileName,
+  } = req.body as {
+    useCase?: string;
+    role?: string;
+    companyName?: string;
+    agentName?: string;
+    agentDirection?: string;
+    languages?: string[];
+    microAnswers?: Array<{ question?: string; answer?: string }>;
+    jdFileContent?: string;
+    jdFileName?: string;
+  };
+
+  if (!Array.isArray(microAnswers) || microAnswers.length === 0) {
+    res.status(400).json({ error: "microAnswers (array of {question, answer}) is required" });
+    return;
+  }
+
+  const cleaned = microAnswers
+    .map((a) => ({
+      question: (a?.question ?? "").trim(),
+      answer: (a?.answer ?? "").trim(),
+    }))
+    .filter((a) => a.question.length > 0);
+
+  const nonEmpty = cleaned.filter((a) => a.answer.length > 0);
+
+  const [activeTemplate, geminiKey] = await Promise.all([
+    getActiveTemplate().catch((err) => {
+      logger.warn({ err }, "getActiveTemplate failed during call-flow generation");
+      return null;
+    }),
+    getSetting("managed_gemini_key"),
+  ]);
+
+  if (!activeTemplate) {
+    res.json({ source: "fallback", reason: "no_active_template", nodes: null, flowText: "" });
+    return;
+  }
+  if (!geminiKey) {
+    res.json({ source: "fallback", reason: "no_gemini_key", nodes: null, flowText: "" });
+    return;
+  }
+
+  const ag = agentName?.trim() || "the agent";
+  const co = companyName?.trim() || "your company";
+
+  function nodesToFlowText(nodes: FlowNode[]): string {
+    return nodes
+      .map((n, i) => `${n.branch ? "  →" : `${i + 1}.`} ${n.label}${n.badge ? ` [${n.badge}]` : ""}`)
+      .join("\n");
+  }
+
+  function parseGeminiNodes(text: string): FlowNode[] | null {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      const match = text.match(/\[[\s\S]*\]/);
+      if (!match) return null;
+      try { parsed = JSON.parse(match[0]); } catch { return null; }
+    }
+    if (!Array.isArray(parsed)) return null;
+    const nodes: FlowNode[] = parsed
+      .map((n) => {
+        const obj = (n ?? {}) as Record<string, unknown>;
+        const label = typeof obj.label === "string" ? obj.label.trim() : "";
+        const badgeRaw = typeof obj.badge === "string" ? obj.badge.trim() : "";
+        return {
+          label,
+          ...(badgeRaw ? { badge: badgeRaw } : {}),
+          branch: Boolean(obj.branch),
+        };
+      })
+      .filter((n) => n.label.length > 0)
+      .slice(0, 12);
+    return nodes.length >= 3 ? nodes : null;
+  }
+
+  async function callGemini(extraEmphasis: string): Promise<FlowNode[] | null> {
+    const systemInstruction = `You are a senior AI voice agent call-flow designer.
+Use the MASTER TEMPLATE below as the STRUCTURAL guide — the ordering and intent of sections (greeting → purpose / qualification → data collection → confirmation → close, or whatever the template prescribes) must be respected.
+Produce a concrete, contextual call flow as a JSON array of 5-10 step objects.
+Each step object has shape: { "label": string, "badge"?: string, "branch"?: boolean }.
+- "label" must be a complete natural sentence describing what the agent does at that step, using the user's actual words and details.
+- "badge" is an optional short tag like "Greeting", "Purpose", "Data Collect", "Close".
+- "branch": true marks an alternative / fallback path (e.g. "If the caller is busy → ...").
+EVERY non-empty user answer below MUST be reflected somewhere in the flow using the user's actual words or recognisably paraphrased — do NOT replace them with generic filler. The optional answer (Q5) may be blank — only include it when given.${extraEmphasis}
+Return ONLY the JSON array. No commentary, no markdown fences.
+
+=== MASTER TEMPLATE ===
+${activeTemplate!.extractedText}
+=== END MASTER TEMPLATE ===`;
+
+    const userBlock = [
+      `Agent name: ${ag}`,
+      `Company: ${co}`,
+      `Use case: ${useCase ?? "general"}`,
+      `Role: ${role ?? "AI voice assistant"}`,
+      `Call direction: ${agentDirection ?? "inbound"}`,
+      `Languages: ${(languages ?? ["english"]).join(", ")}`,
+      jdFileName ? `Job description file: ${jdFileName}` : "",
+      jdFileContent ? `Job description content:\n${jdFileContent.slice(0, 2000)}` : "",
+      "",
+      "Micro-questions and the user's answers:",
+      ...cleaned.map((a, i) =>
+        `Q${i + 1}: ${a.question}\nA${i + 1}: ${a.answer || "(blank — omit this step or use sensible default handling)"}`,
+      ),
+    ].filter(Boolean).join("\n");
+
+    const r = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(geminiKey!)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemInstruction }] },
+          contents: [{ role: "user", parts: [{ text: userBlock }] }],
+          generationConfig: {
+            temperature: 0.6,
+            maxOutputTokens: 2048,
+            responseMimeType: "application/json",
+          },
+        }),
+      },
+    );
+    if (!r.ok) {
+      const errText = await r.text().catch(() => "");
+      logger.warn({ status: r.status, errText: errText.slice(0, 300) }, "Gemini call-flow request failed");
+      return null;
+    }
+    const data = (await r.json()) as {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    };
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
+    if (!text) return null;
+    return parseGeminiNodes(text);
+  }
+
+  try {
+    let nodes = await callGemini("");
+
+    if (nodes && nonEmpty.length > 0) {
+      const haystack = nodes.map((n) => n.label).join(" ").toLowerCase();
+      const missing = nonEmpty.filter((a) => {
+        const ans = a.answer.toLowerCase();
+        const token =
+          ans.split(/\s+/).find((w) => w.length >= 4 && /^[a-z0-9]+$/i.test(w)) ??
+          ans.slice(0, Math.min(8, ans.length));
+        return token.length > 0 && !haystack.includes(token);
+      });
+      if (missing.length > 0) {
+        const retry = await callGemini(
+          `\nCRITICAL: a previous attempt dropped these answers — every one MUST appear (verbatim or recognisably paraphrased) in the next output: ${missing
+            .map((m) => JSON.stringify(m.answer))
+            .join(", ")}.`,
+        );
+        if (retry) nodes = retry;
+      }
+    }
+
+    if (!nodes) {
+      res.json({ source: "fallback", reason: "gemini_parse_failed", nodes: null, flowText: "" });
+      return;
+    }
+
+    res.json({ source: "gemini", nodes, flowText: nodesToFlowText(nodes) });
+  } catch (err) {
+    logger.warn({ err }, "Call-flow generation threw — returning fallback");
+    res.json({ source: "fallback", reason: "gemini_call_failed", nodes: null, flowText: "" });
+  }
 });
 
 function generateFallbackCallFlow(useCase: string, direction: string, description: string): string {
