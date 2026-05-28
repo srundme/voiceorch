@@ -102,8 +102,8 @@ export default function PlatformSettings() {
     try {
       await saveAlertEmail.mutateAsync(val || null);
       toast({ title: val ? "Alert notification email saved" : "Alert notification email cleared" });
-    } catch {
-      toast({ title: "Failed to save alert email", variant: "destructive" });
+    } catch (err) {
+      toast({ title: "Failed to save alert email", description: formatAdminError(err), variant: "destructive" });
     }
   }
 
@@ -116,8 +116,8 @@ export default function PlatformSettings() {
     try {
       await saveAlertSlack.mutateAsync(val || null);
       toast({ title: val ? "Slack webhook saved" : "Slack webhook cleared" });
-    } catch {
-      toast({ title: "Failed to save Slack webhook", variant: "destructive" });
+    } catch (err) {
+      toast({ title: "Failed to save Slack webhook", description: formatAdminError(err), variant: "destructive" });
     }
   }
 
@@ -126,8 +126,8 @@ export default function PlatformSettings() {
     try {
       await saveAlertSeverity.mutateAsync(val);
       toast({ title: "Minimum severity saved", description: `Will notify for ${val} and above.` });
-    } catch {
-      toast({ title: "Failed to save severity setting", variant: "destructive" });
+    } catch (err) {
+      toast({ title: "Failed to save severity setting", description: formatAdminError(err), variant: "destructive" });
     }
   }
 
