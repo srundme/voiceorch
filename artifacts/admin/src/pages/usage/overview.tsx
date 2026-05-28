@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { UsageSubNav, UsagePageHeader } from "@/components/usage-layout";
 import { useUsageOverview, microsToUsd } from "@/hooks/use-usage-monitor";
+import { useChartTheme } from "@/hooks/use-chart-theme";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
@@ -25,17 +26,22 @@ const RANGE_OPTIONS = [
   { label: "Last 90 days", value: 90 },
 ];
 
-const SERVICE_META: Record<string, { label: string; icon: React.ElementType; color: string }> = {
-  stt: { label: "Speech to Text", icon: Mic, color: "#a1a1aa" },
-  llm: { label: "Language Model", icon: Brain, color: "#a1a1aa" },
-  tts: { label: "Text to Speech", icon: Volume2, color: "#d4d4d8" },
+const SERVICE_ICONS: Record<string, React.ElementType> = {
+  stt: Mic,
+  llm: Brain,
+  tts: Volume2,
 };
 
-const PIE_COLORS = ["#a1a1aa", "#a1a1aa", "#d4d4d8", "#a1a1aa", "#d4d4d8", "#c45454", "#a1a1aa", "#d4d4d8"];
+const SERVICE_LABELS: Record<string, string> = {
+  stt: "Speech to Text",
+  llm: "Language Model",
+  tts: "Text to Speech",
+};
 
 export default function UsageOverviewPage() {
   const [days, setDays] = useState(30);
   const { data, isLoading } = useUsageOverview(days);
+  const ct = useChartTheme();
 
   const trendData = useMemo(() => {
     const map = new Map<string, { bucket: string; stt: number; tts: number; llm: number }>();
@@ -60,6 +66,15 @@ export default function UsageOverviewPage() {
     combined && combined.allocatedMicros > 0
       ? Math.min(100, (combined.usedMicros / combined.allocatedMicros) * 100)
       : 0;
+
+  const tooltipStyle = {
+    backgroundColor: ct.tooltipBg,
+    border: `1px solid ${ct.tooltipBorder}`,
+    borderRadius: 6,
+    color: ct.tooltipText,
+    boxShadow: ct.tooltipShadow,
+    fontSize: 12,
+  };
 
   return (
     <div className="space-y-6">
@@ -120,8 +135,8 @@ export default function UsageOverviewPage() {
       <div className="grid gap-4 md:grid-cols-3">
         {(["stt", "llm", "tts"] as const).map((svc) => {
           const row = data?.perService.find((s) => s.service === svc);
-          const meta = SERVICE_META[svc]!;
-          const Icon = meta.icon;
+          const Icon = SERVICE_ICONS[svc]!;
+          const color = ct.serviceColors[svc];
           const pct = row && row.kpis.allocatedMicros > 0
             ? Math.min(100, (row.kpis.usedMicros / row.kpis.allocatedMicros) * 100)
             : 0;
@@ -129,8 +144,8 @@ export default function UsageOverviewPage() {
             <Card key={svc} data-testid={`card-service-${svc}`}>
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center text-sm">
-                  <Icon className="mr-2 h-4 w-4" style={{ color: meta.color }} />
-                  {meta.label}
+                  <Icon className="mr-2 h-4 w-4" style={{ color }} />
+                  {SERVICE_LABELS[svc]}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -164,14 +179,35 @@ export default function UsageOverviewPage() {
           <CardContent className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={trendData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="bucket" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip />
+                <CartesianGrid strokeDasharray="3 3" stroke={ct.gridColor} />
+                <XAxis dataKey="bucket" tick={{ fontSize: 11, fill: ct.tickColor }} />
+                <YAxis tick={{ fontSize: 11, fill: ct.tickColor }} />
+                <Tooltip contentStyle={tooltipStyle} />
                 <Legend />
-                <Area type="monotone" dataKey="stt" stackId="1" stroke="#a1a1aa" fill="#a1a1aa" fillOpacity={0.5} />
-                <Area type="monotone" dataKey="llm" stackId="1" stroke="#a1a1aa" fill="#a1a1aa" fillOpacity={0.5} />
-                <Area type="monotone" dataKey="tts" stackId="1" stroke="#d4d4d8" fill="#d4d4d8" fillOpacity={0.5} />
+                <Area
+                  type="monotone"
+                  dataKey="stt"
+                  stackId="1"
+                  stroke={ct.serviceColors.stt}
+                  fill={ct.serviceColors.stt}
+                  fillOpacity={0.4}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="llm"
+                  stackId="1"
+                  stroke={ct.serviceColors.llm}
+                  fill={ct.serviceColors.llm}
+                  fillOpacity={0.4}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="tts"
+                  stackId="1"
+                  stroke={ct.serviceColors.tts}
+                  fill={ct.serviceColors.tts}
+                  fillOpacity={0.4}
+                />
               </AreaChart>
             </ResponsiveContainer>
           </CardContent>
@@ -185,10 +221,13 @@ export default function UsageOverviewPage() {
               <PieChart>
                 <Pie data={providerShare} dataKey="value" nameKey="name" innerRadius={50} outerRadius={90}>
                   {providerShare.map((_, idx) => (
-                    <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
+                    <Cell key={idx} fill={ct.pieColors[idx % ct.pieColors.length]} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(v: number) => `$${v.toFixed(2)}`} />
+                <Tooltip
+                  formatter={(v: number) => `$${v.toFixed(2)}`}
+                  contentStyle={tooltipStyle}
+                />
                 <Legend wrapperStyle={{ fontSize: 10 }} />
               </PieChart>
             </ResponsiveContainer>

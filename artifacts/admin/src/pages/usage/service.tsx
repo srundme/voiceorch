@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { UsageSubNav, UsagePageHeader } from "@/components/usage-layout";
 import { useUsageByService, microsToUsd, type ServiceKey } from "@/hooks/use-usage-monitor";
+import { useChartTheme } from "@/hooks/use-chart-theme";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
@@ -12,18 +13,16 @@ import {
   PieChart, Pie, Cell, Legend,
 } from "recharts";
 
-const PIE_COLORS = ["#a1a1aa", "#a1a1aa", "#d4d4d8", "#a1a1aa", "#c45454", "#a1a1aa", "#a1a1aa", "#a1a1aa"];
-
 const RANGE_OPTIONS = [
   { label: "7 days", value: 7 },
   { label: "30 days", value: 30 },
   { label: "90 days", value: 90 },
 ];
 
-const META: Record<ServiceKey, { label: string; description: string; icon: React.ElementType; color: string }> = {
-  stt: { label: "STT", description: "Speech to Text provider & model breakdown", icon: Mic, color: "#a1a1aa" },
-  llm: { label: "LLM", description: "Language model usage by provider & model", icon: Brain, color: "#a1a1aa" },
-  tts: { label: "TTS", description: "Text to Speech voices & providers", icon: Volume2, color: "#d4d4d8" },
+const META: Record<ServiceKey, { label: string; description: string; icon: React.ElementType }> = {
+  stt: { label: "STT", description: "Speech to Text provider & model breakdown", icon: Mic },
+  llm: { label: "LLM", description: "Language model usage by provider & model", icon: Brain },
+  tts: { label: "TTS", description: "Text to Speech voices & providers", icon: Volume2 },
 };
 
 export default function ServicePage({ service }: { service: ServiceKey }) {
@@ -39,8 +38,10 @@ export default function ServicePage({ service }: { service: ServiceKey }) {
     userId: userIdFilter || null,
     workspaceId: workspaceFilter || null,
   });
+  const ct = useChartTheme();
   const meta = META[service];
   const Icon = meta.icon;
+  const serviceColor = ct.serviceColors[service];
   const allProviders = Array.from(new Set((data?.providers ?? []).map((p) => p.provider)));
   const allModels = Array.from(
     new Set(
@@ -49,6 +50,15 @@ export default function ServicePage({ service }: { service: ServiceKey }) {
       ),
     ),
   );
+
+  const tooltipStyle = {
+    backgroundColor: ct.tooltipBg,
+    border: `1px solid ${ct.tooltipBorder}`,
+    borderRadius: 6,
+    color: ct.tooltipText,
+    boxShadow: ct.tooltipShadow,
+    fontSize: 12,
+  };
 
   return (
     <div className="space-y-6">
@@ -123,7 +133,7 @@ export default function ServicePage({ service }: { service: ServiceKey }) {
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">
-        <Kpi label="Spend" value={microsToUsd(data?.kpis.usedMicros ?? 0)} icon={Icon} accent={meta.color} />
+        <Kpi label="Spend" value={microsToUsd(data?.kpis.usedMicros ?? 0)} icon={Icon} accent={serviceColor} />
         <Kpi label="Allocated" value={microsToUsd(data?.kpis.allocatedMicros ?? 0)} icon={Activity} />
         <Kpi label="Events" value={(data?.kpis.eventCount ?? 0).toLocaleString()} icon={Activity} />
         <Kpi
@@ -154,10 +164,10 @@ export default function ServicePage({ service }: { service: ServiceKey }) {
                     paddingAngle={2}
                   >
                     {(data?.providers ?? []).map((_, i) => (
-                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                      <Cell key={i} fill={ct.pieColors[i % ct.pieColors.length]} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(v: number) => `$${v.toFixed(4)}`} />
+                  <Tooltip formatter={(v: number) => `$${v.toFixed(4)}`} contentStyle={tooltipStyle} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                 </PieChart>
               </ResponsiveContainer>
@@ -178,9 +188,9 @@ export default function ServicePage({ service }: { service: ServiceKey }) {
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie data={models} dataKey="value" nameKey="name" innerRadius={50} outerRadius={90} paddingAngle={2}>
-                      {models.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                      {models.map((_, i) => <Cell key={i} fill={ct.pieColors[i % ct.pieColors.length]} />)}
                     </Pie>
-                    <Tooltip formatter={(v: number) => `$${v.toFixed(4)}`} />
+                    <Tooltip formatter={(v: number) => `$${v.toFixed(4)}`} contentStyle={tooltipStyle} />
                     <Legend wrapperStyle={{ fontSize: 10 }} />
                   </PieChart>
                 </ResponsiveContainer>
@@ -208,11 +218,11 @@ export default function ServicePage({ service }: { service: ServiceKey }) {
                 <TabsContent key={k} value={k} className="h-72">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={(points ?? []).map((p) => ({ ...p, cost: p.costMicros / 1_000_000 }))}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis dataKey="bucket" tick={{ fontSize: 11 }} />
-                      <YAxis tick={{ fontSize: 11 }} />
-                      <Tooltip formatter={(v: number) => `$${v.toFixed(4)}`} />
-                      <Bar dataKey="cost" fill={meta.color} />
+                      <CartesianGrid strokeDasharray="3 3" stroke={ct.gridColor} />
+                      <XAxis dataKey="bucket" tick={{ fontSize: 11, fill: ct.tickColor }} />
+                      <YAxis tick={{ fontSize: 11, fill: ct.tickColor }} />
+                      <Tooltip formatter={(v: number) => `$${v.toFixed(4)}`} contentStyle={tooltipStyle} />
+                      <Bar dataKey="cost" fill={serviceColor} />
                     </BarChart>
                   </ResponsiveContainer>
                 </TabsContent>

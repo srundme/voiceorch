@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { 
   Activity, 
@@ -49,11 +49,6 @@ function BrandMark({ compact = false }: { compact?: boolean }) {
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
-
-  // Force dark mode on mount since it's the default
-  useEffect(() => {
-    document.documentElement.classList.add("dark");
-  }, []);
 
   const handleLogout = () => {
     localStorage.removeItem("adminToken");
