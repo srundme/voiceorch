@@ -514,14 +514,28 @@ router.get("/admin/settings/alert-min-severity", async (req, res): Promise<void>
   }
 });
 
-const testNotifRateLimit = new Map<string, number[]>();
 const TEST_NOTIF_MAX = 3;
 const TEST_NOTIF_WINDOW_MS = 60_000;
 
+function testNotifRateLimitKey(ip: string): string {
+  return `test_notif_rate_limit:${ip}`;
+}
+
 router.post("/admin/settings/alert-notifications/test", async (req, res): Promise<void> => {
   const ip = req.ip ?? req.socket.remoteAddress ?? "unknown";
+  const key = testNotifRateLimitKey(ip);
   const now = Date.now();
-  const timestamps = (testNotifRateLimit.get(ip) ?? []).filter((t) => now - t < TEST_NOTIF_WINDOW_MS);
+
+  const [existing] = await db
+    .select({ value: platformSettingsTable.value })
+    .from(platformSettingsTable)
+    .where(eq(platformSettingsTable.key, key));
+
+  const raw: unknown = existing?.value ? JSON.parse(existing.value) : [];
+  const timestamps = (Array.isArray(raw) ? (raw as number[]) : []).filter(
+    (t) => now - t < TEST_NOTIF_WINDOW_MS,
+  );
+
   if (timestamps.length >= TEST_NOTIF_MAX) {
     const retryAfterSec = Math.ceil((TEST_NOTIF_WINDOW_MS - (now - timestamps[0]!)) / 1000);
     res.setHeader("Retry-After", String(retryAfterSec));
@@ -529,7 +543,14 @@ router.post("/admin/settings/alert-notifications/test", async (req, res): Promis
     return;
   }
   timestamps.push(now);
-  testNotifRateLimit.set(ip, timestamps);
+
+  await db
+    .insert(platformSettingsTable)
+    .values({ key, value: JSON.stringify(timestamps) })
+    .onConflictDoUpdate({
+      target: platformSettingsTable.key,
+      set: { value: JSON.stringify(timestamps), updatedAt: new Date() },
+    });
 
   try {
     const result = await sendTestAlertNotification();
