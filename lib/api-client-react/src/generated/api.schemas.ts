@@ -1566,6 +1566,11 @@ export interface AvailabilityOverrideInput {
   reason?: string;
 }
 
+export interface PublicNow {
+  /** Current server UTC time as an ISO 8601 string */
+  now: string;
+}
+
 export interface TimeSlot {
   slotStart: string;
   slotEnd: string;

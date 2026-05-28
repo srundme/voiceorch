@@ -117,6 +117,7 @@ import type {
   ProviderUpdate,
   PublicBookingInput,
   PublicEventType,
+  PublicNow,
   PurchasePhoneNumberInput,
   SchedulingCalendar,
   SchedulingCalendarInput,
@@ -6924,6 +6925,83 @@ export function useGetPublicSlots<TData = Awaited<ReturnType<typeof getPublicSlo
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetPublicSlotsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetPublicNowUrl = () => {
+
+
+
+
+  return `/api/scheduling/public/now`
+}
+
+/**
+ * @summary Get current server time (unauthenticated) — used by clients to detect past slots
+ */
+export const getPublicNow = async ( options?: RequestInit): Promise<PublicNow> => {
+
+  return customFetch<PublicNow>(getGetPublicNowUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPublicNowQueryKey = () => {
+    return [
+    `/api/scheduling/public/now`
+    ] as const;
+    }
+
+
+export const getGetPublicNowQueryOptions = <TData = Awaited<ReturnType<typeof getPublicNow>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicNow>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPublicNowQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPublicNow>>> = ({ signal }) => getPublicNow({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPublicNow>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPublicNowQueryResult = NonNullable<Awaited<ReturnType<typeof getPublicNow>>>
+export type GetPublicNowQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get current server time (unauthenticated) — used by clients to detect past slots
+ */
+
+export function useGetPublicNow<TData = Awaited<ReturnType<typeof getPublicNow>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicNow>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPublicNowQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

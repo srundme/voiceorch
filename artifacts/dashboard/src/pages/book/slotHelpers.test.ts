@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { addDays, formatDate, slotsByDay } from "./slotHelpers";
+import { addDays, formatDate, slotsByDay, isSlotPast } from "./slotHelpers";
 
 // ---------------------------------------------------------------------------
 // addDays
@@ -140,5 +140,42 @@ describe("slotsByDay", () => {
       "2026-06-14",
     ]);
     expect(result["2026-06-12"]).toHaveLength(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isSlotPast
+// ---------------------------------------------------------------------------
+describe("isSlotPast", () => {
+  it("returns true when slotStart is strictly before now", () => {
+    expect(isSlotPast("2026-06-15T09:00:00.000Z", "2026-06-15T10:00:00.000Z")).toBe(true);
+  });
+
+  it("returns true when slotStart equals now (boundary: at or before)", () => {
+    const ts = "2026-06-15T09:00:00.000Z";
+    expect(isSlotPast(ts, ts)).toBe(true);
+  });
+
+  it("returns false when slotStart is strictly after now", () => {
+    expect(isSlotPast("2026-06-15T11:00:00.000Z", "2026-06-15T10:00:00.000Z")).toBe(false);
+  });
+
+  it("accepts a Date object as the now argument", () => {
+    const now = new Date("2026-06-15T10:00:00.000Z");
+    expect(isSlotPast("2026-06-15T09:00:00.000Z", now)).toBe(true);
+    expect(isSlotPast("2026-06-15T11:00:00.000Z", now)).toBe(false);
+  });
+
+  it("handles slots on a fully past date", () => {
+    expect(isSlotPast("2026-01-01T09:00:00.000Z", "2026-06-15T10:00:00.000Z")).toBe(true);
+  });
+
+  it("handles slots on a fully future date", () => {
+    expect(isSlotPast("2027-01-01T09:00:00.000Z", "2026-06-15T10:00:00.000Z")).toBe(false);
+  });
+
+  it("is not confused by timezone offsets — compares UTC instants", () => {
+    // slotStart at 10:00 UTC, now at 09:00 UTC (slotStart is 1h in the future)
+    expect(isSlotPast("2026-06-15T10:00:00.000Z", "2026-06-15T09:00:00.000Z")).toBe(false);
   });
 });

@@ -20,6 +20,10 @@ import {
 
 const router: IRouter = Router();
 
+router.get("/scheduling/public/now", (_req, res): void => {
+  res.json({ now: new Date().toISOString() });
+});
+
 router.get("/scheduling/public/event-types/:slug", async (req, res): Promise<void> => {
   const params = GetPublicEventTypeParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }
@@ -75,6 +79,13 @@ router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
   if (!calendar || !calendar.isActive) { res.status(404).json({ error: "Calendar not available" }); return; }
 
   const slotStart = new Date(parsed.data.slotStart);
+
+  // Reject slots whose start time is already in the past
+  if (slotStart.getTime() <= Date.now()) {
+    res.status(409).json({ error: "This slot is in the past — please choose a future time" });
+    return;
+  }
+
   const slotEnd = addMinutes(slotStart, eventType.durationMinutes);
   const lockKey = buildSlotLockKey(calendar.id, slotStart);
 

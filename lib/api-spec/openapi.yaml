@@ -2027,6 +2027,19 @@ paths:
         "404":
           description: Event type not found
 
+  /scheduling/public/now:
+    get:
+      operationId: getPublicNow
+      tags: [scheduling]
+      summary: Get current server time (unauthenticated) — used by clients to detect past slots
+      responses:
+        "200":
+          description: Current server time
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicNow"
+
   /scheduling/public/bookings:
     post:
       operationId: createPublicBooking
@@ -4252,6 +4265,15 @@ components:
           type: string
         reason:
           type: string
+
+    PublicNow:
+      type: object
+      required: [now]
+      properties:
+        now:
+          type: string
+          format: date-time
+          description: Current server UTC time as an ISO 8601 string
 
     TimeSlot:
       type: object

@@ -2182,6 +2182,14 @@ export const GetPublicSlotsResponse = zod.array(GetPublicSlotsResponseItem)
 
 
 /**
+ * @summary Get current server time (unauthenticated) — used by clients to detect past slots
+ */
+export const GetPublicNowResponse = zod.object({
+  "now": zod.coerce.date().describe('Current server UTC time as an ISO 8601 string')
+})
+
+
+/**
  * @summary Create a booking via public form (unauthenticated)
  */
 

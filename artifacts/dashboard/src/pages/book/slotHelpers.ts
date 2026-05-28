@@ -40,3 +40,14 @@ export function slotsByDay(slots: SlotItem[]): Record<string, string[]> {
     return acc;
   }, {});
 }
+
+/**
+ * Returns true when a slot's start time is at or before `now`.
+ *
+ * Both arguments are compared as millisecond timestamps so timezone offsets
+ * don't affect the result — the caller should pass the ISO string returned by
+ * the server's `/scheduling/public/now` endpoint as `now`.
+ */
+export function isSlotPast(slotStart: string, now: string | Date): boolean {
+  return new Date(slotStart).getTime() <= new Date(now).getTime();
+}

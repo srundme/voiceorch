@@ -3,10 +3,12 @@ import { useRoute } from "wouter";
 import { format, parseISO } from "date-fns";
 import { Calendar, Clock, CheckCircle, AlertCircle, Video } from "lucide-react";
 import { buildBookingPayload } from "./bookingPayload";
-import { addDays, formatDate, slotsByDay } from "./slotHelpers";
+import { addDays, formatDate, slotsByDay, isSlotPast } from "./slotHelpers";
 import {
   useGetPublicEventType,
   useGetPublicSlots,
+  useGetPublicNow,
+  getGetPublicNowQueryKey,
   useCreatePublicBooking,
 } from "@workspace/api-client-react";
 import { CreatePublicBookingBody } from "@workspace/api-zod";
@@ -37,6 +39,11 @@ export default function PublicBookingPage() {
   const [touched, setTouched] = useState<{ name?: boolean; email?: boolean }>({});
 
   const { data: eventType, isLoading: etLoading, error: etError } = useGetPublicEventType(slug);
+
+  const { data: serverNow } = useGetPublicNow({
+    query: { queryKey: getGetPublicNowQueryKey(), refetchInterval: 60_000 },
+  });
+  const nowRef = serverNow?.now ?? new Date().toISOString();
 
   useEffect(() => {
     if (eventType?.name) {
@@ -219,19 +226,25 @@ export default function PublicBookingPage() {
                     {format(parseISO(day + "T00:00:00"), "EEEE, MMMM d")}
                   </p>
                   <div className="grid grid-cols-2 gap-2">
-                    {daySlots.map(slot => (
-                      <button
-                        key={slot}
-                        onClick={() => setSelectedSlot(slot)}
-                        className={`px-3 py-2 rounded-lg border text-sm font-medium transition-all ${
-                          selectedSlot === slot
-                            ? "bg-zinc-600 border-zinc-600 text-white"
-                            : "bg-card border-slate-200 text-slate-700 hover:border-zinc-400 hover:bg-muted"
-                        }`}
-                      >
-                        {format(parseISO(slot), "h:mm a")}
-                      </button>
-                    ))}
+                    {daySlots.map(slot => {
+                      const past = isSlotPast(slot, nowRef);
+                      return (
+                        <button
+                          key={slot}
+                          onClick={() => !past && setSelectedSlot(slot)}
+                          disabled={past}
+                          className={`px-3 py-2 rounded-lg border text-sm font-medium transition-all ${
+                            past
+                              ? "bg-card border-slate-200 text-slate-400 opacity-50 cursor-not-allowed"
+                              : selectedSlot === slot
+                                ? "bg-zinc-600 border-zinc-600 text-white"
+                                : "bg-card border-slate-200 text-slate-700 hover:border-zinc-400 hover:bg-muted"
+                          }`}
+                        >
+                          {format(parseISO(slot), "h:mm a")}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               ))}
