@@ -519,7 +519,7 @@ export default function AgentEdit() {
 
                   {/* Step 1 — ASR */}
                   <div className="space-y-4 p-4 border rounded-md bg-muted/20 relative">
-                    <div className="absolute top-0 right-0 -mt-3 -mr-3 bg-white border rounded-full px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Step 1</div>
+                    <div className="absolute top-0 right-0 -mt-3 -mr-3 bg-card border border-border rounded-full px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Step 1</div>
                     <h4 className="font-medium border-b pb-2">Speech-to-Text</h4>
                     <FormField control={form.control} name="asrProvider" render={({ field }) => (
                       <FormItem>
@@ -550,7 +550,7 @@ export default function AgentEdit() {
 
                   {/* Step 2 — LLM */}
                   <div className="space-y-4 p-4 border rounded-md bg-muted/20 relative">
-                    <div className="absolute top-0 right-0 -mt-3 -mr-3 bg-white border rounded-full px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Step 2</div>
+                    <div className="absolute top-0 right-0 -mt-3 -mr-3 bg-card border border-border rounded-full px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Step 2</div>
                     <h4 className="font-medium border-b pb-2">Language Model</h4>
                     <FormField control={form.control} name="llmProvider" render={({ field }) => (
                       <FormItem>
@@ -581,7 +581,7 @@ export default function AgentEdit() {
 
                   {/* Step 3 — TTS */}
                   <div className="space-y-4 p-4 border rounded-md bg-muted/20 relative">
-                    <div className="absolute top-0 right-0 -mt-3 -mr-3 bg-white border rounded-full px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Step 3</div>
+                    <div className="absolute top-0 right-0 -mt-3 -mr-3 bg-card border border-border rounded-full px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Step 3</div>
                     <h4 className="font-medium border-b pb-2">Text-to-Speech</h4>
                     <FormField control={form.control} name="ttsProvider" render={({ field }) => (
                       <FormItem>
@@ -630,7 +630,7 @@ export default function AgentEdit() {
 
                   {/* Step 4 — Telephony */}
                   <div className="space-y-4 p-4 border rounded-md bg-muted/20 relative">
-                    <div className="absolute top-0 right-0 -mt-3 -mr-3 bg-white border rounded-full px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Step 4</div>
+                    <div className="absolute top-0 right-0 -mt-3 -mr-3 bg-card border border-border rounded-full px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Step 4</div>
                     <h4 className="font-medium border-b pb-2">Telephony</h4>
                     <FormField control={form.control} name="telephonyProvider" render={({ field }) => (
                       <FormItem>

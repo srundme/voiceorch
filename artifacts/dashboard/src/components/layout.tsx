@@ -4,8 +4,9 @@ import {
   Users, Phone, Key, Settings, Menu,
   LayoutDashboard, BarChart3, BookOpen,
   Wallet, LogOut, ChevronDown, AlertCircle, Radio, Webhook,
-  Zap, ChevronRight, CalendarDays, TrendingUp,
+  Zap, ChevronRight, CalendarDays, TrendingUp, Moon, Sun,
 } from "lucide-react";
+import { useTheme } from "@/components/theme-provider";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useClerk, useUser } from "@clerk/react";
 import { useGetWallet } from "@workspace/api-client-react";
@@ -200,6 +201,21 @@ function UserMenu() {
   );
 }
 
+/* ── Theme toggle ──────────────────────────────────────────────────────── */
+function ThemeToggle() {
+  const { theme, setTheme } = useTheme();
+  const isDark = theme === "dark";
+  return (
+    <button
+      onClick={() => setTheme(isDark ? "light" : "dark")}
+      className="h-5 w-5 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
+      title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+    >
+      {isDark ? <Sun className="h-3 w-3" /> : <Moon className="h-3 w-3" />}
+    </button>
+  );
+}
+
 /* ── Sidebar content ───────────────────────────────────────────────────── */
 function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   return (
@@ -235,10 +251,11 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
       <div className="px-3 pb-3 pt-3 space-y-2 shrink-0 border-t border-sidebar-border">
         <WalletBadge />
         <UserMenu />
-        {/* Status dot */}
+        {/* Status dot + theme toggle */}
         <div className="flex items-center gap-2 px-3 py-1.5">
           <div className="h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_6px_hsl(var(--primary))]" />
-          <span className="text-[11px] text-muted-foreground">All systems operational</span>
+          <span className="text-[11px] text-muted-foreground flex-1">All systems operational</span>
+          <ThemeToggle />
         </div>
       </div>
     </div>

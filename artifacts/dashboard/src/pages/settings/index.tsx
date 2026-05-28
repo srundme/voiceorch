@@ -200,7 +200,7 @@ function MaskedKey({ value }: { value: string | null | undefined }) {
   return (
     <div className="flex items-center gap-2 bg-muted/60 border border-border/60 rounded-md px-3 py-2 font-mono text-xs text-foreground/90 overflow-x-auto flex-1">
       <span className="flex-1 whitespace-nowrap">{show ? value : masked}</span>
-      <button onClick={() => setShow(s => !s)} className="text-gray-400 hover:text-gray-700 transition-colors">
+      <button onClick={() => setShow(s => !s)} className="text-muted-foreground hover:text-foreground transition-colors">
         {show ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
       </button>
       <CopyButton text={value} />
@@ -276,7 +276,7 @@ function GeneralTab() {
                   <Button variant="outline" size="sm" className="text-xs h-7">{item.action.label}</Button>
                 </Link>
               )}
-              {item.done && <Badge variant="outline" className="text-[10px] bg-gray-50 text-gray-700 border-gray-200">Done</Badge>}
+              {item.done && <Badge variant="outline" className="text-[10px] bg-muted text-muted-foreground border-border">Done</Badge>}
             </div>
           ))}
         </CardContent>

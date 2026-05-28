@@ -312,20 +312,20 @@
   }
   .card-hover:hover {
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.05);
+    box-shadow: var(--shadow-card-hover);
   }
 
   /* Input focus helper */
   .input-glow:focus {
     outline: none;
-    border-color: #9CA3AF !important;
-    box-shadow: 0 0 0 3px rgba(156,163,175,0.15) !important;
+    border-color: hsl(var(--ring)) !important;
+    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.2) !important;
   }
 
-  /* Stat card muted icon badges */
+  /* Stat card muted icon badges — dark-aware */
   .stat-icon-bg {
-    background: #F3F4F6;
-    border: 1px solid #E5E7EB;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
   }
 }
 

@@ -455,7 +455,7 @@ export default function ProvidersList() {
                             <div className="flex items-center gap-2">
                               <span className="font-medium text-sm capitalize">{provider.providerName}</span>
                               {provider.isActive && (
-                                <Badge variant="outline" className="text-[10px] h-4 px-1.5 bg-gray-50 text-gray-700 border-gray-200">Active</Badge>
+                                <Badge variant="outline" className="text-[10px] h-4 px-1.5 bg-muted text-muted-foreground border-border">Active</Badge>
                               )}
                             </div>
                             <div className="flex items-center text-xs text-muted-foreground gap-1 font-mono">

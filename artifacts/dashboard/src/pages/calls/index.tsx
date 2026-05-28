@@ -106,12 +106,12 @@ export default function CallsList() {
           <Input
             type="search"
             placeholder="Search phone numbers..."
-            className="pl-8 bg-white"
+            className="pl-8"
           />
         </div>
         
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[180px] bg-white">
+          <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Filter by Status" />
           </SelectTrigger>
           <SelectContent>
@@ -123,7 +123,7 @@ export default function CallsList() {
         </Select>
 
         <Select value={agentFilter} onValueChange={setAgentFilter}>
-          <SelectTrigger className="w-[200px] bg-white">
+          <SelectTrigger className="w-[200px]">
             <SelectValue placeholder="Filter by Agent" />
           </SelectTrigger>
           <SelectContent>

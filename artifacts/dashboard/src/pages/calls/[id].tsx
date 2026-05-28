@@ -229,7 +229,7 @@ export default function CallDetail() {
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${line.role === 'user' ? 'bg-secondary' : 'bg-primary/20 text-primary'}`}>
                       {line.role === 'user' ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
                     </div>
-                    <div className={`max-w-[80%] rounded-2xl p-4 ${line.role === 'user' ? 'bg-secondary text-secondary-foreground rounded-tr-sm' : 'bg-white border border-border shadow-sm rounded-tl-sm'}`}>
+                    <div className={`max-w-[80%] rounded-2xl p-4 ${line.role === 'user' ? 'bg-secondary text-secondary-foreground rounded-tr-sm' : 'bg-card border border-border shadow-sm rounded-tl-sm'}`}>
                       <p className="text-sm leading-relaxed">{line.content}</p>
                       {line.timestamp && (
                         <span className="text-[10px] text-muted-foreground mt-2 block opacity-70">
@@ -240,7 +240,7 @@ export default function CallDetail() {
                   </div>
                 ))
               ) : (
-                <div className="font-mono text-sm leading-relaxed whitespace-pre-wrap p-4 bg-white rounded-md border">
+                <div className="font-mono text-sm leading-relaxed whitespace-pre-wrap p-4 bg-card rounded-md border border-border">
                   {call.transcript}
                 </div>
               )}
