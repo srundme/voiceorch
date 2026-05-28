@@ -8,6 +8,7 @@ import {
   useSendTestAlertNotification,
   useAlertNotificationLog,
   type AlertNotificationLogEntry,
+  useAlertCooldownStats, useResetAlertSuppressedCount,
 } from "@/hooks/use-admin-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,7 +25,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Settings, Bell, Mail, Check, AlertTriangle, Slack, Send, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { Settings, Bell, Mail, Check, AlertTriangle, Slack, Send, CheckCircle2, XCircle, Clock, RotateCcw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
 
@@ -137,12 +138,14 @@ export default function PlatformSettings() {
   const { data: alertSlackData, isLoading: loadingAlertSlack } = useAlertSlackWebhook();
   const { data: alertSeverityData, isLoading: loadingAlertSeverity } = useAlertMinSeverity();
   const { data: alertCooldownData, isLoading: loadingAlertCooldown } = useAlertNotificationCooldown();
+  const { data: cooldownStats } = useAlertCooldownStats();
   const saveAlertEmail = useSaveAlertEmail();
   const saveAlertSlack = useSaveAlertSlackWebhook();
   const saveAlertSeverity = useSaveAlertMinSeverity();
   const saveAlertCooldown = useSaveAlertNotificationCooldown();
   const sendTestNotification = useSendTestAlertNotification();
   const [testOnCooldown, setTestOnCooldown] = useState(false);
+  const resetSuppressed = useResetAlertSuppressedCount();
 
   const { data: logData, isLoading: loadingLog } = useAlertNotificationLog(50);
   const [showLog, setShowLog] = useState(false);
@@ -291,6 +294,15 @@ export default function PlatformSettings() {
   const slackSummary = logData?.summary.slack;
   const logEntries = logData?.entries ?? [];
 
+  async function handleResetSuppressed() {
+    try {
+      await resetSuppressed.mutateAsync();
+      toast({ title: "Counter reset", description: "Suppressed notification count cleared." });
+    } catch {
+      toast({ title: "Failed to reset counter", variant: "destructive" });
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
@@ -369,6 +381,33 @@ export default function PlatformSettings() {
                 Save
               </Button>
             </div>
+            {cooldownStats != null && (
+              <div className="mt-3 flex items-center gap-3 rounded-md border border-border bg-muted/40 px-3 py-2">
+                <div className="flex-1">
+                  {cooldownStats.suppressedCount > 0 ? (
+                    <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">
+                      {cooldownStats.suppressedCount} notification{cooldownStats.suppressedCount === 1 ? "" : "s"} silenced by rate limiter
+                      {cooldownStats.cooldownExpiresAt != null && cooldownStats.cooldownExpiresAt > Date.now()
+                        ? ` · cooldown resets ${new Date(cooldownStats.cooldownExpiresAt).toLocaleTimeString()}`
+                        : ""}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">No notifications silenced since last reset.</p>
+                  )}
+                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-xs"
+                  onClick={handleResetSuppressed}
+                  disabled={resetSuppressed.isPending || cooldownStats.suppressedCount === 0}
+                  title="Reset counter"
+                >
+                  <RotateCcw className="h-3 w-3 mr-1" />
+                  Reset
+                </Button>
+              </div>
+            )}
           </div>
 
           <div className="space-y-2 max-w-sm border-t border-border pt-5">

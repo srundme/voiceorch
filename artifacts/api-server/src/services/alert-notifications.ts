@@ -19,10 +19,27 @@ let _lastNotifiedSeverity: string | null = null;
 /** Whether we've loaded persisted cooldown state from the DB yet. */
 let _cooldownStateLoaded = false;
 
+/** Count of notifications suppressed by the cooldown rate limiter since last reset. */
+let _suppressedCount = 0;
+
+/** Returns current cooldown stats (suppressed count + when the cooldown window expires). */
+export function getAlertCooldownStats(): { suppressedCount: number; cooldownExpiresAt: number | null } {
+  return {
+    suppressedCount: _suppressedCount,
+    cooldownExpiresAt: _lastNotifiedAt !== null ? _lastNotifiedAt + DEFAULT_COOLDOWN_MINUTES * 60 * 1000 : null,
+  };
+}
+
+/** Resets the suppressed-notification counter. */
+export function resetAlertSuppressedCount(): void {
+  _suppressedCount = 0;
+}
+
 /** @internal Reset in-process cooldown state. Used in unit tests only. */
 export function __resetCooldownState(): void {
   _lastNotifiedAt = null;
   _lastNotifiedSeverity = null;
+  _suppressedCount = 0;
 }
 
 const SEVERITY_RANK: Record<string, number> = {
@@ -282,6 +299,8 @@ export async function sendTestAlertNotification(): Promise<{ email: boolean; sla
  * Rate-limited by `alert_notification_cooldown_minutes` platform setting (default 10 min).
  * At most one notification batch is dispatched within the cooldown window regardless of
  * how many alerts fire simultaneously (prevents inbox flooding during outages).
+ * Exception: if the new alert has higher severity than the last dispatched one, the cooldown
+ * is bypassed so critical escalations are never silenced.
  * Logs each delivery attempt (sent / failed) to alert_notification_log.
  *
  * Cooldown state (`last_notified_at`, `last_notified_severity`) is persisted to the
@@ -312,8 +331,9 @@ export async function dispatchAlertNotification(opts: {
         const lastRank = SEVERITY_RANK[_lastNotifiedSeverity ?? ""] ?? -1;
         const isEscalation = alertRank > lastRank;
         if (!isEscalation) {
+          _suppressedCount++;
           logger.info(
-            { type: opts.type, elapsedMs: elapsed, cooldownMs, severity: opts.severity, lastSeverity: _lastNotifiedSeverity },
+            { type: opts.type, elapsedMs: elapsed, cooldownMs, severity: opts.severity, lastSeverity: _lastNotifiedSeverity, suppressedCount: _suppressedCount },
             "Alert notification suppressed by cooldown rate limit",
           );
           return;

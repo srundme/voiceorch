@@ -4,7 +4,7 @@ import { eq, sql, count, sum, desc, lt, gt, and, inArray } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { getAllSessions } from "../orchestration/session.js";
 import { logger } from "../lib/logger.js";
-import { sendTestAlertNotification } from "../services/alert-notifications.js";
+import { sendTestAlertNotification, getAlertCooldownStats, resetAlertSuppressedCount } from "../services/alert-notifications.js";
 
 const router = Router();
 
@@ -603,6 +603,17 @@ router.put("/admin/settings/alert-notification-cooldown", async (req, res): Prom
     req.log.error({ err }, "admin/settings/alert-notification-cooldown PUT failed");
     res.status(500).json({ error: "Internal server error" });
   }
+});
+
+router.get("/admin/settings/alert-notification-cooldown/stats", (req, res): void => {
+  const stats = getAlertCooldownStats();
+  res.json(stats);
+});
+
+router.post("/admin/settings/alert-notification-cooldown/stats/reset", (req, res): void => {
+  resetAlertSuppressedCount();
+  req.log.info("Alert suppressed-notification counter reset by admin");
+  res.json({ ok: true });
 });
 
 // ─── Spike Alert Settings ─────────────────────────────────────────────────────

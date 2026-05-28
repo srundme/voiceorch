@@ -293,6 +293,28 @@ export function useSendTestAlertNotification() {
   });
 }
 
+export function useAlertCooldownStats() {
+  return useQuery({
+    queryKey: ["admin", "settings", "alert-notification-cooldown", "stats"],
+    queryFn: () =>
+      adminFetch<{ suppressedCount: number; cooldownExpiresAt: number | null }>(
+        "/settings/alert-notification-cooldown/stats",
+      ),
+    refetchInterval: 30000,
+  });
+}
+
+export function useResetAlertSuppressedCount() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      adminFetch<{ ok: boolean }>("/settings/alert-notification-cooldown/stats/reset", { method: "POST" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "settings", "alert-notification-cooldown", "stats"] });
+    },
+  });
+}
+
 export function useSpikeAlerts() {
   return useQuery({
     queryKey: ["admin", "alerts", "spikes"],
