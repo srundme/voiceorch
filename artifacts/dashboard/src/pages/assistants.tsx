@@ -283,38 +283,74 @@ function statusDot(status: string) {
 type CallStatus = "idle" | "connecting" | "listening" | "thinking" | "speaking" | "ended";
 interface Msg { speaker: "user" | "agent"; text: string }
 
-/* Heights (%) for 22 bars — irregular to feel like real audio */
-const BAR_HEIGHTS = [28,52,76,90,64,85,42,96,58,78,44,100,66,88,50,72,38,92,60,80,46,34];
+/* ── Oscilloscope wave canvas (Cartesia-style) ───────────────────────────── */
+function WaveCanvas({
+  active, color, glowColor, amplitude = 0.42, speed = 0.055,
+}: {
+  active: boolean; color: string; glowColor: string;
+  amplitude?: number; speed?: number;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rafRef    = useRef<number | null>(null);
+  const phaseRef  = useRef(0);
 
-function AgentBars({ active }: { active: boolean }) {
-  return (
-    <div className="flex items-center gap-[2px] h-10 flex-1">
-      {BAR_HEIGHTS.map((h, i) => (
-        <div key={i} className="w-[3px] rounded-full origin-bottom shrink-0"
-          style={{
-            height: active ? `${h}%` : "3px",
-            background: active ? "#22c55e" : "#22c55e44",
-            animation: active ? `wcBar 0.9s ease-in-out ${(i * 47) % 900}ms infinite alternate` : "none",
-            transition: "height 0.3s ease, background 0.3s",
-          }} />
-      ))}
-      {active && <style>{`@keyframes wcBar { 0% { transform:scaleY(.2) } 100% { transform:scaleY(1) } }`}</style>}
-    </div>
-  );
-}
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
 
-function UserDots({ active }: { active: boolean }) {
+    const dpr  = window.devicePixelRatio || 1;
+    const W    = canvas.offsetWidth;
+    const H    = canvas.offsetHeight;
+    canvas.width  = W * dpr;
+    canvas.height = H * dpr;
+    ctx.scale(dpr, dpr);
+
+    function draw() {
+      if (!ctx) return;
+      ctx.clearRect(0, 0, W, H);
+
+      const amp = active ? H * amplitude : H * 0.03;
+      const cy  = H / 2;
+
+      ctx.beginPath();
+      for (let px = 0; px <= W; px++) {
+        const t = px / W;
+        const y = cy + amp * (
+          Math.sin(t * Math.PI * 5  + phaseRef.current)        * 0.55 +
+          Math.sin(t * Math.PI * 9  + phaseRef.current * 1.35) * 0.28 +
+          Math.sin(t * Math.PI * 15 + phaseRef.current * 0.72) * 0.17
+        );
+        if (px === 0) ctx.moveTo(px, y); else ctx.lineTo(px, y);
+      }
+
+      ctx.strokeStyle  = color;
+      ctx.lineWidth    = 1.5;
+      ctx.shadowColor  = active ? glowColor : "transparent";
+      ctx.shadowBlur   = active ? 10 : 0;
+      ctx.lineCap      = "round";
+      ctx.lineJoin     = "round";
+      ctx.stroke();
+
+      if (active) {
+        phaseRef.current += speed;
+        rafRef.current = requestAnimationFrame(draw);
+      }
+    }
+
+    draw();
+    return () => { if (rafRef.current != null) cancelAnimationFrame(rafRef.current); };
+  }, [active, color, glowColor, amplitude, speed]);
+
   return (
-    <div className="flex items-center gap-[5px] h-10 flex-1">
-      {Array.from({ length: 10 }, (_, i) => (
-        <div key={i} className="w-[5px] h-[5px] rounded-full shrink-0"
-          style={{
-            background: active ? "#60a5fa" : "#60a5fa44",
-            animation: active ? `wcDot 0.7s ease-in-out ${i * 80}ms infinite alternate` : "none",
-            transition: "background 0.3s",
-          }} />
-      ))}
-      {active && <style>{`@keyframes wcDot { 0% { transform:translateY(4px);opacity:.5 } 100% { transform:translateY(-4px);opacity:1 } }`}</style>}
+    <div className="relative flex-1 h-full">
+      <canvas ref={canvasRef} style={{ width: "100%", height: "100%", display: "block" }} />
+      {/* Edge fade */}
+      <div className="pointer-events-none absolute inset-y-0 left-0 w-6"
+        style={{ background: "linear-gradient(to right, #0a0a0a, transparent)" }} />
+      <div className="pointer-events-none absolute inset-y-0 right-0 w-6"
+        style={{ background: "linear-gradient(to left, #0a0a0a, transparent)" }} />
     </div>
   );
 }
@@ -477,38 +513,62 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
             </button>
           </div>
 
-          {/* Waveform rows */}
-          <div className="px-4 pb-3 space-y-2">
-            <div className="flex items-center gap-2.5">
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-sm shrink-0 w-12 text-center"
-                style={{ background: "#22c55e18", color: "#22c55e", border: "1px solid #22c55e30" }}>
+          {/* Waveform area */}
+          <div className="px-4 pb-4 space-y-1.5">
+            {/* Agent row */}
+            <div className="flex items-center gap-3">
+              <span className="text-[9px] font-bold tracking-widest uppercase shrink-0 w-10 text-right"
+                style={{ color: status === "speaking" ? "#22c55e" : "#333" }}>
                 Agent
               </span>
-              <AgentBars active={status === "speaking"} />
+              <div style={{ height: 44, flex: 1, position: "relative" }}>
+                <WaveCanvas
+                  active={status === "speaking"}
+                  color={status === "speaking" ? "#22c55e" : "#1f3827"}
+                  glowColor="#22c55e"
+                  amplitude={0.44}
+                  speed={0.06}
+                />
+              </div>
             </div>
-            <div className="flex items-center gap-2.5">
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-sm shrink-0 w-12 text-center"
-                style={{ background: "#60a5fa18", color: "#60a5fa", border: "1px solid #60a5fa30" }}>
+
+            {/* Divider */}
+            <div style={{ height: 1, background: "#141414", marginLeft: 52 }} />
+
+            {/* You row */}
+            <div className="flex items-center gap-3">
+              <span className="text-[9px] font-bold tracking-widest uppercase shrink-0 w-10 text-right"
+                style={{ color: status === "listening" ? "#60a5fa" : "#333" }}>
                 You
               </span>
-              <UserDots active={status === "listening"} />
+              <div style={{ height: 44, flex: 1, position: "relative" }}>
+                <WaveCanvas
+                  active={status === "listening"}
+                  color={status === "listening" ? "#60a5fa" : "#1a2535"}
+                  glowColor="#60a5fa"
+                  amplitude={0.36}
+                  speed={0.045}
+                />
+              </div>
             </div>
           </div>
 
           {/* Status footer */}
-          <div className="flex items-center justify-between px-4 py-2.5" style={{ borderTop: "1px solid #1c1c1c" }}>
-            <div className="flex items-center gap-3 text-[11px]" style={{ color: "#555" }}>
+          <div className="flex items-center justify-between px-4 py-2.5" style={{ borderTop: "1px solid #141414" }}>
+            <div className="flex items-center gap-3 text-[11px]" style={{ color: "#444" }}>
               <span className="flex items-center gap-1.5">
-                <span className="h-1.5 w-1.5 rounded-full" style={{ background: "#22c55e" }} />
+                <span className="h-1.5 w-1.5 rounded-full transition-colors"
+                  style={{ background: status === "speaking" ? "#22c55e" : "#2a2a2a" }} />
                 Agent {agentLabel}
               </span>
-              <span style={{ color: "#2a2a2a" }}>•</span>
+              <span style={{ color: "#222" }}>•</span>
               <span className="flex items-center gap-1.5">
-                <span className="h-1.5 w-1.5 rounded-full" style={{ background: "#60a5fa" }} />
+                <span className="h-1.5 w-1.5 rounded-full transition-colors"
+                  style={{ background: status === "listening" ? "#60a5fa" : "#2a2a2a" }} />
                 Mic connected
               </span>
             </div>
-            <span className="text-[11px] font-mono tabular-nums" style={{ color: "#555" }}>{fmtTime(elapsed)}</span>
+            <span className="text-[11px] font-mono tabular-nums" style={{ color: "#444" }}>{fmtTime(elapsed)}</span>
           </div>
         </div>
 
