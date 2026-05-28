@@ -12,7 +12,7 @@ interface SpeechRecognitionInstance {
   stop: () => void;
   abort: () => void;
   onresult: ((event: SpeechRecognitionEvent) => void) | null;
-  onerror: ((event: Event) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
   onend: (() => void) | null;
 }
 
@@ -27,6 +27,10 @@ interface SpeechRecognitionEvent extends Event {
   };
 }
 
+interface SpeechRecognitionErrorEvent extends Event {
+  error?: string;
+}
+
 function getSpeechRecognitionCtor(): SpeechRecognitionCtor | null {
   if (typeof window === "undefined") return null;
   const w = window as unknown as {
@@ -35,6 +39,8 @@ function getSpeechRecognitionCtor(): SpeechRecognitionCtor | null {
   };
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
+
+const FATAL_ERRORS = new Set(["not-allowed", "service-not-allowed"]);
 
 interface VoiceInputButtonProps {
   onTranscript: (text: string) => void;
@@ -45,10 +51,17 @@ export function VoiceInputButton({ onTranscript, className }: VoiceInputButtonPr
   const [supported, setSupported] = useState(false);
   const [recording, setRecording] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const intentRef = useRef(false);
+  const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setSupported(getSpeechRecognitionCtor() !== null);
     return () => {
+      intentRef.current = false;
+      if (restartTimerRef.current) {
+        clearTimeout(restartTimerRef.current);
+        restartTimerRef.current = null;
+      }
       try {
         recognitionRef.current?.abort();
       } catch {
@@ -58,6 +71,23 @@ export function VoiceInputButton({ onTranscript, className }: VoiceInputButtonPr
   }, []);
 
   if (!supported) return null;
+
+  const safeStart = (rec: SpeechRecognitionInstance) => {
+    try {
+      rec.start();
+    } catch {
+      if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
+      restartTimerRef.current = setTimeout(() => {
+        restartTimerRef.current = null;
+        if (!intentRef.current) return;
+        try {
+          rec.start();
+        } catch {
+          /* give up silently */
+        }
+      }, 250);
+    }
+  };
 
   const start = () => {
     const Ctor = getSpeechRecognitionCtor();
@@ -80,21 +110,37 @@ export function VoiceInputButton({ onTranscript, className }: VoiceInputButtonPr
         }
         if (finalText) onTranscript(finalText);
       };
-      rec.onerror = () => {
-        setRecording(false);
+      rec.onerror = (event) => {
+        const err = event.error;
+        if (err && FATAL_ERRORS.has(err)) {
+          intentRef.current = false;
+          setRecording(false);
+        }
+        /* benign errors (no-speech, aborted, audio-capture) — let onend auto-restart */
       };
       rec.onend = () => {
-        setRecording(false);
+        if (intentRef.current) {
+          safeStart(rec);
+        } else {
+          setRecording(false);
+        }
       };
       recognitionRef.current = rec;
-      rec.start();
+      intentRef.current = true;
       setRecording(true);
+      safeStart(rec);
     } catch {
+      intentRef.current = false;
       setRecording(false);
     }
   };
 
   const stop = () => {
+    intentRef.current = false;
+    if (restartTimerRef.current) {
+      clearTimeout(restartTimerRef.current);
+      restartTimerRef.current = null;
+    }
     try {
       recognitionRef.current?.stop();
     } catch {
