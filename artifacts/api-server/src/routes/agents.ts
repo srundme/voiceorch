@@ -95,10 +95,9 @@ router.post("/agents", requireAuth, async (req, res): Promise<void> => {
       insertData["promptTemplateVersion"] = active.version;
       insertData["wizardInputs"] = wizardInputs;
     } catch (err) {
-      req.log.error({ err }, "Failed to generate agent prompt from master template");
-      const message = err instanceof Error ? err.message : "Prompt generation failed";
-      res.status(502).json({ error: `Failed to generate agent prompt: ${message}` });
-      return;
+      req.log.warn({ err }, "Gemini prompt generation failed — falling back to wizard-provided systemPrompt");
+      insertData["wizardInputs"] = wizardInputs;
+      // generatedPrompt and promptTemplateVersion left unset; systemPrompt from payload is used
     }
   }
 
