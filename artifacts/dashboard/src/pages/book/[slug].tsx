@@ -3,6 +3,7 @@ import { useRoute } from "wouter";
 import { format, parseISO } from "date-fns";
 import { Calendar, Clock, CheckCircle, AlertCircle, Video } from "lucide-react";
 import { buildBookingPayload } from "./bookingPayload";
+import { addDays, formatDate, slotsByDay } from "./slotHelpers";
 import {
   useGetPublicEventType,
   useGetPublicSlots,
@@ -17,15 +18,6 @@ import { Badge } from "@/components/ui/badge";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-function addDays(date: Date, days: number) {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  return d;
-}
-
-function formatDate(d: Date) {
-  return d.toISOString().slice(0, 10);
-}
 
 export default function PublicBookingPage() {
   const [, params] = useRoute("/book/:slug");
@@ -167,12 +159,7 @@ export default function PublicBookingPage() {
     );
   }
 
-  const slotsByDay = (slots ?? []).reduce<Record<string, string[]>>((acc, s) => {
-    const day = parseISO(s.slotStart).toISOString().slice(0, 10);
-    if (!acc[day]) acc[day] = [];
-    acc[day]!.push(s.slotStart);
-    return acc;
-  }, {});
+  const groupedSlots = slotsByDay(slots ?? []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4 sm:p-8">
@@ -197,11 +184,11 @@ export default function PublicBookingPage() {
               <Calendar className="h-4 w-4" /> Select a time
             </h2>
             {slotsLoading && <div className="text-muted-foreground text-sm animate-pulse">Loading slots...</div>}
-            {!slotsLoading && Object.keys(slotsByDay).length === 0 && (
+            {!slotsLoading && Object.keys(groupedSlots).length === 0 && (
               <p className="text-muted-foreground text-sm">No available slots in the next 2 weeks. Please check back later.</p>
             )}
             <div className="flex flex-col gap-4">
-              {Object.entries(slotsByDay).map(([day, daySlots]) => (
+              {Object.entries(groupedSlots).map(([day, daySlots]) => (
                 <div key={day}>
                   <p className="text-xs font-semibold text-slate-500 mb-2">
                     {format(parseISO(day + "T00:00:00"), "EEEE, MMMM d")}
