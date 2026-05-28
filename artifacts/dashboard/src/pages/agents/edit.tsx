@@ -46,11 +46,12 @@ import {
   LLM_MODELS,
   TTS_MODELS,
   TTS_VOICES,
+  getModelError,
 } from "@/lib/agent-providers";
 
 /* ── Form schema ──────────────────────────────────────────────────────────── */
 
-const agentFormSchema = z.object({
+export const agentFormSchema = z.object({
   name:              z.string().min(1, "Name is required"),
   description:       z.string().optional(),
   asrProvider:       z.string().min(1, "ASR Provider is required"),
@@ -96,6 +97,15 @@ const agentFormSchema = z.object({
     required: z.boolean().optional(),
     options: z.string().optional(),
   })).optional(),
+}).superRefine((data, ctx) => {
+  const asrErr = getModelError(data.asrProvider, data.asrModel, ASR_MODELS);
+  if (asrErr) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["asrModel"], message: asrErr });
+
+  const llmErr = getModelError(data.llmProvider, data.llmModel, LLM_MODELS);
+  if (llmErr) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["llmModel"], message: llmErr });
+
+  const ttsErr = getModelError(data.ttsProvider, data.ttsModel, TTS_MODELS);
+  if (ttsErr) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["ttsModel"], message: ttsErr });
 });
 
 type AgentFormValues = z.infer<typeof agentFormSchema>;

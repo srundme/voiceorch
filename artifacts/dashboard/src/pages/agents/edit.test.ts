@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { UpdateAgentBody } from "@workspace/api-zod";
-import { buildUpdateAgentPayload } from "./edit";
+import { buildUpdateAgentPayload, agentFormSchema } from "./edit";
 import type { AgentFormValues } from "./edit";
 
 const BASE: AgentFormValues = {
@@ -186,5 +186,140 @@ describe("buildUpdateAgentPayload", () => {
     const data: AgentFormValues = { ...BASE, promptVariables: [] };
     const payload = buildUpdateAgentPayload(data);
     expect((payload.agentConfig as any)?.promptVariables).toBeUndefined();
+  });
+});
+
+describe("agentFormSchema — provider/model cross-field validation", () => {
+  const VALID_BASE = {
+    name: "Test Bot",
+    asrProvider: "azure",
+    asrModel: "en-US-standard",
+    llmProvider: "openai",
+    llmModel: "gpt-4o-mini",
+    ttsProvider: "cartesia",
+    ttsModel: "sonic-3.5",
+    ttsVoice: "",
+    telephonyProvider: "twilio",
+    systemPrompt: "You are a helpful assistant.",
+  };
+
+  it("valid provider/model combinations — passes schema", () => {
+    const result = agentFormSchema.safeParse(VALID_BASE);
+    expect(result.success, JSON.stringify(result)).toBe(true);
+  });
+
+  it("mismatched ASR provider+model — reports error on asrModel", () => {
+    const result = agentFormSchema.safeParse({
+      ...VALID_BASE,
+      asrProvider: "azure",
+      asrModel: "nova-2-general",
+    });
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    const paths = result.error.issues.map(i => i.path.join("."));
+    expect(paths).toContain("asrModel");
+  });
+
+  it("mismatched LLM provider+model — reports error on llmModel", () => {
+    const result = agentFormSchema.safeParse({
+      ...VALID_BASE,
+      llmProvider: "openai",
+      llmModel: "gemini-2.5-flash",
+    });
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    const paths = result.error.issues.map(i => i.path.join("."));
+    expect(paths).toContain("llmModel");
+  });
+
+  it("mismatched TTS provider+model — reports error on ttsModel", () => {
+    const result = agentFormSchema.safeParse({
+      ...VALID_BASE,
+      ttsProvider: "cartesia",
+      ttsModel: "sarvam-voice",
+    });
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    const paths = result.error.issues.map(i => i.path.join("."));
+    expect(paths).toContain("ttsModel");
+  });
+
+  it("provider with no predefined model list (elevenlabs) — any model string is accepted", () => {
+    const result = agentFormSchema.safeParse({
+      ...VALID_BASE,
+      ttsProvider: "elevenlabs",
+      ttsModel: "some-custom-voice-id",
+    });
+    expect(result.success, JSON.stringify(result)).toBe(true);
+  });
+
+  it("empty model field — not treated as a mismatch (falls back to runtime default)", () => {
+    const result = agentFormSchema.safeParse({
+      ...VALID_BASE,
+      asrModel: "",
+      llmModel: "",
+      ttsModel: "",
+    });
+    expect(result.success, JSON.stringify(result)).toBe(true);
+  });
+
+  it("assemblyai with valid model — passes", () => {
+    const result = agentFormSchema.safeParse({
+      ...VALID_BASE,
+      asrProvider: "assemblyai",
+      asrModel: "best",
+    });
+    expect(result.success, JSON.stringify(result)).toBe(true);
+  });
+
+  it("assemblyai with invalid model — fails", () => {
+    const result = agentFormSchema.safeParse({
+      ...VALID_BASE,
+      asrProvider: "assemblyai",
+      asrModel: "en-US-standard",
+    });
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    const paths = result.error.issues.map(i => i.path.join("."));
+    expect(paths).toContain("asrModel");
+  });
+
+  it("sarvam LLM with valid model — passes", () => {
+    const result = agentFormSchema.safeParse({
+      ...VALID_BASE,
+      llmProvider: "sarvam",
+      llmModel: "sarvam-m",
+    });
+    expect(result.success, JSON.stringify(result)).toBe(true);
+  });
+
+  it("sarvam LLM with mismatched model — fails", () => {
+    const result = agentFormSchema.safeParse({
+      ...VALID_BASE,
+      llmProvider: "sarvam",
+      llmModel: "gpt-4o",
+    });
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    const paths = result.error.issues.map(i => i.path.join("."));
+    expect(paths).toContain("llmModel");
+  });
+
+  it("multiple mismatches — all three field errors reported at once", () => {
+    const result = agentFormSchema.safeParse({
+      ...VALID_BASE,
+      asrProvider: "azure",
+      asrModel: "nova-2-general",
+      llmProvider: "openai",
+      llmModel: "gemini-2.5-flash",
+      ttsProvider: "cartesia",
+      ttsModel: "unknown-model",
+    });
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    const paths = result.error.issues.map(i => i.path.join("."));
+    expect(paths).toContain("asrModel");
+    expect(paths).toContain("llmModel");
+    expect(paths).toContain("ttsModel");
   });
 });

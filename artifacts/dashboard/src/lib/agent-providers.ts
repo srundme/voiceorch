@@ -84,6 +84,26 @@ export const TTS_VOICES: Record<string, { value: string; label: string }[] | nul
   ],
 };
 
+/**
+ * Returns an inline error message if `model` is not in the known list for
+ * `provider`, or `null` when the combination is valid.
+ *
+ * Returns `null` for two safe cases:
+ *   - The provider has no predefined model list (e.g. ElevenLabs, Deepgram for TTS).
+ *   - The model field is empty / undefined (UI falls back to runtime defaults).
+ */
+export function getModelError(
+  provider: string,
+  model: string | undefined,
+  catalogue: Record<string, { value: string; label: string }[]>,
+): string | null {
+  const known = catalogue[provider];
+  if (!known || !model) return null;
+  return known.some(m => m.value === model)
+    ? null
+    : `"${model}" is not available for the selected provider. Choose a model from the dropdown.`;
+}
+
 export const LANGUAGES = [
   { value: "en-US", label: "English (US)" },
   { value: "en-GB", label: "English (UK)" },

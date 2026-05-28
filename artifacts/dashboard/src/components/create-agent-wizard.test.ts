@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { CreateAgentBody } from "@workspace/api-zod";
 import { buildCreateAgentPayload } from "./create-agent-wizard";
+import { getModelError, ASR_MODELS, LLM_MODELS, TTS_MODELS } from "@/lib/agent-providers";
 
 const BASE_MANAGED = {
   mode: "managed" as const,
@@ -101,5 +102,71 @@ describe("buildCreateAgentPayload", () => {
     expect(result.success, JSON.stringify(result)).toBe(true);
     if (!result.success) return;
     expect(result.data.systemPrompt).toBe("AI-generated prompt");
+  });
+
+  it("managed stack models are always valid — no provider/model mismatch in managed mode", () => {
+    const englishPayload = buildCreateAgentPayload(BASE_MANAGED);
+    expect(getModelError(englishPayload.asrProvider!, englishPayload.asrModel, ASR_MODELS)).toBeNull();
+    expect(getModelError(englishPayload.llmProvider!, englishPayload.llmModel, LLM_MODELS)).toBeNull();
+  });
+
+  it("managed stack for Indic — sarvam+gemini combination is valid", () => {
+    const state = { ...BASE_MANAGED, additionalLanguages: ["hindi"] };
+    const payload = buildCreateAgentPayload(state);
+    expect(getModelError(payload.asrProvider!, payload.asrModel, ASR_MODELS)).toBeNull();
+    expect(getModelError(payload.llmProvider!, payload.llmModel, LLM_MODELS)).toBeNull();
+  });
+});
+
+describe("getModelError — provider/model validation utility", () => {
+  it("returns null for a valid ASR provider+model pair", () => {
+    expect(getModelError("azure", "en-US-standard", ASR_MODELS)).toBeNull();
+    expect(getModelError("assemblyai", "best", ASR_MODELS)).toBeNull();
+    expect(getModelError("sarvam", "saarika:v2.5", ASR_MODELS)).toBeNull();
+    expect(getModelError("cartesia", "sonic-english", ASR_MODELS)).toBeNull();
+  });
+
+  it("returns an error string for a mismatched ASR provider+model", () => {
+    expect(getModelError("azure", "nova-2-general", ASR_MODELS)).not.toBeNull();
+    expect(getModelError("assemblyai", "en-US-standard", ASR_MODELS)).not.toBeNull();
+    expect(getModelError("sarvam", "gpt-4o", ASR_MODELS)).not.toBeNull();
+  });
+
+  it("returns null for a valid LLM provider+model pair", () => {
+    expect(getModelError("openai", "gpt-4o", LLM_MODELS)).toBeNull();
+    expect(getModelError("google", "gemini-2.5-flash", LLM_MODELS)).toBeNull();
+    expect(getModelError("groq", "llama-3.3-70b-versatile", LLM_MODELS)).toBeNull();
+    expect(getModelError("sarvam", "sarvam-m", LLM_MODELS)).toBeNull();
+  });
+
+  it("returns an error string for a mismatched LLM provider+model", () => {
+    expect(getModelError("openai", "gemini-2.5-flash", LLM_MODELS)).not.toBeNull();
+    expect(getModelError("google", "gpt-4o", LLM_MODELS)).not.toBeNull();
+    expect(getModelError("sarvam", "llama-3.3-70b-versatile", LLM_MODELS)).not.toBeNull();
+  });
+
+  it("returns null for a valid TTS provider+model pair", () => {
+    expect(getModelError("cartesia", "sonic-3.5", TTS_MODELS)).toBeNull();
+    expect(getModelError("cartesia", "sonic-turbo", TTS_MODELS)).toBeNull();
+  });
+
+  it("returns an error string for a mismatched TTS provider+model", () => {
+    expect(getModelError("cartesia", "sarvam-voice", TTS_MODELS)).not.toBeNull();
+    expect(getModelError("cartesia", "nova-2", TTS_MODELS)).not.toBeNull();
+  });
+
+  it("returns null when provider has no known model list (e.g. elevenlabs)", () => {
+    expect(getModelError("elevenlabs", "any-voice-id", TTS_MODELS)).toBeNull();
+  });
+
+  it("returns null when model is undefined or empty", () => {
+    expect(getModelError("azure", undefined, ASR_MODELS)).toBeNull();
+    expect(getModelError("openai", "", LLM_MODELS)).toBeNull();
+    expect(getModelError("cartesia", undefined, TTS_MODELS)).toBeNull();
+  });
+
+  it("returns null for an unknown provider (not in catalogue)", () => {
+    expect(getModelError("deepgram", "nova-2-general", ASR_MODELS)).toBeNull();
+    expect(getModelError("cohere", "command-r-plus", LLM_MODELS)).toBeNull();
   });
 });
