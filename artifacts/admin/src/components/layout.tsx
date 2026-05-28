@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { AlertsBell } from "@/components/alerts-bell";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -34,7 +35,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/", label: "Overview", icon: Activity },
     { href: "/users", label: "Users", icon: Users },
     { href: "/finance", label: "Finance", icon: Wallet },
-    { href: "/usage", label: "Usage", icon: BarChart2 },
+    { href: "/usage", label: "Usage Monitoring", icon: BarChart2 },
     { href: "/platform", label: "Platform", icon: Cpu },
     { href: "/growth", label: "Growth", icon: BarChart3 },
     { href: "/managed-keys", label: "Managed Keys", icon: KeyRound },
@@ -90,9 +91,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0">
-        <div className="md:hidden h-14 border-b flex items-center px-4 bg-card">
-          <Terminal className="h-5 w-5 mr-3 text-primary" />
-          <span className="font-bold tracking-tight">VOICEORCH_OPS</span>
+        <div className="h-14 border-b border-border flex items-center justify-between px-4 md:px-8 bg-card">
+          <div className="flex items-center md:hidden">
+            <Terminal className="h-5 w-5 mr-3 text-primary" />
+            <span className="font-bold tracking-tight">VOICEORCH_OPS</span>
+          </div>
+          <div className="hidden md:block" />
+          <div className="flex items-center gap-2">
+            <AlertsBell />
+          </div>
         </div>
         <div className="flex-1 overflow-auto p-6 md:p-8">
           <div className="max-w-7xl mx-auto space-y-8">

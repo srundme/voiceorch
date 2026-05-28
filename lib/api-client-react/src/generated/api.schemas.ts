@@ -1500,36 +1500,6 @@ export interface AdminSaveListedVoicesInput {
   voices: AdminSaveListedVoicesInputVoicesItem[];
 }
 
-export interface AdminUsageRow {
-  /** @nullable */
-  clerkId: string | null;
-  /** @nullable */
-  email: string | null;
-  callCount: number;
-  sttCallCount: number;
-  /** @nullable */
-  avgSttLatencyMs?: number | null;
-  llmCallCount: number;
-  /** @nullable */
-  avgLlmLatencyMs?: number | null;
-  ttsCallCount: number;
-  /** @nullable */
-  avgTtsFirstChunkMs?: number | null;
-  totalDurationSeconds: number;
-  totalCostCents: number;
-}
-
-export type AdminUsageResponseTotals = {
-  totalSttCalls: number;
-  totalLlmCalls: number;
-  totalTtsCalls: number;
-};
-
-export interface AdminUsageResponse {
-  totals: AdminUsageResponseTotals;
-  rows: AdminUsageRow[];
-}
-
 export interface KycStatusResponse {
   /** pending | completed | failed */
   kycStatus: string;
@@ -1551,6 +1521,220 @@ export interface KycStartResponse {
   status: string;
   /** @nullable */
   widgetUrl?: string | null;
+}
+
+export interface AdminUsageKpis {
+  allocatedMicros: number;
+  usedMicros: number;
+  remainingMicros: number;
+  eventCount: number;
+  failedCount: number;
+}
+
+export interface AdminUsageServiceKpis {
+  service: string;
+  kpis: AdminUsageKpis;
+}
+
+export interface AdminUsageTrendPoint {
+  bucket: string;
+  costMicros: number;
+  eventCount: number;
+  /** @nullable */
+  service?: string | null;
+}
+
+export interface AdminUsageProviderShare {
+  provider: string;
+  costMicros: number;
+  eventCount: number;
+}
+
+export interface AdminUsageOverviewResponse {
+  combined: AdminUsageKpis;
+  perService: AdminUsageServiceKpis[];
+  dailyTrend: AdminUsageTrendPoint[];
+  providerShare: AdminUsageProviderShare[];
+}
+
+export interface AdminUsageModelBreakdown {
+  model: string;
+  costMicros: number;
+  eventCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  audioSeconds: number;
+  characters: number;
+  allocatedMicros: number;
+}
+
+export interface AdminUsageProviderBreakdown {
+  provider: string;
+  allocatedMicros: number;
+  usedMicros: number;
+  remainingMicros: number;
+  eventCount: number;
+  failedCount?: number;
+  models: AdminUsageModelBreakdown[];
+}
+
+export interface AdminUsageServiceResponse {
+  service: string;
+  kpis: AdminUsageKpis;
+  providers: AdminUsageProviderBreakdown[];
+  dailyTrend: AdminUsageTrendPoint[];
+  weeklyTrend: AdminUsageTrendPoint[];
+  monthlyTrend: AdminUsageTrendPoint[];
+}
+
+export interface AdminUsageUserRow {
+  /** @nullable */
+  userId: string | null;
+  /** @nullable */
+  email: string | null;
+  eventCount: number;
+  costMicros: number;
+  sttCostMicros: number;
+  llmCostMicros: number;
+  ttsCostMicros: number;
+}
+
+export interface AdminUsageWorkspaceRow {
+  /** @nullable */
+  workspaceId: string | null;
+  eventCount: number;
+  costMicros: number;
+  sttCostMicros?: number;
+  llmCostMicros?: number;
+  ttsCostMicros?: number;
+}
+
+export interface AdminUsageHistoryEntry {
+  id: number;
+  createdAt: string;
+  service: string;
+  provider: string;
+  /** @nullable */
+  model: string | null;
+  /** @nullable */
+  userId?: string | null;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  workspaceId?: string | null;
+  /** @nullable */
+  callId?: number | null;
+  inputTokens?: number;
+  outputTokens?: number;
+  audioSeconds?: number;
+  characters?: number;
+  /** @nullable */
+  latencyMs?: number | null;
+  estimatedCostMicros: number;
+  success: boolean;
+  /** @nullable */
+  errorMessage?: string | null;
+}
+
+export interface AdminUsageHistoryResponse {
+  rows: AdminUsageHistoryEntry[];
+  total: number;
+}
+
+export interface AdminPricingRow {
+  id: number;
+  service: string;
+  provider: string;
+  model: string;
+  inputTokenPricePerMillionMicros: number;
+  outputTokenPricePerMillionMicros: number;
+  audioSecondPriceMicros: number;
+  characterPriceMicros: number;
+  updatedAt?: string;
+}
+
+export type AdminPricingInputService = typeof AdminPricingInputService[keyof typeof AdminPricingInputService];
+
+
+export const AdminPricingInputService = {
+  stt: 'stt',
+  tts: 'tts',
+  llm: 'llm',
+} as const;
+
+export interface AdminPricingInput {
+  service: AdminPricingInputService;
+  provider: string;
+  model: string;
+  inputTokenPricePerMillionMicros?: number;
+  outputTokenPricePerMillionMicros?: number;
+  audioSecondPriceMicros?: number;
+  characterPriceMicros?: number;
+}
+
+export interface AdminAllocationRow {
+  id: number;
+  service: string;
+  provider: string;
+  /** @nullable */
+  workspaceId?: string | null;
+  allocatedCostMicros: number;
+  lowBalanceThresholdMicros: number;
+  /** @nullable */
+  notes?: string | null;
+  updatedAt?: string;
+}
+
+export type AdminAllocationInputService = typeof AdminAllocationInputService[keyof typeof AdminAllocationInputService];
+
+
+export const AdminAllocationInputService = {
+  stt: 'stt',
+  tts: 'tts',
+  llm: 'llm',
+} as const;
+
+export interface AdminAllocationInput {
+  service: AdminAllocationInputService;
+  provider: string;
+  /** @nullable */
+  workspaceId?: string | null;
+  allocatedCostMicros: number;
+  lowBalanceThresholdMicros?: number;
+  /** @nullable */
+  notes?: string | null;
+}
+
+/**
+ * @nullable
+ */
+export type AdminAlertPayload = { [key: string]: unknown } | null;
+
+export interface AdminAlert {
+  id: number;
+  createdAt: string;
+  type: string;
+  severity: string;
+  title: string;
+  message: string;
+  /** @nullable */
+  service?: string | null;
+  /** @nullable */
+  provider?: string | null;
+  /** @nullable */
+  model?: string | null;
+  /** @nullable */
+  payload?: AdminAlertPayload;
+  dedupeKey: string;
+  /** @nullable */
+  acknowledgedAt?: string | null;
+  /** @nullable */
+  acknowledgedBy?: string | null;
+}
+
+export interface AdminAlertsResponse {
+  alerts: AdminAlert[];
+  unacknowledgedCount: number;
 }
 
 export type ListCallsParams = {
@@ -1688,22 +1872,80 @@ startDate: string;
 endDate: string;
 };
 
-export type AdminGetUsageParams = {
-/**
- * Filter window in days. 0 = all time. Allowed: 0, 7, 30, 90. Defaults to 30.
- */
-days?: AdminGetUsageDays;
+export type AdminUsageOverviewParams = {
+days?: number;
 };
 
-export type AdminGetUsageDays = typeof AdminGetUsageDays[keyof typeof AdminGetUsageDays];
+export type AdminUsageByServiceParams = {
+days?: number;
+/**
+ * @nullable
+ */
+provider?: string | null;
+/**
+ * @nullable
+ */
+model?: string | null;
+/**
+ * @nullable
+ */
+userId?: string | null;
+/**
+ * @nullable
+ */
+workspaceId?: string | null;
+};
 
+export type AdminUsageByUserParams = {
+days?: number;
+};
 
-export const AdminGetUsageDays = {
-  NUMBER_0: 0,
-  NUMBER_7: 7,
-  NUMBER_30: 30,
-  NUMBER_90: 90,
-} as const;
+export type AdminUsageByUser200 = {
+  rows: AdminUsageUserRow[];
+};
+
+export type AdminUsageByWorkspaceParams = {
+days?: number;
+};
+
+export type AdminUsageByWorkspace200 = {
+  rows: AdminUsageWorkspaceRow[];
+};
+
+export type AdminUsageHistoryParams = {
+limit?: number;
+offset?: number;
+/**
+ * @nullable
+ */
+service?: string | null;
+/**
+ * @nullable
+ */
+provider?: string | null;
+/**
+ * @nullable
+ */
+model?: string | null;
+/**
+ * @nullable
+ */
+userId?: string | null;
+/**
+ * @nullable
+ */
+workspaceId?: string | null;
+/**
+ * @nullable
+ */
+search?: string | null;
+days?: number;
+};
+
+export type AdminListAlertsParams = {
+limit?: number;
+onlyUnacknowledged?: boolean;
+};
 
 export type AdminGetCartesiaVoices200 = {
   voices: AdminVoice[];

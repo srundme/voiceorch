@@ -14,8 +14,16 @@ import Platform from "@/pages/platform";
 import Growth from "@/pages/growth";
 import ManagedKeys from "@/pages/managed-keys";
 import Voices from "@/pages/voices";
-import Usage from "@/pages/usage";
 import PlatformSettings from "@/pages/settings";
+
+import UsageOverviewPage from "@/pages/usage/overview";
+import ServicePage from "@/pages/usage/service";
+import UsageUsersPage from "@/pages/usage/users";
+import UsageWorkspacesPage from "@/pages/usage/workspaces";
+import UsageHistoryPage from "@/pages/usage/history";
+import PricingPage from "@/pages/usage/pricing";
+import AllocationsPage from "@/pages/usage/allocations";
+import AlertsPage from "@/pages/usage/alerts";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -28,7 +36,7 @@ const queryClient = new QueryClient({
 
 function ProtectedRoute({ component: Component, ...rest }: { component: any; path?: string }) {
   const token = localStorage.getItem("adminToken");
-  
+
   if (!token) {
     window.location.href = `${import.meta.env.BASE_URL}login`;
     return null;
@@ -57,7 +65,18 @@ function Router() {
       <ProtectedRoute path="/growth" component={Growth} />
       <ProtectedRoute path="/managed-keys" component={ManagedKeys} />
       <ProtectedRoute path="/voices" component={Voices} />
-      <ProtectedRoute path="/usage" component={Usage} />
+
+      <ProtectedRoute path="/usage" component={UsageOverviewPage} />
+      <ProtectedRoute path="/usage/stt" component={() => <ServicePage service="stt" />} />
+      <ProtectedRoute path="/usage/tts" component={() => <ServicePage service="tts" />} />
+      <ProtectedRoute path="/usage/llm" component={() => <ServicePage service="llm" />} />
+      <ProtectedRoute path="/usage/users" component={UsageUsersPage} />
+      <ProtectedRoute path="/usage/workspaces" component={UsageWorkspacesPage} />
+      <ProtectedRoute path="/usage/history" component={UsageHistoryPage} />
+      <ProtectedRoute path="/usage/pricing" component={PricingPage} />
+      <ProtectedRoute path="/usage/allocations" component={AllocationsPage} />
+      <ProtectedRoute path="/usage/alerts" component={AlertsPage} />
+
       <ProtectedRoute path="/settings" component={PlatformSettings} />
       <Route component={NotFound} />
     </Switch>

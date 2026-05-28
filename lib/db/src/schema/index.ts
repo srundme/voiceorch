@@ -15,3 +15,7 @@ export * from "./platform-listed-voices";
 export * from "./usage-spike-dismissals";
 export * from "./usage-spike-notifications";
 export * from "./kyc";
+export * from "./usage-events";
+export * from "./provider-pricing";
+export * from "./provider-allocations";
+export * from "./admin-alerts";

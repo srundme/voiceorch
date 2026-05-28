@@ -561,6 +561,63 @@ export async function endSession(sessionId: string): Promise<void> {
     const [call] = await db.select().from(callsTable).where(eq(callsTable.id, session.callId));
     if (call) {
       const [ag] = await db.select().from(agentsTable).where(eq(agentsTable.id, call.agentId));
+      // ── Record per-service usage events (STT / LLM / TTS) ────────────────────
+      if (ag) {
+        const { recordUsage } = await import("../services/usage/record-usage.js");
+        const turns = metricsAcc.count;
+        // A connected call that produced zero turns indicates a pipeline failure
+        // (STT never produced text, LLM never replied, or TTS never spoke).
+        // Always emit one event per service so error_spike/provider_down alerting
+        // sees real failures even when no turns succeeded.
+        const success = turns > 0;
+        const errorMessage = success ? null : "no_turns_completed";
+        const safeDuration = Math.max(durationSeconds, 0);
+        // Prefer real token/char totals tallied during the call when the pipeline
+        // exposes them; fall back to a turn-count estimate so per-event cost stays
+        // monotonic until every provider adapter reports real metrics.
+        const pipelineAny = session.pipeline as unknown as {
+          getUsageTotals?: () => { llmInputTokens?: number; llmOutputTokens?: number; ttsCharacters?: number };
+        };
+        const llmUsage = pipelineAny.getUsageTotals?.() ?? null;
+        const ttsChars = llmUsage?.ttsCharacters ?? Math.max(turns, 1) * 220;
+        const inputTokens = llmUsage?.llmInputTokens ?? Math.max(turns, 1) * 200;
+        const outputTokens = llmUsage?.llmOutputTokens ?? Math.max(turns, 1) * 60;
+
+        void recordUsage({
+          service: "stt",
+          provider: ag.asrProvider,
+          model: ag.asrModel,
+          userId: ag.userId ?? null,
+          callId: call.id,
+          audioSeconds: safeDuration,
+          latencyMs: avgSttMs,
+          success,
+          errorMessage,
+        });
+        void recordUsage({
+          service: "llm",
+          provider: ag.llmProvider,
+          model: ag.llmModel,
+          userId: ag.userId ?? null,
+          callId: call.id,
+          inputTokens,
+          outputTokens,
+          latencyMs: avgLlmMs,
+          success,
+          errorMessage,
+        });
+        void recordUsage({
+          service: "tts",
+          provider: ag.ttsProvider,
+          model: ag.ttsModel,
+          userId: ag.userId ?? null,
+          callId: call.id,
+          characters: ttsChars,
+          latencyMs: avgTtsMs,
+          success,
+          errorMessage,
+        });
+      }
       if (ag) {
         const prevCount    = ag.successfulCalls;
         const newSuccessful = prevCount + 1;

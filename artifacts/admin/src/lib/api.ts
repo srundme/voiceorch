@@ -21,8 +21,14 @@ export async function adminFetch<T>(path: string, opts?: RequestInit): Promise<T
     const errorText = await res.text().catch(() => "");
     throw new Error(`HTTP ${res.status}: ${errorText || res.statusText}`);
   }
-  
-  return res.json() as Promise<T>;
+
+  // 204 No Content (or empty body) — common for DELETE/PUT — has no JSON to parse.
+  if (res.status === 204) return undefined as T;
+  const ct = res.headers.get("content-type") ?? "";
+  if (!ct.includes("application/json")) return undefined as T;
+  const text = await res.text();
+  if (!text) return undefined as T;
+  return JSON.parse(text) as T;
 }
 
 export function formatCentsToDollars(cents: number): string {

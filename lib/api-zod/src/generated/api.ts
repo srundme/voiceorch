@@ -2117,33 +2117,355 @@ export const CreatePublicBookingBody = zod.object({
 
 
 /**
- * @summary Platform-wide STT/LLM/TTS usage breakdown by user
+ * @summary Combined STT/TTS/LLM overview with cost totals and trends
  */
-export const adminGetUsageQueryDaysDefault = 30;
+export const adminUsageOverviewQueryDaysDefault = 30;
 
-export const AdminGetUsageQueryParams = zod.object({
-  "days": zod.union([zod.literal(0),zod.literal(7),zod.literal(30),zod.literal(90)]).default(adminGetUsageQueryDaysDefault).describe('Filter window in days. 0 = all time. Allowed: 0, 7, 30, 90. Defaults to 30.')
+export const AdminUsageOverviewQueryParams = zod.object({
+  "days": zod.coerce.number().default(adminUsageOverviewQueryDaysDefault)
 })
 
-export const AdminGetUsageResponse = zod.object({
-  "totals": zod.object({
-  "totalSttCalls": zod.number(),
-  "totalLlmCalls": zod.number(),
-  "totalTtsCalls": zod.number()
+export const AdminUsageOverviewResponse = zod.object({
+  "combined": zod.object({
+  "allocatedMicros": zod.number(),
+  "usedMicros": zod.number(),
+  "remainingMicros": zod.number(),
+  "eventCount": zod.number(),
+  "failedCount": zod.number()
 }),
-  "rows": zod.array(zod.object({
-  "clerkId": zod.string().nullable(),
-  "email": zod.string().nullable(),
-  "callCount": zod.number(),
-  "sttCallCount": zod.number(),
-  "avgSttLatencyMs": zod.number().nullish(),
-  "llmCallCount": zod.number(),
-  "avgLlmLatencyMs": zod.number().nullish(),
-  "ttsCallCount": zod.number(),
-  "avgTtsFirstChunkMs": zod.number().nullish(),
-  "totalDurationSeconds": zod.number(),
-  "totalCostCents": zod.number()
+  "perService": zod.array(zod.object({
+  "service": zod.string(),
+  "kpis": zod.object({
+  "allocatedMicros": zod.number(),
+  "usedMicros": zod.number(),
+  "remainingMicros": zod.number(),
+  "eventCount": zod.number(),
+  "failedCount": zod.number()
+})
+})),
+  "dailyTrend": zod.array(zod.object({
+  "bucket": zod.string(),
+  "costMicros": zod.number(),
+  "eventCount": zod.number(),
+  "service": zod.string().nullish()
+})),
+  "providerShare": zod.array(zod.object({
+  "provider": zod.string(),
+  "costMicros": zod.number(),
+  "eventCount": zod.number()
 }))
+})
+
+
+/**
+ * @summary Per-service breakdown by provider+model with trends
+ */
+export const AdminUsageByServiceParams = zod.object({
+  "service": zod.enum(['stt', 'tts', 'llm'])
+})
+
+export const adminUsageByServiceQueryDaysDefault = 30;
+
+export const AdminUsageByServiceQueryParams = zod.object({
+  "days": zod.coerce.number().default(adminUsageByServiceQueryDaysDefault),
+  "provider": zod.coerce.string().nullish(),
+  "model": zod.coerce.string().nullish(),
+  "userId": zod.coerce.string().nullish(),
+  "workspaceId": zod.coerce.string().nullish()
+})
+
+export const AdminUsageByServiceResponse = zod.object({
+  "service": zod.string(),
+  "kpis": zod.object({
+  "allocatedMicros": zod.number(),
+  "usedMicros": zod.number(),
+  "remainingMicros": zod.number(),
+  "eventCount": zod.number(),
+  "failedCount": zod.number()
+}),
+  "providers": zod.array(zod.object({
+  "provider": zod.string(),
+  "allocatedMicros": zod.number(),
+  "usedMicros": zod.number(),
+  "remainingMicros": zod.number(),
+  "eventCount": zod.number(),
+  "failedCount": zod.number().optional(),
+  "models": zod.array(zod.object({
+  "model": zod.string(),
+  "costMicros": zod.number(),
+  "eventCount": zod.number(),
+  "inputTokens": zod.number(),
+  "outputTokens": zod.number(),
+  "audioSeconds": zod.number(),
+  "characters": zod.number(),
+  "allocatedMicros": zod.number()
+}))
+})),
+  "dailyTrend": zod.array(zod.object({
+  "bucket": zod.string(),
+  "costMicros": zod.number(),
+  "eventCount": zod.number(),
+  "service": zod.string().nullish()
+})),
+  "weeklyTrend": zod.array(zod.object({
+  "bucket": zod.string(),
+  "costMicros": zod.number(),
+  "eventCount": zod.number(),
+  "service": zod.string().nullish()
+})),
+  "monthlyTrend": zod.array(zod.object({
+  "bucket": zod.string(),
+  "costMicros": zod.number(),
+  "eventCount": zod.number(),
+  "service": zod.string().nullish()
+}))
+})
+
+
+/**
+ * @summary Per-user usage with drill-down by service/provider
+ */
+export const adminUsageByUserQueryDaysDefault = 30;
+
+export const AdminUsageByUserQueryParams = zod.object({
+  "days": zod.coerce.number().default(adminUsageByUserQueryDaysDefault)
+})
+
+export const AdminUsageByUserResponse = zod.object({
+  "rows": zod.array(zod.object({
+  "userId": zod.string().nullable(),
+  "email": zod.string().nullable(),
+  "eventCount": zod.number(),
+  "costMicros": zod.number(),
+  "sttCostMicros": zod.number(),
+  "llmCostMicros": zod.number(),
+  "ttsCostMicros": zod.number()
+}))
+})
+
+
+/**
+ * @summary Per-workspace usage
+ */
+export const adminUsageByWorkspaceQueryDaysDefault = 30;
+
+export const AdminUsageByWorkspaceQueryParams = zod.object({
+  "days": zod.coerce.number().default(adminUsageByWorkspaceQueryDaysDefault)
+})
+
+export const AdminUsageByWorkspaceResponse = zod.object({
+  "rows": zod.array(zod.object({
+  "workspaceId": zod.string().nullable(),
+  "eventCount": zod.number(),
+  "costMicros": zod.number(),
+  "sttCostMicros": zod.number().optional(),
+  "llmCostMicros": zod.number().optional(),
+  "ttsCostMicros": zod.number().optional()
+}))
+})
+
+
+/**
+ * @summary Paginated, filterable history of individual usage events
+ */
+export const adminUsageHistoryQueryLimitDefault = 50;
+export const adminUsageHistoryQueryOffsetDefault = 0;
+export const adminUsageHistoryQueryDaysDefault = 30;
+
+export const AdminUsageHistoryQueryParams = zod.object({
+  "limit": zod.coerce.number().default(adminUsageHistoryQueryLimitDefault),
+  "offset": zod.coerce.number().default(adminUsageHistoryQueryOffsetDefault),
+  "service": zod.coerce.string().nullish(),
+  "provider": zod.coerce.string().nullish(),
+  "model": zod.coerce.string().nullish(),
+  "userId": zod.coerce.string().nullish(),
+  "workspaceId": zod.coerce.string().nullish(),
+  "search": zod.coerce.string().nullish(),
+  "days": zod.coerce.number().default(adminUsageHistoryQueryDaysDefault)
+})
+
+export const AdminUsageHistoryResponse = zod.object({
+  "rows": zod.array(zod.object({
+  "id": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "service": zod.string(),
+  "provider": zod.string(),
+  "model": zod.string().nullable(),
+  "userId": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "workspaceId": zod.string().nullish(),
+  "callId": zod.number().nullish(),
+  "inputTokens": zod.number().optional(),
+  "outputTokens": zod.number().optional(),
+  "audioSeconds": zod.number().optional(),
+  "characters": zod.number().optional(),
+  "latencyMs": zod.number().nullish(),
+  "estimatedCostMicros": zod.number(),
+  "success": zod.boolean(),
+  "errorMessage": zod.string().nullish()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary List per-(service, provider, model) pricing rows
+ */
+export const AdminListPricingResponseItem = zod.object({
+  "id": zod.number(),
+  "service": zod.string(),
+  "provider": zod.string(),
+  "model": zod.string(),
+  "inputTokenPricePerMillionMicros": zod.number(),
+  "outputTokenPricePerMillionMicros": zod.number(),
+  "audioSecondPriceMicros": zod.number(),
+  "characterPriceMicros": zod.number(),
+  "updatedAt": zod.coerce.date().optional()
+})
+export const AdminListPricingResponse = zod.array(AdminListPricingResponseItem)
+
+
+/**
+ * @summary Upsert a pricing row
+ */
+export const adminUpsertPricingBodyInputTokenPricePerMillionMicrosDefault = 0;
+export const adminUpsertPricingBodyOutputTokenPricePerMillionMicrosDefault = 0;
+export const adminUpsertPricingBodyAudioSecondPriceMicrosDefault = 0;
+export const adminUpsertPricingBodyCharacterPriceMicrosDefault = 0;
+
+export const AdminUpsertPricingBody = zod.object({
+  "service": zod.enum(['stt', 'tts', 'llm']),
+  "provider": zod.string(),
+  "model": zod.string(),
+  "inputTokenPricePerMillionMicros": zod.number().default(adminUpsertPricingBodyInputTokenPricePerMillionMicrosDefault),
+  "outputTokenPricePerMillionMicros": zod.number().default(adminUpsertPricingBodyOutputTokenPricePerMillionMicrosDefault),
+  "audioSecondPriceMicros": zod.number().default(adminUpsertPricingBodyAudioSecondPriceMicrosDefault),
+  "characterPriceMicros": zod.number().default(adminUpsertPricingBodyCharacterPriceMicrosDefault)
+})
+
+export const AdminUpsertPricingResponse = zod.object({
+  "id": zod.number(),
+  "service": zod.string(),
+  "provider": zod.string(),
+  "model": zod.string(),
+  "inputTokenPricePerMillionMicros": zod.number(),
+  "outputTokenPricePerMillionMicros": zod.number(),
+  "audioSecondPriceMicros": zod.number(),
+  "characterPriceMicros": zod.number(),
+  "updatedAt": zod.coerce.date().optional()
+})
+
+
+/**
+ * @summary Delete a pricing row
+ */
+export const AdminDeletePricingParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary List provider allocations
+ */
+export const AdminListAllocationsResponseItem = zod.object({
+  "id": zod.number(),
+  "service": zod.string(),
+  "provider": zod.string(),
+  "workspaceId": zod.string().nullish(),
+  "allocatedCostMicros": zod.number(),
+  "lowBalanceThresholdMicros": zod.number(),
+  "notes": zod.string().nullish(),
+  "updatedAt": zod.coerce.date().optional()
+})
+export const AdminListAllocationsResponse = zod.array(AdminListAllocationsResponseItem)
+
+
+/**
+ * @summary Upsert an allocation
+ */
+export const adminUpsertAllocationBodyLowBalanceThresholdMicrosDefault = 0;
+
+export const AdminUpsertAllocationBody = zod.object({
+  "service": zod.enum(['stt', 'tts', 'llm']),
+  "provider": zod.string(),
+  "workspaceId": zod.string().nullish(),
+  "allocatedCostMicros": zod.number(),
+  "lowBalanceThresholdMicros": zod.number().default(adminUpsertAllocationBodyLowBalanceThresholdMicrosDefault),
+  "notes": zod.string().nullish()
+})
+
+export const AdminUpsertAllocationResponse = zod.object({
+  "id": zod.number(),
+  "service": zod.string(),
+  "provider": zod.string(),
+  "workspaceId": zod.string().nullish(),
+  "allocatedCostMicros": zod.number(),
+  "lowBalanceThresholdMicros": zod.number(),
+  "notes": zod.string().nullish(),
+  "updatedAt": zod.coerce.date().optional()
+})
+
+
+/**
+ * @summary Delete an allocation
+ */
+export const AdminDeleteAllocationParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary List recent admin alerts (acknowledged + unacknowledged)
+ */
+export const adminListAlertsQueryLimitDefault = 50;
+export const adminListAlertsQueryOnlyUnacknowledgedDefault = false;
+
+export const AdminListAlertsQueryParams = zod.object({
+  "limit": zod.coerce.number().default(adminListAlertsQueryLimitDefault),
+  "onlyUnacknowledged": zod.coerce.boolean().default(adminListAlertsQueryOnlyUnacknowledgedDefault)
+})
+
+export const AdminListAlertsResponse = zod.object({
+  "alerts": zod.array(zod.object({
+  "id": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "type": zod.string(),
+  "severity": zod.string(),
+  "title": zod.string(),
+  "message": zod.string(),
+  "service": zod.string().nullish(),
+  "provider": zod.string().nullish(),
+  "model": zod.string().nullish(),
+  "payload": zod.record(zod.string(), zod.unknown()).nullish(),
+  "dedupeKey": zod.string(),
+  "acknowledgedAt": zod.coerce.date().nullish(),
+  "acknowledgedBy": zod.string().nullish()
+})),
+  "unacknowledgedCount": zod.number()
+})
+
+
+/**
+ * @summary Acknowledge an alert
+ */
+export const AdminAcknowledgeAlertParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const AdminAcknowledgeAlertResponse = zod.object({
+  "id": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "type": zod.string(),
+  "severity": zod.string(),
+  "title": zod.string(),
+  "message": zod.string(),
+  "service": zod.string().nullish(),
+  "provider": zod.string().nullish(),
+  "model": zod.string().nullish(),
+  "payload": zod.record(zod.string(), zod.unknown()).nullish(),
+  "dedupeKey": zod.string(),
+  "acknowledgedAt": zod.coerce.date().nullish(),
+  "acknowledgedBy": zod.string().nullish()
 })
 
 

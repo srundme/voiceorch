@@ -140,37 +140,6 @@ export function useSaveListedVoices() {
   });
 }
 
-// Usage
-export interface UsageRow {
-  clerkId: string | null;
-  email: string | null;
-  callCount: number;
-  sttCallCount: number;
-  avgSttLatencyMs: number | null;
-  llmCallCount: number;
-  avgLlmLatencyMs: number | null;
-  ttsCallCount: number;
-  avgTtsFirstChunkMs: number | null;
-  totalDurationSeconds: number;
-  totalCostCents: number;
-}
-
-export interface UsageData {
-  totals: {
-    totalSttCalls: number;
-    totalLlmCalls: number;
-    totalTtsCalls: number;
-  };
-  rows: UsageRow[];
-}
-
-export function useUsage(days: number) {
-  return useQuery({
-    queryKey: ["admin", "usage", days],
-    queryFn: () => adminFetch<UsageData>(`/usage?days=${days}`),
-  });
-}
-
 // Spike Alerts
 export interface SpikeAlert {
   clerkId: string | null;

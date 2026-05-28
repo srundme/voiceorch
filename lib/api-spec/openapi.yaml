@@ -2014,28 +2014,208 @@ paths:
         "409":
           description: Slot already booked
 
-  # ── Admin Usage ──────────────────────────────────────────────────────────────
-  /admin/usage:
+  # ── Admin Usage Monitoring ──────────────────────────────────────────────────
+  /admin/usage/overview:
     get:
-      operationId: adminGetUsage
+      operationId: adminUsageOverview
       tags: [admin-usage]
-      summary: Platform-wide STT/LLM/TTS usage breakdown by user
+      summary: Combined STT/TTS/LLM overview with cost totals and trends
       parameters:
-        - name: days
-          in: query
-          required: false
-          description: "Filter window in days. 0 = all time. Allowed: 0, 7, 30, 90. Defaults to 30."
-          schema:
-            type: integer
-            enum: [0, 7, 30, 90]
-            default: 30
+        - { name: days, in: query, required: false, schema: { type: integer, default: 30 } }
       responses:
         "200":
-          description: Usage totals and per-user breakdown
+          description: Overview
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminUsageOverviewResponse" }
+
+  /admin/usage/services/{service}:
+    get:
+      operationId: adminUsageByService
+      tags: [admin-usage]
+      summary: Per-service breakdown by provider+model with trends
+      parameters:
+        - { name: service, in: path, required: true, schema: { type: string, enum: [stt, tts, llm] } }
+        - { name: days, in: query, required: false, schema: { type: integer, default: 30 } }
+        - { name: provider, in: query, required: false, schema: { type: ["string", "null"] } }
+        - { name: model, in: query, required: false, schema: { type: ["string", "null"] } }
+        - { name: userId, in: query, required: false, schema: { type: ["string", "null"] } }
+        - { name: workspaceId, in: query, required: false, schema: { type: ["string", "null"] } }
+      responses:
+        "200":
+          description: Service breakdown
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminUsageServiceResponse" }
+
+  /admin/usage/users:
+    get:
+      operationId: adminUsageByUser
+      tags: [admin-usage]
+      summary: Per-user usage with drill-down by service/provider
+      parameters:
+        - { name: days, in: query, required: false, schema: { type: integer, default: 30 } }
+      responses:
+        "200":
+          description: Per-user usage
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AdminUsageResponse"
+                type: object
+                required: [rows]
+                properties:
+                  rows:
+                    type: array
+                    items: { $ref: "#/components/schemas/AdminUsageUserRow" }
+
+  /admin/usage/workspaces:
+    get:
+      operationId: adminUsageByWorkspace
+      tags: [admin-usage]
+      summary: Per-workspace usage
+      parameters:
+        - { name: days, in: query, required: false, schema: { type: integer, default: 30 } }
+      responses:
+        "200":
+          description: Per-workspace usage
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [rows]
+                properties:
+                  rows:
+                    type: array
+                    items: { $ref: "#/components/schemas/AdminUsageWorkspaceRow" }
+
+  /admin/usage/history:
+    get:
+      operationId: adminUsageHistory
+      tags: [admin-usage]
+      summary: Paginated, filterable history of individual usage events
+      parameters:
+        - { name: limit, in: query, required: false, schema: { type: integer, default: 50 } }
+        - { name: offset, in: query, required: false, schema: { type: integer, default: 0 } }
+        - { name: service, in: query, required: false, schema: { type: ["string", "null"] } }
+        - { name: provider, in: query, required: false, schema: { type: ["string", "null"] } }
+        - { name: model, in: query, required: false, schema: { type: ["string", "null"] } }
+        - { name: userId, in: query, required: false, schema: { type: ["string", "null"] } }
+        - { name: workspaceId, in: query, required: false, schema: { type: ["string", "null"] } }
+        - { name: search, in: query, required: false, schema: { type: ["string", "null"] } }
+        - { name: days, in: query, required: false, schema: { type: integer, default: 30 } }
+      responses:
+        "200":
+          description: History entries
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminUsageHistoryResponse" }
+
+  /admin/usage/pricing:
+    get:
+      operationId: adminListPricing
+      tags: [admin-usage]
+      summary: List per-(service, provider, model) pricing rows
+      responses:
+        "200":
+          description: Pricing list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AdminPricingRow" }
+    put:
+      operationId: adminUpsertPricing
+      tags: [admin-usage]
+      summary: Upsert a pricing row
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminPricingInput" }
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminPricingRow" }
+
+  /admin/usage/pricing/{id}:
+    delete:
+      operationId: adminDeletePricing
+      tags: [admin-usage]
+      summary: Delete a pricing row
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Deleted }
+
+  /admin/usage/allocations:
+    get:
+      operationId: adminListAllocations
+      tags: [admin-usage]
+      summary: List provider allocations
+      responses:
+        "200":
+          description: Allocations
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AdminAllocationRow" }
+    put:
+      operationId: adminUpsertAllocation
+      tags: [admin-usage]
+      summary: Upsert an allocation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminAllocationInput" }
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminAllocationRow" }
+
+  /admin/usage/allocations/{id}:
+    delete:
+      operationId: adminDeleteAllocation
+      tags: [admin-usage]
+      summary: Delete an allocation
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Deleted }
+
+  /admin/alerts:
+    get:
+      operationId: adminListAlerts
+      tags: [admin-usage]
+      summary: List recent admin alerts (acknowledged + unacknowledged)
+      parameters:
+        - { name: limit, in: query, required: false, schema: { type: integer, default: 50 } }
+        - { name: onlyUnacknowledged, in: query, required: false, schema: { type: boolean, default: false } }
+      responses:
+        "200":
+          description: Alerts
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminAlertsResponse" }
+
+  /admin/alerts/{id}/acknowledge:
+    post:
+      operationId: adminAcknowledgeAlert
+      tags: [admin-usage]
+      summary: Acknowledge an alert
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Acknowledged
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminAlert" }
 
   # ── Admin Voices ─────────────────────────────────────────────────────────────
   /admin/voices/cartesia:
@@ -3874,52 +4054,6 @@ components:
               description:
                 type: string
 
-    AdminUsageRow:
-      type: object
-      required: [clerkId, email, callCount, sttCallCount, llmCallCount, ttsCallCount, totalDurationSeconds, totalCostCents]
-      properties:
-        clerkId:
-          type: ["string", "null"]
-        email:
-          type: ["string", "null"]
-        callCount:
-          type: integer
-        sttCallCount:
-          type: integer
-        avgSttLatencyMs:
-          type: ["integer", "null"]
-        llmCallCount:
-          type: integer
-        avgLlmLatencyMs:
-          type: ["integer", "null"]
-        ttsCallCount:
-          type: integer
-        avgTtsFirstChunkMs:
-          type: ["integer", "null"]
-        totalDurationSeconds:
-          type: number
-        totalCostCents:
-          type: number
-
-    AdminUsageResponse:
-      type: object
-      required: [totals, rows]
-      properties:
-        totals:
-          type: object
-          required: [totalSttCalls, totalLlmCalls, totalTtsCalls]
-          properties:
-            totalSttCalls:
-              type: integer
-            totalLlmCalls:
-              type: integer
-            totalTtsCalls:
-              type: integer
-        rows:
-          type: array
-          items:
-            $ref: "#/components/schemas/AdminUsageRow"
-
     KycStatusResponse:
       type: object
       required: [kycStatus]
@@ -3947,3 +4081,230 @@ components:
           type: string
         widgetUrl:
           type: ["string", "null"]
+
+    # ── Admin Usage Monitoring v2 ─────────────────────────────────────────────
+    AdminUsageKpis:
+      type: object
+      required: [allocatedMicros, usedMicros, remainingMicros, eventCount, failedCount]
+      properties:
+        allocatedMicros: { type: number }
+        usedMicros: { type: number }
+        remainingMicros: { type: number }
+        eventCount: { type: integer }
+        failedCount: { type: integer }
+
+    AdminUsageServiceKpis:
+      type: object
+      required: [service, kpis]
+      properties:
+        service: { type: string }
+        kpis: { $ref: "#/components/schemas/AdminUsageKpis" }
+
+    AdminUsageTrendPoint:
+      type: object
+      required: [bucket, costMicros, eventCount]
+      properties:
+        bucket: { type: string }
+        costMicros: { type: number }
+        eventCount: { type: integer }
+        service: { type: ["string", "null"] }
+
+    AdminUsageProviderShare:
+      type: object
+      required: [provider, costMicros, eventCount]
+      properties:
+        provider: { type: string }
+        costMicros: { type: number }
+        eventCount: { type: integer }
+
+    AdminUsageOverviewResponse:
+      type: object
+      required: [combined, perService, dailyTrend, providerShare]
+      properties:
+        combined: { $ref: "#/components/schemas/AdminUsageKpis" }
+        perService:
+          type: array
+          items: { $ref: "#/components/schemas/AdminUsageServiceKpis" }
+        dailyTrend:
+          type: array
+          items: { $ref: "#/components/schemas/AdminUsageTrendPoint" }
+        providerShare:
+          type: array
+          items: { $ref: "#/components/schemas/AdminUsageProviderShare" }
+
+    AdminUsageModelBreakdown:
+      type: object
+      required: [model, costMicros, eventCount, inputTokens, outputTokens, audioSeconds, characters, allocatedMicros]
+      properties:
+        model: { type: string }
+        costMicros: { type: number }
+        eventCount: { type: integer }
+        inputTokens: { type: number }
+        outputTokens: { type: number }
+        audioSeconds: { type: number }
+        characters: { type: number }
+        allocatedMicros: { type: number }
+
+    AdminUsageProviderBreakdown:
+      type: object
+      required: [provider, allocatedMicros, usedMicros, remainingMicros, eventCount, models]
+      properties:
+        provider: { type: string }
+        allocatedMicros: { type: number }
+        usedMicros: { type: number }
+        remainingMicros: { type: number }
+        eventCount: { type: integer }
+        failedCount: { type: integer }
+        models:
+          type: array
+          items: { $ref: "#/components/schemas/AdminUsageModelBreakdown" }
+
+    AdminUsageServiceResponse:
+      type: object
+      required: [service, kpis, providers, dailyTrend, weeklyTrend, monthlyTrend]
+      properties:
+        service: { type: string }
+        kpis: { $ref: "#/components/schemas/AdminUsageKpis" }
+        providers:
+          type: array
+          items: { $ref: "#/components/schemas/AdminUsageProviderBreakdown" }
+        dailyTrend:
+          type: array
+          items: { $ref: "#/components/schemas/AdminUsageTrendPoint" }
+        weeklyTrend:
+          type: array
+          items: { $ref: "#/components/schemas/AdminUsageTrendPoint" }
+        monthlyTrend:
+          type: array
+          items: { $ref: "#/components/schemas/AdminUsageTrendPoint" }
+
+    AdminUsageUserRow:
+      type: object
+      required: [userId, email, eventCount, costMicros, sttCostMicros, llmCostMicros, ttsCostMicros]
+      properties:
+        userId: { type: ["string", "null"] }
+        email: { type: ["string", "null"] }
+        eventCount: { type: integer }
+        costMicros: { type: number }
+        sttCostMicros: { type: number }
+        llmCostMicros: { type: number }
+        ttsCostMicros: { type: number }
+
+    AdminUsageWorkspaceRow:
+      type: object
+      required: [workspaceId, eventCount, costMicros]
+      properties:
+        workspaceId: { type: ["string", "null"] }
+        eventCount: { type: integer }
+        costMicros: { type: number }
+        sttCostMicros: { type: number }
+        llmCostMicros: { type: number }
+        ttsCostMicros: { type: number }
+
+    AdminUsageHistoryEntry:
+      type: object
+      required: [id, createdAt, service, provider, model, success, estimatedCostMicros]
+      properties:
+        id: { type: integer }
+        createdAt: { type: string, format: date-time }
+        service: { type: string }
+        provider: { type: string }
+        model: { type: ["string", "null"] }
+        userId: { type: ["string", "null"] }
+        email: { type: ["string", "null"] }
+        workspaceId: { type: ["string", "null"] }
+        callId: { type: ["integer", "null"] }
+        inputTokens: { type: integer }
+        outputTokens: { type: integer }
+        audioSeconds: { type: integer }
+        characters: { type: integer }
+        latencyMs: { type: ["integer", "null"] }
+        estimatedCostMicros: { type: number }
+        success: { type: boolean }
+        errorMessage: { type: ["string", "null"] }
+
+    AdminUsageHistoryResponse:
+      type: object
+      required: [rows, total]
+      properties:
+        rows:
+          type: array
+          items: { $ref: "#/components/schemas/AdminUsageHistoryEntry" }
+        total: { type: integer }
+
+    AdminPricingRow:
+      type: object
+      required: [id, service, provider, model, inputTokenPricePerMillionMicros, outputTokenPricePerMillionMicros, audioSecondPriceMicros, characterPriceMicros]
+      properties:
+        id: { type: integer }
+        service: { type: string }
+        provider: { type: string }
+        model: { type: string }
+        inputTokenPricePerMillionMicros: { type: number }
+        outputTokenPricePerMillionMicros: { type: number }
+        audioSecondPriceMicros: { type: number }
+        characterPriceMicros: { type: number }
+        updatedAt: { type: string, format: date-time }
+
+    AdminPricingInput:
+      type: object
+      required: [service, provider, model]
+      properties:
+        service: { type: string, enum: [stt, tts, llm] }
+        provider: { type: string }
+        model: { type: string }
+        inputTokenPricePerMillionMicros: { type: number, default: 0 }
+        outputTokenPricePerMillionMicros: { type: number, default: 0 }
+        audioSecondPriceMicros: { type: number, default: 0 }
+        characterPriceMicros: { type: number, default: 0 }
+
+    AdminAllocationRow:
+      type: object
+      required: [id, service, provider, allocatedCostMicros, lowBalanceThresholdMicros]
+      properties:
+        id: { type: integer }
+        service: { type: string }
+        provider: { type: string }
+        workspaceId: { type: ["string", "null"] }
+        allocatedCostMicros: { type: number }
+        lowBalanceThresholdMicros: { type: number }
+        notes: { type: ["string", "null"] }
+        updatedAt: { type: string, format: date-time }
+
+    AdminAllocationInput:
+      type: object
+      required: [service, provider, allocatedCostMicros]
+      properties:
+        service: { type: string, enum: [stt, tts, llm] }
+        provider: { type: string }
+        workspaceId: { type: ["string", "null"] }
+        allocatedCostMicros: { type: number }
+        lowBalanceThresholdMicros: { type: number, default: 0 }
+        notes: { type: ["string", "null"] }
+
+    AdminAlert:
+      type: object
+      required: [id, createdAt, type, severity, title, message, dedupeKey]
+      properties:
+        id: { type: integer }
+        createdAt: { type: string, format: date-time }
+        type: { type: string }
+        severity: { type: string }
+        title: { type: string }
+        message: { type: string }
+        service: { type: ["string", "null"] }
+        provider: { type: ["string", "null"] }
+        model: { type: ["string", "null"] }
+        payload: { type: ["object", "null"], additionalProperties: true }
+        dedupeKey: { type: string }
+        acknowledgedAt: { type: ["string", "null"], format: date-time }
+        acknowledgedBy: { type: ["string", "null"] }
+
+    AdminAlertsResponse:
+      type: object
+      required: [alerts, unacknowledgedCount]
+      properties:
+        alerts:
+          type: array
+          items: { $ref: "#/components/schemas/AdminAlert" }
+        unacknowledgedCount: { type: integer }
