@@ -337,7 +337,10 @@ export interface Agent {
 export type AgentInputAgentConfig = { [key: string]: unknown };
 
 export interface AgentInput {
-  /** @minLength 1 */
+  /**
+     * @minLength 1
+     * @pattern \S
+     */
   name: string;
   agentType?: string;
   description?: string;
@@ -389,6 +392,10 @@ export interface AgentInput {
 export type AgentUpdateAgentConfig = { [key: string]: unknown };
 
 export interface AgentUpdate {
+  /**
+     * @minLength 1
+     * @pattern \S
+     */
   name?: string;
   agentType?: string;
   description?: string;
@@ -615,6 +622,10 @@ export const ProviderInputProviderType = {
 
 export interface ProviderInput {
   providerType: ProviderInputProviderType;
+  /**
+     * @minLength 1
+     * @pattern \S
+     */
   providerName: string;
   apiKey: string;
   extraConfig?: string;

@@ -2526,6 +2526,7 @@ components:
         name:
           type: string
           minLength: 1
+          pattern: '\S'
         agentType:
           type: string
         description:
@@ -2615,6 +2616,8 @@ components:
       properties:
         name:
           type: string
+          minLength: 1
+          pattern: '\S'
         agentType:
           type: string
         description:
@@ -2883,6 +2886,8 @@ components:
           enum: [asr, llm, tts, telephony]
         providerName:
           type: string
+          minLength: 1
+          pattern: '\S'
         apiKey:
           type: string
         extraConfig:

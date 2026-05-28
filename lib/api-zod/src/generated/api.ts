@@ -101,9 +101,11 @@ export const ListAgentsResponse = zod.array(ListAgentsResponseItem)
  */
 
 
+export const createAgentBodyNameRegExp = new RegExp('\\S');
+
 
 export const CreateAgentBody = zod.object({
-  "name": zod.string().min(1),
+  "name": zod.string().min(1).regex(createAgentBodyNameRegExp),
   "agentType": zod.string().optional(),
   "description": zod.string().optional(),
   "asrProvider": zod.string(),
@@ -248,8 +250,13 @@ export const UpdateAgentParams = zod.object({
   "id": zod.coerce.number()
 })
 
+
+
+export const updateAgentBodyNameRegExp = new RegExp('\\S');
+
+
 export const UpdateAgentBody = zod.object({
-  "name": zod.string().optional(),
+  "name": zod.string().min(1).regex(updateAgentBodyNameRegExp).optional(),
   "agentType": zod.string().optional(),
   "description": zod.string().optional(),
   "asrProvider": zod.string().optional(),
@@ -740,9 +747,14 @@ export const ListProvidersResponse = zod.array(ListProvidersResponseItem)
 /**
  * @summary Add a provider key
  */
+
+
+export const createProviderBodyProviderNameRegExp = new RegExp('\\S');
+
+
 export const CreateProviderBody = zod.object({
   "providerType": zod.enum(['asr', 'llm', 'tts', 'telephony']),
-  "providerName": zod.string(),
+  "providerName": zod.string().min(1).regex(createProviderBodyProviderNameRegExp),
   "apiKey": zod.string(),
   "extraConfig": zod.string().optional()
 })
