@@ -1,0 +1,511 @@
+# Current Replit KYC Architecture + What Can Be Done With The Available VoBiz APIs
+
+We are currently building a white-label KYC onboarding infrastructure integrated with VoBiz Partner APIs.
+
+The current system architecture already supports:
+
+* partner-based onboarding
+* isolated VoBiz sub-account creation
+* hosted KYC session management
+* webhook-driven verification updates
+* resumable verification sessions
+* KYC status synchronization
+
+However, the current implementation is NOT fully white-label because the user is redirected to a VoBiz-hosted verification page through the `widget_url`.
+
+---
+
+# Current Architecture (Already Built)
+
+## Database Structure
+
+### 1. vobiz_accounts
+
+Purpose:
+Stores one isolated VoBiz sub-account per SnapServe user.
+
+Fields include:
+
+* user_id
+* auth_id
+* auth_token
+* kyc_status
+* created_at
+
+Current behavior:
+
+* When a user starts KYC for the first time:
+
+  * backend automatically creates a VoBiz sub-account
+  * returned credentials are stored in DB
+* Every user gets isolated credentials under the master Partner account
+
+This creates a multi-tenant onboarding system.
+
+---
+
+### 2. vobiz_kyc_sessions
+
+Purpose:
+Stores one row per verification attempt.
+
+Fields include:
+
+* session_id
+* user_id
+* widget_url
+* flow_type
+* session_status
+* expires_at
+* verified_data
+* webhook_payload
+* created_at
+
+Current behavior:
+
+* Stores the active KYC widget session
+* Tracks session lifecycle
+* Allows session reuse if still active
+
+---
+
+# Current Backend Routes
+
+## POST /api/kyc/start
+
+Current behavior:
+
+1. Checks whether user already has VoBiz credentials
+2. If not:
+
+   * creates VoBiz sub-account
+   * stores auth_id + auth_token
+3. Creates KYC session through VoBiz
+4. Stores widget_url + expiry
+5. Returns:
+
+```json
+{
+  "widgetUrl": "..."
+}
+```
+
+Current limitation:
+
+* frontend opens external VoBiz widget page
+
+---
+
+## GET /api/kyc/status
+
+Returns:
+
+* kycStatus
+* sessionStatus
+* widgetUrl
+* expiresAt
+
+Used for:
+
+* status polling
+* resume flow
+* showing active session state
+
+---
+
+## GET /api/kyc/callback
+
+Purpose:
+Handles VoBiz redirect after verification.
+
+Current behavior:
+
+* updates session state
+* updates user kyc_status
+* redirects user back to:
+
+  * /app/kyc?kyc=completed
+  * /app/kyc?kyc=pending
+
+---
+
+## POST /api/kyc/webhook
+
+Purpose:
+Receives background updates from VoBiz.
+
+Supported events:
+
+* kyc.completed
+* kyc.failed
+* kyc.session_revoked
+
+Current behavior:
+
+* updates DB
+* syncs overall account KYC state
+* acts as source of truth
+
+This is the correct enterprise webhook architecture.
+
+---
+
+# Current User Flow
+
+## Step 1 — Prepare
+
+User opens:
+
+```text
+/app/kyc
+```
+
+Frontend shows:
+
+* PAN requirement
+* Aadhaar requirement
+* GST requirement
+* Start Verification button
+
+---
+
+## Step 2 — Session Creation
+
+Frontend calls:
+
+```http
+POST /api/kyc/start
+```
+
+Backend:
+
+* creates VoBiz sub-account
+* creates KYC session
+* receives widget_url
+* stores session
+
+Frontend:
+
+* opens widget_url in new tab
+
+---
+
+## Step 3 — Hosted Verification
+
+User completes verification on:
+
+```text
+VoBiz-hosted page
+```
+
+This is the current non-white-label portion.
+
+---
+
+## Step 4 — Completion
+
+VoBiz:
+
+* fires webhook
+* redirects callback
+
+Backend:
+
+* updates DB
+* marks KYC completed
+
+Frontend:
+
+* shows verified state
+
+---
+
+# Current Problem
+
+The current setup uses:
+
+```text
+widget_url
+```
+
+This means:
+
+* user leaves our platform
+* user sees VoBiz domain
+* user sees VoBiz hosted widget
+
+Therefore:
+
+* this is partner-integrated
+* but NOT fully white-label
+
+---
+
+# What The Current VoBiz APIs Actually Support
+
+Based on the available Postman collection, VoBiz currently exposes:
+
+## Available APIs
+
+* Create KYC session
+* Hosted widget flow
+* Redirect flow
+* Session resend
+* Session revoke
+* Session list
+* Session status
+
+This means:
+
+* VoBiz currently controls the frontend KYC widget
+* We only manage sessions and orchestration
+
+---
+
+# What The Current APIs DO NOT Show
+
+The available JSON does NOT expose:
+
+* raw document upload APIs
+* PAN verification APIs
+* Aadhaar OCR APIs
+* face match APIs
+* backend-only KYC APIs
+
+Therefore:
+
+* complete frontend replacement is currently NOT possible using only this collection
+
+---
+
+# What We CAN Do With The Existing APIs
+
+## Option 1 — Improve Current Hosted Flow (Recommended Immediate Upgrade)
+
+We can make the current flow LOOK more white-label.
+
+Possible improvements:
+
+* open widget inside modal
+* open widget inside iframe
+* custom loading screen
+* custom branding before redirect
+* hide VoBiz references where possible
+
+Architecture:
+
+```text
+Your App
+   ↓
+Embedded Widget Experience
+   ↓
+VoBiz Hosted Verification
+```
+
+This becomes:
+
+* semi white-label
+* faster to launch
+* lower engineering complexity
+
+---
+
+# Option 2 — iframe-Based Embedded Flow
+
+Instead of:
+
+```js
+window.open(widgetUrl)
+```
+
+Use:
+
+```html
+<iframe src={widgetUrl} />
+```
+
+Benefits:
+
+* user stays inside app
+* smoother UX
+* more embedded feel
+
+Possible limitations:
+
+* X-Frame-Options restrictions
+* CSP blocking from VoBiz
+* mobile responsiveness issues
+
+Need to test whether VoBiz allows iframe embedding.
+
+---
+
+# Option 3 — Full White-Label Architecture (Requires More APIs)
+
+True white-label requires:
+
+## Our Own Frontend
+
+We build:
+
+* PAN upload UI
+* Aadhaar upload UI
+* selfie capture
+* OCR preview
+* verification status screens
+
+## VoBiz Backend APIs
+
+VoBiz must expose:
+
+* document upload APIs
+* OCR APIs
+* identity verification APIs
+* backend verification endpoints
+
+Flow becomes:
+
+```text
+User uploads docs in OUR UI
+      ↓
+Our backend sends docs to VoBiz
+      ↓
+VoBiz verifies silently
+      ↓
+Webhook updates status
+      ↓
+Our frontend shows result
+```
+
+User never sees VoBiz.
+
+This is true white-label.
+
+---
+
+# What We Need To Ask VoBiz
+
+We need confirmation whether they provide:
+
+* raw KYC verification APIs
+* direct upload APIs
+* OCR APIs
+* Aadhaar verification APIs
+* PAN verification APIs
+* selfie verification APIs
+
+If YES:
+
+* we can build complete white-label onboarding
+
+If NO:
+
+* we must continue using hosted widget architecture
+
+---
+
+# Recommended Architecture Right Now
+
+Immediate plan:
+
+## Phase 1
+
+Keep current hosted widget system.
+
+Improve UX:
+
+* iframe embedding
+* custom branded flow
+* modal experience
+* session reuse
+* polished onboarding
+
+---
+
+## Phase 2
+
+Ask VoBiz for backend-only APIs.
+
+If available:
+
+* migrate to fully internal KYC frontend
+
+---
+
+## Phase 3
+
+Build enterprise white-label onboarding:
+
+* custom branding
+* custom KYC workflows
+* admin review queue
+* OCR extraction
+* telecom compliance
+* audit logs
+* verification analytics
+
+---
+
+# Technical Improvements Recommended
+
+## Add Session State Machine
+
+Use strict enum statuses.
+
+---
+
+## Add Idempotent Webhook Handling
+
+Prevent duplicate webhook processing.
+
+---
+
+## Encrypt Stored Tokens
+
+Encrypt auth_token in DB.
+
+---
+
+## Add Audit Logs
+
+Track:
+
+* webhook payloads
+* user actions
+* status changes
+* IP addresses
+
+---
+
+## Add Retry Queue
+
+Retry failed webhook updates.
+
+---
+
+## Add OCR Layer
+
+Auto-extract:
+
+* PAN number
+* Aadhaar name
+* DOB
+* GSTIN
+
+---
+
+# Final Assessment
+
+The current Replit architecture is already:
+
+* scalable
+* multi-tenant
+* webhook-driven
+* enterprise-style
+* SaaS-ready
+
+The only missing piece for true white-labeling is:
+
+* replacing the VoBiz hosted frontend widget with our own frontend experience.
+
+Whether that is possible depends entirely on whether VoBiz exposes backend-only KYC verification APIs beyond the currently available session/widget APIs.
