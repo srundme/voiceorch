@@ -198,6 +198,70 @@ export function useSaveSpikeAlertEmail() {
   });
 }
 
+// Alert Notification Settings
+export function useAlertEmail() {
+  return useQuery({
+    queryKey: ["admin", "settings", "alert-email"],
+    queryFn: () => adminFetch<{ email: string | null }>("/settings/alert-email"),
+  });
+}
+
+export function useSaveAlertEmail() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (email: string | null) =>
+      adminFetch<{ email: string | null }>("/settings/alert-email", {
+        method: "PUT",
+        body: JSON.stringify({ email }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "settings", "alert-email"] });
+    },
+  });
+}
+
+export function useAlertSlackWebhook() {
+  return useQuery({
+    queryKey: ["admin", "settings", "alert-slack-webhook"],
+    queryFn: () => adminFetch<{ webhookUrl: string | null }>("/settings/alert-slack-webhook"),
+  });
+}
+
+export function useSaveAlertSlackWebhook() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (webhookUrl: string | null) =>
+      adminFetch<{ webhookUrl: string | null }>("/settings/alert-slack-webhook", {
+        method: "PUT",
+        body: JSON.stringify({ webhookUrl }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "settings", "alert-slack-webhook"] });
+    },
+  });
+}
+
+export function useAlertMinSeverity() {
+  return useQuery({
+    queryKey: ["admin", "settings", "alert-min-severity"],
+    queryFn: () => adminFetch<{ minSeverity: string }>("/settings/alert-min-severity"),
+  });
+}
+
+export function useSaveAlertMinSeverity() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (minSeverity: string) =>
+      adminFetch<{ minSeverity: string }>("/settings/alert-min-severity", {
+        method: "PUT",
+        body: JSON.stringify({ minSeverity }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "settings", "alert-min-severity"] });
+    },
+  });
+}
+
 export function useSpikeAlerts() {
   return useQuery({
     queryKey: ["admin", "alerts", "spikes"],

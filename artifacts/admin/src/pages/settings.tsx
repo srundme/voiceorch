@@ -1,10 +1,16 @@
 import { useState, useEffect } from "react";
-import { useSpikeThreshold, useSaveSpikeThreshold, useSpikeAlertEmail, useSaveSpikeAlertEmail } from "@/hooks/use-admin-api";
+import {
+  useSpikeThreshold, useSaveSpikeThreshold, useSpikeAlertEmail, useSaveSpikeAlertEmail,
+  useAlertEmail, useSaveAlertEmail,
+  useAlertSlackWebhook, useSaveAlertSlackWebhook,
+  useAlertMinSeverity, useSaveAlertMinSeverity,
+} from "@/hooks/use-admin-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Settings, Bell, Mail, Check } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Settings, Bell, Mail, Check, AlertTriangle, Slack } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function PlatformSettings() {
@@ -12,22 +18,41 @@ export default function PlatformSettings() {
   const { data: emailData, isLoading: loadingEmail } = useSpikeAlertEmail();
   const saveThreshold = useSaveSpikeThreshold();
   const saveEmail = useSaveSpikeAlertEmail();
+
+  const { data: alertEmailData, isLoading: loadingAlertEmail } = useAlertEmail();
+  const { data: alertSlackData, isLoading: loadingAlertSlack } = useAlertSlackWebhook();
+  const { data: alertSeverityData, isLoading: loadingAlertSeverity } = useAlertMinSeverity();
+  const saveAlertEmail = useSaveAlertEmail();
+  const saveAlertSlack = useSaveAlertSlackWebhook();
+  const saveAlertSeverity = useSaveAlertMinSeverity();
+
   const { toast } = useToast();
 
   const [thresholdInput, setThresholdInput] = useState("");
   const [emailInput, setEmailInput] = useState("");
+  const [alertEmailInput, setAlertEmailInput] = useState("");
+  const [alertSlackInput, setAlertSlackInput] = useState("");
+  const [alertSeverity, setAlertSeverity] = useState("warning");
 
   useEffect(() => {
-    if (thresholdData?.threshold != null) {
-      setThresholdInput(String(thresholdData.threshold));
-    }
+    if (thresholdData?.threshold != null) setThresholdInput(String(thresholdData.threshold));
   }, [thresholdData]);
 
   useEffect(() => {
-    if (emailData?.email != null) {
-      setEmailInput(emailData.email);
-    }
+    if (emailData?.email != null) setEmailInput(emailData.email);
   }, [emailData]);
+
+  useEffect(() => {
+    if (alertEmailData?.email != null) setAlertEmailInput(alertEmailData.email);
+  }, [alertEmailData]);
+
+  useEffect(() => {
+    if (alertSlackData?.webhookUrl != null) setAlertSlackInput(alertSlackData.webhookUrl);
+  }, [alertSlackData]);
+
+  useEffect(() => {
+    if (alertSeverityData?.minSeverity) setAlertSeverity(alertSeverityData.minSeverity);
+  }, [alertSeverityData]);
 
   async function handleSaveThreshold() {
     const raw = thresholdInput.trim();
@@ -67,12 +92,139 @@ export default function PlatformSettings() {
     }
   }
 
+  async function handleSaveAlertEmail() {
+    const val = alertEmailInput.trim();
+    if (val && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
+      toast({ title: "Invalid email address", variant: "destructive" });
+      return;
+    }
+    try {
+      await saveAlertEmail.mutateAsync(val || null);
+      toast({ title: val ? "Alert notification email saved" : "Alert notification email cleared" });
+    } catch {
+      toast({ title: "Failed to save alert email", variant: "destructive" });
+    }
+  }
+
+  async function handleSaveAlertSlack() {
+    const val = alertSlackInput.trim();
+    if (val && !val.startsWith("https://")) {
+      toast({ title: "Invalid webhook URL", description: "Must be an https:// URL.", variant: "destructive" });
+      return;
+    }
+    try {
+      await saveAlertSlack.mutateAsync(val || null);
+      toast({ title: val ? "Slack webhook saved" : "Slack webhook cleared" });
+    } catch {
+      toast({ title: "Failed to save Slack webhook", variant: "destructive" });
+    }
+  }
+
+  async function handleSaveAlertSeverity(val: string) {
+    setAlertSeverity(val);
+    try {
+      await saveAlertSeverity.mutateAsync(val);
+      toast({ title: "Minimum severity saved", description: `Will notify for ${val} and above.` });
+    } catch {
+      toast({ title: "Failed to save severity setting", variant: "destructive" });
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
         <Settings className="h-6 w-6 text-primary" />
         <h1 className="text-3xl font-bold tracking-tight">Platform Settings</h1>
       </div>
+
+      <Card className="border-border shadow-sm">
+        <CardHeader className="pb-3 border-b border-border">
+          <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4" />
+            Alert Engine Notifications
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-6 space-y-6">
+          <p className="text-xs text-muted-foreground max-w-lg">
+            Receive out-of-band notifications when the alert engine fires a new alert (low balance, budget thresholds,
+            error spikes, usage spikes, provider down). Deduplicated — no repeat notifications for the same alert key.
+            Requires <code className="text-xs bg-muted px-1 rounded">GMAIL_USER</code> and{" "}
+            <code className="text-xs bg-muted px-1 rounded">GMAIL_APP_PASSWORD</code> to be set for email.
+          </p>
+
+          <div className="space-y-2 max-w-sm">
+            <Label className="text-sm font-medium">Minimum severity to notify</Label>
+            <p className="text-xs text-muted-foreground">
+              Alerts at this severity or above will trigger a notification. Default: warning.
+            </p>
+            <Select
+              value={loadingAlertSeverity ? "warning" : alertSeverity}
+              onValueChange={handleSaveAlertSeverity}
+              disabled={loadingAlertSeverity || saveAlertSeverity.isPending}
+            >
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="info">Info and above</SelectItem>
+                <SelectItem value="warning">Warning and above</SelectItem>
+                <SelectItem value="critical">Critical only</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2 max-w-sm border-t border-border pt-5">
+            <Label htmlFor="alert-email" className="text-sm font-medium flex items-center gap-2">
+              <Mail className="h-3.5 w-3.5" />
+              Admin notification email
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Email sent to this address when a new alert fires. Clear to disable email notifications.
+            </p>
+            <div className="flex items-center gap-2">
+              <Input
+                id="alert-email"
+                type="email"
+                placeholder={loadingAlertEmail ? "Loading…" : "admin@example.com"}
+                value={alertEmailInput}
+                onChange={(e) => setAlertEmailInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSaveAlertEmail()}
+                className="w-64"
+              />
+              <Button size="sm" onClick={handleSaveAlertEmail} disabled={saveAlertEmail.isPending}>
+                <Check className="h-3.5 w-3.5 mr-1.5" />
+                Save
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-2 max-w-sm border-t border-border pt-5">
+            <Label htmlFor="alert-slack" className="text-sm font-medium flex items-center gap-2">
+              <Slack className="h-3.5 w-3.5" />
+              Slack webhook URL
+              <span className="text-xs text-muted-foreground font-normal">(optional)</span>
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Posts a message to your Slack channel when a new alert fires. Clear to disable.
+            </p>
+            <div className="flex items-center gap-2">
+              <Input
+                id="alert-slack"
+                type="url"
+                placeholder={loadingAlertSlack ? "Loading…" : "https://hooks.slack.com/services/…"}
+                value={alertSlackInput}
+                onChange={(e) => setAlertSlackInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSaveAlertSlack()}
+                className="w-64"
+              />
+              <Button size="sm" onClick={handleSaveAlertSlack} disabled={saveAlertSlack.isPending}>
+                <Check className="h-3.5 w-3.5 mr-1.5" />
+                Save
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card className="border-border shadow-sm">
         <CardHeader className="pb-3 border-b border-border">

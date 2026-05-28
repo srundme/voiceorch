@@ -1,6 +1,7 @@
 import { db, adminAlertsTable, providerAllocationsTable, usageEventsTable } from "@workspace/db";
 import { and, eq, sql, gt } from "drizzle-orm";
 import { logger } from "../../lib/logger.js";
+import { dispatchAlertNotification } from "../alert-notifications.js";
 
 export type AlertType =
   | "low_balance"
@@ -25,7 +26,7 @@ interface CreateAlertOpts {
 
 async function createAlert(opts: CreateAlertOpts): Promise<void> {
   try {
-    await db
+    const inserted = await db
       .insert(adminAlertsTable)
       .values({
         type: opts.type,
@@ -38,7 +39,19 @@ async function createAlert(opts: CreateAlertOpts): Promise<void> {
         payload: opts.payload ?? null,
         dedupeKey: opts.dedupeKey,
       })
-      .onConflictDoNothing({ target: adminAlertsTable.dedupeKey });
+      .onConflictDoNothing({ target: adminAlertsTable.dedupeKey })
+      .returning({ id: adminAlertsTable.id });
+
+    if (inserted.length > 0) {
+      void dispatchAlertNotification({
+        type: opts.type,
+        severity: opts.severity,
+        title: opts.title,
+        message: opts.message,
+        service: opts.service,
+        provider: opts.provider,
+      });
+    }
   } catch (err) {
     logger.warn({ err, opts }, "createAlert failed");
   }

@@ -414,6 +414,125 @@ router.get("/admin/growth/inactive", async (_req, res): Promise<void> => {
   }
 });
 
+// ─── Alert Notification Settings ─────────────────────────────────────────────
+
+const ALERT_NOTIFICATION_EMAIL_KEY = "alert_notification_email";
+const ALERT_SLACK_WEBHOOK_KEY = "alert_slack_webhook_url";
+const ALERT_MIN_SEVERITY_KEY = "alert_min_severity";
+const VALID_SEVERITIES = ["info", "warning", "critical"] as const;
+
+router.get("/admin/settings/alert-email", async (req, res): Promise<void> => {
+  try {
+    const [row] = await db
+      .select({ value: platformSettingsTable.value })
+      .from(platformSettingsTable)
+      .where(eq(platformSettingsTable.key, ALERT_NOTIFICATION_EMAIL_KEY));
+    res.json({ email: row?.value ?? null });
+  } catch (err) {
+    req.log.error({ err }, "admin/settings/alert-email GET failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.put("/admin/settings/alert-email", async (req, res): Promise<void> => {
+  try {
+    const { email } = req.body as { email: string | null };
+    if (email === null || email === "") {
+      await db.delete(platformSettingsTable).where(eq(platformSettingsTable.key, ALERT_NOTIFICATION_EMAIL_KEY));
+      res.json({ email: null });
+      return;
+    }
+    if (typeof email !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      res.status(400).json({ error: "email must be a valid email address or null to clear" });
+      return;
+    }
+    await db
+      .insert(platformSettingsTable)
+      .values({ key: ALERT_NOTIFICATION_EMAIL_KEY, value: email })
+      .onConflictDoUpdate({
+        target: platformSettingsTable.key,
+        set: { value: email, updatedAt: new Date() },
+      });
+    res.json({ email });
+  } catch (err) {
+    req.log.error({ err }, "admin/settings/alert-email PUT failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/admin/settings/alert-slack-webhook", async (req, res): Promise<void> => {
+  try {
+    const [row] = await db
+      .select({ value: platformSettingsTable.value })
+      .from(platformSettingsTable)
+      .where(eq(platformSettingsTable.key, ALERT_SLACK_WEBHOOK_KEY));
+    res.json({ webhookUrl: row?.value ?? null });
+  } catch (err) {
+    req.log.error({ err }, "admin/settings/alert-slack-webhook GET failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.put("/admin/settings/alert-slack-webhook", async (req, res): Promise<void> => {
+  try {
+    const { webhookUrl } = req.body as { webhookUrl: string | null };
+    if (webhookUrl === null || webhookUrl === "") {
+      await db.delete(platformSettingsTable).where(eq(platformSettingsTable.key, ALERT_SLACK_WEBHOOK_KEY));
+      res.json({ webhookUrl: null });
+      return;
+    }
+    if (typeof webhookUrl !== "string" || !webhookUrl.startsWith("https://")) {
+      res.status(400).json({ error: "webhookUrl must be a valid https URL or null to clear" });
+      return;
+    }
+    await db
+      .insert(platformSettingsTable)
+      .values({ key: ALERT_SLACK_WEBHOOK_KEY, value: webhookUrl })
+      .onConflictDoUpdate({
+        target: platformSettingsTable.key,
+        set: { value: webhookUrl, updatedAt: new Date() },
+      });
+    res.json({ webhookUrl });
+  } catch (err) {
+    req.log.error({ err }, "admin/settings/alert-slack-webhook PUT failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/admin/settings/alert-min-severity", async (req, res): Promise<void> => {
+  try {
+    const [row] = await db
+      .select({ value: platformSettingsTable.value })
+      .from(platformSettingsTable)
+      .where(eq(platformSettingsTable.key, ALERT_MIN_SEVERITY_KEY));
+    res.json({ minSeverity: row?.value ?? "warning" });
+  } catch (err) {
+    req.log.error({ err }, "admin/settings/alert-min-severity GET failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.put("/admin/settings/alert-min-severity", async (req, res): Promise<void> => {
+  try {
+    const { minSeverity } = req.body as { minSeverity: string };
+    if (!VALID_SEVERITIES.includes(minSeverity as (typeof VALID_SEVERITIES)[number])) {
+      res.status(400).json({ error: `minSeverity must be one of: ${VALID_SEVERITIES.join(", ")}` });
+      return;
+    }
+    await db
+      .insert(platformSettingsTable)
+      .values({ key: ALERT_MIN_SEVERITY_KEY, value: minSeverity })
+      .onConflictDoUpdate({
+        target: platformSettingsTable.key,
+        set: { value: minSeverity, updatedAt: new Date() },
+      });
+    res.json({ minSeverity });
+  } catch (err) {
+    req.log.error({ err }, "admin/settings/alert-min-severity PUT failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // ─── Spike Alert Settings ─────────────────────────────────────────────────────
 
 const SPIKE_THRESHOLD_KEY = "usage_spike_daily_threshold";
