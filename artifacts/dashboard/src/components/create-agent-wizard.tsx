@@ -619,14 +619,25 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
       systemPrompt: state.byopPrompt, maxDuration: 300,
     };
 
-    create.mutate(payload as any, {
+    create.mutate({ data: payload as any }, {
       onSuccess: (created) => {
         qc.invalidateQueries({ queryKey: getListAgentsQueryKey() });
         toast({ title: `${created.name} is ready!` });
         setState(INITIAL); setStepIdx(0);
         onCreated(created.id);
       },
-      onError: () => { toast({ title: "Create failed", variant: "destructive" }); },
+      onError: (err: any) => {
+        const data = err?.data;
+        const issue = data?.issues?.[0];
+        const detail = issue
+          ? `${(issue.path ?? []).join(".") || "request"}: ${issue.message}`
+          : data?.error || err?.message;
+        toast({
+          title: "Create failed",
+          description: detail || undefined,
+          variant: "destructive",
+        });
+      },
     });
   }
 

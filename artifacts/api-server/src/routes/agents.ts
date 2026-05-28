@@ -32,7 +32,9 @@ router.post("/agents", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const parsed = CreateAgentBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    const issues = parsed.error.issues;
+    req.log.warn({ issues, body: req.body }, "Create agent validation failed");
+    res.status(400).json({ error: "Validation failed", issues });
     return;
   }
   const [agent] = await db
