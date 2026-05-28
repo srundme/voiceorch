@@ -11,6 +11,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 
 import { Layout } from "@/components/layout";
 import { SnapServeLoader, SnapServeIcon } from "@/components/logo";
+import { VoiceAssistant } from "@/components/VoiceAssistant";
 import LandingPage from "@/pages/landing";
 import AssistantsPage from "@/pages/assistants";
 import Dashboard from "@/pages/dashboard";
@@ -186,6 +187,7 @@ function AppRoutes() {
 
   return (
     <Layout>
+      <VoiceAssistant />
       <Switch>
         <Route path="/app" component={AssistantsPage} />
         <Route path="/app/analytics" component={Dashboard} />

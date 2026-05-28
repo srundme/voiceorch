@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useLocation } from "wouter";
-import { useUser } from "@clerk/clerk-react";
+import { useUser } from "@clerk/react";
 import { Mic, MicOff, X, Volume2, Bot, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -191,7 +191,7 @@ export function VoiceAssistant() {
     };
 
     rec.onend = () => {
-      if (phase === "listening") setPhase("idle");
+      setPhase(prev => prev === "listening" ? "idle" : prev);
     };
 
     rec.start();
