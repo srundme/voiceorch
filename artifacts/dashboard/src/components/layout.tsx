@@ -5,6 +5,7 @@ import {
   LayoutDashboard, BarChart3, BookOpen,
   Wallet, LogOut, ChevronDown, AlertCircle, Radio, Webhook,
   Zap, ChevronRight, CalendarDays, TrendingUp, Moon, Sun, ShieldCheck,
+  Facebook, ArrowRightLeft,
 } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -35,8 +36,10 @@ const NAV_SECTIONS = [
   {
     label: "Outreach",
     items: [
-      { name: "Campaigns",  href: "/app/campaigns",  icon: Zap },
-      { name: "Scheduling", href: "/app/scheduling", icon: CalendarDays },
+      { name: "Campaigns",   href: "/app/campaigns",   icon: Zap },
+      { name: "Meta Leads",  href: "/app/meta-leads",  icon: Facebook },
+      { name: "Transfers",   href: "/app/transfers",   icon: ArrowRightLeft },
+      { name: "Scheduling",  href: "/app/scheduling",  icon: CalendarDays },
     ],
   },
   {
@@ -44,6 +47,7 @@ const NAV_SECTIONS = [
     items: [
       { name: "Phone Numbers", href: "/app/phone-numbers", icon: Phone },
       { name: "Verification",  href: "/app/kyc",           icon: ShieldCheck },
+      { name: "API Keys",      href: "/app/api-keys",      icon: Key },
       { name: "Webhooks",      href: "/app/webhooks",      icon: Webhook },
       { name: "Wallet",        href: "/app/wallet",        icon: Wallet },
       { name: "Settings",      href: "/app/settings",      icon: Settings },

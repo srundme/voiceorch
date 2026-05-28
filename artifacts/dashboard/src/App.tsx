@@ -47,6 +47,9 @@ import CancelBookingPage from "@/pages/book/cancel";
 import RescheduleBookingPage from "@/pages/book/reschedule";
 import UsagePage from "@/pages/usage";
 import KycPage from "@/pages/kyc";
+import ApiKeysPage from "@/pages/api-keys";
+import MetaLeadsPage from "@/pages/meta-leads";
+import TransfersPage from "@/pages/transfers";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -230,6 +233,9 @@ function AppRoutes() {
         <Route path="/app/settings" component={Settings} />
         <Route path="/app/usage" component={UsagePage} />
         <Route path="/app/kyc" component={KycPage} />
+        <Route path="/app/api-keys" component={ApiKeysPage} />
+        <Route path="/app/meta-leads" component={MetaLeadsPage} />
+        <Route path="/app/transfers" component={TransfersPage} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

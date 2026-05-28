@@ -26,6 +26,9 @@ import schedulingRouter from "./scheduling/index.js";
 import kycRouter from "./kyc.js";
 import assistantRouter from "./assistant.js";
 import usageMeRouter from "./usage-me.js";
+import userApiKeysRouter from "./user-api-keys.js";
+import metaRouter from "./meta.js";
+import callTransfersRouter from "./call-transfers.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
 const router: IRouter = Router();
@@ -62,5 +65,8 @@ router.use(schedulingRouter);
 router.use(kycRouter);
 router.use(assistantRouter);
 router.use(usageMeRouter);
+router.use(userApiKeysRouter);
+router.use(metaRouter);
+router.use(callTransfersRouter);
 
 export default router;

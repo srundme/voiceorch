@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { randomBytes } from "crypto";
 import { eq, desc, and, sql, gte } from "drizzle-orm";
-import { db, callsTable, agentsTable, providersTable, usersTable, walletTransactionsTable, activityLogsTable } from "@workspace/db";
+import { db, callsTable, agentsTable, providersTable, usersTable, walletTransactionsTable, activityLogsTable, callTransfersTable } from "@workspace/db";
 import {
   InitiateCallBody,
   InitiateOutboundCallBody,
@@ -403,6 +403,19 @@ router.post("/calls/:id/transfer", requireAuth, async (req, res): Promise<void> 
     status: "transferred",
     endedAt: new Date(),
   }).where(eq(callsTable.id, id)).returning();
+
+  // Log transfer in supervisor table (fire-and-forget)
+  const callUserId = call.userId ?? null;
+  if (callUserId) {
+    db.insert(callTransfersTable).values({
+      callId:      id,
+      userId:      callUserId,
+      transferTo:  target.trim(),
+      transferName:typeof warmMessage === "string" ? warmMessage.trim() || null : null,
+      summary:     typeof warmMessage === "string" ? warmMessage.trim() || null : null,
+      status:      "initiated",
+    }).catch((e: unknown) => req.log.warn({ e }, "Failed to log call transfer"));
+  }
 
   res.json(await enrichCall(updated ?? call));
 });
