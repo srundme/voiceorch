@@ -4,6 +4,7 @@ import {
   useAlertEmail, useSaveAlertEmail,
   useAlertSlackWebhook, useSaveAlertSlackWebhook,
   useAlertMinSeverity, useSaveAlertMinSeverity,
+  useAlertNotificationCooldown, useSaveAlertNotificationCooldown,
 } from "@/hooks/use-admin-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,9 +24,11 @@ export default function PlatformSettings() {
   const { data: alertEmailData, isLoading: loadingAlertEmail } = useAlertEmail();
   const { data: alertSlackData, isLoading: loadingAlertSlack } = useAlertSlackWebhook();
   const { data: alertSeverityData, isLoading: loadingAlertSeverity } = useAlertMinSeverity();
+  const { data: alertCooldownData, isLoading: loadingAlertCooldown } = useAlertNotificationCooldown();
   const saveAlertEmail = useSaveAlertEmail();
   const saveAlertSlack = useSaveAlertSlackWebhook();
   const saveAlertSeverity = useSaveAlertMinSeverity();
+  const saveAlertCooldown = useSaveAlertNotificationCooldown();
 
   const { toast } = useToast();
 
@@ -34,6 +37,7 @@ export default function PlatformSettings() {
   const [alertEmailInput, setAlertEmailInput] = useState("");
   const [alertSlackInput, setAlertSlackInput] = useState("");
   const [alertSeverity, setAlertSeverity] = useState("warning");
+  const [alertCooldownInput, setAlertCooldownInput] = useState("10");
 
   useEffect(() => {
     if (thresholdData?.threshold != null) setThresholdInput(String(thresholdData.threshold));
@@ -54,6 +58,10 @@ export default function PlatformSettings() {
   useEffect(() => {
     if (alertSeverityData?.minSeverity) setAlertSeverity(alertSeverityData.minSeverity);
   }, [alertSeverityData]);
+
+  useEffect(() => {
+    if (alertCooldownData?.cooldownMinutes != null) setAlertCooldownInput(String(alertCooldownData.cooldownMinutes));
+  }, [alertCooldownData]);
 
   async function handleSaveThreshold() {
     const raw = thresholdInput.trim();
@@ -131,6 +139,24 @@ export default function PlatformSettings() {
     }
   }
 
+  async function handleSaveAlertCooldown() {
+    const raw = alertCooldownInput.trim();
+    const val = parseInt(raw, 10);
+    if (raw === "" || !Number.isFinite(val) || val < 0) {
+      toast({ title: "Invalid cooldown", description: "Must be a non-negative whole number of minutes.", variant: "destructive" });
+      return;
+    }
+    try {
+      await saveAlertCooldown.mutateAsync(val);
+      toast({
+        title: "Cooldown saved",
+        description: val === 0 ? "Rate limiting disabled." : `At most one notification per ${val} minute${val === 1 ? "" : "s"}.`,
+      });
+    } catch {
+      toast({ title: "Failed to save cooldown", variant: "destructive" });
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
@@ -172,6 +198,32 @@ export default function PlatformSettings() {
                 <SelectItem value="critical">Critical only</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-2 max-w-sm border-t border-border pt-5">
+            <Label htmlFor="alert-cooldown" className="text-sm font-medium">
+              Notification cooldown (minutes)
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              At most one notification will be sent within this window, even if many alerts fire at once. Set to 0 to
+              disable rate limiting. Default: 10.
+            </p>
+            <div className="flex items-center gap-2">
+              <Input
+                id="alert-cooldown"
+                type="number"
+                min={0}
+                placeholder={loadingAlertCooldown ? "Loading…" : "10"}
+                value={alertCooldownInput}
+                onChange={(e) => setAlertCooldownInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSaveAlertCooldown()}
+                className="w-32"
+              />
+              <Button size="sm" onClick={handleSaveAlertCooldown} disabled={saveAlertCooldown.isPending}>
+                <Check className="h-3.5 w-3.5 mr-1.5" />
+                Save
+              </Button>
+            </div>
           </div>
 
           <div className="space-y-2 max-w-sm border-t border-border pt-5">

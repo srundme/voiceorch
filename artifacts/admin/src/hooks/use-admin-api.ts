@@ -263,6 +263,27 @@ export function useSaveAlertMinSeverity() {
   });
 }
 
+export function useAlertNotificationCooldown() {
+  return useQuery({
+    queryKey: ["admin", "settings", "alert-notification-cooldown"],
+    queryFn: () => adminFetch<{ cooldownMinutes: number }>("/settings/alert-notification-cooldown"),
+  });
+}
+
+export function useSaveAlertNotificationCooldown() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (cooldownMinutes: number) =>
+      adminFetch<{ cooldownMinutes: number }>("/settings/alert-notification-cooldown", {
+        method: "PUT",
+        body: JSON.stringify({ cooldownMinutes }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "settings", "alert-notification-cooldown"] });
+    },
+  });
+}
+
 export function useSpikeAlerts() {
   return useQuery({
     queryKey: ["admin", "alerts", "spikes"],

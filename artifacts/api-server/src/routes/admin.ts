@@ -419,6 +419,7 @@ router.get("/admin/growth/inactive", async (_req, res): Promise<void> => {
 const ALERT_NOTIFICATION_EMAIL_KEY = "alert_notification_email";
 const ALERT_SLACK_WEBHOOK_KEY = "alert_slack_webhook_url";
 const ALERT_MIN_SEVERITY_KEY = "alert_min_severity";
+const ALERT_COOLDOWN_KEY = "alert_notification_cooldown_minutes";
 const VALID_SEVERITIES = ["info", "warning", "critical"] as const;
 
 router.get("/admin/settings/alert-email", async (req, res): Promise<void> => {
@@ -529,6 +530,42 @@ router.put("/admin/settings/alert-min-severity", async (req, res): Promise<void>
     res.json({ minSeverity });
   } catch (err) {
     req.log.error({ err }, "admin/settings/alert-min-severity PUT failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/admin/settings/alert-notification-cooldown", async (req, res): Promise<void> => {
+  try {
+    const [row] = await db
+      .select({ value: platformSettingsTable.value })
+      .from(platformSettingsTable)
+      .where(eq(platformSettingsTable.key, ALERT_COOLDOWN_KEY));
+    const parsed = row?.value ? parseInt(row.value, 10) : NaN;
+    const cooldownMinutes = Number.isFinite(parsed) && parsed >= 0 ? parsed : 10;
+    res.json({ cooldownMinutes });
+  } catch (err) {
+    req.log.error({ err }, "admin/settings/alert-notification-cooldown GET failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.put("/admin/settings/alert-notification-cooldown", async (req, res): Promise<void> => {
+  try {
+    const { cooldownMinutes } = req.body as { cooldownMinutes: number };
+    if (typeof cooldownMinutes !== "number" || !Number.isFinite(cooldownMinutes) || cooldownMinutes < 0 || !Number.isInteger(cooldownMinutes)) {
+      res.status(400).json({ error: "cooldownMinutes must be a non-negative integer" });
+      return;
+    }
+    await db
+      .insert(platformSettingsTable)
+      .values({ key: ALERT_COOLDOWN_KEY, value: String(cooldownMinutes) })
+      .onConflictDoUpdate({
+        target: platformSettingsTable.key,
+        set: { value: String(cooldownMinutes), updatedAt: new Date() },
+      });
+    res.json({ cooldownMinutes });
+  } catch (err) {
+    req.log.error({ err }, "admin/settings/alert-notification-cooldown PUT failed");
     res.status(500).json({ error: "Internal server error" });
   }
 });

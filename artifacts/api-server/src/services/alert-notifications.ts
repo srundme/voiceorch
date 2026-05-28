@@ -7,6 +7,11 @@ import type { AlertType } from "./usage/alert-engine.js";
 const ALERT_EMAIL_KEY = "alert_notification_email";
 const ALERT_SLACK_KEY = "alert_slack_webhook_url";
 const ALERT_MIN_SEVERITY_KEY = "alert_min_severity";
+const ALERT_COOLDOWN_KEY = "alert_notification_cooldown_minutes";
+const DEFAULT_COOLDOWN_MINUTES = 10;
+
+/** In-process cooldown: tracks the last time a notification was dispatched (across all channels). */
+let _lastNotifiedAt: number | null = null;
 
 const SEVERITY_RANK: Record<string, number> = {
   info: 0,
@@ -25,8 +30,9 @@ async function getNotificationSettings(): Promise<{
   email: string | null;
   slackWebhook: string | null;
   minSeverity: string;
+  cooldownMinutes: number;
 }> {
-  const [emailRow, slackRow, severityRow] = await Promise.all([
+  const [emailRow, slackRow, severityRow, cooldownRow] = await Promise.all([
     db
       .select({ value: platformSettingsTable.value })
       .from(platformSettingsTable)
@@ -42,12 +48,19 @@ async function getNotificationSettings(): Promise<{
       .from(platformSettingsTable)
       .where(eq(platformSettingsTable.key, ALERT_MIN_SEVERITY_KEY))
       .then(([r]) => r),
+    db
+      .select({ value: platformSettingsTable.value })
+      .from(platformSettingsTable)
+      .where(eq(platformSettingsTable.key, ALERT_COOLDOWN_KEY))
+      .then(([r]) => r),
   ]);
 
+  const parsedCooldown = cooldownRow?.value ? parseInt(cooldownRow.value, 10) : NaN;
   return {
     email: emailRow?.value ?? null,
     slackWebhook: slackRow?.value ?? null,
     minSeverity: severityRow?.value ?? "warning",
+    cooldownMinutes: Number.isFinite(parsedCooldown) && parsedCooldown >= 0 ? parsedCooldown : DEFAULT_COOLDOWN_MINUTES,
   };
 }
 
@@ -130,6 +143,10 @@ async function sendSlackNotification(
 /**
  * Dispatches email and/or Slack notifications for a newly-fired alert.
  * Best-effort: never throws — caller must not block on this.
+ *
+ * Rate-limited by `alert_notification_cooldown_minutes` platform setting (default 10 min).
+ * At most one notification batch is dispatched within the cooldown window regardless of
+ * how many alerts fire simultaneously (prevents inbox flooding during outages).
  */
 export async function dispatchAlertNotification(opts: {
   type: AlertType;
@@ -145,6 +162,18 @@ export async function dispatchAlertNotification(opts: {
     const minRank = SEVERITY_RANK[settings.minSeverity] ?? 1;
     const alertRank = SEVERITY_RANK[opts.severity] ?? 0;
     if (alertRank < minRank) return;
+
+    const cooldownMs = settings.cooldownMinutes * 60 * 1000;
+    if (cooldownMs > 0 && _lastNotifiedAt !== null) {
+      const elapsed = Date.now() - _lastNotifiedAt;
+      if (elapsed < cooldownMs) {
+        logger.info(
+          { type: opts.type, elapsedMs: elapsed, cooldownMs },
+          "Alert notification suppressed by cooldown rate limit",
+        );
+        return;
+      }
+    }
 
     const { subject, text, html } = formatAlertEmail(opts);
 
@@ -172,6 +201,7 @@ export async function dispatchAlertNotification(opts: {
         )
       : Promise.resolve();
 
+    _lastNotifiedAt = Date.now();
     await Promise.all([emailP, slackP]);
   } catch (err) {
     logger.warn({ err, type: opts.type }, "dispatchAlertNotification unexpected error");
