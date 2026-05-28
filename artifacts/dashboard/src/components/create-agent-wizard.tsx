@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
+import { VoiceInputButton } from "@/components/voice-input-button";
 
 /* ── Use-case catalogue ─────────────────────────────────────────────────── */
 const USE_CASES = [
@@ -838,17 +839,28 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
 
                       <div>
                         <p className="text-gray-500 text-xs uppercase tracking-[0.15em] mb-3 font-semibold">Option B — Type role &amp; requirements manually</p>
-                        <textarea
-                          rows={4}
-                          placeholder={q.placeholder}
-                          value={microAnswers.answers[0] ?? ""}
-                          onChange={e => {
-                            const next = [...microAnswers.answers];
-                            next[0] = e.target.value;
-                            updateMicro({ answers: next });
-                          }}
-                          className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 text-gray-900 text-sm placeholder:text-gray-300 focus:outline-none focus:border-violet-500/60 transition-all resize-none leading-relaxed"
-                        />
+                        <div className="relative">
+                          <textarea
+                            rows={4}
+                            placeholder={q.placeholder}
+                            value={microAnswers.answers[0] ?? ""}
+                            onChange={e => {
+                              const next = [...microAnswers.answers];
+                              next[0] = e.target.value;
+                              updateMicro({ answers: next });
+                            }}
+                            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 pt-3.5 pb-11 text-gray-900 text-sm placeholder:text-gray-300 focus:outline-none focus:border-violet-500/60 transition-all resize-none leading-relaxed"
+                          />
+                          <VoiceInputButton
+                            onTranscript={text => {
+                              const next = [...microAnswers.answers];
+                              const current = next[0] ?? "";
+                              const sep = current && !/\s$/.test(current) ? " " : "";
+                              next[0] = current + sep + text;
+                              updateMicro({ answers: next });
+                            }}
+                          />
+                        </div>
                       </div>
                     </div>
                   );
@@ -862,18 +874,29 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                     </p>
                     <h2 className="text-3xl font-bold text-gray-900 mb-2">{q.q}</h2>
                     <p className="text-gray-400 text-sm mb-8">{q.hint}</p>
-                    <textarea
-                      autoFocus
-                      rows={5}
-                      placeholder={q.placeholder}
-                      value={microAnswers.answers[microStep] ?? ""}
-                      onChange={e => {
-                        const next = [...microAnswers.answers];
-                        next[microStep] = e.target.value;
-                        updateMicro({ answers: next });
-                      }}
-                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 text-gray-900 text-sm placeholder:text-gray-300 focus:outline-none focus:border-violet-500/60 transition-all resize-none leading-relaxed"
-                    />
+                    <div className="relative">
+                      <textarea
+                        autoFocus
+                        rows={5}
+                        placeholder={q.placeholder}
+                        value={microAnswers.answers[microStep] ?? ""}
+                        onChange={e => {
+                          const next = [...microAnswers.answers];
+                          next[microStep] = e.target.value;
+                          updateMicro({ answers: next });
+                        }}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 pt-3.5 pb-11 text-gray-900 text-sm placeholder:text-gray-300 focus:outline-none focus:border-violet-500/60 transition-all resize-none leading-relaxed"
+                      />
+                      <VoiceInputButton
+                        onTranscript={text => {
+                          const next = [...microAnswers.answers];
+                          const current = next[microStep] ?? "";
+                          const sep = current && !/\s$/.test(current) ? " " : "";
+                          next[microStep] = current + sep + text;
+                          updateMicro({ answers: next });
+                        }}
+                      />
+                    </div>
                     {microStep === 4 && (
                       <p className="text-gray-300 text-xs mt-2">Optional — leave blank and continue to proceed with default handling.</p>
                     )}
