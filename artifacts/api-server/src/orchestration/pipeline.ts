@@ -1051,12 +1051,27 @@ export class OrchestrationPipeline {
 
     const playPromise = playTask();
 
-    // ── Backchannel: enqueue filler CONCURRENT with LLM startup ──────────────
-    // By enqueuing before the LLM call, playTask immediately starts TTS-ing the
-    // filler phrase while KB retrieval + LLM warm up.  This fills the dead
-    // silence between the user finishing speaking and the first agent word —
-    // instead of sequentially awaiting playSentence (old approach, which added
-    // the filler duration as extra latency on top of LLM time).
+    // ── KB retrieval: kick off immediately so it runs concurrently ───────────
+    // Start the KB lookup as a promise RIGHT NOW — before the backchannel phrase
+    // is even enqueued.  That way KB retrieval overlaps with the backchannel TTS
+    // playback instead of adding to LLM start latency.
+    let systemPromptForTurn = this.resolvedSystemPrompt();
+    let kbContextPromise: Promise<string | null> = Promise.resolve(null);
+    if (this.agent.knowledgeBaseId) {
+      const openaiKey = this.config.providerKeys.get("openai");
+      if (openaiKey) {
+        kbContextPromise = retrieveKbContext(this.agent.knowledgeBaseId, transcript, openaiKey)
+          .catch((err) => {
+            logger.warn({ callId: this.config.callId, err }, "KB retrieval failed — continuing without context");
+            return null;
+          });
+      }
+    }
+
+    // ── Backchannel: enqueue filler CONCURRENT with KB retrieval + LLM startup ─
+    // playTask starts TTS-ing the filler phrase while KB lookup and LLM warm up.
+    // This fills the dead silence between the user finishing speaking and the
+    // first agent word.
     if (this.agent.backchannelingEnabled && !this.closed && !this.bargeInRequested) {
       const freq = this.agent.backchannelingFrequency ?? 0.5;
       if (Math.random() < freq) {
@@ -1065,21 +1080,10 @@ export class OrchestrationPipeline {
       }
     }
 
-    // P1-B: KB context injection — retrieve semantically relevant chunks before LLM call
-    let systemPromptForTurn = this.resolvedSystemPrompt();
-    if (this.agent.knowledgeBaseId) {
-      const openaiKey = this.config.providerKeys.get("openai");
-      if (openaiKey) {
-        try {
-          const kbContext = await retrieveKbContext(this.agent.knowledgeBaseId, transcript, openaiKey);
-          if (kbContext) {
-            systemPromptForTurn =
-              `${systemPromptForTurn}\n\n## Relevant Knowledge Base Context\n\n${kbContext}`;
-          }
-        } catch (err) {
-          logger.warn({ callId: this.config.callId, err }, "KB retrieval failed — continuing without context");
-        }
-      }
+    // Await KB result — by now it has been running concurrently with the backchannel TTS
+    const kbContext = await kbContextPromise;
+    if (kbContext) {
+      systemPromptForTurn = `${systemPromptForTurn}\n\n## Relevant Knowledge Base Context\n\n${kbContext}`;
     }
 
     await this.llm.chat(
@@ -1109,11 +1113,16 @@ export class OrchestrationPipeline {
 
     // ── If LLM called a tool, execute it and skip TTS ──
     if (triggeredToolName) {
+      // Enqueue a brief filler so the caller hears something while the tool
+      // runs (tool calls can take 1–3 s — without this the caller hears dead silence).
+      if (!this.closed && !this.bargeInRequested) {
+        enqueue("One moment…");
+      }
       allEnqueued = true;
       const finalWake = wakePlayer as (() => void) | null;
       wakePlayer = null;
       if (finalWake) finalWake();
-      await playPromise;
+      await playPromise; // plays "One moment…" (and any earlier backchannel) before continuing
       const toolResult = await this.handleToolCall(triggeredToolName, triggeredToolArgs);
       if (toolResult !== undefined) {
         await this.continueWithToolResult(triggeredToolName, toolResult);
