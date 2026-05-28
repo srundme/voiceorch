@@ -8,6 +8,7 @@ import { initAudioPool } from "./orchestration/audioPool.js";
 import { startCallbackPoller } from "./orchestration/callbackScheduler.js";
 import { startSpikeChecker } from "./services/spike-checker.js";
 import { startAlertSweep } from "./services/usage/alert-engine.js";
+import { startRateLimitCleanup } from "./services/rate-limit-cleanup.js";
 import { handleTwilioWebSocket } from "./orchestration/telephony/twilio.js";
 import { handlePlivoWebSocket } from "./orchestration/telephony/plivo.js";
 import { handleVobizWebSocket } from "./orchestration/telephony/vobiz.js";
@@ -61,6 +62,7 @@ server.listen(port, () => {
   startCallbackPoller();
   startSpikeChecker();
   startAlertSweep();
+  startRateLimitCleanup();
 });
 
 function gracefulShutdown(signal: string) {
