@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/table";
 import { ArrowLeft, Wallet, PhoneCall, Bot, Activity } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { formatApiError } from "@/lib/format-api-error";
 
 export default function UserDetail() {
   const { clerkId } = useParams<{ clerkId: string }>();
@@ -56,7 +57,7 @@ export default function UserDetail() {
           setAdjustmentDesc("");
         },
         onError: (err) => {
-          toast({ title: "Failed to adjust wallet", description: err.message, variant: "destructive" });
+          toast({ title: "Failed to adjust wallet", description: formatApiError(err), variant: "destructive" });
         }
       }
     );

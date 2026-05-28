@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { Mic2, Save, RefreshCw, Loader2, Search, Info, Play, Square, AlertTriangle, KeyRound } from "lucide-react";
 import { Link } from "wouter";
+import { formatApiError } from "@/lib/format-api-error";
 
 export default function Voices() {
   const { data, isLoading, refetch, isRefetching, isError, error } = useAdminCartesiaVoices();
@@ -82,10 +83,10 @@ export default function Voices() {
       };
 
       await audio.play();
-    } catch (err: any) {
+    } catch (err) {
       setPreviewingId(null);
       currentAudioRef.current = null;
-      toast({ title: err.message ?? "Preview failed", variant: "destructive" });
+      toast({ title: "Preview failed", description: formatApiError(err), variant: "destructive" });
     }
   }
 
@@ -156,7 +157,7 @@ export default function Voices() {
         setSelectedIds(null);
         refetch();
       },
-      onError: () => toast({ title: "Save failed", variant: "destructive" }),
+      onError: (err) => toast({ title: "Save failed", description: formatApiError(err), variant: "destructive" }),
     });
   }
 

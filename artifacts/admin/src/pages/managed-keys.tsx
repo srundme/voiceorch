@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Key, Save, RefreshCw, Loader2, Info } from "lucide-react";
+import { formatApiError } from "@/lib/format-api-error";
 
 const KEY_FIELDS = [
   {
@@ -69,7 +70,7 @@ export default function ManagedKeys() {
         setFormValues({});
         refetch();
       },
-      onError: () => toast({ title: "Save failed", variant: "destructive" }),
+      onError: (err) => toast({ title: "Save failed", description: formatApiError(err), variant: "destructive" }),
     });
   }
 

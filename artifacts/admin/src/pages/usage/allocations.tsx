@@ -11,6 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Pencil, Trash2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { formatApiError } from "@/lib/format-api-error";
 
 const SERVICES = [{ value: "stt", label: "STT" }, { value: "llm", label: "LLM" }, { value: "tts", label: "TTS" }];
 
@@ -18,6 +20,7 @@ export default function AllocationsPage() {
   const { data, isLoading } = useAllocations();
   const upsert = useUpsertAllocation();
   const del = useDeleteAllocation();
+  const { toast } = useToast();
   const [editing, setEditing] = useState<AllocationRow | null>(null);
   const [open, setOpen] = useState(false);
 
@@ -35,7 +38,14 @@ export default function AllocationsPage() {
             </DialogTrigger>
             <AllocationDialog
               editing={editing}
-              onSave={async (input) => { await upsert.mutateAsync(input); setOpen(false); }}
+              onSave={async (input) => {
+                try {
+                  await upsert.mutateAsync(input);
+                  setOpen(false);
+                } catch (err) {
+                  toast({ title: "Save failed", description: formatApiError(err), variant: "destructive" });
+                }
+              }}
               saving={upsert.isPending}
             />
           </Dialog>
@@ -82,7 +92,9 @@ export default function AllocationsPage() {
                         <Pencil className="h-3 w-3" />
                       </Button>
                       <Button variant="ghost" size="icon" className="h-7 w-7 text-red-400 hover:text-red-300"
-                        onClick={() => del.mutate(r.id)}>
+                        onClick={() => del.mutate(r.id, {
+                          onError: (err) => toast({ title: "Delete failed", description: formatApiError(err), variant: "destructive" }),
+                        })}>
                         <Trash2 className="h-3 w-3" />
                       </Button>
                     </TableCell>

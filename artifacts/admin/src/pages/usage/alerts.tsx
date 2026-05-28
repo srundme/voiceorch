@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertTriangle, Check, Clock } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { formatApiError } from "@/lib/format-api-error";
 
 const SEVERITY: Record<string, string> = {
   critical: "border-red-500/30 bg-red-500/10 text-red-400",
@@ -30,6 +32,7 @@ export default function AlertsPage() {
   const [view, setView] = useState<"open" | "all">("open");
   const { data, isLoading } = useAdminAlerts({ limit: 200, onlyUnacknowledged: view === "open" });
   const ack = useAcknowledgeAlert();
+  const { toast } = useToast();
   const alerts = data?.alerts ?? [];
 
   return (
@@ -82,7 +85,14 @@ export default function AlertsPage() {
                     </p>
                   </div>
                   {!a.acknowledgedAt && (
-                    <Button size="sm" variant="outline" onClick={() => ack.mutate(a.id)} disabled={ack.isPending}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => ack.mutate(a.id, {
+                        onError: (err) => toast({ title: "Failed to acknowledge", description: formatApiError(err), variant: "destructive" }),
+                      })}
+                      disabled={ack.isPending}
+                    >
                       Acknowledge
                     </Button>
                   )}

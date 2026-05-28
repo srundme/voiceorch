@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Settings, Bell, Mail, Check, AlertTriangle, Slack, Send } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { formatAdminError } from "@/lib/api";
+import { formatApiError } from "@/lib/format-api-error";
 
 export default function PlatformSettings() {
   const { data: thresholdData, isLoading: loadingThreshold } = useSpikeThreshold();
@@ -72,7 +72,7 @@ export default function PlatformSettings() {
         await saveThreshold.mutateAsync(null);
         toast({ title: "Threshold cleared", description: "Spike alerts are now disabled." });
       } catch (err) {
-        toast({ title: "Failed to clear threshold", description: formatAdminError(err), variant: "destructive" });
+        toast({ title: "Failed to clear threshold", description: formatApiError(err), variant: "destructive" });
       }
       return;
     }
@@ -85,7 +85,7 @@ export default function PlatformSettings() {
       await saveThreshold.mutateAsync(val);
       toast({ title: "Threshold saved", description: `Alert threshold set to ${val} calls/day.` });
     } catch (err) {
-      toast({ title: "Failed to save threshold", description: formatAdminError(err), variant: "destructive" });
+      toast({ title: "Failed to save threshold", description: formatApiError(err), variant: "destructive" });
     }
   }
 
@@ -99,7 +99,7 @@ export default function PlatformSettings() {
       await saveEmail.mutateAsync(val || null);
       toast({ title: val ? "Notification email saved" : "Notification email cleared" });
     } catch (err) {
-      toast({ title: "Failed to save email", description: formatAdminError(err), variant: "destructive" });
+      toast({ title: "Failed to save email", description: formatApiError(err), variant: "destructive" });
     }
   }
 
@@ -113,7 +113,7 @@ export default function PlatformSettings() {
       await saveAlertEmail.mutateAsync(val || null);
       toast({ title: val ? "Alert notification email saved" : "Alert notification email cleared" });
     } catch (err) {
-      toast({ title: "Failed to save alert email", description: formatAdminError(err), variant: "destructive" });
+      toast({ title: "Failed to save alert email", description: formatApiError(err), variant: "destructive" });
     }
   }
 
@@ -127,7 +127,7 @@ export default function PlatformSettings() {
       await saveAlertSlack.mutateAsync(val || null);
       toast({ title: val ? "Slack webhook saved" : "Slack webhook cleared" });
     } catch (err) {
-      toast({ title: "Failed to save Slack webhook", description: formatAdminError(err), variant: "destructive" });
+      toast({ title: "Failed to save Slack webhook", description: formatApiError(err), variant: "destructive" });
     }
   }
 
@@ -137,7 +137,7 @@ export default function PlatformSettings() {
       await saveAlertSeverity.mutateAsync(val);
       toast({ title: "Minimum severity saved", description: `Will notify for ${val} and above.` });
     } catch (err) {
-      toast({ title: "Failed to save severity setting", description: formatAdminError(err), variant: "destructive" });
+      toast({ title: "Failed to save severity setting", description: formatApiError(err), variant: "destructive" });
     }
   }
 
@@ -154,8 +154,8 @@ export default function PlatformSettings() {
         title: "Cooldown saved",
         description: val === 0 ? "Rate limiting disabled." : `At most one notification per ${val} minute${val === 1 ? "" : "s"}.`,
       });
-    } catch {
-      toast({ title: "Failed to save cooldown", variant: "destructive" });
+    } catch (err) {
+      toast({ title: "Failed to save cooldown", description: formatApiError(err), variant: "destructive" });
     }
   }
 
@@ -164,9 +164,8 @@ export default function PlatformSettings() {
       const result = await sendTestNotification.mutateAsync();
       const channels = result.sent.join(" and ");
       toast({ title: "Test notification sent", description: `Dispatched via ${channels}.` });
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to send test notification";
-      toast({ title: "Test notification failed", description: msg, variant: "destructive" });
+    } catch (err) {
+      toast({ title: "Test notification failed", description: formatApiError(err), variant: "destructive" });
     }
   }
 
