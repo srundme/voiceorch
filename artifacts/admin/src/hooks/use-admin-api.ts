@@ -110,6 +110,7 @@ export interface AdminVoice {
   language: string;
   description: string;
   isListed: boolean;
+  isOwner?: boolean;
 }
 
 export function useAdminCartesiaVoices() {

@@ -7,6 +7,9 @@ import { logger } from "../lib/logger.js";
 
 const router: IRouter = Router();
 
+const CARTESIA_BASE_URL = "https://api.cartesia.ai";
+const CARTESIA_VERSION = "2026-03-01";
+
 async function getCartesiaKey(): Promise<string | null> {
   const [row] = await db
     .select()
@@ -28,34 +31,43 @@ router.get("/admin/voices/cartesia", requireAdmin, async (_req, res): Promise<vo
 
   try {
     const [cartesiaRes, listedRows] = await Promise.all([
-      fetch("https://api.cartesia.ai/voices", {
+      fetch(`${CARTESIA_BASE_URL}/voices`, {
         headers: {
           "X-API-Key": cartesiaKey,
-          "Cartesia-Version": "2024-06-10",
+          "Cartesia-Version": CARTESIA_VERSION,
         },
       }),
       db.select().from(platformListedVoicesTable),
     ]);
 
     if (!cartesiaRes.ok) {
-      const errText = await cartesiaRes.text();
+      const errText = (await cartesiaRes.text().catch(() => "")).trim();
       logger.warn({ status: cartesiaRes.status, body: errText }, "Cartesia voices fetch failed");
-      res.status(502).json({ error: "Failed to fetch voices from Cartesia" });
+      const snippet = errText.slice(0, 300);
+      res.status(502).json({
+        error: `Cartesia ${cartesiaRes.status}: ${snippet || cartesiaRes.statusText || "request failed"}`,
+      });
       return;
     }
 
-    const data = await cartesiaRes.json() as any[];
+    const raw = await cartesiaRes.json() as any;
+    // Cartesia 2026-03-01 wraps voices in { data: [...] }; older versions returned an array
+    const arr: any[] = Array.isArray(raw)
+      ? raw
+      : (Array.isArray(raw?.data) ? raw.data : (Array.isArray(raw?.voices) ? raw.voices : []));
+
     const listedSet = new Set(
       listedRows.filter(r => r.isListed).map(r => r.voiceId)
     );
 
-    const voices = data.map((v: any) => ({
+    const voices = arr.map((v: any) => ({
       id: v.id as string,
       name: (v.name ?? "") as string,
       gender: (v.gender ?? "Neutral") as string,
       language: (v.language ?? "en") as string,
       description: (v.description ?? "") as string,
       isListed: listedSet.has(v.id as string),
+      isOwner: Boolean(v.is_owner ?? v.isOwner ?? false),
     }));
 
     res.json({ voices });
@@ -115,11 +127,11 @@ router.post("/admin/voices/preview", requireAdmin, async (req, res): Promise<voi
   const model = (modelId && PREVIEW_VALID_MODELS.has(modelId)) ? modelId : "sonic-3.5";
 
   try {
-    const response = await fetch("https://api.cartesia.ai/tts/bytes", {
+    const response = await fetch(`${CARTESIA_BASE_URL}/tts/bytes`, {
       method: "POST",
       headers: {
         "X-API-Key": cartesiaKey,
-        "Cartesia-Version": "2026-03-01",
+        "Cartesia-Version": CARTESIA_VERSION,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({

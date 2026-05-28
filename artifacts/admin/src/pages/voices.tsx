@@ -25,6 +25,7 @@ export default function Voices() {
   const [search, setSearch] = useState("");
   const [langFilter, setLangFilter] = useState("all");
   const [genderFilter, setGenderFilter] = useState("all");
+  const [ownerFilter, setOwnerFilter] = useState<"all" | "mine">("all");
   const [previewingId, setPreviewingId] = useState<string | null>(null);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -114,9 +115,10 @@ export default function Voices() {
         (v.description ?? "").toLowerCase().includes(search.toLowerCase());
       const matchesLang = langFilter === "all" || v.language === langFilter;
       const matchesGender = genderFilter === "all" || (v.gender ?? "Neutral") === genderFilter;
-      return matchesSearch && matchesLang && matchesGender;
+      const matchesOwner = ownerFilter === "all" || v.isOwner === true;
+      return matchesSearch && matchesLang && matchesGender && matchesOwner;
     });
-  }, [voices, search, langFilter, genderFilter]);
+  }, [voices, search, langFilter, genderFilter, ownerFilter]);
 
   function toggleVoice(id: string) {
     setSelectedIds(prev => {
@@ -160,6 +162,9 @@ export default function Voices() {
 
   const listedCount = effectiveSelected.size;
   const allFilteredSelected = filtered.length > 0 && filtered.every(v => effectiveSelected.has(v.id));
+  const ownerScopedCount = ownerFilter === "mine"
+    ? voices.filter(v => v.isOwner === true).length
+    : voices.length;
 
   return (
     <div className="space-y-6">
@@ -221,7 +226,7 @@ export default function Voices() {
               ) : (
                 <>
                   <strong className="text-destructive">Could not load voices</strong>
-                  <span className="text-muted-foreground"> — check that the API server is reachable and try again.</span>
+                  <span className="text-muted-foreground"> — {msg || "check that the API server is reachable and try again."}</span>
                 </>
               )}
             </div>
@@ -237,7 +242,7 @@ export default function Voices() {
                 <Mic2 className="h-4 w-4 text-primary" /> Cartesia Voices
               </CardTitle>
               <CardDescription className="text-xs mt-1">
-                {isLoading ? "Loading…" : isError ? "Unavailable" : `${voices.length} total voices · `}
+                {isLoading ? "Loading…" : isError ? "Unavailable" : `${ownerScopedCount} total voices · `}
                 {!isLoading && !isError && (
                   <Badge variant="secondary" className="ml-1 text-xs">
                     {listedCount} listed for users
@@ -277,6 +282,15 @@ export default function Voices() {
                 {genders.map(g => (
                   <SelectItem key={g} value={g}>{g}</SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+            <Select value={ownerFilter} onValueChange={(v) => setOwnerFilter(v as "all" | "mine")}>
+              <SelectTrigger className="w-36 h-8 text-xs bg-muted/30" aria-label="Ownership filter">
+                <SelectValue placeholder="Ownership" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All voices</SelectItem>
+                <SelectItem value="mine">My voices</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -368,7 +382,7 @@ export default function Voices() {
         <span>
           {isError
             ? "Voice data unavailable"
-            : `Showing ${filtered.length} of ${voices.length} voices · ${listedCount} selected for users`}
+            : `Showing ${filtered.length} of ${ownerScopedCount} voices · ${listedCount} selected for users`}
         </span>
         <Button
           size="sm"
