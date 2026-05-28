@@ -514,7 +514,23 @@ router.get("/admin/settings/alert-min-severity", async (req, res): Promise<void>
   }
 });
 
+const testNotifRateLimit = new Map<string, number[]>();
+const TEST_NOTIF_MAX = 3;
+const TEST_NOTIF_WINDOW_MS = 60_000;
+
 router.post("/admin/settings/alert-notifications/test", async (req, res): Promise<void> => {
+  const ip = req.ip ?? req.socket.remoteAddress ?? "unknown";
+  const now = Date.now();
+  const timestamps = (testNotifRateLimit.get(ip) ?? []).filter((t) => now - t < TEST_NOTIF_WINDOW_MS);
+  if (timestamps.length >= TEST_NOTIF_MAX) {
+    const retryAfterSec = Math.ceil((TEST_NOTIF_WINDOW_MS - (now - timestamps[0]!)) / 1000);
+    res.setHeader("Retry-After", String(retryAfterSec));
+    res.status(429).json({ error: `Too many test notifications. Wait ${retryAfterSec} seconds before trying again.` });
+    return;
+  }
+  timestamps.push(now);
+  testNotifRateLimit.set(ip, timestamps);
+
   try {
     const result = await sendTestAlertNotification();
     if (!result.email && !result.slack) {

@@ -142,6 +142,7 @@ export default function PlatformSettings() {
   const saveAlertSeverity = useSaveAlertMinSeverity();
   const saveAlertCooldown = useSaveAlertNotificationCooldown();
   const sendTestNotification = useSendTestAlertNotification();
+  const [testOnCooldown, setTestOnCooldown] = useState(false);
 
   const { data: logData, isLoading: loadingLog } = useAlertNotificationLog(50);
   const [showLog, setShowLog] = useState(false);
@@ -278,6 +279,8 @@ export default function PlatformSettings() {
     try {
       const result = await sendTestNotification.mutateAsync();
       const channels = result.sent.join(" and ");
+      setTestOnCooldown(true);
+      setTimeout(() => setTestOnCooldown(false), 30_000);
       toast({ title: "Test notification sent", description: `Dispatched via ${channels}.` });
     } catch (err) {
       toast({ title: "Test notification failed", description: formatApiError(err), variant: "destructive" });
@@ -306,10 +309,10 @@ export default function PlatformSettings() {
               size="sm"
               variant="outline"
               onClick={() => setTestDialogOpen(true)}
-              disabled={sendTestNotification.isPending}
+              disabled={sendTestNotification.isPending || testOnCooldown}
             >
               <Send className="h-3.5 w-3.5 mr-1.5" />
-              {sendTestNotification.isPending ? "Sending…" : "Send test"}
+              {sendTestNotification.isPending ? "Sending…" : testOnCooldown ? "Sent — wait 30s" : "Send test"}
             </Button>
           </div>
         </CardHeader>
