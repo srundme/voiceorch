@@ -6,6 +6,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
 import {
+  ASR_PROVIDERS,
+  LLM_PROVIDERS,
+  TTS_PROVIDERS,
+  TELEPHONY_PROVIDERS,
+} from "@/lib/agent-providers";
+import {
   Users, Target, Headphones, Bell,
   Megaphone, Building2, Wand2, Globe,
   ChevronLeft, ChevronRight, Check, X, Loader2, Sparkles,
@@ -1452,10 +1458,10 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     {[
-                      { label: "Transcriber (ASR)", key: "byopAsr",       opts: ["deepgram","assemblyai","whisper","azure","sarvam"] },
-                      { label: "Language Model",    key: "byopLlm",       opts: ["openai","anthropic","google","sarvam","groq","deepseek","mistral"] },
-                      { label: "Voice (TTS)",       key: "byopTts",       opts: ["elevenlabs","openai","cartesia","azure","aws_polly","deepgram"] },
-                      { label: "Telephony",         key: "byopTelephony", opts: ["twilio","plivo","vonage","vobiz"] },
+                      { label: "Transcriber (ASR)", key: "byopAsr",       opts: ASR_PROVIDERS },
+                      { label: "Language Model",    key: "byopLlm",       opts: LLM_PROVIDERS },
+                      { label: "Voice (TTS)",       key: "byopTts",       opts: TTS_PROVIDERS },
+                      { label: "Telephony",         key: "byopTelephony", opts: TELEPHONY_PROVIDERS },
                     ].map(field => (
                       <div key={field.key} className="bg-gray-50 border border-gray-200 rounded-xl p-3.5">
                         <p className="text-gray-400 text-[10px] font-semibold uppercase tracking-widest mb-2">{field.label}</p>
@@ -1464,7 +1470,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                           onChange={e => update({ [field.key]: e.target.value } as any)}
                           className="w-full bg-gray-100 border border-gray-200 rounded-lg text-xs text-gray-600 py-2 px-2.5 focus:outline-none focus:border-violet-500/60"
                         >
-                          {field.opts.map(o => <option key={`${field.key}-${o}`} value={o} className="bg-white">{o}</option>)}
+                          {field.opts.map(o => <option key={`${field.key}-${o.value}`} value={o.value} className="bg-white">{o.label}</option>)}
                         </select>
                       </div>
                     ))}
