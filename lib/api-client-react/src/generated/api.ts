@@ -28,6 +28,7 @@ import type {
   AdminAlertsResponse,
   AdminAllocationInput,
   AdminAllocationRow,
+  AdminFailedCall,
   AdminGetCartesiaVoices200,
   AdminGetListedVoices200,
   AdminListAlertsParams,
@@ -7071,6 +7072,83 @@ export function useGetMyUsage<TData = Awaited<ReturnType<typeof getMyUsage>>, TE
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetMyUsageQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getAdminPlatformFailedCallsUrl = () => {
+
+
+
+
+  return `/api/admin/platform/failed-calls`
+}
+
+/**
+ * @summary Recent failed calls with user identity
+ */
+export const adminPlatformFailedCalls = async ( options?: RequestInit): Promise<AdminFailedCall[]> => {
+
+  return customFetch<AdminFailedCall[]>(getAdminPlatformFailedCallsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getAdminPlatformFailedCallsQueryKey = () => {
+    return [
+    `/api/admin/platform/failed-calls`
+    ] as const;
+    }
+
+
+export const getAdminPlatformFailedCallsQueryOptions = <TData = Awaited<ReturnType<typeof adminPlatformFailedCalls>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof adminPlatformFailedCalls>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminPlatformFailedCallsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminPlatformFailedCalls>>> = ({ signal }) => adminPlatformFailedCalls({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminPlatformFailedCalls>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type AdminPlatformFailedCallsQueryResult = NonNullable<Awaited<ReturnType<typeof adminPlatformFailedCalls>>>
+export type AdminPlatformFailedCallsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Recent failed calls with user identity
+ */
+
+export function useAdminPlatformFailedCalls<TData = Awaited<ReturnType<typeof adminPlatformFailedCalls>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof adminPlatformFailedCalls>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getAdminPlatformFailedCallsQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

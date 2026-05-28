@@ -418,7 +418,7 @@ export const AgentInputAgentMode = {
 export type AgentInputAgentConfig = { [key: string]: unknown };
 
 /**
- * Raw wizard answers passed from the dashboard. When present, the server generates the agent's system prompt server-side using the active admin master template (Gemini) and stores the result. Never returned in responses.
+ * Raw wizard answers passed from the dashboard. May include the ordered micro-question/answer pairs (microAnswers) and any uploaded job description content (jdFileContent, jdFileName). When present, the server generates the agent's system prompt server-side using the active admin master template (Gemini) and stores the result. Never returned in responses.
  */
 export type AgentInputWizardInputs = { [key: string]: unknown };
 
@@ -472,7 +472,7 @@ export interface AgentInput {
   leadFields?: string[];
   /** Product or service details for the agent's context */
   productDetails?: string;
-  /** Raw wizard answers passed from the dashboard. When present, the server generates the agent's system prompt server-side using the active admin master template (Gemini) and stores the result. Never returned in responses. */
+  /** Raw wizard answers passed from the dashboard. May include the ordered micro-question/answer pairs (microAnswers) and any uploaded job description content (jdFileContent, jdFileName). When present, the server generates the agent's system prompt server-side using the active admin master template (Gemini) and stores the result. Never returned in responses. */
   wizardInputs?: AgentInputWizardInputs;
 }
 
@@ -1962,6 +1962,27 @@ export interface AdminAlert {
 export interface AdminAlertsResponse {
   alerts: AdminAlert[];
   unacknowledgedCount: number;
+}
+
+export interface AdminFailedCall {
+  id: number;
+  /**
+     * Clerk user ID
+     * @nullable
+     */
+  userId?: string | null;
+  /** @nullable */
+  userEmail?: string | null;
+  /** @nullable */
+  userName?: string | null;
+  /** @nullable */
+  agentId?: number | null;
+  /** @nullable */
+  agentName?: string | null;
+  status: string;
+  /** @nullable */
+  errorMessage?: string | null;
+  createdAt: string;
 }
 
 /**

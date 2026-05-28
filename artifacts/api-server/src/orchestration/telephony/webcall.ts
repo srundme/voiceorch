@@ -524,7 +524,7 @@ export async function handleWebCallWebSocket(
   const maxTimer = setTimeout(() => { void hangup("timeout"); }, (agent.maxDuration ?? 600) * 1000);
 
   // ── Hangup ────────────────────────────────────────────────────────────────
-  async function hangup(reason = "normal") {
+  async function hangup(reason = "normal", errorDetail?: unknown) {
     if (closed) return;
     closed = true;
     clearTimeout(maxTimer);
@@ -535,6 +535,15 @@ export async function handleWebCallWebSocket(
     const durationSeconds = Math.floor((endedAt.getTime() - startedAt.getTime()) / 1000);
     const transcript      = history.map(t => `${t.role === "user" ? "Caller" : "Agent"}: ${t.content}`).join("\n");
 
+    const isFailed = reason === "error" || reason === "timeout";
+    const errorMessage = isFailed
+      ? (errorDetail instanceof Error
+          ? errorDetail.message
+          : errorDetail != null
+            ? String(errorDetail)
+            : reason)
+      : null;
+
     try {
       // Finalize recording — upload to GCS then save the serving URL
       const recordingUrl = await recording.finalize(callId).catch((err) => {
@@ -543,10 +552,11 @@ export async function handleWebCallWebSocket(
       });
 
       await db.update(callsTable).set({
-        status: reason === "error" ? "failed" : "completed",
+        status: isFailed ? "failed" : "completed",
         endedAt,
         durationSeconds,
         transcript: transcript || null,
+        ...(errorMessage ? { errorMessage } : {}),
         ...(recordingUrl ? { recordingUrl } : {}),
       }).where(eq(callsTable.id, callId));
 
@@ -661,6 +671,6 @@ export async function handleWebCallWebSocket(
   ws.on("close", async () => { if (!closed) await hangup("disconnected"); });
   ws.on("error", async (err: unknown) => {
     logger.error({ callId, err }, "WebCall WS error");
-    if (!closed) await hangup("error");
+    if (!closed) await hangup("error", err);
   });
 }

@@ -165,7 +165,7 @@ export const CreateAgentBody = zod.object({
   "leadSourceToken": zod.string().optional().describe('Page Access Token for the lead source (encrypted at rest)'),
   "leadFields": zod.array(zod.string()).optional().describe('Lead fields to capture per incoming lead'),
   "productDetails": zod.string().optional().describe('Product or service details for the agent\'s context'),
-  "wizardInputs": zod.record(zod.string(), zod.unknown()).optional().describe('Raw wizard answers passed from the dashboard. When present, the server generates the agent\'s system prompt server-side using the active admin master template (Gemini) and stores the result. Never returned in responses.')
+  "wizardInputs": zod.record(zod.string(), zod.unknown()).optional().describe('Raw wizard answers passed from the dashboard. May include the ordered micro-question\/answer pairs (microAnswers) and any uploaded job description content (jdFileContent, jdFileName). When present, the server generates the agent\'s system prompt server-side using the active admin master template (Gemini) and stores the result. Never returned in responses.')
 })
 
 
@@ -2230,6 +2230,23 @@ export const GetMyUsageResponse = zod.object({
   "success": zod.boolean()
 }))
 })
+
+
+/**
+ * @summary Recent failed calls with user identity
+ */
+export const AdminPlatformFailedCallsResponseItem = zod.object({
+  "id": zod.number(),
+  "userId": zod.string().nullish().describe('Clerk user ID'),
+  "userEmail": zod.string().nullish(),
+  "userName": zod.string().nullish(),
+  "agentId": zod.number().nullish(),
+  "agentName": zod.string().nullish(),
+  "status": zod.string(),
+  "errorMessage": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const AdminPlatformFailedCallsResponse = zod.array(AdminPlatformFailedCallsResponseItem)
 
 
 /**

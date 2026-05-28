@@ -1,5 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { adminFetch } from "@/lib/api";
+import type { AdminFailedCall } from "@workspace/api-client-react";
+
+export type { AdminFailedCall };
 
 // Overview
 export function useOverview() {
@@ -82,7 +85,7 @@ export interface FailedCallsFilters {
 }
 
 export interface FailedCallsResponse {
-  data: any[];
+  data: AdminFailedCall[];
   total: number;
   page: number;
   pageSize: number;

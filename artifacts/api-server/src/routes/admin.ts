@@ -362,11 +362,13 @@ router.get("/admin/platform/failed-calls", async (req, res): Promise<void> => {
 
     const where = and(...conditions);
 
-    const [failed, [{ total }]] = await Promise.all([
+    const [failedCalls, [{ total }]] = await Promise.all([
       db
         .select({
           id: callsTable.id,
           userId: callsTable.userId,
+          userEmail: usersTable.email,
+          userName: usersTable.name,
           agentId: callsTable.agentId,
           agentName: agentsTable.name,
           status: callsTable.status,
@@ -375,6 +377,7 @@ router.get("/admin/platform/failed-calls", async (req, res): Promise<void> => {
         })
         .from(callsTable)
         .leftJoin(agentsTable, eq(callsTable.agentId, agentsTable.id))
+        .leftJoin(usersTable, eq(callsTable.userId, usersTable.clerkId))
         .where(where)
         .orderBy(desc(callsTable.createdAt))
         .limit(pageSize)
@@ -385,7 +388,7 @@ router.get("/admin/platform/failed-calls", async (req, res): Promise<void> => {
         .where(where),
     ]);
 
-    res.json({ data: failed, total, page, pageSize });
+    res.json({ data: failedCalls, total, page, pageSize });
   } catch (err) {
     req.log.error({ err }, "admin/platform/failed-calls failed");
     res.status(500).json({ error: "Internal server error" });

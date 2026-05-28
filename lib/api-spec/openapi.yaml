@@ -2065,6 +2065,21 @@ paths:
         "401":
           description: Unauthorized
 
+  # ── Admin Platform Health ──────────────────────────────────────────────────
+  /admin/platform/failed-calls:
+    get:
+      operationId: adminPlatformFailedCalls
+      tags: [admin-usage]
+      summary: Recent failed calls with user identity
+      responses:
+        "200":
+          description: Recent failed calls
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AdminFailedCall" }
+
   # ── Admin Usage Monitoring ──────────────────────────────────────────────────
   /admin/usage/overview:
     get:
@@ -4694,3 +4709,17 @@ components:
           type: array
           items: { $ref: "#/components/schemas/AdminAlert" }
         unacknowledgedCount: { type: integer }
+
+    AdminFailedCall:
+      type: object
+      required: [id, status, createdAt]
+      properties:
+        id: { type: integer }
+        userId: { type: ["string", "null"], description: "Clerk user ID" }
+        userEmail: { type: ["string", "null"] }
+        userName: { type: ["string", "null"] }
+        agentId: { type: ["integer", "null"] }
+        agentName: { type: ["string", "null"] }
+        status: { type: string }
+        errorMessage: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }

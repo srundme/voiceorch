@@ -251,9 +251,13 @@ export default function Platform() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    failedCalls.map((call: any) => {
+                    failedCalls?.map((call) => {
                       const agentLabel = call.agentName ?? (call.agentId != null ? `Agent #${call.agentId}` : "—");
                       const reason = call.errorMessage ?? null;
+                      const shortClerkId = call.userId
+                        ? (call.userId.length > 12 ? `${call.userId.slice(0, 12)}…` : call.userId)
+                        : null;
+                      const userLabel = call.userName ?? call.userEmail ?? shortClerkId ?? "—";
                       return (
                         <TableRow
                           key={call.id}
@@ -267,7 +271,7 @@ export default function Platform() {
                           <TableCell className="text-xs">
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <span className="block truncate">{call.userId ?? "—"}</span>
+                                <span className="block truncate">{userLabel}</span>
                               </TooltipTrigger>
                               {call.userId && <TooltipContent className="max-w-[400px] break-all">{call.userId}</TooltipContent>}
                             </Tooltip>
