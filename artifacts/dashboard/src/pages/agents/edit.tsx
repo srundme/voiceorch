@@ -183,6 +183,27 @@ const agentFormSchema = z.object({
 
 type AgentFormValues = z.infer<typeof agentFormSchema>;
 
+export type { AgentFormValues };
+
+export function buildUpdateAgentPayload(data: AgentFormValues) {
+  const { webhookSecret, promptVariables, vadSilenceMs, bargeInEnabled, bargeInEnergyThreshold, bargeInMinFrames, ...rest } = data;
+  const agentConfig: Record<string, unknown> = {};
+  if (webhookSecret) agentConfig["webhookSecret"] = webhookSecret;
+  if (promptVariables?.length) agentConfig["promptVariables"] = promptVariables;
+  if (vadSilenceMs != null && vadSilenceMs !== 250) agentConfig["vadSilenceMs"] = vadSilenceMs;
+  if (bargeInEnabled === false) agentConfig["bargeInEnabled"] = false;
+  if (bargeInEnergyThreshold != null && bargeInEnergyThreshold !== 1200) agentConfig["bargeInEnergyThreshold"] = bargeInEnergyThreshold;
+  if (bargeInMinFrames != null && bargeInMinFrames !== 4) agentConfig["bargeInMinFrames"] = bargeInMinFrames;
+  return {
+    ...rest,
+    ...(Object.keys(agentConfig).length > 0 ? { agentConfig } : {}),
+    dispositionSchema: (rest.dispositionSchema ?? []).map(f => ({
+      ...f,
+      options: f.options ? f.options.split(",").map((s: string) => s.trim()).filter(Boolean) : undefined,
+    })),
+  };
+}
+
 /* ── Smart model select ───────────────────────────────────────────────────── */
 
 function ModelSelect({
@@ -302,22 +323,7 @@ export default function AgentEdit() {
   const backchannelingFrequency = useWatch({ control: form.control, name: "backchannelingFrequency" });
 
   const onSubmit = (data: AgentFormValues) => {
-    const { webhookSecret, promptVariables, vadSilenceMs, bargeInEnabled, bargeInEnergyThreshold, bargeInMinFrames, ...rest } = data;
-    const agentConfig: Record<string, unknown> = {};
-    if (webhookSecret) agentConfig["webhookSecret"] = webhookSecret;
-    if (promptVariables?.length) agentConfig["promptVariables"] = promptVariables;
-    if (vadSilenceMs != null && vadSilenceMs !== 250) agentConfig["vadSilenceMs"] = vadSilenceMs;
-    if (bargeInEnabled === false) agentConfig["bargeInEnabled"] = false;
-    if (bargeInEnergyThreshold != null && bargeInEnergyThreshold !== 1200) agentConfig["bargeInEnergyThreshold"] = bargeInEnergyThreshold;
-    if (bargeInMinFrames != null && bargeInMinFrames !== 4) agentConfig["bargeInMinFrames"] = bargeInMinFrames;
-    const submitData = {
-      ...rest,
-      ...(Object.keys(agentConfig).length > 0 ? { agentConfig } : {}),
-      dispositionSchema: (rest.dispositionSchema ?? []).map(f => ({
-        ...f,
-        options: f.options ? f.options.split(",").map(s => s.trim()).filter(Boolean) : undefined,
-      })),
-    };
+    const submitData = buildUpdateAgentPayload(data);
     updateAgent.mutate(
       { id, data: submitData as any },
       {
