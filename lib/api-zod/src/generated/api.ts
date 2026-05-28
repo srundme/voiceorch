@@ -2157,6 +2157,37 @@ export const CreatePublicBookingBody = zod.object({
 
 
 /**
+ * @summary Current-month spend per service, remaining budget, and last 25 events
+ */
+export const GetMyUsageResponse = zod.object({
+  "totalUsedMicros": zod.number(),
+  "totalAllocatedMicros": zod.number().optional(),
+  "totalRemainingMicros": zod.number().optional(),
+  "perService": zod.array(zod.object({
+  "service": zod.string(),
+  "usedMicros": zod.number(),
+  "eventCount": zod.number(),
+  "allocatedMicros": zod.number(),
+  "remainingMicros": zod.number()
+})),
+  "recentEvents": zod.array(zod.object({
+  "id": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "service": zod.string(),
+  "provider": zod.string(),
+  "model": zod.string().nullish(),
+  "callId": zod.number().nullish(),
+  "inputTokens": zod.number().optional(),
+  "outputTokens": zod.number().optional(),
+  "audioSeconds": zod.number().optional(),
+  "characters": zod.number().optional(),
+  "estimatedCostMicros": zod.number(),
+  "success": zod.boolean()
+}))
+})
+
+
+/**
  * @summary Combined STT/TTS/LLM overview with cost totals and trends
  */
 export const adminUsageOverviewQueryDaysDefault = 30;

@@ -42,6 +42,8 @@ tags:
     description: Native appointment scheduling engine
   - name: admin-usage
     description: Admin platform-wide STT/LLM/TTS usage monitoring
+  - name: usage
+    description: User-facing usage summary and budget
 
 paths:
   /healthz:
@@ -2013,6 +2015,21 @@ paths:
           description: Validation error
         "409":
           description: Slot already booked
+
+  # ── User Usage Summary ──────────────────────────────────────────────────────
+  /usage/me:
+    get:
+      operationId: getMyUsage
+      tags: [usage]
+      summary: Current-month spend per service, remaining budget, and last 25 events
+      responses:
+        "200":
+          description: User usage summary
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MyUsageResponse" }
+        "401":
+          description: Unauthorized
 
   # ── Admin Usage Monitoring ──────────────────────────────────────────────────
   /admin/usage/overview:
@@ -4330,6 +4347,47 @@ components:
         allocatedCostMicros: { type: number }
         lowBalanceThresholdMicros: { type: number, default: 0 }
         notes: { type: ["string", "null"] }
+
+    MyUsageServiceRow:
+      type: object
+      required: [service, usedMicros, eventCount, allocatedMicros, remainingMicros]
+      properties:
+        service: { type: string }
+        usedMicros: { type: number }
+        eventCount: { type: integer }
+        allocatedMicros: { type: number }
+        remainingMicros: { type: number }
+
+    MyUsageEvent:
+      type: object
+      required: [id, createdAt, service, provider, estimatedCostMicros, success]
+      properties:
+        id: { type: integer }
+        createdAt: { type: string, format: date-time }
+        service: { type: string }
+        provider: { type: string }
+        model: { type: ["string", "null"] }
+        callId: { type: ["integer", "null"] }
+        inputTokens: { type: integer }
+        outputTokens: { type: integer }
+        audioSeconds: { type: integer }
+        characters: { type: integer }
+        estimatedCostMicros: { type: number }
+        success: { type: boolean }
+
+    MyUsageResponse:
+      type: object
+      required: [perService, totalUsedMicros, recentEvents]
+      properties:
+        totalUsedMicros: { type: number }
+        totalAllocatedMicros: { type: number }
+        totalRemainingMicros: { type: number }
+        perService:
+          type: array
+          items: { $ref: "#/components/schemas/MyUsageServiceRow" }
+        recentEvents:
+          type: array
+          items: { $ref: "#/components/schemas/MyUsageEvent" }
 
     AdminAlert:
       type: object

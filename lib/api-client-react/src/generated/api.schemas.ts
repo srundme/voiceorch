@@ -1758,6 +1758,39 @@ export interface AdminAllocationInput {
   notes?: string | null;
 }
 
+export interface MyUsageServiceRow {
+  service: string;
+  usedMicros: number;
+  eventCount: number;
+  allocatedMicros: number;
+  remainingMicros: number;
+}
+
+export interface MyUsageEvent {
+  id: number;
+  createdAt: string;
+  service: string;
+  provider: string;
+  /** @nullable */
+  model?: string | null;
+  /** @nullable */
+  callId?: number | null;
+  inputTokens?: number;
+  outputTokens?: number;
+  audioSeconds?: number;
+  characters?: number;
+  estimatedCostMicros: number;
+  success: boolean;
+}
+
+export interface MyUsageResponse {
+  totalUsedMicros: number;
+  totalAllocatedMicros?: number;
+  totalRemainingMicros?: number;
+  perService: MyUsageServiceRow[];
+  recentEvents: MyUsageEvent[];
+}
+
 /**
  * @nullable
  */

@@ -4,7 +4,7 @@ import {
   Users, Phone, Key, Settings, Menu,
   LayoutDashboard, BarChart3, BookOpen,
   Wallet, LogOut, ChevronDown, AlertCircle, Radio, Webhook,
-  Zap, ChevronRight, CalendarDays,
+  Zap, ChevronRight, CalendarDays, TrendingUp,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useClerk, useUser } from "@clerk/react";
@@ -25,6 +25,7 @@ const NAV_SECTIONS = [
     label: "Observe",
     items: [
       { name: "Analytics",    href: "/app/analytics", icon: BarChart3 },
+      { name: "Usage",        href: "/app/usage",     icon: TrendingUp },
       { name: "Live Monitor", href: "/app/monitor",   icon: Radio },
       { name: "Logs",         href: "/app/calls",     icon: Phone },
       { name: "Activity",     href: "/app/activity",  icon: LayoutDashboard },

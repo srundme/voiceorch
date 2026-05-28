@@ -99,6 +99,7 @@ import type {
   ListCampaignLeadsParams,
   ListEventTypesParams,
   ListTransactionsParams,
+  MyUsageResponse,
   OnboardingData,
   OnboardingStatus,
   OutboundCallBody,
@@ -6847,6 +6848,83 @@ export const useCreatePublicBooking = <TError = ErrorType<void>,
       > => {
       return useMutation(getCreatePublicBookingMutationOptions(options));
     }
+
+export const getGetMyUsageUrl = () => {
+
+
+
+
+  return `/api/usage/me`
+}
+
+/**
+ * @summary Current-month spend per service, remaining budget, and last 25 events
+ */
+export const getMyUsage = async ( options?: RequestInit): Promise<MyUsageResponse> => {
+
+  return customFetch<MyUsageResponse>(getGetMyUsageUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMyUsageQueryKey = () => {
+    return [
+    `/api/usage/me`
+    ] as const;
+    }
+
+
+export const getGetMyUsageQueryOptions = <TData = Awaited<ReturnType<typeof getMyUsage>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMyUsage>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMyUsageQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMyUsage>>> = ({ signal }) => getMyUsage({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMyUsage>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMyUsageQueryResult = NonNullable<Awaited<ReturnType<typeof getMyUsage>>>
+export type GetMyUsageQueryError = ErrorType<void>
+
+
+/**
+ * @summary Current-month spend per service, remaining budget, and last 25 events
+ */
+
+export function useGetMyUsage<TData = Awaited<ReturnType<typeof getMyUsage>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMyUsage>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMyUsageQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 
 export const getAdminUsageOverviewUrl = (params?: AdminUsageOverviewParams,) => {
   const normalizedParams = new URLSearchParams();
