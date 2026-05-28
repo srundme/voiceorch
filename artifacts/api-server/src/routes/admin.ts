@@ -4,6 +4,7 @@ import { eq, sql, count, sum, desc, lt, gt, and, inArray } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { getAllSessions } from "../orchestration/session.js";
 import { logger } from "../lib/logger.js";
+import { sendTestAlertNotification } from "../services/alert-notifications.js";
 
 const router = Router();
 
@@ -510,6 +511,24 @@ router.get("/admin/settings/alert-min-severity", async (req, res): Promise<void>
   } catch (err) {
     req.log.error({ err }, "admin/settings/alert-min-severity GET failed");
     res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/admin/settings/alert-notifications/test", async (req, res): Promise<void> => {
+  try {
+    const result = await sendTestAlertNotification();
+    if (!result.email && !result.slack) {
+      res.status(422).json({ error: "No notification channels configured. Set an alert email or Slack webhook first." });
+      return;
+    }
+    const parts: string[] = [];
+    if (result.email) parts.push("email");
+    if (result.slack) parts.push("Slack");
+    res.json({ ok: true, sent: parts, message: `Test notification sent via ${parts.join(" and ")}.` });
+  } catch (err) {
+    req.log.warn({ err }, "admin/settings/alert-notifications/test failed");
+    const message = err instanceof Error ? err.message : "Failed to send test notification";
+    res.status(500).json({ error: message });
   }
 });
 

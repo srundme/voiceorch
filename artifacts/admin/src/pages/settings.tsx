@@ -5,13 +5,14 @@ import {
   useAlertSlackWebhook, useSaveAlertSlackWebhook,
   useAlertMinSeverity, useSaveAlertMinSeverity,
   useAlertNotificationCooldown, useSaveAlertNotificationCooldown,
+  useSendTestAlertNotification,
 } from "@/hooks/use-admin-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Settings, Bell, Mail, Check, AlertTriangle, Slack } from "lucide-react";
+import { Settings, Bell, Mail, Check, AlertTriangle, Slack, Send } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatAdminError } from "@/lib/api";
 
@@ -29,6 +30,7 @@ export default function PlatformSettings() {
   const saveAlertSlack = useSaveAlertSlackWebhook();
   const saveAlertSeverity = useSaveAlertMinSeverity();
   const saveAlertCooldown = useSaveAlertNotificationCooldown();
+  const sendTestNotification = useSendTestAlertNotification();
 
   const { toast } = useToast();
 
@@ -157,6 +159,17 @@ export default function PlatformSettings() {
     }
   }
 
+  async function handleSendTestNotification() {
+    try {
+      const result = await sendTestNotification.mutateAsync();
+      const channels = result.sent.join(" and ");
+      toast({ title: "Test notification sent", description: `Dispatched via ${channels}.` });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to send test notification";
+      toast({ title: "Test notification failed", description: msg, variant: "destructive" });
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
@@ -166,10 +179,21 @@ export default function PlatformSettings() {
 
       <Card className="border-border shadow-sm">
         <CardHeader className="pb-3 border-b border-border">
-          <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4" />
-            Alert Engine Notifications
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" />
+              Alert Engine Notifications
+            </CardTitle>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleSendTestNotification}
+              disabled={sendTestNotification.isPending}
+            >
+              <Send className="h-3.5 w-3.5 mr-1.5" />
+              {sendTestNotification.isPending ? "Sending…" : "Send test"}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="pt-6 space-y-6">
           <p className="text-xs text-muted-foreground max-w-lg">

@@ -284,6 +284,15 @@ export function useSaveAlertNotificationCooldown() {
   });
 }
 
+export function useSendTestAlertNotification() {
+  return useMutation({
+    mutationFn: () =>
+      adminFetch<{ ok: boolean; sent: string[]; message: string }>("/settings/alert-notifications/test", {
+        method: "POST",
+      }),
+  });
+}
+
 export function useSpikeAlerts() {
   return useQuery({
     queryKey: ["admin", "alerts", "spikes"],

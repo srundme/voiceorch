@@ -141,6 +141,53 @@ async function sendSlackNotification(
 }
 
 /**
+ * Sends a synthetic test notification to all configured channels.
+ * Unlike dispatchAlertNotification, this bypasses severity filtering and throws on failure.
+ * Returns a summary of what was attempted.
+ */
+export async function sendTestAlertNotification(): Promise<{ email: boolean; slack: boolean }> {
+  const settings = await getNotificationSettings();
+
+  const testOpts = {
+    type: "test" as AlertType,
+    severity: "info",
+    title: "Test Notification",
+    message: "This is a test notification from VoiceOrch. Your alert notification setup is working correctly.",
+    service: null,
+    provider: null,
+  };
+
+  const { subject, text, html } = formatAlertEmail(testOpts);
+
+  let emailSent = false;
+  let slackSent = false;
+
+  if (settings.email) {
+    const transporter = getTransporter();
+    if (!transporter) {
+      throw new Error("GMAIL_USER or GMAIL_APP_PASSWORD env vars are not set — cannot send test email");
+    }
+    await transporter.sendMail({
+      from: process.env["GMAIL_USER"],
+      to: settings.email,
+      subject,
+      text,
+      html,
+    });
+    logger.info({ to: settings.email }, "Test alert email sent");
+    emailSent = true;
+  }
+
+  if (settings.slackWebhook) {
+    await sendSlackNotification(settings.slackWebhook, testOpts);
+    logger.info("Test alert Slack notification sent");
+    slackSent = true;
+  }
+
+  return { email: emailSent, slack: slackSent };
+}
+
+/**
  * Dispatches email and/or Slack notifications for a newly-fired alert.
  * Best-effort: never throws — caller must not block on this.
  *

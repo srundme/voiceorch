@@ -7,6 +7,7 @@ export type AlertType =
   | "low_balance"
   | "threshold_80"
   | "threshold_90"
+  | "test"
   | "threshold_100"
   | "error_spike"
   | "usage_spike"
