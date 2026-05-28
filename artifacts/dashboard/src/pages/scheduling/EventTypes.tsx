@@ -24,7 +24,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Clock, Copy, Check, LinkIcon, ChevronRight,
-  Pencil, Trash2, Calendar,
+  Pencil, Trash2, Calendar, ArrowLeft,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -116,15 +116,15 @@ function QuickCreateDialog({
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) handleClose(); }}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
+      <DialogContent className="max-w-md w-[calc(100vw-2rem)] overflow-hidden">
+        <DialogHeader className="min-w-0">
           <DialogTitle className="text-xl font-bold">Add a new event type</DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
             Set up event types to offer different types of meetings.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-1">
+        <div className="space-y-4 py-1 min-w-0">
           {/* Calendar selector (only when user has multiple) */}
           {calendars && calendars.length > 1 && (
             <div className="space-y-1.5">
@@ -154,14 +154,14 @@ function QuickCreateDialog({
           </div>
 
           {/* URL */}
-          <div className="space-y-1.5">
+          <div className="space-y-1.5 min-w-0">
             <Label>URL</Label>
-            <div className="flex items-center rounded-md border border-input overflow-hidden bg-background focus-within:ring-1 focus-within:ring-ring">
-              <span className="px-3 py-2 text-xs text-muted-foreground bg-muted border-r border-input whitespace-nowrap">
-                {window.location.origin}{BASE}/book/
+            <div className="flex items-center rounded-md border border-input overflow-hidden bg-background focus-within:ring-1 focus-within:ring-ring min-w-0">
+              <span className="px-2.5 py-2 text-xs text-muted-foreground bg-muted border-r border-input shrink-0">
+                /book/
               </span>
               <input
-                className="flex-1 px-3 py-2 text-sm font-mono bg-transparent outline-none"
+                className="flex-1 min-w-0 px-3 py-2 text-sm font-mono bg-transparent outline-none"
                 value={slug}
                 onChange={e => handleSlugChange(e.target.value)}
                 placeholder="quick-chat"
@@ -284,21 +284,28 @@ export default function EventTypesPage() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="border-b px-6 py-4 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-emerald-50">
-            <Calendar className="h-4 w-4 text-emerald-600" />
+      <div className="border-b px-6 py-4 shrink-0">
+        <Link href={`${BASE}/app/scheduling`}>
+          <button className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-2.5">
+            <ArrowLeft className="h-3 w-3" /> Back to Scheduling
+          </button>
+        </Link>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-emerald-50">
+              <Calendar className="h-4 w-4 text-emerald-600" />
+            </div>
+            <div>
+              <h1 className="text-base font-semibold">Event Types</h1>
+              <p className="text-xs text-muted-foreground">Configure different events for people to book on your calendar.</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-base font-semibold">Event Types</h1>
-            <p className="text-xs text-muted-foreground">Configure different events for people to book on your calendar.</p>
-          </div>
+          {(calendars?.length ?? 0) > 0 && (
+            <Button size="sm" onClick={() => setCreateOpen(true)} className="gap-1.5">
+              <Plus className="h-3.5 w-3.5" /> New
+            </Button>
+          )}
         </div>
-        {(calendars?.length ?? 0) > 0 && (
-          <Button size="sm" onClick={() => setCreateOpen(true)} className="gap-1.5">
-            <Plus className="h-3.5 w-3.5" /> New
-          </Button>
-        )}
       </div>
 
       {/* Body */}
