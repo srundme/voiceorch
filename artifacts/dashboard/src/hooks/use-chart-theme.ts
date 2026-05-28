@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useTheme } from "@/components/theme-provider";
 
 export interface ChartTheme {
@@ -15,9 +16,25 @@ export interface ChartTheme {
   };
 }
 
+function usePrefersDark(): boolean {
+  const [prefersDark, setPrefersDark] = useState(
+    () => window.matchMedia("(prefers-color-scheme: dark)").matches
+  );
+
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const handler = (e: MediaQueryListEvent) => setPrefersDark(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+
+  return prefersDark;
+}
+
 export function useChartTheme(): ChartTheme {
   const { theme } = useTheme();
-  const isDark = theme === "dark";
+  const prefersDark = usePrefersDark();
+  const isDark = theme === "dark" || (theme === "system" && prefersDark);
 
   return {
     tickColor:     isDark ? "hsl(0,0%,55%)"  : "#9CA3AF",
