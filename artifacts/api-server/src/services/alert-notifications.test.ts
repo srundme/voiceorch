@@ -28,15 +28,49 @@ vi.mock("@workspace/db", () => ({
     select: vi.fn(() => ({
       from: vi.fn(() => ({
         where: vi.fn(() => {
+          /**
+           * KEY-CAPTURE PATTERN
+           * -------------------
+           * The `drizzle-orm` mock above captures the second argument passed to `eq()` into
+           * `mockState.lastEqKey` just before each `.where()` call.  This lets us resolve the
+           * correct test value for every `platform_settings` row that the service queries.
+           *
+           * HOW TO EXTEND
+           * If alert-notifications.ts (or any helper it calls) adds a new
+           * `db.select().from(platformSettingsTable).where(eq(platformSettingsTable.key, NEW_KEY))`
+           * query, you MUST add the matching entry here.  Otherwise the mock returns [] silently
+           * and the test may pass for the wrong reason (the service sees "no row" instead of the
+           * value you intended to inject).
+           *
+           * Current keys (keep this list in sync with the constants at the top of alert-notifications.ts):
+           *   alert_notification_email          — getNotificationSettings()
+           *   alert_slack_webhook_url           — getNotificationSettings()
+           *   alert_min_severity                — getNotificationSettings()
+           *   alert_notification_cooldown_minutes — getNotificationSettings()
+           *   alert_last_notified_at            — loadCooldownState()
+           *   alert_last_notified_severity      — loadCooldownState()
+           */
           const key = mockState.lastEqKey;
           const settingsMap: Record<string, () => string | null> = {
+            // ── notification channel settings ──────────────────────────────────
             alert_notification_email: () => mockState.email,
             alert_slack_webhook_url: () => mockState.slackWebhook,
             alert_min_severity: () => mockState.minSeverity,
             alert_notification_cooldown_minutes: () => String(mockState.cooldownMinutes),
+            // ── persisted cooldown state (null = no prior notification) ────────
+            alert_last_notified_at: () => null,
+            alert_last_notified_severity: () => null,
           };
           const getter = settingsMap[key ?? ""];
-          if (!getter) return Promise.resolve([]);
+          if (!getter) {
+            // A new DB query was added to the service but not registered here.
+            // Add the key and a suitable mock value to settingsMap above.
+            console.warn(
+              `[alert-notifications mock] Unrecognised platform_settings key: "${key}". ` +
+              `Add it to settingsMap in the mock so the test reflects the intended value instead of an empty result.`
+            );
+            return Promise.resolve([]);
+          }
           const val = getter();
           if (val === null || val === undefined) return Promise.resolve([]);
           return Promise.resolve([{ value: val }]);
