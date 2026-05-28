@@ -200,9 +200,9 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
       {/* Logo */}
       <div className="flex items-center gap-2 px-4 h-13 shrink-0 border-b border-sidebar-border">
         <Link href="/app" onClick={onNavClick} className="flex items-center">
-          <BrandMark iconSize={18} wordmarkHeight={13} />
+          <BrandMark iconSize={26} wordmarkHeight={17} gapClass="gap-2" />
         </Link>
-        <span className="text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded border border-border bg-elevated text-muted-foreground/50 ml-0.5">
+        <span className="text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded border border-border bg-elevated text-muted-foreground/50 ml-1">
           Beta
         </span>
       </div>
