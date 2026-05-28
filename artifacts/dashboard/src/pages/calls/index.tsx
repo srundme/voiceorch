@@ -83,8 +83,8 @@ export default function CallsList() {
 
   const getLatencyColor = (ms: number | null | undefined, thresholds: [number, number]) => {
     if (ms == null) return "text-muted-foreground";
-    if (ms <= thresholds[0]) return "text-zinc-600 dark:text-gray-700";
-    if (ms <= thresholds[1]) return "text-zinc-600 dark:text-zinc-400";
+    if (ms <= thresholds[0]) return "text-emerald-600 dark:text-emerald-400";
+    if (ms <= thresholds[1]) return "text-yellow-600 dark:text-yellow-400";
     return "text-red-600 dark:text-red-500";
   };
 
@@ -188,7 +188,7 @@ export default function CallsList() {
                       <TableCell className="whitespace-nowrap text-muted-foreground font-medium text-xs">
                         {format(parseISO(call.createdAt), "MMM d, HH:mm:ss")}
                       </TableCell>
-                      <TableCell className="font-mono text-xs text-gray-400">
+                      <TableCell className="font-mono text-xs text-muted-foreground">
                         {(call as any).executionId ?? `#${call.id}`}
                       </TableCell>
                       <TableCell>
