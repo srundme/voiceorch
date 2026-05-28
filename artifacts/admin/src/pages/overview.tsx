@@ -155,24 +155,47 @@ export default function Overview() {
     },
   ];
 
+  const totalCalls = overview?.totalCalls ?? 0;
+  const successfulCalls = overview?.successfulCalls ?? 0;
+  const successRate = totalCalls > 0 ? Math.round((successfulCalls / totalCalls) * 100) : 0;
+  const activeCount = overview?.activeCalls ?? 0;
+  const pendingCount = overview?.pendingCallbacks ?? 0;
+
   return (
     <div className="space-y-6">
+      {/* Cartesia-style status strip */}
+      <div className="flex items-center gap-5 flex-wrap text-[11px] uppercase tracking-[0.14em] text-muted-foreground border border-border rounded-md px-4 py-2 bg-card">
+        <span className="font-semibold text-foreground">Call Center</span>
+        <span className="text-border">|</span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary))]" />
+          <span>{activeCount} Live</span>
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+          <span>{pendingCount} Queue</span>
+        </span>
+        <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/40 px-2.5 py-0.5 text-[10px] font-semibold text-foreground">
+          {successRate}% Rate
+        </span>
+      </div>
+
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight">Platform Overview</h1>
         <div className="text-xs text-muted-foreground">Auto-refreshing every 30s</div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {metrics.map((metric, i) => (
-          <Card key={i} className="border-border shadow-sm">
+          <Card key={i} className="border-border bg-card shadow-none hover:border-muted-foreground/30 transition-colors">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+              <CardTitle className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.14em]">
                 {metric.title}
               </CardTitle>
-              <metric.icon className="h-4 w-4 text-muted-foreground" />
+              <metric.icon className="h-3.5 w-3.5 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{metric.value}</div>
+              <div className="text-3xl font-bold font-mono tabular-nums">{metric.value}</div>
               <p className="text-xs text-muted-foreground mt-1">{metric.description}</p>
             </CardContent>
           </Card>

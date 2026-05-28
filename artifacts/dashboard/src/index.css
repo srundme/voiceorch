@@ -139,14 +139,66 @@
   --destructive-border:   rgba(220,38,38,0.3);
 }
 
+/* ── Design tokens — dark mode (Cartesia-inspired) ───────────────────────── */
+.dark {
+  --background:         0 0% 4%;          /* near-black #0A0A0A */
+  --foreground:         0 0% 96%;
+  --border:             0 0% 14%;         /* hairline */
+
+  --card:               0 0% 6%;          /* elevated card #0F0F0F */
+  --card-foreground:    0 0% 96%;
+
+  --elevated:           0 0% 10%;
+
+  --popover:            0 0% 8%;
+  --popover-foreground: 0 0% 96%;
+
+  --primary:            142 70% 45%;      /* accent green */
+  --primary-foreground: 0 0% 4%;
+
+  --secondary:          0 0% 10%;
+  --secondary-foreground: 0 0% 96%;
+
+  --muted:              0 0% 10%;
+  --muted-foreground:   0 0% 55%;
+
+  --accent:             0 0% 12%;
+  --accent-foreground:  0 0% 96%;
+
+  --destructive:        0 70% 50%;
+  --destructive-foreground: 0 0% 98%;
+
+  --input:              0 0% 14%;
+  --ring:               142 70% 45%;
+
+  --sidebar:              0 0% 5%;
+  --sidebar-foreground:   0 0% 88%;
+  --sidebar-border:       0 0% 14%;
+  --sidebar-primary:      142 70% 45%;
+  --sidebar-primary-foreground: 0 0% 4%;
+  --sidebar-accent:       0 0% 12%;
+  --sidebar-accent-foreground: 0 0% 96%;
+  --sidebar-ring:         142 70% 45%;
+
+  /* Charts — keep monochromatic but inverted */
+  --chart-1: 142 70% 45%;
+  --chart-2: 0 0% 70%;
+  --chart-3: 0 0% 50%;
+  --chart-4: 0 0% 35%;
+  --chart-5: 0 0% 22%;
+
+  --shadow-card: 0 1px 2px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04);
+  --shadow-card-hover: 0 4px 16px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.06);
+}
+
 /* ── Base ────────────────────────────────────────────────────────────────── */
 @layer base {
   * { @apply border-border; box-sizing: border-box; }
   html, body, #root { height: 100%; min-height: 100%; }
 
   body {
-    background-color: #F5F5F7;
-    color: #111827;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
     font-family: var(--app-font-sans);
     font-feature-settings: "cv02","cv03","cv04","cv11";
     -webkit-font-smoothing: antialiased;
@@ -154,19 +206,19 @@
   }
 
   ::selection {
-    background: rgba(55,65,81,0.12);
+    background: hsl(var(--primary) / 0.25);
   }
 
   /* ── Global Card ─────────────────────────────────────────────────────── */
   [data-slot="card"] {
-    background: #FFFFFF;
-    border: 1px solid #E5E7EB;
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
     box-shadow: var(--shadow-card);
     border-radius: 16px;
     transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
   }
   [data-slot="card"]:hover {
-    border-color: #D1D5DB;
+    border-color: hsl(var(--muted-foreground) / 0.3);
     box-shadow: var(--shadow-card-hover);
     transform: translateY(-1px);
   }
@@ -174,38 +226,38 @@
   /* ── Global Input ────────────────────────────────────────────────────── */
   [data-slot="input"] {
     height: 2.5rem !important;
-    background: #FFFFFF !important;
-    border-color: #E5E7EB !important;
-    color: #111827 !important;
+    background: hsl(var(--card)) !important;
+    border-color: hsl(var(--border)) !important;
+    color: hsl(var(--foreground)) !important;
     border-radius: 12px !important;
     transition: border-color 150ms ease, box-shadow 150ms ease !important;
   }
   [data-slot="input"]:focus,
   [data-slot="input"]:focus-within {
-    border-color: #9CA3AF !important;
-    box-shadow: 0 0 0 3px rgba(156,163,175,0.15) !important;
+    border-color: hsl(var(--ring)) !important;
+    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.2) !important;
     outline: none !important;
   }
-  [data-slot="input"]::placeholder { color: #9CA3AF !important; }
+  [data-slot="input"]::placeholder { color: hsl(var(--muted-foreground)) !important; }
 
   input:focus-visible,
   textarea:focus-visible {
-    border-color: #9CA3AF !important;
-    box-shadow: 0 0 0 3px rgba(156,163,175,0.15) !important;
+    border-color: hsl(var(--ring)) !important;
+    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.2) !important;
     outline: none !important;
   }
 
   /* ── SelectTrigger ───────────────────────────────────────────────────── */
   [data-slot="select-trigger"] {
-    background: #FFFFFF !important;
-    border-color: #E5E7EB !important;
+    background: hsl(var(--card)) !important;
+    border-color: hsl(var(--border)) !important;
     border-radius: 12px !important;
     transition: border-color 150ms ease, box-shadow 150ms ease !important;
   }
   [data-slot="select-trigger"]:focus,
   [data-slot="select-trigger"][data-state="open"] {
-    border-color: #9CA3AF !important;
-    box-shadow: 0 0 0 3px rgba(156,163,175,0.15) !important;
+    border-color: hsl(var(--ring)) !important;
+    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.2) !important;
     outline: none !important;
   }
 
@@ -215,27 +267,28 @@
   [data-slot="dropdown-menu-content"],
   [data-slot="context-menu-content"],
   [data-slot="command"] {
-    background: #FFFFFF !important;
-    border-color: #E5E7EB !important;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.05) !important;
+    background: hsl(var(--popover)) !important;
+    border-color: hsl(var(--border)) !important;
+    color: hsl(var(--popover-foreground)) !important;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.18), 0 1px 4px rgba(0,0,0,0.12) !important;
   }
 
   /* ── Table ───────────────────────────────────────────────────────────── */
   [data-slot="table-head"] {
-    color: #6B7280 !important;
+    color: hsl(var(--muted-foreground)) !important;
     font-size: 11px !important;
     font-weight: 600 !important;
     letter-spacing: 0.05em !important;
     text-transform: uppercase !important;
-    border-bottom-color: #E5E7EB !important;
-    background: #FAFAFA;
+    border-bottom-color: hsl(var(--border)) !important;
+    background: hsl(var(--muted) / 0.4);
   }
   [data-slot="table-row"] {
-    border-bottom-color: #F3F4F6 !important;
+    border-bottom-color: hsl(var(--border)) !important;
     transition: background 120ms ease !important;
   }
   [data-slot="table-row"]:hover {
-    background: #F9FAFB !important;
+    background: hsl(var(--muted) / 0.5) !important;
   }
 
   /* ── Badge ───────────────────────────────────────────────────────────── */
@@ -247,7 +300,7 @@
 
   /* ── Skeleton ────────────────────────────────────────────────────────── */
   [data-slot="skeleton"] {
-    background: #F3F4F6 !important;
+    background: hsl(var(--muted)) !important;
   }
 }
 

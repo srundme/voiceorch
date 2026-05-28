@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { Terminal, Lock } from "lucide-react";
+import { Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,13 +29,25 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4 font-mono">
       <Card className="w-full max-w-md shadow-2xl border-border">
-        <CardHeader className="space-y-3 pb-6 text-center border-b border-border/50 mb-6">
-          <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-2">
-            <Terminal className="h-6 w-6 text-primary" />
+        <CardHeader className="space-y-4 pb-6 text-center border-b border-border/50 mb-6">
+          <div className="mx-auto flex items-center justify-center gap-2.5 mb-1">
+            <img
+              src={`${import.meta.env.BASE_URL}snapserve-icon.png`}
+              alt=""
+              aria-hidden
+              className="h-8 w-8 select-none"
+              style={{ filter: "brightness(0) invert(1)" }}
+            />
+            <img
+              src={`${import.meta.env.BASE_URL}snapserve-wordmark.png`}
+              alt="SnapServe"
+              className="h-5 select-none"
+              style={{ filter: "brightness(0) invert(1)" }}
+            />
           </div>
-          <CardTitle className="text-2xl font-bold tracking-tight">System Access</CardTitle>
+          <CardTitle className="text-xl font-bold tracking-tight">System Access</CardTitle>
           <CardDescription className="text-muted-foreground font-mono text-xs uppercase tracking-widest">
-            VoiceOrch Internal Operations
+            SnapServe Internal Operations
           </CardDescription>
         </CardHeader>
         <CardContent>

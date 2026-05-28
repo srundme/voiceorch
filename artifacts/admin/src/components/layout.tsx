@@ -8,7 +8,6 @@ import {
   Wallet, 
   Cpu, 
   LogOut, 
-  Terminal,
   KeyRound,
   Mic2,
   Settings,
@@ -17,9 +16,38 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { AlertsBell } from "@/components/alerts-bell";
 
+function BrandMark({ compact = false }: { compact?: boolean }) {
+  return (
+    <Link href="/" className="flex items-center gap-2 group">
+      <img
+        src={`${import.meta.env.BASE_URL}snapserve-icon.png`}
+        alt=""
+        aria-hidden
+        className={cn("shrink-0 select-none", compact ? "h-5 w-5" : "h-6 w-6")}
+        style={{ filter: "brightness(0) invert(1)" }}
+      />
+      <img
+        src={`${import.meta.env.BASE_URL}snapserve-wordmark.png`}
+        alt="SnapServe"
+        className={cn("select-none", compact ? "h-3.5" : "h-4")}
+        style={{ filter: "brightness(0) invert(1)" }}
+      />
+      <span
+        className="text-[9px] font-semibold uppercase tracking-[0.14em] px-1.5 py-0.5 rounded-sm border"
+        style={{
+          color: "hsl(var(--muted-foreground))",
+          borderColor: "hsl(var(--border))",
+          background: "hsl(var(--muted) / 0.4)",
+        }}
+      >
+        Admin
+      </span>
+    </Link>
+  );
+}
+
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
-  const [isDark, setIsDark] = useState(true);
 
   // Force dark mode on mount since it's the default
   useEffect(() => {
@@ -47,12 +75,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen bg-background text-foreground selection:bg-primary selection:text-primary-foreground font-mono text-sm">
       {/* Sidebar */}
       <aside className="w-64 border-r border-border bg-card flex flex-col hidden md:flex shrink-0">
-        <div className="h-16 flex items-center px-6 border-b border-border">
-          <Terminal className="h-5 w-5 mr-3 text-primary" />
-          <span className="font-bold tracking-tight text-base">VOICEORCH_OPS</span>
+        <div className="h-16 flex items-center px-5 border-b border-border">
+          <BrandMark />
         </div>
         
-        <nav className="flex-1 overflow-y-auto p-4 space-y-1">
+        <nav className="flex-1 overflow-y-auto p-3 space-y-0.5">
           {navItems.map((item) => {
             const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
             const Icon = item.icon;
@@ -62,28 +89,28 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 key={item.href} 
                 href={item.href}
                 className={cn(
-                  "flex items-center px-3 py-2.5 rounded-sm text-sm font-medium transition-colors",
+                  "flex items-center px-3 py-2 rounded-md text-[13px] font-medium transition-colors",
                   isActive 
-                    ? "bg-primary text-primary-foreground" 
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    ? "bg-muted text-foreground" 
+                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                 )}
                 data-testid={`nav-${item.label.toLowerCase()}`}
               >
-                <Icon className={cn("h-4 w-4 mr-3", isActive ? "opacity-100" : "opacity-70")} />
+                <Icon className={cn("h-4 w-4 mr-2.5", isActive ? "opacity-100 text-primary" : "opacity-70")} />
                 {item.label}
               </Link>
             );
           })}
         </nav>
         
-        <div className="p-4 border-t border-border">
+        <div className="p-3 border-t border-border">
           <Button 
             variant="ghost" 
             className="w-full justify-start text-muted-foreground hover:text-foreground hover:bg-muted h-9 px-3"
             onClick={handleLogout}
             data-testid="button-logout"
           >
-            <LogOut className="h-4 w-4 mr-3 opacity-70" />
+            <LogOut className="h-4 w-4 mr-2.5 opacity-70" />
             Sign Out
           </Button>
         </div>
@@ -93,8 +120,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <main className="flex-1 flex flex-col min-w-0">
         <div className="h-14 border-b border-border flex items-center justify-between px-4 md:px-8 bg-card">
           <div className="flex items-center md:hidden">
-            <Terminal className="h-5 w-5 mr-3 text-primary" />
-            <span className="font-bold tracking-tight">VOICEORCH_OPS</span>
+            <BrandMark compact />
           </div>
           <div className="hidden md:block" />
           <div className="flex items-center gap-2">
