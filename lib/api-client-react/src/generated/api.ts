@@ -81,6 +81,7 @@ import type {
   GetAdminAgents200,
   GetAdminPromptTemplates200,
   GetAvailableSlotsParams,
+  GetPublicBookingByTokenParams,
   GetPublicSlotsParams,
   HealthStatus,
   KbChunkResult,
@@ -115,9 +116,12 @@ import type {
   ProviderConfig,
   ProviderInput,
   ProviderUpdate,
+  PublicBookingByTokenResponse,
   PublicBookingInput,
+  PublicCancelByTokenBody,
   PublicEventType,
   PublicNow,
+  PublicRescheduleByTokenBody,
   PurchasePhoneNumberInput,
   SchedulingCalendar,
   SchedulingCalendarInput,
@@ -7083,6 +7087,232 @@ export const useCreatePublicBooking = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getCreatePublicBookingMutationOptions(options));
+    }
+
+export const getGetPublicBookingByTokenUrl = (params: GetPublicBookingByTokenParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/scheduling/public/bookings/by-token?${stringifiedParams}` : `/api/scheduling/public/bookings/by-token`
+}
+
+/**
+ * @summary Get booking summary for cancel/reschedule page (unauthenticated, token-gated)
+ */
+export const getPublicBookingByToken = async (params: GetPublicBookingByTokenParams, options?: RequestInit): Promise<PublicBookingByTokenResponse> => {
+
+  return customFetch<PublicBookingByTokenResponse>(getGetPublicBookingByTokenUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPublicBookingByTokenQueryKey = (params?: GetPublicBookingByTokenParams,) => {
+    return [
+    `/api/scheduling/public/bookings/by-token`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetPublicBookingByTokenQueryOptions = <TData = Awaited<ReturnType<typeof getPublicBookingByToken>>, TError = ErrorType<void>>(params: GetPublicBookingByTokenParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicBookingByToken>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPublicBookingByTokenQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPublicBookingByToken>>> = ({ signal }) => getPublicBookingByToken(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPublicBookingByToken>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPublicBookingByTokenQueryResult = NonNullable<Awaited<ReturnType<typeof getPublicBookingByToken>>>
+export type GetPublicBookingByTokenQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get booking summary for cancel/reschedule page (unauthenticated, token-gated)
+ */
+
+export function useGetPublicBookingByToken<TData = Awaited<ReturnType<typeof getPublicBookingByToken>>, TError = ErrorType<void>>(
+ params: GetPublicBookingByTokenParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicBookingByToken>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPublicBookingByTokenQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCancelPublicBookingByTokenUrl = () => {
+
+
+
+
+  return `/api/scheduling/public/bookings/cancel`
+}
+
+/**
+ * @summary Cancel a booking via attendee self-service token (unauthenticated)
+ */
+export const cancelPublicBookingByToken = async (publicCancelByTokenBody: PublicCancelByTokenBody, options?: RequestInit): Promise<Booking> => {
+
+  return customFetch<Booking>(getCancelPublicBookingByTokenUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      publicCancelByTokenBody,)
+  }
+);}
+
+
+
+
+export const getCancelPublicBookingByTokenMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelPublicBookingByToken>>, TError,{data: BodyType<PublicCancelByTokenBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof cancelPublicBookingByToken>>, TError,{data: BodyType<PublicCancelByTokenBody>}, TContext> => {
+
+const mutationKey = ['cancelPublicBookingByToken'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof cancelPublicBookingByToken>>, {data: BodyType<PublicCancelByTokenBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  cancelPublicBookingByToken(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CancelPublicBookingByTokenMutationResult = NonNullable<Awaited<ReturnType<typeof cancelPublicBookingByToken>>>
+    export type CancelPublicBookingByTokenMutationBody = BodyType<PublicCancelByTokenBody>
+    export type CancelPublicBookingByTokenMutationError = ErrorType<void>
+
+    /**
+ * @summary Cancel a booking via attendee self-service token (unauthenticated)
+ */
+export const useCancelPublicBookingByToken = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelPublicBookingByToken>>, TError,{data: BodyType<PublicCancelByTokenBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof cancelPublicBookingByToken>>,
+        TError,
+        {data: BodyType<PublicCancelByTokenBody>},
+        TContext
+      > => {
+      return useMutation(getCancelPublicBookingByTokenMutationOptions(options));
+    }
+
+export const getReschedulePublicBookingByTokenUrl = () => {
+
+
+
+
+  return `/api/scheduling/public/bookings/reschedule`
+}
+
+/**
+ * @summary Reschedule a booking via attendee self-service token (unauthenticated)
+ */
+export const reschedulePublicBookingByToken = async (publicRescheduleByTokenBody: PublicRescheduleByTokenBody, options?: RequestInit): Promise<Booking> => {
+
+  return customFetch<Booking>(getReschedulePublicBookingByTokenUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      publicRescheduleByTokenBody,)
+  }
+);}
+
+
+
+
+export const getReschedulePublicBookingByTokenMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reschedulePublicBookingByToken>>, TError,{data: BodyType<PublicRescheduleByTokenBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reschedulePublicBookingByToken>>, TError,{data: BodyType<PublicRescheduleByTokenBody>}, TContext> => {
+
+const mutationKey = ['reschedulePublicBookingByToken'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reschedulePublicBookingByToken>>, {data: BodyType<PublicRescheduleByTokenBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  reschedulePublicBookingByToken(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReschedulePublicBookingByTokenMutationResult = NonNullable<Awaited<ReturnType<typeof reschedulePublicBookingByToken>>>
+    export type ReschedulePublicBookingByTokenMutationBody = BodyType<PublicRescheduleByTokenBody>
+    export type ReschedulePublicBookingByTokenMutationError = ErrorType<void>
+
+    /**
+ * @summary Reschedule a booking via attendee self-service token (unauthenticated)
+ */
+export const useReschedulePublicBookingByToken = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reschedulePublicBookingByToken>>, TError,{data: BodyType<PublicRescheduleByTokenBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof reschedulePublicBookingByToken>>,
+        TError,
+        {data: BodyType<PublicRescheduleByTokenBody>},
+        TContext
+      > => {
+      return useMutation(getReschedulePublicBookingByTokenMutationOptions(options));
     }
 
 export const getGetMyUsageUrl = () => {

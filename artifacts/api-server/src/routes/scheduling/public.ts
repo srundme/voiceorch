@@ -3,7 +3,11 @@ import { format, addMinutes } from "date-fns";
 import { eq, and, or, sql } from "drizzle-orm";
 import { db, eventTypesTable, schedulingCalendarsTable, bookingsTable } from "@workspace/db";
 import { getAvailableSlots } from "../../services/scheduling/slot-engine.js";
-import { sendBookingCreatedEmail } from "../../services/scheduling/notifications.js";
+import {
+  sendBookingCreatedEmail,
+  sendBookingCancelledEmail,
+  sendBookingRescheduledEmail,
+} from "../../services/scheduling/notifications.js";
 import { dispatchSchedulingWebhooks } from "./webhooks.js";
 import {
   GetPublicEventTypeParams,
@@ -11,14 +15,46 @@ import {
   GetPublicEventTypeResponse,
   CreatePublicBookingBody,
   GetBookingResponse,
+  GetPublicBookingByTokenQueryParams,
+  GetPublicBookingByTokenResponse,
+  CancelPublicBookingByTokenBody,
+  CancelPublicBookingByTokenResponse,
+  ReschedulePublicBookingByTokenBody,
+  ReschedulePublicBookingByTokenResponse,
 } from "@workspace/api-zod";
 import { buildSlotLockKey } from "../../services/scheduling/lock.js";
 import {
   createCalendarEvent,
+  deleteCalendarEvent,
   getFirstConnectionForUser,
 } from "../../services/scheduling/google-calendar.js";
+import {
+  issueToken,
+  verifyToken,
+  cancelTokenExpiry,
+  rescheduleTokenExpiry,
+} from "../../services/scheduling/booking-tokens.js";
 
 const router: IRouter = Router();
+
+function getBaseUrl(): string {
+  if (process.env["APP_BASE_URL"]) return process.env["APP_BASE_URL"];
+  const domain = process.env["REPLIT_DOMAINS"]?.split(",")[0];
+  return domain ? `https://${domain}` : "http://localhost:80";
+}
+
+function formatBooking(b: typeof bookingsTable.$inferSelect) {
+  return {
+    ...b,
+    slotStart: b.slotStart.toISOString(),
+    slotEnd: b.slotEnd.toISOString(),
+    cancelledAt: b.cancelledAt?.toISOString() ?? null,
+    createdAt: b.createdAt.toISOString(),
+    updatedAt: b.updatedAt.toISOString(),
+    meetLink: (b as any).meetLink ?? null,
+    googleEventId: (b as any).googleEventId ?? null,
+  };
+}
 
 router.get("/scheduling/public/now", (_req, res): void => {
   res.json({ now: new Date().toISOString() });
@@ -202,6 +238,13 @@ router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
     }
   } catch { /* non-fatal */ }
 
+  // Issue self-service tokens for this booking
+  const baseUrl = getBaseUrl();
+  const cancelTok = issueToken(booking.id, "cancel", cancelTokenExpiry());
+  const rescheduleTok = issueToken(booking.id, "reschedule", rescheduleTokenExpiry(booking.slotStart));
+  const cancelLink = `${baseUrl}/book/cancel?token=${encodeURIComponent(cancelTok)}`;
+  const rescheduleLink = `${baseUrl}/book/reschedule?token=${encodeURIComponent(rescheduleTok)}`;
+
   void sendBookingCreatedEmail({
     attendeeName: booking.attendeeName,
     attendeeEmail: booking.attendeeEmail,
@@ -212,6 +255,8 @@ router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
     bookingId: booking.id,
     notes: booking.attendeeNotes,
     meetLink,
+    cancelLink,
+    rescheduleLink,
   });
   void dispatchSchedulingWebhooks(calendar.userId, "scheduling.booking.created", {
     booking: {
@@ -236,6 +281,297 @@ router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
     meetLink,
     googleEventId,
   }));
+});
+
+// ── Token-gated self-service routes ──────────────────────────────────────────
+
+router.get("/scheduling/public/bookings/by-token", async (req, res): Promise<void> => {
+  const qp = GetPublicBookingByTokenQueryParams.safeParse(req.query);
+  if (!qp.success) { res.status(400).json({ error: "token is required" }); return; }
+
+  const verified = verifyToken(qp.data.token);
+  if (!verified) { res.status(400).json({ error: "Invalid or expired token" }); return; }
+
+  const [booking] = await db.select().from(bookingsTable)
+    .where(eq(bookingsTable.id, verified.bookingId));
+  if (!booking) { res.status(404).json({ error: "Booking not found" }); return; }
+
+  const [eventType] = await db.select().from(eventTypesTable)
+    .where(eq(eventTypesTable.id, booking.eventTypeId));
+  const [calendar] = await db.select().from(schedulingCalendarsTable)
+    .where(eq(schedulingCalendarsTable.id, booking.calendarId));
+
+  const meetLinkRow = await db.execute(
+    sql`SELECT meet_link FROM bookings WHERE id = ${booking.id}`
+  );
+  const meetLink = (meetLinkRow.rows[0] as any)?.meet_link as string | null ?? null;
+
+  res.json(GetPublicBookingByTokenResponse.parse({
+    bookingId: booking.id,
+    attendeeName: booking.attendeeName,
+    attendeeEmail: booking.attendeeEmail,
+    eventTypeName: eventType?.name ?? "",
+    eventTypeSlug: eventType?.slug ?? "",
+    slotStart: booking.slotStart.toISOString(),
+    slotEnd: booking.slotEnd.toISOString(),
+    timezone: calendar?.timezone ?? "UTC",
+    status: booking.status,
+    action: verified.action,
+    meetLink,
+  }));
+});
+
+router.post("/scheduling/public/bookings/cancel", async (req, res): Promise<void> => {
+  const parsed = CancelPublicBookingByTokenBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
+
+  const verified = verifyToken(parsed.data.token);
+  if (!verified || verified.action !== "cancel") {
+    res.status(400).json({ error: "Invalid or expired cancellation token" }); return;
+  }
+
+  const [booking] = await db.select().from(bookingsTable)
+    .where(eq(bookingsTable.id, verified.bookingId));
+  if (!booking) { res.status(404).json({ error: "Booking not found" }); return; }
+
+  if (booking.status === "cancelled" || booking.status === "rescheduled") {
+    res.status(409).json({ error: "This booking has already been cancelled or rescheduled" }); return;
+  }
+
+  const [eventType] = await db.select().from(eventTypesTable)
+    .where(eq(eventTypesTable.id, booking.eventTypeId));
+  const [calendar] = await db.select().from(schedulingCalendarsTable)
+    .where(eq(schedulingCalendarsTable.id, booking.calendarId));
+
+  // Fetch google_event_id (not in Drizzle schema type)
+  const gcalRow = await db.execute(
+    sql`SELECT google_event_id FROM bookings WHERE id = ${booking.id}`
+  );
+  const existingGoogleEventId = (gcalRow.rows[0] as any)?.google_event_id as string | null ?? null;
+
+  const [cancelled] = await db.update(bookingsTable)
+    .set({ status: "cancelled", cancelledAt: new Date(), updatedAt: new Date() })
+    .where(eq(bookingsTable.id, booking.id))
+    .returning();
+
+  if (!cancelled) { res.status(404).json({ error: "Booking not found" }); return; }
+
+  // Delete Google Calendar event (best-effort, fire-and-forget)
+  if (existingGoogleEventId) {
+    void (async () => {
+      try {
+        const calRow = await db.execute(
+          sql`SELECT google_calendar_connection_id FROM scheduling_calendars WHERE id = ${booking.calendarId}`
+        );
+        const calendarConnectionId = (calRow.rows[0] as any)?.google_calendar_connection_id as string | null;
+        const connectionId = calendarConnectionId ?? (await getFirstConnectionForUser(booking.userId))?.id ?? null;
+        if (connectionId) {
+          await deleteCalendarEvent(connectionId, existingGoogleEventId);
+        }
+      } catch { /* non-fatal */ }
+    })();
+  }
+
+  void sendBookingCancelledEmail({
+    attendeeName: cancelled.attendeeName,
+    attendeeEmail: cancelled.attendeeEmail,
+    eventTypeName: eventType?.name ?? "",
+    slotStart: cancelled.slotStart,
+    slotEnd: cancelled.slotEnd,
+    timezone: calendar?.timezone ?? "UTC",
+    hostEmail: calendar?.hostEmail,
+    bookingId: cancelled.id,
+  });
+
+  void dispatchSchedulingWebhooks(booking.userId, "scheduling.booking.cancelled", {
+    booking: formatBooking(cancelled),
+  });
+
+  res.json(CancelPublicBookingByTokenResponse.parse(formatBooking(cancelled)));
+});
+
+router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<void> => {
+  const parsed = ReschedulePublicBookingByTokenBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
+
+  const verified = verifyToken(parsed.data.token);
+  if (!verified || verified.action !== "reschedule") {
+    res.status(400).json({ error: "Invalid or expired reschedule token" }); return;
+  }
+
+  const [booking] = await db.select().from(bookingsTable)
+    .where(eq(bookingsTable.id, verified.bookingId));
+  if (!booking) { res.status(404).json({ error: "Booking not found" }); return; }
+
+  if (booking.status === "cancelled" || booking.status === "rescheduled") {
+    res.status(409).json({ error: "This booking is no longer active and cannot be rescheduled" }); return;
+  }
+
+  // Also reject if the slot has already started (belt-and-suspenders — token expiry already handles this)
+  if (booking.slotStart <= new Date()) {
+    res.status(400).json({ error: "This appointment has already started and cannot be rescheduled" }); return;
+  }
+
+  const [eventType] = await db.select().from(eventTypesTable)
+    .where(eq(eventTypesTable.id, booking.eventTypeId));
+  const [calendar] = await db.select().from(schedulingCalendarsTable)
+    .where(eq(schedulingCalendarsTable.id, booking.calendarId));
+
+  if (!eventType || !calendar) { res.status(404).json({ error: "Event type or calendar not found" }); return; }
+
+  const newSlotStart = new Date(parsed.data.slotStart);
+  const newSlotEnd = addMinutes(newSlotStart, eventType.durationMinutes);
+  const lockKey = buildSlotLockKey(booking.calendarId, newSlotStart);
+
+  // Validate new slot against availability
+  const availableSlots = await getAvailableSlots(
+    booking.eventTypeId,
+    format(newSlotStart, "yyyy-MM-dd"),
+    format(newSlotStart, "yyyy-MM-dd"),
+  );
+  const slotIsAvailable = availableSlots.some(
+    (s) => s.slotStart.getTime() === newSlotStart.getTime(),
+  );
+  if (!slotIsAvailable) {
+    res.status(409).json({ error: "This slot is not available — please choose another" }); return;
+  }
+
+  // Fetch existing google_event_id
+  const gcalRow = await db.execute(
+    sql`SELECT google_event_id FROM bookings WHERE id = ${booking.id}`
+  );
+  const existingGoogleEventId = (gcalRow.rows[0] as any)?.google_event_id as string | null ?? null;
+
+  let newBooking: typeof bookingsTable.$inferSelect | undefined;
+  let lockConflict = false;
+
+  await db.transaction(async (tx) => {
+    const lockResult = await tx.execute(
+      sql`SELECT pg_try_advisory_xact_lock(hashtext(${lockKey})) AS acquired`
+    );
+    const acquired = (lockResult.rows[0] as any)?.acquired === true;
+    if (!acquired) { lockConflict = true; return; }
+
+    const newBufBefore = addMinutes(newSlotStart, -eventType.bufferBeforeMins);
+    const newBufAfter = addMinutes(newSlotEnd, eventType.bufferAfterMins);
+
+    const overlapCount = await tx
+      .select({ count: sql<number>`count(*)::int` })
+      .from(bookingsTable)
+      .where(
+        and(
+          eq(bookingsTable.calendarId, booking.calendarId),
+          or(eq(bookingsTable.status, "pending"), eq(bookingsTable.status, "confirmed")),
+          sql`${bookingsTable.slotStart} < ${newBufAfter}`,
+          sql`${bookingsTable.slotEnd} > ${newBufBefore}`,
+        ),
+      )
+      .then((r) => r[0]?.count ?? 0);
+
+    const exactOverlapCount = await tx
+      .select({ count: sql<number>`count(*)::int` })
+      .from(bookingsTable)
+      .where(
+        and(
+          eq(bookingsTable.calendarId, booking.calendarId),
+          or(eq(bookingsTable.status, "pending"), eq(bookingsTable.status, "confirmed")),
+          sql`${bookingsTable.slotStart} < ${newSlotEnd}`,
+          sql`${bookingsTable.slotEnd} > ${newSlotStart}`,
+        ),
+      )
+      .then((r) => r[0]?.count ?? 0);
+
+    if (exactOverlapCount >= eventType.maxBookingsPerSlot || overlapCount > exactOverlapCount) {
+      lockConflict = true; return;
+    }
+
+    // Mark old booking as rescheduled
+    await tx.update(bookingsTable)
+      .set({ status: "rescheduled", updatedAt: new Date() })
+      .where(eq(bookingsTable.id, booking.id));
+
+    // Create new booking for the new slot
+    const [inserted] = await tx.insert(bookingsTable).values({
+      eventTypeId: booking.eventTypeId,
+      calendarId: booking.calendarId,
+      callId: booking.callId,
+      userId: booking.userId,
+      attendeeName: booking.attendeeName,
+      attendeeEmail: booking.attendeeEmail,
+      attendeeNotes: booking.attendeeNotes,
+      slotStart: newSlotStart,
+      slotEnd: newSlotEnd,
+      status: eventType.confirmationMode === "instant" ? "confirmed" : "pending",
+      bookedVia: booking.bookedVia,
+      rescheduledFromId: booking.id,
+    }).returning();
+    newBooking = inserted;
+  });
+
+  if (lockConflict || !newBooking) {
+    res.status(409).json({ error: "This slot is no longer available — please choose another" }); return;
+  }
+
+  // Google Calendar sync (best-effort)
+  void (async () => {
+    try {
+      const calRow = await db.execute(
+        sql`SELECT google_calendar_connection_id FROM scheduling_calendars WHERE id = ${booking.calendarId}`
+      );
+      const calendarConnectionId = (calRow.rows[0] as any)?.google_calendar_connection_id as string | null;
+      const connectionId = calendarConnectionId ?? (await getFirstConnectionForUser(booking.userId))?.id ?? null;
+
+      if (existingGoogleEventId && connectionId) {
+        await deleteCalendarEvent(connectionId, existingGoogleEventId);
+      }
+
+      if (connectionId && newBooking) {
+        const gcalResult = await createCalendarEvent({
+          connectionId,
+          summary: `${eventType.name} — ${newBooking.attendeeName}`,
+          description: newBooking.attendeeNotes ?? undefined,
+          startTime: newBooking.slotStart,
+          endTime: newBooking.slotEnd,
+          attendeeEmail: newBooking.attendeeEmail,
+          attendeeName: newBooking.attendeeName,
+          timezone: calendar.timezone,
+          hostEmail: calendar.hostEmail,
+        });
+        if (gcalResult) {
+          await db.execute(
+            sql`UPDATE bookings SET meet_link = ${gcalResult.meetLink}, google_event_id = ${gcalResult.eventId} WHERE id = ${newBooking.id}`
+          );
+        }
+      }
+    } catch { /* non-fatal */ }
+  })();
+
+  // Issue new reschedule token for the new booking
+  const baseUrl = getBaseUrl();
+  const newCancelTok = issueToken(newBooking.id, "cancel", cancelTokenExpiry());
+  const newRescheduleTok = issueToken(newBooking.id, "reschedule", rescheduleTokenExpiry(newBooking.slotStart));
+  const newCancelLink = `${baseUrl}/book/cancel?token=${encodeURIComponent(newCancelTok)}`;
+  const newRescheduleLink = `${baseUrl}/book/reschedule?token=${encodeURIComponent(newRescheduleTok)}`;
+
+  void sendBookingRescheduledEmail({
+    attendeeName: newBooking.attendeeName,
+    attendeeEmail: newBooking.attendeeEmail,
+    eventTypeName: eventType.name,
+    slotStart: newBooking.slotStart,
+    slotEnd: newBooking.slotEnd,
+    timezone: calendar.timezone,
+    hostEmail: calendar.hostEmail,
+    bookingId: newBooking.id,
+    oldSlotStart: booking.slotStart,
+    cancelLink: newCancelLink,
+    rescheduleLink: newRescheduleLink,
+  });
+
+  void dispatchSchedulingWebhooks(booking.userId, "scheduling.booking.rescheduled", {
+    booking: formatBooking(newBooking),
+  });
+
+  res.json(ReschedulePublicBookingByTokenResponse.parse(formatBooking(newBooking)));
 });
 
 export default router;

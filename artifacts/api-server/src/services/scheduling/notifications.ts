@@ -13,6 +13,8 @@ interface BookingEmailData {
   bookingId: number;
   notes?: string | null;
   meetLink?: string | null;
+  cancelLink?: string | null;
+  rescheduleLink?: string | null;
 }
 
 function getTransporter() {
@@ -87,13 +89,17 @@ export async function sendBookingCreatedEmail(data: BookingEmailData): Promise<v
   const to = formatDateTime(data.slotEnd, data.timezone);
   const meetLine = data.meetLink ? `\nGoogle Meet: ${data.meetLink}` : "";
 
+  const selfServiceLines = (data.cancelLink || data.rescheduleLink)
+    ? `\n\n── Manage your appointment ──${data.rescheduleLink ? `\nReschedule: ${data.rescheduleLink}` : ""}${data.cancelLink ? `\nCancel: ${data.cancelLink}` : ""}`
+    : "";
+
   const attendeeBody = `Hi ${data.attendeeName},
 
 Your appointment "${data.eventTypeName}" has been booked successfully.
 
 Date & Time: ${from} – ${to} (${data.timezone})${meetLine}${data.notes ? `\nNotes: ${data.notes}` : ""}
 
-Booking Reference: #${data.bookingId}
+Booking Reference: #${data.bookingId}${selfServiceLines}
 
 We look forward to speaking with you!`;
 
@@ -174,13 +180,17 @@ export async function sendBookingRescheduledEmail(data: BookingEmailData & { old
   const meetLine = data.meetLink ? `\nGoogle Meet: ${data.meetLink}` : "";
   const oldFrom = data.oldSlotStart ? formatDateTime(data.oldSlotStart, data.timezone) : "previous time";
 
+  const selfServiceLines = (data.cancelLink || data.rescheduleLink)
+    ? `\n\n── Manage your appointment ──${data.rescheduleLink ? `\nReschedule again: ${data.rescheduleLink}` : ""}${data.cancelLink ? `\nCancel: ${data.cancelLink}` : ""}`
+    : "";
+
   const attendeeBody = `Hi ${data.attendeeName},
 
 Your appointment "${data.eventTypeName}" has been rescheduled.
 
 Previous time: ${oldFrom}
 New Date & Time: ${from} – ${to} (${data.timezone})${meetLine}
-Booking Reference: #${data.bookingId}
+Booking Reference: #${data.bookingId}${selfServiceLines}
 
 If you did not request this change, please contact us.`;
 

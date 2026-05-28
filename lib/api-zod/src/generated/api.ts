@@ -2210,6 +2210,93 @@ export const CreatePublicBookingBody = zod.object({
 
 
 /**
+ * @summary Get booking summary for cancel/reschedule page (unauthenticated, token-gated)
+ */
+export const GetPublicBookingByTokenQueryParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const GetPublicBookingByTokenResponse = zod.object({
+  "bookingId": zod.number(),
+  "attendeeName": zod.string(),
+  "attendeeEmail": zod.string(),
+  "eventTypeName": zod.string(),
+  "eventTypeSlug": zod.string(),
+  "slotStart": zod.coerce.date(),
+  "slotEnd": zod.coerce.date(),
+  "timezone": zod.string(),
+  "status": zod.enum(['pending', 'confirmed', 'cancelled', 'rescheduled']),
+  "action": zod.enum(['cancel', 'reschedule']),
+  "meetLink": zod.string().nullish()
+})
+
+
+/**
+ * @summary Cancel a booking via attendee self-service token (unauthenticated)
+ */
+
+
+
+export const CancelPublicBookingByTokenBody = zod.object({
+  "token": zod.string().min(1)
+})
+
+export const CancelPublicBookingByTokenResponse = zod.object({
+  "id": zod.number(),
+  "eventTypeId": zod.number(),
+  "calendarId": zod.number(),
+  "callId": zod.number().nullish(),
+  "userId": zod.string(),
+  "attendeeName": zod.string(),
+  "attendeeEmail": zod.string(),
+  "attendeeNotes": zod.string().nullish(),
+  "slotStart": zod.coerce.date(),
+  "slotEnd": zod.coerce.date(),
+  "status": zod.enum(['pending', 'confirmed', 'cancelled', 'rescheduled']),
+  "bookedVia": zod.enum(['agent', 'web', 'api']),
+  "cancelledAt": zod.coerce.date().nullish(),
+  "rescheduledFromId": zod.number().nullish(),
+  "meetLink": zod.string().nullish(),
+  "googleEventId": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Reschedule a booking via attendee self-service token (unauthenticated)
+ */
+
+
+
+export const ReschedulePublicBookingByTokenBody = zod.object({
+  "token": zod.string().min(1),
+  "slotStart": zod.coerce.date()
+})
+
+export const ReschedulePublicBookingByTokenResponse = zod.object({
+  "id": zod.number(),
+  "eventTypeId": zod.number(),
+  "calendarId": zod.number(),
+  "callId": zod.number().nullish(),
+  "userId": zod.string(),
+  "attendeeName": zod.string(),
+  "attendeeEmail": zod.string(),
+  "attendeeNotes": zod.string().nullish(),
+  "slotStart": zod.coerce.date(),
+  "slotEnd": zod.coerce.date(),
+  "status": zod.enum(['pending', 'confirmed', 'cancelled', 'rescheduled']),
+  "bookedVia": zod.enum(['agent', 'web', 'api']),
+  "cancelledAt": zod.coerce.date().nullish(),
+  "rescheduledFromId": zod.number().nullish(),
+  "meetLink": zod.string().nullish(),
+  "googleEventId": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
  * @summary Current-month spend per service, remaining budget, and last 25 events
  */
 export const GetMyUsageResponse = zod.object({

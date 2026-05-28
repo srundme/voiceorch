@@ -2063,6 +2063,75 @@ paths:
         "409":
           description: Slot already booked
 
+  /scheduling/public/bookings/by-token:
+    get:
+      operationId: getPublicBookingByToken
+      tags: [scheduling]
+      summary: Get booking summary for cancel/reschedule page (unauthenticated, token-gated)
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Booking summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicBookingByTokenResponse"
+        "400":
+          description: Invalid or expired token
+        "404":
+          description: Booking not found
+
+  /scheduling/public/bookings/cancel:
+    post:
+      operationId: cancelPublicBookingByToken
+      tags: [scheduling]
+      summary: Cancel a booking via attendee self-service token (unauthenticated)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PublicCancelByTokenBody"
+      responses:
+        "200":
+          description: Booking cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+        "400":
+          description: Invalid or expired token
+        "409":
+          description: Booking already cancelled or not cancellable
+
+  /scheduling/public/bookings/reschedule:
+    post:
+      operationId: reschedulePublicBookingByToken
+      tags: [scheduling]
+      summary: Reschedule a booking via attendee self-service token (unauthenticated)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PublicRescheduleByTokenBody"
+      responses:
+        "200":
+          description: Booking rescheduled — new booking returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+        "400":
+          description: Invalid or expired token or validation error
+        "409":
+          description: New slot not available
+
   # ── User Usage Summary ──────────────────────────────────────────────────────
   /usage/me:
     get:
@@ -4386,6 +4455,56 @@ components:
           format: email
         attendeeNotes:
           type: string
+
+    PublicBookingByTokenResponse:
+      type: object
+      required: [bookingId, attendeeName, attendeeEmail, eventTypeName, eventTypeSlug, slotStart, slotEnd, timezone, status, action]
+      properties:
+        bookingId:
+          type: integer
+        attendeeName:
+          type: string
+        attendeeEmail:
+          type: string
+        eventTypeName:
+          type: string
+        eventTypeSlug:
+          type: string
+        slotStart:
+          type: string
+          format: date-time
+        slotEnd:
+          type: string
+          format: date-time
+        timezone:
+          type: string
+        status:
+          type: string
+          enum: [pending, confirmed, cancelled, rescheduled]
+        action:
+          type: string
+          enum: [cancel, reschedule]
+        meetLink:
+          type: ["string", "null"]
+
+    PublicCancelByTokenBody:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+          minLength: 1
+
+    PublicRescheduleByTokenBody:
+      type: object
+      required: [token, slotStart]
+      properties:
+        token:
+          type: string
+          minLength: 1
+        slotStart:
+          type: string
+          format: date-time
 
     BookingUpdate:
       type: object

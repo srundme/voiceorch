@@ -43,6 +43,8 @@ import SchedulingEventTypeDetailPage from "@/pages/scheduling/EventTypeDetail";
 import SchedulingAvailabilityPage from "@/pages/scheduling/Availability";
 import SchedulingBookingDetailPage from "@/pages/scheduling/Bookings";
 import PublicBookingPage from "@/pages/book/[slug]";
+import CancelBookingPage from "@/pages/book/cancel";
+import RescheduleBookingPage from "@/pages/book/reschedule";
 import UsagePage from "@/pages/usage";
 import KycPage from "@/pages/kyc";
 
@@ -277,6 +279,8 @@ function Router() {
           <Route path="/sign-in/*?" component={SignInPage} />
           <Route path="/sign-up/*?" component={SignUpPage} />
           <Route path="/app/*?" component={ProtectedApp} />
+          <Route path="/book/cancel" component={CancelBookingPage} />
+          <Route path="/book/reschedule" component={RescheduleBookingPage} />
           <Route path="/book/:slug" component={PublicBookingPage} />
           <Route component={NotFound} />
         </Switch>

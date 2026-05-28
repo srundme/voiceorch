@@ -1663,6 +1663,50 @@ export interface PublicBookingInput {
   attendeeNotes?: string;
 }
 
+export type PublicBookingByTokenResponseStatus = typeof PublicBookingByTokenResponseStatus[keyof typeof PublicBookingByTokenResponseStatus];
+
+
+export const PublicBookingByTokenResponseStatus = {
+  pending: 'pending',
+  confirmed: 'confirmed',
+  cancelled: 'cancelled',
+  rescheduled: 'rescheduled',
+} as const;
+
+export type PublicBookingByTokenResponseAction = typeof PublicBookingByTokenResponseAction[keyof typeof PublicBookingByTokenResponseAction];
+
+
+export const PublicBookingByTokenResponseAction = {
+  cancel: 'cancel',
+  reschedule: 'reschedule',
+} as const;
+
+export interface PublicBookingByTokenResponse {
+  bookingId: number;
+  attendeeName: string;
+  attendeeEmail: string;
+  eventTypeName: string;
+  eventTypeSlug: string;
+  slotStart: string;
+  slotEnd: string;
+  timezone: string;
+  status: PublicBookingByTokenResponseStatus;
+  action: PublicBookingByTokenResponseAction;
+  /** @nullable */
+  meetLink?: string | null;
+}
+
+export interface PublicCancelByTokenBody {
+  /** @minLength 1 */
+  token: string;
+}
+
+export interface PublicRescheduleByTokenBody {
+  /** @minLength 1 */
+  token: string;
+  slotStart: string;
+}
+
 export type BookingUpdateStatus = typeof BookingUpdateStatus[keyof typeof BookingUpdateStatus];
 
 
@@ -2128,6 +2172,10 @@ export type GetPublicSlotsParams = {
 slug: string;
 startDate: string;
 endDate: string;
+};
+
+export type GetPublicBookingByTokenParams = {
+token: string;
 };
 
 export type AdminUsageOverviewParams = {
