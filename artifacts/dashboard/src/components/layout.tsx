@@ -248,8 +248,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <Menu className="h-4 w-4" />
             </button>
           </SheetTrigger>
-          <Link href="/app" className="ml-3 flex items-center">
-            <BrandMark iconSize={16} wordmarkHeight={11} />
+          <Link href="/app" className="ml-3 flex items-center gap-1.5">
+            <SnapServeIcon size={20} className="text-foreground shrink-0" />
+            <span className="leading-none select-none text-[13px] text-foreground" style={{ fontFamily: "'Tex Gyre Heros', Helvetica, Arial, sans-serif", letterSpacing: "-0.01em" }}>
+              <span style={{ fontWeight: 700 }}>Snap</span><span style={{ fontWeight: 400 }}>Serve</span>
+            </span>
           </Link>
         </div>
         <SheetContent side="left" className="p-0 w-[228px]">
