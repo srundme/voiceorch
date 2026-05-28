@@ -272,9 +272,9 @@ function providerTag(p: string) {
 }
 
 function statusDot(status: string) {
-  if (status === "active")   return <span className="h-1.5 w-1.5 rounded-full bg-zinc-400 shrink-0" />;
-  if (status === "inactive") return <span className="h-1.5 w-1.5 rounded-full bg-muted shrink-0" />;
-  return <span className="h-1.5 w-1.5 rounded-full bg-zinc-400 shrink-0" />;
+  if (status === "active")   return <span className="h-1.5 w-1.5 rounded-full bg-foreground/25 shrink-0" />;
+  if (status === "inactive") return <span className="h-1.5 w-1.5 rounded-full bg-foreground/08 shrink-0" />;
+  return <span className="h-1.5 w-1.5 rounded-full bg-foreground/15 shrink-0" />;
 }
 
 /* ── Web Call Panel ──────────────────────────────────────────────────────── */
@@ -1038,29 +1038,26 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
   return (
     <div className="flex-1 flex flex-col min-w-0 overflow-hidden animate-fade-in">
       {/* ── Top bar ── */}
-      <div className="flex items-center gap-3 px-6 h-14 shrink-0" style={{ borderBottom: "1px solid #E5E7EB" }}>
+      <div className="flex items-center gap-3 px-6 h-14 shrink-0 border-b border-border bg-background">
         <div className="flex items-center gap-3 min-w-0">
-          <span className="font-semibold text-[15px] truncate" style={{ color: "#111827" }}>{agentName || agent.name}</span>
-          <span className="text-[10px] font-mono hidden sm:flex items-center px-1.5 py-0.5 rounded-md" style={{ background: "#F3F4F6", color: "#9CA3AF" }}>
+          <span className="font-semibold text-[14.5px] truncate text-foreground">{agentName || agent.name}</span>
+          <span className="text-[10px] font-mono hidden sm:flex items-center px-1.5 py-0.5 rounded-md bg-elevated border border-border text-muted-foreground/60">
             #{String(agent.id).padStart(4, "0")}
           </span>
           {statusDot(agent.status)}
         </div>
         <div className="ml-auto flex items-center gap-2">
           {dirty && (
-            <Button size="sm" className="h-8 text-xs gap-1.5 text-white border-0 transition-all" onClick={handleSave} disabled={update.isPending}
-              style={{ background: "#374151", boxShadow: "0 0 16px #374151" }}>
+            <Button size="sm" className="h-8 text-xs gap-1.5 border border-border bg-elevated text-foreground hover:bg-accent transition-colors" onClick={handleSave} disabled={update.isPending}>
               {update.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} Save
             </Button>
           )}
-          <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 transition-all" onClick={() => setOutboundDialogOpen(true)}
-            style={{ borderColor: "#E5E7EB", color: "#4B5563", background: "#F9FAFB" }}>
+          <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 transition-colors border-border text-muted-foreground hover:text-foreground" onClick={() => setOutboundDialogOpen(true)}>
             <PhoneOutgoing className="h-3 w-3" /> Call
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="ghost" className="h-8 w-8 p-0 transition-colors"
-                style={{ color: "#6B7280" }}>
+              <Button size="sm" variant="ghost" className="h-8 w-8 p-0 transition-colors text-muted-foreground hover:text-foreground">
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -1078,16 +1075,16 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
       </div>
 
       {/* ── Stats row ── */}
-      <div className="flex items-center gap-3 px-6 py-3 shrink-0" style={{ borderBottom: "1px solid #F3F4F6", background: "#FAFAFA" }}>
+      <div className="flex items-center gap-2.5 px-6 py-3 shrink-0 border-b border-border bg-sidebar/50">
         {[
-          { icon: Phone,         val: String(agent.totalCalls ?? 0),                                                label: "calls",   color: "#4B5563" },
-          { icon: CheckCircle2,  val: `${successRate}%`,                                                             label: "success", color: "#a1a1aa" },
-          ...(agent.avgDurationSeconds != null ? [{ icon: Clock, val: `~${agent.avgDurationSeconds}s`, label: "avg", color: "#a1a1aa" }] : []),
-        ].map(({ icon: Icon, val, label, color }) => (
-          <div key={label} className="flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ background: "#F9FAFB", border: "1px solid #F3F4F6" }}>
-            <Icon className="h-3 w-3 shrink-0" style={{ color }} />
-            <span className="text-[13px] font-bold tabular-nums" style={{ color: "#111827" }}>{val}</span>
-            <span className="text-[11px]" style={{ color: "#9CA3AF" }}>{label}</span>
+          { icon: Phone,        val: String(agent.totalCalls ?? 0),                                                  label: "calls" },
+          { icon: CheckCircle2, val: `${successRate}%`,                                                               label: "success" },
+          ...(agent.avgDurationSeconds != null ? [{ icon: Clock, val: `~${agent.avgDurationSeconds}s`, label: "avg" }] : []),
+        ].map(({ icon: Icon, val, label }) => (
+          <div key={label} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-elevated border border-border/60">
+            <Icon className="h-3 w-3 shrink-0 text-muted-foreground/50" />
+            <span className="text-[12.5px] font-semibold tabular-nums text-foreground">{val}</span>
+            <span className="text-[10.5px] text-muted-foreground/50">{label}</span>
           </div>
         ))}
       </div>
@@ -1106,15 +1103,16 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-        <div className="shrink-0 overflow-x-auto" style={{ borderBottom: "1px solid #E5E7EB" }}>
+        <div className="shrink-0 overflow-x-auto border-b border-border bg-background">
           <TabsList className="w-max min-w-full justify-start rounded-none bg-transparent px-4 h-10 gap-0">
             {TABS.map(t => (
               <TabsTrigger key={t.value} value={t.value}
-                className="h-10 rounded-none border-b-2 border-transparent bg-transparent px-3.5 text-[12.5px] font-medium shadow-none transition-colors whitespace-nowrap data-[state=active]:shadow-none"
-                style={{
-                  color: activeTab === t.value ? "#111827" : "#9CA3AF",
-                  borderBottomColor: activeTab === t.value ? "#374151" : "transparent",
-                }}>
+                className={
+                  "h-10 rounded-none border-b-2 bg-transparent px-3.5 text-[12px] font-medium shadow-none transition-colors whitespace-nowrap data-[state=active]:shadow-none " +
+                  (activeTab === t.value
+                    ? "text-foreground border-foreground/40"
+                    : "text-muted-foreground/50 border-transparent hover:text-muted-foreground")
+                }>
                 {t.label}
               </TabsTrigger>
             ))}
@@ -1132,22 +1130,20 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
 
                 {/* Agent Name */}
                 <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] mb-2" style={{ color: "#9CA3AF" }}>
+                  <label className="block text-[10.5px] font-semibold uppercase tracking-[0.12em] mb-2 text-muted-foreground/60">
                     Agent Name
                   </label>
                   <Input value={agentName} onChange={e => { setAgentName(e.target.value); setDirty(true); }}
-                    className="h-11 text-[14px] border transition-all focus-visible:ring-0"
-                    style={{ background: "#F9FAFB", borderColor: "#E5E7EB", color: "#111827" }} />
+                    className="h-11 text-[14px] border transition-all focus-visible:ring-0" />
                 </div>
 
                 {/* Agent Type */}
                 <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] mb-2" style={{ color: "#9CA3AF" }}>
+                  <label className="block text-[10.5px] font-semibold uppercase tracking-[0.12em] mb-2 text-muted-foreground/60">
                     Agent Type
                   </label>
                   <Select value={agentType} onValueChange={mark(setAgentType)}>
-                    <SelectTrigger className="h-11 text-[14px] border transition-all focus-visible:ring-0"
-                      style={{ background: "#F9FAFB", borderColor: "#E5E7EB", color: "#374151" }}>
+                    <SelectTrigger className="h-11 text-[14px] border transition-all focus-visible:ring-0">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="bg-popover border-border">
@@ -1162,34 +1158,31 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
 
                 {/* Welcome Message */}
                 <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] mb-2" style={{ color: "#9CA3AF" }}>
+                  <label className="block text-[10.5px] font-semibold uppercase tracking-[0.12em] mb-2 text-muted-foreground/60">
                     Welcome Message
                   </label>
                   <Textarea value={greetingMessage} onChange={e => { setGreetingMessage(e.target.value); setDirty(true); }}
                     placeholder="First thing the agent says when a call connects"
-                    className="text-[14px] border resize-none min-h-[80px] leading-relaxed transition-all focus-visible:ring-0"
-                    style={{ background: "#F9FAFB", borderColor: "#E5E7EB", color: "#1F2937", padding: "12px 14px" }} />
+                    className="text-[14px] border resize-none min-h-[80px] leading-relaxed transition-all focus-visible:ring-0" />
                 </div>
 
                 {/* Agent Prompt */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <label className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: "#9CA3AF" }}>
+                    <label className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60">
                       Agent Prompt
                     </label>
                     <button type="button"
-                      className="flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-lg transition-all"
-                      style={{ color: "#374151", background: "#F9FAFB", border: "1px solid #E5E7EB" }}
+                      className="flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-lg transition-colors border border-border bg-elevated text-muted-foreground hover:text-foreground hover:bg-accent"
                       onClick={() => { setSystemPrompt("You are a helpful and professional AI voice assistant. Be concise, clear, and friendly in all responses."); setDirty(true); }}>
                       <Sparkles className="h-3 w-3" /> Generate
                     </button>
                   </div>
                   <Textarea value={systemPrompt} onChange={e => { setSystemPrompt(e.target.value); setDirty(true); }}
                     placeholder="You are a helpful AI voice assistant…"
-                    className="text-[14px] border resize-none min-h-[180px] leading-relaxed transition-all focus-visible:ring-0"
-                    style={{ background: "#F9FAFB", borderColor: "#E5E7EB", color: "#1F2937", padding: "12px 14px" }} />
+                    className="text-[14px] border resize-none min-h-[180px] leading-relaxed transition-all focus-visible:ring-0" />
                   <div className="flex flex-wrap gap-2 mt-3">
-                    <span className="text-[11px] self-center" style={{ color: "#9CA3AF" }}>Insert variable:</span>
+                    <span className="text-[11px] self-center text-muted-foreground/50">Insert variable:</span>
                     {[
                       { var: "{caller_salutation}", tip: "sir / ma'am — requires Gender Detection in Engine tab", color: "zinc" },
                       { var: "{caller_number}",     tip: "Caller's phone number",                                color: "zinc"    },
@@ -1216,24 +1209,22 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
 
                 {/* Webhook URL */}
                 <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] mb-2" style={{ color: "#9CA3AF" }}>
-                    Webhook URL <span className="normal-case font-normal" style={{ color: "#D1D5DB" }}>(optional)</span>
+                  <label className="block text-[10.5px] font-semibold uppercase tracking-[0.12em] mb-2 text-muted-foreground/60">
+                    Webhook URL <span className="normal-case font-normal text-muted-foreground/30">(optional)</span>
                   </label>
                   <Input value={webhookUrl} onChange={e => { setWebhookUrl(e.target.value); setDirty(true); }}
                     placeholder="https://your-server.com/webhook"
-                    className="h-11 text-[14px] border transition-all focus-visible:ring-0"
-                    style={{ background: "#F9FAFB", borderColor: "#E5E7EB", color: "#374151" }} />
-                  <p className="text-[11px] mt-1.5" style={{ color: "#9CA3AF" }}>Fires a POST with call summary JSON after each call ends.</p>
+                    className="h-11 text-[14px] border transition-all focus-visible:ring-0" />
+                  <p className="text-[11px] mt-1.5 text-muted-foreground/50">Fires a POST with call summary JSON after each call ends.</p>
                 </div>
 
                 {/* Knowledge Base */}
                 <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] mb-2" style={{ color: "#9CA3AF" }}>
+                  <label className="block text-[10.5px] font-semibold uppercase tracking-[0.12em] mb-2 text-muted-foreground/60">
                     Knowledge Base
                   </label>
                   <Select value={knowledgeBaseId?.toString() ?? "none"} onValueChange={v => { setKnowledgeBaseId(v === "none" ? null : parseInt(v)); setDirty(true); }}>
-                    <SelectTrigger className="h-11 text-[14px] border transition-all focus-visible:ring-0"
-                      style={{ background: "#F9FAFB", borderColor: "#E5E7EB", color: "#374151" }}>
+                    <SelectTrigger className="h-11 text-[14px] border transition-all focus-visible:ring-0">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="bg-popover border-border">
@@ -1241,39 +1232,37 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                       {(kbs ?? []).map(kb => <SelectItem key={kb.id} value={kb.id.toString()} className="text-foreground">{kb.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                  <p className="text-[11px] mt-1.5" style={{ color: "#9CA3AF" }}>Relevant chunks are injected into the system prompt on every call.</p>
+                  <p className="text-[11px] mt-1.5 text-muted-foreground/50">Relevant chunks are injected into the system prompt on every call.</p>
                 </div>
               </div>
             </div>
 
             {/* ── Right: analytics panel ── */}
-            <div className="w-[280px] shrink-0 overflow-y-auto p-4 space-y-3"
-              style={{ borderLeft: "1px solid #F3F4F6", background: "#FAFAFA" }}>
+            <div className="w-[264px] shrink-0 overflow-y-auto p-4 space-y-3 border-l border-border bg-sidebar/40">
 
               {/* Agent Status card */}
-              <div className="rounded-2xl p-4 space-y-3"
-                style={{ background: "#F9FAFB", border: "1px solid #E5E7EB" }}>
+              <div className="rounded-2xl p-4 space-y-3 bg-card border border-border">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "#6B7280" }}>Agent Status</span>
-                  <span className={`flex items-center gap-1.5 text-[11px] font-semibold ${agent.status === "active" ? "text-foreground" : "text-muted-foreground"}`}>
-                    <span className={`h-1.5 w-1.5 rounded-full ${agent.status === "active" ? "bg-zinc-500" : "bg-muted"}`} />
+                  <span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50">Agent Status</span>
+                  <span className={`flex items-center gap-1.5 text-[11px] font-semibold ${agent.status === "active" ? "text-foreground" : "text-muted-foreground/60"}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${agent.status === "active" ? "bg-foreground/25" : "bg-foreground/08"}`} />
                     {agent.status === "active" ? "Active" : "Inactive"}
                   </span>
                 </div>
                 <div className="space-y-2.5">
                   {[
-                    { label: "Total calls",  value: String(agent.totalCalls ?? 0), accent: "#4B5563" },
-                    { label: "Success rate", value: `${successRate}%`,              accent: "#a1a1aa" },
-                    { label: "Avg duration", value: agent.avgDurationSeconds != null ? `~${agent.avgDurationSeconds}s` : "—", accent: "#a1a1aa" },
+                    { label: "Total calls",  value: String(agent.totalCalls ?? 0) },
+                    { label: "Success rate", value: `${successRate}%` },
+                    { label: "Avg duration", value: agent.avgDurationSeconds != null ? `~${agent.avgDurationSeconds}s` : "—" },
                   ].map(row => (
                     <div key={row.label}>
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-[11px]" style={{ color: "#6B7280" }}>{row.label}</span>
-                        <span className="text-[12px] font-bold tabular-nums" style={{ color: row.accent }}>{row.value}</span>
+                        <span className="text-[11px] text-muted-foreground/60">{row.label}</span>
+                        <span className="text-[12px] font-semibold tabular-nums text-foreground/70">{row.value}</span>
                       </div>
                       {row.label === "Success rate" && (
-                        <div className="h-1 rounded-full overflow-hidden" style={{ background: "#F3F4F6" }}>
-                          <div className="h-full rounded-full transition-all" style={{ width: `${successRate}%`, background: "linear-gradient(90deg, #a1a1aa, #d4d4d8)" }} />
+                        <div className="h-1 rounded-full overflow-hidden bg-elevated">
+                          <div className="h-full rounded-full transition-all bg-foreground/25" style={{ width: `${successRate}%` }} />
                         </div>
                       )}
                     </div>
@@ -1282,47 +1271,43 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
               </div>
 
               {/* Provider Stack card */}
-              <div className="rounded-2xl p-4 space-y-3"
-                style={{ background: "#FAFAFA", border: "1px solid #E5E7EB" }}>
-                <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "#6B7280" }}>Provider Stack</span>
-                <div className="space-y-2">
+              <div className="rounded-2xl p-4 space-y-3 bg-card border border-border">
+                <span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50">Provider Stack</span>
+                <div className="space-y-1">
                   {[
-                    { label: "ASR",       value: agent.asrProvider,       color: "#a1a1aa" },
-                    { label: "LLM",       value: agent.llmProvider,       color: "#a1a1aa" },
-                    { label: "TTS",       value: agent.ttsProvider,       color: "#d4d4d8" },
-                    { label: "Telephony", value: agent.telephonyProvider, color: "#d4d4d8" },
+                    { label: "ASR",       value: agent.asrProvider },
+                    { label: "LLM",       value: agent.llmProvider },
+                    { label: "TTS",       value: agent.ttsProvider },
+                    { label: "Telephony", value: agent.telephonyProvider },
                   ].map(row => (
-                    <div key={row.label} className="flex items-center justify-between py-1.5 px-3 rounded-lg"
-                      style={{ background: "#FAFAFA" }}>
-                      <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "#9CA3AF" }}>{row.label}</span>
-                      <span className="text-[12px] font-semibold capitalize" style={{ color: row.color }}>{row.value}</span>
+                    <div key={row.label} className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-elevated/50">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50">{row.label}</span>
+                      <span className="text-[12px] font-medium capitalize text-foreground/60">{row.value ?? "—"}</span>
                     </div>
                   ))}
                 </div>
               </div>
 
               {/* Recent Calls card */}
-              <div className="rounded-2xl p-4 space-y-3"
-                style={{ background: "#FAFAFA", border: "1px solid #E5E7EB" }}>
-                <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "#6B7280" }}>Recent Calls</span>
+              <div className="rounded-2xl p-4 space-y-3 bg-card border border-border">
+                <span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50">Recent Calls</span>
                 {callsLoading ? (
                   <div className="space-y-2">
-                    {[1,2,3].map(i => <div key={i} className="h-8 rounded-lg animate-pulse" style={{ background: "#F9FAFB" }} />)}
+                    {[1,2,3].map(i => <div key={i} className="h-8 rounded-lg animate-pulse bg-elevated" />)}
                   </div>
                 ) : !calls?.length ? (
-                  <p className="text-[12px] italic" style={{ color: "#D1D5DB" }}>No calls yet</p>
+                  <p className="text-[12px] italic text-muted-foreground/30">No calls yet</p>
                 ) : (
-                  <div className="space-y-1.5">
+                  <div className="space-y-1">
                     {calls.slice(0, 5).map(call => (
-                      <div key={call.id} className="flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg"
-                        style={{ background: "#FAFAFA" }}>
-                        <span className="text-[11.5px] font-mono truncate flex-1" style={{ color: "#6B7280" }}>
+                      <div key={call.id} className="flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg bg-elevated/40">
+                        <span className="text-[11px] font-mono truncate flex-1 text-muted-foreground/60">
                           {call.fromNumber ?? `#${call.id}`}
                         </span>
-                        <span className={`text-[11px] font-bold shrink-0 px-1.5 py-0.5 rounded ${
-                          call.status === "completed" ? "text-foreground bg-muted" :
-                          call.status === "failed"    ? "text-foreground bg-muted" :
-                                                        "text-muted-foreground bg-muted"
+                        <span className={`text-[10px] font-semibold shrink-0 px-1.5 py-0.5 rounded border ${
+                          call.status === "completed" ? "text-foreground/60 bg-foreground/[0.05] border-foreground/[0.07]" :
+                          call.status === "failed"    ? "text-muted-foreground/60 bg-transparent border-border" :
+                                                        "text-muted-foreground/40 bg-transparent border-border/50"
                         }`}>
                           {call.status === "completed" ? "OK" : call.status === "failed" ? "Fail" : "—"}
                         </span>
@@ -3149,26 +3134,22 @@ export default function AssistantsPage() {
   return (
     <div className="flex h-full overflow-hidden">
       {/* ── Agents List Panel ─────────────────────────────────────── */}
-      <div className="w-[272px] shrink-0 flex flex-col"
-        style={{ borderRight: "1px solid #E5E7EB", background: "#FAFAFA" }}>
+      <div className="w-[272px] shrink-0 flex flex-col border-r border-border bg-sidebar">
 
         {/* Header */}
-        <div className="flex items-center gap-2.5 px-4 h-14 shrink-0"
-          style={{ borderBottom: "1px solid #F3F4F6" }}>
-          <span className="font-semibold text-[14px] flex-1" style={{ color: "#111827" }}>
+        <div className="flex items-center gap-2.5 px-4 h-14 shrink-0 border-b border-border">
+          <span className="font-semibold text-[13.5px] flex-1 text-foreground">
             Assistants
           </span>
           {agents && (
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md tabular-nums"
-              style={{ background: "#F3F4F6", color: "#4B5563", border: "1px solid #E5E7EB" }}>
+            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-md tabular-nums border border-border bg-elevated text-muted-foreground/60">
               {agents.length}
             </span>
           )}
           <button
             onClick={() => setWizardOpen(true)}
             title="Create assistant"
-            className="h-7 w-7 flex items-center justify-center rounded-lg transition-all"
-            style={{ background: "#F3F4F6", color: "#374151", border: "1px solid #E5E7EB" }}
+            className="h-7 w-7 flex items-center justify-center rounded-lg transition-colors border border-border bg-elevated text-muted-foreground hover:text-foreground hover:bg-accent"
           >
             <Plus className="h-3.5 w-3.5" />
           </button>
@@ -3178,12 +3159,7 @@ export default function AssistantsPage() {
         <div className="px-3 pt-3 pb-2 shrink-0">
           <button
             onClick={() => setWizardOpen(true)}
-            className="w-full flex items-center justify-center gap-2 h-9 rounded-xl text-[13px] font-medium transition-all"
-            style={{
-              background: "linear-gradient(135deg, #F3F4F6 0%, #F9FAFB 100%)",
-              border: "1px solid #E5E7EB",
-              color: "#374151",
-            }}
+            className="w-full flex items-center justify-center gap-2 h-9 rounded-xl text-[12.5px] font-medium transition-colors border border-dashed border-border/60 bg-transparent text-muted-foreground hover:text-foreground hover:bg-accent/50 hover:border-border"
           >
             <Plus className="h-3.5 w-3.5" /> Create Assistant
           </button>
@@ -3192,31 +3168,26 @@ export default function AssistantsPage() {
         {/* Search */}
         <div className="px-3 pb-3 shrink-0">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5" style={{ color: "#9CA3AF" }} />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/40" />
             <input
               placeholder="Search assistants…"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full h-9 pl-9 pr-3 rounded-xl text-[13px] outline-none transition-all"
-              style={{
-                background: "#F3F4F6",
-                border: "1px solid #F3F4F6",
-                color: "#374151",
-              }}
+              className="w-full h-9 pl-9 pr-3 rounded-xl text-[12.5px] outline-none transition-colors border border-border bg-card text-foreground placeholder:text-muted-foreground/40 focus:border-muted-foreground/40"
             />
           </div>
         </div>
 
         {/* List */}
-        <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-1">
+        <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-px">
           {isLoading ? (
-            <div className="space-y-2 p-1">
+            <div className="space-y-1.5 p-1">
               {[1, 2, 3, 4].map(i => (
-                <div key={i} className="h-[60px] rounded-xl animate-pulse" style={{ background: "#F9FAFB" }} />
+                <div key={i} className="h-[60px] rounded-xl animate-pulse bg-elevated" />
               ))}
             </div>
           ) : filtered?.length === 0 ? (
-            <div className="py-8 text-center text-[12px]" style={{ color: "#9CA3AF" }}>
+            <div className="py-8 text-center text-[12px] text-muted-foreground/50">
               No assistants found.
             </div>
           ) : (
@@ -3227,26 +3198,25 @@ export default function AssistantsPage() {
                 <button
                   key={agent.id}
                   onClick={() => setSelectedId(agent.id)}
-                  className="w-full text-left px-3 py-2.5 rounded-xl transition-all card-hover"
-                  style={{
-                    background: isSelected
-                      ? "linear-gradient(135deg, #F3F4F6 0%, #F9FAFB 100%)"
-                      : "#FAFAFA",
-                    border: `1px solid ${isSelected ? "#D1D5DB" : "#F3F4F6"}`,
-                    boxShadow: isSelected ? "0 0 16px #F9FAFB" : undefined,
-                  }}
+                  className={
+                    "w-full text-left px-3 py-2.5 rounded-xl transition-colors border " +
+                    (isSelected
+                      ? "bg-accent border-border/80"
+                      : "bg-transparent border-transparent hover:bg-accent/40 hover:border-border/40")
+                  }
                 >
                   <div className="flex items-center gap-2 mb-1.5">
                     {statusDot(agent.status)}
-                    <span className="text-[13px] font-medium truncate"
-                      style={{ color: isSelected ? "#111827" : "#374151" }}>
+                    <span className={
+                      "text-[12.5px] font-medium truncate " +
+                      (isSelected ? "text-foreground" : "text-foreground/70")
+                    }>
                       {agent.name}
                     </span>
                   </div>
-                  <div className="flex flex-wrap gap-1 ml-4">
+                  <div className="flex flex-wrap gap-1 ml-3.5">
                     {tags.map(t => (
-                      <span key={t} className="text-[10px] px-1.5 py-0.5 rounded-md"
-                        style={{ background: "#E5E7EB", color: "#6B7280" }}>
+                      <span key={t} className="text-[10px] px-1.5 py-0.5 rounded-md bg-elevated border border-border/60 text-muted-foreground/60">
                         {t}
                       </span>
                     ))}
@@ -3259,27 +3229,21 @@ export default function AssistantsPage() {
       </div>
 
       {/* ── Config / Editor Panel ─────────────────────────────────── */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 bg-background">
         {selectedId !== null ? (
           <AgentConfigPanel agentId={selectedId} onDeleted={() => setSelectedId(agents?.[0]?.id ?? null)} />
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-center gap-4">
-            <div className="h-16 w-16 rounded-2xl flex items-center justify-center"
-              style={{ background: "#F9FAFB", border: "1px solid #E5E7EB" }}>
-              <Mic className="h-8 w-8" style={{ color: "#6B7280" }} />
+            <div className="h-16 w-16 rounded-2xl flex items-center justify-center bg-elevated border border-border">
+              <Mic className="h-8 w-8 text-muted-foreground/40" />
             </div>
             <div>
-              <p className="text-[14px] font-semibold" style={{ color: "#6B7280" }}>No assistant selected</p>
-              <p className="text-[12px] mt-1" style={{ color: "#9CA3AF" }}>Choose one from the list or create a new one.</p>
+              <p className="text-[14px] font-semibold text-muted-foreground/60">No assistant selected</p>
+              <p className="text-[12px] mt-1 text-muted-foreground/40">Choose one from the list or create a new one.</p>
             </div>
             <button
               onClick={() => setWizardOpen(true)}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-medium transition-all"
-              style={{
-                background: "#374151",
-                color: "white",
-                boxShadow: "0 0 20px #374151",
-              }}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-medium border border-border bg-elevated text-foreground/80 hover:text-foreground hover:bg-accent transition-colors"
             >
               <Plus className="h-4 w-4" /> Create Assistant
             </button>
