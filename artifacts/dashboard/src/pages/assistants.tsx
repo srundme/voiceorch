@@ -1309,11 +1309,6 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
               <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Sampling Parameters</p>
               <SliderRow label="Temperature" desc="Randomness — higher = more creative" value={temperature} onChange={v => { setTemperature(v); setDirty(true); }} min={0} max={2} step={0.01} />
               <SliderRow label="Max Tokens" desc="Maximum tokens in the LLM response" value={cfg.maxTokens ?? 200} onChange={v => setCfg({ maxTokens: v })} min={50} max={2000} step={10} />
-              <SliderRow label="Top P" desc="Nucleus sampling — lower = more focused" value={cfg.topP ?? 1} onChange={v => setCfg({ topP: v })} min={0} max={1} step={0.01} />
-              <SliderRow label="Min P" desc="Minimum token probability" value={cfg.minP ?? 0} onChange={v => setCfg({ minP: v })} min={0} max={1} step={0.01} />
-              <SliderRow label="Top K" desc="Only sample from top K tokens (0 = disabled)" value={cfg.topK ?? 0} onChange={v => setCfg({ topK: v })} min={0} max={200} step={1} />
-              <SliderRow label="Presence Penalty" desc="Penalises repeated topics" value={cfg.presencePenalty ?? 0} onChange={v => setCfg({ presencePenalty: v })} min={-2} max={2} step={0.01} />
-              <SliderRow label="Frequency Penalty" desc="Penalises repeated words" value={cfg.frequencyPenalty ?? 0} onChange={v => setCfg({ frequencyPenalty: v })} min={-2} max={2} step={0.01} />
               <ToggleRow label="Request JSON Response" desc="Force model to output structured JSON" checked={cfg.requestJsonResponse ?? false} onChange={v => setCfg({ requestJsonResponse: v })} />
             </div>
             <div className="bg-gray-50 border border-gray-200/40 rounded-xl overflow-hidden">
