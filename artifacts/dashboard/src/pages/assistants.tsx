@@ -283,12 +283,49 @@ function statusDot(status: string) {
 type CallStatus = "idle" | "connecting" | "listening" | "thinking" | "speaking" | "ended";
 interface Msg { speaker: "user" | "agent"; text: string }
 
+/* Heights (%) for 22 bars — irregular to feel like real audio */
+const BAR_HEIGHTS = [28,52,76,90,64,85,42,96,58,78,44,100,66,88,50,72,38,92,60,80,46,34];
+
+function AgentBars({ active }: { active: boolean }) {
+  return (
+    <div className="flex items-center gap-[2px] h-10 flex-1">
+      {BAR_HEIGHTS.map((h, i) => (
+        <div key={i} className="w-[3px] rounded-full origin-bottom shrink-0"
+          style={{
+            height: active ? `${h}%` : "3px",
+            background: active ? "#22c55e" : "#22c55e44",
+            animation: active ? `wcBar 0.9s ease-in-out ${(i * 47) % 900}ms infinite alternate` : "none",
+            transition: "height 0.3s ease, background 0.3s",
+          }} />
+      ))}
+      {active && <style>{`@keyframes wcBar { 0% { transform:scaleY(.2) } 100% { transform:scaleY(1) } }`}</style>}
+    </div>
+  );
+}
+
+function UserDots({ active }: { active: boolean }) {
+  return (
+    <div className="flex items-center gap-[5px] h-10 flex-1">
+      {Array.from({ length: 10 }, (_, i) => (
+        <div key={i} className="w-[5px] h-[5px] rounded-full shrink-0"
+          style={{
+            background: active ? "#60a5fa" : "#60a5fa44",
+            animation: active ? `wcDot 0.7s ease-in-out ${i * 80}ms infinite alternate` : "none",
+            transition: "background 0.3s",
+          }} />
+      ))}
+      {active && <style>{`@keyframes wcDot { 0% { transform:translateY(4px);opacity:.5 } 100% { transform:translateY(-4px);opacity:1 } }`}</style>}
+    </div>
+  );
+}
+
 function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: string }) {
   const [status, setStatus]     = useState<CallStatus>("idle");
   const [msgs, setMsgs]         = useState<Msg[]>([]);
   const [error, setError]       = useState<string | null>(null);
   const [duration, setDuration] = useState<number | null>(null);
   const [copied, setCopied]     = useState(false);
+  const [elapsed, setElapsed]   = useState(0);
 
   const wsRef          = useRef<WebSocket | null>(null);
   const audioCtxRef    = useRef<AudioContext | null>(null);
@@ -296,6 +333,7 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
   const streamRef      = useRef<MediaStream | null>(null);
   const nextPlayRef    = useRef(0);
   const activeSourcesRef = useRef<AudioBufferSourceNode[]>([]);
+  const timerRef       = useRef<ReturnType<typeof setInterval> | null>(null);
   const transcriptRef  = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -385,86 +423,146 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
 
   useEffect(() => () => { cleanup(); }, []);
 
-  const embedCode = `<script src="${location.protocol}//${location.host}/api/widget.js"\n        data-agent-id="${agentId}"\n        data-name="${agentName}"\n        data-color="#a1a1aa">\n</script>`;
-
-  const sc: Record<CallStatus, { label: string; color: string; pulse: boolean }> = {
-    idle:       { label: "Ready to test",  color: "bg-muted",    pulse: false },
-    connecting: { label: "Connecting…",    color: "bg-zinc-400",   pulse: true  },
-    listening:  { label: "Listening…",     color: "bg-zinc-400", pulse: true  },
-    thinking:   { label: "Thinking…",      color: "bg-zinc-400",   pulse: true  },
-    speaking:   { label: "Speaking…",      color: "bg-zinc-400",     pulse: true  },
-    ended:      { label: "Call ended",     color: "bg-muted",    pulse: false },
-  };
-  const s = sc[status];
   const isActive = status !== "idle" && status !== "ended";
+
+  /* Elapsed call timer */
+  useEffect(() => {
+    if (isActive) {
+      setElapsed(0);
+      timerRef.current = setInterval(() => setElapsed(e => e + 1), 1000);
+    } else {
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    }
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [isActive]);
+
+  const embedCode = [
+    `<script src="${location.protocol}//${location.host}/api/widget.js"`,
+    `        data-agent-id="${agentId}"`,
+    `        data-name="${agentName}"`,
+    `        data-color="#a1a1aa">`,
+    `</script>`,
+  ].join("\n");
+
+  const fmtTime = (s: number) =>
+    `${Math.floor(s / 60).toString().padStart(1,"0")}:${(s % 60).toString().padStart(2,"0")}`;
+
+  const agentLabel =
+    status === "speaking"   ? "speaking"   :
+    status === "thinking"   ? "thinking"   :
+    status === "connecting" ? "connecting" : "listening";
 
   return (
     <div className="space-y-4">
-      {/* Status */}
-      <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-muted/50 border border-border">
-        <span className={`w-2 h-2 rounded-full shrink-0 ${s.color} ${s.pulse ? "animate-pulse" : ""}`} />
-        <span className="text-sm text-foreground">{s.label}</span>
-        {status === "ended" && duration !== null && (
-          <span className="text-xs text-muted-foreground ml-auto">
-            {Math.floor(duration / 60)}m {duration % 60}s
-          </span>
-        )}
-      </div>
 
-      {error && (
-        <div className="text-sm text-foreground bg-muted border border-border rounded-lg px-3 py-2">
-          {error}
+      {/* ── Live call card ───────────────────────────────────────────── */}
+      {isActive ? (
+        <div className="rounded-2xl overflow-hidden" style={{ background: "#0a0a0a", border: "1px solid #1c1c1c" }}>
+
+          {/* Header */}
+          <div className="flex items-center gap-3 px-4 pt-4 pb-3">
+            <div className="h-10 w-10 rounded-full bg-white flex items-center justify-center shrink-0 shadow-sm">
+              <Mic className="h-5 w-5 text-black" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-white truncate">{agentName}</p>
+              <p className="text-[11px]" style={{ color: "#555" }}>Live call</p>
+            </div>
+            <button
+              onClick={endCall}
+              className="h-10 w-10 rounded-full flex items-center justify-center transition-opacity hover:opacity-80 shrink-0"
+              style={{ background: "#ef4444" }}
+            >
+              <PhoneOff className="h-4 w-4 text-white" />
+            </button>
+          </div>
+
+          {/* Waveform rows */}
+          <div className="px-4 pb-3 space-y-2">
+            <div className="flex items-center gap-2.5">
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-sm shrink-0 w-12 text-center"
+                style={{ background: "#22c55e18", color: "#22c55e", border: "1px solid #22c55e30" }}>
+                Agent
+              </span>
+              <AgentBars active={status === "speaking"} />
+            </div>
+            <div className="flex items-center gap-2.5">
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-sm shrink-0 w-12 text-center"
+                style={{ background: "#60a5fa18", color: "#60a5fa", border: "1px solid #60a5fa30" }}>
+                You
+              </span>
+              <UserDots active={status === "listening"} />
+            </div>
+          </div>
+
+          {/* Status footer */}
+          <div className="flex items-center justify-between px-4 py-2.5" style={{ borderTop: "1px solid #1c1c1c" }}>
+            <div className="flex items-center gap-3 text-[11px]" style={{ color: "#555" }}>
+              <span className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full" style={{ background: "#22c55e" }} />
+                Agent {agentLabel}
+              </span>
+              <span style={{ color: "#2a2a2a" }}>•</span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full" style={{ background: "#60a5fa" }} />
+                Mic connected
+              </span>
+            </div>
+            <span className="text-[11px] font-mono tabular-nums" style={{ color: "#555" }}>{fmtTime(elapsed)}</span>
+          </div>
+        </div>
+
+      ) : (
+        /* ── Idle / Ended ─────────────────────────────────────────────── */
+        <div className="space-y-3">
+          {status === "ended" && duration !== null && (
+            <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-muted/40 border border-border">
+              <span className="text-xs text-muted-foreground">Call ended</span>
+              <span className="text-xs font-mono text-muted-foreground">{fmtTime(duration)}</span>
+            </div>
+          )}
+          {error && (
+            <div className="text-sm text-foreground bg-muted border border-border rounded-xl px-3 py-2">{error}</div>
+          )}
+          <Button className="w-full gap-2" onClick={() => void startCall()}>
+            <Mic className="h-4 w-4" />
+            {status === "ended" ? "Call again" : "Start Test Call"}
+          </Button>
         </div>
       )}
 
-      {/* Transcript */}
-      <div ref={transcriptRef} className="h-48 overflow-y-auto space-y-2 pr-1">
-        {msgs.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground gap-2">
-            <Volume2 className="h-7 w-7 opacity-30" />
-            <p className="text-xs">Transcript will appear here.</p>
-          </div>
-        ) : msgs.map((m, i) => (
-          <div key={i} className={`flex ${m.speaker === "user" ? "justify-end" : "justify-start"}`}>
-            <div className={`max-w-[80%] px-3 py-2 rounded-xl text-sm ${
-              m.speaker === "user"
-                ? "bg-primary text-primary-foreground rounded-br-sm"
-                : "bg-transparent text-foreground border border-border rounded-bl-sm"
-            }`}>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">
-                {m.speaker === "user" ? "You" : agentName}
-              </p>
-              {m.text}
+      {/* ── Transcript (shown when messages exist) ────────────────────── */}
+      {msgs.length > 0 && (
+        <div ref={transcriptRef} className="h-44 overflow-y-auto space-y-2 pr-1">
+          {msgs.map((m, i) => (
+            <div key={i} className={`flex ${m.speaker === "user" ? "justify-end" : "justify-start"}`}>
+              <div className={`max-w-[85%] px-3 py-2 rounded-xl text-sm leading-relaxed ${
+                m.speaker === "user"
+                  ? "bg-foreground/10 text-foreground rounded-br-sm"
+                  : "bg-transparent text-foreground border border-border/60 rounded-bl-sm"
+              }`}>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60 mb-0.5">
+                  {m.speaker === "user" ? "You" : agentName}
+                </p>
+                {m.text}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Controls */}
-      {!isActive ? (
-        <Button className="w-full gap-2 bg-primary hover:opacity-90 text-primary-foreground" onClick={() => void startCall()}>
-          <Mic className="h-4 w-4" /> Start Test Call
-        </Button>
-      ) : (
-        <Button variant="destructive" className="w-full gap-2" onClick={endCall}>
-          <PhoneOff className="h-4 w-4" /> End Call
-        </Button>
+          ))}
+        </div>
       )}
 
-      {/* Embed snippet */}
-      <div className="mt-2">
-        <p className="text-xs text-muted-foreground mb-1.5">Embed on your website</p>
-        <pre className="bg-muted border border-border rounded-lg px-3 py-2.5 text-[11px] font-mono text-muted-foreground overflow-x-auto whitespace-pre">
+      {/* ── Embed snippet ────────────────────────────────────────────── */}
+      <div>
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50 mb-1.5">Embed on your website</p>
+        <pre className="bg-elevated border border-border/50 rounded-xl px-3 py-2.5 text-[11px] font-mono text-muted-foreground/60 overflow-x-auto whitespace-pre leading-relaxed">
           {embedCode}
         </pre>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="mt-1 h-7 text-xs text-muted-foreground hover:text-foreground gap-1.5 px-2"
+        <button
+          className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-foreground transition-colors"
           onClick={() => { navigator.clipboard.writeText(embedCode); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
         >
-          {copied ? <><Check className="h-3 w-3 text-foreground" /> Copied</> : <><Copy className="h-3 w-3" /> Copy snippet</>}
-        </Button>
+          {copied ? <><Check className="h-3 w-3" /> Copied</> : <><Copy className="h-3 w-3" /> Copy snippet</>}
+        </button>
       </div>
     </div>
   );
