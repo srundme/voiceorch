@@ -679,7 +679,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
   const queryClient = useQueryClient();
   const { getToken } = useAuth();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState("agent");
+  const [activeTab, setActiveTab] = useState("overview");
   const [outboundDialogOpen, setOutboundDialogOpen] = useState(false);
   const [toNumber, setToNumber] = useState("");
 
