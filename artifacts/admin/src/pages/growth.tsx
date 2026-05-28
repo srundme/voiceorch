@@ -13,9 +13,9 @@ import { formatCentsToDollars } from "@/lib/api";
 import { format } from "date-fns";
 
 export default function Growth() {
-  const { data: funnel, isLoading: loadingFunnel } = useGrowthFunnel();
-  const { data: topUsers, isLoading: loadingTop } = useGrowthTopUsers();
-  const { data: inactiveUsers, isLoading: loadingInactive } = useGrowthInactive();
+  const { data: funnel, isLoading: loadingFunnel, isError: funnelError, error: funnelErr } = useGrowthFunnel();
+  const { data: topUsers, isLoading: loadingTop, isError: topError, error: topErr } = useGrowthTopUsers();
+  const { data: inactiveUsers, isLoading: loadingInactive, isError: inactiveError, error: inactiveErr } = useGrowthInactive();
 
   const funnelData = [
     { label: "Total Signups", value: funnel?.totalUsers || 0, percent: 100 },
@@ -36,6 +36,8 @@ export default function Growth() {
         <CardContent className="pt-6">
           {loadingFunnel ? (
             <div className="animate-pulse flex gap-4 h-24 bg-muted/50 rounded" />
+          ) : funnelError ? (
+            <p className="text-sm text-destructive py-6 text-center">Failed to load funnel data: {(funnelErr as Error)?.message}</p>
           ) : (
             <div className="flex flex-col md:flex-row items-stretch justify-between gap-4">
               {funnelData.map((step, idx) => (
@@ -70,6 +72,8 @@ export default function Growth() {
               <TableBody>
                 {loadingTop ? (
                   <TableRow><TableCell colSpan={3} className="text-center py-4">Loading...</TableCell></TableRow>
+                ) : topError ? (
+                  <TableRow><TableCell colSpan={3} className="text-center py-8 text-destructive">Failed to load top users: {(topErr as Error)?.message}</TableCell></TableRow>
                 ) : topUsers?.length === 0 ? (
                   <TableRow><TableCell colSpan={3} className="text-center py-8 text-muted-foreground">No data available</TableCell></TableRow>
                 ) : (
@@ -108,6 +112,8 @@ export default function Growth() {
               <TableBody>
                 {loadingInactive ? (
                   <TableRow><TableCell colSpan={3} className="text-center py-4">Loading...</TableCell></TableRow>
+                ) : inactiveError ? (
+                  <TableRow><TableCell colSpan={3} className="text-center py-8 text-destructive">Failed to load inactive users: {(inactiveErr as Error)?.message}</TableCell></TableRow>
                 ) : inactiveUsers?.length === 0 ? (
                   <TableRow><TableCell colSpan={3} className="text-center py-8 text-muted-foreground">No inactive users</TableCell></TableRow>
                 ) : (

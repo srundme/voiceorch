@@ -16,7 +16,7 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 
 export default function UsersList() {
-  const { data: users, isLoading } = useUsers();
+  const { data: users, isLoading, isError, error } = useUsers();
   const [search, setSearch] = useState("");
 
   const filteredUsers = users?.filter(
@@ -58,6 +58,12 @@ export default function UsersList() {
               <TableRow>
                 <TableCell colSpan={6} className="text-center h-24 text-muted-foreground animate-pulse">
                   Loading users...
+                </TableCell>
+              </TableRow>
+            ) : isError ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center h-24 text-destructive">
+                  Failed to load users: {(error as Error)?.message}
                 </TableCell>
               </TableRow>
             ) : filteredUsers?.length === 0 ? (

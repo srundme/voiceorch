@@ -12,8 +12,8 @@ import {
 import { Activity, AlertTriangle } from "lucide-react";
 
 export default function Platform() {
-  const { data: activeData, isLoading: loadingActive } = usePlatformActive();
-  const { data: failedCalls, isLoading: loadingFailed } = usePlatformFailedCalls();
+  const { data: activeData, isLoading: loadingActive, isError: activeError, error: activeErr } = usePlatformActive();
+  const { data: failedCalls, isLoading: loadingFailed, isError: failedError, error: failedErr } = usePlatformFailedCalls();
 
   return (
     <div className="space-y-6">
@@ -40,6 +40,8 @@ export default function Platform() {
               <TableBody>
                 {loadingActive ? (
                   <TableRow><TableCell colSpan={3} className="text-center py-4">Loading...</TableCell></TableRow>
+                ) : activeError ? (
+                  <TableRow><TableCell colSpan={3} className="text-center py-4 text-destructive">Failed to load active sessions: {(activeErr as Error)?.message}</TableCell></TableRow>
                 ) : activeData?.activeSessions?.length === 0 ? (
                   <TableRow><TableCell colSpan={3} className="text-center py-8 text-muted-foreground">No active calls right now</TableCell></TableRow>
                 ) : (
@@ -76,6 +78,8 @@ export default function Platform() {
               <TableBody>
                 {loadingFailed ? (
                   <TableRow><TableCell colSpan={3} className="text-center py-4">Loading...</TableCell></TableRow>
+                ) : failedError ? (
+                  <TableRow><TableCell colSpan={3} className="text-center py-8 text-destructive">Failed to load failed calls: {(failedErr as Error)?.message}</TableCell></TableRow>
                 ) : failedCalls?.length === 0 ? (
                   <TableRow><TableCell colSpan={3} className="text-center py-8 text-muted-foreground">No failed calls recently</TableCell></TableRow>
                 ) : (

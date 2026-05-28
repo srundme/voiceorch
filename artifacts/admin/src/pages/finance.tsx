@@ -14,14 +14,18 @@ import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
 
 export default function Finance() {
-  const { data: summary, isLoading: loadingSummary } = useFinanceSummary();
-  const { data: transactions, isLoading: loadingTx } = useFinanceTransactions();
+  const { data: summary, isLoading: loadingSummary, isError: summaryError, error: summaryErr } = useFinanceSummary();
+  const { data: transactions, isLoading: loadingTx, isError: txError, error: txErr } = useFinanceTransactions();
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight">Financial Overview</h1>
       </div>
+
+      {summaryError && (
+        <p className="text-sm text-destructive">Failed to load summary: {(summaryErr as Error)?.message}</p>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card>
@@ -96,6 +100,12 @@ export default function Finance() {
               <TableRow>
                 <TableCell colSpan={6} className="text-center py-8 text-muted-foreground animate-pulse">
                   Loading transactions...
+                </TableCell>
+              </TableRow>
+            ) : txError ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-8 text-destructive">
+                  Failed to load transactions: {(txErr as Error)?.message}
                 </TableCell>
               </TableRow>
             ) : transactions?.length === 0 ? (
