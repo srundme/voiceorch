@@ -1646,7 +1646,6 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
               <div className="flex flex-wrap gap-2">
                 {([
                   { label: "Call Transfer",    icon: PhoneForwarded, onClick: () => { setAgentTools(prev => [...prev, { type: "call_transfer" as const, name: "transfer_to_human", description: "Transfer the call to a human agent when the caller requests escalation.", transferTo: "", warmHandoffMessage: "" }]); setDirty(true); } },
-                  { label: "Send SMS",         icon: Zap,            onClick: () => { setAgentTools(prev => [...prev, { type: "send_sms" as const, name: "send_sms", description: "Send a text message to the caller with a confirmation or link.", messageTemplate: "" }]); setDirty(true); } },
                   { label: "End Call",         icon: PhoneOff,       onClick: () => { setAgentTools(prev => [...prev, { type: "end_call" as const, name: "end_call", description: "End the call when the conversation is complete.", goodbyeMessage: "" }]); setDirty(true); } },
                   { label: "Cal.com",          icon: Clock,          onClick: () => { setAgentTools(prev => [...prev, { type: "cal_com" as const, name: "book_appointment", description: "Book an appointment on Cal.com when the caller wants to schedule.", apiKey: "", eventTypeId: 0, timezone: "UTC" }]); setDirty(true); } },
                   { label: "Book Appointment", icon: CalendarPlus,   onClick: () => setBookingModal({ editIdx: null, calendarId: null, googleCalendarKey: null, eventTypeId: null, timezone: "UTC", taskName: "book_appointment", description: "Book an appointment when the caller wants to schedule a meeting.", preToolMessage: "" }) },
@@ -1673,7 +1672,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       {tool.type === "call_transfer"            && <PhoneForwarded className="h-4 w-4 text-zinc-500" />}
-                      {tool.type === "send_sms"                 && <Zap            className="h-4 w-4 text-zinc-500" />}
+
                       {tool.type === "end_call"                 && <PhoneOff       className="h-4 w-4 text-muted-foreground" />}
                       {tool.type === "cal_com"                  && <Clock          className="h-4 w-4 text-zinc-400" />}
                       {tool.type === "webhook"                  && <Globe          className="h-4 w-4 text-muted-foreground" />}
@@ -1682,7 +1681,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                       {tool.type === "native_cancel"            && <CalendarX      className="h-4 w-4 text-zinc-500" />}
                       {tool.type === "native_check_availability" && <CalendarCheck className="h-4 w-4 text-zinc-500" />}
                       <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                        {tool.type === "call_transfer" ? "Call Transfer" : tool.type === "send_sms" ? "Send SMS" : tool.type === "end_call" ? "End Call"
+                        {tool.type === "call_transfer" ? "Call Transfer" : tool.type === "end_call" ? "End Call"
                           : tool.type === "cal_com" ? "Cal.com" : tool.type === "native_booking" ? "Book Appointment"
                           : tool.type === "native_reschedule" ? "Reschedule" : tool.type === "native_cancel" ? "Cancel Booking"
                           : tool.type === "native_check_availability" ? "Availability" : "Custom Function"}
@@ -1899,8 +1898,6 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                 {[
                   { id: "engine",    label: "Engine & Interruption",    desc: "Backchanneling, ambient noise, gender detection, end-call phrases" },
                   { id: "call",      label: "Call Behaviour",           desc: "Duration, recording, IVR, queue, scheduling, transfer" },
-                  { id: "inbound",   label: "Inbound & Memory",         desc: "Inbound limits, call memory / RAG" },
-                  { id: "whatsapp",  label: "WhatsApp",                 desc: "WhatsApp Business API integration" },
                   { id: "analytics", label: "Analytics & Summarization",desc: "Auto-summarize calls, disposition fields" },
                 ].map(section => (
                   <button key={section.id} type="button" onClick={() => setActiveTab(section.id)}
@@ -2049,49 +2046,6 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                   </div>
                   {cfg.callTransferType === "warm" && <div><p className="text-xs text-muted-foreground mb-1">Warm handoff message</p><Textarea value={cfg.callTransferWarmMessage ?? ""} onChange={e => setCfg({ callTransferWarmMessage: e.target.value })} placeholder="Please hold while I connect you with a specialist…" rows={2} className="bg-card border-border text-foreground text-xs resize-none placeholder:text-muted-foreground" /></div>}
                 </>}
-              </div>
-            </div>
-          )}
-
-          {/* ═══ INBOUND ════════════════════════════════════════════════ */}
-          {activeTab === "inbound" && (
-            <div className="px-5 py-4 max-w-2xl space-y-5">
-              <button onClick={() => setActiveTab("pipeline")} className="text-[11px] text-muted-foreground/50 hover:text-foreground flex items-center gap-1 transition-colors"><ChevronRight className="h-3 w-3 rotate-180" /> Back to Pipeline</button>
-              <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-5">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Call Limits</p>
-                <SliderRow label="Inbound Limit" desc="Max concurrent inbound calls (−1 = unlimited)" value={cfg.inboundLimit ?? -1} onChange={v => setCfg({ inboundLimit: v })} min={-1} max={50} step={1} />
-                <ToggleRow label="Disallow Unknown Numbers" desc="Reject calls from numbers not on the whitelist" checked={cfg.disallowUnknownNumbers ?? false} onChange={v => setCfg({ disallowUnknownNumbers: v })} />
-                {cfg.disallowUnknownNumbers && <div><p className="text-xs text-muted-foreground mb-1">Whitelist Numbers</p><Textarea value={cfg.whitelistNumbers ?? ""} onChange={e => setCfg({ whitelistNumbers: e.target.value })} placeholder="+1234567890, +0987654321" rows={2} className="bg-card border-border text-foreground text-xs resize-none placeholder:text-muted-foreground" /><p className="text-[10px] text-muted-foreground mt-1">Comma-separated E.164 numbers.</p></div>}
-              </div>
-              <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-4">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Call Memory / RAG</p>
-                <ToggleRow label="Enable Call Memory" desc="Ingest call data into a RAG source for context-aware responses" checked={cfg.callMemoryEnabled ?? false} onChange={v => setCfg({ callMemoryEnabled: v })} />
-                {cfg.callMemoryEnabled && <>
-                  <div><p className="text-xs text-muted-foreground mb-1">Source Type</p>
-                    <Select value={cfg.callMemorySourceType ?? "api"} onValueChange={v => setCfg({ callMemorySourceType: v })}>
-                      <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
-                      <SelectContent className="bg-card border-border">{[["api","REST API"],["s3","Amazon S3"],["gcs","Google Cloud Storage"],["database","Database"]].map(([v,l]) => <SelectItem key={v} value={v} className="text-foreground text-xs">{l}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </div>
-                  <div><p className="text-xs text-muted-foreground mb-1">Source URL</p><Input value={cfg.callMemorySourceUrl ?? ""} onChange={e => setCfg({ callMemorySourceUrl: e.target.value })} placeholder="https://api.your-rag.com/ingest" className="h-7 text-xs bg-card border-border text-foreground placeholder:text-muted-foreground" /></div>
-                  <div><p className="text-xs text-muted-foreground mb-1">Auth Token</p><Input type="password" value={cfg.callMemoryAuthToken ?? ""} onChange={e => setCfg({ callMemoryAuthToken: e.target.value })} placeholder="Bearer token or API key" className="h-7 text-xs bg-card border-border text-foreground placeholder:text-muted-foreground" /></div>
-                </>}
-              </div>
-            </div>
-          )}
-
-          {/* ═══ WHATSAPP ═══════════════════════════════════════════════ */}
-          {activeTab === "whatsapp" && (
-            <div className="px-5 py-4 max-w-2xl space-y-5">
-              <button onClick={() => setActiveTab("pipeline")} className="text-[11px] text-muted-foreground/50 hover:text-foreground flex items-center gap-1 transition-colors"><ChevronRight className="h-3 w-3 rotate-180" /> Back to Pipeline</button>
-              <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-4">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Provider</p>
-                <Select value={cfg.whatsappProvider ?? "none"} onValueChange={v => setCfg({ whatsappProvider: v === "none" ? undefined : v })}>
-                  <SelectTrigger className="h-8 text-xs bg-card border-border text-foreground"><SelectValue placeholder="Select provider" /></SelectTrigger>
-                  <SelectContent className="bg-card border-border">
-                    {[["none","— Not configured —"],["aisensy","AiSensy"],["meta","Meta (Business API)"],["twilio","Twilio WhatsApp"],["360dialog","360dialog"],["wati","WATI"]].map(([v,l]) => <SelectItem key={v} value={v} className={v === "none" ? "text-muted-foreground text-xs" : "text-foreground text-xs"}>{l}</SelectItem>)}
-                  </SelectContent>
-                </Select>
               </div>
             </div>
           )}
