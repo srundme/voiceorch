@@ -1,0 +1,230 @@
+Redesign my entire AI voice agent SaaS dashboard into a monochrome premium interface.
+
+IMPORTANT:
+I do NOT want colorful dashboards.
+
+Remove:
+
+* purple gradients
+* bright accent colors
+* neon charts
+* colorful cards
+* flashy analytics
+* vibrant UI elements
+
+I want a:
+
+* minimal
+* monochrome
+* graphite
+* obsidian
+* luxury dark UI
+
+Inspired by:
+
+* Cartesia AI
+* Linear
+* Raycast
+* Cursor
+* Arc Browser
+* Notion Dark
+* OpenAI Platform
+
+---
+
+## DESIGN STYLE
+
+The UI should feel:
+
+* calm
+* silent
+* premium
+* futuristic
+* elegant
+* minimal
+
+NOT:
+
+* gaming UI
+* crypto dashboard
+* startup template
+* flashy SaaS
+
+---
+
+## COLOR SYSTEM
+
+Use ONLY:
+
+* charcoal
+* graphite
+* obsidian
+* slate
+* soft whites
+
+NO SATURATED COLORS.
+
+Main palette:
+
+Background:
+#0B0D12
+
+Sidebar:
+#0E1117
+
+Card:
+#12161F
+
+Elevated Surface:
+#171C26
+
+Border:
+rgba(255,255,255,0.05)
+
+Primary Text:
+#F3F4F6
+
+Secondary Text:
+#9CA3AF
+
+Muted:
+#6B7280
+
+Hover:
+rgba(255,255,255,0.03)
+
+Active Surface:
+rgba(255,255,255,0.06)
+
+Success/Warning/Danger:
+Use extremely muted versions only.
+No bright greens or reds.
+
+---
+
+## LAYOUT STYLE
+
+Use:
+
+* floating layout
+* large spacing
+* minimal separators
+* subtle depth
+* clean hierarchy
+
+Avoid:
+
+* hard section boxes
+* thick borders
+* crowded widgets
+* bright highlights
+
+---
+
+## CARD DESIGN
+
+Cards should:
+
+* blend softly into background
+* use subtle elevation
+* have almost invisible borders
+* use soft shadows only
+
+NO glowing cards.
+NO colorful cards.
+
+---
+
+## TYPOGRAPHY
+
+Typography should feel like:
+
+* Linear
+* Cursor
+* Cartesia
+
+Use:
+
+* Inter
+* medium font weights
+* softer contrast
+* elegant spacing
+
+Avoid:
+
+* bold everywhere
+* uppercase overload
+* large heavy titles
+
+---
+
+## SIDEBAR
+
+Sidebar should:
+
+* feel integrated
+* very minimal
+* soft hover states
+* clean active state
+* monochrome icons
+
+NO colorful nav items.
+
+---
+
+## BUTTONS
+
+Buttons should:
+
+* be understated
+* subtle borders
+* graphite surfaces
+* soft hover transitions
+
+Primary buttons:
+
+* matte graphite
+* no bright gradients
+
+---
+
+## CHARTS
+
+Charts should:
+
+* use monochrome tones
+* soft gray bars
+* thin lines
+* subtle contrast
+
+NO neon charts.
+NO colorful analytics.
+
+---
+
+## FORMS
+
+Inputs should:
+
+* look premium
+* soft graphite backgrounds
+* subtle borders
+* smooth focus state
+* minimal appearance
+
+---
+
+## OVERALL GOAL
+
+The interface should feel:
+
+* expensive
+* mature
+* elegant
+* highly polished
+* enterprise-grade
+* AI-native
+
+Like a premium operating system for AI voice infrastructure.
+
+Generate an entirely new design system and rebuild all UI components from scratch.
