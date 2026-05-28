@@ -25,7 +25,6 @@ export default function Voices() {
   const [selectedIds, setSelectedIds] = useState<Set<string> | null>(null);
   const [search, setSearch] = useState("");
   const [langFilter, setLangFilter] = useState("all");
-  const [genderFilter, setGenderFilter] = useState("all");
   const [ownerFilter, setOwnerFilter] = useState<"all" | "mine">("all");
   const [previewingId, setPreviewingId] = useState<string | null>(null);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -103,11 +102,6 @@ export default function Voices() {
     return langs;
   }, [voices]);
 
-  const genders = useMemo(() => {
-    const gs = Array.from(new Set(voices.map(v => v.gender ?? "Neutral"))).sort();
-    return gs;
-  }, [voices]);
-
   const filtered = useMemo(() => {
     return voices.filter(v => {
       const matchesSearch =
@@ -115,11 +109,10 @@ export default function Voices() {
         v.name.toLowerCase().includes(search.toLowerCase()) ||
         (v.description ?? "").toLowerCase().includes(search.toLowerCase());
       const matchesLang = langFilter === "all" || v.language === langFilter;
-      const matchesGender = genderFilter === "all" || (v.gender ?? "Neutral") === genderFilter;
       const matchesOwner = ownerFilter === "all" || v.isOwner === true;
-      return matchesSearch && matchesLang && matchesGender && matchesOwner;
+      return matchesSearch && matchesLang && matchesOwner;
     });
-  }, [voices, search, langFilter, genderFilter, ownerFilter]);
+  }, [voices, search, langFilter, ownerFilter]);
 
   function toggleVoice(id: string) {
     setSelectedIds(prev => {
@@ -274,17 +267,6 @@ export default function Voices() {
                 ))}
               </SelectContent>
             </Select>
-            <Select value={genderFilter} onValueChange={setGenderFilter}>
-              <SelectTrigger className="w-32 h-8 text-xs bg-muted/30">
-                <SelectValue placeholder="Gender" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All genders</SelectItem>
-                {genders.map(g => (
-                  <SelectItem key={g} value={g}>{g}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
             <Select value={ownerFilter} onValueChange={(v) => setOwnerFilter(v as "all" | "mine")}>
               <SelectTrigger className="w-36 h-8 text-xs bg-muted/30" aria-label="Ownership filter">
                 <SelectValue placeholder="Ownership" />
@@ -320,7 +302,6 @@ export default function Voices() {
                     </th>
                     <th className="px-4 py-2.5 text-left font-semibold uppercase tracking-wider text-muted-foreground">Name</th>
                     <th className="px-4 py-2.5 text-left font-semibold uppercase tracking-wider text-muted-foreground">Language</th>
-                    <th className="px-4 py-2.5 text-left font-semibold uppercase tracking-wider text-muted-foreground">Gender</th>
                     <th className="px-4 py-2.5 text-left font-semibold uppercase tracking-wider text-muted-foreground">Description</th>
                     <th className="px-4 py-2.5 text-left font-semibold uppercase tracking-wider text-muted-foreground">Status</th>
                     <th className="w-12 px-4 py-2.5 text-left font-semibold uppercase tracking-wider text-muted-foreground">Preview</th>
@@ -344,7 +325,6 @@ export default function Voices() {
                         </td>
                         <td className="px-4 py-3 font-medium text-foreground">{voice.name}</td>
                         <td className="px-4 py-3 font-mono text-muted-foreground">{voice.language}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{voice.gender ?? "Neutral"}</td>
                         <td className="px-4 py-3 text-muted-foreground max-w-xs truncate">{voice.description || "—"}</td>
                         <td className="px-4 py-3">
                           {isChecked ? (

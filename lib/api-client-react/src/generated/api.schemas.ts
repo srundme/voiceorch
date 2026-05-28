@@ -1725,7 +1725,6 @@ export interface BookingUpdate {
 export interface AdminVoice {
   id: string;
   name: string;
-  gender: string;
   language: string;
   description: string;
   isListed: boolean;
@@ -1734,7 +1733,6 @@ export interface AdminVoice {
 export type AdminSaveListedVoicesInputVoicesItem = {
   id: string;
   name: string;
-  gender?: string;
   language?: string;
   description?: string;
 };

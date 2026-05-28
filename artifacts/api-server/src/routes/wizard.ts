@@ -22,7 +22,7 @@ function requireDbUser(req: Request, res: Response, next: NextFunction): void {
 
 // ── Known-good Cartesia voice IDs (verified real) ────────────────────────────
 // Only Arushi is used as fallback — all others come from live Cartesia API.
-const ARUSHI_VOICE = { id: "2ee87190-8f84-4925-97da-e52547f9462c", name: "Arushi", gender: "Female", language: "en", description: "Warm Indian English female" };
+const ARUSHI_VOICE = { id: "2ee87190-8f84-4925-97da-e52547f9462c", name: "Arushi", language: "en", description: "Warm Indian English female" };
 
 // Indian language codes recognised by Cartesia
 const INDIAN_LANGS = new Set(["hi", "ta", "te", "kn", "ml", "bn", "mr", "gu", "pa", "or", "as", "en-IN"]);
@@ -50,7 +50,6 @@ router.get("/wizard/voices", requireDbUser, async (req, res): Promise<void> => {
       const voices = listedRows.map(r => ({
         id: r.voiceId,
         name: r.voiceName,
-        gender: r.gender,
         language: r.language,
         description: r.description,
       }));
@@ -116,7 +115,6 @@ router.get("/wizard/voices", requireDbUser, async (req, res): Promise<void> => {
     const voices = combined.map((v: any) => ({
       id: v.id,
       name: v.name,
-      gender: (v.gender ?? "Neutral") as string,
       language: (v.language ?? "en") as string,
       description: (v.description ?? "") as string,
     }));

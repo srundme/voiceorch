@@ -150,7 +150,6 @@ export function useSaveManagedKeys() {
 export interface AdminVoice {
   id: string;
   name: string;
-  gender: string;
   language: string;
   description: string;
   isListed: boolean;
@@ -174,7 +173,7 @@ export function useAdminListedVoices() {
 export function useSaveListedVoices() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (voices: Array<{ id: string; name: string; gender?: string; language?: string; description?: string }>) =>
+    mutationFn: (voices: Array<{ id: string; name: string; language?: string; description?: string }>) =>
       adminFetch<{ saved: number }>("/voices/listed", {
         method: "PUT",
         body: JSON.stringify({ voices }),

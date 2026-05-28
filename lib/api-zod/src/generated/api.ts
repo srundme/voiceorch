@@ -2704,7 +2704,6 @@ export const AdminGetCartesiaVoicesResponse = zod.object({
   "voices": zod.array(zod.object({
   "id": zod.string(),
   "name": zod.string(),
-  "gender": zod.string(),
   "language": zod.string(),
   "description": zod.string(),
   "isListed": zod.boolean()
@@ -2719,7 +2718,6 @@ export const AdminGetListedVoicesResponse = zod.object({
   "voices": zod.array(zod.object({
   "id": zod.string(),
   "name": zod.string(),
-  "gender": zod.string(),
   "language": zod.string(),
   "description": zod.string(),
   "isListed": zod.boolean()
@@ -2734,7 +2732,6 @@ export const AdminSaveListedVoicesBody = zod.object({
   "voices": zod.array(zod.object({
   "id": zod.string(),
   "name": zod.string(),
-  "gender": zod.string().optional(),
   "language": zod.string().optional(),
   "description": zod.string().optional()
 }))

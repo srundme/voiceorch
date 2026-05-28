@@ -121,12 +121,6 @@ export async function createSession(params: {
       autoFallback: agent.asrAutoFallback ?? false,
     },
     tools,
-    // Gender Detection (from agentConfig JSONB)
-    genderDetectionEnabled:          (agentCfg["genderDetectionEnabled"]          as boolean | undefined) ?? false,
-    genderDetectionProvider:         (agentCfg["genderDetectionProvider"]         as string  | undefined) ?? "internal",
-    genderDetectionMaleSalutation:   (agentCfg["genderDetectionMaleSalutation"]   as string  | undefined) ?? "sir",
-    genderDetectionFemaleSalutation: (agentCfg["genderDetectionFemaleSalutation"] as string  | undefined) ?? "ma'am",
-    genderDetectionNeutralSalutation:(agentCfg["genderDetectionNeutralSalutation"] as string  | undefined) ?? "",
     // P1-A: User-defined prompt variables
     promptVariables: Array.isArray(agentCfg["promptVariables"])
       ? (agentCfg["promptVariables"] as Array<{ key: string; defaultValue: string; description?: string }>)
@@ -163,8 +157,6 @@ export async function createSession(params: {
 
   // ── Resolve dynamic variables in system prompt ─────────────────────────────
   // Supports both {{var}} and {var} syntax.
-  // {caller_salutation} is intentionally left unresolved here — the pipeline
-  // resolves it at runtime after detecting the caller's gender from audio.
   // Priority order (lowest → highest): system defaults < agent promptVariables < inbound customParameters
   const now = new Date();
   // Load campaign lead data if a campaignLeadId was supplied

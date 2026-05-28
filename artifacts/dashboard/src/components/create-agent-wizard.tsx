@@ -272,7 +272,6 @@ function getManagedStack(languages: string[]) {
 const ARUSHI_VOICE = {
   id: "2ee87190-8f84-4925-97da-e52547f9462c",
   name: "Arushi",
-  gender: "Female",
   language: "en",
   description: "Warm Indian English female — Cartesia",
 };
@@ -286,7 +285,7 @@ const LANG_LABEL: Record<string, string> = {
 };
 
 /* ── Types ──────────────────────────────────────────────────────────────── */
-interface CartesiaVoice { id: string; name: string; gender: string; description: string; language?: string }
+interface CartesiaVoice { id: string; name: string; description: string; language?: string }
 type AgentDirection = "inbound" | "outbound" | "both";
 
 interface LeadSourceState {
@@ -333,13 +332,13 @@ const INITIAL: WizardState = {
 /* ── Voice preview ──────────────────────────────────────────────────────── */
 const PREVIEW_TEXT = "Hello! I am your AI voice assistant. I am here to help you today. How can I assist you?";
 
-function speakWithBrowser(voiceName: string, gender: string, onEnd: () => void) {
+function speakWithBrowser(voiceName: string, onEnd: () => void) {
   window.speechSynthesis.cancel();
   const utter = new SpeechSynthesisUtterance(PREVIEW_TEXT);
   const voices = window.speechSynthesis.getVoices();
   const femaleKeywords = ["female", "woman", "girl", "zira", "samantha", "victoria", "moira", "fiona", "veena"];
   const maleKeywords   = ["male", "man", "daniel", "alex", "tom", "fred", "lee"];
-  const isFemale = gender.toLowerCase() === "female";
+  const isFemale = false;
   const match = voices.find(v => {
     const n = v.name.toLowerCase();
     return isFemale ? femaleKeywords.some(k => n.includes(k)) : maleKeywords.some(k => n.includes(k));
@@ -389,7 +388,7 @@ function useVoicePreview(apiFetch: (path: string, init?: RequestInit) => Promise
       if (res.status === 503) {
         setPlaying(null);
         const voice = voicesRef.current.find(v => v.id === voiceId);
-        speakWithBrowser(voice?.name ?? "", voice?.gender ?? "Female", () => setPlaying(null));
+        speakWithBrowser(voice?.name ?? "", () => setPlaying(null));
         return;
       }
 
@@ -1762,10 +1761,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                               : "border-border bg-muted hover:border-border hover:bg-muted",
                           )}
                         >
-                          <div className={cn(
-                            "h-11 w-11 rounded-full flex items-center justify-center text-sm font-bold shrink-0",
-                            voice.gender === "Female" ? "bg-muted text-zinc-500" : "bg-muted text-foreground",
-                          )}>
+                          <div className="h-11 w-11 rounded-full flex items-center justify-center text-sm font-bold shrink-0 bg-muted text-foreground">
                             {voice.name.charAt(0)}
                           </div>
                           <div className="flex-1 min-w-0">
@@ -1778,7 +1774,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                                 </span>
                               )}
                             </div>
-                            <div className="text-xs text-muted-foreground mt-0.5 truncate">{voice.gender}</div>
+                            <div className="text-xs text-muted-foreground mt-0.5 truncate">{voice.description}</div>
                           </div>
                           <button
                             onClick={e => { e.stopPropagation(); void preview(voice.id); }}

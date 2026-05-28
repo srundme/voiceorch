@@ -5,7 +5,6 @@ import { createSTTAdapter } from "../adapters/stt/index.js";
 import { createLLMAdapter } from "../adapters/llm/index.js";
 import { createTTSAdapter } from "../adapters/tts/index.js";
 import { downsample16to8 } from "../audio.js";
-import { detectCallerGender, applyCallerSalutation, buildGenderInstruction } from "../genderDetection.js";
 import { toReadableError } from "../utils.js";
 import { logger } from "../../lib/logger.js";
 import { RecordingBuffer } from "../recorder.js";
@@ -217,99 +216,7 @@ export async function handleWebCallWebSocket(
   const history: ConversationTurn[] = [];
   let closed      = false;
 
-  // ── Gender detection state ────────────────────────────────────────────────
-  // Extract config from agent.agentConfig JSONB (same defaults as session.ts)
-  const agentCfg = (agent.agentConfig as Record<string, unknown> | null) ?? {};
-  const genderEnabled       = (agentCfg["genderDetectionEnabled"]          as boolean | undefined) ?? false;
-  const genderProvider      = (agentCfg["genderDetectionProvider"]         as string  | undefined) ?? "internal";
-  const maleSalutation      = (agentCfg["genderDetectionMaleSalutation"]   as string  | undefined) ?? "sir";
-  const femaleSalutation    = (agentCfg["genderDetectionFemaleSalutation"] as string  | undefined) ?? "ma'am";
-  const neutralSalutation   = (agentCfg["genderDetectionNeutralSalutation"] as string | undefined) ?? "";
-
-  // We keep a mutable copy of the system prompt so gender detection can patch it in-place.
-  // The original is preserved separately so we can restore it if a handoff is detected.
-  const originalSystemPrompt = agent.generatedPrompt ?? agent.systemPrompt ?? "";
-  let systemPrompt          = originalSystemPrompt;
-  let genderDetected        = false;
-  let genderDetectPromise: Promise<void> | null = null;  // in-flight detection
-  const genderAccum16k: Buffer[] = [];   // raw 16kHz from browser
-  let genderAccumBytes      = 0;
-  const GENDER_MIN_BYTES_16K = 32000;    // ~1 s @ 16kHz 16-bit
-
-  /**
-   * Reset gender detection so the next chunk of caller audio re-runs the detector.
-   * Restores the original system prompt template so the placeholder can be re-patched.
-   */
-  function resetGenderDetection(): void {
-    genderDetected       = false;
-    genderDetectPromise  = null;
-    genderAccum16k.length = 0;
-    genderAccumBytes     = 0;
-    systemPrompt         = originalSystemPrompt;
-    logger.info({ callId }, "WebCall gender detection reset — possible phone handoff");
-  }
-
-  let handoffSilenceTimer: ReturnType<typeof setTimeout> | null = null;
-
-  /** Arm (or re-arm) the handoff-silence timer. Fires after HANDOFF_SILENCE_MS of quiet.
-   *
-   * NOTE: intentionally a no-op for WebCalls.  Browser sessions have no concept
-   * of a mid-call phone handoff — once gender is detected for a WebCall caller
-   * it should stay locked.  Silence-based resets here were causing the agent to
-   * re-detect during normal post-response pauses and pick up the TTS voice instead.
-   * Phrase-based handoff detection (Signal 1) is preserved for IVR-style flows.
-   */
-  function resetHandoffSilenceTimer(): void { /* no-op for WebCall */ }
-
-  /** Cancel the handoff-silence timer on any incoming speech. */
-  function clearHandoffSilenceTimer(): void {
-    if (handoffSilenceTimer) { clearTimeout(handoffSilenceTimer); handoffSilenceTimer = null; }
-  }
-
-  /**
-   * Returns the system prompt with any unresolved {caller_salutation} replaced
-   * by the neutral salutation. Safe to call before gender detection completes.
-   */
-  function resolvedSystemPrompt(): string {
-    if (!genderDetected) {
-      return applyCallerSalutation(systemPrompt, neutralSalutation);
-    }
-    return systemPrompt;
-  }
-
-  /** Accumulate caller audio; trigger detection once we have ~1 s of speech. */
-  function accumulateGenderAudio(pcm16k: Buffer): void {
-    if (!genderEnabled || genderDetected || genderDetectPromise || genderAccumBytes >= GENDER_MIN_BYTES_16K) return;
-    genderAccum16k.push(pcm16k);
-    genderAccumBytes += pcm16k.length;
-    if (genderAccumBytes >= GENDER_MIN_BYTES_16K) {
-      const combined16k = Buffer.concat(genderAccum16k);
-      genderAccum16k.length = 0;   // free memory
-      const pcm8k = downsample16to8(combined16k);
-      // Store the promise so process() can await it if it fires before detection completes
-      genderDetectPromise = detectCallerGender(pcm8k, {
-        provider: genderProvider,
-        maleSalutation,
-        femaleSalutation,
-        neutralSalutation,
-        providerKeys,
-        callId,
-      }).then((salutation) => {
-        // 1. Replace {caller_salutation} placeholders in the system prompt.
-        // 2. Prepend a high-priority instruction block so the LLM actively uses
-        //    the salutation in its spoken output rather than just having the
-        //    word buried in replaced placeholders that it might silently ignore.
-        const patched = applyCallerSalutation(systemPrompt, salutation);
-        systemPrompt   = buildGenderInstruction(salutation) + patched;
-        genderDetected = true;
-        logger.info({ callId, salutation }, "WebCall gender detection complete");
-      }).catch((err: unknown) => {
-        logger.warn({ callId, err }, "WebCall gender detection failed");
-      }).finally(() => {
-        genderDetectPromise = null;
-      });
-    }
-  }
+  const systemPrompt = agent.generatedPrompt ?? agent.systemPrompt ?? "";
 
   // ── State ─────────────────────────────────────────────────────────────────
   const audioChunks: Buffer[] = [];
@@ -318,7 +225,6 @@ export async function handleWebCallWebSocket(
   let speaking        = false; // true while audio frames are being sent to client
   let speakingStartedAt = 0;  // timestamp (ms) when speaking last transitioned to true
   let speakingEndedAt = 0;    // timestamp (ms) when speaking last transitioned to false
-  const SPEAKING_ECHO_GRACE_MS = 400; // skip gender accumulation for this long after agent stops
   let interrupted = false;        // barge-in flag; checked inside audio loop
   let bargeInFrames = 0;         // consecutive high-RMS frames counted while agent is speaking
 
@@ -356,24 +262,7 @@ export async function handleWebCallWebSocket(
       send({ type: "transcript", speaker: "user", text: userText });
       history.push({ role: "user", content: userText });
 
-      // ── Phone-handoff phrase detection (Signal 1: transcript keyword) ──
-      if (genderEnabled && genderDetected) {
-        const lower = userText.toLowerCase();
-        if (HANDOFF_PHRASES.some(p => lower.includes(p))) {
-          logger.info({ callId, transcript: userText }, "WebCall handoff phrase — resetting gender detection");
-          resetGenderDetection();
-        }
-      }
-
-      // 2. Wait for any in-flight gender detection to finish before calling the LLM.
-      // Without this, a short first utterance (~0.5s) can trigger process() via the
-      // VAD silence timer before ~1s of audio has accumulated for detection, causing
-      // the LLM to receive the neutral (empty) salutation instead of the real one.
-      if (genderEnabled && !genderDetected && genderDetectPromise) {
-        await genderDetectPromise;
-      }
-
-      // 3. LLM — stream tokens, queue TTS per sentence
+      // 2. LLM — stream tokens, queue TTS per sentence
       const sentenceJobs: Promise<Buffer>[] = [];
       let tokenBuf  = "";   // filtered text waiting to be split into sentences
       let fullReply = "";   // raw LLM output (may include <think> blocks)
@@ -429,7 +318,7 @@ export async function handleWebCallWebSocket(
       try {
        await llm.chat(
         history,
-        resolvedSystemPrompt(),
+        systemPrompt,
         (token) => {
           fullReply += token;                        // keep raw (for cleaning later)
           const filtered = filterThinkToken(token);  // strip <think>…</think>
@@ -565,7 +454,7 @@ export async function handleWebCallWebSocket(
     closed = true;
     clearTimeout(maxTimer);
     clearSilenceTimer();
-    clearHandoffSilenceTimer();
+
 
     const endedAt         = new Date();
     const durationSeconds = Math.floor((endedAt.getTime() - startedAt.getTime()) / 1000);
@@ -692,22 +581,11 @@ export async function handleWebCallWebSocket(
     if (rms > SPEECH_RMS_THRESHOLD) {
       const chunk = Buffer.from(data);
       audioChunks.push(chunk);
-      // Skip gender accumulation during the post-speaking echo grace period.
-      // When the agent stops speaking the browser may still be flushing buffered
-      // TTS audio; those ~400 ms contain TTS echo at female frequencies and must
-      // not contaminate the caller's pitch profile.
-      if (Date.now() - speakingEndedAt > SPEAKING_ECHO_GRACE_MS) {
-        accumulateGenderAudio(chunk);
-      }
-      clearHandoffSilenceTimer();     // speech arrived — cancel handoff timer
       clearSilenceTimer();
       if (!processing) sendStatus("listening");
     } else if (audioChunks.length > 0) {
       audioChunks.push(Buffer.from(data));
       scheduleSilenceFlush();
-    } else {
-      // Pure silence with no buffered speech — start handoff timer (Signal 2)
-      resetHandoffSilenceTimer();
     }
   });
 

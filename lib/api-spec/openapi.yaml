@@ -4519,13 +4519,11 @@ components:
 
     AdminVoice:
       type: object
-      required: [id, name, gender, language, description, isListed]
+      required: [id, name, language, description, isListed]
       properties:
         id:
           type: string
         name:
-          type: string
-        gender:
           type: string
         language:
           type: string
@@ -4547,8 +4545,6 @@ components:
               id:
                 type: string
               name:
-                type: string
-              gender:
                 type: string
               language:
                 type: string

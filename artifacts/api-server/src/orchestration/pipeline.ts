@@ -9,7 +9,6 @@ import { processAudioIn, processRawPcm8kIn, destroyAudioSession } from "./audioP
 import { RecordingBuffer } from "./recorder.js";
 import type { AudioProcessResult } from "./audioPool.js";
 import type { AgentConfig, AgentTool, ConversationTurn, LLMUsage, SessionConfig, StreamSTT, ToolDefinition } from "./types.js";
-import { detectCallerGender, applyCallerSalutation, buildGenderInstruction } from "./genderDetection.js";
 import { retrieveKbContext } from "./kb-retrieval.js";
 import { logger } from "../lib/logger.js";
 import { format, addMinutes } from "date-fns";
@@ -65,7 +64,6 @@ export class OrchestrationPipeline {
   private audioBuffer: Buffer[] = [];
   private silenceTimer: ReturnType<typeof setTimeout> | null = null;
   private silenceHangupTimer: ReturnType<typeof setTimeout> | null = null;
-  private handoffSilenceTimer: ReturnType<typeof setTimeout> | null = null;
   private isProcessing = false;
 
   // Barge-in state
@@ -122,20 +120,9 @@ export class OrchestrationPipeline {
   private dtmfResolver: ((digit: string | null) => void) | null = null;
   private dtmfTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
-  // Gender detection
-  // We accumulate the first ~1 s of caller PCM (16 000 bytes @ 8 kHz 16-bit),
-  // detect once, then resolve {caller_salutation} in the system prompt.
-  private readonly GENDER_MIN_BYTES = 16000;
-  private readonly originalSystemPrompt: string;   // never mutated — used to restore on handoff
-  private genderDetected = false;
-  private genderAudioAccum: Buffer[] = [];
-  private genderAudioBytes = 0;
-  private genderDetectPromise: Promise<void> | null = null;
-
   constructor(config: SessionConfig) {
     this.config = config;
     this.agent = config.agentConfig;
-    this.originalSystemPrompt = config.agentConfig.systemPrompt ?? "";
     this.bargeInCallback = config.onBargeIn ?? null;
     // P1-D: Per-agent VAD / barge-in tuning
     this.vadSilenceMs           = config.agentConfig.vadSilenceMs;
@@ -277,13 +264,6 @@ export class OrchestrationPipeline {
     const pcm8k = decodeMulaw(mulawChunk);
     // Record raw caller audio (before noise cancellation)
     this.recording.addCallerChunk(pcm8k);
-    // Accumulate raw (pre-noise-cancellation) PCM for gender detection so the
-    // 300 Hz bandpass highpass in NoiseCanceller does not strip female
-    // fundamentals (165–255 Hz).  Skip while the agent is playing TTS to
-    // avoid mis-classifying echo of the agent's own voice.
-    if (this.agent.genderDetectionEnabled && !this.genderDetected && !this.isPlaying) {
-      this.accumulateGenderAudio(pcm8k);
-    }
     processAudioIn(callId, mulawChunk, this.agent.noiseCancellationEnabled)
       .then((result) => this.handleProcessedAudio(result))
       .catch((err) => logger.error({ callId: this.config.callId, err }, "Audio worker error (mulaw)"));
@@ -295,11 +275,6 @@ export class OrchestrationPipeline {
     const callId = String(this.config.callId);
     // Record raw caller audio (before noise cancellation)
     this.recording.addCallerChunk(pcm8k);
-    // Same as onAudioIn: accumulate raw PCM before noise-cancellation and
-    // skip while the agent is speaking to prevent echo misclassification.
-    if (this.agent.genderDetectionEnabled && !this.genderDetected && !this.isPlaying) {
-      this.accumulateGenderAudio(pcm8k);
-    }
     processRawPcm8kIn(callId, pcm8k, this.agent.noiseCancellationEnabled)
       .then((result) => this.handleProcessedAudio(result))
       .catch((err) => logger.error({ callId: this.config.callId, err }, "Audio worker error (pcm8k)"));
@@ -308,111 +283,6 @@ export class OrchestrationPipeline {
   /** Returns the recording buffer so the caller (session.ts) can finalize it at call end. */
   getRecording(): RecordingBuffer {
     return this.recording;
-  }
-
-  // ── Gender detection ────────────────────────────────────────────────────────
-
-  /**
-   * Accumulate caller PCM audio until we have enough to estimate pitch (~1 s),
-   * then trigger an async detection.  Safe to call on every audio chunk.
-   */
-  private accumulateGenderAudio(pcm8k: Buffer): void {
-    if (!this.agent.genderDetectionEnabled || this.genderDetected) return;
-    // Skip silent/background frames — only voiced speech carries pitch information.
-    if (!hasSpeechEnergy(pcm8k)) return;
-    this.genderAudioAccum.push(pcm8k);
-    this.genderAudioBytes += pcm8k.length;
-    if (this.genderAudioBytes >= this.GENDER_MIN_BYTES && !this.genderDetectPromise) {
-      const combined = Buffer.concat(this.genderAudioAccum);
-      this.genderAudioAccum = [];   // free memory
-      this.genderDetectPromise = this.detectGenderAsync(combined).finally(() => {
-        this.genderDetectPromise = null;
-      });
-    }
-  }
-
-  // ── Gender handoff detection ─────────────────────────────────────────────
-
-  /**
-   * Reset gender detection state so the next speech chunk re-runs the detector.
-   * Restores the system prompt to the original template (with {caller_salutation}
-   * placeholder intact) so the new detection can patch it again.
-   */
-  private resetGenderDetection(): void {
-    this.genderDetected       = false;
-    this.genderAudioAccum     = [];
-    this.genderAudioBytes     = 0;
-    this.genderDetectPromise  = null;
-    this.agent.systemPrompt   = this.originalSystemPrompt;
-    logger.info({ callId: this.config.callId }, "Gender detection reset — possible phone handoff");
-  }
-
-  /**
-   * Start (or restart) a timer that resets gender detection after HANDOFF_SILENCE_MS
-   * of continuous silence — a long quiet gap strongly suggests a phone was passed.
-   * Only arms itself when gender detection has already fired (no point resetting
-   * before we ever detected anything).
-   */
-  private resetHandoffSilenceTimer(): void {
-    if (!this.agent.genderDetectionEnabled) return;
-    if (this.handoffSilenceTimer) clearTimeout(this.handoffSilenceTimer);
-    this.handoffSilenceTimer = setTimeout(() => {
-      this.handoffSilenceTimer = null;
-      if (!this.closed && this.genderDetected) {
-        this.resetGenderDetection();
-      }
-    }, HANDOFF_SILENCE_MS);
-  }
-
-  /** Cancel the handoff silence timer (called on any incoming speech). */
-  private stopHandoffSilenceTimer(): void {
-    if (this.handoffSilenceTimer) {
-      clearTimeout(this.handoffSilenceTimer);
-      this.handoffSilenceTimer = null;
-    }
-  }
-
-  /**
-   * Returns the system prompt with any remaining {caller_salutation} placeholders
-   * replaced by the neutral salutation. This is the safe fallback for LLM calls
-   * that happen before gender detection has completed (e.g. short first utterances).
-   * Once gender detection runs, it mutates this.agent.systemPrompt directly so the
-   * placeholder is already gone and this becomes a no-op.
-   */
-  private resolvedSystemPrompt(): string {
-    if (!this.genderDetected) {
-      return applyCallerSalutation(this.agent.systemPrompt, this.agent.genderDetectionNeutralSalutation || "");
-    }
-    return this.agent.systemPrompt;
-  }
-
-  /** Run the detection, resolve the system prompt, log the result. */
-  private async detectGenderAsync(pcm8k: Buffer): Promise<void> {
-    try {
-      const salutation = await detectCallerGender(pcm8k, {
-        provider: this.agent.genderDetectionProvider,
-        maleSalutation: this.agent.genderDetectionMaleSalutation,
-        femaleSalutation: this.agent.genderDetectionFemaleSalutation,
-        neutralSalutation: this.agent.genderDetectionNeutralSalutation,
-        providerKeys: this.config.providerKeys,
-        callId: this.config.callId,
-      });
-
-      // Patch the live system prompt:
-      // 1. Replace every {caller_salutation} placeholder with the resolved word.
-      // 2. Prepend a short, high-priority instruction block so the LLM actually
-      //    uses the salutation in spoken output (passive placeholder replacement
-      //    alone is often not enough to make the model say it out loud).
-      const patched = applyCallerSalutation(this.agent.systemPrompt, salutation);
-      this.agent.systemPrompt = buildGenderInstruction(salutation) + patched;
-      this.genderDetected = true;
-      logger.info(
-        { callId: this.config.callId, salutation },
-        "Gender detection complete — system prompt updated"
-      );
-    } catch (err) {
-      logger.warn({ callId: this.config.callId, err }, "detectGenderAsync failed");
-    }
   }
 
   /** Handles pre-processed audio returned by the audio worker pool. */
@@ -431,15 +301,6 @@ export class OrchestrationPipeline {
         if (this.dtmfTimeoutId) { clearTimeout(this.dtmfTimeoutId); this.dtmfTimeoutId = null; }
         resolve(digit);
       }
-    }
-
-    // Gender audio is now accumulated in onAudioIn / onRawPcm8kIn from raw
-    // (pre-noise-cancellation) PCM so the bandpass filter does not strip
-    // female fundamentals.  Here we only manage the handoff-silence timer.
-    if (hasSpeech) {
-      this.stopHandoffSilenceTimer();
-    } else {
-      this.resetHandoffSilenceTimer();
     }
 
     // Streaming STT path: feed all audio directly to Deepgram — no local VAD needed
@@ -506,7 +367,7 @@ export class OrchestrationPipeline {
         // Fallback: ask the LLM to generate an opener
         try {
           await this.llm.chat(
-            [], this.resolvedSystemPrompt(),
+            [], this.agent.systemPrompt,
             (token) => { greeting += token; },
             (full) => { greeting = full; },
             {
@@ -526,11 +387,6 @@ export class OrchestrationPipeline {
         // Strip any <think>…</think> reasoning blocks that reasoning models emit
         greeting = greeting.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
       }
-
-      // {caller_salutation} in the greeting fires before any caller audio arrives,
-      // so gender detection hasn't run yet. Use the neutral salutation as fallback.
-      // The system prompt placeholder is handled separately once audio is heard.
-      greeting = applyCallerSalutation(greeting, this.agent.genderDetectionNeutralSalutation || "");
 
       if (!greeting.trim() || this.closed) return;
       logger.info({ callId: this.config.callId, greeting: greeting.slice(0, 80) }, "Sending greeting");
@@ -939,12 +795,6 @@ export class OrchestrationPipeline {
     this.bargeInSpeechFrames = 0;
     this.firstAudioSentAt = null;
 
-    // If gender detection is running concurrently, wait for it to finish so the
-    // system prompt is fully resolved before the LLM receives the first turn.
-    if (this.genderDetectPromise) {
-      await this.genderDetectPromise;
-    }
-
     logger.info({ callId: this.config.callId, transcript, sttLatencyMs }, "Processing turn");
     this.config.onTranscript("user", transcript);
     this.conversationHistory.push({ role: "user", content: transcript });
@@ -970,15 +820,6 @@ export class OrchestrationPipeline {
         logger.info({ callId: this.config.callId, transcript }, "End-call phrase detected — hanging up");
         this.config.onCallEnd();
         return;
-      }
-    }
-
-    // ── Phone-handoff phrase detection (Signal 1: transcript keyword) ──
-    if (this.agent.genderDetectionEnabled && this.genderDetected) {
-      const lower = transcript.toLowerCase();
-      if (HANDOFF_PHRASES.some(p => lower.includes(p))) {
-        logger.info({ callId: this.config.callId, transcript }, "Handoff phrase detected — resetting gender detection");
-        this.resetGenderDetection();
       }
     }
 
@@ -1109,7 +950,7 @@ export class OrchestrationPipeline {
     // Start the KB lookup as a promise RIGHT NOW — before the backchannel phrase
     // is even enqueued.  That way KB retrieval overlaps with the backchannel TTS
     // playback instead of adding to LLM start latency.
-    let systemPromptForTurn = this.resolvedSystemPrompt();
+    let systemPromptForTurn = this.agent.systemPrompt;
     let kbContextPromise: Promise<string | null> = Promise.resolve(null);
     if (this.agent.knowledgeBaseId) {
       const openaiKey = this.config.providerKeys.get("openai");
@@ -1808,7 +1649,7 @@ export class OrchestrationPipeline {
     try {
       await this.llm.chat(
         this.conversationHistory,
-        this.resolvedSystemPrompt(),
+        this.agent.systemPrompt,
         (token) => {
           llmResponse += token;
           const filtered = filterThinkToken(token);
@@ -1986,7 +1827,6 @@ export class OrchestrationPipeline {
       clearTimeout(this.silenceHangupTimer);
       this.silenceHangupTimer = null;
     }
-    this.stopHandoffSilenceTimer();
     if (this.streamSTTReconnectTimer) {
       clearTimeout(this.streamSTTReconnectTimer);
       this.streamSTTReconnectTimer = null;

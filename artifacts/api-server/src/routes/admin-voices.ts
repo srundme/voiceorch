@@ -115,7 +115,6 @@ router.get("/admin/voices/cartesia", requireAdmin, async (_req, res): Promise<vo
     const voices = Array.from(merged.values()).map((v: any) => ({
       id: v.id as string,
       name: (v.name ?? "") as string,
-      gender: (v.gender ?? "Neutral") as string,
       language: (v.language ?? "en") as string,
       description: (v.description ?? "") as string,
       isListed: listedSet.has(v.id as string),
@@ -145,7 +144,6 @@ router.get("/admin/voices/listed", requireAdmin, async (_req, res): Promise<void
   const voices = rows.map(r => ({
     id: r.voiceId,
     name: r.voiceName,
-    gender: r.gender,
     language: r.language,
     description: r.description,
     isListed: r.isListed,
@@ -249,7 +247,6 @@ router.put("/admin/voices/listed", requireAdmin, async (req, res): Promise<void>
         .values({
           voiceId: v.id,
           voiceName: v.name,
-          gender: v.gender ?? "Neutral",
           language: v.language ?? "en",
           description: v.description ?? "",
           isListed: true,
@@ -258,7 +255,6 @@ router.put("/admin/voices/listed", requireAdmin, async (req, res): Promise<void>
           target: platformListedVoicesTable.voiceId,
           set: {
             voiceName: v.name,
-            gender: v.gender ?? "Neutral",
             language: v.language ?? "en",
             description: v.description ?? "",
             isListed: true,

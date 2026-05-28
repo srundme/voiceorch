@@ -653,7 +653,7 @@ function ToggleRow({ label, desc, checked, onChange }: {
   );
 }
 
-type CartesiaVoice = { id: string; name: string; description?: string; gender?: string; language?: string };
+type CartesiaVoice = { id: string; name: string; description?: string; language?: string };
 
 const LANG_LABEL: Record<string, string> = {
   hi: "Hindi", ta: "Tamil", te: "Telugu", kn: "Kannada",
@@ -666,7 +666,6 @@ const ARUSHI_VOICE: CartesiaVoice = {
   id: "2ee87190-8f84-4925-97da-e52547f9462c",
   name: "Arushi",
   description: "Warm Indian English female",
-  gender: "Female",
   language: "en",
 };
 
@@ -842,11 +841,6 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
       // Fallback to browser TTS
       const voice = cartesiaVoices.find(v => v.id === voiceId);
       const utt = new SpeechSynthesisUtterance(PREVIEW_TEXT);
-      if (voice?.gender === "male") {
-        const voices = window.speechSynthesis.getVoices();
-        const male = voices.find(v => v.name.toLowerCase().includes("male") || v.name.toLowerCase().includes("daniel"));
-        if (male) utt.voice = male;
-      }
       window.speechSynthesis.cancel();
       window.speechSynthesis.speak(utt);
       utt.onend = () => setVoicePlaying(null);
@@ -1557,7 +1551,6 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                                 <SelectItem key={v.id} value={v.id} className="text-foreground text-xs">
                                   <span className="flex items-center gap-1.5">
                                     {v.name}
-                                    {v.gender && <span className="text-muted-foreground text-[10px]">· {v.gender}</span>}
                                     <span className="text-muted-foreground text-[10px]">· {langLabel(v.language)}</span>
                                   </span>
                                 </SelectItem>

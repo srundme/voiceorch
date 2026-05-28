@@ -148,7 +148,6 @@ Use these placeholders in your system prompt — they are auto-substituted befor
 | `{caller_number}` or `{{from_number}}` | Inbound caller's phone number |
 | `{{to_number}}` | Number being called (outbound) |
 | `{date}` | Current date (e.g. "Tuesday, May 20, 2026") |
-| `{caller_salutation}` | Runtime-resolved salutation based on gender detection (sir / ma'am / custom) |
 
 ### 3.3 Greeting Message
 
@@ -224,33 +223,15 @@ A URL that receives a POST request after every call completes, with full call da
 
 These run during an active call.
 
-### 4.1 Gender Detection + Caller Salutation
-
-**Requires:** LLM provider key configured.
-
-When enabled, the AI detects the caller's likely gender from voice characteristics and spoken content during the first 20–30 seconds of the call. It then substitutes `{caller_salutation}` in the system prompt with the appropriate term.
-
-| Agent Setting | Description |
-|--------------|-------------|
-| **Enable gender detection** | Toggle on/off |
-| **Detection provider** | `internal` (transcript-based) or external |
-| **Male salutation** | What to call male callers (default: "sir") |
-| **Female salutation** | What to call female callers (default: "ma'am") |
-| **Neutral salutation** | What to use when gender is unclear (default: empty) |
-
-Set to `"skip"` in any salutation field to suppress the salutation entirely for that gender.
-
-**How it works:** After gender is detected, the system prompt is rewritten mid-call with the correct salutation filled in. The pipeline reprocesses the prompt so subsequent LLM turns use the updated version.
-
-### 4.2 Handoff Detection
+### 4.1 Handoff Detection
 
 Automatically detects when a call should be handed off to a human agent based on:
 - Trigger phrases in the conversation ("speak to a human", "transfer me", "agent please")
 - 3-second silence after a handoff keyword is detected
 
-When handoff is detected, the call is transferred and the agent's state is reset so the next speaker gets fresh gender detection.
+When handoff is detected, the call is transferred to a human agent.
 
-### 4.3 Barge-In (Interruption Handling)
+### 4.2 Barge-In (Interruption Handling)
 
 The caller can interrupt the AI mid-sentence. When voice activity is detected while the AI is speaking, the AI stops immediately and listens.
 

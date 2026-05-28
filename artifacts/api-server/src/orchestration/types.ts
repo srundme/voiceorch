@@ -145,13 +145,6 @@ export interface AgentConfig {
   // Tools
   tools: AgentTool[];
 
-  // Gender Detection
-  genderDetectionEnabled: boolean;
-  genderDetectionProvider: string;
-  genderDetectionMaleSalutation: string;
-  genderDetectionFemaleSalutation: string;
-  genderDetectionNeutralSalutation: string;
-
   // P1-A: User-defined prompt variables resolved at call start
   promptVariables: Array<{ key: string; defaultValue: string; description?: string }>;
 
