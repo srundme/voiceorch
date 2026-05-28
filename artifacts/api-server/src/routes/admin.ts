@@ -306,6 +306,35 @@ router.get("/admin/platform/callbacks", async (req, res): Promise<void> => {
   }
 });
 
+router.get("/admin/platform/failed-calls/by-reason", async (req, res): Promise<void> => {
+  try {
+    // Aggregate over the same 100-row window as /platform/failed-calls.
+    // Truncate at 120 chars before grouping so long variable messages (e.g. stack
+    // traces with embedded request IDs) collapse into a single bucket.
+    const rows = await db.execute<{ reason: string; count: number }>(sql`
+      WITH recent_failed AS (
+        SELECT error_message
+        FROM calls
+        WHERE status = 'failed'
+        ORDER BY created_at DESC
+        LIMIT 100
+      )
+      SELECT
+        coalesce(nullif(trim(left(error_message, 120)), ''), 'Unknown') AS reason,
+        count(*)::int AS count
+      FROM recent_failed
+      GROUP BY coalesce(nullif(trim(left(error_message, 120)), ''), 'Unknown')
+      ORDER BY count(*) DESC
+      LIMIT 5
+    `);
+
+    res.json(rows.rows);
+  } catch (err) {
+    req.log.error({ err }, "admin/platform/failed-calls/by-reason failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/admin/platform/failed-calls", async (req, res): Promise<void> => {
   try {
     const failed = await db

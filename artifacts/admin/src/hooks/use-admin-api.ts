@@ -80,6 +80,18 @@ export function usePlatformFailedCalls() {
   });
 }
 
+export interface FailureReasonRow {
+  reason: string;
+  count: number;
+}
+
+export function usePlatformFailedCallsByReason() {
+  return useQuery({
+    queryKey: ["admin", "platform", "failed-calls", "by-reason"],
+    queryFn: () => adminFetch<FailureReasonRow[]>("/platform/failed-calls/by-reason"),
+  });
+}
+
 // Managed Keys
 export function useManagedKeys() {
   return useQuery({

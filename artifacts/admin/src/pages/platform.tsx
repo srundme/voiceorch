@@ -1,4 +1,4 @@
-import { usePlatformActive, usePlatformFailedCalls } from "@/hooks/use-admin-api";
+import { usePlatformActive, usePlatformFailedCalls, usePlatformFailedCallsByReason } from "@/hooks/use-admin-api";
 import { format } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -10,11 +10,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Activity, AlertTriangle } from "lucide-react";
+import { Activity, AlertTriangle, BarChart2 } from "lucide-react";
 
 export default function Platform() {
   const { data: activeData, isLoading: loadingActive, isError: activeError, error: activeErr } = usePlatformActive();
   const { data: failedCalls, isLoading: loadingFailed, isError: failedError, error: failedErr } = usePlatformFailedCalls();
+  const { data: byReason, isLoading: loadingByReason, isError: byReasonError } = usePlatformFailedCallsByReason();
 
   return (
     <div className="space-y-6">
@@ -58,6 +59,54 @@ export default function Platform() {
                 )}
               </TableBody>
             </Table>
+          </CardContent>
+        </Card>
+
+        <Card className="border-destructive/10">
+          <CardHeader className="pb-3 border-b border-border bg-card">
+            <CardTitle className="text-sm font-medium uppercase tracking-wider flex items-center gap-2 text-destructive">
+              <BarChart2 className="h-4 w-4" /> Top Failure Reasons
+              <span className="ml-auto text-xs font-normal normal-case tracking-normal text-muted-foreground">in last 100 failed calls</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <TooltipProvider delayDuration={200}>
+              {loadingByReason ? (
+                <div className="py-4 text-center text-sm text-muted-foreground">Loading...</div>
+              ) : byReasonError ? (
+                <div className="py-4 text-center text-sm text-destructive">Failed to load failure reasons</div>
+              ) : !byReason || byReason.length === 0 ? (
+                <div className="py-6 text-center text-sm text-muted-foreground">No failures recorded</div>
+              ) : (
+                <div className="p-4 space-y-2">
+                  {(() => {
+                    const total = byReason.reduce((sum, r) => sum + r.count, 0);
+                    return byReason.map((row, i) => {
+                      const pct = total > 0 ? Math.round((row.count / total) * 100) : 0;
+                      return (
+                        <div key={i} className="space-y-1">
+                          <div className="flex items-center justify-between gap-4">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="text-xs truncate max-w-[70%] text-destructive/90">{row.reason}</span>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-[500px] whitespace-pre-wrap break-words">{row.reason}</TooltipContent>
+                            </Tooltip>
+                            <span className="text-xs font-mono text-muted-foreground shrink-0">{row.count} ({pct}%)</span>
+                          </div>
+                          <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-destructive/70"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              )}
+            </TooltipProvider>
           </CardContent>
         </Card>
 
