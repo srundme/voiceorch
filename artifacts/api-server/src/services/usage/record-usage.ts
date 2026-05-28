@@ -128,6 +128,17 @@ export async function recordUsage(input: RecordUsageInput): Promise<void> {
       });
     }
   } catch (err) {
-    logger.error({ err, input }, "recordUsage failed");
+    const e = err as { code?: string; message?: string };
+    logger.error(
+      {
+        err,
+        code: e?.code,
+        message: e?.message,
+        service: input.service,
+        provider: input.provider,
+        model: input.model ?? "default",
+      },
+      "recordUsage failed",
+    );
   }
 }

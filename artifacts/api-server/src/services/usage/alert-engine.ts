@@ -54,7 +54,19 @@ async function createAlert(opts: CreateAlertOpts): Promise<void> {
       });
     }
   } catch (err) {
-    logger.warn({ err, opts }, "createAlert failed");
+    const e = err as { code?: string; message?: string };
+    logger.error(
+      {
+        err,
+        code: e?.code,
+        message: e?.message,
+        service: opts.service,
+        provider: opts.provider,
+        type: opts.type,
+        dedupeKey: opts.dedupeKey,
+      },
+      "createAlert failed",
+    );
   }
 }
 
