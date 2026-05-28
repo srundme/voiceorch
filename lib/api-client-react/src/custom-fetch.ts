@@ -33,6 +33,7 @@ export class RequestTimeoutError extends Error {
 
 let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
+let _defaultTimeoutMs: number = DEFAULT_TIMEOUT_MS;
 
 /**
  * Set a base URL that is prepended to every relative request URL
@@ -58,6 +59,18 @@ export function setBaseUrl(url: string | null): void {
  */
 export function setAuthTokenGetter(getter: AuthTokenGetter | null): void {
   _authTokenGetter = getter;
+}
+
+/**
+ * Override the default timeout applied to every request that does not
+ * supply an explicit `timeoutMs` option.
+ *
+ * - Pass a positive finite number (milliseconds) to set a custom default.
+ * - Pass `0` or `Infinity` to disable the timeout globally.
+ * - The built-in default is 30 000 ms (30 s).
+ */
+export function setDefaultTimeoutMs(ms: number): void {
+  _defaultTimeoutMs = ms;
 }
 
 function isRequest(input: RequestInfo | URL): input is Request {
@@ -376,7 +389,7 @@ export async function customFetch<T = unknown>(
   options: CustomFetchOptions = {},
 ): Promise<T> {
   input = applyBaseUrl(input);
-  const { responseType = "auto", headers: headersInit, timeoutMs = DEFAULT_TIMEOUT_MS, ...init } = options;
+  const { responseType = "auto", headers: headersInit, timeoutMs = _defaultTimeoutMs, ...init } = options;
 
   const method = resolveMethod(input, init.method);
 

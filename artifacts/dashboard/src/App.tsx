@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/reac
 import { ClerkProvider, SignIn, SignUp, Show, useClerk, useAuth } from "@clerk/react";
 import { publishableKeyFromHost } from "@clerk/react/internal";
 import { shadcn } from "@clerk/themes";
-import { setAuthTokenGetter, useGetOnboardingStatus } from "@workspace/api-client-react";
+import { setAuthTokenGetter, setDefaultTimeoutMs, useGetOnboardingStatus } from "@workspace/api-client-react";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -48,6 +48,13 @@ const queryClient = new QueryClient({
     queries: { retry: false, refetchOnWindowFocus: false },
   },
 });
+
+// Apply persisted request-timeout preference immediately on load.
+const TIMEOUT_STORAGE_KEY = "voiceorch:requestTimeoutMs";
+const _storedTimeout = localStorage.getItem(TIMEOUT_STORAGE_KEY);
+if (_storedTimeout !== null) {
+  setDefaultTimeoutMs(Number(_storedTimeout));
+}
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 

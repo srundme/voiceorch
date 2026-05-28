@@ -3,12 +3,12 @@ import { Link, useLocation } from "wouter";
 import {
   Phone, Copy, Check, ExternalLink, Zap, Key, BookOpen,
   ChevronDown, ChevronRight, AlertTriangle, CheckCircle2,
-  RefreshCw, Plus, Eye, EyeOff, Users, Settings2, Calendar, Video
+  RefreshCw, Plus, Eye, EyeOff, Users, Settings2, Calendar, Video, Timer
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useListAgents, useListProviders, useGetAccount, useRegenerateApiKey, useAddConcurrentSlot, getListAgentsQueryKey, getListProvidersQueryKey, getGetAccountQueryKey } from "@workspace/api-client-react";
+import { useListAgents, useListProviders, useGetAccount, useRegenerateApiKey, useAddConcurrentSlot, getListAgentsQueryKey, getListProvidersQueryKey, getGetAccountQueryKey, setDefaultTimeoutMs } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
@@ -19,6 +19,76 @@ import ConferencingPage from "@/pages/settings/Conferencing";
 const BASE_DOMAIN = window.location.hostname;
 const BASE_URL = `https://${BASE_DOMAIN}`;
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+const TIMEOUT_STORAGE_KEY = "voiceorch:requestTimeoutMs";
+
+type TimeoutOption = { label: string; value: number | null; description: string };
+const TIMEOUT_OPTIONS: TimeoutOption[] = [
+  { label: "10 s", value: 10_000, description: "Fast — best on reliable connections" },
+  { label: "30 s", value: 30_000, description: "Default — recommended for most users" },
+  { label: "60 s", value: 60_000, description: "Slow — helpful for long-running queries" },
+  { label: "None", value: null, description: "No limit — wait as long as needed" },
+];
+
+function getStoredTimeoutMs(): number | null {
+  const raw = localStorage.getItem(TIMEOUT_STORAGE_KEY);
+  if (raw === null) return 30_000;
+  const parsed = Number(raw);
+  return parsed === 0 ? null : parsed;
+}
+
+function RequestTimeoutCard() {
+  const [selected, setSelected] = useState<number | null>(getStoredTimeoutMs);
+  const { toast } = useToast();
+
+  function handleSelect(opt: TimeoutOption) {
+    const ms = opt.value;
+    setSelected(ms);
+    if (ms === null) {
+      localStorage.setItem(TIMEOUT_STORAGE_KEY, "0");
+      setDefaultTimeoutMs(0);
+    } else {
+      localStorage.setItem(TIMEOUT_STORAGE_KEY, String(ms));
+      setDefaultTimeoutMs(ms);
+    }
+    toast({ title: "Timeout updated", description: `Request timeout set to ${opt.label}.` });
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Timer className="h-5 w-5 text-primary" />
+          Request Timeout
+        </CardTitle>
+        <CardDescription>
+          How long the app waits for a slow server response before giving up. The default is 30 s.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {TIMEOUT_OPTIONS.map((opt) => {
+            const isActive = selected === opt.value;
+            return (
+              <button
+                key={opt.label}
+                onClick={() => handleSelect(opt)}
+                className={`flex flex-col items-center gap-1.5 rounded-lg border px-4 py-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                  isActive
+                    ? "border-primary bg-primary/10 text-foreground"
+                    : "border-border/60 bg-muted/20 text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+                }`}
+              >
+                <span className="text-base font-semibold">{opt.label}</span>
+                <span className="text-[11px] font-normal text-center leading-tight opacity-75">{opt.description}</span>
+              </button>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -335,6 +405,8 @@ function GeneralTab() {
           )}
         </CardContent>
       </Card>
+
+      <RequestTimeoutCard />
 
       {/* API reference quick links */}
       <Card>
