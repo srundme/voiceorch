@@ -1162,9 +1162,10 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                 <div className="grid grid-cols-2 gap-4">
                   <button
                     onClick={() => { update({ mode: "managed" }); setDirection("forward"); setRenderKey(k => k + 1); }}
-                    className="group relative text-left p-6 rounded-2xl border border-border bg-muted hover:bg-muted hover:border-zinc-500/60 transition-all duration-200"
+                    className="group relative text-left p-6 rounded-2xl border border-zinc-600/50 transition-all duration-200"
+                    style={{ background: "linear-gradient(135deg, #4a4a52 0%, #3e3e46 100%)" }}
                   >
-                    <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-zinc-100/60 to-zinc-50/40 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity" style={{ background: "linear-gradient(135deg, #55555e 0%, #47474f 100%)" }} />
                     <div className="relative">
                       <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-zinc-500 to-zinc-600 flex items-center justify-center mb-4 shadow-lg shadow-zinc-500/30">
                         <Wand2 className="h-5 w-5 text-white" />
