@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useLocation } from "wouter";
-import { useUser } from "@clerk/react";
+import { useUser, useAuth } from "@clerk/react";
 import { Mic, MicOff, X, Volume2, Bot, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -48,6 +48,7 @@ function newRecognition(): ISpeechRecognition | null {
 export function VoiceAssistant() {
   const [, navigate] = useLocation();
   const { user } = useUser();
+  const { getToken } = useAuth();
 
   const [open, setOpen]         = useState(false);
   const [phase, setPhase]       = useState<Phase>("idle");
@@ -94,9 +95,13 @@ export function VoiceAssistant() {
   async function speakText(text: string): Promise<void> {
     setPhase("speaking");
     try {
+      const token = await getToken();
       const res = await fetch(`${BASE}/api/assistant/tts`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ text }),
       });
       if (!res.ok) return; // silently skip TTS if not configured
@@ -120,9 +125,13 @@ export function VoiceAssistant() {
     setTranscript("");
 
     try {
+      const token = await getToken();
       const res = await fetch(`${BASE}/api/assistant/chat`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           message: userText,
           history: nextHistory.map(m => ({ role: m.role, content: m.content })),
