@@ -265,12 +265,13 @@ router.get("/kyc/callback", async (req, res): Promise<void> => {
 // Respond 200 immediately; update DB.
 
 router.post("/kyc/webhook", async (req, res): Promise<void> => {
+  // Respond immediately — VoBiz expects a fast 200 acknowledgement.
   res.sendStatus(200);
 
   const body = req.body as {
-    event?:      string;
-    session_id?: string;
-    auth_id?:    string;
+    event?:         string;
+    session_id?:    string;
+    auth_id?:       string;
     verified_data?: Record<string, unknown>;
   };
 
@@ -283,9 +284,18 @@ router.post("/kyc/webhook", async (req, res): Promise<void> => {
       .from(vobizKycSessionsTable)
       .where(eq(vobizKycSessionsTable.vobizSessionId, session_id));
 
-    if (!session) return;
+    if (!session) {
+      req.log.warn({ session_id, event }, "KYC webhook for unknown session — ignored");
+      return;
+    }
 
     if (event === "kyc.completed") {
+      // Idempotency guard: skip if already marked completed
+      if (session.status === "kyc_completed") {
+        req.log.info({ sessionId: session_id }, "KYC webhook kyc.completed already processed — skipping");
+        return;
+      }
+
       await db
         .update(vobizKycSessionsTable)
         .set({ status: "kyc_completed", completedAt: new Date() })
@@ -302,6 +312,9 @@ router.post("/kyc/webhook", async (req, res): Promise<void> => {
       req.log.info({ sessionId: session_id, userId: session.userId }, "KYC completed via webhook");
 
     } else if (event === "kyc.failed") {
+      // Idempotency guard: only update if not already terminal
+      if (session.status === "revoked" || session.status === "kyc_completed") return;
+
       await db
         .update(vobizKycSessionsTable)
         .set({ status: "revoked" })
@@ -312,11 +325,20 @@ router.post("/kyc/webhook", async (req, res): Promise<void> => {
         .set({ kycStatus: "failed" })
         .where(eq(vobizAccountsTable.userId, session.userId));
 
+      req.log.info({ sessionId: session_id, userId: session.userId }, "KYC failed via webhook");
+
     } else if (event === "kyc.session_revoked") {
+      if (session.status === "revoked" || session.status === "kyc_completed") return;
+
       await db
         .update(vobizKycSessionsTable)
         .set({ status: "revoked" })
         .where(eq(vobizKycSessionsTable.vobizSessionId, session_id));
+
+      req.log.info({ sessionId: session_id }, "KYC session revoked via webhook");
+
+    } else {
+      req.log.warn({ sessionId: session_id, event }, "KYC webhook unknown event");
     }
   } catch (err) {
     req.log.error({ err, session_id, event }, "Error processing KYC webhook");
