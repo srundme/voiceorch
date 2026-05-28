@@ -1721,6 +1721,7 @@ export class OrchestrationPipeline {
       const tz = tool.timezone || calendar.timezone || "UTC";
       const preview = slots.slice(0, 5).map(s => formatInTimeZone(s.slotStart, tz, "EEE MMM d 'at' h:mm a")).join("; ");
       return `available_slots: count=${slots.length}, event="${eventType.name}", duration_mins=${eventType.durationMinutes}, timezone="${tz}", next="${preview}"`;
+
     } catch (err) {
       logger.error({ callId: this.config.callId, err }, "Native check-availability tool execution failed");
       return "error: availability check failed due to a technical issue";

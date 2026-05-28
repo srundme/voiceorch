@@ -71,7 +71,17 @@ router.post("/agents", requireAuth, async (req, res): Promise<void> => {
   // If wizard submit included inputs, run the admin master template through Gemini
   // and store the generated prompt + template version. Fail loudly if no active template.
   if (wizardInputs && typeof wizardInputs === "object") {
-    const active = await getActiveTemplate();
+    let active: Awaited<ReturnType<typeof getActiveTemplate>>;
+    try {
+      active = await getActiveTemplate();
+    } catch (err) {
+      req.log.error({ err }, "Failed to query prompt_templates — table may be missing");
+      res.status(503).json({
+        error:
+          "Agent creation is currently unavailable: platform configuration could not be read. Please contact the platform administrator.",
+      });
+      return;
+    }
     if (!active) {
       res.status(503).json({
         error:
