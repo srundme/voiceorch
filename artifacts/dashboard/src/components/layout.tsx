@@ -10,7 +10,7 @@ import {
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useClerk, useUser } from "@clerk/react";
 import { useGetWallet } from "@workspace/api-client-react";
-import { BrandMark } from "@/components/logo";
+import { SnapServeIcon } from "@/components/logo";
 
 /* ── Nav structure ──────────────────────────────────────────────────────── */
 const NAV_SECTIONS = [
@@ -199,8 +199,11 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
     <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border">
       {/* Logo */}
       <div className="flex items-center gap-2 px-4 h-13 shrink-0 border-b border-sidebar-border">
-        <Link href="/app" onClick={onNavClick} className="flex items-center">
-          <BrandMark iconSize={26} wordmarkHeight={17} gapClass="gap-2" />
+        <Link href="/app" onClick={onNavClick} className="flex items-center gap-2">
+          <SnapServeIcon size={26} className="text-foreground shrink-0" />
+          <span className="leading-none select-none text-[15px] text-foreground" style={{ fontFamily: "'Tex Gyre Heros', Helvetica, Arial, sans-serif", letterSpacing: "-0.01em" }}>
+            <span style={{ fontWeight: 700 }}>Snap</span><span style={{ fontWeight: 400 }}>Serve</span>
+          </span>
         </Link>
         <span className="text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded border border-border bg-elevated text-muted-foreground/50 ml-1">
           Beta
