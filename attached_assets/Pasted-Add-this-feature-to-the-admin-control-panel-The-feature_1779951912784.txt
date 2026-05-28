@@ -1,0 +1,13 @@
+Add this feature to the admin control panel:
+
+The feature: a template upload section where the admin uploads a PDF or Word document that serves as the master prompt template. The backend reads and extracts the full text content from the uploaded file. This extracted content becomes the active template that Gemini will follow when generating any agent's final prompt. Save the extracted text to the database with a version number and timestamp every time a new file is uploaded, so there is always a clear history of which template was active when.
+
+Whenever a user completes the agent setup flow and submits, the backend collects all their answers, fetches the current active template text from the database, constructs a Gemini API request that passes the template as the instruction and the user's inputs as the context, and asks Gemini to return a complete final agent prompt following that structure exactly. Store the Gemini-generated prompt in the database against that agent. This generated prompt is what gets injected into every outbound or inbound  call that agent makes.
+
+If the admin uploads a new template file, all agents created after that point will use the new structure. Existing agents are unaffected unless the admin clicks a regenerate button next to any individual agent, which re-sends that agent's original inputs plus the new template to Gemini and overwrites the stored prompt.
+
+The admin panel should also show a list of all agents created by all users, displaying agent name, company, type, date created, and a preview button that opens the full Gemini-generated prompt in a modal. Next to each agent is a regenerate button to rebuild its prompt using the current template.
+
+Below the upload section, show a live preview panel. After a file is uploaded, send a sample payload with dummy variable values to Gemini using the extracted template and render the output so the admin can see exactly how a generated prompt will look before it goes live.
+
+The Gemini API key must only live in server-side environment variables. No part of the template, the generation logic, or the raw generated prompt should ever be sent to the client. Users can only see a simplified human-readable version of their call flow, not the underlying prompt.
