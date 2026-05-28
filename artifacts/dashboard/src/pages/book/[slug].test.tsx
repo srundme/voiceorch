@@ -1,21 +1,27 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
 
 vi.mock("wouter", () => ({
   useRoute: () => [true, { slug: "test-slug" }],
 }));
 
-vi.mock("@workspace/api-client-react", () => ({
-  useGetPublicEventType: vi.fn(),
-  useGetPublicSlots: vi.fn(),
-  useCreatePublicBooking: vi.fn(),
-}));
+vi.mock("@workspace/api-client-react", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@workspace/api-client-react")>();
+  return {
+    ...actual,
+    useGetPublicEventType: vi.fn(),
+    useGetPublicSlots: vi.fn(),
+    useCreatePublicBooking: vi.fn(),
+  };
+});
 
 import {
   useGetPublicEventType,
   useGetPublicSlots,
   useCreatePublicBooking,
+  ApiError,
+  RequestTimeoutError,
 } from "@workspace/api-client-react";
 
 import PublicBookingPage from "./[slug]";
@@ -210,5 +216,102 @@ describe("slot-fetching path", () => {
     render(<PublicBookingPage />);
     expect(screen.getByText("11:30 PM")).toBeInTheDocument();
     expect(screen.getByText("12:00 AM")).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Booking error path — formatApiError integration
+// ---------------------------------------------------------------------------
+
+function makeApiError(data: unknown, status = 400, statusText = "Bad Request"): ApiError {
+  const response = new Response(null, { status, statusText });
+  return new ApiError(response, data, { method: "POST", url: "/api/scheduling/public/bookings" });
+}
+
+describe("booking error path", () => {
+  const MOCK_SLOT = "2026-06-15T09:00:00.000Z";
+
+  beforeEach(() => {
+    vi.mocked(useGetPublicEventType).mockReturnValue({
+      data: MOCK_EVENT_TYPE,
+      isLoading: false,
+      error: null,
+    } as any);
+    vi.mocked(useGetPublicSlots).mockReturnValue({
+      data: [{ slotStart: MOCK_SLOT }],
+      isLoading: false,
+    } as any);
+  });
+
+  async function fillAndSubmit() {
+    render(<PublicBookingPage />);
+    fireEvent.change(screen.getByLabelText(/full name/i), {
+      target: { value: "Jane Smith" },
+    });
+    fireEvent.change(screen.getByLabelText(/email/i), {
+      target: { value: "jane@example.com" },
+    });
+    fireEvent.click(screen.getByText("9:00 AM"));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /confirm booking/i }));
+    });
+  }
+
+  it("shows the server error string from a 409 ApiError (double-booking)", async () => {
+    const err = makeApiError(
+      { error: "This slot is no longer available" },
+      409,
+      "Conflict",
+    );
+    vi.mocked(MOCK_MUTATION.mutateAsync).mockRejectedValueOnce(err);
+    await fillAndSubmit();
+    expect(screen.getByText("This slot is no longer available")).toBeInTheDocument();
+  });
+
+  it("shows the first Zod issue from a 422 ApiError (validation)", async () => {
+    const err = makeApiError(
+      { issues: [{ path: ["attendeeEmail"], message: "Invalid email address" }] },
+      422,
+      "Unprocessable Entity",
+    );
+    vi.mocked(MOCK_MUTATION.mutateAsync).mockRejectedValueOnce(err);
+    await fillAndSubmit();
+    expect(screen.getByText("attendeeEmail: Invalid email address")).toBeInTheDocument();
+  });
+
+  it("shows the timeout message for a RequestTimeoutError", async () => {
+    const err = new RequestTimeoutError(30_000);
+    vi.mocked(MOCK_MUTATION.mutateAsync).mockRejectedValueOnce(err);
+    await fillAndSubmit();
+    expect(
+      screen.getByText("Request timed out — please try again"),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the timeout message for an Error with name AbortError", async () => {
+    const err = Object.assign(new Error("The user aborted a request."), { name: "AbortError" });
+    vi.mocked(MOCK_MUTATION.mutateAsync).mockRejectedValueOnce(err);
+    await fillAndSubmit();
+    expect(
+      screen.getByText("Request timed out — please try again"),
+    ).toBeInTheDocument();
+  });
+
+  it("does not expose a raw HTTP status string for a 409 with no body", async () => {
+    const err = makeApiError(null, 409, "Conflict");
+    vi.mocked(MOCK_MUTATION.mutateAsync).mockRejectedValueOnce(err);
+    await fillAndSubmit();
+    const errorEl = screen.getByText(/Something went wrong with your request/i);
+    expect(errorEl).toBeInTheDocument();
+    expect(errorEl.textContent).not.toMatch(/HTTP \d+/);
+  });
+
+  it("shows a friendly 5xx message instead of a raw status string", async () => {
+    const err = makeApiError(null, 500, "Internal Server Error");
+    vi.mocked(MOCK_MUTATION.mutateAsync).mockRejectedValueOnce(err);
+    await fillAndSubmit();
+    const errorEl = screen.getByText(/Something went wrong on our end/i);
+    expect(errorEl).toBeInTheDocument();
+    expect(errorEl.textContent).not.toMatch(/HTTP \d+/);
   });
 });
