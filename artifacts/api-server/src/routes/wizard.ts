@@ -296,9 +296,9 @@ router.post("/wizard/generate-call-flow", requireDbUser, async (req, res): Promi
 
   const nonEmpty = cleaned.filter((a) => a.answer.length > 0);
 
-  const geminiKey = (process.env.GEMINI_API_KEY ?? "").trim();
+  const geminiKey = (await getSetting("managed_gemini_key") ?? "").trim();
   if (!geminiKey) {
-    req.log.warn("GEMINI_API_KEY env var is not set — call-flow preview unavailable");
+    req.log.warn("managed_gemini_key not set in admin — call-flow preview unavailable");
     res.status(503).json({
       error: "Gemini API key is not configured on the server.",
       reason: "gemini_key_missing",
