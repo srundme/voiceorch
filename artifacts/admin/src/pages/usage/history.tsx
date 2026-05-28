@@ -99,12 +99,12 @@ export default function UsageHistoryPage() {
                     </TableCell>
                     <TableCell className="font-mono text-[10px] text-muted-foreground">{r.workspaceId ?? "—"}</TableCell>
                     <TableCell className="font-mono text-[11px]">{r.callId ?? "—"}</TableCell>
-                    <TableCell className="text-right text-[11px]">
+                    <TableCell className="text-right text-[11px] font-mono tabular-nums">
                       {r.service === "stt" && `${r.audioSeconds}s`}
                       {r.service === "tts" && `${r.characters} chars`}
                       {r.service === "llm" && `${r.inputTokens}/${r.outputTokens} tok`}
                     </TableCell>
-                    <TableCell className="text-right">{microsToUsd(r.estimatedCostMicros)}</TableCell>
+                    <TableCell className="text-right font-mono tabular-nums">{microsToUsd(r.estimatedCostMicros)}</TableCell>
                     <TableCell className="text-right">
                       {r.success ? (
                         <Badge variant="outline" className="border-zinc-500/30 bg-zinc-500/10 text-zinc-400">ok</Badge>

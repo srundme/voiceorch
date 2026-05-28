@@ -87,11 +87,11 @@ export default function UsageUsersPage() {
                         <div className="text-sm">{r.email ?? "—"}</div>
                         <div className="font-mono text-[10px] text-muted-foreground">{r.userId ?? "anonymous"}</div>
                       </TableCell>
-                      <TableCell className="text-right">{r.eventCount.toLocaleString()}</TableCell>
-                      <TableCell className="text-right">{microsToUsd(r.sttCostMicros)}</TableCell>
-                      <TableCell className="text-right">{microsToUsd(r.llmCostMicros)}</TableCell>
-                      <TableCell className="text-right">{microsToUsd(r.ttsCostMicros)}</TableCell>
-                      <TableCell className="text-right font-semibold">{microsToUsd(r.costMicros)}</TableCell>
+                      <TableCell className="text-right font-mono tabular-nums">{r.eventCount.toLocaleString()}</TableCell>
+                      <TableCell className="text-right font-mono tabular-nums">{microsToUsd(r.sttCostMicros)}</TableCell>
+                      <TableCell className="text-right font-mono tabular-nums">{microsToUsd(r.llmCostMicros)}</TableCell>
+                      <TableCell className="text-right font-mono tabular-nums">{microsToUsd(r.ttsCostMicros)}</TableCell>
+                      <TableCell className="text-right font-mono tabular-nums font-semibold">{microsToUsd(r.costMicros)}</TableCell>
                     </TableRow>,
                     open ? (
                       <TableRow key={`${key}-detail`} className="bg-muted/30">

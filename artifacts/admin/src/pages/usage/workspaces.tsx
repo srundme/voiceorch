@@ -69,11 +69,11 @@ export default function UsageWorkspacesPage() {
                         {(r.providers?.length ?? 0) > 0 ? (open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />) : null}
                       </TableCell>
                       <TableCell className="font-mono text-xs">{r.workspaceId ?? "(no workspace)"}</TableCell>
-                      <TableCell className="text-right">{r.eventCount.toLocaleString()}</TableCell>
-                      <TableCell className="text-right">{microsToUsd(r.sttCostMicros)}</TableCell>
-                      <TableCell className="text-right">{microsToUsd(r.llmCostMicros)}</TableCell>
-                      <TableCell className="text-right">{microsToUsd(r.ttsCostMicros)}</TableCell>
-                      <TableCell className="text-right font-semibold">{microsToUsd(r.costMicros)}</TableCell>
+                      <TableCell className="text-right font-mono tabular-nums">{r.eventCount.toLocaleString()}</TableCell>
+                      <TableCell className="text-right font-mono tabular-nums">{microsToUsd(r.sttCostMicros)}</TableCell>
+                      <TableCell className="text-right font-mono tabular-nums">{microsToUsd(r.llmCostMicros)}</TableCell>
+                      <TableCell className="text-right font-mono tabular-nums">{microsToUsd(r.ttsCostMicros)}</TableCell>
+                      <TableCell className="text-right font-mono tabular-nums font-semibold">{microsToUsd(r.costMicros)}</TableCell>
                     </TableRow>,
                     open ? (
                       <TableRow key={`${key}-detail`} className="bg-muted/30">

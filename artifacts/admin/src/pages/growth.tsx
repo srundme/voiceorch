@@ -84,8 +84,8 @@ export default function Growth() {
                           {user.email || 'Unknown'}
                         </Link>
                       </TableCell>
-                      <TableCell className="text-right font-mono font-medium">{user.callCount?.toLocaleString() || 0}</TableCell>
-                      <TableCell className="text-right font-mono text-muted-foreground text-xs">
+                      <TableCell className="text-right font-mono tabular-nums font-medium">{user.callCount?.toLocaleString() || 0}</TableCell>
+                      <TableCell className="text-right font-mono tabular-nums text-muted-foreground text-xs">
                         {formatCentsToDollars(user.walletBalanceCents || 0)}
                       </TableCell>
                     </TableRow>

@@ -27,7 +27,7 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4 font-mono">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4 font-sans">
       <Card className="w-full max-w-md shadow-2xl border-border">
         <CardHeader className="space-y-4 pb-6 text-center border-b border-border/50 mb-6">
           <div className="mx-auto flex items-center justify-center gap-2.5 mb-1">

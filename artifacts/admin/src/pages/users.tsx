@@ -82,16 +82,16 @@ export default function UsersList() {
                       <div className="text-[10px] text-muted-foreground font-mono mt-1 opacity-50 group-hover:opacity-100">{user.clerkId}</div>
                     </Link>
                   </TableCell>
-                  <TableCell className="text-right font-mono">
+                  <TableCell className="text-right font-mono tabular-nums">
                     <span className={user.walletBalanceCents < 0 ? "text-destructive" : ""}>
                       {formatCentsToDollars(user.walletBalanceCents || 0)}
                     </span>
                   </TableCell>
-                  <TableCell className="text-right font-mono text-muted-foreground">
+                  <TableCell className="text-right font-mono tabular-nums text-muted-foreground">
                     {formatCentsToDollars(user.totalSpentCents || 0)}
                   </TableCell>
-                  <TableCell className="text-right font-mono">{user.callCount?.toLocaleString() || 0}</TableCell>
-                  <TableCell className="text-right font-mono">{user.agentCount?.toLocaleString() || 0}</TableCell>
+                  <TableCell className="text-right font-mono tabular-nums">{user.callCount?.toLocaleString() || 0}</TableCell>
+                  <TableCell className="text-right font-mono tabular-nums">{user.agentCount?.toLocaleString() || 0}</TableCell>
                   <TableCell className="text-right text-xs text-muted-foreground">
                     {user.createdAt ? format(new Date(user.createdAt), "MMM d, yyyy") : "-"}
                     {!user.onboardingCompleted && (

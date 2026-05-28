@@ -105,9 +105,9 @@ export default function PromptTemplatePage() {
   }
 
   return (
-    <div className="p-8 max-w-6xl mx-auto space-y-6">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Prompt Template</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Prompt Template</h1>
         <p className="text-muted-foreground mt-1">
           Upload the master prompt template (PDF or Word). The active version is used to generate every new agent's system prompt via Gemini.
         </p>

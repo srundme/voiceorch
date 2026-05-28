@@ -13,6 +13,7 @@ import {
   Settings,
   FileText,
   Bot,
+  Calendar,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -70,11 +71,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/voices",       label: "Voices",       icon: Mic2 },
     { href: "/prompt-template", label: "Prompt Template", icon: FileText },
     { href: "/all-agents",   label: "All Agents",   icon: Bot },
+    { href: "/scheduling",   label: "Scheduling",   icon: Calendar },
     { href: "/settings",     label: "Settings",     icon: Settings },
   ];
 
   return (
-    <div className="flex min-h-screen bg-background text-foreground selection:bg-primary selection:text-primary-foreground font-mono text-sm">
+    <div className="flex min-h-screen bg-background text-foreground selection:bg-primary selection:text-primary-foreground font-sans text-sm">
       {/* Sidebar */}
       <aside className="w-64 border-r border-border bg-card flex flex-col hidden md:flex shrink-0">
         <div className="h-16 flex items-center px-5 border-b border-border">

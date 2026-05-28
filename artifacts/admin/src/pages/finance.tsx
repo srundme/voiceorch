@@ -143,7 +143,7 @@ export default function Finance() {
                   <TableCell className="text-xs truncate max-w-[250px]" title={tx.description || tx.razorpayPaymentId}>
                     {tx.description || (tx.razorpayPaymentId ? `Ref: ${tx.razorpayPaymentId}` : "-")}
                   </TableCell>
-                  <TableCell className={`text-right font-mono ${tx.amountCents > 0 ? 'text-primary' : tx.amountCents < 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
+                  <TableCell className={`text-right font-mono tabular-nums ${tx.amountCents > 0 ? 'text-primary' : tx.amountCents < 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
                     {tx.amountCents > 0 ? '+' : ''}{formatCentsToDollars(tx.amountCents)}
                   </TableCell>
                 </TableRow>

@@ -29,11 +29,11 @@ function useAdminBookings(params: { status?: string; startDate?: string; endDate
 
 function statusBadge(status: string) {
   switch (status) {
-    case "confirmed":   return <Badge className="bg-zinc-50 text-zinc-700 border-zinc-200">{status}</Badge>;
-    case "pending":     return <Badge className="bg-zinc-50 text-zinc-700 border-zinc-200">{status}</Badge>;
-    case "cancelled":   return <Badge className="bg-red-50 text-red-600 border-red-200">{status}</Badge>;
-    case "rescheduled": return <Badge className="bg-zinc-50 text-zinc-700 border-zinc-200">{status}</Badge>;
-    default:            return <Badge variant="outline">{status}</Badge>;
+    case "confirmed":   return <Badge variant="outline" className="capitalize">{status}</Badge>;
+    case "pending":     return <Badge variant="secondary" className="capitalize">{status}</Badge>;
+    case "cancelled":   return <Badge variant="destructive" className="capitalize">{status}</Badge>;
+    case "rescheduled": return <Badge variant="outline" className="capitalize">{status}</Badge>;
+    default:            return <Badge variant="outline" className="capitalize">{status}</Badge>;
   }
 }
 
@@ -51,14 +51,14 @@ export default function AdminSchedulingPage() {
   });
 
   return (
-    <div className="p-6 flex flex-col gap-6">
+    <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <div className="p-2 rounded-lg bg-zinc-50">
-          <Calendar className="h-5 w-5 text-zinc-600" />
+        <div className="p-2 rounded-lg bg-muted/40 border border-border">
+          <Calendar className="h-5 w-5 text-muted-foreground" />
         </div>
         <div>
-          <h1 className="text-xl font-semibold">Platform Scheduling</h1>
-          <p className="text-sm text-muted-foreground">All bookings across all tenants (read-only)</p>
+          <h1 className="text-3xl font-bold tracking-tight">Platform Scheduling</h1>
+          <p className="text-sm text-muted-foreground mt-1">All bookings across all tenants (read-only)</p>
         </div>
       </div>
 

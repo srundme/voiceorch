@@ -82,7 +82,7 @@ export default function UserDetail() {
           </Link>
         </Button>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">{user.email}</h1>
+          <h1 className="text-3xl font-bold tracking-tight">{user.email}</h1>
           <p className="text-sm text-muted-foreground font-mono">{user.clerkId}</p>
         </div>
       </div>
@@ -211,10 +211,10 @@ export default function UserDetail() {
                         <TableCell className="text-xs font-mono text-muted-foreground">
                           {format(new Date(call.createdAt), "MMM d HH:mm")}
                         </TableCell>
-                        <TableCell className="text-right text-xs font-mono">
+                        <TableCell className="text-right text-xs font-mono tabular-nums">
                           {formatDuration(call.durationSeconds || 0)}
                         </TableCell>
-                        <TableCell className="text-right text-xs font-mono">
+                        <TableCell className="text-right text-xs font-mono tabular-nums">
                           {formatCentsToDollars(call.costCents || 0)}
                         </TableCell>
                       </TableRow>
@@ -256,7 +256,7 @@ export default function UserDetail() {
                         </TableCell>
                         <TableCell className="text-xs capitalize">{tx.type}</TableCell>
                         <TableCell className="text-xs truncate max-w-[150px]" title={tx.description}>{tx.description}</TableCell>
-                        <TableCell className={`text-right text-xs font-mono ${tx.amountCents > 0 ? 'text-primary' : 'text-destructive'}`}>
+                        <TableCell className={`text-right text-xs font-mono tabular-nums ${tx.amountCents > 0 ? 'text-primary' : 'text-destructive'}`}>
                           {tx.amountCents > 0 ? '+' : ''}{formatCentsToDollars(tx.amountCents)}
                         </TableCell>
                       </TableRow>
