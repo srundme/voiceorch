@@ -20,7 +20,7 @@ import {
   getGetDailyCallVolumeQueryKey,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { useTheme } from "@/components/theme-provider";
+import { useChartTheme } from "@/hooks/use-chart-theme";
 import {
   AreaChart,
   Area,
@@ -152,21 +152,12 @@ function StatusStrip({ stats }: { stats: any }) {
 
 /* ── Dashboard ───────────────────────────────────────────────────────────── */
 export default function Dashboard() {
-  const { theme } = useTheme();
-  const isDark = theme === "dark";
+  const { tickColor, gridColor, tooltipBg, tooltipBorder, tooltipText, tooltipShadow, palette } = useChartTheme();
 
   const { data: stats,       isLoading: statsLoading }       = useGetDashboardStats({ query: { queryKey: getGetDashboardStatsQueryKey() } });
   const { data: recentCalls, isLoading: recentCallsLoading } = useGetRecentCalls({ query: { queryKey: getGetRecentCallsQueryKey() } });
   const { data: callsByStatus }                               = useGetCallsByStatus({ query: { queryKey: getGetCallsByStatusQueryKey() } });
   const { data: dailyVolume, isLoading: dailyVolumeLoading } = useGetDailyCallVolume({ query: { queryKey: getGetDailyCallVolumeQueryKey() } });
-
-  const chartCompleted  = isDark ? "#22c55e" : "#374151";
-  const chartFailed     = "#EF4444";
-  const chartGrid       = isDark ? "rgba(255,255,255,0.06)" : "#F3F4F6";
-  const tickColor       = isDark ? "hsl(0,0%,55%)" : "#9CA3AF";
-  const tooltipBg       = isDark ? "hsl(0,0%,8%)"  : "#FFFFFF";
-  const tooltipBorder   = isDark ? "hsl(0,0%,14%)" : "#E5E7EB";
-  const tooltipColor    = isDark ? "hsl(0,0%,96%)" : "#111827";
 
   const chartData = useMemo(() => {
     if (!dailyVolume) return [];
@@ -263,10 +254,10 @@ export default function Dashboard() {
               </div>
               <div className="flex items-center gap-4">
                 <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                  <span className="h-2 w-2 rounded-full" style={{ background: chartCompleted }} />Completed
+                  <span className="h-2 w-2 rounded-full" style={{ background: palette.completed }} />Completed
                 </span>
                 <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                  <span className="h-2 w-2 rounded-full" style={{ background: chartFailed }} />Failed
+                  <span className="h-2 w-2 rounded-full" style={{ background: palette.failed }} />Failed
                 </span>
               </div>
             </div>
@@ -282,12 +273,12 @@ export default function Dashboard() {
                   <AreaChart data={chartData} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
                     <defs>
                       <linearGradient id="colorCompleted" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%"  stopColor={chartCompleted} stopOpacity={isDark ? 0.2 : 0.12} />
-                        <stop offset="95%" stopColor={chartCompleted} stopOpacity={0} />
+                        <stop offset="5%"  stopColor={palette.completed} stopOpacity={0.18} />
+                        <stop offset="95%" stopColor={palette.completed} stopOpacity={0} />
                       </linearGradient>
                       <linearGradient id="colorFailed" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%"  stopColor={chartFailed} stopOpacity={0.15} />
-                        <stop offset="95%" stopColor={chartFailed} stopOpacity={0} />
+                        <stop offset="5%"  stopColor={palette.failed} stopOpacity={0.15} />
+                        <stop offset="95%" stopColor={palette.failed} stopOpacity={0} />
                       </linearGradient>
                     </defs>
                     <XAxis
@@ -304,21 +295,21 @@ export default function Dashboard() {
                       axisLine={false}
                       width={28}
                     />
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={chartGrid} />
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridColor} />
                     <Tooltip
                       contentStyle={{
                         background:   tooltipBg,
                         border:       `1px solid ${tooltipBorder}`,
                         borderRadius: "12px",
-                        color:        tooltipColor,
+                        color:        tooltipText,
                         fontSize:     "12px",
-                        boxShadow:    isDark ? "0 4px 16px rgba(0,0,0,0.6)" : "0 4px 12px rgba(0,0,0,0.08)",
+                        boxShadow:    tooltipShadow,
                       }}
-                      itemStyle={{ color: tooltipColor }}
+                      itemStyle={{ color: tooltipText }}
                       cursor={{ stroke: tooltipBorder, strokeWidth: 1 }}
                     />
-                    <Area type="monotone" dataKey="completed" stroke={chartCompleted} strokeWidth={1.5} fillOpacity={1} fill="url(#colorCompleted)" dot={false} />
-                    <Area type="monotone" dataKey="failed"    stroke={chartFailed}    strokeWidth={1.5} fillOpacity={1} fill="url(#colorFailed)"    dot={false} />
+                    <Area type="monotone" dataKey="completed" stroke={palette.completed} strokeWidth={1.5} fillOpacity={1} fill="url(#colorCompleted)" dot={false} />
+                    <Area type="monotone" dataKey="failed"    stroke={palette.failed}    strokeWidth={1.5} fillOpacity={1} fill="url(#colorFailed)"    dot={false} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -359,9 +350,9 @@ export default function Dashboard() {
                           background:   tooltipBg,
                           border:       `1px solid ${tooltipBorder}`,
                           borderRadius: "12px",
-                          color:        tooltipColor,
+                          color:        tooltipText,
                           fontSize:     "12px",
-                          boxShadow:    isDark ? "0 4px 16px rgba(0,0,0,0.6)" : "0 4px 12px rgba(0,0,0,0.08)",
+                          boxShadow:    tooltipShadow,
                         }}
                       />
                     </PieChart>

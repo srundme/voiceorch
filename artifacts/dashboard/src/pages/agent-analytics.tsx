@@ -7,6 +7,7 @@ import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from "recharts";
 import { format, parseISO } from "date-fns";
+import { useChartTheme } from "@/hooks/use-chart-theme";
 
 function StatCard({
   label, value, sub, icon: Icon, accent = "zinc",
@@ -48,24 +49,35 @@ function LatencyPill({ label, ms }: { label: string; ms: number | null | undefin
   );
 }
 
-const CustomTooltip = ({ active, payload, label }: any) => {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="bg-white border border-gray-200 rounded-lg p-3 text-xs shadow-xl">
-      <p className="text-gray-500 mb-1.5">{label}</p>
-      {payload.map((p: any) => (
-        <p key={p.name} style={{ color: p.color }} className="flex gap-2 items-center">
-          <span className="font-medium">{p.name}:</span>
-          <span className="tabular-nums">{p.value}</span>
-        </p>
-      ))}
-    </div>
-  );
-};
+function makeCustomTooltip(bg: string, border: string, text: string, shadow: string) {
+  return function CustomTooltip({ active, payload, label }: any) {
+    if (!active || !payload?.length) return null;
+    return (
+      <div
+        style={{
+          background: bg,
+          border: `1px solid ${border}`,
+          color: text,
+          boxShadow: shadow,
+        }}
+        className="rounded-lg p-3 text-xs"
+      >
+        <p className="mb-1.5" style={{ color: text, opacity: 0.6 }}>{label}</p>
+        {payload.map((p: any) => (
+          <p key={p.name} style={{ color: p.color }} className="flex gap-2 items-center">
+            <span className="font-medium">{p.name}:</span>
+            <span className="tabular-nums">{p.value}</span>
+          </p>
+        ))}
+      </div>
+    );
+  };
+}
 
 export default function AgentAnalyticsPage() {
   const params = useParams<{ id: string }>();
   const agentId = parseInt(params.id ?? "0", 10);
+  const { tickColor, gridColor, tooltipBg, tooltipBorder, tooltipText, tooltipShadow } = useChartTheme();
 
   const { data: stats, isLoading } = useGetAgentStats(agentId, {
     query: { enabled: !!agentId, queryKey: ["analytics", "agents", agentId] },
@@ -183,16 +195,16 @@ export default function AgentAnalyticsPage() {
 
         {/* Daily volume chart */}
         {chartData.length > 0 && (
-          <div className="p-4 rounded-lg bg-white border border-gray-200">
-            <p className="text-xs font-medium text-gray-500 mb-4">Daily call volume (last 30 days)</p>
+          <div className="p-4 rounded-lg bg-card border border-border">
+            <p className="text-xs font-medium text-muted-foreground mb-4">Daily call volume (last 30 days)</p>
             <ResponsiveContainer width="100%" height={180}>
               <BarChart data={chartData} barSize={8} barGap={3}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#71717a" }} tickLine={false} axisLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: "#71717a" }} tickLine={false} axisLine={false} width={24} />
-                <Tooltip content={<CustomTooltip />} />
-                <Legend wrapperStyle={{ fontSize: 11, color: "#71717a" }} />
-                <Bar dataKey="Completed" fill="#a1a1aa" radius={[3, 3, 0, 0]} />
+                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
+                <XAxis dataKey="date" tick={{ fontSize: 10, fill: tickColor }} tickLine={false} axisLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: tickColor }} tickLine={false} axisLine={false} width={24} />
+                <Tooltip content={makeCustomTooltip(tooltipBg, tooltipBorder, tooltipText, tooltipShadow)} />
+                <Legend wrapperStyle={{ fontSize: 11, color: tickColor }} />
+                <Bar dataKey="Completed" fill="#10b981" radius={[3, 3, 0, 0]} />
                 <Bar dataKey="Failed" fill="#ef4444" radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
