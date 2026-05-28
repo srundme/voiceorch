@@ -1,0 +1,322 @@
+Completely redesign my AI Voice Agent SaaS dashboard UI from scratch.
+
+DO NOT improve the current UI.
+
+REBUILD EVERYTHING with a premium aesthetic inspired by:
+
+* Cartesia AI
+* Retell AI
+* Linear
+* Vapi
+* OpenAI Platform
+* Raycast
+* Stripe Dashboard
+
+IMPORTANT:
+I want the UI to feel EXACTLY like Cartesia:
+
+* minimal
+* futuristic
+* premium
+* clean
+* AI-native
+* spacious
+* elegant
+* dark luxury aesthetic
+
+---
+
+## CORE DESIGN PHILOSOPHY
+
+The current UI feels:
+
+* cluttered
+* outdated
+* bootstrap-like
+* crowded
+* visually heavy
+* cheap
+
+The new UI should feel:
+
+* calm
+* modern
+* expensive
+* highly polished
+* minimal
+* soft
+* intelligently spaced
+
+The UI should NOT feel like:
+
+* admin template
+* CRM
+* old SaaS dashboard
+* Tailwind starter kit
+
+---
+
+## FULL LAYOUT REBUILD
+
+Create a completely new layout system.
+
+Structure:
+
+1. LEFT NAVIGATION
+
+* Ultra minimal
+* Floating dark sidebar
+* Width around 220px
+* Soft translucent background
+* Minimal icons
+* Clean spacing
+* Elegant hover states
+* Active item with soft glow
+
+2. MAIN CONTENT
+
+* More breathing room
+* Max width around 1200px
+* Large spacing between sections
+* Floating cards
+* Much less visual density
+
+3. RIGHT INSIGHTS PANEL
+
+* Floating analytics widgets
+* Sticky
+* Separate surface
+* Elegant compact cards
+
+---
+
+## COLOR SYSTEM
+
+Use EXACTLY this aesthetic:
+
+Background:
+#0B1020
+
+Sidebar:
+#0E1525
+
+Card:
+#121A2B
+
+Elevated:
+#182235
+
+Borders:
+rgba(255,255,255,0.04)
+
+Primary:
+#8B5CF6
+
+Primary Hover:
+#A78BFA
+
+Text Primary:
+#F8FAFC
+
+Text Secondary:
+#94A3B8
+
+Muted:
+#64748B
+
+Success:
+#10B981
+
+Danger:
+#EF4444
+
+WARNING:
+NO PURE BLACK.
+NO PURE WHITE.
+NO HARSH CONTRAST.
+
+Everything should feel soft and premium.
+
+---
+
+## TYPOGRAPHY
+
+Use:
+
+* Inter
+* medium weights
+* subtle hierarchy
+* more whitespace
+
+Avoid:
+
+* bold everywhere
+* excessive uppercase
+* dense labels
+
+Use:
+
+* softer text colors
+* elegant spacing
+* modern readability
+
+---
+
+## COMPONENT REDESIGN
+
+Redesign ALL:
+
+* cards
+* tabs
+* buttons
+* forms
+* charts
+* tables
+* metrics
+* assistant list
+* analytics widgets
+
+Use:
+
+* rounded-2xl
+* subtle shadows
+* layered surfaces
+* soft hover effects
+* elegant transitions
+
+---
+
+## INPUT DESIGN
+
+Current inputs are ugly.
+
+New inputs should:
+
+* feel premium
+* have translucent surfaces
+* subtle borders
+* elegant focus glow
+* softer placeholder text
+* 48px height
+* smooth animations
+
+Textareas should:
+
+* auto resize
+* elegant typography
+* larger internal padding
+
+---
+
+## TABS
+
+Current tabs look old.
+
+Create:
+
+* modern segmented tabs
+* animated active state
+* subtle underline/glow
+* minimal appearance
+
+Inspired by Linear + Cartesia.
+
+---
+
+## ASSISTANT LIST
+
+Assistant cards should:
+
+* feel like floating entities
+* compact but elegant
+* soft hover elevation
+* muted provider badges
+* cleaner status indicators
+
+NO bulky cards.
+
+---
+
+## METRICS SECTION
+
+Current metrics are terrible.
+
+Redesign completely:
+
+* modern graphs
+* thinner chart lines
+* subtle gradients
+* elegant data visualization
+* premium analytics feel
+
+Cards should look futuristic.
+
+---
+
+## RIGHT SIDEBAR WIDGETS
+
+Widgets should:
+
+* look glassy
+* compact
+* elegant
+* softly separated
+
+Include:
+
+* status
+* recent calls
+* provider stack
+* live analytics
+
+---
+
+## MOTION & INTERACTIONS
+
+Use Framer Motion.
+
+Add:
+
+* smooth fades
+* hover lift
+* tab animations
+* page transitions
+* animated charts
+* elegant micro interactions
+
+Animations should be:
+
+* subtle
+* fast
+* premium
+
+---
+
+## GLOBAL RULES
+
+Remove:
+
+* thick borders
+* bright whites
+* old dashboard styling
+* excessive shadows
+* crowded sections
+* ugly cards
+* boxy layouts
+
+Focus on:
+
+* spacing rhythm
+* premium hierarchy
+* elegant density
+* futuristic minimalism
+
+Everything should feel:
+
+* luxurious
+* AI-native
+* modern
+* polished
+* enterprise-grade
+
+Generate production-quality UI with reusable components and a scalable design system.
