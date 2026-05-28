@@ -49,6 +49,7 @@ export default function UsersList() {
               <TableHead className="font-mono text-xs text-right">Balance</TableHead>
               <TableHead className="font-mono text-xs text-right">Spent</TableHead>
               <TableHead className="font-mono text-xs text-right">Calls</TableHead>
+              <TableHead className="font-mono text-xs text-right">Minutes</TableHead>
               <TableHead className="font-mono text-xs text-right">Agents</TableHead>
               <TableHead className="font-mono text-xs text-right">Joined</TableHead>
             </TableRow>
@@ -56,19 +57,19 @@ export default function UsersList() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center h-24 text-muted-foreground animate-pulse">
+                <TableCell colSpan={7} className="text-center h-24 text-muted-foreground animate-pulse">
                   Loading users...
                 </TableCell>
               </TableRow>
             ) : isError ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center h-24 text-destructive">
+                <TableCell colSpan={7} className="text-center h-24 text-destructive">
                   Failed to load users: {(error as Error)?.message}
                 </TableCell>
               </TableRow>
             ) : filteredUsers?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center h-24 text-muted-foreground">
+                <TableCell colSpan={7} className="text-center h-24 text-muted-foreground">
                   No users found
                 </TableCell>
               </TableRow>
@@ -91,6 +92,7 @@ export default function UsersList() {
                     {formatCentsToDollars(user.totalSpentCents || 0)}
                   </TableCell>
                   <TableCell className="text-right font-mono tabular-nums">{user.callCount?.toLocaleString() || 0}</TableCell>
+                  <TableCell className="text-right font-mono tabular-nums">{Math.round((user.totalDurationSeconds ?? 0) / 60).toLocaleString()}</TableCell>
                   <TableCell className="text-right font-mono tabular-nums">{user.agentCount?.toLocaleString() || 0}</TableCell>
                   <TableCell className="text-right text-xs text-muted-foreground">
                     {user.createdAt ? format(new Date(user.createdAt), "MMM d, yyyy") : "-"}

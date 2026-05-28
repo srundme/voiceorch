@@ -60,7 +60,7 @@ router.get("/admin/users", async (req, res): Promise<void> => {
       return;
     }
 
-    const [callCounts, agentCounts, spentAmounts] = await Promise.all([
+    const [callCounts, agentCounts, spentAmounts, callDurations] = await Promise.all([
       db
         .select({ clerkId: callsTable.userId, callCount: count() })
         .from(callsTable)
@@ -87,11 +87,22 @@ router.get("/admin/users", async (req, res): Promise<void> => {
           ),
         )
         .groupBy(walletTransactionsTable.userId),
+      db
+        .select({
+          clerkId: callsTable.userId,
+          totalDurationSeconds: sql<number>`coalesce(sum(duration_seconds), 0)`,
+        })
+        .from(callsTable)
+        .where(inArray(callsTable.userId, clerkIds))
+        .groupBy(callsTable.userId),
     ]);
 
     const callCountMap = new Map(callCounts.map((r) => [r.clerkId, r.callCount]));
     const agentCountMap = new Map(agentCounts.map((r) => [r.clerkId, r.agentCount]));
     const spentMap = new Map(spentAmounts.map((r) => [r.userId, Number(r.totalSpentCents)]));
+    const durationMap = new Map(
+      callDurations.map((r) => [r.clerkId, Number(r.totalDurationSeconds)]),
+    );
 
     const result = users.map((u) => ({
       id: u.id,
@@ -103,6 +114,7 @@ router.get("/admin/users", async (req, res): Promise<void> => {
       onboardingCompleted: u.onboardingCompleted,
       callCount: callCountMap.get(u.clerkId) ?? 0,
       agentCount: agentCountMap.get(u.clerkId) ?? 0,
+      totalDurationSeconds: durationMap.get(u.clerkId) ?? 0,
       totalSpentCents: spentMap.get(u.id) ?? 0,
       createdAt: u.createdAt,
     }));
