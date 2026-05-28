@@ -19,6 +19,12 @@ let _lastNotifiedSeverity: string | null = null;
 /** Whether we've loaded persisted cooldown state from the DB yet. */
 let _cooldownStateLoaded = false;
 
+/** @internal Reset in-process cooldown state. Used in unit tests only. */
+export function __resetCooldownState(): void {
+  _lastNotifiedAt = null;
+  _lastNotifiedSeverity = null;
+}
+
 const SEVERITY_RANK: Record<string, number> = {
   info: 0,
   warning: 1,
