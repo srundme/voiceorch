@@ -29,38 +29,90 @@ router.get("/admin/voices/cartesia", requireAdmin, async (_req, res): Promise<vo
     return;
   }
 
-  try {
-    const [cartesiaRes, listedRows] = await Promise.all([
-      fetch(`${CARTESIA_BASE_URL}/voices`, {
+  const PAGE_LIMIT = 100;
+  const MAX_PAGES = 50;
+
+  async function fetchAllVoices(extraParams: Record<string, string> = {}): Promise<any[]> {
+    const collected: any[] = [];
+    let cursor: string | null = null;
+
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const url = new URL(`${CARTESIA_BASE_URL}/voices`);
+      url.searchParams.set("limit", String(PAGE_LIMIT));
+      for (const [k, v] of Object.entries(extraParams)) url.searchParams.set(k, v);
+      if (cursor) url.searchParams.set("starting_after", cursor);
+
+      const r = await fetch(url.toString(), {
         headers: {
-          "X-API-Key": cartesiaKey,
+          "X-API-Key": cartesiaKey!,
           "Cartesia-Version": CARTESIA_VERSION,
         },
-      }),
+      });
+
+      if (!r.ok) {
+        const errText = (await r.text().catch(() => "")).trim();
+        logger.warn(
+          { status: r.status, body: errText.slice(0, 300), page, params: extraParams },
+          "Cartesia voices fetch failed",
+        );
+        const snippet = errText.slice(0, 300);
+        const err = new Error(`Cartesia ${r.status}: ${snippet || r.statusText || "request failed"}`);
+        (err as any).status = 502;
+        throw err;
+      }
+
+      const raw = (await r.json()) as any;
+      const arr: any[] = Array.isArray(raw)
+        ? raw
+        : Array.isArray(raw?.data)
+          ? raw.data
+          : Array.isArray(raw?.voices)
+            ? raw.voices
+            : [];
+
+      collected.push(...arr);
+
+      // If the response isn't paginated (legacy array), stop.
+      if (Array.isArray(raw)) break;
+
+      const hasMore = Boolean(raw?.has_more);
+      const nextCursor =
+        (raw?.next_page as string | undefined) ??
+        (arr.length > 0 ? (arr[arr.length - 1]?.id as string | undefined) : undefined);
+
+      if (!hasMore || !nextCursor) break;
+      cursor = nextCursor;
+    }
+
+    return collected;
+  }
+
+  try {
+    const [allVoices, ownedVoices, listedRows] = await Promise.all([
+      fetchAllVoices(),
+      fetchAllVoices({ is_owner: "true" }),
       db.select().from(platformListedVoicesTable),
     ]);
 
-    if (!cartesiaRes.ok) {
-      const errText = (await cartesiaRes.text().catch(() => "")).trim();
-      logger.warn({ status: cartesiaRes.status, body: errText }, "Cartesia voices fetch failed");
-      const snippet = errText.slice(0, 300);
-      res.status(502).json({
-        error: `Cartesia ${cartesiaRes.status}: ${snippet || cartesiaRes.statusText || "request failed"}`,
-      });
-      return;
+    // Merge, deduplicating by id and preferring is_owner=true entries
+    const merged = new Map<string, any>();
+    for (const v of allVoices) {
+      if (v?.id) merged.set(v.id, v);
+    }
+    for (const v of ownedVoices) {
+      if (!v?.id) continue;
+      const existing = merged.get(v.id);
+      const isOwner = Boolean(v.is_owner ?? v.isOwner ?? true);
+      if (!existing || isOwner) {
+        merged.set(v.id, { ...existing, ...v, is_owner: isOwner });
+      }
     }
 
-    const raw = await cartesiaRes.json() as any;
-    // Cartesia 2026-03-01 wraps voices in { data: [...] }; older versions returned an array
-    const arr: any[] = Array.isArray(raw)
-      ? raw
-      : (Array.isArray(raw?.data) ? raw.data : (Array.isArray(raw?.voices) ? raw.voices : []));
-
     const listedSet = new Set(
-      listedRows.filter(r => r.isListed).map(r => r.voiceId)
+      listedRows.filter(r => r.isListed).map(r => r.voiceId),
     );
 
-    const voices = arr.map((v: any) => ({
+    const voices = Array.from(merged.values()).map((v: any) => ({
       id: v.id as string,
       name: (v.name ?? "") as string,
       gender: (v.gender ?? "Neutral") as string,
@@ -71,7 +123,11 @@ router.get("/admin/voices/cartesia", requireAdmin, async (_req, res): Promise<vo
     }));
 
     res.json({ voices });
-  } catch (err) {
+  } catch (err: any) {
+    if (err?.status === 502) {
+      res.status(502).json({ error: err.message });
+      return;
+    }
     logger.error({ err }, "Error in adminGetCartesiaVoices");
     res.status(500).json({ error: "Internal server error" });
   }
