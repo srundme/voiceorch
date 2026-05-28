@@ -4,7 +4,7 @@ import {
   Users, Phone, Key, Settings, Menu,
   LayoutDashboard, BarChart3, BookOpen,
   Wallet, LogOut, ChevronDown, AlertCircle, Radio, Webhook,
-  Zap, ChevronRight, CalendarDays, TrendingUp, Moon, Sun,
+  Zap, ChevronRight, CalendarDays, TrendingUp, Moon, Sun, ShieldCheck,
 } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -43,6 +43,7 @@ const NAV_SECTIONS = [
     label: "Platform",
     items: [
       { name: "Phone Numbers", href: "/app/phone-numbers", icon: Phone },
+      { name: "Verification",  href: "/app/kyc",           icon: ShieldCheck },
       { name: "Webhooks",      href: "/app/webhooks",      icon: Webhook },
       { name: "Wallet",        href: "/app/wallet",        icon: Wallet },
       { name: "Settings",      href: "/app/settings",      icon: Settings },

@@ -44,6 +44,7 @@ import SchedulingAvailabilityPage from "@/pages/scheduling/Availability";
 import SchedulingBookingDetailPage from "@/pages/scheduling/Bookings";
 import PublicBookingPage from "@/pages/book/[slug]";
 import UsagePage from "@/pages/usage";
+import KycPage from "@/pages/kyc";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -226,6 +227,7 @@ function AppRoutes() {
         <Route path="/app/settings/conferencing" component={Settings} />
         <Route path="/app/settings" component={Settings} />
         <Route path="/app/usage" component={UsagePage} />
+        <Route path="/app/kyc" component={KycPage} />
         <Route component={NotFound} />
       </Switch>
     </Layout>
