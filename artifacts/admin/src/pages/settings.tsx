@@ -14,6 +14,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Settings, Bell, Mail, Check, AlertTriangle, Slack, Send, CheckCircle2, XCircle, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
@@ -144,6 +154,7 @@ export default function PlatformSettings() {
   const [alertSlackInput, setAlertSlackInput] = useState("");
   const [alertSeverity, setAlertSeverity] = useState("warning");
   const [alertCooldownInput, setAlertCooldownInput] = useState("10");
+  const [testDialogOpen, setTestDialogOpen] = useState(false);
 
   useEffect(() => {
     if (thresholdData?.threshold != null) setThresholdInput(String(thresholdData.threshold));
@@ -294,7 +305,7 @@ export default function PlatformSettings() {
             <Button
               size="sm"
               variant="outline"
-              onClick={handleSendTestNotification}
+              onClick={() => setTestDialogOpen(true)}
               disabled={sendTestNotification.isPending}
             >
               <Send className="h-3.5 w-3.5 mr-1.5" />
@@ -507,6 +518,31 @@ export default function PlatformSettings() {
           </div>
         </CardContent>
       </Card>
+
+      <AlertDialog open={testDialogOpen} onOpenChange={setTestDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Send test notification?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will immediately dispatch a test alert to all configured channels — email
+              {alertEmailInput.trim() ? ` (${alertEmailInput.trim()})` : ""} and Slack
+              {alertSlackInput.trim() ? " webhook" : ""}. Use this to verify your notification
+              settings are working correctly.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setTestDialogOpen(false);
+                handleSendTestNotification();
+              }}
+            >
+              Send test
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
