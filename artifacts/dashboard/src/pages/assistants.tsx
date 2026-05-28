@@ -8,6 +8,7 @@ import {
   BarChart2, Clock, CheckCircle2, XCircle, BookOpen,
   AlertTriangle, Target, AlignLeft, Zap, RefreshCw, ClipboardList, X,
   PhoneForwarded, Globe, CalendarPlus, CalendarClock, CalendarX, CalendarCheck, Wrench,
+  ChevronRight, ChevronUp, GitBranch, MessageSquare, LayoutGrid, Workflow,
 } from "lucide-react";
 import { CreateAgentWizard } from "@/components/create-agent-wizard";
 import {
@@ -688,7 +689,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
 
   const { data: calls, isLoading: callsLoading } = useListCalls(
     { agentId },
-    { query: { enabled: activeTab === "logs" || activeTab === "agent", queryKey: getListCallsQueryKey({ agentId }) } }
+    { query: { enabled: activeTab === "logs" || activeTab === "overview", queryKey: getListCallsQueryKey({ agentId }) } }
   );
 
   const update          = useUpdateAgent();
@@ -859,6 +860,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
   const [agentConfig, setAgentConfig]                       = useState<AgentCfg>({});
 
   const [dirty, setDirty]                                   = useState(false);
+  const [activeDrawer, setActiveDrawer]                     = useState<string | null>(null);
 
   function mark<T>(setter: (v: T) => void) {
     return (v: T) => { setter(v); setDirty(true); };
@@ -1021,24 +1023,22 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
     ? Math.round(((agent.successfulCalls ?? 0) / agent.totalCalls) * 100)
     : 0;
 
-  const TABS = [
-    { value: "agent",     label: "Agent" },
-    { value: "llm",       label: "LLM" },
-    { value: "audio",     label: "Audio" },
-    { value: "engine",    label: "Engine" },
-    { value: "call",      label: "Call" },
-    { value: "tools",     label: "Tools" },
-    { value: "analytics", label: "Analytics" },
-    { value: "inbound",   label: "Inbound" },
-    { value: "whatsapp",  label: "WhatsApp" },
-    { value: "logs",      label: "Logs" },
-    { value: "test",      label: "Test" },
+  type NavItem = { value: string; label: string; icon: React.ComponentType<{ className?: string }> };
+  const NAV_ITEMS: NavItem[] = [
+    { value: "overview",  label: "Overview",  icon: LayoutGrid },
+    { value: "prompt",    label: "Prompt",    icon: MessageSquare },
+    { value: "voice",     label: "Voice",     icon: Mic },
+    { value: "knowledge", label: "Knowledge", icon: BookOpen },
+    { value: "tools",     label: "Tools",     icon: Wrench },
+    { value: "pipeline",  label: "Pipeline",  icon: GitBranch },
+    { value: "test",      label: "Test",      icon: PlayCircle },
+    { value: "logs",      label: "Logs",      icon: AlignLeft },
   ];
 
   return (
     <div className="flex-1 flex flex-col min-w-0 overflow-hidden animate-fade-in">
-      {/* ── Top bar ── */}
-      <div className="flex items-center gap-3 px-6 h-14 shrink-0 border-b border-border bg-background">
+      {/* ── Compact top bar ── */}
+      <div className="flex items-center gap-3 px-5 h-12 shrink-0 border-b border-border bg-background">
         <div className="flex items-center gap-3 min-w-0">
           <span className="font-semibold text-[14.5px] truncate text-foreground">{agentName || agent.name}</span>
           <span className="text-[10px] font-mono hidden sm:flex items-center px-1.5 py-0.5 rounded-md bg-elevated border border-border text-muted-foreground/60">
@@ -1046,18 +1046,27 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
           </span>
           {statusDot(agent.status)}
         </div>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="hidden sm:flex items-center gap-1.5 ml-2">
+          <span className="text-[11px] text-muted-foreground/40 tabular-nums">{agent.totalCalls ?? 0} calls</span>
+          <span className="text-[11px] text-muted-foreground/25">·</span>
+          <span className="text-[11px] text-muted-foreground/40 tabular-nums">{successRate}% ok</span>
+          {agent.avgDurationSeconds != null && <>
+            <span className="text-[11px] text-muted-foreground/25">·</span>
+            <span className="text-[11px] text-muted-foreground/40">~{agent.avgDurationSeconds}s</span>
+          </>}
+        </div>
+        <div className="ml-auto flex items-center gap-1.5">
           {dirty && (
-            <Button size="sm" className="h-8 text-xs gap-1.5 border border-border bg-elevated text-foreground hover:bg-accent transition-colors" onClick={handleSave} disabled={update.isPending}>
+            <Button size="sm" className="h-7 text-[11px] gap-1.5 border border-border bg-elevated text-foreground hover:bg-accent transition-colors" onClick={handleSave} disabled={update.isPending}>
               {update.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} Save
             </Button>
           )}
-          <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 transition-colors border-border text-muted-foreground hover:text-foreground" onClick={() => setOutboundDialogOpen(true)}>
+          <Button size="sm" variant="outline" className="h-7 text-[11px] gap-1 border-border text-muted-foreground hover:text-foreground" onClick={() => setOutboundDialogOpen(true)}>
             <PhoneOutgoing className="h-3 w-3" /> Call
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="ghost" className="h-8 w-8 p-0 transition-colors text-muted-foreground hover:text-foreground">
+              <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground">
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -1074,1855 +1083,942 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
         </div>
       </div>
 
-      {/* ── Stats row ── */}
-      <div className="flex items-center gap-2.5 px-6 py-3 shrink-0 border-b border-border bg-sidebar/50">
-        {[
-          { icon: Phone,        val: String(agent.totalCalls ?? 0),                                                  label: "calls" },
-          { icon: CheckCircle2, val: `${successRate}%`,                                                               label: "success" },
-          ...(agent.avgDurationSeconds != null ? [{ icon: Clock, val: `~${agent.avgDurationSeconds}s`, label: "avg" }] : []),
-        ].map(({ icon: Icon, val, label }) => (
-          <div key={label} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-elevated border border-border/60">
-            <Icon className="h-3 w-3 shrink-0 text-muted-foreground/50" />
-            <span className="text-[12.5px] font-semibold tabular-nums text-foreground">{val}</span>
-            <span className="text-[10.5px] text-muted-foreground/50">{label}</span>
-          </div>
-        ))}
-      </div>
+      {/* ── Secondary sidebar + workspace ── */}
 
-      {/* ── Latency bar ── */}
-      <AgentMetricsBar
-        asrProvider={agent.asrProvider}
-        llmProvider={agent.llmProvider}
-        llmModel={agent.llmModel}
-        ttsProvider={agent.ttsProvider}
-        telephonyProvider={agent.telephonyProvider}
-        avgSttLatencyMs={agent.avgSttLatencyMs}
-        avgLlmLatencyMs={agent.avgLlmLatencyMs}
-        avgTtsFirstChunkMs={agent.avgTtsFirstChunkMs}
-      />
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        {/* ── Secondary nav ── */}
+        <nav className="w-[148px] shrink-0 border-r border-border bg-sidebar flex flex-col py-2 px-2 gap-px overflow-y-auto">
+          {NAV_ITEMS.map(item => (
+            <button key={item.value} onClick={() => setActiveTab(item.value)}
+              className={
+                "flex items-center gap-2.5 px-2.5 py-[7px] rounded-lg text-[12px] font-medium transition-colors w-full text-left " +
+                (activeTab === item.value ? "bg-accent text-foreground" : "text-muted-foreground/60 hover:text-foreground hover:bg-accent/40")
+              }>
+              <item.icon className="h-3.5 w-3.5 shrink-0" />
+              {item.label}
+            </button>
+          ))}
+        </nav>
 
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-        <div className="shrink-0 overflow-x-auto border-b border-border bg-background">
-          <TabsList className="w-max min-w-full justify-start rounded-none bg-transparent px-4 h-10 gap-0">
-            {TABS.map(t => (
-              <TabsTrigger key={t.value} value={t.value}
-                className={
-                  "h-10 rounded-none border-b-2 bg-transparent px-3.5 text-[12px] font-medium shadow-none transition-colors whitespace-nowrap data-[state=active]:shadow-none " +
-                  (activeTab === t.value
-                    ? "text-foreground border-foreground/40"
-                    : "text-muted-foreground/50 border-transparent hover:text-muted-foreground")
-                }>
-                {t.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </div>
+        {/* ── Main workspace ── */}
+        <div className="flex-1 min-h-0 overflow-y-auto bg-background">
 
-        {/* ═══════════ TAB CONTENTS ═══════════ */}
-
-        {/* ── Tab 1: Agent ── */}
-        <TabsContent value="agent" className="flex-1 overflow-hidden m-0">
-          <div className="flex h-full">
-            {/* ── Left: form ── */}
-            <div className="flex-1 overflow-y-auto px-8 py-6">
-              <div className="max-w-[560px] space-y-5">
-
-                {/* Agent Name */}
-                <div>
-                  <label className="block text-[10.5px] font-semibold uppercase tracking-[0.12em] mb-2 text-muted-foreground/60">
-                    Agent Name
-                  </label>
-                  <Input value={agentName} onChange={e => { setAgentName(e.target.value); setDirty(true); }}
-                    className="h-11 text-[14px] border transition-all focus-visible:ring-0" />
-                </div>
-
-                {/* Agent Type */}
-                <div>
-                  <label className="block text-[10.5px] font-semibold uppercase tracking-[0.12em] mb-2 text-muted-foreground/60">
-                    Agent Type
-                  </label>
-                  <Select value={agentType} onValueChange={mark(setAgentType)}>
-                    <SelectTrigger className="h-11 text-[14px] border transition-all focus-visible:ring-0">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-popover border-border">
-                      <SelectItem value="general" className="text-foreground">General Purpose</SelectItem>
-                      <SelectItem value="lead_qualification" className="text-foreground">Lead Qualification</SelectItem>
-                      <SelectItem value="customer_support" className="text-foreground">Customer Support</SelectItem>
-                      <SelectItem value="appointment_booking" className="text-foreground">Appointment Booking</SelectItem>
-                      <SelectItem value="survey" className="text-foreground">Survey</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Welcome Message */}
-                <div>
-                  <label className="block text-[10.5px] font-semibold uppercase tracking-[0.12em] mb-2 text-muted-foreground/60">
-                    Welcome Message
-                  </label>
-                  <Textarea value={greetingMessage} onChange={e => { setGreetingMessage(e.target.value); setDirty(true); }}
-                    placeholder="First thing the agent says when a call connects"
-                    className="text-[14px] border resize-none min-h-[80px] leading-relaxed transition-all focus-visible:ring-0" />
-                </div>
-
-                {/* Agent Prompt */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60">
-                      Agent Prompt
-                    </label>
-                    <button type="button"
-                      className="flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-lg transition-colors border border-border bg-elevated text-muted-foreground hover:text-foreground hover:bg-accent"
-                      onClick={() => { setSystemPrompt("You are a helpful and professional AI voice assistant. Be concise, clear, and friendly in all responses."); setDirty(true); }}>
-                      <Sparkles className="h-3 w-3" /> Generate
-                    </button>
+          {/* ═══ OVERVIEW ════════════════════════════════════════════════ */}
+          {activeTab === "overview" && (
+            <div className="p-5 space-y-4 max-w-3xl">
+              <AgentMetricsBar
+                asrProvider={agent.asrProvider} llmProvider={agent.llmProvider} llmModel={agent.llmModel}
+                ttsProvider={agent.ttsProvider} telephonyProvider={agent.telephonyProvider}
+                avgSttLatencyMs={agent.avgSttLatencyMs} avgLlmLatencyMs={agent.avgLlmLatencyMs} avgTtsFirstChunkMs={agent.avgTtsFirstChunkMs}
+              />
+              <div className="grid grid-cols-2 gap-3">
+                {/* Identity card */}
+                <div className="bg-card border border-border rounded-2xl p-4 space-y-3">
+                  <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50">Identity</p>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground/60 mb-1">Name</p>
+                    <Input value={agentName} onChange={e => { setAgentName(e.target.value); setDirty(true); }} className="h-8 text-[13px] border focus-visible:ring-0" />
                   </div>
-                  <Textarea value={systemPrompt} onChange={e => { setSystemPrompt(e.target.value); setDirty(true); }}
-                    placeholder="You are a helpful AI voice assistant…"
-                    className="text-[14px] border resize-none min-h-[180px] leading-relaxed transition-all focus-visible:ring-0" />
-                  <div className="flex flex-wrap gap-2 mt-3">
-                    <span className="text-[11px] self-center text-muted-foreground/50">Insert variable:</span>
-                    {[
-                      { var: "{caller_salutation}", tip: "sir / ma'am — requires Gender Detection in Engine tab", color: "zinc" },
-                      { var: "{caller_number}",     tip: "Caller's phone number",                                color: "zinc"    },
-                      { var: "{agent_name}",         tip: "This agent's name",                                   color: "zinc"},
-                      { var: "{date}",               tip: "Current date",                                        color: "zinc"  },
-                    ].map(chip => (
-                      <button
-                        key={chip.var}
-                        type="button"
-                        title={chip.tip}
-                        onClick={() => { setSystemPrompt(p => p + " " + chip.var); setDirty(true); }}
-                        className={`text-[11px] rounded-lg border px-2.5 py-1 font-mono transition-all ${
-                          chip.color === "zinc" ? "bg-muted border-border text-muted-foreground hover:border-border" :
-                          chip.color === "zinc"    ? "bg-zinc-950/50 border-zinc-700/40 text-zinc-300 hover:border-zinc-600/60" :
-                          chip.color === "zinc"? "bg-zinc-950/50 border-zinc-700/40 text-zinc-300 hover:border-zinc-600/60" :
-                                                    "bg-zinc-950/50 border-zinc-700/40 text-zinc-300 hover:border-zinc-600/60"
-                        }`}
-                      >
-                        {chip.var}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Webhook URL */}
-                <div>
-                  <label className="block text-[10.5px] font-semibold uppercase tracking-[0.12em] mb-2 text-muted-foreground/60">
-                    Webhook URL <span className="normal-case font-normal text-muted-foreground/30">(optional)</span>
-                  </label>
-                  <Input value={webhookUrl} onChange={e => { setWebhookUrl(e.target.value); setDirty(true); }}
-                    placeholder="https://your-server.com/webhook"
-                    className="h-11 text-[14px] border transition-all focus-visible:ring-0" />
-                  <p className="text-[11px] mt-1.5 text-muted-foreground/50">Fires a POST with call summary JSON after each call ends.</p>
-                </div>
-
-                {/* Knowledge Base */}
-                <div>
-                  <label className="block text-[10.5px] font-semibold uppercase tracking-[0.12em] mb-2 text-muted-foreground/60">
-                    Knowledge Base
-                  </label>
-                  <Select value={knowledgeBaseId?.toString() ?? "none"} onValueChange={v => { setKnowledgeBaseId(v === "none" ? null : parseInt(v)); setDirty(true); }}>
-                    <SelectTrigger className="h-11 text-[14px] border transition-all focus-visible:ring-0">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-popover border-border">
-                      <SelectItem value="none" className="text-muted-foreground">— None —</SelectItem>
-                      {(kbs ?? []).map(kb => <SelectItem key={kb.id} value={kb.id.toString()} className="text-foreground">{kb.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-[11px] mt-1.5 text-muted-foreground/50">Relevant chunks are injected into the system prompt on every call.</p>
-                </div>
-              </div>
-            </div>
-
-            {/* ── Right: analytics panel ── */}
-            <div className="w-[264px] shrink-0 overflow-y-auto p-4 space-y-3 border-l border-border bg-sidebar/40">
-
-              {/* Agent Status card */}
-              <div className="rounded-2xl p-4 space-y-3 bg-card border border-border">
-                <div className="flex items-center justify-between">
-                  <span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50">Agent Status</span>
-                  <span className={`flex items-center gap-1.5 text-[11px] font-semibold ${agent.status === "active" ? "text-foreground" : "text-muted-foreground/60"}`}>
-                    <span className={`h-1.5 w-1.5 rounded-full ${agent.status === "active" ? "bg-foreground/25" : "bg-foreground/08"}`} />
-                    {agent.status === "active" ? "Active" : "Inactive"}
-                  </span>
-                </div>
-                <div className="space-y-2.5">
-                  {[
-                    { label: "Total calls",  value: String(agent.totalCalls ?? 0) },
-                    { label: "Success rate", value: `${successRate}%` },
-                    { label: "Avg duration", value: agent.avgDurationSeconds != null ? `~${agent.avgDurationSeconds}s` : "—" },
-                  ].map(row => (
-                    <div key={row.label}>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-[11px] text-muted-foreground/60">{row.label}</span>
-                        <span className="text-[12px] font-semibold tabular-nums text-foreground/70">{row.value}</span>
-                      </div>
-                      {row.label === "Success rate" && (
-                        <div className="h-1 rounded-full overflow-hidden bg-elevated">
-                          <div className="h-full rounded-full transition-all bg-foreground/25" style={{ width: `${successRate}%` }} />
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Provider Stack card */}
-              <div className="rounded-2xl p-4 space-y-3 bg-card border border-border">
-                <span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50">Provider Stack</span>
-                <div className="space-y-1">
-                  {[
-                    { label: "ASR",       value: agent.asrProvider },
-                    { label: "LLM",       value: agent.llmProvider },
-                    { label: "TTS",       value: agent.ttsProvider },
-                    { label: "Telephony", value: agent.telephonyProvider },
-                  ].map(row => (
-                    <div key={row.label} className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-elevated/50">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50">{row.label}</span>
-                      <span className="text-[12px] font-medium capitalize text-foreground/60">{row.value ?? "—"}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Recent Calls card */}
-              <div className="rounded-2xl p-4 space-y-3 bg-card border border-border">
-                <span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50">Recent Calls</span>
-                {callsLoading ? (
-                  <div className="space-y-2">
-                    {[1,2,3].map(i => <div key={i} className="h-8 rounded-lg animate-pulse bg-elevated" />)}
-                  </div>
-                ) : !calls?.length ? (
-                  <p className="text-[12px] italic text-muted-foreground/30">No calls yet</p>
-                ) : (
-                  <div className="space-y-1">
-                    {calls.slice(0, 5).map(call => (
-                      <div key={call.id} className="flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg bg-elevated/40">
-                        <span className="text-[11px] font-mono truncate flex-1 text-muted-foreground/60">
-                          {call.fromNumber ?? `#${call.id}`}
-                        </span>
-                        <span className={`text-[10px] font-semibold shrink-0 px-1.5 py-0.5 rounded border ${
-                          call.status === "completed" ? "text-foreground/60 bg-foreground/[0.05] border-foreground/[0.07]" :
-                          call.status === "failed"    ? "text-muted-foreground/60 bg-transparent border-border" :
-                                                        "text-muted-foreground/40 bg-transparent border-border/50"
-                        }`}>
-                          {call.status === "completed" ? "OK" : call.status === "failed" ? "Fail" : "—"}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </TabsContent>
-
-        {/* ── Tab 2: LLM ── */}
-        <TabsContent value="llm" className="flex-1 overflow-y-auto m-0 px-5 py-4">
-          <div className="max-w-2xl space-y-5">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-muted border border-border rounded-xl p-3.5 space-y-2">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Provider</p>
-                <Select value={llmProvider} onValueChange={v => { mark(setLlmProvider)(v); setLlmModel(LLM_MODELS[v]?.[0]?.value ?? ""); }}>
-                  <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-card border-border">
-                    {LLM_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="bg-muted border border-border rounded-xl p-3.5 space-y-2">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Model</p>
-                {llmModelOptions.length > 0
-                  ? <Select value={llmModel} onValueChange={mark(setLlmModel)}>
-                      <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
-                      <SelectContent className="bg-card border-border">
-                        {llmModelOptions.map(m => <SelectItem key={m.value} value={m.value} className="text-foreground text-xs">{m.label}</SelectItem>)}
+                  <div>
+                    <p className="text-[10px] text-muted-foreground/60 mb-1">Type</p>
+                    <Select value={agentType} onValueChange={mark(setAgentType)}>
+                      <SelectTrigger className="h-8 text-xs border"><SelectValue /></SelectTrigger>
+                      <SelectContent className="bg-popover border-border">
+                        {[["general","General Purpose"],["lead_qualification","Lead Qualification"],["customer_support","Customer Support"],["appointment_booking","Appointment Booking"],["survey","Survey"]].map(([v,l]) => (
+                          <SelectItem key={v} value={v} className="text-foreground text-xs">{l}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
-                  : <Input value={llmModel} onChange={e => { setLlmModel(e.target.value); setDirty(true); }} placeholder="Model name"
-                      className="h-7 text-xs bg-card border-border text-foreground" />
-                }
-              </div>
-            </div>
-            <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-5">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Sampling Parameters</p>
-              <SliderRow label="Temperature" desc="Randomness — higher = more creative" value={temperature} onChange={v => { setTemperature(v); setDirty(true); }} min={0} max={2} step={0.01} />
-              <SliderRow label="Max Tokens" desc="Maximum tokens in the LLM response" value={cfg.maxTokens ?? 200} onChange={v => setCfg({ maxTokens: v })} min={50} max={2000} step={10} />
-              <ToggleRow label="Request JSON Response" desc="Force model to output structured JSON" checked={cfg.requestJsonResponse ?? false} onChange={v => setCfg({ requestJsonResponse: v })} />
-            </div>
-            <div className="bg-muted border border-border/40 rounded-xl overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Guardrail Routes</p>
-                <button type="button" onClick={() => setCfg({ guardrailRoutes: [...(cfg.guardrailRoutes ?? []), { name: "", scoreThreshold: 0.8, utterances: "", response: "" }] })}
-                  className="text-[11px] text-foreground hover:text-zinc-300 flex items-center gap-1">
-                  <Plus className="h-3 w-3" /> Add Route
-                </button>
-              </div>
-              {!(cfg.guardrailRoutes?.length) ? (
-                <p className="text-[11px] text-muted-foreground px-4 py-3">No guardrail routes. Add routes to intercept specific user intents.</p>
-              ) : (
-                <div className="divide-y divide-border">
-                  {cfg.guardrailRoutes!.map((route, i) => (
-                    <div key={i} className="px-4 py-3 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <input value={route.name} onChange={e => { const r = [...cfg.guardrailRoutes!]; r[i] = { ...r[i]!, name: e.target.value }; setCfg({ guardrailRoutes: r }); }}
-                          placeholder="Route name" className="flex-1 h-7 rounded-md bg-card border border-border text-foreground text-xs px-2.5 placeholder:text-muted-foreground focus:outline-none focus:border-[#ACADB1]" />
-                        <button type="button" onClick={() => setCfg({ guardrailRoutes: cfg.guardrailRoutes!.filter((_, j) => j !== i) })} className="text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
-                      </div>
-                      <SliderRow label={`Score threshold: ${route.scoreThreshold.toFixed(2)}`} value={route.scoreThreshold}
-                        onChange={v => { const r = [...cfg.guardrailRoutes!]; r[i] = { ...r[i]!, scoreThreshold: v }; setCfg({ guardrailRoutes: r }); }} min={0} max={1} step={0.01} />
-                      <textarea value={route.utterances} onChange={e => { const r = [...cfg.guardrailRoutes!]; r[i] = { ...r[i]!, utterances: e.target.value }; setCfg({ guardrailRoutes: r }); }}
-                        placeholder="Sample utterances (one per line)" rows={2}
-                        className="w-full rounded-md bg-card border border-border text-foreground text-xs px-2.5 py-1.5 placeholder:text-muted-foreground focus:outline-none focus:border-[#ACADB1] resize-none" />
-                      <input value={route.response} onChange={e => { const r = [...cfg.guardrailRoutes!]; r[i] = { ...r[i]!, response: e.target.value }; setCfg({ guardrailRoutes: r }); }}
-                        placeholder="Response to send when triggered"
-                        className="w-full h-7 rounded-md bg-card border border-border text-foreground text-xs px-2.5 placeholder:text-muted-foreground focus:outline-none focus:border-[#ACADB1]" />
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </TabsContent>
-
-        {/* ── Tab 3: Audio ── */}
-        <TabsContent value="audio" className="flex-1 overflow-y-auto m-0 px-5 py-4">
-          <div className="max-w-2xl space-y-5">
-            {(() => {
-              const effectiveSecondary: string[] = cfg.secondaryLanguages
-                ?? (cfg.secondaryLanguage ? [cfg.secondaryLanguage] : []);
-              const displaySecondary: string[] = effectiveSecondary.length >= 2
-                ? effectiveSecondary.slice(0, 2)
-                : effectiveSecondary.length === 1
-                  ? [effectiveSecondary[0]]
-                  : [""];
-              const hasTwoSlots = displaySecondary.length === 2;
-              const cols = hasTwoSlots ? "grid-cols-3" : "grid-cols-2";
-
-              function updateSecondary(index: number, value: string) {
-                const next = [...displaySecondary];
-                next[index] = value === "none" ? "" : value;
-                const filtered = next.filter(Boolean);
-                setCfg({
-                  secondaryLanguages: filtered,
-                  secondaryLanguage: filtered[0] ?? undefined,
-                });
-              }
-
-              return (
-                <div className={`grid ${cols} gap-3`}>
-                  <div className="bg-muted border border-border rounded-xl p-3.5 space-y-2">
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Primary Language</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground/60 mb-1">Language</p>
                     <Select value={asrLanguage} onValueChange={mark(setAsrLanguage)}>
-                      <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="h-8 text-xs border"><SelectValue /></SelectTrigger>
                       <SelectContent className="bg-card border-border max-h-60">
                         {LANGUAGES.map(l => <SelectItem key={l.value} value={l.value} className="text-foreground text-xs">{l.label}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
-                  {displaySecondary.map((lang, idx) => (
-                    <div key={idx} className="bg-muted border border-border rounded-xl p-3.5 space-y-2">
-                      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                        {hasTwoSlots ? `Secondary Language ${idx + 1}` : "Secondary Language"}
-                      </p>
-                      <Select value={lang || "none"} onValueChange={v => updateSecondary(idx, v)}>
-                        <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
-                        <SelectContent className="bg-card border-border max-h-60">
-                          <SelectItem value="none" className="text-muted-foreground text-xs">— None —</SelectItem>
-                          {LANGUAGES.map(l => <SelectItem key={l.value} value={l.value} className="text-foreground text-xs">{l.label}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  ))}
                 </div>
-              );
-            })()}
-            <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-4">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Transcriber</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Provider</p>
-                  <Select value={asrProvider} onValueChange={v => { mark(setAsrProvider)(v); setAsrModel(ASR_MODELS[v]?.[0]?.value ?? ""); }}>
-                    <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
-                    <SelectContent className="bg-card border-border">
-                      {ASR_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Model</p>
-                  {asrModelOptions.length > 0
-                    ? <Select value={asrModel} onValueChange={mark(setAsrModel)}>
-                        <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
-                        <SelectContent className="bg-card border-border">
-                          {asrModelOptions.map(m => <SelectItem key={m.value} value={m.value} className="text-foreground text-xs">{m.label}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    : <Input value={asrModel} onChange={e => { setAsrModel(e.target.value); setDirty(true); }} placeholder="Model name"
-                        className="h-7 text-xs bg-card border-border text-foreground" />
-                  }
-                </div>
-              </div>
-              <SliderRow label="Confidence Threshold" desc="Discard transcripts below this score" value={asrConfidenceThreshold}
-                onChange={v => { setAsrConfidenceThreshold(v); setDirty(true); }} min={0} max={1} step={0.01} />
-              <SliderRow label="End-of-Turn Timeout" desc="Max wait after speech before finishing a turn" value={asrEndOfTurnTimeout}
-                onChange={v => { setAsrEndOfTurnTimeout(v); setDirty(true); }} min={500} max={10000} step={100} unit="ms" />
-              <ToggleRow label="Background Denoising" desc="Filter background noise from the caller's audio" checked={asrBackgroundDenoising}
-                onChange={v => { setAsrBackgroundDenoising(v); setDirty(true); }} />
-              <ToggleRow label="Auto Fallback" desc="Automatically pick a backup STT provider if primary fails" checked={asrAutoFallback}
-                onChange={v => { setAsrAutoFallback(v); setDirty(true); }} />
-              <div>
-                <p className="text-xs text-muted-foreground mb-1.5">Smart Endpointing</p>
-                <div className="flex border border-border rounded-lg p-0.5 bg-card w-fit">
-                  {(["off", "vapi", "livekit"] as const).map(opt => (
-                    <button key={opt} type="button" onClick={() => { setAsrSmartEndpointing(opt); setDirty(true); }}
-                      className={`text-xs h-7 px-4 rounded-md transition-colors ${asrSmartEndpointing === opt ? "bg-muted text-foreground font-semibold" : "text-muted-foreground hover:text-foreground"}`}>
-                      {opt === "off" ? "Off" : opt === "vapi" ? "VAPI" : "LiveKit"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Keyterms</p>
-                <Textarea value={asrKeyterms} onChange={e => { setAsrKeyterms(e.target.value); setDirty(true); }}
-                  placeholder="e.g. SnapServe, API, webhook" rows={2}
-                  className="bg-card border-border text-foreground text-xs resize-none placeholder:text-muted-foreground" />
-              </div>
-            </div>
-            <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-4">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Synthesizer</p>
-
-              {ttsProvider === "cartesia" ? (
-                <div className="space-y-3">
-                  {/* Provider row */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Provider</p>
-                      <Select value={ttsProvider} onValueChange={v => { mark(setTtsProvider)(v); setTtsModel(v === "cartesia" ? "sonic-2" : (TTS_MODELS[v]?.[0]?.value ?? "")); setTtsVoice(""); }}>
-                        <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
-                        <SelectContent className="bg-card border-border">
-                          {TTS_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Model</p>
-                      <Select value={ttsModel || "sonic-2"} onValueChange={v => { setTtsModel(v); setDirty(true); }}>
-                        <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
-                        <SelectContent className="bg-card border-border">
-                          {TTS_MODELS.cartesia.map(m => <SelectItem key={m.value} value={m.value} className="text-foreground text-xs">{m.label}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  {/* Voice row with preview */}
+                {/* Brain card */}
+                <div className="bg-card border border-border rounded-2xl p-4 space-y-3">
+                  <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50">Brain</p>
                   <div>
-                    <p className="text-xs text-muted-foreground mb-1">Voice</p>
-                    <div className="flex gap-2">
-                      <Select
-                        value={ttsVoice || ARUSHI_VOICE.id}
-                        onValueChange={v => { setTtsVoice(v); setDirty(true); }}
-                      >
-                        <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground flex-1">
-                          <SelectValue placeholder={loadingCartesiaVoices ? "Loading voices…" : "Select voice"} />
-                        </SelectTrigger>
-                        <SelectContent className="bg-card border-border max-h-72">
-                          {loadingCartesiaVoices
-                            ? <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Loading…</div>
-                            : cartesiaVoices.map(v => (
-                                <SelectItem key={v.id} value={v.id} className="text-foreground text-xs">
-                                  <span className="flex items-center gap-1.5">
-                                    {v.name}
-                                    <span className="text-muted-foreground text-[10px]">· {langLabel(v.language)}</span>
-                                  </span>
-                                </SelectItem>
-                              ))
-                          }
+                    <p className="text-[10px] text-muted-foreground/60 mb-1">LLM Provider</p>
+                    <Select value={llmProvider} onValueChange={v => { mark(setLlmProvider)(v); setLlmModel(LLM_MODELS[v]?.[0]?.value ?? ""); }}>
+                      <SelectTrigger className="h-8 text-xs border"><SelectValue /></SelectTrigger>
+                      <SelectContent className="bg-card border-border">
+                        {LLM_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {llmModelOptions.length > 0 && (
+                    <div>
+                      <p className="text-[10px] text-muted-foreground/60 mb-1">Model</p>
+                      <Select value={llmModel} onValueChange={mark(setLlmModel)}>
+                        <SelectTrigger className="h-8 text-xs border"><SelectValue /></SelectTrigger>
+                        <SelectContent className="bg-card border-border">
+                          {llmModelOptions.map(m => <SelectItem key={m.value} value={m.value} className="text-foreground text-xs">{m.label}</SelectItem>)}
                         </SelectContent>
                       </Select>
-                      <button
-                        type="button"
-                        title="Preview voice"
-                        onClick={() => void previewVoice(ttsVoice || ARUSHI_VOICE.id)}
-                        className="h-7 w-7 shrink-0 flex items-center justify-center rounded-md border border-border bg-card/70 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                      >
-                        {voicePlaying === (ttsVoice || ARUSHI_VOICE.id)
-                          ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          : <Volume2 className="h-3.5 w-3.5" />
-                        }
-                      </button>
                     </div>
-                    {cartesiaVoiceSource === "fallback" && !loadingCartesiaVoices && (
-                      <p className="text-[10px] text-foreground/70 mt-1">Configure Cartesia key in Admin → Managed Keys to see all Indian voices</p>
-                    )}
-                    {ttsVoice && cartesiaVoiceSource === "cartesia" && (
-                      <p className="text-[10px] text-muted-foreground mt-1 font-mono truncate">{ttsVoice}</p>
-                    )}
-                  </div>
+                  )}
+                  <SliderRow label="Temperature" desc="Creativity" value={temperature} onChange={v => { setTemperature(v); setDirty(true); }} min={0} max={2} step={0.01} />
                 </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-3">
+                {/* Voice card */}
+                <div className="bg-card border border-border rounded-2xl p-4 space-y-3">
+                  <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50">Voice</p>
                   <div>
-                    <p className="text-xs text-muted-foreground mb-1">Provider</p>
-                    <Select value={ttsProvider} onValueChange={v => { mark(setTtsProvider)(v); setTtsModel(TTS_MODELS[v]?.[0]?.value ?? ""); setTtsVoice(""); }}>
-                      <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
+                    <p className="text-[10px] text-muted-foreground/60 mb-1">TTS Provider</p>
+                    <Select value={ttsProvider} onValueChange={v => { mark(setTtsProvider)(v); setTtsModel(v === "cartesia" ? "sonic-2" : (TTS_MODELS[v]?.[0]?.value ?? "")); setTtsVoice(""); }}>
+                      <SelectTrigger className="h-8 text-xs border"><SelectValue /></SelectTrigger>
                       <SelectContent className="bg-card border-border">
                         {TTS_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-1">Voice / Model</p>
-                    {TTS_MODELS[ttsProvider]
-                      ? <Select value={ttsModel} onValueChange={mark(setTtsModel)}>
-                          <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue placeholder="Select voice" /></SelectTrigger>
+                  {ttsProvider === "cartesia" && (
+                    <div>
+                      <p className="text-[10px] text-muted-foreground/60 mb-1">Voice</p>
+                      <div className="flex gap-1.5">
+                        <Select value={ttsVoice || ARUSHI_VOICE.id} onValueChange={v => { setTtsVoice(v); setDirty(true); }}>
+                          <SelectTrigger className="h-8 text-xs border flex-1"><SelectValue placeholder="Select voice" /></SelectTrigger>
                           <SelectContent className="bg-card border-border max-h-60">
-                            {TTS_MODELS[ttsProvider]!.map(m => <SelectItem key={m.value} value={m.value} className="text-foreground text-xs">{m.label}</SelectItem>)}
+                            {cartesiaVoices.map(v => <SelectItem key={v.id} value={v.id} className="text-foreground text-xs">{v.name}</SelectItem>)}
                           </SelectContent>
                         </Select>
-                      : <Input value={ttsModel} onChange={e => { setTtsModel(e.target.value); setDirty(true); }} placeholder="Voice / model name"
-                          className="h-7 text-xs bg-card border-border text-foreground" />
-                    }
-                  </div>
-                </div>
-              )}
-              {/* ── Auto-config banner ── */}
-              {telephony && TELEPHONY_AUDIO_DEFAULTS[telephony] ? (
-                <div className="rounded-lg bg-zinc-950/40 border border-zinc-800/50 px-3 py-2.5 flex items-start gap-2.5">
-                  <Check className="h-3.5 w-3.5 text-foreground mt-0.5 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-zinc-300 font-medium">
-                      Auto-configured for {TELEPHONY_PROVIDERS.find(p => p.value === telephony)?.label}
-                    </p>
-                    <p className="text-[11px] text-foreground mt-0.5">
-                      {TELEPHONY_AUDIO_DEFAULTS[telephony]!.label} · {TELEPHONY_AUDIO_DEFAULTS[telephony]!.note}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setAudioAdvanced(v => !v)}
-                    className="text-[11px] text-muted-foreground hover:text-foreground whitespace-nowrap shrink-0 mt-0.5"
-                  >
-                    {audioAdvanced ? "Hide advanced" : "Advanced"}
-                  </button>
-                </div>
-              ) : (
-                <div className="rounded-lg bg-card border border-border px-3 py-2.5 flex items-center justify-between">
-                  <p className="text-[11px] text-muted-foreground">Select a telephony provider above to auto-configure audio.</p>
-                  <button
-                    type="button"
-                    onClick={() => setAudioAdvanced(v => !v)}
-                    className="text-[11px] text-muted-foreground hover:text-foreground"
-                  >
-                    {audioAdvanced ? "Hide" : "Manual setup"}
-                  </button>
-                </div>
-              )}
-
-              {/* ── Advanced knobs (hidden by default) ── */}
-              {audioAdvanced && (
-                <div className="space-y-3 pt-1 border-t border-border/40">
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Sampling Rate</p>
-                      <Input type="number" value={cfg.ttsSamplingRate ?? ""} onChange={e => setCfg({ ttsSamplingRate: parseInt(e.target.value) || undefined })}
-                        placeholder="e.g. 8000" className="h-7 text-xs bg-card border-border text-foreground placeholder:text-muted-foreground" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Encoding</p>
-                      <Select value={cfg.ttsEncoding ?? "none"} onValueChange={v => setCfg({ ttsEncoding: v === "none" ? undefined : v })}>
-                        <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue placeholder="Default" /></SelectTrigger>
-                        <SelectContent className="bg-card border-border">
-                          <SelectItem value="none" className="text-muted-foreground text-xs">Default</SelectItem>
-                          <SelectItem value="pcm_s16le" className="text-foreground text-xs">PCM 16-bit LE</SelectItem>
-                          <SelectItem value="mulaw" className="text-foreground text-xs">μ-law</SelectItem>
-                          <SelectItem value="alaw" className="text-foreground text-xs">A-law</SelectItem>
-                          <SelectItem value="mp3" className="text-foreground text-xs">MP3</SelectItem>
-                          <SelectItem value="opus" className="text-foreground text-xs">Opus</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Format</p>
-                      <Select value={cfg.ttsAudioFormat ?? "none"} onValueChange={v => setCfg({ ttsAudioFormat: v === "none" ? undefined : v })}>
-                        <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue placeholder="Default" /></SelectTrigger>
-                        <SelectContent className="bg-card border-border">
-                          <SelectItem value="none" className="text-muted-foreground text-xs">Default</SelectItem>
-                          <SelectItem value="wav" className="text-foreground text-xs">WAV</SelectItem>
-                          <SelectItem value="mp3" className="text-foreground text-xs">MP3</SelectItem>
-                          <SelectItem value="ogg" className="text-foreground text-xs">OGG</SelectItem>
-                          <SelectItem value="flac" className="text-foreground text-xs">FLAC</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <ToggleRow label="Stream Audio" desc="Enable streaming output for lower latency" checked={cfg.ttsStream ?? false} onChange={v => setCfg({ ttsStream: v })} />
-                </div>
-              )}
-            </div>
-            <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-3">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Telephony</p>
-              <Select
-                value={telephony}
-                onValueChange={v => {
-                  mark(setTelephony)(v);
-                  const d = TELEPHONY_AUDIO_DEFAULTS[v];
-                  if (d) {
-                    setCfg({ ttsEncoding: d.encoding, ttsSamplingRate: d.samplingRate, ttsAudioFormat: d.format, ttsStream: d.stream });
-                    setAudioAdvanced(false);
-                  }
-                }}
-              >
-                <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
-                <SelectContent className="bg-card border-border">
-                  {TELEPHONY_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </TabsContent>
-
-        {/* ── Tab 4: Engine ── */}
-        <TabsContent value="engine" className="flex-1 overflow-y-auto m-0 px-5 py-4">
-          <div className="max-w-2xl space-y-5">
-            <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-5">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Interruption</p>
-              <SliderRow label="Words for Interruption" desc="How many user words trigger an interruption" value={cfg.wordsForInterruption ?? 2}
-                onChange={v => setCfg({ wordsForInterruption: v })} min={1} max={10} step={1} />
-              <SliderRow label="Incremental Delay" desc="Delay between LLM streaming chunks" value={cfg.incrementalDelay ?? 100}
-                onChange={v => setCfg({ incrementalDelay: v })} min={0} max={2000} step={10} unit="ms" />
-            </div>
-            <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-5">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Backchanneling</p>
-              <ToggleRow label="Backchanneling" desc={'Short acknowledgements ("mm-hmm", "I see") while the LLM is thinking'}
-                checked={backchannelingEnabled} onChange={v => { setBackchannelingEnabled(v); setDirty(true); }} />
-              {backchannelingEnabled && (
-                <>
-                  <SliderRow label="Frequency" desc="Probability of backchanneling on each turn"
-                    value={backchannelingFrequency} onChange={v => { setBackchannelingFrequency(v); setDirty(true); }} min={0} max={1} step={0.01} />
-                  <SliderRow label="Start Delay" desc="Wait before injecting backchannel audio"
-                    value={cfg.backchannelingStartDelay ?? 1.5} onChange={v => setCfg({ backchannelingStartDelay: v })} min={0} max={5} step={0.1} unit="s" />
-                </>
-              )}
-            </div>
-            <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-4">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Ambient &amp; Noise</p>
-              <ToggleRow label="Ambient Noise" desc="Play background audio to make the call feel natural"
-                checked={cfg.ambientNoiseEnabled ?? false} onChange={v => setCfg({ ambientNoiseEnabled: v })} />
-              {cfg.ambientNoiseEnabled && (
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Track</p>
-                  <Select value={cfg.ambientNoiseTrack ?? "office-ambience"} onValueChange={v => setCfg({ ambientNoiseTrack: v })}>
-                    <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
-                    <SelectContent className="bg-card border-border">
-                      {["office-ambience","cafe","coffee-shop","convention-hall","home","outdoor","restaurant"].map(t => (
-                        <SelectItem key={t} value={t} className="text-foreground text-xs capitalize">{t.replace(/-/g, " ")}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-              <ToggleRow label="Noise Cancellation" desc="Filter background noise from caller audio"
-                checked={noiseCancellationEnabled} onChange={v => { setNoiseCancellationEnabled(v); setDirty(true); }} />
-            </div>
-            {/* ── Gender Detection ── */}
-            <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-4">
-              <div className="flex items-start gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-zinc-950/60 border border-zinc-800/40 flex items-center justify-center shrink-0">
-                  <span className="text-sm font-bold text-zinc-300">G</span>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold text-foreground">Caller Gender Detection</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">
-                    Analyse the caller's voice within the first few seconds and inject <code className="bg-muted text-muted-foreground rounded px-1 py-px">{"{caller_salutation}"}</code> into your agent prompt — automatically addressing them as <em>sir</em> or <em>ma'am</em>.
-                  </p>
-                </div>
-              </div>
-              <ToggleRow
-                label="Enable Gender Detection"
-                desc="Detects vocal pitch/formants from the first speech turn and sets the salutation variable"
-                checked={cfg.genderDetectionEnabled ?? false}
-                onChange={v => setCfg({ genderDetectionEnabled: v })}
-              />
-              {cfg.genderDetectionEnabled && (
-                <>
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-1">Detection Provider</p>
-                    <Select value={cfg.genderDetectionProvider ?? "deepgram"} onValueChange={v => setCfg({ genderDetectionProvider: v })}>
-                      <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
-                      <SelectContent className="bg-card border-border">
-                        <SelectItem value="deepgram" className="text-foreground text-xs">Deepgram (voice type signal)</SelectItem>
-                        <SelectItem value="assemblyai" className="text-foreground text-xs">AssemblyAI (speaker analysis)</SelectItem>
-                        <SelectItem value="azure" className="text-foreground text-xs">Azure Speaker Recognition</SelectItem>
-                        <SelectItem value="internal" className="text-foreground text-xs">SnapServe built-in (pitch analysis)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Male salutation</p>
-                      <Input value={cfg.genderDetectionMaleSalutation ?? "sir"}
-                        onChange={e => setCfg({ genderDetectionMaleSalutation: e.target.value })}
-                        className="h-7 text-xs bg-card border-border text-foreground" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Female salutation</p>
-                      <Input value={cfg.genderDetectionFemaleSalutation ?? "ma'am"}
-                        onChange={e => setCfg({ genderDetectionFemaleSalutation: e.target.value })}
-                        className="h-7 text-xs bg-card border-border text-foreground" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Neutral / unknown</p>
-                      <Input value={cfg.genderDetectionNeutralSalutation ?? ""}
-                        onChange={e => setCfg({ genderDetectionNeutralSalutation: e.target.value })}
-                        placeholder="(skip)"
-                        className="h-7 text-xs bg-card border-border text-foreground placeholder:text-muted-foreground" />
-                    </div>
-                  </div>
-                  <div className="rounded-lg bg-zinc-950/30 border border-zinc-800/40 px-3 py-2.5 space-y-1">
-                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">How to use in your prompt</p>
-                    <p className="text-[11px] text-muted-foreground leading-relaxed">
-                      Add <code className="bg-muted text-muted-foreground rounded px-1">{"{caller_salutation}"}</code> anywhere in your Agent Prompt. At call start it will be replaced with the detected value.
-                    </p>
-                    <p className="text-[11px] text-muted-foreground italic mt-1">
-                      Example: <span className="not-italic text-muted-foreground">"Good morning, {"{caller_salutation}"}! How can I help you today?"</span>
-                    </p>
-                  </div>
-                </>
-              )}
-            </div>
-
-            <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-3">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">End Call Phrases</p>
-              <Textarea value={endCallPhrases} onChange={e => { setEndCallPhrases(e.target.value); setDirty(true); }}
-                placeholder="goodbye, bye, thanks for calling" rows={2}
-                className="bg-card border-border text-foreground text-xs resize-none placeholder:text-muted-foreground" />
-              <p className="text-[10px] text-muted-foreground">Comma-separated phrases that trigger hangup when detected.</p>
-            </div>
-          </div>
-        </TabsContent>
-
-        {/* ── Tab 5: Call ── */}
-        <TabsContent value="call" className="flex-1 overflow-y-auto m-0 px-5 py-4">
-          <div className="max-w-2xl space-y-5">
-            <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-5">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Duration &amp; Silence</p>
-              <SliderRow label="Max Call Duration" desc="Auto-terminate after this duration" value={maxDuration}
-                onChange={v => { setMaxDuration(v); setDirty(true); }} min={30} max={3600} step={30} unit="s" />
-              <SliderRow label="Hangup After Silence" desc="End call if caller is silent this long" value={silenceTimeout}
-                onChange={v => { setSilenceTimeout(v); setDirty(true); }} min={5} max={120} step={5} unit="s" />
-              <ToggleRow label="Hangup After LLM Call" desc="Hang up automatically when the LLM finishes its response"
-                checked={cfg.hangupAfterLlmCall ?? false} onChange={v => setCfg({ hangupAfterLlmCall: v })} />
-            </div>
-            <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-4">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Messages</p>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Cancellation Prompt</p>
-                <Textarea value={cfg.callCancellationPrompt ?? ""} onChange={e => setCfg({ callCancellationPrompt: e.target.value })}
-                  placeholder="What to say when cancelling the call…" rows={2}
-                  className="bg-card border-border text-foreground text-xs resize-none placeholder:text-muted-foreground" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Inactivity Message</p>
-                <Input value={inactivityMessage} onChange={e => { setInactivityMessage(e.target.value); setDirty(true); }}
-                  placeholder="Are you still there?" className="h-8 text-xs bg-card border-border text-foreground placeholder:text-muted-foreground" />
-              </div>
-            </div>
-            <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-4">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Detection (P2-B)</p>
-              <ToggleRow label="Voicemail / AMD Detection" desc="Detect answering machines on outbound calls and respond appropriately"
-                checked={cfg.voicemailDetection ?? false} onChange={v => setCfg({ voicemailDetection: v })} />
-              {cfg.voicemailDetection && (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Detection mode</p>
-                      <Select value={cfg.machineDetectionMode ?? "DetectMessageEnd"}
-                        onValueChange={v => setCfg({ machineDetectionMode: v as "Enable" | "DetectMessageEnd" })}>
-                        <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
-                        <SelectContent className="bg-card border-border">
-                          <SelectItem value="DetectMessageEnd" className="text-foreground text-xs">Wait for beep (recommended)</SelectItem>
-                          <SelectItem value="Enable" className="text-foreground text-xs">Immediate detect</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">When machine detected</p>
-                      <Select value={cfg.voicemailAction ?? "hangup"}
-                        onValueChange={v => setCfg({ voicemailAction: v as "hangup" | "leave_message" | "continue" })}>
-                        <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
-                        <SelectContent className="bg-card border-border">
-                          <SelectItem value="hangup"       className="text-foreground text-xs">Hang up</SelectItem>
-                          <SelectItem value="leave_message" className="text-foreground text-xs">Leave a message</SelectItem>
-                          <SelectItem value="continue"     className="text-foreground text-xs">Continue as human</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  {cfg.voicemailAction === "leave_message" && (
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Voicemail message</p>
-                      <Textarea value={cfg.voicemailMessage ?? ""}
-                        onChange={e => setCfg({ voicemailMessage: e.target.value })}
-                        placeholder="Hi, this is a message from [Company]. Please call us back at +1 555…"
-                        rows={2}
-                        className="bg-card border-border text-foreground text-xs resize-none placeholder:text-muted-foreground" />
+                        <button type="button" onClick={() => void previewVoice(ttsVoice || ARUSHI_VOICE.id)}
+                          className="h-8 w-8 shrink-0 flex items-center justify-center rounded-md border border-border bg-elevated hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
+                          {voicePlaying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Volume2 className="h-3.5 w-3.5" />}
+                        </button>
+                      </div>
                     </div>
                   )}
-                  <p className="text-[10px] text-muted-foreground leading-relaxed">
-                    AMD runs on outbound calls only. "Wait for beep" gives a natural pause before leaving messages.
-                  </p>
-                </>
-              )}
-            </div>
-            {/* P2-C: Call Recording */}
-            <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-4">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Recording (P2-C)</p>
-              <ToggleRow label="Record Calls" desc="Save an audio recording of every call for review and compliance"
-                checked={cfg.recordingEnabled ?? false} onChange={v => setCfg({ recordingEnabled: v })} />
-              {cfg.recordingEnabled && (
-                <div className="w-40">
-                  <p className="text-xs text-muted-foreground mb-1">Audio format</p>
-                  <Select value={cfg.recordingFormat ?? "mp3"} onValueChange={v => setCfg({ recordingFormat: v as "mp3" | "wav" })}>
-                    <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
-                    <SelectContent className="bg-card border-border">
-                      <SelectItem value="mp3" className="text-foreground text-xs">MP3 (smaller)</SelectItem>
-                      <SelectItem value="wav" className="text-foreground text-xs">WAV (lossless)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            </div>
-
-            {/* P2-D: IVR / DTMF pre-filter */}
-            <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-4">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">IVR / DTMF Pre-filter (P2-D)</p>
-              <ToggleRow label="Enable IVR Menu" desc="Play a key-press menu before connecting the caller to this AI agent"
-                checked={cfg.ivrEnabled ?? false} onChange={v => setCfg({ ivrEnabled: v })} />
-              {cfg.ivrEnabled && (
-                <>
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-1">Opening greeting</p>
-                    <Input value={cfg.ivrGreeting ?? ""}
-                      onChange={e => setCfg({ ivrGreeting: e.target.value })}
-                      placeholder="Welcome to SnapServe. Please choose from the following options."
-                      className="h-7 text-xs bg-card border-border text-foreground placeholder:text-muted-foreground" />
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-xs text-muted-foreground">Menu options</p>
-                      <button
-                        type="button"
-                        onClick={() => setCfg({ ivrOptions: [...(cfg.ivrOptions ?? []), { digit: "", label: "" }] })}
-                        className="text-[10px] bg-muted hover:bg-muted text-muted-foreground px-2 py-1 rounded-md transition-colors">
-                        + Add option
-                      </button>
-                    </div>
-                    {(cfg.ivrOptions ?? []).map((opt, idx) => (
-                      <div key={idx} className="flex gap-2 mb-1.5 items-center">
-                        <Input value={opt.digit}
-                          onChange={e => { const opts = [...(cfg.ivrOptions ?? [])]; opts[idx] = { ...opts[idx], digit: e.target.value }; setCfg({ ivrOptions: opts }); }}
-                          placeholder="1" className="h-7 w-12 text-xs text-center bg-card border-border text-foreground shrink-0" maxLength={1} />
-                        <Input value={opt.label}
-                          onChange={e => { const opts = [...(cfg.ivrOptions ?? [])]; opts[idx] = { ...opts[idx], label: e.target.value }; setCfg({ ivrOptions: opts }); }}
-                          placeholder="Sales" className="h-7 flex-1 text-xs bg-card border-border text-foreground placeholder:text-muted-foreground" />
-                        <button type="button"
-                          onClick={() => { const opts = (cfg.ivrOptions ?? []).filter((_, i) => i !== idx); setCfg({ ivrOptions: opts }); }}
-                          className="text-muted-foreground hover:text-foreground transition-colors text-xs px-1">✕</button>
-                      </div>
-                    ))}
-                    {(cfg.ivrOptions ?? []).length === 0 && (
-                      <p className="text-[10px] text-muted-foreground">No menu options yet — add at least one digit/label pair.</p>
-                    )}
-                  </div>
-                  <p className="text-[10px] text-muted-foreground leading-relaxed">
-                    The caller hears the greeting, presses a digit, and is routed to the agent assigned to that option.
-                    Unmatched digits fall through to this agent.
-                  </p>
-                </>
-              )}
-            </div>
-
-            {/* P2-E: Call Queue */}
-            <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-4">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Call Queue (P2-E)</p>
-              <ToggleRow label="Enable Call Queue" desc="Hold new callers when agent is busy instead of dropping them"
-                checked={cfg.queueEnabled ?? false} onChange={v => setCfg({ queueEnabled: v })} />
-              {cfg.queueEnabled && (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
+                  {ttsProvider && ttsProvider !== "cartesia" && TTS_MODELS[ttsProvider] && (
                     <div>
-                      <p className="text-xs text-muted-foreground mb-1">Max concurrent calls</p>
-                      <Input type="number" min={1} max={20} value={cfg.queueMaxConcurrent ?? 1}
-                        onChange={e => setCfg({ queueMaxConcurrent: parseInt(e.target.value) || 1 })}
-                        className="h-7 text-xs bg-card border-border text-foreground" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Hold loop length (sec)</p>
-                      <Input type="number" min={10} max={120} value={cfg.queueWaitSeconds ?? 30}
-                        onChange={e => setCfg({ queueWaitSeconds: parseInt(e.target.value) || 30 })}
-                        className="h-7 text-xs bg-card border-border text-foreground" />
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-1">Hold music URL <span className="text-muted-foreground">(optional — MP3 stream)</span></p>
-                    <Input value={cfg.queueHoldMusicUrl ?? ""}
-                      onChange={e => setCfg({ queueHoldMusicUrl: e.target.value })}
-                      placeholder="https://…/hold-music.mp3"
-                      className="h-7 text-xs bg-card border-border text-foreground placeholder:text-muted-foreground" />
-                  </div>
-                  <p className="text-[10px] text-muted-foreground leading-relaxed">
-                    When all {cfg.queueMaxConcurrent ?? 1} slot{(cfg.queueMaxConcurrent ?? 1) > 1 ? "s are" : " is"} occupied,
-                    inbound callers hear hold music and are retried every {cfg.queueWaitSeconds ?? 30}s.
-                  </p>
-                </>
-              )}
-            </div>
-
-            <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-4">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Scheduling</p>
-              <ToggleRow label="Scheduling Guardrails" desc="Restrict when this agent can make outbound calls"
-                checked={cfg.schedulingGuardrails ?? false} onChange={v => setCfg({ schedulingGuardrails: v })} />
-              {cfg.schedulingGuardrails && (
-                <div className="grid grid-cols-2 gap-3 pt-1">
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-1">Call Start (hour 0–23)</p>
-                    <Select value={String(cfg.callStartHour ?? 8)} onValueChange={v => setCfg({ callStartHour: parseInt(v) })}>
-                      <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
-                      <SelectContent className="bg-card border-border max-h-48">
-                        {Array.from({ length: 24 }, (_, i) => <SelectItem key={i} value={String(i)} className="text-foreground text-xs">{String(i).padStart(2, "0")}:00</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-1">Call End (hour 0–23)</p>
-                    <Select value={String(cfg.callEndHour ?? 20)} onValueChange={v => setCfg({ callEndHour: parseInt(v) })}>
-                      <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
-                      <SelectContent className="bg-card border-border max-h-48">
-                        {Array.from({ length: 24 }, (_, i) => <SelectItem key={i} value={String(i)} className="text-foreground text-xs">{String(i).padStart(2, "0")}:00</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* P2-A: Call Transfer */}
-            <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-4">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Call Transfer (P2-A)</p>
-              <ToggleRow label="Enable Call Transfer" desc="Allow this agent to transfer calls to a human or another number"
-                checked={cfg.callTransferEnabled ?? false} onChange={v => setCfg({ callTransferEnabled: v })} />
-              {cfg.callTransferEnabled && (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Transfer type</p>
-                      <Select value={cfg.callTransferType ?? "cold"} onValueChange={v => setCfg({ callTransferType: v as "warm" | "cold" })}>
-                        <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
-                        <SelectContent className="bg-card border-border">
-                          <SelectItem value="cold" className="text-foreground text-xs">Cold — immediate blind transfer</SelectItem>
-                          <SelectItem value="warm" className="text-foreground text-xs">Warm — announce then transfer</SelectItem>
+                      <p className="text-[10px] text-muted-foreground/60 mb-1">Voice / Model</p>
+                      <Select value={ttsModel} onValueChange={mark(setTtsModel)}>
+                        <SelectTrigger className="h-8 text-xs border"><SelectValue placeholder="Select voice" /></SelectTrigger>
+                        <SelectContent className="bg-card border-border max-h-60">
+                          {TTS_MODELS[ttsProvider]!.map(m => <SelectItem key={m.value} value={m.value} className="text-foreground text-xs">{m.label}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Default transfer number</p>
-                      <Input value={cfg.callTransferNumber ?? ""}
-                        onChange={e => setCfg({ callTransferNumber: e.target.value })}
-                        placeholder="+15551234567"
-                        className="h-7 text-xs bg-card border-border text-foreground placeholder:text-muted-foreground" />
-                    </div>
-                  </div>
-                  {cfg.callTransferType === "warm" && (
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Warm handoff message</p>
-                      <Input value={cfg.callTransferWarmMessage ?? ""}
-                        onChange={e => setCfg({ callTransferWarmMessage: e.target.value })}
-                        placeholder="Please hold while I connect you to an agent."
-                        className="h-7 text-xs bg-card border-border text-foreground placeholder:text-muted-foreground" />
-                    </div>
                   )}
-                  <p className="text-[10px] text-muted-foreground leading-relaxed">
-                    The agent will transfer the call when it detects an escalation intent or when triggered from Live Monitor.
-                    The LLM tool call uses the default number above unless overridden.
-                  </p>
-                </>
-              )}
-            </div>
-          </div>
-        </TabsContent>
-
-        {/* ── Tab 6: Tools ── */}
-        <TabsContent value="tools" className="flex-1 overflow-y-auto m-0 px-5 py-4">
-          <div className="max-w-2xl space-y-4">
-            {/* Add buttons */}
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => { setAgentTools(prev => [...prev, { type: "call_transfer", name: "transfer_to_human", description: "Transfer the call to a human agent when the caller requests escalation or needs specialist help.", transferTo: "", warmHandoffMessage: "" }]); setDirty(true); }}
-                className="flex items-center gap-1.5 text-xs bg-card border border-border text-foreground hover:border-border hover:bg-muted rounded-lg px-3 py-2 transition-colors"
-              >
-                <PhoneForwarded className="h-3.5 w-3.5 text-zinc-500" />
-                Add Call Transfer
-              </button>
-              <button
-                type="button"
-                onClick={() => { setAgentTools(prev => [...prev, { type: "send_sms", name: "send_sms", description: "Send a text message to the caller with a confirmation, link, or summary.", messageTemplate: "" }]); setDirty(true); }}
-                className="flex items-center gap-1.5 text-xs bg-card border border-border text-foreground hover:border-border hover:bg-muted rounded-lg px-3 py-2 transition-colors"
-              >
-                <Zap className="h-3.5 w-3.5 text-zinc-500" />
-                Add Send SMS
-              </button>
-              <button
-                type="button"
-                onClick={() => { setAgentTools(prev => [...prev, { type: "end_call", name: "end_call", description: "End the call when the conversation is complete or the caller says goodbye.", goodbyeMessage: "" }]); setDirty(true); }}
-                className="flex items-center gap-1.5 text-xs bg-card border border-border text-foreground hover:border-border hover:bg-muted rounded-lg px-3 py-2 transition-colors"
-              >
-                <PhoneOff className="h-3.5 w-3.5 text-muted-foreground" />
-                Add End Call
-              </button>
-              <button
-                type="button"
-                onClick={() => { setAgentTools(prev => [...prev, { type: "cal_com", name: "book_appointment", description: "Book an appointment on Cal.com when the caller wants to schedule a meeting.", apiKey: "", eventTypeId: 0, timezone: "UTC" }]); setDirty(true); }}
-                className="flex items-center gap-1.5 text-xs bg-card border border-border text-foreground hover:border-border hover:bg-muted rounded-lg px-3 py-2 transition-colors"
-              >
-                <Clock className="h-3.5 w-3.5 text-zinc-400" />
-                Add Cal.com
-              </button>
-              <button
-                type="button"
-                onClick={() => setBookingModal({ editIdx: null, calendarId: null, googleCalendarKey: null, eventTypeId: null, timezone: "UTC", taskName: "book_appointment", description: "Book an appointment using the platform's scheduling engine when the caller wants to schedule a meeting.", preToolMessage: "" })}
-                className="flex items-center gap-1.5 text-xs bg-card border border-border text-foreground hover:border-border hover:bg-muted rounded-lg px-3 py-2 transition-colors"
-              >
-                <CalendarPlus className="h-3.5 w-3.5 text-zinc-500" />
-                Book Appointment
-              </button>
-              <button
-                type="button"
-                onClick={() => { setAgentTools(prev => [...prev, { type: "native_check_availability", name: "check_availability", description: "Check available appointment slots when the caller asks what times are open.", eventTypeId: 0 }]); setDirty(true); }}
-                className="flex items-center gap-1.5 text-xs bg-card border border-border text-foreground hover:border-border hover:bg-muted rounded-lg px-3 py-2 transition-colors"
-              >
-                <CalendarCheck className="h-3.5 w-3.5 text-zinc-500" />
-                Calendar Availability
-              </button>
-              <button
-                type="button"
-                onClick={() => { setAgentTools(prev => [...prev, { type: "native_reschedule", name: "reschedule_appointment", description: "Reschedule an existing booking when the caller provides their booking reference and wants a new time." }]); setDirty(true); }}
-                className="flex items-center gap-1.5 text-xs bg-card border border-border text-foreground hover:border-border hover:bg-muted rounded-lg px-3 py-2 transition-colors"
-              >
-                <CalendarClock className="h-3.5 w-3.5 text-zinc-500" />
-                Reschedule Appointment
-              </button>
-              <button
-                type="button"
-                onClick={() => { setAgentTools(prev => [...prev, { type: "native_cancel", name: "cancel_appointment", description: "Cancel an existing booking when the caller provides their booking reference and wants to cancel." }]); setDirty(true); }}
-                className="flex items-center gap-1.5 text-xs bg-card border border-border text-foreground hover:border-border hover:bg-muted rounded-lg px-3 py-2 transition-colors"
-              >
-                <CalendarX className="h-3.5 w-3.5 text-zinc-500" />
-                Cancel Appointment
-              </button>
-              <button
-                type="button"
-                onClick={() => { setAgentTools(prev => [...prev, { type: "webhook", name: "custom_action", description: "Invoke this when the caller requests a specific action.", url: "", method: "POST" }]); setDirty(true); }}
-                className="flex items-center gap-1.5 text-xs bg-card border border-border text-foreground hover:border-border hover:bg-muted rounded-lg px-3 py-2 transition-colors"
-              >
-                <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
-                Add Custom Function
-              </button>
-            </div>
-
-            {/* Empty state */}
-            {agentTools.length === 0 && (
-              <div className="bg-muted border border-border/40 rounded-xl p-8 flex flex-col items-center text-center gap-2">
-                <Settings2 className="h-8 w-8 text-muted-foreground" />
-                <p className="text-sm font-medium text-muted-foreground">No tools configured</p>
-                <p className="text-xs text-muted-foreground max-w-sm">Add a call transfer or webhook tool above. The AI decides when to invoke each tool based on the conversation context and the description you provide.</p>
-              </div>
-            )}
-
-            {/* Tool cards */}
-            {agentTools.map((tool, idx) => (
-              <div key={idx} className="bg-muted border border-border/40 rounded-xl p-4 space-y-3">
-                {/* Card header */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    {tool.type === "call_transfer"   && <PhoneForwarded className="h-4 w-4 text-zinc-500" />}
-                    {tool.type === "send_sms"        && <Zap            className="h-4 w-4 text-zinc-500" />}
-                    {tool.type === "end_call"         && <PhoneOff        className="h-4 w-4 text-muted-foreground" />}
-                    {tool.type === "cal_com"          && <Clock           className="h-4 w-4 text-zinc-400" />}
-                    {tool.type === "webhook"          && <Globe           className="h-4 w-4 text-muted-foreground" />}
-                    {tool.type === "native_booking"   && <CalendarPlus    className="h-4 w-4 text-zinc-500" />}
-                    {tool.type === "native_reschedule" && <CalendarClock  className="h-4 w-4 text-zinc-500" />}
-                    {tool.type === "native_cancel"    && <CalendarX       className="h-4 w-4 text-zinc-500" />}
-                    {tool.type === "native_check_availability" && <CalendarCheck className="h-4 w-4 text-zinc-500" />}
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      {tool.type === "call_transfer"   ? "Call Transfer"
-                        : tool.type === "send_sms"       ? "Send SMS"
-                        : tool.type === "end_call"       ? "End Call"
-                        : tool.type === "cal_com"        ? "Cal.com Booking"
-                        : tool.type === "native_booking" ? "Book Appointment"
-                        : tool.type === "native_reschedule" ? "Reschedule Appointment"
-                        : tool.type === "native_cancel"  ? "Cancel Appointment"
-                        : tool.type === "native_check_availability" ? "Calendar Availability"
-                        : "Custom Function"}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => { setAgentTools(prev => prev.filter((_, i) => i !== idx)); setDirty(true); }}
-                    className="text-muted-foreground hover:text-muted-foreground transition-colors"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
                 </div>
-
-                {/* Function name (all tools) */}
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Function Name</p>
-                  <Input
-                    value={tool.name}
-                    onChange={e => { const next = [...agentTools]; next[idx] = { ...tool, name: e.target.value }; setAgentTools(next); setDirty(true); }}
-                    placeholder="snake_case_name"
-                    className="bg-card border-border text-foreground text-xs h-8"
-                  />
-                </div>
-
-                {/* Description (all tools) */}
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">
-                    Description <span className="text-muted-foreground">(tells the AI when to use this tool)</span>
-                  </p>
-                  <Textarea
-                    value={tool.description}
-                    onChange={e => { const next = [...agentTools]; next[idx] = { ...tool, description: e.target.value }; setAgentTools(next); setDirty(true); }}
-                    rows={2}
-                    className="bg-card border-border text-foreground text-xs resize-none"
-                  />
-                </div>
-
-                {/* ── Call Transfer fields ── */}
-                {tool.type === "call_transfer" && (
-                  <>
-                    <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground">Transfer To (E.164)</p>
-                      <Input
-                        value={tool.transferTo}
-                        onChange={e => { const next = [...agentTools]; next[idx] = { ...tool, transferTo: e.target.value }; setAgentTools(next); setDirty(true); }}
-                        placeholder="+12125551234"
-                        className="bg-card border-border text-foreground text-xs h-8"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground">
-                        Warm Handoff Message <span className="text-muted-foreground">(spoken before transferring, optional)</span>
-                      </p>
-                      <Textarea
-                        value={tool.warmHandoffMessage ?? ""}
-                        onChange={e => { const next = [...agentTools]; next[idx] = { ...tool, warmHandoffMessage: e.target.value }; setAgentTools(next); setDirty(true); }}
-                        rows={2}
-                        placeholder="Please hold while I connect you with a specialist…"
-                        className="bg-card border-border text-foreground text-xs resize-none placeholder:text-muted-foreground"
-                      />
-                    </div>
-                  </>
-                )}
-
-                {/* ── Send SMS fields ── */}
-                {tool.type === "send_sms" && (
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">Message Template</p>
-                    <Textarea
-                      value={tool.messageTemplate}
-                      onChange={e => { const next = [...agentTools]; next[idx] = { ...tool, messageTemplate: e.target.value }; setAgentTools(next); setDirty(true); }}
-                      rows={3}
-                      placeholder="Hi! Here's your booking confirmation: https://…"
-                      className="bg-card border-border text-foreground text-xs resize-none placeholder:text-muted-foreground"
-                    />
-                    <p className="text-[10px] text-muted-foreground">Sent to the caller's phone via your Twilio or Plivo account.</p>
-                  </div>
-                )}
-
-                {/* ── End Call fields ── */}
-                {tool.type === "end_call" && (
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">
-                      Goodbye Message <span className="text-muted-foreground">(spoken before hanging up, optional)</span>
-                    </p>
-                    <Textarea
-                      value={tool.goodbyeMessage ?? ""}
-                      onChange={e => { const next = [...agentTools]; next[idx] = { ...tool, goodbyeMessage: e.target.value }; setAgentTools(next); setDirty(true); }}
-                      rows={2}
-                      placeholder="Thank you for calling! Have a great day."
-                      className="bg-card border-border text-foreground text-xs resize-none placeholder:text-muted-foreground"
-                    />
-                  </div>
-                )}
-
-                {/* ── Cal.com fields ── */}
-                {tool.type === "cal_com" && (
-                  <>
-                    <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground">Cal.com API Key</p>
-                      <Input
-                        value={tool.apiKey}
-                        onChange={e => { const next = [...agentTools]; next[idx] = { ...tool, apiKey: e.target.value }; setAgentTools(next); setDirty(true); }}
-                        placeholder="cal_live_xxxxxxxxxxxx"
-                        type="password"
-                        className="bg-card border-border text-foreground text-xs h-8"
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground">Event Type ID</p>
-                        <Input
-                          value={tool.eventTypeId === 0 ? "" : String(tool.eventTypeId)}
-                          onChange={e => { const next = [...agentTools]; next[idx] = { ...tool, eventTypeId: parseInt(e.target.value) || 0 }; setAgentTools(next); setDirty(true); }}
-                          placeholder="123456"
-                          className="bg-card border-border text-foreground text-xs h-8"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground">Default Timezone</p>
-                        <Input
-                          value={tool.timezone ?? "UTC"}
-                          onChange={e => { const next = [...agentTools]; next[idx] = { ...tool, timezone: e.target.value }; setAgentTools(next); setDirty(true); }}
-                          placeholder="America/New_York"
-                          className="bg-card border-border text-foreground text-xs h-8"
-                        />
-                      </div>
-                    </div>
-                    <p className="text-[10px] text-muted-foreground">The AI collects the caller's name, email, and preferred time, then books the first available slot.</p>
-                  </>
-                )}
-
-                {/* ── Native Booking summary + Edit ── */}
-                {tool.type === "native_booking" && (() => {
-                  const cal = (calendars ?? []).find(c => c.id === tool.calendarId);
-                  const et  = (eventTypes ?? []).find(e => e.id === tool.eventTypeId);
-                  return (
-                    <div className="space-y-2">
-                      <div className="grid grid-cols-2 gap-3 text-xs">
-                        <div>
-                          <p className="text-muted-foreground mb-0.5">Calendar</p>
-                          <p className="text-foreground truncate">{cal?.name ?? <span className="text-muted-foreground italic">Not selected</span>}</p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground mb-0.5">Event Type</p>
-                          <p className="text-foreground truncate">
-                            {et ? `${et.name} (${et.durationMinutes} min)` : <span className="text-muted-foreground italic">Not selected</span>}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground mb-0.5">Timezone</p>
-                          <p className="text-foreground truncate">{tool.timezone || "UTC"}</p>
-                        </div>
-                        {tool.preToolMessage && (
-                          <div>
-                            <p className="text-muted-foreground mb-0.5">Pre-tool message</p>
-                            <p className="text-foreground truncate">{tool.preToolMessage}</p>
-                          </div>
-                        )}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const schedCalId = tool.calendarId ?? null;
-                          // Try to derive the Google calendar key from the linked scheduling calendar.
-                          const match = schedCalId != null
-                            ? (googleCals ?? []).find(g => g.schedulingCalendarId === schedCalId)
-                            : undefined;
-                          setBookingModal({
-                            editIdx: idx,
-                            calendarId: schedCalId,
-                            googleCalendarKey: match ? `${match.connectionId}|${match.googleCalendarId}` : null,
-                            eventTypeId: tool.eventTypeId || null,
-                            timezone: tool.timezone ?? "UTC",
-                            taskName: tool.taskName ?? tool.name,
-                            description: tool.description,
-                            preToolMessage: tool.preToolMessage ?? "",
-                          });
-                        }}
-                        className="text-xs text-foreground underline underline-offset-2 hover:text-foreground"
-                      >
-                        Edit configuration
-                      </button>
-                      {!tool.eventTypeId && (
-                        <p className="text-[10px] text-muted-foreground">⚠ Event type not selected — booking will fail at runtime.</p>
-                      )}
-                    </div>
-                  );
-                })()}
-
-                {/* ── Native Reschedule fields ── */}
-                {tool.type === "native_reschedule" && (
-                  <p className="text-[10px] text-muted-foreground">The AI will ask the caller for their booking reference ID and reschedule them to the next available slot.</p>
-                )}
-
-                {/* ── Native Cancel fields ── */}
-                {tool.type === "native_cancel" && (
-                  <p className="text-[10px] text-muted-foreground">The AI will ask the caller for their booking reference ID and cancel the appointment.</p>
-                )}
-
-                {/* ── Calendar Availability fields ── */}
-                {tool.type === "native_check_availability" && (
-                  <>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground">Calendar</p>
-                        <Select
-                          value={tool.calendarId ? String(tool.calendarId) : ""}
-                          onValueChange={v => { const next = [...agentTools]; next[idx] = { ...tool, calendarId: parseInt(v) || undefined, eventTypeId: 0 }; setAgentTools(next); setDirty(true); }}
-                        >
-                          <SelectTrigger className="bg-card border-border text-foreground text-xs h-8">
-                            <SelectValue placeholder="Select calendar…" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {(calendars ?? []).map(c => (
-                              <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
-                            ))}
-                            {(calendars ?? []).length === 0 && (
-                              <SelectItem value="0" disabled>No calendars — create one in Scheduling</SelectItem>
-                            )}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground">Event Type</p>
-                        <Select
-                          value={tool.eventTypeId ? String(tool.eventTypeId) : ""}
-                          onValueChange={v => { const next = [...agentTools]; next[idx] = { ...tool, eventTypeId: parseInt(v) || 0 }; setAgentTools(next); setDirty(true); }}
-                          disabled={!tool.calendarId}
-                        >
-                          <SelectTrigger className="bg-card border-border text-foreground text-xs h-8">
-                            <SelectValue placeholder={tool.calendarId ? "Select event type…" : "Pick a calendar first"} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {(eventTypes ?? []).filter(et => !tool.calendarId || et.calendarId === tool.calendarId).map(et => (
-                              <SelectItem key={et.id} value={String(et.id)}>
-                                {et.name} ({et.durationMinutes} min)
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    <p className="text-[10px] text-muted-foreground">The AI returns up to 5 available slots so the caller can pick one before booking.</p>
-                    {!tool.eventTypeId && (
-                      <p className="text-[10px] text-muted-foreground">⚠ Event type not selected — availability checks will fail at runtime.</p>
-                    )}
-                  </>
-                )}
-
-                {/* ── Webhook fields ── */}
-                {tool.type === "webhook" && (
-                  <>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground">Endpoint URL</p>
-                        <Input
-                          value={tool.url}
-                          onChange={e => { const next = [...agentTools]; next[idx] = { ...tool, url: e.target.value }; setAgentTools(next); setDirty(true); }}
-                          placeholder="https://your-api.com/webhook"
-                          className="bg-card border-border text-foreground text-xs h-8"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground">HTTP Method</p>
-                        <Select value={tool.method} onValueChange={v => { const next = [...agentTools]; next[idx] = { ...tool, method: v as "GET" | "POST" }; setAgentTools(next); setDirty(true); }}>
-                          <SelectTrigger className="bg-card border-border text-foreground text-xs h-8">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="GET">GET</SelectItem>
-                            <SelectItem value="POST">POST</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground">
-                        Secret <span className="text-muted-foreground">(sent as X-Webhook-Secret header, optional)</span>
-                      </p>
-                      <Input
-                        value={tool.secret ?? ""}
-                        onChange={e => { const next = [...agentTools]; next[idx] = { ...tool, secret: e.target.value }; setAgentTools(next); setDirty(true); }}
-                        placeholder="optional-shared-secret"
-                        type="password"
-                        className="bg-card border-border text-foreground text-xs h-8"
-                      />
-                    </div>
-                  </>
-                )}
-              </div>
-            ))}
-
-            {agentTools.length > 0 && (
-              <p className="text-[11px] text-muted-foreground px-1">
-                The AI automatically decides when to invoke each tool based on the conversation context and the description you provide.
-              </p>
-            )}
-          </div>
-
-          {/* ── Book Appointment configuration modal ── */}
-          <Dialog open={bookingModal !== null} onOpenChange={(open) => { if (!open) setBookingModal(null); }}>
-            <DialogContent className="sm:max-w-lg">
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <CalendarPlus className="h-4 w-4 text-zinc-500" />
-                  {bookingModal?.editIdx == null ? "Add Book Appointment Tool" : "Edit Book Appointment Tool"}
-                </DialogTitle>
-                <DialogDescription>
-                  Configure how the AI books appointments using your inbuilt calendar.
-                </DialogDescription>
-              </DialogHeader>
-
-              {bookingModal && (
-                <div className="space-y-3 py-1">
-                  {/* Calendar — lists Google sub-calendars across all connected Google accounts */}
-                  <div className="space-y-1">
-                    <Label className="text-xs">Calendar <span className="text-foreground">*</span></Label>
-                    <Select
-                      value={bookingModal.googleCalendarKey ?? ""}
-                      onValueChange={(v) => {
-                        const entry = (googleCals ?? []).find(g => `${g.connectionId}|${g.googleCalendarId}` === v);
-                        setBookingModal({
-                          ...bookingModal,
-                          googleCalendarKey: v,
-                          calendarId: entry?.schedulingCalendarId ?? null,
-                          eventTypeId: null,
-                        });
-                      }}
-                      disabled={googleCalsLoading}
-                    >
-                      <SelectTrigger className="h-9 text-sm">
-                        <SelectValue placeholder={googleCalsLoading ? "Loading Google calendars…" : "Select a Google calendar…"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(() => {
-                          const cals = googleCals ?? [];
-                          if (!googleCalsLoading && cals.length === 0) {
-                            return (
-                              <SelectItem value="__none" disabled>
-                                No Google calendars — connect a Google account in Scheduling → Calendar settings
-                              </SelectItem>
-                            );
-                          }
-                          // Group by connection email
-                          const byEmail = new Map<string, GoogleCalEntry[]>();
-                          for (const c of cals) {
-                            const arr = byEmail.get(c.connectionEmail) ?? [];
-                            arr.push(c);
-                            byEmail.set(c.connectionEmail, arr);
-                          }
-                          return Array.from(byEmail.entries()).map(([email, items]) => (
-                            <div key={email}>
-                              <div className="px-2 py-1 text-[10px] uppercase tracking-wider text-muted-foreground">{email}</div>
-                              {items.map(c => {
-                                const key = `${c.connectionId}|${c.googleCalendarId}`;
-                                return (
-                                  <SelectItem key={key} value={key}>
-                                    {c.summary}{c.primary ? " (Primary)" : ""}
-                                    {c.schedulingCalendarId == null ? " — not linked" : ""}
-                                  </SelectItem>
-                                );
-                              })}
-                            </div>
-                          ));
-                        })()}
-                      </SelectContent>
-                    </Select>
-                    {bookingModal.googleCalendarKey && bookingModal.calendarId == null && (
-                      <p className="text-[10px] text-amber-600 dark:text-amber-400">
-                        This Google calendar isn't linked to a scheduling calendar yet. Go to Scheduling → Calendars to link it before saving.
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Event Type — cascades from calendar */}
-                  <div className="space-y-1">
-                    <Label className="text-xs">Event Type <span className="text-foreground">*</span></Label>
-                    <Select
-                      value={bookingModal.eventTypeId ? String(bookingModal.eventTypeId) : ""}
-                      onValueChange={(v) => setBookingModal({ ...bookingModal, eventTypeId: parseInt(v) || null })}
-                      disabled={!bookingModal.calendarId || modalEventTypesLoading}
-                    >
-                      <SelectTrigger className="h-9 text-sm">
-                        <SelectValue placeholder={
-                          !bookingModal.calendarId ? "Pick a calendar first"
-                          : modalEventTypesLoading ? "Loading event types…"
-                          : "Select an event type…"
-                        } />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(modalEventTypes ?? []).map((et) => (
-                          <SelectItem key={et.id} value={String(et.id)}>{et.name} ({et.durationMinutes} min)</SelectItem>
-                        ))}
-                        {bookingModal.calendarId && !modalEventTypesLoading && (modalEventTypes ?? []).length === 0 && (
-                          <SelectItem value="__none" disabled>No event types for this calendar</SelectItem>
-                        )}
+                {/* Knowledge card */}
+                <div className="bg-card border border-border rounded-2xl p-4 space-y-3">
+                  <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50">Knowledge</p>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground/60 mb-1">Knowledge Base</p>
+                    <Select value={knowledgeBaseId?.toString() ?? "none"} onValueChange={v => { setKnowledgeBaseId(v === "none" ? null : parseInt(v)); setDirty(true); }}>
+                      <SelectTrigger className="h-8 text-xs border"><SelectValue /></SelectTrigger>
+                      <SelectContent className="bg-popover border-border">
+                        <SelectItem value="none" className="text-muted-foreground text-xs">— None —</SelectItem>
+                        {(kbs ?? []).map(kb => <SelectItem key={kb.id} value={kb.id.toString()} className="text-foreground text-xs">{kb.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
-
-                  {/* Timezone */}
-                  <div className="space-y-1">
-                    <Label className="text-xs">Timezone</Label>
-                    <Select value={bookingModal.timezone} onValueChange={(v) => setBookingModal({ ...bookingModal, timezone: v })}>
-                      <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {["UTC", "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "Europe/London", "Europe/Paris", "Asia/Kolkata", "Asia/Singapore", "Asia/Tokyo", "Australia/Sydney"].map((tz) => (
-                          <SelectItem key={tz} value={tz}>{tz}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground/60 mb-1">Webhook URL</p>
+                    <Input value={webhookUrl} onChange={e => { setWebhookUrl(e.target.value); setDirty(true); }} placeholder="https://…/webhook" className="h-8 text-xs border" />
                   </div>
-
-                  {/* Task Name */}
-                  <div className="space-y-1">
-                    <Label className="text-xs">Task Name</Label>
-                    <Input
-                      value={bookingModal.taskName}
-                      onChange={(e) => setBookingModal({ ...bookingModal, taskName: e.target.value })}
-                      placeholder="book_appointment"
-                      className="h-9 text-sm"
-                    />
-                    <p className="text-[10px] text-muted-foreground">Function name exposed to the AI (snake_case recommended).</p>
-                  </div>
-
-                  {/* Description */}
-                  <div className="space-y-1">
-                    <Label className="text-xs">Description</Label>
-                    <Textarea
-                      value={bookingModal.description}
-                      onChange={(e) => setBookingModal({ ...bookingModal, description: e.target.value })}
-                      rows={2}
-                      placeholder="Tells the AI when to call this tool."
-                      className="text-sm resize-none"
-                    />
-                  </div>
-
-                  {/* Pre-tool message */}
-                  <div className="space-y-1">
-                    <Label className="text-xs">Pre-tool Message</Label>
-                    <Input
-                      value={bookingModal.preToolMessage}
-                      onChange={(e) => setBookingModal({ ...bookingModal, preToolMessage: e.target.value })}
-                      placeholder="e.g. Sure, let me book that for you…"
-                      className="h-9 text-sm"
-                    />
-                    <p className="text-[10px] text-muted-foreground">Hint for the AI to say before completing the booking (optional).</p>
+                  <div className="flex items-center justify-between pt-1 border-t border-border/40">
+                    <span className="text-[11px] text-muted-foreground/50">{agentTools.length} tool{agentTools.length !== 1 ? "s" : ""}</span>
+                    <button onClick={() => setActiveTab("tools")} className="text-[11px] text-foreground/50 hover:text-foreground underline underline-offset-2 transition-colors">Manage →</button>
                   </div>
                 </div>
-              )}
-
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setBookingModal(null)}>Cancel</Button>
-                <Button
-                  onClick={() => {
-                    if (!bookingModal) return;
-                    if (!bookingModal.calendarId) { toast({ title: "Calendar is required", variant: "destructive" }); return; }
-                    if (!bookingModal.eventTypeId) { toast({ title: "Event type is required", variant: "destructive" }); return; }
-                    const taskName = (bookingModal.taskName || "book_appointment").trim();
-                    const next: AgentToolLocal = {
-                      type: "native_booking",
-                      name: taskName,
-                      description: bookingModal.description || "Book an appointment when the caller wants to schedule a meeting.",
-                      eventTypeId: bookingModal.eventTypeId,
-                      calendarId: bookingModal.calendarId,
-                      timezone: bookingModal.timezone,
-                      taskName,
-                      preToolMessage: bookingModal.preToolMessage || undefined,
-                    };
-                    setAgentTools(prev => {
-                      if (bookingModal.editIdx == null) return [...prev, next];
-                      const copy = [...prev];
-                      copy[bookingModal.editIdx] = next;
-                      return copy;
-                    });
-                    setDirty(true);
-                    setBookingModal(null);
-                    toast({ title: bookingModal.editIdx == null ? "Booking tool added" : "Booking tool updated" });
-                  }}
-                >
-                  Save Configuration
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </TabsContent>
-
-        {/* ── Tab 7: Analytics ── */}
-        <TabsContent value="analytics" className="flex-1 overflow-y-auto m-0 px-5 py-4">
-          <div className="max-w-2xl space-y-5">
-            <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-4">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Summarization</p>
-              <ToggleRow label="Auto-Summarize Calls" desc="Generate a summary of each call transcript after the call ends"
-                checked={cfg.summarizationEnabled ?? false} onChange={v => setCfg({ summarizationEnabled: v })} />
-              {cfg.summarizationEnabled && (
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Summarization Prompt</p>
-                  <Textarea value={cfg.summarizationPrompt ?? ""} onChange={e => setCfg({ summarizationPrompt: e.target.value })}
-                    placeholder="Summarize the key points, next steps, and any issues raised…" rows={4}
-                    className="bg-card border-border text-foreground text-xs resize-none placeholder:text-muted-foreground" />
-                </div>
-              )}
-            </div>
-            <div className="bg-muted border border-border/40 rounded-xl overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-                <div className="flex items-center gap-2">
-                  <ClipboardList className="h-3.5 w-3.5 text-foreground" />
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Disposition Fields</p>
-                </div>
-                <button type="button" onClick={() => { setDispositionSchema(prev => [...prev, { key: "", label: "", type: "text", required: false, options: "" }]); setDirty(true); }}
-                  className="text-[11px] text-foreground hover:text-zinc-300 flex items-center gap-1">
-                  <Plus className="h-3 w-3" /> Add Field
-                </button>
               </div>
-              {dispositionSchema.length === 0 ? (
-                <p className="text-[11px] text-muted-foreground px-4 py-3">No fields defined. Fields are extracted from call transcripts by the LLM after each call.</p>
-              ) : (
-                <div className="divide-y divide-border">
-                  {dispositionSchema.map((field, i) => (
-                    <div key={i} className="px-4 py-3 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <input value={field.key} onChange={e => { const n = [...dispositionSchema]; n[i] = { ...n[i]!, key: e.target.value }; setDispositionSchema(n); setDirty(true); }}
-                          placeholder="key_name" className="flex-1 h-7 rounded-md bg-card border border-border text-foreground text-xs px-2.5 placeholder:text-muted-foreground focus:outline-none focus:border-[#ACADB1]" />
-                        <input value={field.label} onChange={e => { const n = [...dispositionSchema]; n[i] = { ...n[i]!, label: e.target.value }; setDispositionSchema(n); setDirty(true); }}
-                          placeholder="Display Label" className="flex-1 h-7 rounded-md bg-card border border-border text-foreground text-xs px-2.5 placeholder:text-muted-foreground focus:outline-none focus:border-[#ACADB1]" />
-                        <Select value={field.type} onValueChange={v => { const n = [...dispositionSchema]; n[i] = { ...n[i]!, type: v }; setDispositionSchema(n); setDirty(true); }}>
-                          <SelectTrigger className="h-7 w-24 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
-                          <SelectContent className="bg-card border-border">
-                            <SelectItem value="text" className="text-foreground text-xs">Text</SelectItem>
-                            <SelectItem value="number" className="text-foreground text-xs">Number</SelectItem>
-                            <SelectItem value="boolean" className="text-foreground text-xs">Yes / No</SelectItem>
-                            <SelectItem value="choice" className="text-foreground text-xs">Choice</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <button type="button" onClick={() => { setDispositionSchema(prev => prev.filter((_, j) => j !== i)); setDirty(true); }} className="text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
+              {/* Mini pipeline */}
+              <div className="bg-card border border-border rounded-2xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50">Pipeline</p>
+                  <button onClick={() => setActiveTab("pipeline")} className="text-[11px] text-foreground/50 hover:text-foreground underline underline-offset-2 transition-colors">Configure →</button>
+                </div>
+                <div className="flex items-center gap-2 overflow-x-auto">
+                  {([
+                    { label: "Caller",    sub: "",                 icon: Phone },
+                    { label: "STT",       sub: asrProvider || "—", icon: Mic },
+                    { label: "LLM",       sub: llmProvider || "—", icon: Sparkles },
+                    { label: "TTS",       sub: ttsProvider || "—", icon: Volume2 },
+                    { label: "Telephony", sub: telephony || "—",   icon: PhoneOutgoing },
+                  ] as { label: string; sub: string; icon: React.ComponentType<{ className?: string }> }[]).map((node, i, arr) => (
+                    <React.Fragment key={node.label}>
+                      <div className="flex flex-col items-center gap-1 shrink-0">
+                        <div className="h-9 w-9 rounded-xl bg-elevated border border-border flex items-center justify-center">
+                          <node.icon className="h-4 w-4 text-muted-foreground/40" />
+                        </div>
+                        <p className="text-[9px] font-semibold text-muted-foreground/50 uppercase tracking-wide">{node.label}</p>
+                        {node.sub && <p className="text-[9px] text-muted-foreground/40 capitalize">{node.sub}</p>}
                       </div>
-                      {field.type === "choice" && (
-                        <input value={field.options ?? ""} onChange={e => { const n = [...dispositionSchema]; n[i] = { ...n[i]!, options: e.target.value }; setDispositionSchema(n); setDirty(true); }}
-                          placeholder="Options: resolved, escalated, callback"
-                          className="w-full h-7 rounded-md bg-card border border-border text-foreground text-xs px-2.5 placeholder:text-muted-foreground focus:outline-none focus:border-[#ACADB1]" />
-                      )}
+                      {i < arr.length - 1 && <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/15 shrink-0" />}
+                    </React.Fragment>
+                  ))}
+                </div>
+              </div>
+              {/* Recent calls */}
+              {calls && calls.length > 0 && (
+                <div className="bg-card border border-border rounded-2xl p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50">Recent Calls</p>
+                    <button onClick={() => setActiveTab("logs")} className="text-[11px] text-foreground/50 hover:text-foreground underline underline-offset-2 transition-colors">All logs →</button>
+                  </div>
+                  {calls.slice(0, 4).map(call => (
+                    <div key={call.id} className="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-elevated/40">
+                      <span className="text-[11px] font-mono truncate flex-1 text-muted-foreground/60">{call.fromNumber ?? `#${call.id}`}</span>
+                      <span className={`text-[10px] font-semibold shrink-0 px-1.5 py-0.5 rounded border ${
+                        call.status === "completed" ? "text-foreground/60 bg-foreground/[0.05] border-foreground/[0.07]" :
+                        call.status === "failed"    ? "text-muted-foreground/60 bg-transparent border-border" :
+                                                      "text-muted-foreground/40 bg-transparent border-border/50"
+                      }`}>{call.status === "completed" ? "OK" : call.status === "failed" ? "Fail" : "—"}</span>
                     </div>
                   ))}
                 </div>
               )}
             </div>
-          </div>
-        </TabsContent>
+          )}
 
-        {/* ── Tab 8: Inbound ── */}
-        <TabsContent value="inbound" className="flex-1 overflow-y-auto m-0 px-5 py-4">
-          <div className="max-w-2xl space-y-5">
-            <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-5">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Call Limits</p>
-              <SliderRow label="Inbound Limit" desc="Max concurrent inbound calls (−1 = unlimited)" value={cfg.inboundLimit ?? -1}
-                onChange={v => setCfg({ inboundLimit: v })} min={-1} max={50} step={1} />
-              <ToggleRow label="Disallow Unknown Numbers" desc="Reject calls from numbers not on the whitelist"
-                checked={cfg.disallowUnknownNumbers ?? false} onChange={v => setCfg({ disallowUnknownNumbers: v })} />
-              {cfg.disallowUnknownNumbers && (
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Whitelist Numbers</p>
-                  <Textarea value={cfg.whitelistNumbers ?? ""} onChange={e => setCfg({ whitelistNumbers: e.target.value })}
-                    placeholder="+1234567890, +0987654321" rows={2}
-                    className="bg-card border-border text-foreground text-xs resize-none placeholder:text-muted-foreground" />
-                  <p className="text-[10px] text-muted-foreground mt-1">Comma-separated E.164 numbers.</p>
+          {/* ═══ PROMPT ════════════════════════════════════════════════ */}
+          {activeTab === "prompt" && (
+            <div className="p-6 max-w-2xl space-y-5">
+              <div>
+                <label className="block text-[10.5px] font-semibold uppercase tracking-[0.12em] mb-2 text-muted-foreground/60">Welcome Message</label>
+                <Textarea value={greetingMessage} onChange={e => { setGreetingMessage(e.target.value); setDirty(true); }}
+                  placeholder="First thing the agent says when a call connects"
+                  className="text-[14px] border resize-none min-h-[72px] leading-relaxed focus-visible:ring-0" />
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60">Agent Prompt</label>
+                  <button type="button"
+                    className="flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-lg transition-colors border border-border bg-elevated text-muted-foreground hover:text-foreground hover:bg-accent"
+                    onClick={() => { setSystemPrompt("You are a helpful and professional AI voice assistant. Be concise, clear, and friendly in all responses."); setDirty(true); }}>
+                    <Sparkles className="h-3 w-3" /> Generate
+                  </button>
                 </div>
-              )}
+                <Textarea value={systemPrompt} onChange={e => { setSystemPrompt(e.target.value); setDirty(true); }}
+                  placeholder="You are a helpful AI voice assistant…"
+                  className="text-[14px] border resize-none min-h-[280px] leading-relaxed focus-visible:ring-0" />
+                <div className="flex flex-wrap gap-2 mt-3">
+                  <span className="text-[11px] self-center text-muted-foreground/50">Variables:</span>
+                  {[
+                    { var: "{caller_salutation}", tip: "sir / ma'am — requires Gender Detection in Pipeline" },
+                    { var: "{caller_number}",     tip: "Caller's phone number" },
+                    { var: "{agent_name}",        tip: "This agent's name" },
+                    { var: "{date}",              tip: "Current date" },
+                  ].map(chip => (
+                    <button key={chip.var} type="button" title={chip.tip}
+                      onClick={() => { setSystemPrompt(p => p + " " + chip.var); setDirty(true); }}
+                      className="text-[11px] rounded-lg border border-border px-2.5 py-1 font-mono transition-colors bg-muted text-muted-foreground hover:text-foreground hover:border-muted-foreground/40">
+                      {chip.var}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
-            <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-4">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Call Memory / RAG</p>
-              <ToggleRow label="Enable Call Memory" desc="Ingest call data into a RAG source for context-aware responses"
-                checked={cfg.callMemoryEnabled ?? false} onChange={v => setCfg({ callMemoryEnabled: v })} />
-              {cfg.callMemoryEnabled && (
-                <>
+          )}
+
+          {/* ═══ VOICE ══════════════════════════════════════════════════ */}
+          {activeTab === "voice" && (
+            <div className="px-5 py-4 max-w-2xl space-y-5">
+              {/* ASR */}
+              <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-4">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Transcriber (ASR)</p>
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <p className="text-xs text-muted-foreground mb-1">Source Type</p>
-                    <Select value={cfg.callMemorySourceType ?? "api"} onValueChange={v => setCfg({ callMemorySourceType: v })}>
+                    <p className="text-xs text-muted-foreground mb-1">Provider</p>
+                    <Select value={asrProvider} onValueChange={v => { mark(setAsrProvider)(v); setAsrModel(ASR_MODELS[v]?.[0]?.value ?? ""); }}>
                       <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
-                      <SelectContent className="bg-card border-border">
-                        <SelectItem value="api" className="text-foreground text-xs">REST API</SelectItem>
-                        <SelectItem value="s3" className="text-foreground text-xs">Amazon S3</SelectItem>
-                        <SelectItem value="gcs" className="text-foreground text-xs">Google Cloud Storage</SelectItem>
-                        <SelectItem value="database" className="text-foreground text-xs">Database</SelectItem>
-                      </SelectContent>
+                      <SelectContent className="bg-card border-border">{ASR_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground mb-1">Source URL</p>
-                    <Input value={cfg.callMemorySourceUrl ?? ""} onChange={e => setCfg({ callMemorySourceUrl: e.target.value })}
-                      placeholder="https://api.your-rag.com/ingest" className="h-7 text-xs bg-card border-border text-foreground placeholder:text-muted-foreground" />
+                    <p className="text-xs text-muted-foreground mb-1">Model</p>
+                    {asrModelOptions.length > 0
+                      ? <Select value={asrModel} onValueChange={mark(setAsrModel)}><SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger><SelectContent className="bg-card border-border">{asrModelOptions.map(m => <SelectItem key={m.value} value={m.value} className="text-foreground text-xs">{m.label}</SelectItem>)}</SelectContent></Select>
+                      : <Input value={asrModel} onChange={e => { setAsrModel(e.target.value); setDirty(true); }} placeholder="Model name" className="h-7 text-xs bg-card border-border text-foreground" />}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Language</p>
+                  <Select value={asrLanguage} onValueChange={mark(setAsrLanguage)}>
+                    <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-card border-border max-h-60">{LANGUAGES.map(l => <SelectItem key={l.value} value={l.value} className="text-foreground text-xs">{l.label}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <SliderRow label="Confidence Threshold" desc="Discard transcripts below this score" value={asrConfidenceThreshold} onChange={v => { setAsrConfidenceThreshold(v); setDirty(true); }} min={0} max={1} step={0.01} />
+                <SliderRow label="End-of-Turn Timeout" desc="Max wait after speech ends" value={asrEndOfTurnTimeout} onChange={v => { setAsrEndOfTurnTimeout(v); setDirty(true); }} min={500} max={10000} step={100} unit="ms" />
+                <ToggleRow label="Background Denoising" desc="Filter background noise from caller audio" checked={asrBackgroundDenoising} onChange={v => { setAsrBackgroundDenoising(v); setDirty(true); }} />
+                <ToggleRow label="Auto Fallback" desc="Switch to backup STT if primary fails" checked={asrAutoFallback} onChange={v => { setAsrAutoFallback(v); setDirty(true); }} />
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1.5">Smart Endpointing</p>
+                  <div className="flex border border-border rounded-lg p-0.5 bg-card w-fit">
+                    {(["off", "vapi", "livekit"] as const).map(opt => (
+                      <button key={opt} type="button" onClick={() => { setAsrSmartEndpointing(opt); setDirty(true); }}
+                        className={`text-xs h-7 px-4 rounded-md transition-colors ${asrSmartEndpointing === opt ? "bg-muted text-foreground font-semibold" : "text-muted-foreground hover:text-foreground"}`}>
+                        {opt === "off" ? "Off" : opt === "vapi" ? "VAPI" : "LiveKit"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Keyterms</p>
+                  <Textarea value={asrKeyterms} onChange={e => { setAsrKeyterms(e.target.value); setDirty(true); }} placeholder="e.g. SnapServe, API, webhook" rows={2} className="bg-card border-border text-foreground text-xs resize-none placeholder:text-muted-foreground" />
+                </div>
+              </div>
+              {/* TTS */}
+              <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-4">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Synthesizer (TTS)</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Provider</p>
+                    <Select value={ttsProvider} onValueChange={v => { mark(setTtsProvider)(v); setTtsModel(v === "cartesia" ? "sonic-2" : (TTS_MODELS[v]?.[0]?.value ?? "")); setTtsVoice(""); }}>
+                      <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
+                      <SelectContent className="bg-card border-border">{TTS_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}</SelectContent>
+                    </Select>
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground mb-1">Auth Token</p>
-                    <Input type="password" value={cfg.callMemoryAuthToken ?? ""} onChange={e => setCfg({ callMemoryAuthToken: e.target.value })}
-                      placeholder="Bearer token or API key" className="h-7 text-xs bg-card border-border text-foreground placeholder:text-muted-foreground" />
+                    <p className="text-xs text-muted-foreground mb-1">{ttsProvider === "cartesia" ? "Model" : "Voice / Model"}</p>
+                    {ttsProvider === "cartesia"
+                      ? <Select value={ttsModel || "sonic-2"} onValueChange={v => { setTtsModel(v); setDirty(true); }}><SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger><SelectContent className="bg-card border-border">{TTS_MODELS.cartesia.map(m => <SelectItem key={m.value} value={m.value} className="text-foreground text-xs">{m.label}</SelectItem>)}</SelectContent></Select>
+                      : TTS_MODELS[ttsProvider]
+                        ? <Select value={ttsModel} onValueChange={mark(setTtsModel)}><SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue placeholder="Select voice" /></SelectTrigger><SelectContent className="bg-card border-border max-h-60">{TTS_MODELS[ttsProvider]!.map(m => <SelectItem key={m.value} value={m.value} className="text-foreground text-xs">{m.label}</SelectItem>)}</SelectContent></Select>
+                        : <Input value={ttsModel} onChange={e => { setTtsModel(e.target.value); setDirty(true); }} placeholder="Voice / model name" className="h-7 text-xs bg-card border-border text-foreground" />}
                   </div>
-                </>
-              )}
-            </div>
-          </div>
-        </TabsContent>
-
-        {/* ── Tab 9: WhatsApp ── */}
-        <TabsContent value="whatsapp" className="flex-1 overflow-y-auto m-0 px-5 py-4">
-          <div className="max-w-2xl space-y-5">
-            <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-4">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Provider</p>
-              <Select value={cfg.whatsappProvider ?? "none"} onValueChange={v => setCfg({ whatsappProvider: v === "none" ? undefined : v })}>
-                <SelectTrigger className="h-8 text-xs bg-card border-border text-foreground"><SelectValue placeholder="Select provider" /></SelectTrigger>
-                <SelectContent className="bg-card border-border">
-                  <SelectItem value="none" className="text-muted-foreground text-xs">— Not configured —</SelectItem>
-                  <SelectItem value="aisensy" className="text-foreground text-xs">AiSensy</SelectItem>
-                  <SelectItem value="meta" className="text-foreground text-xs">Meta (Business API)</SelectItem>
-                  <SelectItem value="twilio" className="text-foreground text-xs">Twilio WhatsApp</SelectItem>
-                  <SelectItem value="360dialog" className="text-foreground text-xs">360dialog</SelectItem>
-                  <SelectItem value="wati" className="text-foreground text-xs">WATI</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {cfg.whatsappProvider && cfg.whatsappProvider !== "none" && (
-              <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-3">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Credentials</p>
-                {(cfg.whatsappProvider === "aisensy") && (
-                  <>
-                    <div><p className="text-xs text-muted-foreground mb-1">API Key</p>
-                      <Input type="password" value={cfg.whatsappCredentials?.["apiKey"] ?? ""} onChange={e => setCfg({ whatsappCredentials: { ...cfg.whatsappCredentials, apiKey: e.target.value } })}
-                        placeholder="AiSensy API key" className="h-7 text-xs bg-card border-border text-foreground" />
+                </div>
+                {ttsProvider === "cartesia" && (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Voice</p>
+                    <div className="flex gap-2">
+                      <Select value={ttsVoice || ARUSHI_VOICE.id} onValueChange={v => { setTtsVoice(v); setDirty(true); }}>
+                        <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground flex-1"><SelectValue placeholder={loadingCartesiaVoices ? "Loading voices…" : "Select voice"} /></SelectTrigger>
+                        <SelectContent className="bg-card border-border max-h-72">
+                          {loadingCartesiaVoices ? <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Loading…</div>
+                            : cartesiaVoices.map(v => <SelectItem key={v.id} value={v.id} className="text-foreground text-xs">{v.name} · {langLabel(v.language)}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <button type="button" onClick={() => void previewVoice(ttsVoice || ARUSHI_VOICE.id)}
+                        className="h-7 w-7 shrink-0 flex items-center justify-center rounded-md border border-border bg-card/70 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
+                        {voicePlaying === (ttsVoice || ARUSHI_VOICE.id) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Volume2 className="h-3.5 w-3.5" />}
+                      </button>
                     </div>
-                    <div><p className="text-xs text-muted-foreground mb-1">Campaign Name</p>
-                      <Input value={cfg.whatsappCredentials?.["campaignName"] ?? ""} onChange={e => setCfg({ whatsappCredentials: { ...cfg.whatsappCredentials, campaignName: e.target.value } })}
-                        placeholder="Campaign name" className="h-7 text-xs bg-card border-border text-foreground" />
-                    </div>
-                  </>
+                  </div>
                 )}
-                {cfg.whatsappProvider === "meta" && (
-                  <>
-                    <div><p className="text-xs text-muted-foreground mb-1">Access Token</p>
-                      <Input type="password" value={cfg.whatsappCredentials?.["accessToken"] ?? ""} onChange={e => setCfg({ whatsappCredentials: { ...cfg.whatsappCredentials, accessToken: e.target.value } })}
-                        placeholder="Meta API access token" className="h-7 text-xs bg-card border-border text-foreground" />
+                {(() => {
+                  const d = TELEPHONY_AUDIO_DEFAULTS[telephony];
+                  if (!d) return null;
+                  return (
+                    <div className="rounded-lg bg-zinc-950/40 border border-zinc-800/50 px-3 py-2.5 flex items-start gap-2.5">
+                      <Check className="h-3.5 w-3.5 text-foreground mt-0.5 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-zinc-300 font-medium">Auto-configured for {TELEPHONY_PROVIDERS.find(p => p.value === telephony)?.label}</p>
+                        <p className="text-[11px] text-foreground/70 mt-0.5">{d.label} · {d.note}</p>
+                      </div>
+                      <button type="button" onClick={() => setAudioAdvanced(v => !v)} className="text-[11px] text-muted-foreground hover:text-foreground whitespace-nowrap shrink-0 mt-0.5">
+                        {audioAdvanced ? "Hide" : "Advanced"}
+                      </button>
                     </div>
-                    <div><p className="text-xs text-muted-foreground mb-1">Phone Number ID</p>
-                      <Input value={cfg.whatsappCredentials?.["phoneNumberId"] ?? ""} onChange={e => setCfg({ whatsappCredentials: { ...cfg.whatsappCredentials, phoneNumberId: e.target.value } })}
-                        placeholder="e.g. 123456789012345" className="h-7 text-xs bg-card border-border text-foreground" />
+                  );
+                })()}
+                {audioAdvanced && (
+                  <div className="space-y-3 pt-1 border-t border-border/40">
+                    <div className="grid grid-cols-3 gap-3">
+                      <div><p className="text-xs text-muted-foreground mb-1">Sampling Rate</p><Input type="number" value={cfg.ttsSamplingRate ?? ""} onChange={e => setCfg({ ttsSamplingRate: parseInt(e.target.value) || undefined })} placeholder="e.g. 8000" className="h-7 text-xs bg-card border-border text-foreground placeholder:text-muted-foreground" /></div>
+                      <div><p className="text-xs text-muted-foreground mb-1">Encoding</p>
+                        <Select value={cfg.ttsEncoding ?? "none"} onValueChange={v => setCfg({ ttsEncoding: v === "none" ? undefined : v })}>
+                          <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue placeholder="Default" /></SelectTrigger>
+                          <SelectContent className="bg-card border-border">
+                            {[["none","Default"],["pcm_s16le","PCM 16-bit"],["mulaw","μ-law"],["alaw","A-law"],["mp3","MP3"],["opus","Opus"]].map(([v,l]) => <SelectItem key={v} value={v} className="text-foreground text-xs">{l}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div><p className="text-xs text-muted-foreground mb-1">Format</p>
+                        <Select value={cfg.ttsAudioFormat ?? "none"} onValueChange={v => setCfg({ ttsAudioFormat: v === "none" ? undefined : v })}>
+                          <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue placeholder="Default" /></SelectTrigger>
+                          <SelectContent className="bg-card border-border">
+                            {[["none","Default"],["wav","WAV"],["mp3","MP3"],["ogg","OGG"],["flac","FLAC"]].map(([v,l]) => <SelectItem key={v} value={v} className="text-foreground text-xs">{l}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
-                  </>
-                )}
-                {["twilio","360dialog","wati"].includes(cfg.whatsappProvider) && (
-                  <>
-                    <div><p className="text-xs text-muted-foreground mb-1">API Key / SID</p>
-                      <Input type="password" value={cfg.whatsappCredentials?.["apiKey"] ?? ""} onChange={e => setCfg({ whatsappCredentials: { ...cfg.whatsappCredentials, apiKey: e.target.value } })}
-                        placeholder="API key or account SID" className="h-7 text-xs bg-card border-border text-foreground" />
-                    </div>
-                    <div><p className="text-xs text-muted-foreground mb-1">API Secret / Auth Token</p>
-                      <Input type="password" value={cfg.whatsappCredentials?.["apiSecret"] ?? ""} onChange={e => setCfg({ whatsappCredentials: { ...cfg.whatsappCredentials, apiSecret: e.target.value } })}
-                        placeholder="API secret or auth token" className="h-7 text-xs bg-card border-border text-foreground" />
-                    </div>
-                  </>
+                    <ToggleRow label="Stream Audio" desc="Enable streaming output for lower latency" checked={cfg.ttsStream ?? false} onChange={v => setCfg({ ttsStream: v })} />
+                  </div>
                 )}
               </div>
-            )}
-            {cfg.whatsappProvider && cfg.whatsappProvider !== "none" && (
-              <div className="bg-muted border border-border/40 rounded-xl overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Outcome Messages</p>
-                  <button type="button" onClick={() => setCfg({ whatsappOutcomeMessages: [...(cfg.whatsappOutcomeMessages ?? []), { outcome: "interested", templateName: "", language: "en" }] })}
-                    className="text-[11px] text-foreground hover:text-zinc-300 flex items-center gap-1"><Plus className="h-3 w-3" /> Add</button>
+              {/* Telephony */}
+              <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-3">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Telephony</p>
+                <Select value={telephony} onValueChange={v => {
+                  mark(setTelephony)(v);
+                  const d = TELEPHONY_AUDIO_DEFAULTS[v];
+                  if (d) setCfg({ ttsSamplingRate: d.samplingRate, ttsEncoding: d.encoding, ttsAudioFormat: d.format });
+                }}>
+                  <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue placeholder="Select provider" /></SelectTrigger>
+                  <SelectContent className="bg-card border-border">{TELEPHONY_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+
+          {/* ═══ KNOWLEDGE ══════════════════════════════════════════════ */}
+          {activeTab === "knowledge" && (
+            <div className="p-6 max-w-xl space-y-5">
+              <div>
+                <label className="block text-[10.5px] font-semibold uppercase tracking-[0.12em] mb-2 text-muted-foreground/60">Knowledge Base</label>
+                <Select value={knowledgeBaseId?.toString() ?? "none"} onValueChange={v => { setKnowledgeBaseId(v === "none" ? null : parseInt(v)); setDirty(true); }}>
+                  <SelectTrigger className="h-11 text-[14px] border"><SelectValue /></SelectTrigger>
+                  <SelectContent className="bg-popover border-border">
+                    <SelectItem value="none" className="text-muted-foreground">— None —</SelectItem>
+                    {(kbs ?? []).map(kb => <SelectItem key={kb.id} value={kb.id.toString()} className="text-foreground">{kb.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] mt-1.5 text-muted-foreground/50">Relevant chunks are injected into the system prompt on every call.</p>
+              </div>
+              <div>
+                <label className="block text-[10.5px] font-semibold uppercase tracking-[0.12em] mb-2 text-muted-foreground/60">Webhook URL <span className="normal-case font-normal text-muted-foreground/30">(optional)</span></label>
+                <Input value={webhookUrl} onChange={e => { setWebhookUrl(e.target.value); setDirty(true); }} placeholder="https://your-server.com/webhook" className="h-11 text-[14px] border focus-visible:ring-0" />
+                <p className="text-[11px] mt-1.5 text-muted-foreground/50">Fires a POST with call summary JSON after each call ends.</p>
+              </div>
+            </div>
+          )}
+
+          {/* ═══ TOOLS ══════════════════════════════════════════════════ */}
+          {activeTab === "tools" && (
+            <div className="px-5 py-4 max-w-2xl space-y-4">
+              <div className="flex flex-wrap gap-2">
+                {([
+                  { label: "Call Transfer",    icon: PhoneForwarded, onClick: () => { setAgentTools(prev => [...prev, { type: "call_transfer" as const, name: "transfer_to_human", description: "Transfer the call to a human agent when the caller requests escalation.", transferTo: "", warmHandoffMessage: "" }]); setDirty(true); } },
+                  { label: "Send SMS",         icon: Zap,            onClick: () => { setAgentTools(prev => [...prev, { type: "send_sms" as const, name: "send_sms", description: "Send a text message to the caller with a confirmation or link.", messageTemplate: "" }]); setDirty(true); } },
+                  { label: "End Call",         icon: PhoneOff,       onClick: () => { setAgentTools(prev => [...prev, { type: "end_call" as const, name: "end_call", description: "End the call when the conversation is complete.", goodbyeMessage: "" }]); setDirty(true); } },
+                  { label: "Cal.com",          icon: Clock,          onClick: () => { setAgentTools(prev => [...prev, { type: "cal_com" as const, name: "book_appointment", description: "Book an appointment on Cal.com when the caller wants to schedule.", apiKey: "", eventTypeId: 0, timezone: "UTC" }]); setDirty(true); } },
+                  { label: "Book Appointment", icon: CalendarPlus,   onClick: () => setBookingModal({ editIdx: null, calendarId: null, googleCalendarKey: null, eventTypeId: null, timezone: "UTC", taskName: "book_appointment", description: "Book an appointment when the caller wants to schedule a meeting.", preToolMessage: "" }) },
+                  { label: "Availability",     icon: CalendarCheck,  onClick: () => { setAgentTools(prev => [...prev, { type: "native_check_availability" as const, name: "check_availability", description: "Check available slots when the caller asks what times are open.", eventTypeId: 0 }]); setDirty(true); } },
+                  { label: "Reschedule",       icon: CalendarClock,  onClick: () => { setAgentTools(prev => [...prev, { type: "native_reschedule" as const, name: "reschedule_appointment", description: "Reschedule an existing booking when the caller provides their booking reference." }]); setDirty(true); } },
+                  { label: "Cancel Booking",   icon: CalendarX,      onClick: () => { setAgentTools(prev => [...prev, { type: "native_cancel" as const, name: "cancel_appointment", description: "Cancel an existing booking when the caller provides their booking reference." }]); setDirty(true); } },
+                  { label: "Custom Function",  icon: Wrench,         onClick: () => { setAgentTools(prev => [...prev, { type: "webhook" as const, name: "custom_action", description: "Invoke this when the caller requests a specific action.", url: "", method: "POST" as const }]); setDirty(true); } },
+                ] as { label: string; icon: React.ComponentType<{ className?: string }>; onClick: () => void }[]).map(btn => (
+                  <button key={btn.label} type="button" onClick={btn.onClick}
+                    className="flex items-center gap-1.5 text-xs bg-card border border-border text-foreground hover:bg-muted rounded-lg px-3 py-2 transition-colors">
+                    <btn.icon className="h-3.5 w-3.5 text-muted-foreground/60" /> {btn.label}
+                  </button>
+                ))}
+              </div>
+              {agentTools.length === 0 && (
+                <div className="bg-muted border border-border/40 rounded-xl p-8 flex flex-col items-center text-center gap-2">
+                  <Settings2 className="h-8 w-8 text-muted-foreground/30" />
+                  <p className="text-sm font-medium text-muted-foreground">No tools configured</p>
+                  <p className="text-xs text-muted-foreground/60 max-w-sm">Add tools above — the AI decides when to invoke each based on the conversation context and description you provide.</p>
                 </div>
-                {!(cfg.whatsappOutcomeMessages?.length) ? (
-                  <p className="text-[11px] text-muted-foreground px-4 py-3">No outcome messages configured.</p>
-                ) : (
-                  <div className="divide-y divide-border">
-                    {cfg.whatsappOutcomeMessages!.map((msg, i) => (
-                      <div key={i} className="px-4 py-3 space-y-2">
-                        <div className="flex items-center gap-2">
-                          <Select value={msg.outcome} onValueChange={v => { const m = [...cfg.whatsappOutcomeMessages!]; m[i] = { ...m[i]!, outcome: v }; setCfg({ whatsappOutcomeMessages: m }); }}>
-                            <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground w-36"><SelectValue /></SelectTrigger>
-                            <SelectContent className="bg-card border-border">
-                              <SelectItem value="interested" className="text-foreground text-xs">Interested</SelectItem>
-                              <SelectItem value="callback" className="text-foreground text-xs">Callback</SelectItem>
-                              <SelectItem value="no_answer" className="text-foreground text-xs">No Answer</SelectItem>
-                              <SelectItem value="not_interested" className="text-foreground text-xs">Not Interested</SelectItem>
+              )}
+              {agentTools.map((tool, idx) => (
+                <div key={idx} className="bg-muted border border-border/40 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      {tool.type === "call_transfer"            && <PhoneForwarded className="h-4 w-4 text-zinc-500" />}
+                      {tool.type === "send_sms"                 && <Zap            className="h-4 w-4 text-zinc-500" />}
+                      {tool.type === "end_call"                 && <PhoneOff       className="h-4 w-4 text-muted-foreground" />}
+                      {tool.type === "cal_com"                  && <Clock          className="h-4 w-4 text-zinc-400" />}
+                      {tool.type === "webhook"                  && <Globe          className="h-4 w-4 text-muted-foreground" />}
+                      {tool.type === "native_booking"           && <CalendarPlus   className="h-4 w-4 text-zinc-500" />}
+                      {tool.type === "native_reschedule"        && <CalendarClock  className="h-4 w-4 text-zinc-500" />}
+                      {tool.type === "native_cancel"            && <CalendarX      className="h-4 w-4 text-zinc-500" />}
+                      {tool.type === "native_check_availability" && <CalendarCheck className="h-4 w-4 text-zinc-500" />}
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        {tool.type === "call_transfer" ? "Call Transfer" : tool.type === "send_sms" ? "Send SMS" : tool.type === "end_call" ? "End Call"
+                          : tool.type === "cal_com" ? "Cal.com" : tool.type === "native_booking" ? "Book Appointment"
+                          : tool.type === "native_reschedule" ? "Reschedule" : tool.type === "native_cancel" ? "Cancel Booking"
+                          : tool.type === "native_check_availability" ? "Availability" : "Custom Function"}
+                      </span>
+                    </div>
+                    <button type="button" onClick={() => { setAgentTools(prev => prev.filter((_, i) => i !== idx)); setDirty(true); }} className="text-muted-foreground hover:text-foreground transition-colors">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">Function Name</p>
+                    <Input value={tool.name} onChange={e => { const n = [...agentTools]; n[idx] = { ...tool, name: e.target.value }; setAgentTools(n); setDirty(true); }} placeholder="snake_case_name" className="bg-card border-border text-foreground text-xs h-8" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">Description</p>
+                    <Textarea value={tool.description} onChange={e => { const n = [...agentTools]; n[idx] = { ...tool, description: e.target.value }; setAgentTools(n); setDirty(true); }} rows={2} className="bg-card border-border text-foreground text-xs resize-none" />
+                  </div>
+                  {tool.type === "call_transfer" && <>
+                    <div className="space-y-1"><p className="text-xs text-muted-foreground">Transfer To (E.164)</p><Input value={tool.transferTo} onChange={e => { const n = [...agentTools]; n[idx] = { ...tool, transferTo: e.target.value }; setAgentTools(n); setDirty(true); }} placeholder="+12125551234" className="bg-card border-border text-foreground text-xs h-8" /></div>
+                    <div className="space-y-1"><p className="text-xs text-muted-foreground">Warm Handoff Message</p><Textarea value={tool.warmHandoffMessage ?? ""} onChange={e => { const n = [...agentTools]; n[idx] = { ...tool, warmHandoffMessage: e.target.value }; setAgentTools(n); setDirty(true); }} rows={2} placeholder="Please hold while I connect you…" className="bg-card border-border text-foreground text-xs resize-none placeholder:text-muted-foreground" /></div>
+                  </>}
+                  {tool.type === "send_sms" && <div className="space-y-1"><p className="text-xs text-muted-foreground">Message Template</p><Textarea value={tool.messageTemplate} onChange={e => { const n = [...agentTools]; n[idx] = { ...tool, messageTemplate: e.target.value }; setAgentTools(n); setDirty(true); }} rows={3} placeholder="Hi! Here's your booking confirmation…" className="bg-card border-border text-foreground text-xs resize-none placeholder:text-muted-foreground" /></div>}
+                  {tool.type === "end_call" && <div className="space-y-1"><p className="text-xs text-muted-foreground">Goodbye Message</p><Textarea value={tool.goodbyeMessage ?? ""} onChange={e => { const n = [...agentTools]; n[idx] = { ...tool, goodbyeMessage: e.target.value }; setAgentTools(n); setDirty(true); }} rows={2} placeholder="Thank you for calling! Have a great day." className="bg-card border-border text-foreground text-xs resize-none placeholder:text-muted-foreground" /></div>}
+                  {tool.type === "cal_com" && <>
+                    <div className="space-y-1"><p className="text-xs text-muted-foreground">Cal.com API Key</p><Input value={tool.apiKey} onChange={e => { const n = [...agentTools]; n[idx] = { ...tool, apiKey: e.target.value }; setAgentTools(n); setDirty(true); }} placeholder="cal_live_xxxxxxxxxxxx" type="password" className="bg-card border-border text-foreground text-xs h-8" /></div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1"><p className="text-xs text-muted-foreground">Event Type ID</p><Input value={tool.eventTypeId === 0 ? "" : String(tool.eventTypeId)} onChange={e => { const n = [...agentTools]; n[idx] = { ...tool, eventTypeId: parseInt(e.target.value) || 0 }; setAgentTools(n); setDirty(true); }} placeholder="123456" className="bg-card border-border text-foreground text-xs h-8" /></div>
+                      <div className="space-y-1"><p className="text-xs text-muted-foreground">Default Timezone</p><Input value={tool.timezone ?? "UTC"} onChange={e => { const n = [...agentTools]; n[idx] = { ...tool, timezone: e.target.value }; setAgentTools(n); setDirty(true); }} placeholder="America/New_York" className="bg-card border-border text-foreground text-xs h-8" /></div>
+                    </div>
+                  </>}
+                  {tool.type === "native_booking" && (() => {
+                    const et = (eventTypes ?? []).find(e => e.id === tool.eventTypeId);
+                    return <div className="space-y-2">
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <div><p className="text-muted-foreground mb-0.5">Event Type</p><p className="text-foreground truncate">{et ? `${et.name} (${et.durationMinutes} min)` : <span className="italic text-muted-foreground">Not selected</span>}</p></div>
+                        <div><p className="text-muted-foreground mb-0.5">Timezone</p><p className="text-foreground">{tool.timezone || "UTC"}</p></div>
+                      </div>
+                      <button type="button" onClick={() => {
+                        const match = (googleCals ?? []).find(g => g.schedulingCalendarId === tool.calendarId);
+                        setBookingModal({ editIdx: idx, calendarId: tool.calendarId ?? null, googleCalendarKey: match ? `${match.connectionId}|${match.googleCalendarId}` : null, eventTypeId: tool.eventTypeId || null, timezone: tool.timezone ?? "UTC", taskName: tool.taskName ?? tool.name, description: tool.description, preToolMessage: tool.preToolMessage ?? "" });
+                      }} className="text-xs text-foreground underline underline-offset-2 hover:text-foreground">Edit configuration</button>
+                      {!tool.eventTypeId && <p className="text-[10px] text-muted-foreground">⚠ Event type not selected — booking will fail at runtime.</p>}
+                    </div>;
+                  })()}
+                  {tool.type === "native_check_availability" && (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1"><p className="text-xs text-muted-foreground">Calendar</p>
+                        <Select value={tool.calendarId ? String(tool.calendarId) : ""} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, calendarId: parseInt(v) || undefined, eventTypeId: 0 }; setAgentTools(n); setDirty(true); }}>
+                          <SelectTrigger className="bg-card border-border text-foreground text-xs h-8"><SelectValue placeholder="Select calendar…" /></SelectTrigger>
+                          <SelectContent>{(calendars ?? []).map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}{(calendars ?? []).length === 0 && <SelectItem value="0" disabled>No calendars — create one in Scheduling</SelectItem>}</SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1"><p className="text-xs text-muted-foreground">Event Type</p>
+                        <Select value={tool.eventTypeId ? String(tool.eventTypeId) : ""} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, eventTypeId: parseInt(v) || 0 }; setAgentTools(n); setDirty(true); }} disabled={!tool.calendarId}>
+                          <SelectTrigger className="bg-card border-border text-foreground text-xs h-8"><SelectValue placeholder={tool.calendarId ? "Select event type…" : "Pick a calendar first"} /></SelectTrigger>
+                          <SelectContent>{(eventTypes ?? []).filter(et => !tool.calendarId || et.calendarId === tool.calendarId).map(et => <SelectItem key={et.id} value={String(et.id)}>{et.name} ({et.durationMinutes} min)</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  )}
+                  {tool.type === "webhook" && <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1"><p className="text-xs text-muted-foreground">Endpoint URL</p><Input value={tool.url} onChange={e => { const n = [...agentTools]; n[idx] = { ...tool, url: e.target.value }; setAgentTools(n); setDirty(true); }} placeholder="https://your-api.com/webhook" className="bg-card border-border text-foreground text-xs h-8" /></div>
+                      <div className="space-y-1"><p className="text-xs text-muted-foreground">HTTP Method</p>
+                        <Select value={tool.method} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, method: v as "GET" | "POST" }; setAgentTools(n); setDirty(true); }}>
+                          <SelectTrigger className="bg-card border-border text-foreground text-xs h-8"><SelectValue /></SelectTrigger>
+                          <SelectContent><SelectItem value="GET">GET</SelectItem><SelectItem value="POST">POST</SelectItem></SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="space-y-1"><p className="text-xs text-muted-foreground">Secret (X-Webhook-Secret, optional)</p><Input value={tool.secret ?? ""} onChange={e => { const n = [...agentTools]; n[idx] = { ...tool, secret: e.target.value }; setAgentTools(n); setDirty(true); }} placeholder="optional-shared-secret" type="password" className="bg-card border-border text-foreground text-xs h-8" /></div>
+                  </>}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ═══ PIPELINE ═══════════════════════════════════════════════ */}
+          {activeTab === "pipeline" && (
+            <div className="p-6 space-y-6 max-w-3xl">
+              <div>
+                <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50 mb-4">Voice Pipeline — click a node to configure</p>
+                <div className="flex items-stretch gap-0">
+                  {([
+                    { id: "asr",       label: "Transcribe", note: "Speech → Text", sub: asrProvider || "not set",  icon: Mic },
+                    { id: "llm",       label: "Think",      note: "LLM Reasoning", sub: llmProvider ? `${llmProvider}${llmModel ? ` · ${llmModel}` : ""}` : "not set", icon: Sparkles },
+                    { id: "tts",       label: "Speak",      note: "Text → Speech", sub: ttsProvider || "not set",  icon: Volume2 },
+                    { id: "telephony", label: "Deliver",    note: "Carrier",        sub: telephony || "not set",    icon: PhoneOutgoing },
+                  ] as { id: string; label: string; note: string; sub: string; icon: React.ComponentType<{ className?: string }> }[]).map((node, i, arr) => (
+                    <React.Fragment key={node.id}>
+                      <button onClick={() => setActiveDrawer(activeDrawer === node.id ? null : node.id)}
+                        className={"flex flex-col gap-2.5 px-5 py-4 rounded-2xl border transition-all text-left min-w-[150px] " +
+                          (activeDrawer === node.id ? "bg-accent border-border shadow-sm" : "bg-card border-border hover:bg-accent/40")}>
+                        <div className="flex items-center justify-between">
+                          <div className="h-8 w-8 rounded-lg bg-elevated border border-border flex items-center justify-center">
+                            <node.icon className="h-4 w-4 text-muted-foreground/50" />
+                          </div>
+                          {activeDrawer === node.id && <ChevronUp className="h-3.5 w-3.5 text-muted-foreground/40" />}
+                        </div>
+                        <div>
+                          <p className="text-[11px] font-semibold text-foreground/80">{node.label}</p>
+                          <p className="text-[9px] text-muted-foreground/40 uppercase tracking-wide">{node.note}</p>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground/60 capitalize font-mono truncate max-w-[130px]">{node.sub}</p>
+                      </button>
+                      {i < arr.length - 1 && <div className="flex items-center px-2 shrink-0"><ChevronRight className="h-4 w-4 text-muted-foreground/15" /></div>}
+                    </React.Fragment>
+                  ))}
+                </div>
+              </div>
+              {/* Inline node drawer */}
+              {activeDrawer && (
+                <div className="bg-card border border-border rounded-2xl p-5 space-y-4 animate-fade-in">
+                  {activeDrawer === "asr" && <>
+                    <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50">ASR / Transcriber</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div><p className="text-xs text-muted-foreground mb-1">Provider</p>
+                        <Select value={asrProvider} onValueChange={v => { mark(setAsrProvider)(v); setAsrModel(ASR_MODELS[v]?.[0]?.value ?? ""); }}>
+                          <SelectTrigger className="h-7 text-xs bg-muted border-border text-foreground"><SelectValue /></SelectTrigger>
+                          <SelectContent className="bg-card border-border">{ASR_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                      <div><p className="text-xs text-muted-foreground mb-1">Model</p>
+                        {asrModelOptions.length > 0
+                          ? <Select value={asrModel} onValueChange={mark(setAsrModel)}><SelectTrigger className="h-7 text-xs bg-muted border-border text-foreground"><SelectValue /></SelectTrigger><SelectContent className="bg-card border-border">{asrModelOptions.map(m => <SelectItem key={m.value} value={m.value} className="text-foreground text-xs">{m.label}</SelectItem>)}</SelectContent></Select>
+                          : <Input value={asrModel} onChange={e => { setAsrModel(e.target.value); setDirty(true); }} placeholder="Model name" className="h-7 text-xs" />}
+                      </div>
+                    </div>
+                    <SliderRow label="Confidence Threshold" desc="Discard transcripts below this score" value={asrConfidenceThreshold} onChange={v => { setAsrConfidenceThreshold(v); setDirty(true); }} min={0} max={1} step={0.01} />
+                    <SliderRow label="End-of-Turn Timeout" desc="Max wait after speech ends" value={asrEndOfTurnTimeout} onChange={v => { setAsrEndOfTurnTimeout(v); setDirty(true); }} min={500} max={10000} step={100} unit="ms" />
+                    <ToggleRow label="Background Denoising" desc="Filter noise from caller audio" checked={asrBackgroundDenoising} onChange={v => { setAsrBackgroundDenoising(v); setDirty(true); }} />
+                    <ToggleRow label="Auto Fallback" desc="Switch to backup STT if primary fails" checked={asrAutoFallback} onChange={v => { setAsrAutoFallback(v); setDirty(true); }} />
+                  </>}
+                  {activeDrawer === "llm" && <>
+                    <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50">LLM / Brain</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div><p className="text-xs text-muted-foreground mb-1">Provider</p>
+                        <Select value={llmProvider} onValueChange={v => { mark(setLlmProvider)(v); setLlmModel(LLM_MODELS[v]?.[0]?.value ?? ""); }}>
+                          <SelectTrigger className="h-7 text-xs bg-muted border-border text-foreground"><SelectValue /></SelectTrigger>
+                          <SelectContent className="bg-card border-border">{LLM_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                      <div><p className="text-xs text-muted-foreground mb-1">Model</p>
+                        {llmModelOptions.length > 0
+                          ? <Select value={llmModel} onValueChange={mark(setLlmModel)}><SelectTrigger className="h-7 text-xs bg-muted border-border text-foreground"><SelectValue /></SelectTrigger><SelectContent className="bg-card border-border">{llmModelOptions.map(m => <SelectItem key={m.value} value={m.value} className="text-foreground text-xs">{m.label}</SelectItem>)}</SelectContent></Select>
+                          : <Input value={llmModel} onChange={e => { setLlmModel(e.target.value); setDirty(true); }} placeholder="Model name" className="h-7 text-xs" />}
+                      </div>
+                    </div>
+                    <SliderRow label="Temperature" desc="Randomness — higher = more creative" value={temperature} onChange={v => { setTemperature(v); setDirty(true); }} min={0} max={2} step={0.01} />
+                    <SliderRow label="Max Tokens" desc="Max tokens per LLM response" value={cfg.maxTokens ?? 200} onChange={v => setCfg({ maxTokens: v })} min={50} max={2000} step={10} />
+                    <ToggleRow label="Request JSON Response" desc="Force model to output structured JSON" checked={cfg.requestJsonResponse ?? false} onChange={v => setCfg({ requestJsonResponse: v })} />
+                  </>}
+                  {activeDrawer === "tts" && <>
+                    <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50">TTS / Synthesizer</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div><p className="text-xs text-muted-foreground mb-1">Provider</p>
+                        <Select value={ttsProvider} onValueChange={v => { mark(setTtsProvider)(v); setTtsModel(v === "cartesia" ? "sonic-2" : (TTS_MODELS[v]?.[0]?.value ?? "")); setTtsVoice(""); }}>
+                          <SelectTrigger className="h-7 text-xs bg-muted border-border text-foreground"><SelectValue /></SelectTrigger>
+                          <SelectContent className="bg-card border-border">{TTS_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                      <div><p className="text-xs text-muted-foreground mb-1">{ttsProvider === "cartesia" ? "Model" : "Voice / Model"}</p>
+                        {ttsProvider === "cartesia"
+                          ? <Select value={ttsModel || "sonic-2"} onValueChange={v => { setTtsModel(v); setDirty(true); }}><SelectTrigger className="h-7 text-xs bg-muted border-border text-foreground"><SelectValue /></SelectTrigger><SelectContent className="bg-card border-border">{TTS_MODELS.cartesia.map(m => <SelectItem key={m.value} value={m.value} className="text-foreground text-xs">{m.label}</SelectItem>)}</SelectContent></Select>
+                          : TTS_MODELS[ttsProvider]
+                            ? <Select value={ttsModel} onValueChange={mark(setTtsModel)}><SelectTrigger className="h-7 text-xs bg-muted border-border text-foreground"><SelectValue placeholder="Select voice" /></SelectTrigger><SelectContent className="bg-card border-border max-h-60">{TTS_MODELS[ttsProvider]!.map(m => <SelectItem key={m.value} value={m.value} className="text-foreground text-xs">{m.label}</SelectItem>)}</SelectContent></Select>
+                            : <Input value={ttsModel} onChange={e => { setTtsModel(e.target.value); setDirty(true); }} placeholder="Voice / model" className="h-7 text-xs bg-muted border-border text-foreground" />}
+                      </div>
+                    </div>
+                    {ttsProvider === "cartesia" && (
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">Voice</p>
+                        <div className="flex gap-2">
+                          <Select value={ttsVoice || ARUSHI_VOICE.id} onValueChange={v => { setTtsVoice(v); setDirty(true); }}>
+                            <SelectTrigger className="h-7 text-xs bg-muted border-border text-foreground flex-1"><SelectValue placeholder="Select voice" /></SelectTrigger>
+                            <SelectContent className="bg-card border-border max-h-72">
+                              {loadingCartesiaVoices ? <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Loading…</div>
+                                : cartesiaVoices.map(v => <SelectItem key={v.id} value={v.id} className="text-foreground text-xs">{v.name} · {langLabel(v.language)}</SelectItem>)}
                             </SelectContent>
                           </Select>
-                          <input value={msg.templateName} onChange={e => { const m = [...cfg.whatsappOutcomeMessages!]; m[i] = { ...m[i]!, templateName: e.target.value }; setCfg({ whatsappOutcomeMessages: m }); }}
-                            placeholder="Template name" className="flex-1 h-7 rounded-md bg-card border border-border text-foreground text-xs px-2.5 placeholder:text-muted-foreground focus:outline-none focus:border-[#ACADB1]" />
-                          <button type="button" onClick={() => setCfg({ whatsappOutcomeMessages: cfg.whatsappOutcomeMessages!.filter((_, j) => j !== i) })} className="text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
+                          <button type="button" onClick={() => void previewVoice(ttsVoice || ARUSHI_VOICE.id)}
+                            className="h-7 w-7 shrink-0 flex items-center justify-center rounded-md border border-border bg-card/70 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
+                            {voicePlaying === (ttsVoice || ARUSHI_VOICE.id) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Volume2 className="h-3.5 w-3.5" />}
+                          </button>
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <input value={msg.mediaUrl ?? ""} onChange={e => { const m = [...cfg.whatsappOutcomeMessages!]; m[i] = { ...m[i]!, mediaUrl: e.target.value }; setCfg({ whatsappOutcomeMessages: m }); }}
-                            placeholder="Media URL (optional)" className="h-7 rounded-md bg-card border border-border text-foreground text-xs px-2.5 placeholder:text-muted-foreground focus:outline-none focus:border-[#ACADB1]" />
-                          <input value={msg.mediaFilename ?? ""} onChange={e => { const m = [...cfg.whatsappOutcomeMessages!]; m[i] = { ...m[i]!, mediaFilename: e.target.value }; setCfg({ whatsappOutcomeMessages: m }); }}
-                            placeholder="Filename (optional)" className="h-7 rounded-md bg-card border border-border text-foreground text-xs px-2.5 placeholder:text-muted-foreground focus:outline-none focus:border-[#ACADB1]" />
+                      </div>
+                    )}
+                    <ToggleRow label="Stream Audio" desc="Enable streaming output for lower latency" checked={cfg.ttsStream ?? false} onChange={v => setCfg({ ttsStream: v })} />
+                  </>}
+                  {activeDrawer === "telephony" && <>
+                    <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50">Telephony / Carrier</p>
+                    <div><p className="text-xs text-muted-foreground mb-1">Provider</p>
+                      <Select value={telephony} onValueChange={v => {
+                        mark(setTelephony)(v);
+                        const d = TELEPHONY_AUDIO_DEFAULTS[v];
+                        if (d) setCfg({ ttsSamplingRate: d.samplingRate, ttsEncoding: d.encoding, ttsAudioFormat: d.format });
+                      }}>
+                        <SelectTrigger className="h-7 text-xs bg-muted border-border text-foreground"><SelectValue placeholder="Select provider" /></SelectTrigger>
+                        <SelectContent className="bg-card border-border">{TELEPHONY_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                    {telephony && TELEPHONY_AUDIO_DEFAULTS[telephony] && (
+                      <div className="rounded-lg bg-zinc-950/40 border border-zinc-800/50 px-3 py-2.5">
+                        <p className="text-xs text-zinc-300 font-medium">Audio auto-configured: {TELEPHONY_AUDIO_DEFAULTS[telephony]!.label}</p>
+                        <p className="text-[11px] text-foreground/70 mt-0.5">{TELEPHONY_AUDIO_DEFAULTS[telephony]!.note}</p>
+                      </div>
+                    )}
+                  </>}
+                </div>
+              )}
+              {/* Advanced Settings accordion */}
+              <div className="space-y-2">
+                <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50 mb-1">Advanced Settings</p>
+                {[
+                  { id: "engine",    label: "Engine & Interruption",    desc: "Backchanneling, ambient noise, gender detection, end-call phrases" },
+                  { id: "call",      label: "Call Behaviour",           desc: "Duration, recording, IVR, queue, scheduling, transfer" },
+                  { id: "inbound",   label: "Inbound & Memory",         desc: "Inbound limits, call memory / RAG" },
+                  { id: "whatsapp",  label: "WhatsApp",                 desc: "WhatsApp Business API integration" },
+                  { id: "analytics", label: "Analytics & Summarization",desc: "Auto-summarize calls, disposition fields" },
+                ].map(section => (
+                  <button key={section.id} type="button" onClick={() => setActiveTab(section.id)}
+                    className="w-full flex items-center justify-between px-4 py-3 bg-card border border-border rounded-xl text-left hover:bg-accent/40 transition-colors">
+                    <div>
+                      <p className="text-[12px] font-medium text-foreground/70">{section.label}</p>
+                      <p className="text-[10px] text-muted-foreground/40 mt-0.5">{section.desc}</p>
+                    </div>
+                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ═══ ENGINE ═════════════════════════════════════════════════ */}
+          {activeTab === "engine" && (
+            <div className="px-5 py-4 max-w-2xl space-y-5">
+              <button onClick={() => setActiveTab("pipeline")} className="text-[11px] text-muted-foreground/50 hover:text-foreground flex items-center gap-1 transition-colors"><ChevronRight className="h-3 w-3 rotate-180" /> Back to Pipeline</button>
+              <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-5">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Interruption</p>
+                <SliderRow label="Words for Interruption" desc="User words that trigger an agent interruption" value={cfg.wordsForInterruption ?? 2} onChange={v => setCfg({ wordsForInterruption: v })} min={1} max={10} step={1} />
+                <SliderRow label="Incremental Delay" desc="Delay between LLM streaming chunks" value={cfg.incrementalDelay ?? 100} onChange={v => setCfg({ incrementalDelay: v })} min={0} max={2000} step={10} unit="ms" />
+              </div>
+              <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-5">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Backchanneling</p>
+                <ToggleRow label="Backchanneling" desc={'Short acknowledgements while the LLM is thinking'} checked={backchannelingEnabled} onChange={v => { setBackchannelingEnabled(v); setDirty(true); }} />
+                {backchannelingEnabled && <>
+                  <SliderRow label="Frequency" desc="Probability of backchanneling per turn" value={backchannelingFrequency} onChange={v => { setBackchannelingFrequency(v); setDirty(true); }} min={0} max={1} step={0.01} />
+                  <SliderRow label="Start Delay" desc="Wait before injecting backchannel audio" value={cfg.backchannelingStartDelay ?? 1.5} onChange={v => setCfg({ backchannelingStartDelay: v })} min={0} max={5} step={0.1} unit="s" />
+                </>}
+              </div>
+              <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-4">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Ambient & Noise</p>
+                <ToggleRow label="Ambient Noise" desc="Play background audio to make the call feel natural" checked={cfg.ambientNoiseEnabled ?? false} onChange={v => setCfg({ ambientNoiseEnabled: v })} />
+                {cfg.ambientNoiseEnabled && <div><p className="text-xs text-muted-foreground mb-1">Track</p>
+                  <Select value={cfg.ambientNoiseTrack ?? "office-ambience"} onValueChange={v => setCfg({ ambientNoiseTrack: v })}>
+                    <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-card border-border">{["office-ambience","cafe","coffee-shop","convention-hall","home","outdoor","restaurant"].map(t => <SelectItem key={t} value={t} className="text-foreground text-xs capitalize">{t.replace(/-/g, " ")}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>}
+                <ToggleRow label="Noise Cancellation" desc="Filter background noise from caller audio" checked={noiseCancellationEnabled} onChange={v => { setNoiseCancellationEnabled(v); setDirty(true); }} />
+              </div>
+              <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-4">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Caller Gender Detection</p>
+                <ToggleRow label="Enable Gender Detection" desc="Detects vocal pitch and sets the {caller_salutation} variable" checked={cfg.genderDetectionEnabled ?? false} onChange={v => setCfg({ genderDetectionEnabled: v })} />
+                {cfg.genderDetectionEnabled && <>
+                  <div><p className="text-xs text-muted-foreground mb-1">Detection Provider</p>
+                    <Select value={cfg.genderDetectionProvider ?? "deepgram"} onValueChange={v => setCfg({ genderDetectionProvider: v })}>
+                      <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
+                      <SelectContent className="bg-card border-border">
+                        {[["deepgram","Deepgram"],["assemblyai","AssemblyAI"],["azure","Azure Speaker Recognition"],["internal","SnapServe built-in (pitch analysis)"]].map(([v,l]) => <SelectItem key={v} value={v} className="text-foreground text-xs">{l}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div><p className="text-xs text-muted-foreground mb-1">Male</p><Input value={cfg.genderDetectionMaleSalutation ?? "sir"} onChange={e => setCfg({ genderDetectionMaleSalutation: e.target.value })} className="h-7 text-xs bg-card border-border text-foreground" /></div>
+                    <div><p className="text-xs text-muted-foreground mb-1">Female</p><Input value={cfg.genderDetectionFemaleSalutation ?? "ma'am"} onChange={e => setCfg({ genderDetectionFemaleSalutation: e.target.value })} className="h-7 text-xs bg-card border-border text-foreground" /></div>
+                    <div><p className="text-xs text-muted-foreground mb-1">Neutral</p><Input value={cfg.genderDetectionNeutralSalutation ?? ""} onChange={e => setCfg({ genderDetectionNeutralSalutation: e.target.value })} placeholder="(skip)" className="h-7 text-xs bg-card border-border text-foreground placeholder:text-muted-foreground" /></div>
+                  </div>
+                </>}
+              </div>
+              <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-3">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">End Call Phrases</p>
+                <Textarea value={endCallPhrases} onChange={e => { setEndCallPhrases(e.target.value); setDirty(true); }} placeholder="goodbye, bye, thanks for calling" rows={2} className="bg-card border-border text-foreground text-xs resize-none placeholder:text-muted-foreground" />
+                <p className="text-[10px] text-muted-foreground">Comma-separated phrases that trigger hangup when detected.</p>
+              </div>
+            </div>
+          )}
+
+          {/* ═══ CALL ═══════════════════════════════════════════════════ */}
+          {activeTab === "call" && (
+            <div className="px-5 py-4 max-w-2xl space-y-5">
+              <button onClick={() => setActiveTab("pipeline")} className="text-[11px] text-muted-foreground/50 hover:text-foreground flex items-center gap-1 transition-colors"><ChevronRight className="h-3 w-3 rotate-180" /> Back to Pipeline</button>
+              <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-5">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Duration & Silence</p>
+                <SliderRow label="Max Call Duration" desc="Auto-terminate after this duration" value={maxDuration} onChange={v => { setMaxDuration(v); setDirty(true); }} min={30} max={3600} step={30} unit="s" />
+                <SliderRow label="Hangup After Silence" desc="End call if caller is silent this long" value={silenceTimeout} onChange={v => { setSilenceTimeout(v); setDirty(true); }} min={5} max={120} step={5} unit="s" />
+                <ToggleRow label="Hangup After LLM Call" desc="Hang up automatically when the LLM finishes responding" checked={cfg.hangupAfterLlmCall ?? false} onChange={v => setCfg({ hangupAfterLlmCall: v })} />
+              </div>
+              <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-4">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Messages</p>
+                <div><p className="text-xs text-muted-foreground mb-1">Inactivity Message</p><Input value={inactivityMessage} onChange={e => { setInactivityMessage(e.target.value); setDirty(true); }} placeholder="Are you still there?" className="h-8 text-xs bg-card border-border text-foreground placeholder:text-muted-foreground" /></div>
+                <div><p className="text-xs text-muted-foreground mb-1">Cancellation Prompt</p><Textarea value={cfg.callCancellationPrompt ?? ""} onChange={e => setCfg({ callCancellationPrompt: e.target.value })} placeholder="What to say when cancelling…" rows={2} className="bg-card border-border text-foreground text-xs resize-none placeholder:text-muted-foreground" /></div>
+              </div>
+              <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-4">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Voicemail / AMD</p>
+                <ToggleRow label="Voicemail Detection" desc="Detect answering machines on outbound calls" checked={cfg.voicemailDetection ?? false} onChange={v => setCfg({ voicemailDetection: v })} />
+                {cfg.voicemailDetection && <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><p className="text-xs text-muted-foreground mb-1">Detection mode</p>
+                      <Select value={cfg.machineDetectionMode ?? "DetectMessageEnd"} onValueChange={v => setCfg({ machineDetectionMode: v as "Enable" | "DetectMessageEnd" })}>
+                        <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
+                        <SelectContent className="bg-card border-border"><SelectItem value="DetectMessageEnd" className="text-foreground text-xs">Wait for beep</SelectItem><SelectItem value="Enable" className="text-foreground text-xs">Immediate detect</SelectItem></SelectContent>
+                      </Select>
+                    </div>
+                    <div><p className="text-xs text-muted-foreground mb-1">When machine detected</p>
+                      <Select value={cfg.voicemailAction ?? "hangup"} onValueChange={v => setCfg({ voicemailAction: v as "hangup" | "leave_message" | "continue" })}>
+                        <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
+                        <SelectContent className="bg-card border-border"><SelectItem value="hangup" className="text-foreground text-xs">Hang up</SelectItem><SelectItem value="leave_message" className="text-foreground text-xs">Leave a message</SelectItem><SelectItem value="continue" className="text-foreground text-xs">Continue as human</SelectItem></SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  {cfg.voicemailAction === "leave_message" && <div><p className="text-xs text-muted-foreground mb-1">Voicemail message</p><Textarea value={cfg.voicemailMessage ?? ""} onChange={e => setCfg({ voicemailMessage: e.target.value })} placeholder="Hi, this is a message from…" rows={2} className="bg-card border-border text-foreground text-xs resize-none placeholder:text-muted-foreground" /></div>}
+                </>}
+              </div>
+              <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-4">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Call Recording</p>
+                <ToggleRow label="Record Calls" desc="Save an audio recording of every call" checked={cfg.recordingEnabled ?? false} onChange={v => setCfg({ recordingEnabled: v })} />
+                {cfg.recordingEnabled && <div className="w-40"><p className="text-xs text-muted-foreground mb-1">Format</p>
+                  <Select value={cfg.recordingFormat ?? "mp3"} onValueChange={v => setCfg({ recordingFormat: v as "mp3" | "wav" })}>
+                    <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-card border-border"><SelectItem value="mp3" className="text-foreground text-xs">MP3 (smaller)</SelectItem><SelectItem value="wav" className="text-foreground text-xs">WAV (lossless)</SelectItem></SelectContent>
+                  </Select>
+                </div>}
+              </div>
+              <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-4">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">IVR / DTMF</p>
+                <ToggleRow label="Enable IVR Menu" desc="Play a key-press menu before connecting to this agent" checked={cfg.ivrEnabled ?? false} onChange={v => setCfg({ ivrEnabled: v })} />
+                {cfg.ivrEnabled && <>
+                  <div><p className="text-xs text-muted-foreground mb-1">Opening greeting</p><Input value={cfg.ivrGreeting ?? ""} onChange={e => setCfg({ ivrGreeting: e.target.value })} placeholder="Welcome! Please choose from the following options." className="h-7 text-xs bg-card border-border text-foreground placeholder:text-muted-foreground" /></div>
+                  <div>
+                    <div className="flex items-center justify-between mb-2"><p className="text-xs text-muted-foreground">Menu options</p><button type="button" onClick={() => setCfg({ ivrOptions: [...(cfg.ivrOptions ?? []), { digit: "", label: "" }] })} className="text-[10px] text-muted-foreground hover:text-foreground px-2 py-1 rounded-md border border-border">+ Add</button></div>
+                    {(cfg.ivrOptions ?? []).map((opt, idx) => (
+                      <div key={idx} className="flex gap-2 mb-1.5 items-center">
+                        <Input value={opt.digit} onChange={e => { const opts = [...(cfg.ivrOptions ?? [])]; opts[idx] = { ...opts[idx], digit: e.target.value }; setCfg({ ivrOptions: opts }); }} placeholder="1" className="h-7 w-12 text-xs text-center bg-card border-border text-foreground shrink-0" maxLength={1} />
+                        <Input value={opt.label} onChange={e => { const opts = [...(cfg.ivrOptions ?? [])]; opts[idx] = { ...opts[idx], label: e.target.value }; setCfg({ ivrOptions: opts }); }} placeholder="Sales" className="h-7 flex-1 text-xs bg-card border-border text-foreground placeholder:text-muted-foreground" />
+                        <button type="button" onClick={() => setCfg({ ivrOptions: (cfg.ivrOptions ?? []).filter((_, i) => i !== idx) })} className="text-muted-foreground hover:text-foreground text-xs px-1">✕</button>
+                      </div>
+                    ))}
+                  </div>
+                </>}
+              </div>
+              <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-4">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Call Transfer</p>
+                <ToggleRow label="Enable Call Transfer" desc="Allow this agent to transfer calls to another number" checked={cfg.callTransferEnabled ?? false} onChange={v => setCfg({ callTransferEnabled: v })} />
+                {cfg.callTransferEnabled && <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><p className="text-xs text-muted-foreground mb-1">Transfer type</p>
+                      <Select value={cfg.callTransferType ?? "cold"} onValueChange={v => setCfg({ callTransferType: v as "warm" | "cold" })}>
+                        <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
+                        <SelectContent className="bg-card border-border"><SelectItem value="cold" className="text-foreground text-xs">Cold — immediate blind</SelectItem><SelectItem value="warm" className="text-foreground text-xs">Warm — announce then transfer</SelectItem></SelectContent>
+                      </Select>
+                    </div>
+                    <div><p className="text-xs text-muted-foreground mb-1">Default transfer number</p><Input value={cfg.callTransferNumber ?? ""} onChange={e => setCfg({ callTransferNumber: e.target.value })} placeholder="+12125551234" className="h-7 text-xs bg-card border-border text-foreground" /></div>
+                  </div>
+                  {cfg.callTransferType === "warm" && <div><p className="text-xs text-muted-foreground mb-1">Warm handoff message</p><Textarea value={cfg.callTransferWarmMessage ?? ""} onChange={e => setCfg({ callTransferWarmMessage: e.target.value })} placeholder="Please hold while I connect you with a specialist…" rows={2} className="bg-card border-border text-foreground text-xs resize-none placeholder:text-muted-foreground" /></div>}
+                </>}
+              </div>
+            </div>
+          )}
+
+          {/* ═══ INBOUND ════════════════════════════════════════════════ */}
+          {activeTab === "inbound" && (
+            <div className="px-5 py-4 max-w-2xl space-y-5">
+              <button onClick={() => setActiveTab("pipeline")} className="text-[11px] text-muted-foreground/50 hover:text-foreground flex items-center gap-1 transition-colors"><ChevronRight className="h-3 w-3 rotate-180" /> Back to Pipeline</button>
+              <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-5">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Call Limits</p>
+                <SliderRow label="Inbound Limit" desc="Max concurrent inbound calls (−1 = unlimited)" value={cfg.inboundLimit ?? -1} onChange={v => setCfg({ inboundLimit: v })} min={-1} max={50} step={1} />
+                <ToggleRow label="Disallow Unknown Numbers" desc="Reject calls from numbers not on the whitelist" checked={cfg.disallowUnknownNumbers ?? false} onChange={v => setCfg({ disallowUnknownNumbers: v })} />
+                {cfg.disallowUnknownNumbers && <div><p className="text-xs text-muted-foreground mb-1">Whitelist Numbers</p><Textarea value={cfg.whitelistNumbers ?? ""} onChange={e => setCfg({ whitelistNumbers: e.target.value })} placeholder="+1234567890, +0987654321" rows={2} className="bg-card border-border text-foreground text-xs resize-none placeholder:text-muted-foreground" /><p className="text-[10px] text-muted-foreground mt-1">Comma-separated E.164 numbers.</p></div>}
+              </div>
+              <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-4">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Call Memory / RAG</p>
+                <ToggleRow label="Enable Call Memory" desc="Ingest call data into a RAG source for context-aware responses" checked={cfg.callMemoryEnabled ?? false} onChange={v => setCfg({ callMemoryEnabled: v })} />
+                {cfg.callMemoryEnabled && <>
+                  <div><p className="text-xs text-muted-foreground mb-1">Source Type</p>
+                    <Select value={cfg.callMemorySourceType ?? "api"} onValueChange={v => setCfg({ callMemorySourceType: v })}>
+                      <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
+                      <SelectContent className="bg-card border-border">{[["api","REST API"],["s3","Amazon S3"],["gcs","Google Cloud Storage"],["database","Database"]].map(([v,l]) => <SelectItem key={v} value={v} className="text-foreground text-xs">{l}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div><p className="text-xs text-muted-foreground mb-1">Source URL</p><Input value={cfg.callMemorySourceUrl ?? ""} onChange={e => setCfg({ callMemorySourceUrl: e.target.value })} placeholder="https://api.your-rag.com/ingest" className="h-7 text-xs bg-card border-border text-foreground placeholder:text-muted-foreground" /></div>
+                  <div><p className="text-xs text-muted-foreground mb-1">Auth Token</p><Input type="password" value={cfg.callMemoryAuthToken ?? ""} onChange={e => setCfg({ callMemoryAuthToken: e.target.value })} placeholder="Bearer token or API key" className="h-7 text-xs bg-card border-border text-foreground placeholder:text-muted-foreground" /></div>
+                </>}
+              </div>
+            </div>
+          )}
+
+          {/* ═══ WHATSAPP ═══════════════════════════════════════════════ */}
+          {activeTab === "whatsapp" && (
+            <div className="px-5 py-4 max-w-2xl space-y-5">
+              <button onClick={() => setActiveTab("pipeline")} className="text-[11px] text-muted-foreground/50 hover:text-foreground flex items-center gap-1 transition-colors"><ChevronRight className="h-3 w-3 rotate-180" /> Back to Pipeline</button>
+              <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-4">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Provider</p>
+                <Select value={cfg.whatsappProvider ?? "none"} onValueChange={v => setCfg({ whatsappProvider: v === "none" ? undefined : v })}>
+                  <SelectTrigger className="h-8 text-xs bg-card border-border text-foreground"><SelectValue placeholder="Select provider" /></SelectTrigger>
+                  <SelectContent className="bg-card border-border">
+                    {[["none","— Not configured —"],["aisensy","AiSensy"],["meta","Meta (Business API)"],["twilio","Twilio WhatsApp"],["360dialog","360dialog"],["wati","WATI"]].map(([v,l]) => <SelectItem key={v} value={v} className={v === "none" ? "text-muted-foreground text-xs" : "text-foreground text-xs"}>{l}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+
+          {/* ═══ ANALYTICS ══════════════════════════════════════════════ */}
+          {activeTab === "analytics" && (
+            <div className="px-5 py-4 max-w-2xl space-y-5">
+              <button onClick={() => setActiveTab("pipeline")} className="text-[11px] text-muted-foreground/50 hover:text-foreground flex items-center gap-1 transition-colors"><ChevronRight className="h-3 w-3 rotate-180" /> Back to Pipeline</button>
+              <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-4">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Summarization</p>
+                <ToggleRow label="Auto-Summarize Calls" desc="Generate a summary of each call transcript after the call ends" checked={cfg.summarizationEnabled ?? false} onChange={v => setCfg({ summarizationEnabled: v })} />
+                {cfg.summarizationEnabled && <div><p className="text-xs text-muted-foreground mb-1">Summarization Prompt</p><Textarea value={cfg.summarizationPrompt ?? ""} onChange={e => setCfg({ summarizationPrompt: e.target.value })} placeholder="Summarize the key points, next steps, and any issues raised…" rows={4} className="bg-card border-border text-foreground text-xs resize-none placeholder:text-muted-foreground" /></div>}
+              </div>
+              <div className="bg-muted border border-border/40 rounded-xl overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                  <div className="flex items-center gap-2">
+                    <ClipboardList className="h-3.5 w-3.5 text-foreground" />
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Disposition Fields</p>
+                  </div>
+                  <button type="button" onClick={() => { setDispositionSchema(prev => [...prev, { key: "", label: "", type: "text", required: false, options: "" }]); setDirty(true); }} className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1"><Plus className="h-3 w-3" /> Add Field</button>
+                </div>
+                {dispositionSchema.length === 0 ? (
+                  <p className="text-[11px] text-muted-foreground px-4 py-3">No fields defined. Fields are extracted from call transcripts by the LLM after each call.</p>
+                ) : (
+                  <div className="divide-y divide-border">
+                    {dispositionSchema.map((field, i) => (
+                      <div key={i} className="px-4 py-3 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <input value={field.key} onChange={e => { const n = [...dispositionSchema]; n[i] = { ...n[i]!, key: e.target.value }; setDispositionSchema(n); setDirty(true); }} placeholder="key_name" className="flex-1 h-7 rounded-md bg-card border border-border text-foreground text-xs px-2.5 placeholder:text-muted-foreground focus:outline-none" />
+                          <input value={field.label} onChange={e => { const n = [...dispositionSchema]; n[i] = { ...n[i]!, label: e.target.value }; setDispositionSchema(n); setDirty(true); }} placeholder="Display Label" className="flex-1 h-7 rounded-md bg-card border border-border text-foreground text-xs px-2.5 placeholder:text-muted-foreground focus:outline-none" />
+                          <Select value={field.type} onValueChange={v => { const n = [...dispositionSchema]; n[i] = { ...n[i]!, type: v }; setDispositionSchema(n); setDirty(true); }}>
+                            <SelectTrigger className="h-7 w-24 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
+                            <SelectContent className="bg-card border-border"><SelectItem value="text" className="text-foreground text-xs">Text</SelectItem><SelectItem value="number" className="text-foreground text-xs">Number</SelectItem><SelectItem value="boolean" className="text-foreground text-xs">Yes / No</SelectItem><SelectItem value="choice" className="text-foreground text-xs">Choice</SelectItem></SelectContent>
+                          </Select>
+                          <button type="button" onClick={() => { setDispositionSchema(prev => prev.filter((_, j) => j !== i)); setDirty(true); }} className="text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
                         </div>
+                        {field.type === "choice" && <input value={field.options ?? ""} onChange={e => { const n = [...dispositionSchema]; n[i] = { ...n[i]!, options: e.target.value }; setDispositionSchema(n); setDirty(true); }} placeholder="Options: resolved, escalated, callback" className="w-full h-7 rounded-md bg-card border border-border text-foreground text-xs px-2.5 placeholder:text-muted-foreground focus:outline-none" />}
                       </div>
                     ))}
                   </div>
                 )}
               </div>
-            )}
-          </div>
-        </TabsContent>
+            </div>
+          )}
 
-        {/* ── Logs ── */}
-        <TabsContent value="logs" className="flex-1 overflow-y-auto m-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead className="bg-card sticky top-0">
-                <tr>
-                  <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Date</th>
-                  <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Status</th>
-                  <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">To / From</th>
-                  <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Duration</th>
-                </tr>
-              </thead>
-              <tbody>
-                {callsLoading ? (
-                  [1,2,3].map(i => (
-                    <tr key={i}>{[1,2,3,4].map(j => <td key={j} className="px-4 py-2.5"><Skeleton className="h-4 w-full bg-muted" /></td>)}</tr>
-                  ))
-                ) : (calls ?? []).length === 0 ? (
-                  <tr><td colSpan={4} className="text-center text-muted-foreground py-10">No calls yet for this assistant.</td></tr>
-                ) : (calls ?? []).map(call => (
-                  <tr key={call.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
-                    <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">{format(new Date(call.createdAt), "MMM d, HH:mm")}</td>
-                    <td className="px-4 py-2.5">
-                      {call.status === "completed"   && <span className="text-foreground">completed</span>}
-                      {call.status === "failed"      && <span className="text-foreground">failed</span>}
-                      {call.status === "in_progress" && <span className="text-foreground">in progress</span>}
-                      {!["completed","failed","in_progress"].includes(call.status) && <span className="text-muted-foreground">{call.status}</span>}
-                    </td>
-                    <td className="px-4 py-2.5 text-muted-foreground font-mono text-[11px]">{call.toNumber || "—"}</td>
-                    <td className="px-4 py-2.5 text-muted-foreground">{call.durationSeconds != null ? `${call.durationSeconds}s` : "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </TabsContent>
+          {/* ═══ TEST ═══════════════════════════════════════════════════ */}
+          {activeTab === "test" && (
+            <div className="p-5 max-w-lg">
+              <WebCallPanel agentId={agentId} agentName={agentName || agent.name} />
+            </div>
+          )}
 
-        {/* ── Test ── */}
-        <TabsContent value="test" className="flex-1 overflow-y-auto m-0 px-5 py-4">
-          <div className="max-w-lg">
-            <WebCallPanel agentId={agent.id} agentName={agent.name} />
-          </div>
-        </TabsContent>
-      </Tabs>
+          {/* ═══ LOGS ═══════════════════════════════════════════════════ */}
+          {activeTab === "logs" && (
+            <div className="px-5 py-4 max-w-2xl space-y-2">
+              {callsLoading ? (
+                <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-12 w-full rounded-xl bg-muted animate-pulse" />)}</div>
+              ) : (calls ?? []).length === 0 ? (
+                <div className="py-12 text-center"><p className="text-sm text-muted-foreground/50">No calls yet</p></div>
+              ) : (calls ?? []).map(call => (
+                <div key={call.id} className="bg-card border border-border rounded-xl px-4 py-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[12px] font-mono text-muted-foreground/60">{call.fromNumber ?? `#${call.id}`}</span>
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${
+                      call.status === "completed" ? "text-foreground/60 bg-foreground/[0.05] border-foreground/[0.07]" :
+                      call.status === "failed"    ? "text-muted-foreground/60 bg-transparent border-border" :
+                                                    "text-muted-foreground/40 bg-transparent border-border/50"
+                    }`}>{call.status}</span>
+                  </div>
+                  {call.createdAt && <p className="text-[10px] text-muted-foreground/40 mt-0.5">{new Date(call.createdAt).toLocaleString()}</p>}
+                </div>
+              ))}
+            </div>
+          )}
 
-      {/* Outbound call dialog */}
+        </div>
+      </div>
+
+      {/* ── Outbound call dialog ── */}
       <Dialog open={outboundDialogOpen} onOpenChange={setOutboundDialogOpen}>
         <DialogContent className="bg-card border-border sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-foreground flex items-center gap-2">
-              <PhoneOutgoing className="h-4 w-4 text-foreground" /> Make a Call
-            </DialogTitle>
+            <DialogTitle className="text-foreground flex items-center gap-2"><PhoneOutgoing className="h-4 w-4" /> Make a Call</DialogTitle>
             <DialogDescription className="text-muted-foreground text-sm">
-              Dial a number using <span className="capitalize font-medium text-foreground">{agent.telephonyProvider}</span>.
+              Dial a number using <span className="capitalize font-medium text-foreground">{agent.telephonyProvider || "your telephony provider"}</span>.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
@@ -2931,29 +2027,87 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
           </div>
           <DialogFooter>
             <Button variant="outline" className="border-border text-muted-foreground" onClick={() => setOutboundDialogOpen(false)}>Cancel</Button>
-            <Button
-              className="bg-primary hover:opacity-90 text-primary-foreground"
-              disabled={!toNumber.trim() || initiateOutbound.isPending}
-              onClick={() => {
-                initiateOutbound.mutate(
-                  { data: { agentId: agent.id, toNumber: toNumber.trim(), webhookBaseUrl: window.location.origin } },
-                  {
-                    onSuccess: () => {
-                      toast({ title: "Call initiated", description: `Dialing ${toNumber} via ${agent.name}.` });
-                      setOutboundDialogOpen(false);
-                      setToNumber("");
-                    },
-                    onError: (err: unknown) => {
-                      toast({ title: "Call failed", description: formatApiError(err), variant: "destructive" });
-                    },
-                  }
-                );
-              }}
-            >
-              {initiateOutbound.isPending
-                ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Dialing…</>
-                : <><PhoneOutgoing className="h-4 w-4 mr-2" /> Call Now</>}
+            <Button className="bg-primary hover:opacity-90 text-primary-foreground" disabled={!toNumber.trim() || initiateOutbound.isPending}
+              onClick={() => initiateOutbound.mutate(
+                { data: { agentId: agent.id, toNumber: toNumber.trim(), webhookBaseUrl: window.location.origin } },
+                {
+                  onSuccess: () => { toast({ title: "Call initiated", description: `Dialing ${toNumber} via ${agent.name}.` }); setOutboundDialogOpen(false); setToNumber(""); },
+                  onError: (err: unknown) => { toast({ title: "Call failed", description: formatApiError(err), variant: "destructive" }); },
+                }
+              )}>
+              {initiateOutbound.isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Dialing…</> : <><PhoneOutgoing className="h-4 w-4 mr-2" /> Call Now</>}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Book Appointment modal ── */}
+      <Dialog open={bookingModal !== null} onOpenChange={open => { if (!open) setBookingModal(null); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><CalendarPlus className="h-4 w-4 text-zinc-500" />{bookingModal?.editIdx == null ? "Add Book Appointment Tool" : "Edit Book Appointment Tool"}</DialogTitle>
+            <DialogDescription>Configure how the AI books appointments using your inbuilt calendar.</DialogDescription>
+          </DialogHeader>
+          {bookingModal && (
+            <div className="space-y-3 py-1">
+              <div className="space-y-1">
+                <Label className="text-xs">Calendar <span className="text-foreground">*</span></Label>
+                <Select value={bookingModal.googleCalendarKey ?? ""} onValueChange={v => {
+                  const entry = (googleCals ?? []).find(g => `${g.connectionId}|${g.googleCalendarId}` === v);
+                  setBookingModal({ ...bookingModal, googleCalendarKey: v, calendarId: entry?.schedulingCalendarId ?? null, eventTypeId: null });
+                }} disabled={googleCalsLoading}>
+                  <SelectTrigger className="h-9 text-sm"><SelectValue placeholder={googleCalsLoading ? "Loading…" : "Select a Google calendar…"} /></SelectTrigger>
+                  <SelectContent>
+                    {(() => {
+                      const cals = googleCals ?? [];
+                      if (!googleCalsLoading && cals.length === 0) return <SelectItem value="__none" disabled>No Google calendars — connect in Scheduling</SelectItem>;
+                      const byEmail = new Map<string, typeof cals>();
+                      for (const c of cals) { const arr = byEmail.get(c.connectionEmail) ?? []; arr.push(c); byEmail.set(c.connectionEmail, arr); }
+                      return Array.from(byEmail.entries()).map(([email, items]) => (
+                        <div key={email}>
+                          <div className="px-2 py-1 text-[10px] uppercase tracking-wider text-muted-foreground">{email}</div>
+                          {items.map(c => { const key = `${c.connectionId}|${c.googleCalendarId}`; return <SelectItem key={key} value={key}>{c.summary}{c.primary ? " (Primary)" : ""}{c.schedulingCalendarId == null ? " — not linked" : ""}</SelectItem>; })}
+                        </div>
+                      ));
+                    })()}
+                  </SelectContent>
+                </Select>
+                {bookingModal.googleCalendarKey && bookingModal.calendarId == null && <p className="text-[10px] text-amber-600 dark:text-amber-400">This calendar isn&apos;t linked yet. Go to Scheduling → Calendars to link it.</p>}
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Event Type <span className="text-foreground">*</span></Label>
+                <Select value={bookingModal.eventTypeId ? String(bookingModal.eventTypeId) : ""} onValueChange={v => setBookingModal({ ...bookingModal, eventTypeId: parseInt(v) || null })} disabled={!bookingModal.calendarId || modalEventTypesLoading}>
+                  <SelectTrigger className="h-9 text-sm"><SelectValue placeholder={!bookingModal.calendarId ? "Pick a calendar first" : modalEventTypesLoading ? "Loading…" : "Select an event type…"} /></SelectTrigger>
+                  <SelectContent>
+                    {(modalEventTypes ?? []).map(et => <SelectItem key={et.id} value={String(et.id)}>{et.name} ({et.durationMinutes} min)</SelectItem>)}
+                    {bookingModal.calendarId && !modalEventTypesLoading && (modalEventTypes ?? []).length === 0 && <SelectItem value="__none" disabled>No event types for this calendar</SelectItem>}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Timezone</Label>
+                <Select value={bookingModal.timezone} onValueChange={v => setBookingModal({ ...bookingModal, timezone: v })}>
+                  <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>{["UTC","America/New_York","America/Chicago","America/Denver","America/Los_Angeles","Europe/London","Europe/Paris","Asia/Kolkata","Asia/Singapore","Asia/Tokyo","Australia/Sydney"].map(tz => <SelectItem key={tz} value={tz}>{tz}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1"><Label className="text-xs">Task Name</Label><Input value={bookingModal.taskName} onChange={e => setBookingModal({ ...bookingModal, taskName: e.target.value })} placeholder="book_appointment" className="h-9 text-sm" /></div>
+              <div className="space-y-1"><Label className="text-xs">Description</Label><Textarea value={bookingModal.description} onChange={e => setBookingModal({ ...bookingModal, description: e.target.value })} rows={2} placeholder="Tells the AI when to call this tool." className="text-sm resize-none" /></div>
+              <div className="space-y-1"><Label className="text-xs">Pre-tool Message</Label><Input value={bookingModal.preToolMessage} onChange={e => setBookingModal({ ...bookingModal, preToolMessage: e.target.value })} placeholder="e.g. Sure, let me book that for you…" className="h-9 text-sm" /></div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBookingModal(null)}>Cancel</Button>
+            <Button onClick={() => {
+              if (!bookingModal) return;
+              if (!bookingModal.calendarId) { toast({ title: "Calendar is required", variant: "destructive" }); return; }
+              if (!bookingModal.eventTypeId) { toast({ title: "Event type is required", variant: "destructive" }); return; }
+              const taskName = (bookingModal.taskName || "book_appointment").trim();
+              const next: AgentToolLocal = { type: "native_booking", name: taskName, description: bookingModal.description || "Book an appointment when the caller wants to schedule a meeting.", eventTypeId: bookingModal.eventTypeId, calendarId: bookingModal.calendarId, timezone: bookingModal.timezone, taskName, preToolMessage: bookingModal.preToolMessage || undefined };
+              setAgentTools(prev => { if (bookingModal.editIdx == null) return [...prev, next]; const copy = [...prev]; copy[bookingModal.editIdx] = next; return copy; });
+              setDirty(true); setBookingModal(null);
+              toast({ title: bookingModal.editIdx == null ? "Booking tool added" : "Booking tool updated" });
+            }}>Save Configuration</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

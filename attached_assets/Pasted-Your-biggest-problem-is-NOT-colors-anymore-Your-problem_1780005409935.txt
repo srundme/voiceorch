@@ -1,0 +1,376 @@
+Your biggest problem is NOT colors anymore.
+
+Your problem is:
+
+> You built the UI around the backend architecture instead of the user workflow.
+
+Right now the product feels:
+
+* configuration-heavy
+* engineering-heavy
+* tab-heavy
+* mentally exhausting
+* “settings panel SaaS”
+
+Instead, SnapServe should feel like:
+
+> “Operating system for AI voice agents”
+
+That means:
+
+* less forms
+* less tabs
+* progressive disclosure
+* contextual configuration
+* workflow-first UX
+* modular panels
+* command-center feel
+
+Right now everything is exposed at once:
+
+* ASR
+* LLM
+* TTS
+* telephony
+* thresholds
+* endpointing
+* denoising
+* interruptions
+* backchanneling
+* AMD
+* queues
+* IVR
+* tools
+
+This overwhelms users instantly.
+
+# WHAT YOU SHOULD DO INSTEAD
+
+You need 3 layers:
+
+---
+
+# LAYER 1 — SIMPLE MODE (80% USERS)
+
+This should feel like:
+
+* ChatGPT
+* Notion
+* Linear
+* Arc
+
+Minimal.
+
+Only show:
+
+* Agent name
+* Goal
+* Voice
+* Language
+* Prompt
+* Knowledge base
+* Call flow
+* Test button
+
+That’s it.
+
+Everything else hidden.
+
+---
+
+# LAYER 2 — ADVANCED PANELS
+
+Instead of tabs…
+
+Use:
+
+* slide-over panels
+* expandable sections
+* contextual drawers
+* command palette style settings
+
+Example:
+
+Click:
+“Audio”
+
+→ right-side floating panel opens.
+
+NOT a full page/tab switch.
+
+This keeps context alive.
+
+---
+
+# LAYER 3 — INFRASTRUCTURE MODE
+
+For power users.
+
+A separate:
+“Pipeline” or “Infrastructure” mode.
+
+Visual pipeline:
+
+Caller
+↓
+ASR
+↓
+LLM
+↓
+TTS
+↓
+Telephony
+
+Each block clickable.
+
+THAT becomes your advanced configuration system.
+
+This alone makes SnapServe feel unique.
+
+---
+
+# NEW STRUCTURE (IMPORTANT)
+
+STOP USING:
+
+* 11 horizontal tabs
+* massive forms
+* admin-dashboard layouts
+
+Use this instead:
+
+# NEW LAYOUT
+
+## LEFT SIDEBAR (GLOBAL NAV)
+
+Very minimal.
+
+ONLY:
+
+* Dashboard
+* Agents
+* Calls
+* Campaigns
+* Analytics
+* Scheduling
+* Providers
+* Settings
+
+Nothing else.
+
+---
+
+# SECONDARY SIDEBAR (CONTEXTUAL)
+
+When inside an agent:
+
+Show:
+
+* Overview
+* Prompt
+* Voice
+* Knowledge
+* Tools
+* Pipeline
+* Analytics
+* Test
+
+This is MUCH cleaner.
+
+---
+
+# MAIN WORKSPACE
+
+Now divided into blocks.
+
+NOT tabs.
+
+Think:
+Notion + Linear + Cursor.
+
+---
+
+# RECOMMENDED PAGE STRUCTURE
+
+# 1. AGENT HEADER
+
+Top section:
+
+* Agent name
+* Status
+* Quick stats
+* Test button
+* Call button
+* Save
+
+Minimal and sticky.
+
+---
+
+# 2. QUICK CONFIG AREA
+
+Cards:
+
+### Identity
+
+* Name
+* Use case
+* Languages
+
+### Brain
+
+* Prompt
+* LLM provider
+* Temperature
+
+### Voice
+
+* Voice preview
+* TTS provider
+
+### Knowledge
+
+* Upload files
+* KB status
+
+Compact cards.
+
+---
+
+# 3. VISUAL PIPELINE
+
+THIS SHOULD BE YOUR CORE FEATURE.
+
+Example:
+
+Caller
+→ Deepgram
+→ GPT-4o
+→ Cartesia
+→ Twilio
+
+Each node clickable.
+
+When clicked:
+a side drawer opens.
+
+THIS makes the product feel premium.
+
+---
+
+# 4. ADVANCED SETTINGS
+
+Collapsed by default.
+
+Accordion sections:
+
+* Audio
+* Engine
+* Call Behaviour
+* Queue
+* Recording
+* Guardrails
+* Transfers
+
+Only open when needed.
+
+---
+
+# 5. LIVE TEST AREA
+
+Sticky bottom/right:
+
+* Call simulator
+* Live transcript
+* Audio levels
+* Latency
+* Test call
+
+THIS creates the “AI infrastructure” feel.
+
+---
+
+# WHAT TO REMOVE
+
+REMOVE:
+
+* giant forms
+* excessive labels
+* full-width inputs
+* long vertical pages
+* too many visible controls
+* huge analytics cards
+* thick borders
+* duplicated settings
+
+---
+
+# WHAT TO ADD
+
+ADD:
+
+* command palette
+* searchable settings
+* floating drawers
+* node-based pipeline
+* collapsible advanced sections
+* inline editing
+* live previews
+* voice preview everywhere
+* realtime indicators
+
+---
+
+# BEST UX DECISION YOU CAN MAKE
+
+Separate:
+
+## SIMPLE USERS
+
+from
+
+## INFRASTRUCTURE USERS
+
+Most SaaS fail because they expose EVERYTHING.
+
+SnapServe should progressively unlock complexity.
+
+---
+
+# IDEAL SNAPSERVE EXPERIENCE
+
+User enters.
+
+1. Create agent
+2. Describe use case
+3. AI builds pipeline
+4. User tweaks visually
+5. Test live instantly
+6. Deploy
+
+THAT is the experience.
+
+Not:
+“Here are 400 settings.”
+
+---
+
+# FINAL DESIGN DIRECTION
+
+Your product should feel like:
+
+* Linear → clean UX
+* Cursor → AI-native interactions
+* Vapi → voice infra
+* Retell → realtime pipeline
+* Cartesia → visual elegance
+* Notion → progressive complexity
+
+NOT:
+
+* old admin dashboard
+* CRM
+* Twilio console
+* AWS console
+
+That mindset shift is what will completely transform the product.
