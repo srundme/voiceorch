@@ -408,6 +408,7 @@ export function buildCreateAgentPayload(state: WizardState) {
   if (isManaged) {
     const leadEnabled = state.leadSource.enabled;
     return {
+      agentMode: "managed" as const,
       name: state.agentName || `${STEP_LABELS["use-case"]} Agent`,
       language: LANG_CODE_MAP[state.primaryLanguage] ?? "en-US",
       asrLanguage: ASR_LANG_CODE_MAP[state.primaryLanguage] ?? "en",

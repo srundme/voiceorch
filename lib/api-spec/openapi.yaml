@@ -2390,6 +2390,10 @@ components:
           type: integer
         name:
           type: string
+        agentMode:
+          type: ["string", "null"]
+          enum: [managed, byop, null]
+          description: "managed = platform master keys; byop = user-supplied keys"
         agentType:
           type: ["string", "null"]
           enum: [general, lead_qualification, customer_support, appointment_booking, survey, null]
@@ -2544,6 +2548,10 @@ components:
           type: string
           minLength: 1
           pattern: '\S'
+        agentMode:
+          type: string
+          enum: [managed, byop]
+          description: "managed = use platform master keys; byop = user supplies their own provider keys"
         agentType:
           type: string
         description:
@@ -2635,6 +2643,10 @@ components:
           type: string
           minLength: 1
           pattern: '\S'
+        agentMode:
+          type: string
+          enum: [managed, byop]
+          description: "managed = use platform master keys; byop = user supplies their own provider keys"
         agentType:
           type: string
         description:

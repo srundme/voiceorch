@@ -22,6 +22,7 @@ export const HealthCheckResponse = zod.object({
 export const ListAgentsResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
+  "agentMode": zod.union([zod.literal('managed'),zod.literal('byop'),zod.literal(null)]).nullish().describe('managed = platform master keys; byop = user-supplied keys'),
   "agentType": zod.union([zod.literal('general'),zod.literal('lead_qualification'),zod.literal('customer_support'),zod.literal('appointment_booking'),zod.literal('survey'),zod.literal(null)]).nullish(),
   "description": zod.string().nullish(),
   "status": zod.enum(['active', 'inactive', 'draft']),
@@ -106,6 +107,7 @@ export const createAgentBodyNameRegExp = new RegExp('\\S');
 
 export const CreateAgentBody = zod.object({
   "name": zod.string().min(1).regex(createAgentBodyNameRegExp),
+  "agentMode": zod.enum(['managed', 'byop']).optional().describe('managed = use platform master keys; byop = user supplies their own provider keys'),
   "agentType": zod.string().optional(),
   "description": zod.string().optional(),
   "asrProvider": zod.string(),
@@ -170,6 +172,7 @@ export const GetAgentParams = zod.object({
 export const GetAgentResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
+  "agentMode": zod.union([zod.literal('managed'),zod.literal('byop'),zod.literal(null)]).nullish().describe('managed = platform master keys; byop = user-supplied keys'),
   "agentType": zod.union([zod.literal('general'),zod.literal('lead_qualification'),zod.literal('customer_support'),zod.literal('appointment_booking'),zod.literal('survey'),zod.literal(null)]).nullish(),
   "description": zod.string().nullish(),
   "status": zod.enum(['active', 'inactive', 'draft']),
@@ -257,6 +260,7 @@ export const updateAgentBodyNameRegExp = new RegExp('\\S');
 
 export const UpdateAgentBody = zod.object({
   "name": zod.string().min(1).regex(updateAgentBodyNameRegExp).optional(),
+  "agentMode": zod.enum(['managed', 'byop']).optional().describe('managed = use platform master keys; byop = user supplies their own provider keys'),
   "agentType": zod.string().optional(),
   "description": zod.string().optional(),
   "asrProvider": zod.string().optional(),
@@ -324,6 +328,7 @@ export const UpdateAgentBody = zod.object({
 export const UpdateAgentResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
+  "agentMode": zod.union([zod.literal('managed'),zod.literal('byop'),zod.literal(null)]).nullish().describe('managed = platform master keys; byop = user-supplied keys'),
   "agentType": zod.union([zod.literal('general'),zod.literal('lead_qualification'),zod.literal('customer_support'),zod.literal('appointment_booking'),zod.literal('survey'),zod.literal(null)]).nullish(),
   "description": zod.string().nullish(),
   "status": zod.enum(['active', 'inactive', 'draft']),
@@ -415,6 +420,7 @@ export const ToggleAgentParams = zod.object({
 export const ToggleAgentResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
+  "agentMode": zod.union([zod.literal('managed'),zod.literal('byop'),zod.literal(null)]).nullish().describe('managed = platform master keys; byop = user-supplied keys'),
   "agentType": zod.union([zod.literal('general'),zod.literal('lead_qualification'),zod.literal('customer_support'),zod.literal('appointment_booking'),zod.literal('survey'),zod.literal(null)]).nullish(),
   "description": zod.string().nullish(),
   "status": zod.enum(['active', 'inactive', 'draft']),

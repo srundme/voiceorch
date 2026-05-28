@@ -100,6 +100,18 @@ export interface AgentTool {
 }
 
 /**
+ * managed = platform master keys; byop = user-supplied keys
+ * @nullable
+ */
+export type AgentAgentMode = typeof AgentAgentMode[keyof typeof AgentAgentMode] | null;
+
+
+export const AgentAgentMode = {
+  managed: 'managed',
+  byop: 'byop',
+} as const;
+
+/**
  * @nullable
  */
 export type AgentAgentType = typeof AgentAgentType[keyof typeof AgentAgentType] | null;
@@ -144,6 +156,11 @@ export type AgentAgentConfig = { [key: string]: unknown } | null;
 export interface Agent {
   id: number;
   name: string;
+  /**
+     * managed = platform master keys; byop = user-supplied keys
+     * @nullable
+     */
+  agentMode?: AgentAgentMode;
   /** @nullable */
   agentType?: AgentAgentType;
   /** @nullable */
@@ -332,6 +349,17 @@ export interface Agent {
 }
 
 /**
+ * managed = use platform master keys; byop = user supplies their own provider keys
+ */
+export type AgentInputAgentMode = typeof AgentInputAgentMode[keyof typeof AgentInputAgentMode];
+
+
+export const AgentInputAgentMode = {
+  managed: 'managed',
+  byop: 'byop',
+} as const;
+
+/**
  * Advanced per-tab configuration
  */
 export type AgentInputAgentConfig = { [key: string]: unknown };
@@ -342,6 +370,8 @@ export interface AgentInput {
      * @pattern \S
      */
   name: string;
+  /** managed = use platform master keys; byop = user supplies their own provider keys */
+  agentMode?: AgentInputAgentMode;
   agentType?: string;
   description?: string;
   asrProvider: string;
@@ -387,6 +417,17 @@ export interface AgentInput {
 }
 
 /**
+ * managed = use platform master keys; byop = user supplies their own provider keys
+ */
+export type AgentUpdateAgentMode = typeof AgentUpdateAgentMode[keyof typeof AgentUpdateAgentMode];
+
+
+export const AgentUpdateAgentMode = {
+  managed: 'managed',
+  byop: 'byop',
+} as const;
+
+/**
  * Advanced per-tab configuration
  */
 export type AgentUpdateAgentConfig = { [key: string]: unknown };
@@ -397,6 +438,8 @@ export interface AgentUpdate {
      * @pattern \S
      */
   name?: string;
+  /** managed = use platform master keys; byop = user supplies their own provider keys */
+  agentMode?: AgentUpdateAgentMode;
   agentType?: string;
   description?: string;
   asrProvider?: string;

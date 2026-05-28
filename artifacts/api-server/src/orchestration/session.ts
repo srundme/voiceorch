@@ -247,12 +247,18 @@ export async function createSession(params: {
     agent.ttsProvider?.toLowerCase(),
   ].filter((p): p is string => !!p);
 
+  const isManaged = agent.agentMode === "managed";
+
   for (const providerName of requiredProviders) {
-    if (!providerKeys.has(providerName) && MANAGED[providerName]) {
-      const managed = await getPlatformSetting(MANAGED[providerName]!);
-      if (managed) {
-        providerKeys.set(providerName, managed);
-        logger.info({ providerName }, "Using platform managed key for provider");
+    if (MANAGED[providerName]) {
+      // Managed agents: platform key is primary — always use it (ignore user key)
+      // BYOP agents: platform key is fallback — only if user has no key
+      if (isManaged || !providerKeys.has(providerName)) {
+        const managed = await getPlatformSetting(MANAGED[providerName]!);
+        if (managed) {
+          providerKeys.set(providerName, managed);
+          logger.info({ providerName, isManaged }, "Using platform managed key for provider");
+        }
       }
     }
   }

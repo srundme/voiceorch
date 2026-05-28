@@ -150,6 +150,9 @@ export const agentsTable = pgTable("agents", {
     required?: boolean;
   }>>(),
 
+  // ── Mode ──────────────────────────────────────────────────────────────────────
+  agentMode: text("agent_mode").default("byop"), // "managed" | "byop"
+
   // ── Lead Source ───────────────────────────────────────────────────────────────
   leadSourceType: text("lead_source_type"),
   leadSourceToken: text("lead_source_token"),

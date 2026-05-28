@@ -146,12 +146,18 @@ export async function handleWebCallWebSocket(
     agent.ttsProvider?.toLowerCase(),
   ].filter((p): p is string => !!p);
 
+  const isManaged = agent.agentMode === "managed";
+
   for (const providerName of requiredProviders) {
-    if (!providerKeys.has(providerName) && MANAGED[providerName]) {
-      const [row] = await db.select().from(platformSettingsTable).where(eq(platformSettingsTable.key, MANAGED[providerName]!));
-      if (row?.value) {
-        providerKeys.set(providerName, row.value);
-        logger.info({ providerName }, "webcall: using platform managed key for provider");
+    if (MANAGED[providerName]) {
+      // Managed agents: platform key is primary — always use it (ignore user key)
+      // BYOP agents: platform key is fallback — only if user has no key
+      if (isManaged || !providerKeys.has(providerName)) {
+        const [row] = await db.select().from(platformSettingsTable).where(eq(platformSettingsTable.key, MANAGED[providerName]!));
+        if (row?.value) {
+          providerKeys.set(providerName, row.value);
+          logger.info({ providerName, isManaged }, "webcall: using platform managed key for provider");
+        }
       }
     }
   }
