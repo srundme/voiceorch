@@ -3,7 +3,8 @@ import { Link, useLocation } from "wouter";
 import {
   Phone, Copy, Check, ExternalLink, Zap, Key, BookOpen,
   ChevronDown, ChevronRight, AlertTriangle, CheckCircle2,
-  RefreshCw, Plus, Eye, EyeOff, Users, Settings2, Calendar, Video, Timer
+  RefreshCw, Plus, Eye, EyeOff, Users, Settings2, Calendar, Video, Timer,
+  Sun, Moon, Monitor, Palette,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { useListAgents, useListProviders, useGetAccount, useRegenerateApiKey, useAddConcurrentSlot, getListAgentsQueryKey, getListProvidersQueryKey, getGetAccountQueryKey, setDefaultTimeoutMs } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { useTheme } from "@/components/theme-provider";
 import { formatApiError } from "@/lib/format-api-error";
 import type { ProviderConfigProviderType } from "@workspace/api-client-react";
 import CalendarsPage from "@/pages/scheduling/Calendars";
@@ -80,6 +82,59 @@ function RequestTimeoutCard() {
                 }`}
               >
                 <span className="text-base font-semibold">{opt.label}</span>
+                <span className="text-[11px] font-normal text-center leading-tight opacity-75">{opt.description}</span>
+              </button>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+type ThemeOption = { label: string; value: "light" | "dark" | "system"; icon: React.ReactNode; description: string };
+const THEME_OPTIONS: ThemeOption[] = [
+  { label: "Light",  value: "light",  icon: <Sun className="h-5 w-5" />,     description: "Always use light mode" },
+  { label: "Dark",   value: "dark",   icon: <Moon className="h-5 w-5" />,    description: "Always use dark mode" },
+  { label: "System", value: "system", icon: <Monitor className="h-5 w-5" />, description: "Follow your OS setting" },
+];
+
+function AppearanceCard() {
+  const { theme, setTheme } = useTheme();
+  const { toast } = useToast();
+
+  function handleSelect(opt: ThemeOption) {
+    setTheme(opt.value);
+    toast({ title: "Theme updated", description: `Appearance set to ${opt.label}.` });
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Palette className="h-5 w-5 text-primary" />
+          Appearance
+        </CardTitle>
+        <CardDescription>
+          Choose how the dashboard looks. Your preference is saved in this browser.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-3 gap-3">
+          {THEME_OPTIONS.map((opt) => {
+            const isActive = theme === opt.value;
+            return (
+              <button
+                key={opt.value}
+                onClick={() => handleSelect(opt)}
+                className={`flex flex-col items-center gap-2 rounded-lg border px-4 py-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                  isActive
+                    ? "border-primary bg-primary/10 text-foreground"
+                    : "border-border/60 bg-muted/20 text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+                }`}
+              >
+                <span className={isActive ? "text-primary" : "text-muted-foreground"}>{opt.icon}</span>
+                <span className="font-semibold">{opt.label}</span>
                 <span className="text-[11px] font-normal text-center leading-tight opacity-75">{opt.description}</span>
               </button>
             );
@@ -407,6 +462,7 @@ function GeneralTab() {
       </Card>
 
       <RequestTimeoutCard />
+      <AppearanceCard />
 
       {/* API reference quick links */}
       <Card>
