@@ -2,7 +2,7 @@ import { useOverview, useSpikeAlerts, useDismissSpikeAlert } from "@/hooks/use-a
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Users, PhoneCall, Activity, DollarSign, Clock, AlertCircle, Bell, X, Mail } from "lucide-react";
-import { formatCentsToDollars } from "@/lib/api";
+import { formatCentsToDollars, formatAdminError } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 
@@ -20,8 +20,8 @@ function SpikeAlertsPanel() {
     try {
       await dismissAlert.mutateAsync(clerkId);
       toast({ title: "Alert dismissed", description: "This alert won't reappear today." });
-    } catch {
-      toast({ title: "Failed to dismiss", variant: "destructive" });
+    } catch (err) {
+      toast({ title: "Failed to dismiss", description: formatAdminError(err), variant: "destructive" });
     }
   }
 

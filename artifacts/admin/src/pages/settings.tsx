@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Settings, Bell, Mail, Check, AlertTriangle, Slack } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { formatAdminError } from "@/lib/api";
 
 export default function PlatformSettings() {
   const { data: thresholdData, isLoading: loadingThreshold } = useSpikeThreshold();
@@ -60,8 +61,8 @@ export default function PlatformSettings() {
       try {
         await saveThreshold.mutateAsync(null);
         toast({ title: "Threshold cleared", description: "Spike alerts are now disabled." });
-      } catch {
-        toast({ title: "Failed to clear threshold", variant: "destructive" });
+      } catch (err) {
+        toast({ title: "Failed to clear threshold", description: formatAdminError(err), variant: "destructive" });
       }
       return;
     }
@@ -73,8 +74,8 @@ export default function PlatformSettings() {
     try {
       await saveThreshold.mutateAsync(val);
       toast({ title: "Threshold saved", description: `Alert threshold set to ${val} calls/day.` });
-    } catch {
-      toast({ title: "Failed to save threshold", variant: "destructive" });
+    } catch (err) {
+      toast({ title: "Failed to save threshold", description: formatAdminError(err), variant: "destructive" });
     }
   }
 
@@ -87,8 +88,8 @@ export default function PlatformSettings() {
     try {
       await saveEmail.mutateAsync(val || null);
       toast({ title: val ? "Notification email saved" : "Notification email cleared" });
-    } catch {
-      toast({ title: "Failed to save email", variant: "destructive" });
+    } catch (err) {
+      toast({ title: "Failed to save email", description: formatAdminError(err), variant: "destructive" });
     }
   }
 

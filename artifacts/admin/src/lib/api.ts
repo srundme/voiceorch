@@ -18,7 +18,7 @@ export async function adminFetch<T>(path: string, opts?: RequestInit): Promise<T
   }
   
   if (!res.ok) {
-    const errorText = await res.text().catch(() => "");
+    const errorText = (await res.text().catch(() => "")).trim();
     throw new Error(`HTTP ${res.status}: ${errorText || res.statusText}`);
   }
 
@@ -29,6 +29,20 @@ export async function adminFetch<T>(path: string, opts?: RequestInit): Promise<T
   const text = await res.text();
   if (!text) return undefined as T;
   return JSON.parse(text) as T;
+}
+
+/**
+ * Extracts a user-readable message from any value thrown by adminFetch or
+ * mutation handlers.
+ *
+ * Priority:
+ *  1. err.message — the HTTP status + body text built by adminFetch, or a
+ *     network-level message from a TypeError thrown by fetch itself
+ *  2. Generic fallback for all other thrown values (null, undefined, strings, …)
+ */
+export function formatAdminError(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return "An unexpected error occurred.";
 }
 
 export function formatCentsToDollars(cents: number): string {
