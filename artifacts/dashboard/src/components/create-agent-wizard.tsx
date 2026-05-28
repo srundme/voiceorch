@@ -377,6 +377,48 @@ function useVoicePreview(apiFetch: (path: string, init?: RequestInit) => Promise
   return { playing, preview, setVoicesRef };
 }
 
+/* ── Pure payload builder (exported for testing) ─────────────────────────── */
+export function buildCreateAgentPayload(state: WizardState) {
+  const isManaged = state.mode === "managed";
+  const langs = [state.primaryLanguage, ...state.additionalLanguages];
+  const stack = getManagedStack(langs);
+
+  if (isManaged) {
+    return {
+      name: state.agentName || `${STEP_LABELS["use-case"]} Agent`,
+      language: LANG_CODE_MAP[state.primaryLanguage] ?? "en-US",
+      asrLanguage: ASR_LANG_CODE_MAP[state.primaryLanguage] ?? "en",
+      asrProvider: stack.asrProvider,
+      asrModel: stack.asrModel,
+      llmProvider: stack.llmProvider,
+      llmModel: stack.llmModel,
+      ttsProvider: stack.ttsProvider,
+      ttsModel: stack.ttsModel,
+      ttsVoice: state.selectedVoiceId || ARUSHI_VOICE.id,
+      telephonyProvider: stack.telephonyProvider,
+      systemPrompt: state.generatedPrompt || state.callFlowDescription || "You are a helpful AI voice assistant.",
+      maxDuration: 600,
+      agentConfig: {
+        summarizationEnabled: true,
+        summarizationPrompt: "Summarize this call in 3 bullet points: 1) caller intent, 2) key information exchanged, 3) outcome or next step.",
+      } as Record<string, unknown>,
+      tools: state.callTransferEnabled && state.callTransferNumber.trim()
+        ? [{ type: "call_transfer" as const, name: "transfer_to_human", description: "Transfer the call to a human agent when the caller requests it or when escalation is needed.", transferTo: state.callTransferNumber.trim() }]
+        : [],
+    };
+  }
+
+  return {
+    name: state.agentName || "New Assistant",
+    asrProvider: state.byopAsr,
+    llmProvider: state.byopLlm,
+    ttsProvider: state.byopTts,
+    telephonyProvider: state.byopTelephony,
+    systemPrompt: state.byopPrompt,
+    maxDuration: 300,
+  };
+}
+
 /* ── Step definitions ───────────────────────────────────────────────────── */
 // Step order: use-case → details → language → [micro 5q] → [call flow] → requirements → knowledge → voice → skills
 const MANAGED_STEPS = [
@@ -590,34 +632,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
 
   /* create agent */
   async function handleCreate() {
-    const isManaged = state.mode === "managed";
-    const langs  = [state.primaryLanguage, ...state.additionalLanguages];
-    const stack  = getManagedStack(langs);
-
-    const payload = isManaged ? {
-      name: state.agentName || `${STEP_LABELS["use-case"]} Agent`,
-      language: LANG_CODE_MAP[state.primaryLanguage] ?? "en-US",
-      asrLanguage: ASR_LANG_CODE_MAP[state.primaryLanguage] ?? "en",
-      asrProvider: stack.asrProvider, asrModel: stack.asrModel,
-      llmProvider: stack.llmProvider, llmModel: stack.llmModel,
-      ttsProvider: stack.ttsProvider, ttsModel: stack.ttsModel,
-      ttsVoice: state.selectedVoiceId || ARUSHI_VOICE.id,
-      telephonyProvider: stack.telephonyProvider,
-      systemPrompt: state.generatedPrompt || state.callFlowDescription || "You are a helpful AI voice assistant.",
-      maxDuration: 600,
-      agentConfig: {
-        summarizationEnabled: true,
-        summarizationPrompt: "Summarize this call in 3 bullet points: 1) caller intent, 2) key information exchanged, 3) outcome or next step.",
-      } as any,
-      tools: state.callTransferEnabled && state.callTransferNumber.trim()
-        ? [{ type: "call_transfer", name: "transfer_to_human", description: "Transfer the call to a human agent when the caller requests it or when escalation is needed.", transferTo: state.callTransferNumber.trim() }]
-        : [],
-    } : {
-      name: state.agentName || "New Assistant",
-      asrProvider: state.byopAsr, llmProvider: state.byopLlm,
-      ttsProvider: state.byopTts, telephonyProvider: state.byopTelephony,
-      systemPrompt: state.byopPrompt, maxDuration: 300,
-    };
+    const payload = buildCreateAgentPayload(state);
 
     create.mutate({ data: payload as any }, {
       onSuccess: (created) => {
