@@ -195,7 +195,7 @@ function StatusStrip({ calls, now }: { calls: any[]; now: number }) {
         <span className="text-muted-foreground">{calls.length} live call{calls.length !== 1 ? "s" : ""}</span>
       </div>
       <div className="flex items-center gap-1.5">
-        <div className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+        <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground" />
         <span className="text-muted-foreground">{agentsCount} agent{agentsCount !== 1 ? "s" : ""} busy</span>
       </div>
       {calls.length > 0 && (

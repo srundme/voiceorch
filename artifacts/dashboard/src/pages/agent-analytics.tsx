@@ -19,10 +19,9 @@ function StatCard({
   accent?: "zinc" | "zinc" | "zinc" | "red";
 }) {
   const colors: Record<string, string> = {
-    emerald: "text-emerald-600 bg-emerald-500/10",
-    blue:    "text-blue-400 bg-blue-500/10",
-    amber:   "text-amber-600 bg-amber-500/10",
-    red:     "text-red-500 bg-red-500/10",
+    blue:    "text-muted-foreground bg-muted",
+    amber:   "text-muted-foreground bg-muted",
+    red:     "text-muted-foreground bg-muted",
     zinc:    "text-muted-foreground bg-muted",
   };
   return (
@@ -41,7 +40,7 @@ function StatCard({
 
 function LatencyPill({ label, ms }: { label: string; ms: number | null | undefined }) {
   if (ms == null) return null;
-  const color = ms < 200 ? "text-foreground" : ms < 500 ? "text-amber-600" : "text-red-500";
+  const color = ms < 200 ? "text-foreground" : ms < 500 ? "text-foreground" : "text-foreground";
   return (
     <div className="flex items-center justify-between py-2 border-b border-border last:border-0">
       <span className="text-xs text-muted-foreground">{label}</span>
@@ -50,25 +49,35 @@ function LatencyPill({ label, ms }: { label: string; ms: number | null | undefin
   );
 }
 
-const CustomTooltip = ({ active, payload, label }: any) => {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="bg-popover border border-border rounded-lg p-3 text-xs shadow-xl">
-      <p className="text-muted-foreground mb-1.5">{label}</p>
-      {payload.map((p: any) => (
-        <p key={p.name} style={{ color: p.color }} className="flex gap-2 items-center">
-          <span className="font-medium">{p.name}:</span>
-          <span className="tabular-nums">{p.value}</span>
-        </p>
-      ))}
-    </div>
-  );
-};
+function makeCustomTooltip(bg: string, border: string, text: string, shadow: string) {
+  return function CustomTooltip({ active, payload, label }: any) {
+    if (!active || !payload?.length) return null;
+    return (
+      <div
+        style={{
+          background: bg,
+          border: `1px solid ${border}`,
+          color: text,
+          boxShadow: shadow,
+        }}
+        className="rounded-lg p-3 text-xs"
+      >
+        <p className="mb-1.5" style={{ color: text, opacity: 0.6 }}>{label}</p>
+        {payload.map((p: any) => (
+          <p key={p.name} style={{ color: p.color }} className="flex gap-2 items-center">
+            <span className="font-medium">{p.name}:</span>
+            <span className="tabular-nums">{p.value}</span>
+          </p>
+        ))}
+      </div>
+    );
+  };
+}
 
 export default function AgentAnalyticsPage() {
   const params = useParams<{ id: string }>();
   const agentId = parseInt(params.id ?? "0", 10);
-  const { tickColor, gridColor } = useChartTheme();
+  const { tickColor, gridColor, tooltipBg, tooltipBorder, tooltipText, tooltipShadow } = useChartTheme();
 
   const { data: stats, isLoading } = useGetAgentStats(agentId, {
     query: { enabled: !!agentId, queryKey: ["analytics", "agents", agentId] },
@@ -115,7 +124,7 @@ export default function AgentAnalyticsPage() {
           <h1 className="text-base font-semibold text-foreground">{stats.name}</h1>
           <p className="text-xs text-muted-foreground">Agent analytics · last 30 days</p>
         </div>
-        <Badge className={`ml-auto text-[10px] ${stats.successRate >= 90 ? "bg-muted text-foreground border-border" : stats.successRate >= 70 ? "bg-amber-500/15 text-amber-600 border-amber-500/30" : "bg-red-500/15 text-red-500 border-red-500/30"}`}>
+        <Badge className={`ml-auto text-[10px] ${stats.successRate >= 90 ? "bg-muted text-foreground border-border" : stats.successRate >= 70 ? "bg-muted text-foreground border-border" : "bg-muted text-foreground border-border"}`}>
           {stats.successRate}% success
         </Badge>
       </div>
@@ -143,8 +152,8 @@ export default function AgentAnalyticsPage() {
         {/* Success / fail breakdown */}
         <div className="grid grid-cols-2 gap-3">
           <div className="p-4 rounded-lg bg-card border border-border flex items-center gap-3">
-            <div className="h-8 w-8 rounded-full bg-emerald-500/10 flex items-center justify-center shrink-0">
-              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+            <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center shrink-0">
+              <CheckCircle2 className="h-4 w-4 text-foreground" />
             </div>
             <div>
               <p className="text-xl font-bold text-foreground tabular-nums">{stats.successfulCalls}</p>
@@ -152,11 +161,11 @@ export default function AgentAnalyticsPage() {
             </div>
           </div>
           <div className="p-4 rounded-lg bg-card border border-border flex items-center gap-3">
-            <div className="h-8 w-8 rounded-full bg-red-500/15 flex items-center justify-center shrink-0">
-              <XCircle className="h-4 w-4 text-red-500" />
+            <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center shrink-0">
+              <XCircle className="h-4 w-4 text-foreground" />
             </div>
             <div>
-              <p className="text-xl font-bold text-red-500 tabular-nums">{stats.failedCalls ?? 0}</p>
+              <p className="text-xl font-bold text-foreground tabular-nums">{stats.failedCalls ?? 0}</p>
               <p className="text-[11px] text-muted-foreground">Failed calls</p>
             </div>
           </div>
@@ -172,11 +181,11 @@ export default function AgentAnalyticsPage() {
             <div className="flex items-center gap-3">
               <div className="flex-1 bg-muted rounded-full h-2 overflow-hidden">
                 <div
-                  className={`h-2 rounded-full transition-all ${(stats as any).aiPassRate >= 70 ? "bg-zinc-500" : (stats as any).aiPassRate >= 50 ? "bg-zinc-500" : "bg-red-500"}`}
+                  className={`h-2 rounded-full transition-all ${(stats as any).aiPassRate >= 70 ? "bg-zinc-500" : (stats as any).aiPassRate >= 50 ? "bg-zinc-500" : "bg-foreground"}`}
                   style={{ width: `${(stats as any).aiPassRate ?? 0}%` }}
                 />
               </div>
-              <span className={`text-sm font-bold tabular-nums min-w-[3rem] text-right ${(stats as any).aiPassRate >= 70 ? "text-zinc-600" : (stats as any).aiPassRate >= 50 ? "text-zinc-600" : "text-red-500"}`}>
+              <span className={`text-sm font-bold tabular-nums min-w-[3rem] text-right ${(stats as any).aiPassRate >= 70 ? "text-foreground" : (stats as any).aiPassRate >= 50 ? "text-foreground" : "text-foreground"}`}>
                 {(stats as any).aiPassRate ?? 0}%
               </span>
               <span className="text-[11px] text-muted-foreground">PASS</span>
@@ -193,10 +202,10 @@ export default function AgentAnalyticsPage() {
                 <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
                 <XAxis dataKey="date" tick={{ fontSize: 10, fill: tickColor }} tickLine={false} axisLine={false} />
                 <YAxis tick={{ fontSize: 10, fill: tickColor }} tickLine={false} axisLine={false} width={24} />
-                <Tooltip content={CustomTooltip} />
+                <Tooltip content={makeCustomTooltip(tooltipBg, tooltipBorder, tooltipText, tooltipShadow)} />
                 <Legend wrapperStyle={{ fontSize: 11, color: tickColor }} />
-                <Bar dataKey="Completed" fill="#10b981" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="Failed" fill="#ef4444" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="Completed" fill="hsl(var(--chart-2))" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="Failed" fill="hsl(var(--chart-4))" radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>

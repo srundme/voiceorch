@@ -158,7 +158,7 @@ export default function PublicBookingPage() {
           <BrandHeader />
           <Card>
             <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
-              <div className="p-4 rounded-full bg-zinc-50">
+              <div className="p-4 rounded-full bg-muted">
                 <CheckCircle className="h-10 w-10 text-zinc-500" />
               </div>
               <div className="w-full">
@@ -172,8 +172,8 @@ export default function PublicBookingPage() {
                   </p>
                 )}
                 {meetLink && (
-                  <div className="mt-5 p-4 rounded-lg bg-zinc-50 border border-zinc-200 flex flex-col items-center gap-2">
-                    <div className="flex items-center gap-2 text-zinc-700 font-medium text-sm">
+                  <div className="mt-5 p-4 rounded-lg bg-muted border border-border flex flex-col items-center gap-2">
+                    <div className="flex items-center gap-2 text-foreground font-medium text-sm">
                       <Video className="h-4 w-4" />
                       Join with Google Meet
                     </div>
@@ -181,7 +181,7 @@ export default function PublicBookingPage() {
                       href={meetLink}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-zinc-600 underline underline-offset-2 text-sm break-all hover:text-zinc-800"
+                      className="text-foreground underline underline-offset-2 text-sm break-all hover:text-zinc-800"
                     >
                       {meetLink}
                     </a>
@@ -203,7 +203,7 @@ export default function PublicBookingPage() {
       <div className="max-w-3xl mx-auto">
         <BrandHeader />
         <div className="mb-8 text-center">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-100 text-zinc-700 text-sm font-medium mb-4">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-muted text-foreground text-sm font-medium mb-4">
             <Clock className="h-3.5 w-3.5" />
             {eventType.durationMinutes} min
           </div>
@@ -239,7 +239,7 @@ export default function PublicBookingPage() {
                         className={`px-3 py-2 rounded-lg border text-sm font-medium transition-all ${
                           selectedSlot === slot
                             ? "bg-zinc-600 border-zinc-600 text-white"
-                            : "bg-white border-slate-200 text-slate-700 hover:border-zinc-400 hover:bg-zinc-50"
+                            : "bg-card border-slate-200 text-slate-700 hover:border-zinc-400 hover:bg-muted"
                         }`}
                       >
                         {format(parseISO(slot), "h:mm a")}
@@ -272,7 +272,7 @@ export default function PublicBookingPage() {
                   aria-invalid={touched.name && !!fieldErrors.name}
                   aria-describedby={fieldErrors.name ? "name-error" : undefined}
                   placeholder="Jane Smith"
-                  className={`bg-white ${touched.name && fieldErrors.name ? "border-destructive focus-visible:ring-destructive" : ""}`}
+                  className={`bg-card ${touched.name && fieldErrors.name ? "border-destructive focus-visible:ring-destructive" : ""}`}
                 />
                 {touched.name && fieldErrors.name && (
                   <p id="name-error" className="text-sm text-destructive">{fieldErrors.name}</p>
@@ -295,7 +295,7 @@ export default function PublicBookingPage() {
                   aria-invalid={touched.email && !!fieldErrors.email}
                   aria-describedby={fieldErrors.email ? "email-error" : undefined}
                   placeholder="jane@example.com"
-                  className={`bg-white ${touched.email && fieldErrors.email ? "border-destructive focus-visible:ring-destructive" : ""}`}
+                  className={`bg-card ${touched.email && fieldErrors.email ? "border-destructive focus-visible:ring-destructive" : ""}`}
                 />
                 {touched.email && fieldErrors.email && (
                   <p id="email-error" className="text-sm text-destructive">{fieldErrors.email}</p>
@@ -308,18 +308,18 @@ export default function PublicBookingPage() {
                   value={notes}
                   onChange={e => setNotes(e.target.value)}
                   placeholder="Anything you'd like to share in advance..."
-                  className="flex min-h-[80px] w-full rounded-md border border-input bg-white px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+                  className="flex min-h-[80px] w-full rounded-md border border-input bg-card px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
                 />
               </div>
 
               {selectedSlot && (
-                <div className="p-3 rounded-lg bg-zinc-50 border border-zinc-200 text-sm text-zinc-800">
+                <div className="p-3 rounded-lg bg-muted border border-border text-sm text-zinc-800">
                   <strong>Selected:</strong> {format(parseISO(selectedSlot), "EEEE, MMMM d")} at {format(parseISO(selectedSlot), "h:mm a")}
                 </div>
               )}
 
               {bookingError && (
-                <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                <div className="p-3 rounded-lg bg-muted border border-border text-sm text-foreground">
                   {bookingError}
                 </div>
               )}

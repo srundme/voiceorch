@@ -46,10 +46,10 @@ export function useChartTheme(): ChartTheme {
       ? "0 4px 16px rgba(0,0,0,0.6)"
       : "0 4px 12px rgba(0,0,0,0.08)",
     palette: {
-      completed: isDark ? "#22c55e" : "#374151",
-      failed:    "#EF4444",
-      inProgress: "#F59E0B",
-      pending:   "#6b7280",
+      completed: isDark ? "hsl(0,0%,92%)" : "hsl(0,0%,18%)",
+      failed:    isDark ? "hsl(0,0%,45%)" : "hsl(0,0%,55%)",
+      inProgress: isDark ? "hsl(0,0%,70%)" : "hsl(0,0%,38%)",
+      pending:   isDark ? "hsl(0,0%,38%)" : "hsl(0,0%,72%)",
     },
   };
 }

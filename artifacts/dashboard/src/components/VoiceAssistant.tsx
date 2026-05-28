@@ -335,18 +335,18 @@ export function VoiceAssistant() {
           {/* Status / transcript bar */}
           <div className="px-4 py-2 min-h-[28px] shrink-0" style={{ borderTop: "1px solid #1e293b" }}>
             {phase === "listening" && (
-              <p className="text-xs animate-pulse" style={{ color: "#ef4444" }}>
+              <p className="text-xs animate-pulse text-foreground font-semibold">
                 🎙 Listening{transcript ? `: "${transcript}"` : "…"}
               </p>
             )}
             {phase === "speaking" && (
-              <p className="text-xs" style={{ color: "#a1a1aa" }}>🔊 Speaking…</p>
+              <p className="text-xs text-muted-foreground">🔊 Speaking…</p>
             )}
             {phase === "thinking" && (
-              <p className="text-xs" style={{ color: "#64748b" }}>Thinking…</p>
+              <p className="text-xs text-muted-foreground">Thinking…</p>
             )}
             {phase === "error" && (
-              <p className="text-xs" style={{ color: "#ef4444" }}>{error}</p>
+              <p className="text-xs text-foreground font-semibold underline">{error}</p>
             )}
           </div>
 
@@ -372,11 +372,11 @@ export function VoiceAssistant() {
               )}
               style={{
                 background: phase === "listening"
-                  ? "#ef4444"
+                  ? "hsl(var(--foreground))"
                   : isBusy
-                    ? "#1e293b"
-                    : "linear-gradient(135deg, #52525b, #52525b)",
-                boxShadow: phase === "listening" ? "0 0 0 8px rgba(239,68,68,0.2)" : undefined,
+                    ? "hsl(var(--muted))"
+                    : "hsl(var(--foreground) / 0.85)",
+                boxShadow: phase === "listening" ? "0 0 0 8px hsl(var(--foreground) / 0.2)" : undefined,
               }}
               title={phase === "listening" ? "Release to send" : "Hold to speak"}
             >

@@ -87,7 +87,7 @@ export default function CallDetail() {
     switch(status) {
       case "completed": return <Badge variant="default" className="bg-primary/20 text-primary hover:bg-primary/30 border-transparent">Completed</Badge>;
       case "failed": return <Badge variant="destructive" className="bg-destructive/20 text-destructive hover:bg-destructive/30 border-transparent">Failed</Badge>;
-      case "in_progress": return <Badge variant="secondary" className="bg-zinc-500/20 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-500/30 border-transparent animate-pulse">In Progress</Badge>;
+      case "in_progress": return <Badge variant="secondary" className="bg-muted text-foreground dark:text-zinc-400 hover:bg-zinc-500/30 border-transparent animate-pulse">In Progress</Badge>;
       case "pending": return <Badge variant="outline" className="text-muted-foreground">Pending</Badge>;
       case "cancelled": return <Badge variant="outline" className="bg-muted text-muted-foreground border-transparent">Cancelled</Badge>;
       default: return <Badge variant="outline">{status}</Badge>;
@@ -195,13 +195,13 @@ export default function CallDetail() {
 
             {/* Success Evaluation */}
             {(evalIsPass || evalIsFail) && (
-              <div className={`mx-4 mt-4 p-4 rounded-lg border ${evalIsPass ? "bg-zinc-50 border-zinc-200" : "bg-red-50 border-red-200"}`}>
-                <div className={`flex items-center gap-2 mb-1 text-sm font-semibold ${evalIsPass ? "text-zinc-700" : "text-red-600"}`}>
+              <div className={`mx-4 mt-4 p-4 rounded-lg border ${evalIsPass ? "bg-muted border-border" : "bg-muted border-border"}`}>
+                <div className={`flex items-center gap-2 mb-1 text-sm font-semibold ${evalIsPass ? "text-foreground" : "text-foreground"}`}>
                   {evalIsPass ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
                   AI Evaluation: {evalIsPass ? "PASS" : "FAIL"}
                 </div>
                 {evalReason && (
-                  <p className={`text-xs leading-relaxed ${evalIsPass ? "text-zinc-600" : "text-red-500"}`}>{evalReason}</p>
+                  <p className={`text-xs leading-relaxed ${evalIsPass ? "text-foreground" : "text-foreground"}`}>{evalReason}</p>
                 )}
               </div>
             )}

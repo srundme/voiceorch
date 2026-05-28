@@ -72,10 +72,10 @@ function KycBanner() {
   if (isLoading) return null;
   if (kycData?.kycStatus === "completed") {
     return (
-      <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-zinc-500/20 bg-zinc-500/5 text-zinc-700 text-sm">
+      <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-zinc-500/20 bg-zinc-500/5 text-foreground text-sm">
         <ShieldCheck className="h-4 w-4 shrink-0" />
         <span className="font-medium">Identity verified</span>
-        <span className="text-zinc-600/70 text-xs">— You can purchase Aadhaar-required Indian numbers.</span>
+        <span className="text-foreground/70 text-xs">— You can purchase Aadhaar-required Indian numbers.</span>
       </div>
     );
   }
@@ -109,22 +109,22 @@ function KycBanner() {
   return (
     <div className={`flex items-start gap-3 px-4 py-3 rounded-lg border text-sm ${
       isFailed
-        ? "border-red-500/20 bg-red-500/5"
+        ? "border-border bg-muted/40"
         : "border-zinc-500/20 bg-zinc-500/5"
     }`}>
       {isFailed
-        ? <ShieldAlert className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+        ? <ShieldAlert className="h-4 w-4 text-foreground mt-0.5 shrink-0" />
         : <ShieldAlert className="h-4 w-4 text-zinc-500 mt-0.5 shrink-0" />
       }
       <div className="flex-1 space-y-1">
-        <p className={`font-medium ${isFailed ? "text-red-700" : "text-zinc-700"}`}>
+        <p className={`font-medium ${isFailed ? "text-foreground" : "text-foreground"}`}>
           {isFailed
             ? "Identity verification failed"
             : hasActiveSession
               ? "Identity verification in progress"
               : "Identity verification required"}
         </p>
-        <p className={`text-xs leading-relaxed ${isFailed ? "text-red-600/70" : "text-zinc-600/70"}`}>
+        <p className={`text-xs leading-relaxed ${isFailed ? "text-foreground/70" : "text-foreground/70"}`}>
           {isFailed
             ? "Your KYC verification was unsuccessful. Common reasons include a name mismatch or OTP failure. Click below to try again."
             : hasActiveSession
@@ -136,7 +136,7 @@ function KycBanner() {
         size="sm"
         className={`h-8 gap-1.5 shrink-0 text-xs ${
           isFailed
-            ? "bg-red-600 hover:bg-red-700 text-white"
+            ? "bg-foreground hover:bg-foreground text-white"
             : "bg-zinc-500 hover:bg-zinc-600 text-white"
         }`}
         disabled={startKyc.isPending}
@@ -297,30 +297,30 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
               You are about to purchase <span className="font-mono text-foreground font-semibold">{selected}</span>.
             </DialogDescription>
           </DialogHeader>
-          <div className="rounded-lg border border-gray-200 bg-gray-50 divide-y divide-gray-100 text-sm">
+          <div className="rounded-lg border border-border bg-muted divide-y divide-border text-sm">
             <div className="flex justify-between px-4 py-2.5">
-              <span className="text-gray-500">Number</span>
-              <span className="font-mono font-medium text-gray-800">{selected}</span>
+              <span className="text-muted-foreground">Number</span>
+              <span className="font-mono font-medium text-foreground">{selected}</span>
             </div>
             {selectedNum?.region && (
               <div className="flex justify-between px-4 py-2.5">
-                <span className="text-gray-500">Region</span>
-                <span className="text-gray-700">{selectedNum.region}</span>
+                <span className="text-muted-foreground">Region</span>
+                <span className="text-foreground">{selectedNum.region}</span>
               </div>
             )}
             <div className="flex justify-between px-4 py-2.5">
-              <span className="text-gray-500">Monthly fee</span>
-              <span className="font-semibold text-gray-800">{totalCents > 0 ? `₹${(totalCents / 100).toFixed(0)}/mo` : "Free"}</span>
+              <span className="text-muted-foreground">Monthly fee</span>
+              <span className="font-semibold text-foreground">{totalCents > 0 ? `₹${(totalCents / 100).toFixed(0)}/mo` : "Free"}</span>
             </div>
           </div>
-          <div className="flex items-start gap-3 p-3 rounded-lg border border-zinc-500/20 bg-zinc-500/5 text-zinc-600 text-xs">
+          <div className="flex items-start gap-3 p-3 rounded-lg border border-zinc-500/20 bg-zinc-500/5 text-foreground text-xs">
             <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
             <span>Setup fee + first month's fee will be deducted from your wallet immediately. This action cannot be undone.</span>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirming(false)}>Back</Button>
             <Button
-              className="bg-black/85 hover:bg-black/90 text-gray-900"
+              className="bg-black/85 hover:bg-black/90 text-foreground"
               onClick={handlePurchase}
               disabled={purchase.isPending}
             >
@@ -383,21 +383,21 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
                 </div>
               ) : platformNotConfigured ? (
                 <div className="flex flex-col gap-2 p-4">
-                  <div className="flex items-start gap-2.5 text-zinc-600">
+                  <div className="flex items-start gap-2.5 text-foreground">
                     <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
                     <div className="text-sm">
                       <p className="font-medium">Platform not configured</p>
-                      <p className="text-zinc-600/70 mt-0.5 text-xs leading-relaxed">
+                      <p className="text-foreground/70 mt-0.5 text-xs leading-relaxed">
                         Carrier credentials are missing. Contact your platform administrator.
                       </p>
                     </div>
                   </div>
                 </div>
               ) : !available || available.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 text-gray-400 text-sm">
+                <div className="flex flex-col items-center justify-center py-8 text-muted-foreground text-sm">
                   <Globe className="h-8 w-8 mb-2 opacity-30" />
                   <p>No numbers available for {country}{pattern ? ` matching "${pattern}"` : ""}</p>
-                  <p className="text-xs mt-1 text-gray-300">Try a different country or remove the filter.</p>
+                  <p className="text-xs mt-1 text-muted-foreground">Try a different country or remove the filter.</p>
                 </div>
               ) : (
                 <div className="divide-y divide-border/40">
@@ -406,15 +406,15 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
                       key={n.number}
                       onClick={() => setSelected(n.number)}
                       className={`w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-muted/50 transition-colors text-left ${
-                        selected === n.number ? "bg-gray-50 border-l-2 border-zinc-500" : ""
+                        selected === n.number ? "bg-muted border-l-2 border-zinc-500" : ""
                       }`}
                     >
                       <div className="flex items-center gap-3">
-                        <span className="font-mono font-medium text-gray-800">{n.number}</span>
-                        {n.region && <span className="text-xs text-gray-400">{n.region}</span>}
+                        <span className="font-mono font-medium text-foreground">{n.number}</span>
+                        {n.region && <span className="text-xs text-muted-foreground">{n.region}</span>}
                       </div>
                       <div className="flex items-center gap-2 text-xs shrink-0">
-                        <span className="text-gray-700 font-medium">
+                        <span className="text-foreground font-medium">
                           {(n.monthlyRateCents ?? 0) > 0 ? `₹${((n.monthlyRateCents ?? 0) / 100).toFixed(0)}/mo` : "Free"}
                         </span>
                         <Badge variant="outline" className="text-[10px] capitalize">{n.numberType.replace("_", " ")}</Badge>
@@ -430,7 +430,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button
-            className="bg-black/85 hover:bg-black/90 text-gray-900 gap-1.5"
+            className="bg-black/85 hover:bg-black/90 text-foreground gap-1.5"
             disabled={!selected}
             onClick={() => setConfirming(true)}
           >
@@ -509,46 +509,46 @@ function RoutingRulesDialog({ number, onClose }: { number: PhoneNumber; onClose:
           </DialogDescription>
         </DialogHeader>
         {loading ? (
-          <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-gray-400" /></div>
+          <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
         ) : (
           <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
             {rules.length === 0 && (
-              <p className="text-xs text-gray-400 text-center py-4">No rules — all calls go to the assigned agent.</p>
+              <p className="text-xs text-muted-foreground text-center py-4">No rules — all calls go to the assigned agent.</p>
             )}
             {rules.map((rule, i) => (
-              <div key={i} className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
+              <div key={i} className="rounded-lg border border-border bg-muted p-3 space-y-2">
                 <div className="flex items-center gap-2">
                   <Select value={rule.condition} onValueChange={v => updateRule(i, { condition: v as RoutingRule["condition"] })}>
-                    <SelectTrigger className="h-7 text-xs flex-1 bg-white border-gray-200"><SelectValue /></SelectTrigger>
-                    <SelectContent className="bg-white border-gray-200">
+                    <SelectTrigger className="h-7 text-xs flex-1 bg-card border-border"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-card border-border">
                       <SelectItem value="caller_prefix" className="text-xs">Caller prefix matches</SelectItem>
                       <SelectItem value="time_range" className="text-xs">Time of day (UTC)</SelectItem>
                       <SelectItem value="always" className="text-xs">Always (catch-all)</SelectItem>
                     </SelectContent>
                   </Select>
-                  <button type="button" onClick={() => removeRule(i)} className="text-gray-400 hover:text-red-500 text-xs px-1 transition-colors">✕</button>
+                  <button type="button" onClick={() => removeRule(i)} className="text-muted-foreground hover:text-foreground text-xs px-1 transition-colors">✕</button>
                 </div>
                 {rule.condition === "caller_prefix" && (
                   <Input value={rule.value ?? ""} onChange={e => updateRule(i, { value: e.target.value })}
-                    placeholder="+1800 or +44" className="h-7 text-xs bg-white border-gray-200" />
+                    placeholder="+1800 or +44" className="h-7 text-xs bg-card border-border" />
                 )}
                 {rule.condition === "time_range" && (
                   <div className="flex gap-2 items-center">
                     <Input type="number" min={0} max={23} value={rule.startHour ?? 9}
                       onChange={e => updateRule(i, { startHour: parseInt(e.target.value) })}
-                      className="h-7 w-16 text-xs text-center bg-white border-gray-200" />
-                    <span className="text-xs text-gray-400">to</span>
+                      className="h-7 w-16 text-xs text-center bg-card border-border" />
+                    <span className="text-xs text-muted-foreground">to</span>
                     <Input type="number" min={0} max={23} value={rule.endHour ?? 17}
                       onChange={e => updateRule(i, { endHour: parseInt(e.target.value) })}
-                      className="h-7 w-16 text-xs text-center bg-white border-gray-200" />
-                    <span className="text-xs text-gray-400">UTC</span>
+                      className="h-7 w-16 text-xs text-center bg-card border-border" />
+                    <span className="text-xs text-muted-foreground">UTC</span>
                   </div>
                 )}
                 <div>
-                  <p className="text-[10px] text-gray-400 mb-1">Route to agent</p>
+                  <p className="text-[10px] text-muted-foreground mb-1">Route to agent</p>
                   <Select value={String(rule.targetAgentId)} onValueChange={v => updateRule(i, { targetAgentId: parseInt(v) })}>
-                    <SelectTrigger className="h-7 text-xs bg-white border-gray-200"><SelectValue /></SelectTrigger>
-                    <SelectContent className="bg-white border-gray-200">
+                    <SelectTrigger className="h-7 text-xs bg-card border-border"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-card border-border">
                       {agentList.map(a => (
                         <SelectItem key={a.id} value={String(a.id)} className="text-xs">{a.name}</SelectItem>
                       ))}
@@ -558,14 +558,14 @@ function RoutingRulesDialog({ number, onClose }: { number: PhoneNumber; onClose:
               </div>
             ))}
             <button type="button" onClick={addRule}
-              className="w-full text-xs text-gray-400 hover:text-gray-600 border border-dashed border-white/[0.12] rounded-lg py-2 transition-colors">
+              className="w-full text-xs text-muted-foreground hover:text-muted-foreground border border-dashed border-white/[0.12] rounded-lg py-2 transition-colors">
               + Add rule
             </button>
           </div>
         )}
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleSave} disabled={saving} className="bg-black/85 hover:bg-black/90 text-gray-900 gap-1.5">
+          <Button onClick={handleSave} disabled={saving} className="bg-black/85 hover:bg-black/90 text-foreground gap-1.5">
             {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Save Rules
           </Button>
         </DialogFooter>
@@ -634,13 +634,13 @@ export default function PhoneNumbersPage() {
   return (
     <div className="h-full overflow-y-auto bg-transparent">
       {/* Header */}
-      <div className="border-b border-gray-200 px-6 py-4 flex items-center gap-3 shrink-0">
-        <Phone className="w-5 h-5 text-gray-700" />
-        <h1 className="font-semibold text-gray-800 text-lg">Phone Numbers</h1>
-        <span className="text-xs text-gray-400 ml-auto">Powered by Vobiz · live inventory</span>
+      <div className="border-b border-border px-6 py-4 flex items-center gap-3 shrink-0">
+        <Phone className="w-5 h-5 text-foreground" />
+        <h1 className="font-semibold text-foreground text-lg">Phone Numbers</h1>
+        <span className="text-xs text-muted-foreground ml-auto">Powered by Vobiz · live inventory</span>
         <Button
           size="sm"
-          className="h-8 gap-1.5 bg-black/85 hover:bg-black/90 text-gray-900"
+          className="h-8 gap-1.5 bg-black/85 hover:bg-black/90 text-foreground"
           onClick={() => setBuyOpen(true)}
         >
           <Plus className="h-3.5 w-3.5" /> Get Number
@@ -652,11 +652,11 @@ export default function PhoneNumbersPage() {
         <KycBanner />
 
         {/* Info banner */}
-        <div className="flex items-start gap-3 p-4 rounded-xl border border-gray-200 bg-white">
-          <Globe className="h-5 w-5 text-gray-700 mt-0.5 shrink-0" />
-          <div className="text-sm text-gray-500 space-y-0.5">
-            <p className="text-gray-700 font-medium">Self-serve number provisioning</p>
-            <p>Search Vobiz's live inventory across 130+ countries. Purchase a number and it's immediately active — assign it to any agent and inbound calls route straight to its pipeline. <span className="text-gray-400">Releasing returns the number to Vobiz inventory.</span></p>
+        <div className="flex items-start gap-3 p-4 rounded-xl border border-border bg-card">
+          <Globe className="h-5 w-5 text-foreground mt-0.5 shrink-0" />
+          <div className="text-sm text-muted-foreground space-y-0.5">
+            <p className="text-foreground font-medium">Self-serve number provisioning</p>
+            <p>Search Vobiz's live inventory across 130+ countries. Purchase a number and it's immediately active — assign it to any agent and inbound calls route straight to its pipeline. <span className="text-muted-foreground">Releasing returns the number to Vobiz inventory.</span></p>
           </div>
         </div>
 
@@ -664,7 +664,7 @@ export default function PhoneNumbersPage() {
         {isLoading ? (
           <div className="space-y-2">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-4 p-4 rounded-lg border border-gray-200 bg-white">
+              <div key={i} className="flex items-center gap-4 p-4 rounded-lg border border-border bg-card">
                 <Skeleton className="h-5 w-36" />
                 <Skeleton className="h-5 w-20" />
                 <Skeleton className="h-5 w-28 ml-auto" />
@@ -672,10 +672,10 @@ export default function PhoneNumbersPage() {
             ))}
           </div>
         ) : !numbers || numbers.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 text-gray-400">
+          <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
             <Phone className="w-12 h-12 mb-4 opacity-30" />
             <p className="text-sm mb-3">No phone numbers yet.</p>
-            <Button size="sm" className="gap-1.5 bg-black/85 hover:bg-black/90 text-gray-900" onClick={() => setBuyOpen(true)}>
+            <Button size="sm" className="gap-1.5 bg-black/85 hover:bg-black/90 text-foreground" onClick={() => setBuyOpen(true)}>
               <Plus className="h-3.5 w-3.5" /> Get your first number
             </Button>
           </div>
@@ -684,11 +684,11 @@ export default function PhoneNumbersPage() {
             {numbers.map(n => (
               <div
                 key={n.id}
-                className="flex items-center gap-4 px-4 py-3 rounded-lg border border-gray-200/60 bg-white hover:bg-white transition-colors"
+                className="flex items-center gap-4 px-4 py-3 rounded-lg border border-border/60 bg-card hover:bg-card transition-colors"
               >
                 <div className="shrink-0">
-                  <p className="font-mono font-semibold text-gray-800 text-sm">{n.number}</p>
-                  <p className="text-[11px] text-gray-400 mt-0.5">{n.countryCode}{n.region ? ` · ${n.region}` : ""}</p>
+                  <p className="font-mono font-semibold text-foreground text-sm">{n.number}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">{n.countryCode}{n.region ? ` · ${n.region}` : ""}</p>
                 </div>
 
                 <Badge variant="outline" className="text-[10px] capitalize shrink-0">
@@ -697,12 +697,12 @@ export default function PhoneNumbersPage() {
 
                 <div className="flex-1 min-w-0">
                   {n.agentName ? (
-                    <div className="flex items-center gap-1.5 text-xs text-gray-700">
+                    <div className="flex items-center gap-1.5 text-xs text-foreground">
                       <Link2 className="h-3 w-3" />
                       <span className="truncate">{n.agentName}</span>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-1.5 text-xs text-gray-400">
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                       <Link2Off className="h-3 w-3" />
                       Unassigned
                     </div>
@@ -710,7 +710,7 @@ export default function PhoneNumbersPage() {
                 </div>
 
                 {(n.monthlyRateCents ?? 0) > 0 && (
-                  <div className="flex items-center gap-0.5 text-xs text-gray-400 shrink-0">
+                  <div className="flex items-center gap-0.5 text-xs text-muted-foreground shrink-0">
                     <IndianRupee className="h-3 w-3" />
                     <span>{((n.monthlyRateCents ?? 0) / 100).toFixed(0)}/mo</span>
                   </div>
@@ -721,7 +721,7 @@ export default function PhoneNumbersPage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-7 text-xs gap-1.5 text-gray-500 hover:text-gray-800"
+                      className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
                       onClick={() => setRoutingTarget(n)}
                     >
                       <GitFork className="h-3 w-3" /> Rules
@@ -730,7 +730,7 @@ export default function PhoneNumbersPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-7 text-xs gap-1.5 text-gray-500 hover:text-gray-800"
+                    className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
                     onClick={() => setAssignTarget(n)}
                   >
                     <Link2 className="h-3 w-3" /> {n.agentId ? "Reassign" : "Assign"}
@@ -738,7 +738,7 @@ export default function PhoneNumbersPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-7 text-xs gap-1.5 text-gray-400 hover:text-red-500"
+                    className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
                     onClick={() => setReleaseTarget(n)}
                   >
                     <Trash2 className="h-3 w-3" />
@@ -765,7 +765,7 @@ export default function PhoneNumbersPage() {
                 <span className="font-mono text-foreground">{releaseTarget.number}</span> will be returned to Vobiz inventory. This cannot be undone — someone else may claim it.
               </DialogDescription>
             </DialogHeader>
-            <div className="flex items-start gap-2.5 p-3 rounded-lg border border-red-500/20 bg-red-500/5 text-red-600 text-xs">
+            <div className="flex items-start gap-2.5 p-3 rounded-lg border border-border bg-muted/40 text-foreground text-xs">
               <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
               Any active calls or agent assignments using this number will stop working.
             </div>

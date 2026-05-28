@@ -71,13 +71,13 @@ function parseCsv(text: string): { headers: string[]; rows: Record<string, strin
 
 function statusBadge(status: string) {
   const map: Record<string, string> = {
-    pending:   "bg-gray-50 text-gray-600 border-gray-200",
-    calling:   "bg-zinc-50 text-zinc-700 border-zinc-200",
-    completed: "bg-zinc-50 text-zinc-700 border-zinc-200",
-    failed:    "bg-red-50 text-red-700 border-red-200",
-    skipped:   "bg-zinc-50 text-zinc-700 border-zinc-200",
+    pending:   "bg-muted text-muted-foreground border-border",
+    calling:   "bg-muted text-foreground border-border",
+    completed: "bg-muted text-foreground border-border",
+    failed:    "bg-muted text-foreground border-border",
+    skipped:   "bg-muted text-foreground border-border",
   };
-  return map[status] ?? "bg-gray-50 text-gray-500 border-gray-200";
+  return map[status] ?? "bg-muted text-muted-foreground border-border";
 }
 
 function sourceLabel(source: string) {
@@ -95,20 +95,20 @@ function WebhookUrlBox({ token }: { token: string }) {
     setTimeout(() => setCopied(false), 2000);
   }
   return (
-    <div className="border border-dashed border-zinc-200 rounded-xl bg-zinc-50/50 p-4">
-      <p className="text-xs font-semibold text-zinc-700 mb-2 flex items-center gap-1.5">
+    <div className="border border-dashed border-border rounded-xl bg-muted/50 p-4">
+      <p className="text-xs font-semibold text-foreground mb-2 flex items-center gap-1.5">
         <Megaphone className="h-3.5 w-3.5" /> Webhook URL
       </p>
       <div className="flex items-center gap-2">
         <code className="text-xs font-mono text-zinc-900 flex-1 truncate">{url}</code>
         <button
           onClick={copy}
-          className="shrink-0 p-1.5 rounded-lg hover:bg-zinc-100 text-zinc-600 transition-colors"
+          className="shrink-0 p-1.5 rounded-lg hover:bg-muted text-foreground transition-colors"
         >
           {copied ? <Check className="h-3.5 w-3.5 text-zinc-500" /> : <Copy className="h-3.5 w-3.5" />}
         </button>
       </div>
-      <p className="text-[11px] text-zinc-600/70 mt-2">
+      <p className="text-[11px] text-foreground/70 mt-2">
         POST JSON leads here — or use as Meta Lead Ads webhook URL (GET for verification, POST for leads).
       </p>
     </div>
@@ -203,7 +203,7 @@ function UploadCsvModal({
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Upload className="h-4 w-4 text-zinc-600" /> Upload CSV
+            <Upload className="h-4 w-4 text-foreground" /> Upload CSV
           </DialogTitle>
           <DialogDescription>
             Upload a CSV file to bulk-import leads into this campaign.
@@ -214,26 +214,26 @@ function UploadCsvModal({
         {result ? (
           <div className="space-y-4">
             <div className="flex flex-col items-center gap-3 py-6 text-center">
-              <div className="p-3 rounded-full bg-zinc-50 text-zinc-600">
+              <div className="p-3 rounded-full bg-muted text-foreground">
                 <CheckCircle2 className="h-8 w-8" />
               </div>
               <div>
-                <p className="text-lg font-bold text-gray-900">Import complete</p>
-                <p className="text-sm text-gray-500 mt-0.5">
-                  <span className="font-semibold text-zinc-700">{result.imported} leads imported</span>
+                <p className="text-lg font-bold text-foreground">Import complete</p>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  <span className="font-semibold text-foreground">{result.imported} leads imported</span>
                   {result.skipped > 0 && (
-                    <span className="text-zinc-600">, {result.skipped} rows skipped</span>
+                    <span className="text-foreground">, {result.skipped} rows skipped</span>
                   )}
                 </p>
               </div>
               {(result.errors ?? []).length > 0 && (
-                <div className="w-full bg-zinc-50 border border-zinc-200 rounded-lg p-3 text-left">
-                  <p className="text-xs font-semibold text-zinc-700 mb-1.5 flex items-center gap-1">
+                <div className="w-full bg-muted border border-border rounded-lg p-3 text-left">
+                  <p className="text-xs font-semibold text-foreground mb-1.5 flex items-center gap-1">
                     <AlertCircle className="h-3.5 w-3.5" /> Skipped rows
                   </p>
                   <ul className="space-y-0.5">
                     {(result.errors ?? []).map((e, i) => (
-                      <li key={i} className="text-xs text-zinc-700 font-mono">{e}</li>
+                      <li key={i} className="text-xs text-foreground font-mono">{e}</li>
                     ))}
                   </ul>
                 </div>
@@ -246,23 +246,23 @@ function UploadCsvModal({
         ) : (
           <div className="space-y-4">
             {/* Field mapping reference */}
-            <div className="bg-gray-50 rounded-lg p-3 text-xs">
-              <p className="font-semibold text-gray-500 mb-2">This campaign maps CSV columns:</p>
+            <div className="bg-muted rounded-lg p-3 text-xs">
+              <p className="font-semibold text-muted-foreground mb-2">This campaign maps CSV columns:</p>
               <div className="flex flex-wrap gap-2">
                 {[
                   { role: "Phone (required)", field: phoneField },
                   ...(fieldMappings["name"]  ? [{ role: "Name",  field: nameField  }] : []),
                   ...(fieldMappings["email"] ? [{ role: "Email", field: emailField }] : []),
                 ].map(({ role, field }) => (
-                  <div key={role} className="flex items-center gap-1.5 bg-white border border-gray-200 rounded px-2 py-1">
-                    <span className="text-gray-400">{role}</span>
-                    <span className="text-gray-300">←</span>
-                    <code className="font-mono text-zinc-700">{field}</code>
+                  <div key={role} className="flex items-center gap-1.5 bg-card border border-border rounded px-2 py-1">
+                    <span className="text-muted-foreground">{role}</span>
+                    <span className="text-muted-foreground">←</span>
+                    <code className="font-mono text-foreground">{field}</code>
                   </div>
                 ))}
               </div>
-              <p className="text-gray-400 mt-1.5">
-                Make sure your CSV has a column named exactly <code className="font-mono text-zinc-700">{phoneField}</code>.
+              <p className="text-muted-foreground mt-1.5">
+                Make sure your CSV has a column named exactly <code className="font-mono text-foreground">{phoneField}</code>.
               </p>
             </div>
 
@@ -275,18 +275,18 @@ function UploadCsvModal({
                 onClick={() => fileInputRef.current?.click()}
                 className={`border-2 border-dashed rounded-xl p-10 flex flex-col items-center gap-3 cursor-pointer transition-colors ${
                   dragging
-                    ? "border-zinc-400 bg-zinc-50"
-                    : "border-gray-200 hover:border-zinc-300 hover:bg-gray-50"
+                    ? "border-zinc-400 bg-muted"
+                    : "border-border hover:border-zinc-300 hover:bg-muted"
                 }`}
               >
-                <div className="p-3 rounded-full bg-zinc-50 text-zinc-400">
+                <div className="p-3 rounded-full bg-muted text-zinc-400">
                   <FileText className="h-7 w-7" />
                 </div>
                 <div className="text-center">
-                  <p className="text-sm font-medium text-gray-700">
+                  <p className="text-sm font-medium text-foreground">
                     Drop your CSV file here, or click to browse
                   </p>
-                  <p className="text-xs text-gray-400 mt-0.5">
+                  <p className="text-xs text-muted-foreground mt-0.5">
                     Must include a <code className="font-mono">{phoneField}</code> column • Any number of rows
                   </p>
                 </div>
@@ -301,7 +301,7 @@ function UploadCsvModal({
             ) : (
               <div className="space-y-3">
                 {/* File name + clear */}
-                <div className="flex items-center justify-between bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-2">
+                <div className="flex items-center justify-between bg-muted border border-border rounded-lg px-3 py-2">
                   <div className="flex items-center gap-2">
                     <FileText className="h-4 w-4 text-zinc-500" />
                     <span className="text-sm font-medium text-zinc-800">{fileName}</span>
@@ -311,7 +311,7 @@ function UploadCsvModal({
                   </div>
                   <button
                     onClick={reset}
-                    className="text-zinc-400 hover:text-zinc-700 transition-colors"
+                    className="text-zinc-400 hover:text-foreground transition-colors"
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -319,14 +319,14 @@ function UploadCsvModal({
 
                 {/* Column detection status */}
                 {phoneDetected === false && (
-                  <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg p-3">
-                    <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
-                    <div className="text-sm text-red-700">
+                  <div className="flex items-start gap-2 bg-muted border border-border rounded-lg p-3">
+                    <AlertCircle className="h-4 w-4 text-foreground mt-0.5 shrink-0" />
+                    <div className="text-sm text-foreground">
                       <p className="font-semibold">Phone column not found</p>
                       <p className="text-xs mt-0.5">
                         Your CSV headers: <code className="font-mono">{parsed.headers.join(", ")}</code>
                         <br />
-                        Expected column: <code className="font-mono text-red-800">{phoneField}</code>
+                        Expected column: <code className="font-mono text-foreground">{phoneField}</code>
                         <br />
                         Update the campaign's field mappings to match your column names.
                       </p>
@@ -335,9 +335,9 @@ function UploadCsvModal({
                 )}
 
                 {phoneDetected && (
-                  <div className="flex items-center gap-2 bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-2">
+                  <div className="flex items-center gap-2 bg-muted border border-border rounded-lg px-3 py-2">
                     <CheckCircle2 className="h-4 w-4 text-zinc-500 shrink-0" />
-                    <p className="text-xs text-zinc-700">
+                    <p className="text-xs text-foreground">
                       Phone column <code className="font-mono font-bold">{phoneField}</code> detected —{" "}
                       ready to import <strong>{parsed.rows.length.toLocaleString()}</strong> leads
                     </p>
@@ -347,33 +347,33 @@ function UploadCsvModal({
                 {/* Preview table */}
                 {parsed.headers.length > 0 && (
                   <div>
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
                       Preview (first {Math.min(previewRows.length, 5)} rows)
                     </p>
-                    <div className="overflow-x-auto rounded-lg border border-gray-100">
+                    <div className="overflow-x-auto rounded-lg border border-border">
                       <table className="text-xs w-full">
                         <thead>
-                          <tr className="bg-gray-50 border-b border-gray-100">
+                          <tr className="bg-muted border-b border-border">
                             {parsed.headers.map(h => (
                               <th
                                 key={h}
                                 className={`px-3 py-2 text-left font-medium ${
                                   h === phoneField
-                                    ? "text-zinc-700 bg-zinc-50"
+                                    ? "text-foreground bg-muted"
                                     : h === nameField || h === emailField
-                                    ? "text-zinc-600"
-                                    : "text-gray-400"
+                                    ? "text-foreground"
+                                    : "text-muted-foreground"
                                 }`}
                               >
                                 {h}
                                 {h === phoneField && (
-                                  <span className="ml-1 text-[9px] bg-zinc-100 text-zinc-600 px-1 rounded">phone</span>
+                                  <span className="ml-1 text-[9px] bg-muted text-foreground px-1 rounded">phone</span>
                                 )}
                                 {h === nameField && h !== phoneField && (
-                                  <span className="ml-1 text-[9px] bg-zinc-100 text-zinc-600 px-1 rounded">name</span>
+                                  <span className="ml-1 text-[9px] bg-muted text-foreground px-1 rounded">name</span>
                                 )}
                                 {h === emailField && h !== phoneField && (
-                                  <span className="ml-1 text-[9px] bg-zinc-100 text-zinc-600 px-1 rounded">email</span>
+                                  <span className="ml-1 text-[9px] bg-muted text-foreground px-1 rounded">email</span>
                                 )}
                               </th>
                             ))}
@@ -381,12 +381,12 @@ function UploadCsvModal({
                         </thead>
                         <tbody>
                           {previewRows.map((row, i) => (
-                            <tr key={i} className="border-b border-gray-50 last:border-0">
+                            <tr key={i} className="border-b border-border last:border-0">
                               {parsed.headers.map(h => (
                                 <td
                                   key={h}
                                   className={`px-3 py-1.5 truncate max-w-[160px] ${
-                                    h === phoneField ? "font-mono font-medium text-gray-800" : "text-gray-500"
+                                    h === phoneField ? "font-mono font-medium text-foreground" : "text-muted-foreground"
                                   }`}
                                 >
                                   {row[h] ?? ""}
@@ -398,7 +398,7 @@ function UploadCsvModal({
                       </table>
                     </div>
                     {parsed.rows.length > 5 && (
-                      <p className="text-[11px] text-gray-400 mt-1">
+                      <p className="text-[11px] text-muted-foreground mt-1">
                         …and {(parsed.rows.length - 5).toLocaleString()} more rows
                       </p>
                     )}
@@ -438,24 +438,24 @@ function LeadRow({ lead, onRetry }: { lead: CampaignLead; onRetry: () => void })
   return (
     <>
       <tr
-        className="border-b border-gray-50 hover:bg-gray-50/50 cursor-pointer transition-colors"
+        className="border-b border-border hover:bg-muted/50 cursor-pointer transition-colors"
         onClick={() => setOpen(o => !o)}
       >
         <td className="py-3 px-4">
           <div className="flex items-center gap-2">
-            <Phone className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-            <span className="text-sm font-mono font-medium text-gray-800">{lead.phone}</span>
+            <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <span className="text-sm font-mono font-medium text-foreground">{lead.phone}</span>
           </div>
-          {lead.name && <p className="text-xs text-gray-400 mt-0.5 ml-5.5">{lead.name}</p>}
+          {lead.name && <p className="text-xs text-muted-foreground mt-0.5 ml-5.5">{lead.name}</p>}
         </td>
         <td className="py-3 px-4">
           <Badge variant="outline" className={`text-[10px] ${statusBadge(lead.callStatus)}`}>
             {lead.callStatus}
           </Badge>
         </td>
-        <td className="py-3 px-4 text-xs text-gray-400">{lead.callAttempts}</td>
-        <td className="py-3 px-4 text-xs text-gray-400">{sourceLabel(lead.source)}</td>
-        <td className="py-3 px-4 text-xs text-gray-400">
+        <td className="py-3 px-4 text-xs text-muted-foreground">{lead.callAttempts}</td>
+        <td className="py-3 px-4 text-xs text-muted-foreground">{sourceLabel(lead.source)}</td>
+        <td className="py-3 px-4 text-xs text-muted-foreground">
           {formatDistanceToNow(new Date(lead.createdAt), { addSuffix: true })}
         </td>
         <td className="py-3 px-4">
@@ -471,33 +471,33 @@ function LeadRow({ lead, onRetry }: { lead: CampaignLead; onRetry: () => void })
         </td>
       </tr>
       {open && (
-        <tr className="bg-zinc-50/30">
+        <tr className="bg-muted/30">
           <td colSpan={6} className="px-4 py-3">
             <div className="grid grid-cols-2 gap-4 text-xs">
               {lead.email && (
-                <div className="flex items-center gap-1.5 text-gray-500">
+                <div className="flex items-center gap-1.5 text-muted-foreground">
                   <Mail className="h-3.5 w-3.5" /> {lead.email}
                 </div>
               )}
               {lead.lastAttemptAt && (
-                <div className="flex items-center gap-1.5 text-gray-500">
+                <div className="flex items-center gap-1.5 text-muted-foreground">
                   <Clock className="h-3.5 w-3.5" /> Last attempt: {format(new Date(lead.lastAttemptAt), "MMM d, HH:mm")}
                 </div>
               )}
               {lead.externalLeadId && (
-                <div className="text-gray-400">Lead ID: <code className="font-mono">{lead.externalLeadId}</code></div>
+                <div className="text-muted-foreground">Lead ID: <code className="font-mono">{lead.externalLeadId}</code></div>
               )}
               {lead.notes && (
-                <div className="col-span-2 text-red-500">{lead.notes}</div>
+                <div className="col-span-2 text-foreground">{lead.notes}</div>
               )}
               {Object.keys(lead.leadData ?? {}).length > 0 && (
                 <div className="col-span-2">
-                  <p className="font-medium text-gray-500 mb-1">Form data</p>
+                  <p className="font-medium text-muted-foreground mb-1">Form data</p>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1">
                     {Object.entries(lead.leadData as Record<string, string>).map(([k, v]) => (
                       <div key={k} className="flex gap-1">
-                        <span className="text-gray-400 font-mono">{k}:</span>
-                        <span className="text-gray-600 truncate">{v}</span>
+                        <span className="text-muted-foreground font-mono">{k}:</span>
+                        <span className="text-muted-foreground truncate">{v}</span>
                       </div>
                     ))}
                   </div>
@@ -561,8 +561,8 @@ export default function CampaignDetailPage() {
   if (loadingCampaign) {
     return (
       <div className="p-6 max-w-5xl mx-auto">
-        <div className="h-8 w-48 bg-gray-100 rounded animate-pulse mb-6" />
-        <div className="h-40 bg-gray-50 rounded-2xl animate-pulse" />
+        <div className="h-8 w-48 bg-muted rounded animate-pulse mb-6" />
+        <div className="h-40 bg-muted rounded-2xl animate-pulse" />
       </div>
     );
   }
@@ -570,7 +570,7 @@ export default function CampaignDetailPage() {
   if (!campaign) {
     return (
       <div className="p-6 text-center">
-        <p className="text-gray-500">Campaign not found.</p>
+        <p className="text-muted-foreground">Campaign not found.</p>
         <Link href="/app/campaigns"><Button variant="ghost" className="mt-2">Back to campaigns</Button></Link>
       </div>
     );
@@ -585,7 +585,7 @@ export default function CampaignDetailPage() {
     <div className="p-6 max-w-5xl mx-auto">
       {/* Back */}
       <Link href="/app/campaigns">
-        <button className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-700 mb-4 transition-colors">
+        <button className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4 transition-colors">
           <ArrowLeft className="h-3.5 w-3.5" /> Campaigns
         </button>
       </Link>
@@ -593,12 +593,12 @@ export default function CampaignDetailPage() {
       {/* Header */}
       <div className="flex items-start justify-between gap-4 mb-6">
         <div className="flex items-center gap-3">
-          <div className="p-3 rounded-xl bg-zinc-50 text-zinc-600">
+          <div className="p-3 rounded-xl bg-muted text-foreground">
             <Megaphone className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-gray-900">{campaign.name}</h1>
-            {campaign.description && <p className="text-sm text-gray-400">{campaign.description}</p>}
+            <h1 className="text-xl font-bold text-foreground">{campaign.name}</h1>
+            {campaign.description && <p className="text-sm text-muted-foreground">{campaign.description}</p>}
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -610,7 +610,7 @@ export default function CampaignDetailPage() {
           >
             <Upload className="h-3.5 w-3.5" /> Upload CSV
           </Button>
-          <span className="text-sm text-gray-500">{campaign.isActive ? "Active" : "Inactive"}</span>
+          <span className="text-sm text-muted-foreground">{campaign.isActive ? "Active" : "Inactive"}</span>
           <Switch checked={campaign.isActive} onCheckedChange={() => void toggleActive()} />
         </div>
       </div>
@@ -623,9 +623,9 @@ export default function CampaignDetailPage() {
           { label: "Max attempts", value: campaign.maxAttempts  },
           { label: "Delay (s)",    value: campaign.callDelaySeconds },
         ].map(s => (
-          <div key={s.label} className="bg-white border border-gray-100 rounded-xl p-3 text-center">
-            <p className="text-[11px] text-gray-400">{s.label}</p>
-            <p className="text-2xl font-bold text-gray-900">{s.value}</p>
+          <div key={s.label} className="bg-card border border-border rounded-xl p-3 text-center">
+            <p className="text-[11px] text-muted-foreground">{s.label}</p>
+            <p className="text-2xl font-bold text-foreground">{s.value}</p>
           </div>
         ))}
       </div>
@@ -636,28 +636,28 @@ export default function CampaignDetailPage() {
       </div>
 
       {/* Field mappings */}
-      <div className="mb-6 bg-white border border-gray-100 rounded-xl p-4">
-        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Field Mappings</p>
+      <div className="mb-6 bg-card border border-border rounded-xl p-4">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Field Mappings</p>
         <div className="flex flex-wrap gap-2">
           {Object.entries(fieldMappings).map(([role, field]) => (
-            <div key={role} className="flex items-center gap-1.5 bg-gray-50 rounded-lg px-3 py-1.5 text-xs">
-              <span className="font-medium text-gray-700">{role}</span>
-              <span className="text-gray-300">←</span>
-              <code className="font-mono text-zinc-700">{field}</code>
+            <div key={role} className="flex items-center gap-1.5 bg-muted rounded-lg px-3 py-1.5 text-xs">
+              <span className="font-medium text-foreground">{role}</span>
+              <span className="text-muted-foreground">←</span>
+              <code className="font-mono text-foreground">{field}</code>
             </div>
           ))}
         </div>
-        <p className="text-[11px] text-gray-400 mt-2">
+        <p className="text-[11px] text-muted-foreground mt-2">
           Use <code className="font-mono">{"{{name}}"}</code>, <code className="font-mono">{"{{phone}}"}</code>, etc. as variables in your agent's system prompt.
           When uploading CSV, column names must match these field mappings exactly.
         </p>
       </div>
 
       {/* Leads table */}
-      <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-50">
-          <p className="text-sm font-semibold text-gray-700">
-            Leads <span className="text-gray-400 font-normal">({total})</span>
+      <div className="bg-card border border-border rounded-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+          <p className="text-sm font-semibold text-foreground">
+            Leads <span className="text-muted-foreground font-normal">({total})</span>
           </p>
           <div className="flex items-center gap-2">
             <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); setPage(0); }}>
@@ -688,14 +688,14 @@ export default function CampaignDetailPage() {
         </div>
 
         {loadingLeads ? (
-          <div className="p-8 text-center text-sm text-gray-400">Loading leads…</div>
+          <div className="p-8 text-center text-sm text-muted-foreground">Loading leads…</div>
         ) : !leads.length ? (
           <div className="p-12 text-center">
             <div className="inline-flex flex-col items-center gap-3">
-              <div className="p-3 rounded-full bg-gray-50 text-gray-300">
+              <div className="p-3 rounded-full bg-muted text-muted-foreground">
                 <FileText className="h-7 w-7" />
               </div>
-              <p className="text-gray-400 text-sm font-medium">No leads yet</p>
+              <p className="text-muted-foreground text-sm font-medium">No leads yet</p>
               <div className="flex gap-2 mt-1">
                 <Button size="sm" className="gap-1.5 text-xs" onClick={() => setUploadOpen(true)}>
                   <Upload className="h-3.5 w-3.5" /> Upload CSV
@@ -709,9 +709,9 @@ export default function CampaignDetailPage() {
         ) : (
           <table className="w-full text-left">
             <thead>
-              <tr className="border-b border-gray-50">
+              <tr className="border-b border-border">
                 {["Phone / Name", "Status", "Attempts", "Source", "Received", ""].map(h => (
-                  <th key={h} className="py-2 px-4 text-[11px] font-medium text-gray-400 uppercase tracking-wide">{h}</th>
+                  <th key={h} className="py-2 px-4 text-[11px] font-medium text-muted-foreground uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -724,8 +724,8 @@ export default function CampaignDetailPage() {
         )}
 
         {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-50">
-            <p className="text-xs text-gray-400">Page {page + 1} of {totalPages}</p>
+          <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+            <p className="text-xs text-muted-foreground">Page {page + 1} of {totalPages}</p>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" className="h-7 text-xs" disabled={page === 0} onClick={() => setPage(p => p - 1)}>Prev</Button>
               <Button variant="outline" size="sm" className="h-7 text-xs" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next</Button>

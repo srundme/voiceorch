@@ -6,22 +6,22 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const EVENT_META: Record<string, { label: string; color: string; icon: React.ElementType }> = {
-  "agent.created":                 { label: "Agent Created",          color: "bg-muted text-foreground border-border",                        icon: Bot },
-  "agent.deleted":                 { label: "Agent Deleted",          color: "bg-red-500/10 text-red-500 border-red-500/20",                  icon: Bot },
-  "agent.toggled":                 { label: "Agent Toggled",          color: "bg-blue-500/10 text-blue-400 border-blue-500/20",               icon: Bot },
-  "call.started":                  { label: "Call Started",           color: "bg-violet-500/10 text-violet-500 border-violet-500/20",         icon: Phone },
-  "call.ended":                    { label: "Call Ended",             color: "bg-muted text-muted-foreground border-border/50",               icon: Phone },
-  "provider.added":                { label: "Provider Added",         color: "bg-muted text-foreground border-border",                        icon: Key },
-  "provider.deleted":              { label: "Provider Deleted",       color: "bg-red-500/10 text-red-500 border-red-500/20",                  icon: Key },
-  "knowledge_base.created":        { label: "KB Created",             color: "bg-amber-500/10 text-amber-600 border-amber-500/20",            icon: BookOpen },
-  "knowledge_base.deleted":        { label: "KB Deleted",             color: "bg-red-500/10 text-red-500 border-red-500/20",                  icon: BookOpen },
-  "account.api_key_regenerated":   { label: "API Key Regenerated",    color: "bg-orange-500/10 text-orange-400 border-orange-500/20",         icon: RefreshCw },
-  "account.concurrent_slot_added": { label: "Concurrent Slot Added",  color: "bg-blue-500/10 text-blue-400 border-blue-500/20",               icon: Settings },
-  "wallet.topup":                  { label: "Wallet Top-up",          color: "bg-muted text-foreground border-border",                        icon: Wallet },
+  "agent.created":                 { label: "Agent Created",          color: "bg-muted text-foreground border-border",         icon: Bot },
+  "agent.deleted":                 { label: "Agent Deleted",          color: "bg-muted text-foreground border-border",         icon: Bot },
+  "agent.toggled":                 { label: "Agent Toggled",          color: "bg-muted text-muted-foreground border-border",   icon: Bot },
+  "call.started":                  { label: "Call Started",           color: "bg-muted text-foreground border-border",         icon: Phone },
+  "call.ended":                    { label: "Call Ended",             color: "bg-muted text-muted-foreground border-border",   icon: Phone },
+  "provider.added":                { label: "Provider Added",         color: "bg-muted text-foreground border-border",         icon: Key },
+  "provider.deleted":              { label: "Provider Deleted",       color: "bg-muted text-foreground border-border",         icon: Key },
+  "knowledge_base.created":        { label: "KB Created",             color: "bg-muted text-foreground border-border",         icon: BookOpen },
+  "knowledge_base.deleted":        { label: "KB Deleted",             color: "bg-muted text-foreground border-border",         icon: BookOpen },
+  "account.api_key_regenerated":   { label: "API Key Regenerated",    color: "bg-muted text-muted-foreground border-border",   icon: RefreshCw },
+  "account.concurrent_slot_added": { label: "Concurrent Slot Added",  color: "bg-muted text-muted-foreground border-border",   icon: Settings },
+  "wallet.topup":                  { label: "Wallet Top-up",          color: "bg-muted text-foreground border-border",         icon: Wallet },
 };
 
 function eventMeta(type: string) {
-  return EVENT_META[type] ?? { label: type, color: "bg-muted text-muted-foreground border-border/50", icon: Activity };
+  return EVENT_META[type] ?? { label: type, color: "bg-muted text-muted-foreground border-border", icon: Activity };
 }
 
 export default function ActivityPage() {
@@ -66,7 +66,7 @@ export default function ActivityPage() {
                 return (
                   <div
                     key={log.id}
-                    className="flex items-start gap-3 px-4 py-3 rounded-lg border border-border/50 bg-card hover:bg-muted/30 transition-colors"
+                    className="flex items-start gap-3 px-4 py-3 rounded-lg border border-border/60 bg-card hover:bg-muted/30 transition-colors"
                   >
                     <div className="shrink-0 mt-0.5">
                       <Icon className="w-4 h-4 text-muted-foreground" />

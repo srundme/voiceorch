@@ -165,8 +165,8 @@ export function VoiceInputButton({ onTranscript, className }: VoiceInputButtonPr
       className={cn(
         "absolute bottom-2 right-2 h-7 w-7 rounded-full flex items-center justify-center transition-colors",
         recording
-          ? "bg-red-500 text-white animate-pulse hover:bg-red-600"
-          : "bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700",
+          ? "bg-foreground text-white animate-pulse hover:bg-foreground"
+          : "bg-muted text-muted-foreground hover:bg-muted hover:text-foreground",
         className,
       )}
     >

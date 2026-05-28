@@ -24,10 +24,10 @@ const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 function statusBadge(status: string) {
   switch (status) {
-    case "confirmed":   return <Badge className="bg-zinc-50 text-zinc-700 border-zinc-200 hover:bg-zinc-50">{status}</Badge>;
-    case "pending":     return <Badge className="bg-zinc-50 text-zinc-700 border-zinc-200 hover:bg-zinc-50">{status}</Badge>;
-    case "cancelled":   return <Badge className="bg-red-50 text-red-600 border-red-200 hover:bg-red-50">{status}</Badge>;
-    case "rescheduled": return <Badge className="bg-zinc-50 text-zinc-700 border-zinc-200 hover:bg-zinc-50">{status}</Badge>;
+    case "confirmed":   return <Badge className="bg-muted text-foreground border-border hover:bg-muted">{status}</Badge>;
+    case "pending":     return <Badge className="bg-muted text-foreground border-border hover:bg-muted">{status}</Badge>;
+    case "cancelled":   return <Badge className="bg-muted text-foreground border-border hover:bg-muted">{status}</Badge>;
+    case "rescheduled": return <Badge className="bg-muted text-foreground border-border hover:bg-muted">{status}</Badge>;
     default:            return <Badge variant="outline">{status}</Badge>;
   }
 }
@@ -35,7 +35,7 @@ function statusBadge(status: string) {
 function sourceBadge(bookedVia: string) {
   if (bookedVia === "agent") {
     return (
-      <Badge className="bg-zinc-50 text-zinc-700 border-zinc-200 hover:bg-zinc-50 gap-1">
+      <Badge className="bg-muted text-foreground border-border hover:bg-muted gap-1">
         <Bot className="h-3 w-3" />Agent Call
       </Badge>
     );
@@ -69,8 +69,8 @@ export default function SchedulingPage() {
     <div className="flex flex-col gap-6 p-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-xl bg-zinc-50">
-            <Calendar className="h-5 w-5 text-zinc-600" />
+          <div className="p-2 rounded-xl bg-muted">
+            <Calendar className="h-5 w-5 text-foreground" />
           </div>
           <div>
             <h1 className="text-xl font-semibold text-foreground">Scheduling</h1>

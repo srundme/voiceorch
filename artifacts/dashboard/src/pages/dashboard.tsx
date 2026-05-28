@@ -54,8 +54,8 @@ const getStatusBadge = (status: string) => {
       );
     case "failed":
       return (
-        <span className={`${base} bg-red-500/10 text-red-500 border border-red-500/20`}>
-          <span className="h-1.5 w-1.5 rounded-full bg-red-500" />Failed
+        <span className={`${base} bg-muted text-foreground border border-border`}>
+          <span className="h-1.5 w-1.5 rounded-full bg-foreground" />Failed
         </span>
       );
     case "in_progress":
@@ -80,11 +80,11 @@ const getStatusBadge = (status: string) => {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  completed:   "#d4d4d8",
-  failed:      "#ef4444",
-  in_progress: "#a1a1aa",
-  pending:     "#71717a",
-  cancelled:   "#52525b",
+  completed:   "hsl(var(--chart-1))",
+  failed:      "hsl(var(--chart-4))",
+  in_progress: "hsl(var(--chart-2))",
+  pending:     "hsl(var(--chart-3))",
+  cancelled:   "hsl(var(--chart-5))",
 };
 
 /* ── Stat cards ──────────────────────────────────────────────────────────── */
@@ -134,11 +134,11 @@ function StatusStrip({ stats }: { stats: any }) {
         <span className="text-muted-foreground">{active} agent{active !== 1 ? "s" : ""} active</span>
       </div>
       <div className="flex items-center gap-1.5">
-        <div className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+        <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground" />
         <span className="text-muted-foreground">{total} calls today</span>
       </div>
       <div className="flex items-center gap-1.5">
-        <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+        <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground" />
         <span className="text-muted-foreground">{successful} completed</span>
       </div>
       <div className="ml-auto">
@@ -342,7 +342,7 @@ export default function Dashboard() {
                     <PieChart>
                       <Pie data={pieData} cx="50%" cy="50%" innerRadius={48} outerRadius={72} paddingAngle={2} dataKey="value" strokeWidth={0}>
                         {pieData.map((entry) => (
-                          <Cell key={entry.status} fill={STATUS_COLORS[entry.status] ?? "#6b7280"} />
+                          <Cell key={entry.status} fill={STATUS_COLORS[entry.status] ?? "hsl(var(--muted-foreground))"} />
                         ))}
                       </Pie>
                       <Tooltip
@@ -365,7 +365,7 @@ export default function Dashboard() {
                     const pct   = total ? Math.round((entry.value / total) * 100) : 0;
                     return (
                       <div key={entry.status} className="flex items-center gap-2.5">
-                        <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: STATUS_COLORS[entry.status] ?? "#6b7280" }} />
+                        <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: STATUS_COLORS[entry.status] ?? "hsl(var(--muted-foreground))" }} />
                         <span className="text-[12px] flex-1 capitalize text-muted-foreground">
                           {entry.name}
                         </span>

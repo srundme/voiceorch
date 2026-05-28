@@ -158,7 +158,7 @@ function CopyButton({ text }: { text: string }) {
         setTimeout(() => setCopied(false), 2000);
       }}
     >
-      {copied ? <Check className="h-3.5 w-3.5 text-gray-700" /> : <Copy className="h-3.5 w-3.5" />}
+      {copied ? <Check className="h-3.5 w-3.5 text-foreground" /> : <Copy className="h-3.5 w-3.5" />}
     </Button>
   );
 }
@@ -250,7 +250,7 @@ function TelephonyGuide({ provider, agentId }: TelephonyGuideProps) {
 
 function MaskedKey({ value }: { value: string | null | undefined }) {
   const [show, setShow] = useState(false);
-  if (!value) return <span className="text-gray-400 text-xs italic">Not generated yet</span>;
+  if (!value) return <span className="text-muted-foreground text-xs italic">Not generated yet</span>;
   const masked = value.slice(0, 8) + "•".repeat(20) + value.slice(-4);
   return (
     <div className="flex items-center gap-2 bg-muted/60 border border-border/60 rounded-md px-3 py-2 font-mono text-xs text-foreground/90 overflow-x-auto flex-1">
@@ -320,9 +320,9 @@ function GeneralTab() {
             <div key={i} className="flex items-center justify-between gap-3 py-2 border-b border-border/40 last:border-0">
               <div className="flex items-center gap-2.5">
                 {item.done ? (
-                  <CheckCircle2 className="h-4 w-4 text-gray-700 shrink-0" />
+                  <CheckCircle2 className="h-4 w-4 text-foreground shrink-0" />
                 ) : (
-                  <AlertTriangle className="h-4 w-4 text-zinc-600 shrink-0" />
+                  <AlertTriangle className="h-4 w-4 text-foreground shrink-0" />
                 )}
                 <span className={`text-sm ${item.done ? "text-foreground" : "text-muted-foreground"}`}>{item.label}</span>
               </div>
@@ -406,9 +406,9 @@ function GeneralTab() {
             <>
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium">Secret API Key <span className="text-[10px] text-gray-400 font-mono ml-1">vok_…</span></p>
+                  <p className="text-sm font-medium">Secret API Key <span className="text-[10px] text-muted-foreground font-mono ml-1">vok_…</span></p>
                   <Button
-                    variant="ghost" size="sm" className="h-7 text-xs gap-1.5 text-gray-500 hover:text-gray-800"
+                    variant="ghost" size="sm" className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
                     disabled={regenerate.isPending}
                     onClick={() => regenerate.mutate(undefined, {
                       onSuccess: () => { queryClient.invalidateQueries({ queryKey: getGetAccountQueryKey() }); toast({ title: "API key regenerated" }); },
@@ -419,13 +419,13 @@ function GeneralTab() {
                   </Button>
                 </div>
                 <MaskedKey value={account?.apiKey} />
-                <p className="text-[11px] text-gray-400">Include as <code className="bg-gray-100 px-1 rounded text-gray-500">Authorization: Bearer &lt;key&gt;</code> header.</p>
+                <p className="text-[11px] text-muted-foreground">Include as <code className="bg-muted px-1 rounded text-muted-foreground">Authorization: Bearer &lt;key&gt;</code> header.</p>
               </div>
 
               <div className="space-y-1.5">
-                <p className="text-sm font-medium">Organisation Key <span className="text-[10px] text-gray-400 font-mono ml-1">voo_…</span></p>
+                <p className="text-sm font-medium">Organisation Key <span className="text-[10px] text-muted-foreground font-mono ml-1">voo_…</span></p>
                 <MaskedKey value={account?.orgKey} />
-                <p className="text-[11px] text-gray-400">Use to verify webhook signatures sent from SnapServe to your server.</p>
+                <p className="text-[11px] text-muted-foreground">Use to verify webhook signatures sent from SnapServe to your server.</p>
               </div>
 
               <div className="flex items-center justify-between p-4 rounded-lg border border-border/60 bg-muted/20">
@@ -439,7 +439,7 @@ function GeneralTab() {
                 <div className="flex items-center gap-3 shrink-0">
                   <span className="text-2xl font-bold tabular-nums">{account?.concurrentLimit ?? "—"}</span>
                   <Button
-                    size="sm" className="h-8 text-xs gap-1.5 bg-black/85 hover:bg-black/90 text-gray-900"
+                    size="sm" className="h-8 text-xs gap-1.5 bg-black/85 hover:bg-black/90 text-foreground"
                     disabled={addSlot.isPending}
                     onClick={() => addSlot.mutate(undefined, {
                       onSuccess: () => { queryClient.invalidateQueries({ queryKey: getGetAccountQueryKey() }); toast({ title: "Concurrent slot added", description: "Your limit has been increased by 1." }); },
@@ -490,10 +490,10 @@ function GeneralTab() {
                 variant="outline"
                 className={`text-[10px] font-mono shrink-0 w-12 justify-center ${
                   ep.method === "WS"
-                    ? "bg-zinc-50 text-zinc-600 border-zinc-500/20"
+                    ? "bg-muted text-foreground border-zinc-500/20"
                     : ep.method === "GET"
-                    ? "bg-zinc-500/10 text-zinc-400 border-zinc-500/20"
-                    : "bg-zinc-500/10 text-zinc-600 border-zinc-500/20"
+                    ? "bg-muted text-zinc-400 border-zinc-500/20"
+                    : "bg-muted text-foreground border-zinc-500/20"
                 }`}
               >
                 {ep.method}

@@ -324,7 +324,7 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
             {embedCode}
           </pre>
           <Button variant="outline" size="sm" className="gap-2" onClick={copyEmbed}>
-            {copied ? <><Check className="h-3.5 w-3.5 text-gray-700" /> Copied!</> : <><Copy className="h-3.5 w-3.5" /> Copy Embed Code</>}
+            {copied ? <><Check className="h-3.5 w-3.5 text-foreground" /> Copied!</> : <><Copy className="h-3.5 w-3.5" /> Copy Embed Code</>}
           </Button>
           <p className="text-xs text-muted-foreground">
             You can customize <code className="font-mono bg-muted px-1 rounded">data-color</code>, <code className="font-mono bg-muted px-1 rounded">data-name</code>, and <code className="font-mono bg-muted px-1 rounded">data-position</code> (bottom-right, bottom-left, top-right, top-left).
@@ -383,7 +383,7 @@ export default function AgentDetail() {
     switch (status) {
       case "completed":  return <Badge className="bg-primary/20 text-primary border-transparent">Completed</Badge>;
       case "failed":     return <Badge className="bg-destructive/20 text-destructive border-transparent">Failed</Badge>;
-      case "in_progress":return <Badge className="bg-zinc-500/20 text-zinc-400 border-transparent">In Progress</Badge>;
+      case "in_progress":return <Badge className="bg-muted text-zinc-400 border-transparent">In Progress</Badge>;
       case "pending":    return <Badge variant="outline" className="text-muted-foreground">Pending</Badge>;
       default:           return <Badge variant="outline">{status}</Badge>;
     }
@@ -544,7 +544,7 @@ export default function AgentDetail() {
                   ].map((stage, i) => (
                     <React.Fragment key={stage.label}>
                       <div className={`flex flex-col items-center gap-2 p-4 border rounded-lg w-full text-center ${
-                        stage.highlight ? "bg-primary/10 border-primary/30" : "bg-white"
+                        stage.highlight ? "bg-primary/10 border-primary/30" : "bg-card"
                       }`}>
                         <span className={`text-xs uppercase tracking-wider font-semibold ${stage.highlight ? "text-primary" : "text-muted-foreground"}`}>
                           {stage.label}

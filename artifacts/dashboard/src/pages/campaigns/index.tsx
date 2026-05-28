@@ -36,9 +36,9 @@ import { formatDistanceToNow } from "date-fns";
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 function statusColor(status: string) {
-  if (status === "active")  return "bg-zinc-50 text-zinc-700 border-zinc-200";
-  if (status === "paused")  return "bg-zinc-50 text-zinc-700 border-zinc-200";
-  return "bg-gray-50 text-gray-500 border-gray-200";
+  if (status === "active")  return "bg-muted text-foreground border-border";
+  if (status === "paused")  return "bg-muted text-foreground border-border";
+  return "bg-muted text-muted-foreground border-border";
 }
 
 function CopiedToken({ token }: { token: string }) {
@@ -52,7 +52,7 @@ function CopiedToken({ token }: { token: string }) {
   return (
     <button
       onClick={(e) => { e.preventDefault(); copy(); }}
-      className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700 transition-colors font-mono"
+      className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"
       title="Click to copy webhook URL"
     >
       {copied ? <Check className="h-3 w-3 text-zinc-500" /> : <Copy className="h-3 w-3" />}
@@ -248,16 +248,16 @@ function CampaignCard({ campaign }: { campaign: Campaign }) {
   return (
     <>
       <Link href={`/app/campaigns/${campaign.id}`}>
-        <div className="group bg-white border border-gray-100 rounded-2xl p-5 hover:shadow-md transition-all cursor-pointer">
+        <div className="group bg-card border border-border rounded-2xl p-5 hover:shadow-md transition-all cursor-pointer">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="p-2.5 rounded-xl bg-zinc-50 text-zinc-600 shrink-0">
+              <div className="p-2.5 rounded-xl bg-muted text-foreground shrink-0">
                 <Megaphone className="h-4 w-4" />
               </div>
               <div className="min-w-0">
-                <h3 className="font-semibold text-[15px] text-gray-900 truncate">{campaign.name}</h3>
+                <h3 className="font-semibold text-[15px] text-foreground truncate">{campaign.name}</h3>
                 {campaign.description && (
-                  <p className="text-xs text-gray-400 truncate mt-0.5">{campaign.description}</p>
+                  <p className="text-xs text-muted-foreground truncate mt-0.5">{campaign.description}</p>
                 )}
               </div>
             </div>
@@ -276,7 +276,7 @@ function CampaignCard({ campaign }: { campaign: Campaign }) {
                     <Pencil className="h-3.5 w-3.5 mr-2" /> Edit
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    className="text-red-600 focus:text-red-600"
+                    className="text-foreground focus:text-foreground"
                     onClick={e => { e.preventDefault(); setDeleteOpen(true); setMenuOpen(false); }}
                   >
                     <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete
@@ -287,17 +287,17 @@ function CampaignCard({ campaign }: { campaign: Campaign }) {
           </div>
 
           <div className="mt-4 grid grid-cols-3 gap-3 text-center">
-            <div className="bg-gray-50 rounded-xl p-2.5">
-              <p className="text-[11px] text-gray-400 mb-0.5">Total leads</p>
-              <p className="text-lg font-bold text-gray-900">{campaign.totalLeads}</p>
+            <div className="bg-muted rounded-xl p-2.5">
+              <p className="text-[11px] text-muted-foreground mb-0.5">Total leads</p>
+              <p className="text-lg font-bold text-foreground">{campaign.totalLeads}</p>
             </div>
-            <div className="bg-gray-50 rounded-xl p-2.5">
-              <p className="text-[11px] text-gray-400 mb-0.5">Called</p>
-              <p className="text-lg font-bold text-gray-900">{campaign.calledLeads}</p>
+            <div className="bg-muted rounded-xl p-2.5">
+              <p className="text-[11px] text-muted-foreground mb-0.5">Called</p>
+              <p className="text-lg font-bold text-foreground">{campaign.calledLeads}</p>
             </div>
-            <div className="bg-gray-50 rounded-xl p-2.5">
-              <p className="text-[11px] text-gray-400 mb-0.5">Called %</p>
-              <p className="text-lg font-bold text-gray-900">{successRate}%</p>
+            <div className="bg-muted rounded-xl p-2.5">
+              <p className="text-[11px] text-muted-foreground mb-0.5">Called %</p>
+              <p className="text-lg font-bold text-foreground">{successRate}%</p>
             </div>
           </div>
 
@@ -310,11 +310,11 @@ function CampaignCard({ campaign }: { campaign: Campaign }) {
                 onClick={e => e.preventDefault()}
                 className="scale-90"
               />
-              <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-gray-500 transition-colors" />
+              <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-muted-foreground transition-colors" />
             </div>
           </div>
 
-          <p className="mt-2 text-[10px] text-gray-300">
+          <p className="mt-2 text-[10px] text-muted-foreground">
             Created {formatDistanceToNow(new Date(campaign.createdAt), { addSuffix: true })}
           </p>
         </div>
@@ -332,7 +332,7 @@ function CampaignCard({ campaign }: { campaign: Campaign }) {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
+            <AlertDialogAction onClick={confirmDelete} className="bg-foreground hover:bg-foreground">Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -348,8 +348,8 @@ export default function CampaignsPage() {
     <div className="p-6 max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Campaigns</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
+          <h1 className="text-2xl font-bold text-foreground">Campaigns</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
             Auto-call leads from Instagram ads or website forms
           </p>
         </div>
@@ -361,16 +361,16 @@ export default function CampaignsPage() {
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {[1,2,3].map(i => (
-            <div key={i} className="bg-white border border-gray-100 rounded-2xl p-5 h-48 animate-pulse" />
+            <div key={i} className="bg-card border border-border rounded-2xl p-5 h-48 animate-pulse" />
           ))}
         </div>
       ) : !campaigns?.length ? (
         <div className="flex flex-col items-center justify-center py-24 text-center">
-          <div className="p-4 rounded-2xl bg-zinc-50 text-zinc-400 mb-4">
+          <div className="p-4 rounded-2xl bg-muted text-zinc-400 mb-4">
             <Megaphone className="h-8 w-8" />
           </div>
-          <h3 className="text-lg font-semibold text-gray-700 mb-1">No campaigns yet</h3>
-          <p className="text-sm text-gray-400 max-w-sm mb-6">
+          <h3 className="text-lg font-semibold text-foreground mb-1">No campaigns yet</h3>
+          <p className="text-sm text-muted-foreground max-w-sm mb-6">
             Create a campaign to auto-call leads from Instagram ads or any website form.
           </p>
           <Button onClick={() => setCreateOpen(true)} className="gap-2">

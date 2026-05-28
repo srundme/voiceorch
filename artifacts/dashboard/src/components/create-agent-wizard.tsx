@@ -755,7 +755,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
 
   /* ────────────────────────────────────────────────────────────────────── */
   return createPortal(
-    <div className="fixed inset-0 z-[9999] bg-white flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-[9999] bg-card flex flex-col overflow-hidden">
 
       <style>{`
         @keyframes slideInRight { from { opacity:0; transform:translateX(48px); } to { opacity:1; transform:translateX(0); } }
@@ -764,7 +764,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
       `}</style>
 
       {/* Progress bar */}
-      <div className="h-0.5 bg-gray-100 shrink-0">
+      <div className="h-0.5 bg-muted shrink-0">
         <div
           className="h-full bg-gradient-to-r from-zinc-500 to-zinc-400 transition-all duration-500 ease-out"
           style={{ width: `${progress}%` }}
@@ -784,7 +784,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                 } else if (state.mode === "managed" && stepIdx > 0) go(-1);
                 else { setState(INITIAL); setStepIdx(0); setRenderKey(k => k + 1); }
               }}
-              className="flex items-center gap-1.5 text-gray-400 hover:text-gray-700 transition-colors text-sm"
+              className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors text-sm"
             >
               <ChevronLeft className="h-4 w-4" /> {flowEditMode ? "Cancel edit" : "Back"}
             </button>
@@ -793,18 +793,18 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
 
         <div className="flex items-center gap-4">
           {microActive && (
-            <span className="text-gray-400 text-xs font-mono tracking-widest uppercase">
+            <span className="text-muted-foreground text-xs font-mono tracking-widest uppercase">
               {microStep < 5
                 ? `${String(microStep + 1).padStart(2, "0")} / 05 — Question ${microStep + 1}`
                 : flowEditMode ? "Call Flow — Edit Mode" : "Call Flow Preview"}
             </span>
           )}
           {!microActive && state.mode === "managed" && currentStep && (
-            <span className="text-gray-400 text-xs font-mono tracking-widest uppercase">
+            <span className="text-muted-foreground text-xs font-mono tracking-widest uppercase">
               {String(stepIdx + 1).padStart(2, "0")} / {String(totalManagedSteps).padStart(2, "0")} — {STEP_LABELS[currentStep]}
             </span>
           )}
-          <button onClick={handleClose} className="h-8 w-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 hover:text-gray-700 transition-all">
+          <button onClick={handleClose} className="h-8 w-8 rounded-full bg-muted hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-all">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -828,45 +828,45 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                 if (q.type === "jd-upload") {
                   return (
                     <div>
-                      <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">01 / 05</p>
-                      <h2 className="text-3xl font-bold text-gray-900 mb-2">Job description &amp;<br />must-have skills</h2>
-                      <p className="text-gray-400 text-sm mb-8">{q.hint}</p>
+                      <p className="text-muted-foreground text-xs uppercase tracking-[0.2em] mb-3">01 / 05</p>
+                      <h2 className="text-3xl font-bold text-foreground mb-2">Job description &amp;<br />must-have skills</h2>
+                      <p className="text-muted-foreground text-sm mb-8">{q.hint}</p>
 
                       <div className="mb-5">
-                        <p className="text-gray-500 text-xs uppercase tracking-[0.15em] mb-3 font-semibold">Option A — Upload JD file</p>
+                        <p className="text-muted-foreground text-xs uppercase tracking-[0.15em] mb-3 font-semibold">Option A — Upload JD file</p>
                         {microAnswers.jdFileName ? (
-                          <div className="p-4 rounded-xl border border-zinc-300 bg-zinc-50 flex items-center gap-3">
-                            <FileText className="h-5 w-5 text-zinc-600 shrink-0" />
+                          <div className="p-4 rounded-xl border border-zinc-300 bg-muted flex items-center gap-3">
+                            <FileText className="h-5 w-5 text-foreground shrink-0" />
                             <div className="flex-1 min-w-0">
-                              <p className="text-gray-700 text-sm font-semibold truncate">{microAnswers.jdFileName}</p>
-                              <p className="text-gray-400 text-xs">Uploaded — add any extra notes in Option B if needed</p>
+                              <p className="text-foreground text-sm font-semibold truncate">{microAnswers.jdFileName}</p>
+                              <p className="text-muted-foreground text-xs">Uploaded — add any extra notes in Option B if needed</p>
                             </div>
                             <button
                               onClick={() => updateMicro({ jdFileContent: "", jdFileName: "" })}
-                              className="text-gray-400 hover:text-gray-500 transition-colors"
+                              className="text-muted-foreground hover:text-muted-foreground transition-colors"
                             >
                               <X className="h-4 w-4" />
                             </button>
                           </div>
                         ) : (
                           <div
-                            className="border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center hover:border-gray-300 transition-colors cursor-pointer group"
+                            className="border-2 border-dashed border-border rounded-2xl p-8 text-center hover:border-border transition-colors cursor-pointer group"
                             onClick={() => jdInputRef.current?.click()}
                           >
-                            <div className="h-12 w-12 rounded-2xl bg-gray-50 group-hover:bg-gray-100 flex items-center justify-center mx-auto mb-3 transition-colors">
-                              <Upload className="h-6 w-6 text-gray-400" />
+                            <div className="h-12 w-12 rounded-2xl bg-muted group-hover:bg-muted flex items-center justify-center mx-auto mb-3 transition-colors">
+                              <Upload className="h-6 w-6 text-muted-foreground" />
                             </div>
-                            <p className="text-gray-500 font-semibold text-sm mb-1">Click to upload JD</p>
-                            <p className="text-gray-400 text-xs">PDF, DOCX, or TXT — max 5 MB</p>
+                            <p className="text-muted-foreground font-semibold text-sm mb-1">Click to upload JD</p>
+                            <p className="text-muted-foreground text-xs">PDF, DOCX, or TXT — max 5 MB</p>
                             <input ref={jdInputRef} type="file" accept=".txt,.pdf,.docx,.md" className="hidden" onChange={handleJDFile} />
                           </div>
                         )}
                       </div>
 
-                      <p className="text-gray-400 text-xs text-center mb-5">— or —</p>
+                      <p className="text-muted-foreground text-xs text-center mb-5">— or —</p>
 
                       <div>
-                        <p className="text-gray-500 text-xs uppercase tracking-[0.15em] mb-3 font-semibold">Option B — Type role &amp; requirements manually</p>
+                        <p className="text-muted-foreground text-xs uppercase tracking-[0.15em] mb-3 font-semibold">Option B — Type role &amp; requirements manually</p>
                         <div className="relative">
                           <textarea
                             rows={4}
@@ -877,7 +877,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                               next[0] = e.target.value;
                               updateMicro({ answers: next });
                             }}
-                            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 pt-3.5 pb-11 text-gray-900 text-sm placeholder:text-gray-300 focus:outline-none focus:border-zinc-500/60 transition-all resize-none leading-relaxed"
+                            className="w-full bg-muted border border-border rounded-xl px-4 pt-3.5 pb-11 text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:border-foreground transition-all resize-none leading-relaxed"
                           />
                           <VoiceInputButton
                             onTranscript={text => {
@@ -897,11 +897,11 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                 /* Standard textarea question */
                 return (
                   <div>
-                    <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">
+                    <p className="text-muted-foreground text-xs uppercase tracking-[0.2em] mb-3">
                       {String(microStep + 1).padStart(2, "0")} / 05
                     </p>
-                    <h2 className="text-3xl font-bold text-gray-900 mb-2">{q.q}</h2>
-                    <p className="text-gray-400 text-sm mb-8">{q.hint}</p>
+                    <h2 className="text-3xl font-bold text-foreground mb-2">{q.q}</h2>
+                    <p className="text-muted-foreground text-sm mb-8">{q.hint}</p>
                     <div className="relative">
                       <textarea
                         autoFocus
@@ -913,7 +913,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                           next[microStep] = e.target.value;
                           updateMicro({ answers: next });
                         }}
-                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 pt-3.5 pb-11 text-gray-900 text-sm placeholder:text-gray-300 focus:outline-none focus:border-zinc-500/60 transition-all resize-none leading-relaxed"
+                        className="w-full bg-muted border border-border rounded-xl px-4 pt-3.5 pb-11 text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:border-foreground transition-all resize-none leading-relaxed"
                       />
                       <VoiceInputButton
                         onTranscript={text => {
@@ -926,7 +926,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                       />
                     </div>
                     {microStep === 4 && (
-                      <p className="text-gray-300 text-xs mt-2">Optional — leave blank and continue to proceed with default handling.</p>
+                      <p className="text-muted-foreground text-xs mt-2">Optional — leave blank and continue to proceed with default handling.</p>
                     )}
                   </div>
                 );
@@ -937,17 +937,17 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                 if (flowEditMode) {
                   return (
                     <div>
-                      <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">Call Flow — Edit Mode</p>
-                      <h2 className="text-3xl font-bold text-gray-900 mb-2">Edit your call flow</h2>
-                      <p className="text-gray-400 text-sm mb-6">
-                        Edit each step below — one step per line. Lines starting with → are branch paths. Use <code className="bg-gray-100 px-1 rounded text-xs">[Badge]</code> at the end of a line to add a tag.
+                      <p className="text-muted-foreground text-xs uppercase tracking-[0.2em] mb-3">Call Flow — Edit Mode</p>
+                      <h2 className="text-3xl font-bold text-foreground mb-2">Edit your call flow</h2>
+                      <p className="text-muted-foreground text-sm mb-6">
+                        Edit each step below — one step per line. Lines starting with → are branch paths. Use <code className="bg-muted px-1 rounded text-xs">[Badge]</code> at the end of a line to add a tag.
                       </p>
                       <textarea
                         autoFocus
                         rows={14}
                         value={flowEditText}
                         onChange={e => setFlowEditText(e.target.value)}
-                        className="w-full bg-gray-50 border border-zinc-300 rounded-xl px-4 py-3.5 text-gray-900 text-sm font-mono placeholder:text-gray-300 focus:outline-none focus:border-zinc-500/60 transition-all resize-none leading-relaxed"
+                        className="w-full bg-muted border border-zinc-300 rounded-xl px-4 py-3.5 text-foreground text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:border-foreground transition-all resize-none leading-relaxed"
                       />
                     </div>
                   );
@@ -955,30 +955,30 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
 
                 return (
                   <div>
-                    <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">Step 5 of 9 — Call Flow Preview</p>
-                    <h2 className="text-3xl font-bold text-gray-900 mb-2">Here's how your<br />agent will run</h2>
-                    <p className="text-gray-400 text-sm mb-7">
-                      This call flow was built from your answers. Review it carefully — click <strong className="text-gray-600">Edit this flow</strong> to make changes, or continue when it looks right.
+                    <p className="text-muted-foreground text-xs uppercase tracking-[0.2em] mb-3">Step 5 of 9 — Call Flow Preview</p>
+                    <h2 className="text-3xl font-bold text-foreground mb-2">Here's how your<br />agent will run</h2>
+                    <p className="text-muted-foreground text-sm mb-7">
+                      This call flow was built from your answers. Review it carefully — click <strong className="text-muted-foreground">Edit this flow</strong> to make changes, or continue when it looks right.
                     </p>
 
                     {/* Flow nodes */}
                     <div className="relative pl-5">
-                      <div className="absolute left-0 top-2 bottom-2 w-px bg-gray-100" />
+                      <div className="absolute left-0 top-2 bottom-2 w-px bg-muted" />
                       {currentFlowNodes.map((node, i) => (
                         <div key={i} className={cn("relative mb-5 last:mb-0", node.branch && "ml-5")}>
                           <div className={cn(
                             "absolute -left-5 top-[7px] h-2.5 w-2.5 rounded-full border-2",
-                            node.branch ? "border-gray-200 bg-white" : "border-zinc-400 bg-zinc-400",
+                            node.branch ? "border-border bg-card" : "border-zinc-400 bg-zinc-400",
                           )} />
                           <div className="pl-3">
                             <p className={cn(
                               "text-sm leading-snug",
-                              node.branch ? "text-gray-400 font-normal" : "text-gray-700 font-medium",
+                              node.branch ? "text-muted-foreground font-normal" : "text-foreground font-medium",
                             )}>
                               {node.label}
                             </p>
                             {node.badge && (
-                              <span className="inline-block mt-1.5 px-2.5 py-0.5 text-[10px] font-semibold rounded-full bg-zinc-50 text-zinc-600 border border-zinc-200 leading-normal">
+                              <span className="inline-block mt-1.5 px-2.5 py-0.5 text-[10px] font-semibold rounded-full bg-muted text-foreground border border-border leading-normal">
                                 {node.badge}
                               </span>
                             )}
@@ -999,14 +999,14 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
             {/* ── Mode selection ── */}
             {state.mode === null && (
               <div className="animate-[fadeUp_0.4s_ease-out]">
-                <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">Get started</p>
-                <h1 className="text-4xl font-bold text-gray-900 mb-2 leading-tight">How do you want to<br />build your agent?</h1>
-                <p className="text-gray-400 text-base mb-10">Choose your setup mode — you can always change provider settings later.</p>
+                <p className="text-muted-foreground text-xs uppercase tracking-[0.2em] mb-3">Get started</p>
+                <h1 className="text-4xl font-bold text-foreground mb-2 leading-tight">How do you want to<br />build your agent?</h1>
+                <p className="text-muted-foreground text-base mb-10">Choose your setup mode — you can always change provider settings later.</p>
 
                 <div className="grid grid-cols-2 gap-4">
                   <button
                     onClick={() => { update({ mode: "managed" }); setDirection("forward"); setRenderKey(k => k + 1); }}
-                    className="group relative text-left p-6 rounded-2xl border border-gray-200 bg-gray-50 hover:bg-gray-100 hover:border-zinc-500/60 transition-all duration-200"
+                    className="group relative text-left p-6 rounded-2xl border border-border bg-muted hover:bg-muted hover:border-zinc-500/60 transition-all duration-200"
                   >
                     <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-zinc-100/60 to-zinc-50/40 opacity-0 group-hover:opacity-100 transition-opacity" />
                     <div className="relative">
@@ -1014,11 +1014,11 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                         <Wand2 className="h-5 w-5 text-white" />
                       </div>
                       <div className="flex items-center gap-2 mb-1.5">
-                        <span className="font-bold text-gray-900 text-lg">Managed</span>
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600 font-semibold border border-zinc-300">Recommended</span>
+                        <span className="font-bold text-foreground text-lg">Managed</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-foreground font-semibold border border-zinc-300">Recommended</span>
                       </div>
-                      <p className="text-gray-500 text-sm leading-relaxed">We handle the full AI stack. Just describe what your agent should do.</p>
-                      <div className="mt-4 flex items-center gap-1.5 text-zinc-600 text-sm font-medium group-hover:gap-2.5 transition-all">
+                      <p className="text-muted-foreground text-sm leading-relaxed">We handle the full AI stack. Just describe what your agent should do.</p>
+                      <div className="mt-4 flex items-center gap-1.5 text-foreground text-sm font-medium group-hover:gap-2.5 transition-all">
                         Get started <ChevronRight className="h-4 w-4" />
                       </div>
                     </div>
@@ -1026,18 +1026,18 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
 
                   <button
                     onClick={() => { update({ mode: "byop" }); setDirection("forward"); setRenderKey(k => k + 1); }}
-                    className="group relative text-left p-6 rounded-2xl border border-gray-200 bg-gray-50 hover:bg-gray-100 hover:border-gray-300 transition-all duration-200"
+                    className="group relative text-left p-6 rounded-2xl border border-border bg-muted hover:bg-muted hover:border-border transition-all duration-200"
                   >
                     <div className="relative">
-                      <div className="h-11 w-11 rounded-xl bg-gray-100 flex items-center justify-center mb-4">
-                        <Globe className="h-5 w-5 text-gray-600" />
+                      <div className="h-11 w-11 rounded-xl bg-muted flex items-center justify-center mb-4">
+                        <Globe className="h-5 w-5 text-muted-foreground" />
                       </div>
                       <div className="mb-1.5">
-                        <span className="font-bold text-gray-900 text-lg">BYOP</span>
-                        <span className="ml-2 text-gray-400 text-sm">Bring Your Own Providers</span>
+                        <span className="font-bold text-foreground text-lg">BYOP</span>
+                        <span className="ml-2 text-muted-foreground text-sm">Bring Your Own Providers</span>
                       </div>
-                      <p className="text-gray-500 text-sm leading-relaxed">Choose your own ASR, LLM, TTS and telephony. Full control.</p>
-                      <div className="mt-4 flex items-center gap-1.5 text-gray-400 text-sm font-medium group-hover:gap-2.5 transition-all">
+                      <p className="text-muted-foreground text-sm leading-relaxed">Choose your own ASR, LLM, TTS and telephony. Full control.</p>
+                      <div className="mt-4 flex items-center gap-1.5 text-muted-foreground text-sm font-medium group-hover:gap-2.5 transition-all">
                         Configure manually <ChevronRight className="h-4 w-4" />
                       </div>
                     </div>
@@ -1053,9 +1053,9 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
             {/* Step 1: Use Case */}
             {currentStep === "use-case" && (
               <div>
-                <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">Step 1 of 9</p>
-                <h2 className="text-3xl font-bold text-gray-900 mb-2">What type of agent<br />do you need?</h2>
-                <p className="text-gray-400 text-sm mb-8">Select the use case that best matches your goal.</p>
+                <p className="text-muted-foreground text-xs uppercase tracking-[0.2em] mb-3">Step 1 of 9</p>
+                <h2 className="text-3xl font-bold text-foreground mb-2">What type of agent<br />do you need?</h2>
+                <p className="text-muted-foreground text-sm mb-8">Select the use case that best matches your goal.</p>
 
                 <div className="grid grid-cols-2 gap-2.5">
                   {USE_CASES.map(uc => {
@@ -1068,21 +1068,21 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                         className={cn(
                           "text-left p-4 rounded-xl border transition-all duration-200 flex items-center gap-3 group",
                           sel
-                            ? "border-zinc-400 bg-zinc-50 shadow-[0_0_0_1px_rgba(99,102,241,0.3)]"
-                            : "border-gray-200 bg-gray-50 hover:border-gray-200 hover:bg-gray-50",
+                            ? "border-zinc-400 bg-muted shadow-[0_0_0_1px_rgba(99,102,241,0.3)]"
+                            : "border-border bg-muted hover:border-border hover:bg-muted",
                         )}
                       >
                         <div className={cn(
                           "h-9 w-9 rounded-lg flex items-center justify-center shrink-0 transition-colors",
-                          sel ? "bg-zinc-500 text-white" : "bg-gray-100 text-gray-500",
+                          sel ? "bg-zinc-500 text-white" : "bg-muted text-muted-foreground",
                         )}>
                           <Icon className="h-4 w-4" />
                         </div>
                         <div className="min-w-0">
-                          <div className={cn("font-semibold text-sm", sel ? "text-gray-900" : "text-gray-600")}>{uc.label}</div>
-                          <div className="text-xs text-gray-400 mt-0.5 leading-tight truncate">{uc.desc}</div>
+                          <div className={cn("font-semibold text-sm", sel ? "text-foreground" : "text-muted-foreground")}>{uc.label}</div>
+                          <div className="text-xs text-muted-foreground mt-0.5 leading-tight truncate">{uc.desc}</div>
                         </div>
-                        {sel && <Check className="h-4 w-4 text-zinc-600 shrink-0 ml-auto" />}
+                        {sel && <Check className="h-4 w-4 text-foreground shrink-0 ml-auto" />}
                       </button>
                     );
                   })}
@@ -1093,45 +1093,45 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
             {/* Step 2: Agent Details */}
             {currentStep === "details" && (
               <div>
-                <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">Step 2 of 9</p>
-                <h2 className="text-3xl font-bold text-gray-900 mb-2">Tell us about<br />your agent</h2>
-                <p className="text-gray-400 text-sm mb-8">Basic details that personalise the agent's identity.</p>
+                <p className="text-muted-foreground text-xs uppercase tracking-[0.2em] mb-3">Step 2 of 9</p>
+                <h2 className="text-3xl font-bold text-foreground mb-2">Tell us about<br />your agent</h2>
+                <p className="text-muted-foreground text-sm mb-8">Basic details that personalise the agent's identity.</p>
 
                 <div className="space-y-5">
                   <div>
-                    <label className="text-gray-500 text-xs uppercase tracking-[0.15em] block mb-2">Agent's name</label>
+                    <label className="text-muted-foreground text-xs uppercase tracking-[0.15em] block mb-2">Agent's name</label>
                     <input
                       type="text"
                       placeholder="e.g. Arushi, Priya, Alex"
                       value={state.agentName}
                       onChange={e => { update({ agentName: e.target.value }); if (e.target.value.trim()) setDetailsErrors(prev => ({ ...prev, agentName: undefined })); }}
                       className={cn(
-                        "w-full bg-gray-50 border rounded-xl px-4 py-3.5 text-gray-900 text-base placeholder:text-gray-300 focus:outline-none focus:bg-gray-100 transition-all",
-                        detailsErrors.agentName ? "border-red-400 focus:border-red-400" : "border-gray-200 focus:border-zinc-500/60",
+                        "w-full bg-muted border rounded-xl px-4 py-3.5 text-foreground text-base placeholder:text-muted-foreground focus:outline-none focus:bg-muted transition-all",
+                        detailsErrors.agentName ? "border-foreground focus:border-foreground" : "border-border focus:border-foreground",
                       )}
                     />
                     {detailsErrors.agentName && (
-                      <p className="mt-1.5 text-xs text-red-500">{detailsErrors.agentName}</p>
+                      <p className="mt-1.5 text-xs text-foreground">{detailsErrors.agentName}</p>
                     )}
                   </div>
                   <div>
-                    <label className="text-gray-500 text-xs uppercase tracking-[0.15em] block mb-2">Company name</label>
+                    <label className="text-muted-foreground text-xs uppercase tracking-[0.15em] block mb-2">Company name</label>
                     <input
                       type="text"
                       placeholder="e.g. QuickPay, Acme Corp"
                       value={state.companyName}
                       onChange={e => { update({ companyName: e.target.value }); if (e.target.value.trim()) setDetailsErrors(prev => ({ ...prev, companyName: undefined })); }}
                       className={cn(
-                        "w-full bg-gray-50 border rounded-xl px-4 py-3.5 text-gray-900 text-base placeholder:text-gray-300 focus:outline-none focus:bg-gray-100 transition-all",
-                        detailsErrors.companyName ? "border-red-400 focus:border-red-400" : "border-gray-200 focus:border-zinc-500/60",
+                        "w-full bg-muted border rounded-xl px-4 py-3.5 text-foreground text-base placeholder:text-muted-foreground focus:outline-none focus:bg-muted transition-all",
+                        detailsErrors.companyName ? "border-foreground focus:border-foreground" : "border-border focus:border-foreground",
                       )}
                     />
                     {detailsErrors.companyName && (
-                      <p className="mt-1.5 text-xs text-red-500">{detailsErrors.companyName}</p>
+                      <p className="mt-1.5 text-xs text-foreground">{detailsErrors.companyName}</p>
                     )}
                   </div>
                   <div>
-                    <label className="text-gray-500 text-xs uppercase tracking-[0.15em] block mb-3">Call direction</label>
+                    <label className="text-muted-foreground text-xs uppercase tracking-[0.15em] block mb-3">Call direction</label>
                     <div className="flex gap-3">
                       {(["inbound", "outbound", "both"] as AgentDirection[]).map(dir => (
                         <button
@@ -1140,8 +1140,8 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                           className={cn(
                             "flex-1 py-3 px-4 rounded-xl border font-medium text-sm capitalize transition-all",
                             state.agentDirection === dir
-                              ? "border-zinc-400 bg-zinc-50 text-gray-900"
-                              : "border-gray-200 bg-gray-50 text-gray-400 hover:border-gray-300",
+                              ? "border-zinc-400 bg-muted text-foreground"
+                              : "border-border bg-muted text-muted-foreground hover:border-border",
                           )}
                         >
                           {dir}
@@ -1151,36 +1151,36 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                   </div>
 
                   {/* ── Lead Source ─────────────────────────────────── */}
-                  <div className="rounded-xl border border-gray-200 overflow-hidden">
+                  <div className="rounded-xl border border-border overflow-hidden">
                     <button
                       type="button"
                       onClick={() => update({ leadSource: { ...state.leadSource, enabled: !state.leadSource.enabled } })}
-                      className="w-full flex items-center justify-between px-4 py-3.5 bg-gray-50 hover:bg-gray-100 transition-colors"
+                      className="w-full flex items-center justify-between px-4 py-3.5 bg-muted hover:bg-muted transition-colors"
                     >
                       <div className="flex items-center gap-3">
                         <div className={cn(
                           "w-2 h-2 rounded-full",
-                          state.leadSource.enabled ? "bg-zinc-500" : "bg-gray-300",
+                          state.leadSource.enabled ? "bg-zinc-500" : "bg-muted",
                         )} />
-                        <span className="text-gray-500 text-xs uppercase tracking-[0.15em] font-medium">Lead Source</span>
+                        <span className="text-muted-foreground text-xs uppercase tracking-[0.15em] font-medium">Lead Source</span>
                         {state.leadSource.enabled && (
-                          <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600 bg-zinc-50 border border-zinc-200 px-1.5 py-0.5 rounded-full">On</span>
+                          <span className="text-[10px] font-semibold uppercase tracking-wider text-foreground bg-muted border border-border px-1.5 py-0.5 rounded-full">On</span>
                         )}
                       </div>
-                      <span className="text-gray-400 text-xs">{state.leadSource.enabled ? "▲" : "▼"}</span>
+                      <span className="text-muted-foreground text-xs">{state.leadSource.enabled ? "▲" : "▼"}</span>
                     </button>
 
                     {state.leadSource.enabled && (
-                      <div className="px-4 pb-4 pt-3 space-y-4 bg-white">
+                      <div className="px-4 pb-4 pt-3 space-y-4 bg-card">
                         {/* Source type */}
                         <div>
-                          <label className="text-gray-500 text-xs uppercase tracking-[0.15em] block mb-2">Source</label>
+                          <label className="text-muted-foreground text-xs uppercase tracking-[0.15em] block mb-2">Source</label>
                           <div className="flex items-center gap-2">
-                            <div className="flex items-center gap-2 flex-1 px-4 py-2.5 rounded-xl border border-zinc-300 bg-zinc-50">
-                              <svg viewBox="0 0 24 24" className="h-4 w-4 text-zinc-600 shrink-0" fill="currentColor">
+                            <div className="flex items-center gap-2 flex-1 px-4 py-2.5 rounded-xl border border-zinc-300 bg-muted">
+                              <svg viewBox="0 0 24 24" className="h-4 w-4 text-foreground shrink-0" fill="currentColor">
                                 <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/>
                               </svg>
-                              <span className="text-sm text-zinc-700 font-medium">Instagram</span>
+                              <span className="text-sm text-foreground font-medium">Instagram</span>
                             </div>
                           </div>
                         </div>
@@ -1188,12 +1188,12 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                         {/* Page Access Token */}
                         <div>
                           <div className="flex items-center justify-between mb-2">
-                            <label className="text-gray-500 text-xs uppercase tracking-[0.15em]">Page Access Token</label>
+                            <label className="text-muted-foreground text-xs uppercase tracking-[0.15em]">Page Access Token</label>
                             <a
                               href="https://developers.facebook.com/docs/instagram-platform/instagram-api-with-facebook-login/get-access-tokens-and-permissions"
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-[11px] text-zinc-500 hover:text-zinc-700 underline"
+                              className="text-[11px] text-zinc-500 hover:text-foreground underline"
                             >
                               Get token ↗
                             </a>
@@ -1203,13 +1203,13 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                             placeholder="EAAxxxxxxxxxxxxxxxxxxxxxxxx"
                             value={state.leadSource.token}
                             onChange={e => update({ leadSource: { ...state.leadSource, token: e.target.value } })}
-                            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-sm placeholder:text-gray-300 focus:outline-none focus:border-zinc-500/60 transition-all font-mono"
+                            className="w-full bg-muted border border-border rounded-xl px-4 py-3 text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:border-foreground transition-all font-mono"
                           />
                         </div>
 
                         {/* Lead fields checklist */}
                         <div>
-                          <label className="text-gray-500 text-xs uppercase tracking-[0.15em] block mb-2">Lead Fields to Capture</label>
+                          <label className="text-muted-foreground text-xs uppercase tracking-[0.15em] block mb-2">Lead Fields to Capture</label>
                           <div className="flex gap-2 flex-wrap mb-3">
                             {/* Default fields — always visible, togglable on/off */}
                             {(DEFAULT_LEAD_FIELDS as readonly string[]).map(field => {
@@ -1228,15 +1228,15 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                                   className={cn(
                                     "flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-medium transition-all",
                                     checked
-                                      ? "border-zinc-400 bg-zinc-50 text-zinc-700"
-                                      : "border-gray-200 bg-gray-50 text-gray-400 hover:border-gray-300",
+                                      ? "border-zinc-400 bg-muted text-foreground"
+                                      : "border-border bg-muted text-muted-foreground hover:border-border",
                                   )}
                                 >
-                                  <span className={cn("w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0", checked ? "border-zinc-500 bg-zinc-500" : "border-gray-300")}>
+                                  <span className={cn("w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0", checked ? "border-zinc-500 bg-zinc-500" : "border-border")}>
                                     {checked && <Check className="h-2.5 w-2.5 text-white" />}
                                   </span>
                                   <span className="capitalize">{field}</span>
-                                  <span className={cn("font-mono text-[10px]", checked ? "text-zinc-500" : "text-gray-300")}>{varName}</span>
+                                  <span className={cn("font-mono text-[10px]", checked ? "text-zinc-500" : "text-muted-foreground")}>{varName}</span>
                                 </button>
                               );
                             })}
@@ -1251,8 +1251,8 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                                   className={cn(
                                     "flex items-center gap-1.5 pl-3 pr-2 py-2 rounded-xl border text-xs font-medium transition-all",
                                     checked
-                                      ? "border-zinc-400 bg-zinc-50 text-zinc-700"
-                                      : "border-gray-200 bg-gray-50 text-gray-400",
+                                      ? "border-zinc-400 bg-muted text-foreground"
+                                      : "border-border bg-muted text-muted-foreground",
                                   )}
                                 >
                                   {/* toggle button */}
@@ -1264,12 +1264,12 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                                         : [...state.leadSource.fields, field];
                                       update({ leadSource: { ...state.leadSource, fields: next } });
                                     }}
-                                    className={cn("w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 transition-colors", checked ? "border-zinc-500 bg-zinc-500" : "border-gray-300 hover:border-gray-400")}
+                                    className={cn("w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 transition-colors", checked ? "border-zinc-500 bg-zinc-500" : "border-border hover:border-border")}
                                   >
                                     {checked && <Check className="h-2.5 w-2.5 text-white" />}
                                   </button>
                                   <span className="capitalize">{displayName}</span>
-                                  <span className={cn("font-mono text-[10px]", checked ? "text-zinc-500" : "text-gray-300")}>{varName}</span>
+                                  <span className={cn("font-mono text-[10px]", checked ? "text-zinc-500" : "text-muted-foreground")}>{varName}</span>
                                   {/* remove button */}
                                   <button
                                     type="button"
@@ -1282,7 +1282,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                                         },
                                       });
                                     }}
-                                    className="ml-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center shrink-0 text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                    className="ml-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center shrink-0 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                                     title={`Remove ${displayName}`}
                                   >
                                     <X className="h-2.5 w-2.5" />
@@ -1300,32 +1300,32 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                               value={addFieldInput}
                               onChange={e => { setAddFieldInput(e.target.value); setAddFieldError(""); }}
                               onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleAddLeadField(); } }}
-                              className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-gray-900 text-xs placeholder:text-gray-300 focus:outline-none focus:border-zinc-500/60 transition-all"
+                              className="flex-1 bg-muted border border-border rounded-xl px-3 py-2 text-foreground text-xs placeholder:text-muted-foreground focus:outline-none focus:border-foreground transition-all"
                             />
                             <button
                               type="button"
                               onClick={handleAddLeadField}
-                              className="px-3 py-2 rounded-xl border border-zinc-300 bg-zinc-50 text-zinc-700 text-xs font-medium hover:bg-zinc-100 transition-colors shrink-0"
+                              className="px-3 py-2 rounded-xl border border-zinc-300 bg-muted text-foreground text-xs font-medium hover:bg-muted transition-colors shrink-0"
                             >
                               Add field
                             </button>
                           </div>
                           {addFieldError && (
-                            <p className="mt-1.5 text-[11px] text-red-500">{addFieldError}</p>
+                            <p className="mt-1.5 text-[11px] text-foreground">{addFieldError}</p>
                           )}
                         </div>
 
                         {/* Product Details */}
                         <div>
-                          <label className="text-gray-500 text-xs uppercase tracking-[0.15em] block mb-2">Product Details</label>
+                          <label className="text-muted-foreground text-xs uppercase tracking-[0.15em] block mb-2">Product Details</label>
                           <textarea
                             placeholder="Describe what you're selling — e.g. 3BHK apartments in Whitefield starting ₹80L, ready to move in..."
                             value={state.productDetails}
                             onChange={e => update({ productDetails: e.target.value })}
                             rows={3}
-                            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-sm placeholder:text-gray-300 focus:outline-none focus:border-zinc-500/60 transition-all resize-none leading-relaxed"
+                            className="w-full bg-muted border border-border rounded-xl px-4 py-3 text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:border-foreground transition-all resize-none leading-relaxed"
                           />
-                          <p className="mt-1.5 text-[11px] text-gray-400">Available as <code className="font-mono">&#123;&#123;product_details&#125;&#125;</code> in your agent's prompt.</p>
+                          <p className="mt-1.5 text-[11px] text-muted-foreground">Available as <code className="font-mono">&#123;&#123;product_details&#125;&#125;</code> in your agent's prompt.</p>
                         </div>
                       </div>
                     )}
@@ -1337,9 +1337,9 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
             {/* Step 3: Language */}
             {currentStep === "language" && (
               <div>
-                <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">Step 3 of 9</p>
-                <h2 className="text-3xl font-bold text-gray-900 mb-2">What language will<br />your agent speak?</h2>
-                <p className="text-gray-400 text-sm mb-8">English is always available. Add regional languages for Indian markets.</p>
+                <p className="text-muted-foreground text-xs uppercase tracking-[0.2em] mb-3">Step 3 of 9</p>
+                <h2 className="text-3xl font-bold text-foreground mb-2">What language will<br />your agent speak?</h2>
+                <p className="text-muted-foreground text-sm mb-8">English is always available. Add regional languages for Indian markets.</p>
 
                 <div className="flex gap-3 mb-6">
                   {[
@@ -1353,21 +1353,21 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                         onClick={() => update({ isMultilingual: opt.value, additionalLanguages: [] })}
                         className={cn(
                           "flex-1 p-4 rounded-xl border transition-all flex items-start gap-3",
-                          sel ? "border-zinc-400 bg-zinc-50" : "border-gray-200 bg-gray-50 hover:border-gray-200",
+                          sel ? "border-zinc-400 bg-muted" : "border-border bg-muted hover:border-border",
                         )}
                       >
-                        {opt.value ? <Languages className={cn("h-5 w-5 mt-0.5 shrink-0", sel ? "text-zinc-600" : "text-gray-400")} /> : <Volume2 className={cn("h-5 w-5 mt-0.5 shrink-0", sel ? "text-zinc-600" : "text-gray-400")} />}
+                        {opt.value ? <Languages className={cn("h-5 w-5 mt-0.5 shrink-0", sel ? "text-foreground" : "text-muted-foreground")} /> : <Volume2 className={cn("h-5 w-5 mt-0.5 shrink-0", sel ? "text-foreground" : "text-muted-foreground")} />}
                         <div className="text-left">
-                          <div className={cn("font-semibold text-sm", sel ? "text-gray-900" : "text-gray-500")}>{opt.label}</div>
-                          <div className="text-xs text-gray-400 mt-0.5">{opt.sub}</div>
+                          <div className={cn("font-semibold text-sm", sel ? "text-foreground" : "text-muted-foreground")}>{opt.label}</div>
+                          <div className="text-xs text-muted-foreground mt-0.5">{opt.sub}</div>
                         </div>
-                        {sel && <Check className="h-4 w-4 text-zinc-600 ml-auto mt-0.5" />}
+                        {sel && <Check className="h-4 w-4 text-foreground ml-auto mt-0.5" />}
                       </button>
                     );
                   })}
                 </div>
 
-                <p className="text-gray-400 text-xs uppercase tracking-[0.15em] mb-3">{state.isMultilingual ? "Primary language" : "Select language"}</p>
+                <p className="text-muted-foreground text-xs uppercase tracking-[0.15em] mb-3">{state.isMultilingual ? "Primary language" : "Select language"}</p>
                 <div className="grid grid-cols-3 gap-2 mb-4">
                   {LANGUAGES.map(lang => {
                     const sel = state.primaryLanguage === lang.code;
@@ -1377,11 +1377,11 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                         onClick={() => update({ primaryLanguage: lang.code })}
                         className={cn(
                           "p-3 rounded-xl border flex items-center gap-2.5 transition-all",
-                          sel ? "border-zinc-400 bg-zinc-50" : "border-gray-200 bg-gray-50 hover:border-gray-200",
+                          sel ? "border-zinc-400 bg-muted" : "border-border bg-muted hover:border-border",
                         )}
                       >
-                        <span className={cn("font-medium text-sm", sel ? "text-gray-900" : "text-gray-500")}>{lang.label}</span>
-                        {sel && <Check className="h-3.5 w-3.5 text-zinc-600 ml-auto" />}
+                        <span className={cn("font-medium text-sm", sel ? "text-foreground" : "text-muted-foreground")}>{lang.label}</span>
+                        {sel && <Check className="h-3.5 w-3.5 text-foreground ml-auto" />}
                       </button>
                     );
                   })}
@@ -1389,7 +1389,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
 
                 {state.isMultilingual && (
                   <>
-                    <p className="text-gray-400 text-xs uppercase tracking-[0.15em] mb-3">Additional regional languages <span className="text-gray-300 normal-case">(up to 2)</span></p>
+                    <p className="text-muted-foreground text-xs uppercase tracking-[0.15em] mb-3">Additional regional languages <span className="text-muted-foreground normal-case">(up to 2)</span></p>
                     <div className="grid grid-cols-3 gap-2 mb-4">
                       {LANGUAGES.filter(l => l.code !== state.primaryLanguage).map(lang => {
                         const sel   = state.additionalLanguages.includes(lang.code);
@@ -1406,13 +1406,13 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                             }}
                             className={cn(
                               "p-3 rounded-xl border flex items-center gap-2.5 transition-all",
-                              sel    ? "border-zinc-400 bg-zinc-50"
-                              : maxed ? "border-gray-100 opacity-30 cursor-not-allowed"
-                              : "border-gray-200 bg-gray-50 hover:border-gray-200",
+                              sel    ? "border-zinc-400 bg-muted"
+                              : maxed ? "border-border opacity-30 cursor-not-allowed"
+                              : "border-border bg-muted hover:border-border",
                             )}
                           >
-                            <span className={cn("font-medium text-sm", sel ? "text-gray-900" : "text-gray-500")}>{lang.label}</span>
-                            {sel && <Check className="h-3.5 w-3.5 text-zinc-600 ml-auto" />}
+                            <span className={cn("font-medium text-sm", sel ? "text-foreground" : "text-muted-foreground")}>{lang.label}</span>
+                            {sel && <Check className="h-3.5 w-3.5 text-foreground ml-auto" />}
                           </button>
                         );
                       })}
@@ -1426,8 +1426,8 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                   const hasTamil = langs.includes("tamil");
                   const hasIndic = langs.some(l => ["hindi","telugu","kannada","marathi","gujarati","bengali","malayalam"].includes(l));
                   return (
-                    <div className="p-4 rounded-xl border border-gray-200 bg-gray-50">
-                      <p className="text-gray-400 text-xs uppercase tracking-[0.15em] mb-2">Auto-selected AI stack</p>
+                    <div className="p-4 rounded-xl border border-border bg-muted">
+                      <p className="text-muted-foreground text-xs uppercase tracking-[0.15em] mb-2">Auto-selected AI stack</p>
                       <div className="grid grid-cols-4 gap-2">
                         {[
                           { l: "STT",  v: stack.asrProvider,       note: hasTamil ? "Tamil optimised" : "" },
@@ -1435,10 +1435,10 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                           { l: "TTS",  v: "Cartesia Sonic", note: "" },
                           { l: "TEL",  v: stack.telephonyProvider,  note: "" },
                         ].map(item => (
-                          <div key={item.l} className="text-center p-2.5 rounded-lg bg-gray-50 border border-gray-100">
-                            <div className="text-gray-400 text-[9px] uppercase tracking-widest">{item.l}</div>
-                            <div className="text-gray-700 text-xs font-semibold capitalize mt-0.5">{item.v}</div>
-                            {item.note && <div className="text-zinc-600/70 text-[9px] mt-0.5">{item.note}</div>}
+                          <div key={item.l} className="text-center p-2.5 rounded-lg bg-muted border border-border">
+                            <div className="text-muted-foreground text-[9px] uppercase tracking-widest">{item.l}</div>
+                            <div className="text-foreground text-xs font-semibold capitalize mt-0.5">{item.v}</div>
+                            {item.note && <div className="text-foreground/70 text-[9px] mt-0.5">{item.note}</div>}
                           </div>
                         ))}
                       </div>
@@ -1451,9 +1451,9 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
             {/* Step 6: Agent Instructions (pre-filled from call flow) */}
             {currentStep === "requirements" && (
               <div>
-                <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">Step 6 of 9</p>
-                <h2 className="text-3xl font-bold text-gray-900 mb-2">Refine your agent's<br />instructions</h2>
-                <p className="text-gray-400 text-sm mb-6">
+                <p className="text-muted-foreground text-xs uppercase tracking-[0.2em] mb-3">Step 6 of 9</p>
+                <h2 className="text-3xl font-bold text-foreground mb-2">Refine your agent's<br />instructions</h2>
+                <p className="text-muted-foreground text-sm mb-6">
                   Your call flow has been pre-filled below. Edit it if needed, then generate an AI prompt or continue directly.
                 </p>
 
@@ -1462,7 +1462,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                   value={state.callFlowDescription}
                   onChange={e => { update({ callFlowDescription: e.target.value }); setGenError(""); }}
                   rows={7}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 text-gray-900 text-sm placeholder:text-gray-300 focus:outline-none focus:border-zinc-500/60 transition-all resize-none leading-relaxed mb-3"
+                  className="w-full bg-muted border border-border rounded-xl px-4 py-3.5 text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:border-foreground transition-all resize-none leading-relaxed mb-3"
                 />
 
                 <button
@@ -1471,7 +1471,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                   className={cn(
                     "w-full flex items-center justify-center gap-2.5 py-3.5 rounded-xl font-semibold text-sm transition-all mb-3",
                     !state.callFlowDescription.trim() || isGenerating
-                      ? "bg-gray-50 text-gray-400 cursor-not-allowed"
+                      ? "bg-muted text-muted-foreground cursor-not-allowed"
                       : "bg-gradient-to-r from-zinc-600 to-zinc-600 hover:from-zinc-500 hover:to-zinc-500 text-white shadow-lg shadow-zinc-500/20",
                   )}
                 >
@@ -1482,11 +1482,11 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                 </button>
 
                 {generateError && (
-                  <div className="flex items-start gap-2.5 p-3.5 rounded-xl border border-zinc-300 bg-zinc-50 mb-3">
+                  <div className="flex items-start gap-2.5 p-3.5 rounded-xl border border-zinc-300 bg-muted mb-3">
                     <X className="h-4 w-4 text-zinc-500 shrink-0 mt-0.5" />
                     <div>
                       <p className="text-zinc-500 text-xs font-semibold mb-0.5">Generation failed</p>
-                      <p className="text-gray-400 text-xs">{generateError}</p>
+                      <p className="text-muted-foreground text-xs">{generateError}</p>
                     </div>
                   </div>
                 )}
@@ -1497,14 +1497,14 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                   className={cn(
                     "w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm border transition-all",
                     !state.callFlowDescription.trim()
-                      ? "border-gray-100 text-gray-300 cursor-not-allowed"
-                      : "border-gray-200 text-gray-500 hover:text-gray-600 hover:border-gray-300",
+                      ? "border-border text-muted-foreground cursor-not-allowed"
+                      : "border-border text-muted-foreground hover:text-muted-foreground hover:border-border",
                   )}
                 >
                   <SkipForward className="h-3.5 w-3.5" /> Skip AI generation &amp; continue manually
                 </button>
 
-                <p className="text-gray-300 text-xs text-center mt-3">
+                <p className="text-muted-foreground text-xs text-center mt-3">
                   You can edit or write the system prompt manually on the agent settings page.
                 </p>
               </div>
@@ -1513,24 +1513,24 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
             {/* Step 7: Knowledge Base */}
             {currentStep === "knowledge" && (
               <div>
-                <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">Step 7 of 9</p>
-                <h2 className="text-3xl font-bold text-gray-900 mb-2">Add a knowledge<br />base <span className="text-gray-400">(optional)</span></h2>
-                <p className="text-gray-400 text-sm mb-8">
+                <p className="text-muted-foreground text-xs uppercase tracking-[0.2em] mb-3">Step 7 of 9</p>
+                <h2 className="text-3xl font-bold text-foreground mb-2">Add a knowledge<br />base <span className="text-muted-foreground">(optional)</span></h2>
+                <p className="text-muted-foreground text-sm mb-8">
                   Upload FAQs, product info, or any text your agent should know. The agent references this during calls. You can skip and add it later.
                 </p>
 
                 {!state.kbContent ? (
                   <div
-                    className="border-2 border-dashed border-gray-200 rounded-2xl p-10 text-center hover:border-gray-300 transition-colors cursor-pointer group"
+                    className="border-2 border-dashed border-border rounded-2xl p-10 text-center hover:border-border transition-colors cursor-pointer group"
                     onClick={() => fileInputRef.current?.click()}
                     onDragOver={e => e.preventDefault()}
                     onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
                   >
-                    <div className="h-14 w-14 rounded-2xl bg-gray-50 group-hover:bg-gray-100 flex items-center justify-center mx-auto mb-4 transition-colors">
-                      <Upload className="h-7 w-7 text-gray-400" />
+                    <div className="h-14 w-14 rounded-2xl bg-muted group-hover:bg-muted flex items-center justify-center mx-auto mb-4 transition-colors">
+                      <Upload className="h-7 w-7 text-muted-foreground" />
                     </div>
-                    <p className="text-gray-500 font-semibold mb-1">Drop a file or click to upload</p>
-                    <p className="text-gray-400 text-sm">TXT, PDF, DOCX — max 5 MB</p>
+                    <p className="text-muted-foreground font-semibold mb-1">Drop a file or click to upload</p>
+                    <p className="text-muted-foreground text-sm">TXT, PDF, DOCX — max 5 MB</p>
                     <input
                       ref={fileInputRef}
                       type="file"
@@ -1540,31 +1540,31 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                     />
                   </div>
                 ) : (
-                  <div className="p-4 rounded-xl border border-zinc-300 bg-zinc-50 flex items-center gap-3 mb-4">
-                    <FileText className="h-5 w-5 text-zinc-600 shrink-0" />
+                  <div className="p-4 rounded-xl border border-zinc-300 bg-muted flex items-center gap-3 mb-4">
+                    <FileText className="h-5 w-5 text-foreground shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-gray-700 text-sm font-semibold truncate">{state.kbFileName || "Pasted content"}</p>
-                      <p className="text-gray-400 text-xs">{state.kbContent.length.toLocaleString()} characters</p>
+                      <p className="text-foreground text-sm font-semibold truncate">{state.kbFileName || "Pasted content"}</p>
+                      <p className="text-muted-foreground text-xs">{state.kbContent.length.toLocaleString()} characters</p>
                     </div>
-                    <button onClick={() => update({ kbContent: "", kbFileName: "" })} className="text-gray-400 hover:text-gray-500 transition-colors">
+                    <button onClick={() => update({ kbContent: "", kbFileName: "" })} className="text-muted-foreground hover:text-muted-foreground transition-colors">
                       <X className="h-4 w-4" />
                     </button>
                   </div>
                 )}
 
-                <p className="text-gray-400 text-xs text-center my-4">— or —</p>
+                <p className="text-muted-foreground text-xs text-center my-4">— or —</p>
 
                 <textarea
                   placeholder="Paste your FAQs, product description, pricing, or any knowledge here..."
                   value={state.kbContent && !state.kbFileName ? state.kbContent : ""}
                   onChange={e => update({ kbContent: e.target.value, kbFileName: "" })}
                   rows={5}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 text-gray-900 text-sm placeholder:text-gray-300 focus:outline-none focus:border-zinc-500/60 transition-all resize-none leading-relaxed"
+                  className="w-full bg-muted border border-border rounded-xl px-4 py-3.5 text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:border-foreground transition-all resize-none leading-relaxed"
                 />
 
-                <div className="mt-4 p-3.5 rounded-xl border border-gray-200 bg-gray-50 flex items-center gap-2.5">
-                  <SkipForward className="h-4 w-4 text-gray-400 shrink-0" />
-                  <p className="text-gray-400 text-xs">You can skip this step and add a knowledge base later from the agent settings.</p>
+                <div className="mt-4 p-3.5 rounded-xl border border-border bg-muted flex items-center gap-2.5">
+                  <SkipForward className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <p className="text-muted-foreground text-xs">You can skip this step and add a knowledge base later from the agent settings.</p>
                 </div>
               </div>
             )}
@@ -1572,12 +1572,12 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
             {/* Step 8: Voice */}
             {currentStep === "voice" && (
               <div>
-                <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">Step 8 of 9</p>
-                <h2 className="text-3xl font-bold text-gray-900 mb-2">Choose your<br />agent's voice</h2>
-                <p className="text-gray-400 text-sm mb-8">
+                <p className="text-muted-foreground text-xs uppercase tracking-[0.2em] mb-3">Step 8 of 9</p>
+                <h2 className="text-3xl font-bold text-foreground mb-2">Choose your<br />agent's voice</h2>
+                <p className="text-muted-foreground text-sm mb-8">
                   {state.primaryLanguage !== "english"
-                    ? <><span className="text-zinc-600 font-medium">A native {state.primaryLanguage} voice is pre-selected</span> — voices with a matching language badge work best.{" "}</>
-                    : <><span className="text-zinc-600 font-medium">Arushi</span> is pre-selected — warm Indian English female.{" "}</>
+                    ? <><span className="text-foreground font-medium">A native {state.primaryLanguage} voice is pre-selected</span> — voices with a matching language badge work best.{" "}</>
+                    : <><span className="text-foreground font-medium">Arushi</span> is pre-selected — warm Indian English female.{" "}</>
                   }
                   {voiceSource === "cartesia"
                     ? "Press ▶ to hear any voice."
@@ -1585,7 +1585,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                 </p>
 
                 {loadingVoices ? (
-                  <div className="flex items-center justify-center py-16 text-gray-400 gap-2">
+                  <div className="flex items-center justify-center py-16 text-muted-foreground gap-2">
                     <Loader2 className="h-5 w-5 animate-spin" /> Loading voices...
                   </div>
                 ) : (
@@ -1601,38 +1601,38 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                           className={cn(
                             "p-4 rounded-xl border cursor-pointer transition-all duration-200 flex items-center gap-3 group",
                             sel
-                              ? "border-zinc-400 bg-zinc-50"
-                              : "border-gray-200 bg-gray-50 hover:border-gray-200 hover:bg-gray-50",
+                              ? "border-zinc-400 bg-muted"
+                              : "border-border bg-muted hover:border-border hover:bg-muted",
                           )}
                         >
                           <div className={cn(
                             "h-11 w-11 rounded-full flex items-center justify-center text-sm font-bold shrink-0",
-                            voice.gender === "Female" ? "bg-zinc-500/20 text-zinc-500" : "bg-zinc-100 text-zinc-600",
+                            voice.gender === "Female" ? "bg-muted text-zinc-500" : "bg-muted text-foreground",
                           )}>
                             {voice.name.charAt(0)}
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className={cn("font-semibold text-sm", sel ? "text-gray-900" : "text-gray-600")}>{voice.name}</span>
-                              {isArushi && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-zinc-100 text-zinc-600 font-semibold">Default</span>}
+                              <span className={cn("font-semibold text-sm", sel ? "text-foreground" : "text-muted-foreground")}>{voice.name}</span>
+                              {isArushi && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-muted text-foreground font-semibold">Default</span>}
                               {voice.language && (
-                                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-400 font-medium">
+                                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">
                                   {LANG_LABEL[voice.language] ?? voice.language.toUpperCase()}
                                 </span>
                               )}
                             </div>
-                            <div className="text-xs text-gray-400 mt-0.5 truncate">{voice.gender}</div>
+                            <div className="text-xs text-muted-foreground mt-0.5 truncate">{voice.gender}</div>
                           </div>
                           <button
                             onClick={e => { e.stopPropagation(); void preview(voice.id); }}
                             className={cn(
                               "h-8 w-8 rounded-full flex items-center justify-center shrink-0 transition-all",
-                              isPlay ? "bg-zinc-500 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700",
+                              isPlay ? "bg-zinc-500 text-white" : "bg-muted text-muted-foreground hover:bg-muted hover:text-foreground",
                             )}
                           >
                             {isPlay ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
                           </button>
-                          {sel && <Check className="h-4 w-4 text-zinc-600 shrink-0" />}
+                          {sel && <Check className="h-4 w-4 text-foreground shrink-0" />}
                         </div>
                       );
                     })}
@@ -1644,65 +1644,65 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
             {/* Step 9: Skills & Finish */}
             {currentStep === "skills" && (
               <div>
-                <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">Step 9 — Final step</p>
-                <h2 className="text-3xl font-bold text-gray-900 mb-2">Agent skills &amp;<br />final setup</h2>
-                <p className="text-gray-400 text-sm mb-8">Enable capabilities your agent needs. Auto-summarize is always on.</p>
+                <p className="text-muted-foreground text-xs uppercase tracking-[0.2em] mb-3">Step 9 — Final step</p>
+                <h2 className="text-3xl font-bold text-foreground mb-2">Agent skills &amp;<br />final setup</h2>
+                <p className="text-muted-foreground text-sm mb-8">Enable capabilities your agent needs. Auto-summarize is always on.</p>
 
                 <div className="space-y-4">
                   {/* Call Transfer */}
                   <div className={cn(
                     "p-5 rounded-xl border transition-all",
-                    state.callTransferEnabled ? "border-zinc-200 bg-zinc-50/60" : "border-gray-200 bg-white",
+                    state.callTransferEnabled ? "border-border bg-muted/60" : "border-border bg-card",
                   )}>
                     <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-2.5">
-                        <PhoneForwarded className={cn("h-4 w-4", state.callTransferEnabled ? "text-zinc-600" : "text-gray-400")} />
-                        <span className="font-semibold text-gray-800 text-sm">Call Transfer</span>
+                        <PhoneForwarded className={cn("h-4 w-4", state.callTransferEnabled ? "text-foreground" : "text-muted-foreground")} />
+                        <span className="font-semibold text-foreground text-sm">Call Transfer</span>
                       </div>
                       <Switch
                         checked={state.callTransferEnabled}
                         onCheckedChange={v => update({ callTransferEnabled: v })}
                       />
                     </div>
-                    <p className="text-gray-400 text-xs mb-3">Agent can transfer calls to a human agent when needed</p>
+                    <p className="text-muted-foreground text-xs mb-3">Agent can transfer calls to a human agent when needed</p>
                     {state.callTransferEnabled && (
                       <input
                         type="tel"
                         placeholder="+91 9876543210"
                         value={state.callTransferNumber}
                         onChange={e => update({ callTransferNumber: e.target.value })}
-                        className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2.5 text-gray-900 text-sm placeholder:text-gray-400 focus:outline-none focus:border-zinc-400 transition-all"
+                        className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:border-zinc-400 transition-all"
                       />
                     )}
                   </div>
 
                   {/* Auto Summarize — always on */}
-                  <div className="p-5 rounded-xl border border-zinc-200 bg-zinc-50 flex items-start gap-3">
-                    <div className="h-8 w-8 rounded-lg bg-zinc-100 flex items-center justify-center shrink-0 mt-0.5">
-                      <Check className="h-4 w-4 text-zinc-600" />
+                  <div className="p-5 rounded-xl border border-border bg-muted flex items-start gap-3">
+                    <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center shrink-0 mt-0.5">
+                      <Check className="h-4 w-4 text-foreground" />
                     </div>
                     <div>
                       <div className="flex items-center gap-2 mb-0.5">
-                        <span className="font-semibold text-gray-700 text-sm">Auto-Summarize Calls</span>
-                        <span className="text-[9px] px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600 font-semibold border border-zinc-200">Always On</span>
+                        <span className="font-semibold text-foreground text-sm">Auto-Summarize Calls</span>
+                        <span className="text-[9px] px-2 py-0.5 rounded-full bg-muted text-foreground font-semibold border border-border">Always On</span>
                       </div>
-                      <p className="text-gray-400 text-xs leading-relaxed">After each call, AI generates a 3-bullet summary — caller intent, key info exchanged, and outcome.</p>
+                      <p className="text-muted-foreground text-xs leading-relaxed">After each call, AI generates a 3-bullet summary — caller intent, key info exchanged, and outcome.</p>
                     </div>
                   </div>
 
                   {/* Coming soon */}
-                  <div className="p-4 rounded-xl border border-gray-100 bg-gray-50">
-                    <p className="text-gray-400 text-xs uppercase tracking-widest mb-2">Coming soon</p>
+                  <div className="p-4 rounded-xl border border-border bg-muted">
+                    <p className="text-muted-foreground text-xs uppercase tracking-widest mb-2">Coming soon</p>
                     <div className="flex flex-wrap gap-2">
                       {["WhatsApp Integration", "SMS Service", "CRM Sync", "Zapier", "Salesforce"].map(item => (
-                        <span key={item} className="px-2.5 py-1 rounded-full bg-gray-50 text-xs text-gray-400 border border-gray-100">{item}</span>
+                        <span key={item} className="px-2.5 py-1 rounded-full bg-muted text-xs text-muted-foreground border border-border">{item}</span>
                       ))}
                     </div>
                   </div>
 
                   {/* Summary card */}
-                  <div className="p-5 rounded-xl border border-gray-200 bg-gray-50 mt-2">
-                    <p className="text-gray-400 text-xs uppercase tracking-widest mb-3">Your agent summary</p>
+                  <div className="p-5 rounded-xl border border-border bg-muted mt-2">
+                    <p className="text-muted-foreground text-xs uppercase tracking-widest mb-3">Your agent summary</p>
                     <div className="space-y-2">
                       {[
                         { k: "Name",      v: state.agentName || "—" },
@@ -1713,8 +1713,8 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                         { k: "Direction", v: state.agentDirection },
                       ].map(row => (
                         <div key={row.k} className="flex items-center justify-between text-sm">
-                          <span className="text-gray-400">{row.k}</span>
-                          <span className="text-gray-600 font-medium capitalize">{row.v}</span>
+                          <span className="text-muted-foreground">{row.k}</span>
+                          <span className="text-muted-foreground font-medium capitalize">{row.v}</span>
                         </div>
                       ))}
                     </div>
@@ -1728,15 +1728,15 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
             ════════════════════════════════════════════ */}
             {state.mode === "byop" && (
               <div>
-                <p className="text-gray-400 text-xs uppercase tracking-[0.2em] mb-3">BYOP Configuration</p>
-                <h2 className="text-3xl font-bold text-gray-900 mb-2">Configure your<br />provider stack</h2>
-                <p className="text-gray-400 text-sm mb-8">Choose your own providers and write a system prompt.</p>
+                <p className="text-muted-foreground text-xs uppercase tracking-[0.2em] mb-3">BYOP Configuration</p>
+                <h2 className="text-3xl font-bold text-foreground mb-2">Configure your<br />provider stack</h2>
+                <p className="text-muted-foreground text-sm mb-8">Choose your own providers and write a system prompt.</p>
 
                 <div className="space-y-5">
                   <div>
-                    <label className="text-gray-500 text-xs uppercase tracking-widest block mb-2">Agent Name</label>
+                    <label className="text-muted-foreground text-xs uppercase tracking-widest block mb-2">Agent Name</label>
                     <input type="text" placeholder="My Assistant" value={state.agentName} onChange={e => update({ agentName: e.target.value })}
-                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-zinc-500/60 transition-all" />
+                      className="w-full bg-muted border border-border rounded-xl px-4 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-foreground transition-all" />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     {[
@@ -1745,23 +1745,23 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                       { label: "Voice (TTS)",       key: "byopTts",       opts: TTS_PROVIDERS },
                       { label: "Telephony",         key: "byopTelephony", opts: TELEPHONY_PROVIDERS },
                     ].map(field => (
-                      <div key={field.key} className="bg-gray-50 border border-gray-200 rounded-xl p-3.5">
-                        <p className="text-gray-400 text-[10px] font-semibold uppercase tracking-widest mb-2">{field.label}</p>
+                      <div key={field.key} className="bg-muted border border-border rounded-xl p-3.5">
+                        <p className="text-muted-foreground text-[10px] font-semibold uppercase tracking-widest mb-2">{field.label}</p>
                         <select
                           value={(state as any)[field.key]}
                           onChange={e => update({ [field.key]: e.target.value } as any)}
-                          className="w-full bg-gray-100 border border-gray-200 rounded-lg text-xs text-gray-600 py-2 px-2.5 focus:outline-none focus:border-zinc-500/60"
+                          className="w-full bg-muted border border-border rounded-lg text-xs text-muted-foreground py-2 px-2.5 focus:outline-none focus:border-foreground"
                         >
-                          {field.opts.map(o => <option key={`${field.key}-${o.value}`} value={o.value} className="bg-white">{o.label}</option>)}
+                          {field.opts.map(o => <option key={`${field.key}-${o.value}`} value={o.value} className="bg-card">{o.label}</option>)}
                         </select>
                       </div>
                     ))}
                   </div>
                   <div>
-                    <label className="text-gray-500 text-xs uppercase tracking-widest block mb-2">System Prompt</label>
+                    <label className="text-muted-foreground text-xs uppercase tracking-widest block mb-2">System Prompt</label>
                     <textarea
                       value={state.byopPrompt} onChange={e => update({ byopPrompt: e.target.value })} rows={6}
-                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-700 text-sm focus:outline-none focus:border-zinc-500/60 transition-all resize-none"
+                      className="w-full bg-muted border border-border rounded-xl px-4 py-3 text-foreground text-sm focus:outline-none focus:border-foreground transition-all resize-none"
                     />
                   </div>
                 </div>
@@ -1776,7 +1776,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
 
       {/* Bottom navigation */}
       {(state.mode !== null || microActive) && (
-        <div className="px-8 py-5 border-t border-gray-200 shrink-0 flex items-center justify-between">
+        <div className="px-8 py-5 border-t border-border shrink-0 flex items-center justify-between">
           <div className="flex gap-1.5">
             {microActive
               ? Array.from({ length: 6 }).map((_, i) => (
@@ -1784,9 +1784,9 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                     key={i}
                     className={cn(
                       "h-1 rounded-full transition-all duration-300",
-                      i < microStep ? "w-5 bg-gray-300"
+                      i < microStep ? "w-5 bg-muted"
                       : i === microStep ? "w-5 bg-zinc-400"
-                      : "w-2 bg-gray-100",
+                      : "w-2 bg-muted",
                     )}
                   />
                 ))
@@ -1795,9 +1795,9 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                     key={i}
                     className={cn(
                       "h-1 rounded-full transition-all duration-300",
-                      i < stepIdx ? "w-5 bg-gray-300"
+                      i < stepIdx ? "w-5 bg-muted"
                       : i === stepIdx ? "w-5 bg-zinc-400"
-                      : "w-2 bg-gray-100",
+                      : "w-2 bg-muted",
                     )}
                   />
                 ))}
@@ -1814,7 +1814,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                     setFlowEditText(nodesToText(currentFlowNodes));
                     setFlowEditMode(true);
                   }}
-                  className="flex items-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm border border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:text-gray-800 transition-all"
+                  className="flex items-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm border border-border bg-card text-muted-foreground hover:border-border hover:text-foreground transition-all"
                 >
                   <Pencil className="h-3.5 w-3.5" /> Edit this flow
                 </button>
@@ -1850,8 +1850,8 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                 className={cn(
                   "flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm transition-all",
                   !microStepValid()
-                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                    : "bg-gray-100 hover:bg-gray-200 text-gray-900 border border-gray-200",
+                    ? "bg-muted text-muted-foreground cursor-not-allowed"
+                    : "bg-muted hover:bg-muted text-foreground border border-border",
                 )}
               >
                 Continue <ChevronRight className="h-4 w-4" />
@@ -1862,7 +1862,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
             {!microActive && state.mode === "managed" && currentStep === "knowledge" && (
               <button
                 onClick={() => go(1)}
-                className="text-gray-400 hover:text-gray-500 text-sm flex items-center gap-1.5 transition-colors"
+                className="text-muted-foreground hover:text-muted-foreground text-sm flex items-center gap-1.5 transition-colors"
               >
                 <SkipForward className="h-3.5 w-3.5" /> Skip for now
               </button>
@@ -1875,7 +1875,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                 className={cn(
                   "flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm transition-all",
                   create.isPending
-                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                    ? "bg-muted text-muted-foreground cursor-not-allowed"
                     : "bg-gradient-to-r from-zinc-600 to-zinc-600 hover:from-zinc-500 hover:to-zinc-500 text-white shadow-lg shadow-zinc-500/25",
                 )}
               >
@@ -1917,8 +1917,8 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                   "flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm transition-all",
                   (currentStep === "use-case" && !state.useCase) ||
                   (currentStep === "details" && (!state.agentName.trim() || !state.companyName.trim()))
-                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                    : "bg-gray-100 hover:bg-gray-200 text-gray-900 border border-gray-200",
+                    ? "bg-muted text-muted-foreground cursor-not-allowed"
+                    : "bg-muted hover:bg-muted text-foreground border border-border",
                 )}
               >
                 Continue <ChevronRight className="h-4 w-4" />

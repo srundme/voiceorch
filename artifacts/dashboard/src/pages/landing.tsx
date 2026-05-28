@@ -92,9 +92,9 @@ function PipelineScene() {
 
         /* ── Pipeline nodes ── */
         const nodes = [
-          { label: "ASR", sub: "Deepgram Nova-3",  x: -130, z: -80, col: [100, 200, 255] as [number,number,number], r: 28 },
-          { label: "LLM", sub: "GPT-4o mini",      x:    0, z:  20, col: [160, 100, 255] as [number,number,number], r: 34 },
-          { label: "TTS", sub: "Cartesia Sonic-2", x:  130, z: -80, col: [80,  220, 180] as [number,number,number], r: 28 },
+          { label: "ASR", sub: "Deepgram Nova-3",  x: -130, z: -80, col: [220, 220, 220] as [number,number,number], r: 28 },
+          { label: "LLM", sub: "GPT-4o mini",      x:    0, z:  20, col: [240, 240, 240] as [number,number,number], r: 34 },
+          { label: "TTS", sub: "Cartesia Sonic-2", x:  130, z: -80, col: [200, 200, 200] as [number,number,number], r: 28 },
         ];
 
         const floatY = Math.sin(t * 0.0012) * 6;
@@ -109,7 +109,7 @@ function PipelineScene() {
           const c2 = nodes[i + 1]!.col;
           const grad = ctx.createLinearGradient(x1, y1, x2, y2);
           grad.addColorStop(0,   `rgba(${c1[0]},${c1[1]},${c1[2]},0.5)`);
-          grad.addColorStop(0.5, "rgba(200,160,255,0.3)");
+          grad.addColorStop(0.5, "rgba(220,220,220,0.3)");
           grad.addColorStop(1,   `rgba(${c2[0]},${c2[1]},${c2[2]},0.5)`);
           ctx.beginPath();
           ctx.strokeStyle = grad;
@@ -128,12 +128,12 @@ function PipelineScene() {
         ctx.globalAlpha = 0.55;
         ctx.beginPath();
         ctx.arc(inX, inY + floatY, 18 * inSc, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(80,80,120,0.3)";
-        ctx.strokeStyle = "rgba(150,150,200,0.3)";
+        ctx.fillStyle = "rgba(120,120,120,0.3)";
+        ctx.strokeStyle = "rgba(180,180,180,0.3)";
         ctx.lineWidth = 1;
         ctx.fill(); ctx.stroke();
         ctx.font = `${Math.round(8 * inSc)}px monospace`;
-        ctx.fillStyle = "rgba(200,200,255,0.5)";
+        ctx.fillStyle = "rgba(220,220,220,0.5)";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText("IN", inX, inY + floatY);
@@ -145,12 +145,12 @@ function PipelineScene() {
         ctx.globalAlpha = 0.55;
         ctx.beginPath();
         ctx.arc(outX, outY + floatY, 18 * outSc, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(30,100,70,0.3)";
-        ctx.strokeStyle = "rgba(80,220,160,0.3)";
+        ctx.fillStyle = "rgba(120,120,120,0.3)";
+        ctx.strokeStyle = "rgba(200,200,200,0.3)";
         ctx.lineWidth = 1;
         ctx.fill(); ctx.stroke();
         ctx.font = `${Math.round(8 * outSc)}px monospace`;
-        ctx.fillStyle = "rgba(80,220,160,0.6)";
+        ctx.fillStyle = "rgba(220,220,220,0.6)";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText("OUT", outX, outY + floatY);
@@ -200,7 +200,7 @@ function PipelineScene() {
         // Latency badge above LLM node
         const [lx, ly] = project(0, 20);
         const badgeTag = "184ms total";
-        const [bcr, bcg, bcb] = [180, 130, 255];
+        const [bcr, bcg, bcb] = [220, 220, 220];
         const bx = lx, by = ly + floatY - 60;
         ctx.save();
         ctx.font = "bold 11px ui-monospace, monospace";
@@ -271,7 +271,7 @@ function Counter({ to, suffix = "", prefix = "" }: { to: number; suffix?: string
 /* ─── Reusable section label ─────────────────────────────────────────────── */
 function Label({ text }: { text: string }) {
   return (
-    <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-zinc-600 mb-4">{text}</p>
+    <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-foreground mb-4">{text}</p>
   );
 }
 
@@ -280,13 +280,13 @@ function FeatureRow({ label, title, body, visual }: {
   label: string; title: string; body: string; visual: React.ReactNode;
 }) {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center py-20 border-b border-gray-200">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center py-20 border-b border-border">
       <div>
         <Label text={label} />
-        <h2 className="text-[40px] sm:text-[52px] font-black tracking-tight leading-[1.0] text-gray-900 mb-6">{title}</h2>
-        <p className="text-[15px] text-gray-400 leading-[1.75] max-w-md">{body}</p>
+        <h2 className="text-[40px] sm:text-[52px] font-black tracking-tight leading-[1.0] text-foreground mb-6">{title}</h2>
+        <p className="text-[15px] text-muted-foreground leading-[1.75] max-w-md">{body}</p>
       </div>
-      <div className="rounded-2xl border border-gray-200 bg-white/[0.02] overflow-hidden aspect-[4/3] flex items-center justify-center">
+      <div className="rounded-2xl border border-border bg-card/[0.02] overflow-hidden aspect-[4/3] flex items-center justify-center">
         {visual}
       </div>
     </div>
@@ -315,12 +315,12 @@ function CodeBlock({ lines }: { lines: { t: string; c: string }[] }) {
 /* ─── Use case card ──────────────────────────────────────────────────────── */
 function UCCard({ title, kpi, body }: { title: string; kpi: string; body: string }) {
   return (
-    <div className="group flex flex-col gap-3 p-6 rounded-2xl border border-gray-200 hover:border-white/[0.1] bg-white/[0.01] hover:bg-white/[0.03] transition-all duration-300">
+    <div className="group flex flex-col gap-3 p-6 rounded-2xl border border-border hover:border-white/[0.1] bg-card/[0.01] hover:bg-card/[0.03] transition-all duration-300">
       <div className="flex items-start justify-between gap-2">
-        <h3 className="text-[14px] font-bold text-gray-700 group-hover:text-gray-900 transition-colors">{title}</h3>
-        <span className="shrink-0 text-[10px] font-black text-zinc-300 bg-zinc-50 border border-zinc-500/20 px-2 py-0.5 rounded-full">{kpi}</span>
+        <h3 className="text-[14px] font-bold text-foreground group-hover:text-foreground transition-colors">{title}</h3>
+        <span className="shrink-0 text-[10px] font-black text-zinc-300 bg-muted border border-zinc-500/20 px-2 py-0.5 rounded-full">{kpi}</span>
       </div>
-      <p className="text-[12px] text-gray-400 leading-[1.7]">{body}</p>
+      <p className="text-[12px] text-muted-foreground leading-[1.7]">{body}</p>
     </div>
   );
 }
@@ -331,35 +331,35 @@ function PCard({ plan, price, per, note, items, cta, hot }: {
   items: string[]; cta: string; hot?: boolean;
 }) {
   return (
-    <div className={`relative flex flex-col gap-6 p-6 rounded-2xl border transition-all ${hot ? "border-zinc-500/40 bg-zinc-500/5" : "border-gray-200 bg-white/[0.015]"}`}>
+    <div className={`relative flex flex-col gap-6 p-6 rounded-2xl border transition-all ${hot ? "border-border bg-zinc-500/5" : "border-border bg-card/[0.015]"}`}>
       {hot && (
         <div className="absolute -top-3 left-6">
-          <span className="text-[9px] font-black uppercase tracking-widest bg-zinc-600 text-gray-900 px-3 py-1 rounded-full">
+          <span className="text-[9px] font-black uppercase tracking-widest bg-zinc-600 text-foreground px-3 py-1 rounded-full">
             Most popular
           </span>
         </div>
       )}
       <div className="pt-1">
-        <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-5">{plan}</p>
+        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-5">{plan}</p>
         <div className="flex items-end gap-1.5 mb-1">
-          <span className="text-[36px] font-black text-gray-900 leading-none">{price}</span>
-          {per && <span className="text-[13px] text-gray-400 mb-1.5">{per}</span>}
+          <span className="text-[36px] font-black text-foreground leading-none">{price}</span>
+          {per && <span className="text-[13px] text-muted-foreground mb-1.5">{per}</span>}
         </div>
-        <p className="text-[12px] text-gray-400">{note}</p>
+        <p className="text-[12px] text-muted-foreground">{note}</p>
       </div>
-      <div className="h-px bg-white/[0.06]" />
+      <div className="h-px bg-card/[0.06]" />
       <ul className="flex flex-col gap-3 flex-1">
         {items.map(item => (
-          <li key={item} className="flex items-start gap-2.5 text-[13px] text-gray-500">
-            <Check className="h-3.5 w-3.5 text-zinc-600 mt-0.5 shrink-0" />
+          <li key={item} className="flex items-start gap-2.5 text-[13px] text-muted-foreground">
+            <Check className="h-3.5 w-3.5 text-foreground mt-0.5 shrink-0" />
             {item}
           </li>
         ))}
       </ul>
       <Link href={`${basePath}/sign-up`}>
         <button className={`w-full py-3 rounded-full text-[13px] font-bold transition-all duration-200 ${hot
-          ? "bg-white text-black hover:bg-white/90"
-          : "border border-white/[0.1] text-gray-500 hover:border-white/[0.2] hover:text-gray-600"
+          ? "bg-card text-black hover:bg-card/90"
+          : "border border-white/[0.1] text-muted-foreground hover:border-white/[0.2] hover:text-muted-foreground"
         }`}>{cta}</button>
       </Link>
     </div>
@@ -369,13 +369,13 @@ function PCard({ plan, price, per, note, items, cta, hot }: {
 /* ─── Provider chip ──────────────────────────────────────────────────────── */
 function Chip({ name, tag }: { name: string; tag: string }) {
   return (
-    <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 bg-white/[0.02] hover:border-white/[0.1] transition-colors cursor-default">
-      <div className="h-5 w-5 rounded-md bg-white/[0.07] flex items-center justify-center shrink-0">
-        <span className="text-[8px] font-black text-gray-400">{name.slice(0, 2).toUpperCase()}</span>
+    <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border bg-card/[0.02] hover:border-white/[0.1] transition-colors cursor-default">
+      <div className="h-5 w-5 rounded-md bg-card/[0.07] flex items-center justify-center shrink-0">
+        <span className="text-[8px] font-black text-muted-foreground">{name.slice(0, 2).toUpperCase()}</span>
       </div>
       <div>
         <div className="text-[11px] font-semibold text-white/65 leading-none">{name}</div>
-        <div className="text-[9px] text-gray-400 mt-0.5">{tag}</div>
+        <div className="text-[9px] text-muted-foreground mt-0.5">{tag}</div>
       </div>
     </div>
   );
@@ -384,21 +384,21 @@ function Chip({ name, tag }: { name: string; tag: string }) {
 /* ─── Main ───────────────────────────────────────────────────────────────── */
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-black text-gray-900 antialiased overflow-x-hidden">
+    <div className="min-h-screen bg-black text-foreground antialiased overflow-x-hidden">
 
       {/* ── Nav ───────────────────────────────────────────────────── */}
-      <header className="fixed top-0 inset-x-0 z-50 flex items-center justify-between px-8 h-14 border-b border-gray-100 bg-gray-800 backdrop-blur-xl">
+      <header className="fixed top-0 inset-x-0 z-50 flex items-center justify-between px-8 h-14 border-b border-border bg-black/60 backdrop-blur-xl">
         <div className="flex items-center gap-2">
           <div className="flex h-6 w-6 items-center justify-center rounded-md bg-zinc-600">
-            <SnapServeIcon size={13} className="text-gray-900" />
+            <SnapServeIcon size={13} className="text-foreground" />
           </div>
-          <SnapServeLogo size="sm" className="text-gray-900" />
+          <SnapServeLogo size="sm" className="text-foreground" />
         </div>
 
         <nav className="hidden md:flex items-center gap-7">
           {[["Product", "#product"], ["Use Cases", "#use-cases"], ["Pricing", "#pricing"], ["Docs", "#"]].map(([l, h]) => (
             <a key={l} href={h}
-              className="text-[13px] font-medium text-gray-400 hover:text-gray-700 transition-colors">
+              className="text-[13px] font-medium text-muted-foreground hover:text-foreground transition-colors">
               {l}
             </a>
           ))}
@@ -406,12 +406,12 @@ export default function LandingPage() {
 
         <div className="flex items-center gap-3">
           <Link href={`${basePath}/sign-in`}>
-            <button className="text-[13px] font-medium text-gray-400 hover:text-gray-600 transition-colors px-3 py-1.5">
+            <button className="text-[13px] font-medium text-muted-foreground hover:text-muted-foreground transition-colors px-3 py-1.5">
               Sign in
             </button>
           </Link>
           <Link href={`${basePath}/sign-up`}>
-            <button className="flex items-center gap-1.5 bg-white text-black text-[13px] font-bold px-4 py-1.5 rounded-full hover:bg-white/90 transition-all">
+            <button className="flex items-center gap-1.5 bg-card text-black text-[13px] font-bold px-4 py-1.5 rounded-full hover:bg-card/90 transition-all">
               Get started <ArrowRight className="h-3.5 w-3.5" />
             </button>
           </Link>
@@ -423,14 +423,14 @@ export default function LandingPage() {
 
         {/* Left: text */}
         <div className="flex flex-col justify-center px-10 lg:px-16 py-20 lg:py-0">
-          <div className="inline-flex items-center gap-2 mb-8 w-fit px-3 py-1 rounded-full border border-white/[0.1] text-[11px] font-semibold text-gray-500">
+          <div className="inline-flex items-center gap-2 mb-8 w-fit px-3 py-1 rounded-full border border-white/[0.1] text-[11px] font-semibold text-muted-foreground">
             <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 animate-pulse" />
             From $0.03 / min &mdash; BYOK or Managed
           </div>
 
-          <h1 className="text-[52px] sm:text-[64px] lg:text-[72px] font-black tracking-[-0.035em] leading-[0.95] mb-8 text-gray-900">
+          <h1 className="text-[52px] sm:text-[64px] lg:text-[72px] font-black tracking-[-0.035em] leading-[0.95] mb-8 text-foreground">
             AI voice<br />agents,<br />
-            <span className="text-gray-400">built to</span><br />
+            <span className="text-muted-foreground">built to</span><br />
             <span style={{
               background: "linear-gradient(90deg, #a1a1aa 0%, #a1a1aa 40%, #a1a1aa 100%)",
               WebkitBackgroundClip: "text",
@@ -438,25 +438,25 @@ export default function LandingPage() {
             }}>deploy.</span>
           </h1>
 
-          <p className="text-[15px] text-gray-400 leading-[1.75] max-w-sm mb-10">
+          <p className="text-[15px] text-muted-foreground leading-[1.75] max-w-sm mb-10">
             Real-time orchestration infrastructure. Connect your ASR, LLM, and TTS providers — or use ours.
             We handle the pipeline so you ship the agent.
           </p>
 
           <div className="flex items-center gap-3 flex-wrap">
             <Link href={`${basePath}/sign-up`}>
-              <button className="flex items-center gap-2 bg-white text-black text-[14px] font-bold px-6 py-3 rounded-full hover:bg-white/90 transition-all">
+              <button className="flex items-center gap-2 bg-card text-black text-[14px] font-bold px-6 py-3 rounded-full hover:bg-card/90 transition-all">
                 Get started <ArrowRight className="h-4 w-4" />
               </button>
             </Link>
             <a href="#product">
-              <button className="text-[14px] font-medium text-gray-400 border border-white/[0.1] px-6 py-3 rounded-full hover:border-white/[0.2] hover:text-gray-500 transition-all">
+              <button className="text-[14px] font-medium text-muted-foreground border border-white/[0.1] px-6 py-3 rounded-full hover:border-white/[0.2] hover:text-muted-foreground transition-all">
                 See how it works
               </button>
             </a>
           </div>
 
-          <p className="text-[11px] text-gray-300 mt-5">$5 credit on signup — no card required</p>
+          <p className="text-[11px] text-muted-foreground mt-5">$5 credit on signup — no card required</p>
         </div>
 
         {/* Right: 3D pipeline visual */}
@@ -474,24 +474,24 @@ export default function LandingPage() {
               { label: "LLM", value: "94ms",  col: "#d4d4d8" },
               { label: "TTS", value: "28ms",  col: "#e4e4e7" },
             ].map(({ label, value, col }) => (
-              <div key={label} className="flex items-center gap-2.5 bg-white/[0.04] border border-gray-200 backdrop-blur-sm px-3 py-2 rounded-xl">
+              <div key={label} className="flex items-center gap-2.5 bg-card/[0.04] border border-border backdrop-blur-sm px-3 py-2 rounded-xl">
                 <span className="text-[10px] font-bold" style={{ color: col }}>{label}</span>
-                <span className="text-[12px] font-black text-gray-900 font-mono">{value}</span>
+                <span className="text-[12px] font-black text-foreground font-mono">{value}</span>
               </div>
             ))}
           </div>
 
           {/* Bottom live indicator */}
-          <div className="absolute bottom-8 right-8 z-20 flex items-center gap-2 bg-white/[0.03] border border-gray-200 px-3 py-1.5 rounded-full">
+          <div className="absolute bottom-8 right-8 z-20 flex items-center gap-2 bg-card/[0.03] border border-border px-3 py-1.5 rounded-full">
             <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 animate-pulse" />
-            <span className="text-[11px] font-semibold text-gray-400">Live session active</span>
+            <span className="text-[11px] font-semibold text-muted-foreground">Live session active</span>
           </div>
         </div>
       </section>
 
       {/* ── Metrics ───────────────────────────────────────────────── */}
-      <section className="border-y border-gray-200">
-        <div className="max-w-5xl mx-auto grid grid-cols-2 md:grid-cols-4 divide-x divide-gray-100">
+      <section className="border-y border-border">
+        <div className="max-w-5xl mx-auto grid grid-cols-2 md:grid-cols-4 divide-x divide-border">
           {[
             { to: 10,  s: "M+",   p: "",  l: "Minutes processed" },
             { to: 184, s: "ms",   p: "<", l: "Pipeline latency" },
@@ -499,10 +499,10 @@ export default function LandingPage() {
             { to: 99,  s: ".9%",  p: "",  l: "Uptime SLA" },
           ].map(({ to, s, p, l }) => (
             <div key={l} className="flex flex-col items-center py-10 gap-1.5">
-              <div className="text-[30px] font-black text-gray-900 tabular-nums">
+              <div className="text-[30px] font-black text-foreground tabular-nums">
                 <Counter to={to} suffix={s} prefix={p} />
               </div>
-              <p className="text-[11px] text-gray-400 font-medium">{l}</p>
+              <p className="text-[11px] text-muted-foreground font-medium">{l}</p>
             </div>
           ))}
         </div>
@@ -524,8 +524,8 @@ export default function LandingPage() {
                 { stage: "TOTAL",      ms: "184ms",  bar: 100, col: "#a1a1aa" },
               ].map(({ stage, ms, bar, col }) => (
                 <div key={stage} className="flex items-center gap-3">
-                  <span className="w-20 text-right text-gray-400 text-[10px]">{stage}</span>
-                  <div className="flex-1 h-1.5 bg-white/[0.05] rounded-full overflow-hidden">
+                  <span className="w-20 text-right text-muted-foreground text-[10px]">{stage}</span>
+                  <div className="flex-1 h-1.5 bg-card/[0.05] rounded-full overflow-hidden">
                     <div className="h-full rounded-full transition-all" style={{ width: `${bar}%`, background: col, boxShadow: `0 0 8px ${col}` }} />
                   </div>
                   <span className="w-10 text-[11px] font-bold" style={{ color: col }}>{ms}</span>
@@ -567,12 +567,12 @@ export default function LandingPage() {
                 { lang: "Malayalam", code: "ml-IN", active: false },
                 { lang: "English",   code: "en-IN", active: true },
               ].map(({ lang, code, active }) => (
-                <div key={lang} className="flex items-center justify-between px-4 py-2.5 rounded-xl border border-gray-200 bg-white/[0.02]">
+                <div key={lang} className="flex items-center justify-between px-4 py-2.5 rounded-xl border border-border bg-card/[0.02]">
                   <div className="flex items-center gap-3">
-                    <div className={`w-2 h-2 rounded-full ${active ? "bg-zinc-400" : "bg-white/20"}`} />
-                    <span className="text-[13px] font-semibold text-gray-600">{lang}</span>
+                    <div className={`w-2 h-2 rounded-full ${active ? "bg-zinc-400" : "bg-card/20"}`} />
+                    <span className="text-[13px] font-semibold text-muted-foreground">{lang}</span>
                   </div>
-                  <span className="text-[10px] font-mono text-gray-400">{code}</span>
+                  <span className="text-[10px] font-mono text-muted-foreground">{code}</span>
                 </div>
               ))}
             </div>
@@ -581,11 +581,11 @@ export default function LandingPage() {
       </section>
 
       {/* ── Provider grid ─────────────────────────────────────────── */}
-      <section className="border-y border-gray-200 py-16">
+      <section className="border-y border-border py-16">
         <div className="max-w-5xl mx-auto px-8 lg:px-10">
           <Label text="Integrations" />
-          <h2 className="text-[36px] font-black tracking-tight text-gray-900 mb-2">Your stack. Your choice.</h2>
-          <p className="text-[13px] text-gray-400 mb-10">Every major provider across the full pipeline.</p>
+          <h2 className="text-[36px] font-black tracking-tight text-foreground mb-2">Your stack. Your choice.</h2>
+          <p className="text-[13px] text-muted-foreground mb-10">Every major provider across the full pipeline.</p>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
             {[
@@ -606,7 +606,7 @@ export default function LandingPage() {
               { name: "VoBiz",      tag: "Telephony" },
               { name: "Vonage",     tag: "Telephony" },
             ].map(p => <Chip key={p.name} {...p} />)}
-            <div className="flex items-center justify-center px-3 py-2 rounded-xl border border-dashed border-gray-100 text-[10px] text-white/18">
+            <div className="flex items-center justify-center px-3 py-2 rounded-xl border border-dashed border-border text-[10px] text-white/18">
               + more
             </div>
           </div>
@@ -616,7 +616,7 @@ export default function LandingPage() {
       {/* ── Use cases ─────────────────────────────────────────────── */}
       <section id="use-cases" className="max-w-5xl mx-auto px-8 lg:px-10 py-20">
         <Label text="Use cases" />
-        <h2 className="text-[36px] font-black tracking-tight text-gray-900 mb-10">What teams ship</h2>
+        <h2 className="text-[36px] font-black tracking-tight text-foreground mb-10">What teams ship</h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <UCCard title="Customer Support"        kpi="24/7"         body="Handle FAQs, status updates, complaints. Escalate to human only when needed." />
@@ -629,11 +629,11 @@ export default function LandingPage() {
       </section>
 
       {/* ── Pricing ───────────────────────────────────────────────── */}
-      <section id="pricing" className="border-t border-gray-200 py-20">
+      <section id="pricing" className="border-t border-border py-20">
         <div className="max-w-5xl mx-auto px-8 lg:px-10">
           <Label text="Pricing" />
-          <h2 className="text-[36px] font-black tracking-tight text-gray-900 mb-2">Usage-based. No surprises.</h2>
-          <p className="text-[13px] text-gray-400 mb-12">No seats. No monthly minimums. Pay per minute.</p>
+          <h2 className="text-[36px] font-black tracking-tight text-foreground mb-2">Usage-based. No surprises.</h2>
+          <p className="text-[13px] text-muted-foreground mb-12">No seats. No monthly minimums. Pay per minute.</p>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <PCard plan="Starter" price="$0.03" per="/ min" note="Bring your own provider keys"
@@ -652,15 +652,15 @@ export default function LandingPage() {
       {/* ── Final CTA ─────────────────────────────────────────────── */}
       <section className="py-24 px-8">
         <div className="max-w-3xl mx-auto text-center">
-          <h2 className="text-[48px] sm:text-[60px] font-black tracking-[-0.03em] leading-[1.0] text-gray-900 mb-5">
+          <h2 className="text-[48px] sm:text-[60px] font-black tracking-[-0.03em] leading-[1.0] text-foreground mb-5">
             First agent live<br />
-            <span className="text-gray-400">in under 10 minutes.</span>
+            <span className="text-muted-foreground">in under 10 minutes.</span>
           </h2>
-          <p className="text-[14px] text-gray-400 mb-8 max-w-md mx-auto leading-[1.75]">
+          <p className="text-[14px] text-muted-foreground mb-8 max-w-md mx-auto leading-[1.75]">
             No WebSocket code. No infra to manage. Write a prompt, pick a voice, connect a number.
           </p>
           <Link href={`${basePath}/sign-up`}>
-            <button className="inline-flex items-center gap-2 bg-white text-black text-[14px] font-bold px-8 py-3.5 rounded-full hover:bg-white/90 transition-all">
+            <button className="inline-flex items-center gap-2 bg-card text-black text-[14px] font-bold px-8 py-3.5 rounded-full hover:bg-card/90 transition-all">
               Start building free <ArrowRight className="h-4 w-4" />
             </button>
           </Link>
@@ -669,18 +669,18 @@ export default function LandingPage() {
       </section>
 
       {/* ── Footer ────────────────────────────────────────────────── */}
-      <footer className="border-t border-gray-100 py-7 px-8">
+      <footer className="border-t border-border py-7 px-8">
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <div className="flex h-5 w-5 items-center justify-center rounded-md bg-zinc-600/70">
-              <SnapServeIcon size={11} className="text-gray-900" />
+              <SnapServeIcon size={11} className="text-foreground" />
             </div>
-            <span className="text-[12px] font-bold text-gray-400">SnapServe</span>
+            <span className="text-[12px] font-bold text-muted-foreground">SnapServe</span>
           </div>
           <p className="text-[11px] text-white/15">AI Voice Agent Orchestration Platform</p>
           <div className="flex items-center gap-5">
             {["Privacy", "Terms", "Docs", "Status"].map(l => (
-              <a key={l} href="#" className="text-[11px] text-gray-300 hover:text-gray-500 transition-colors">{l}</a>
+              <a key={l} href="#" className="text-[11px] text-muted-foreground hover:text-muted-foreground transition-colors">{l}</a>
             ))}
           </div>
         </div>

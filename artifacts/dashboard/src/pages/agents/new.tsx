@@ -255,10 +255,10 @@ function ModelSelect({
 /* ── Page ─────────────────────────────────────────────────────────────────── */
 
 const CATEGORY_COLORS: Record<string, string> = {
-  support:  "bg-zinc-500/15 text-zinc-300 border-zinc-500/30",
-  sales:    "bg-zinc-500/15 text-zinc-300 border-zinc-500/30",
+  support:  "bg-muted text-zinc-300 border-border",
+  sales:    "bg-muted text-zinc-300 border-border",
   booking:  "bg-muted text-muted-foreground border-border",
-  survey:   "bg-zinc-500/15 text-zinc-300 border-zinc-500/30",
+  survey:   "bg-muted text-zinc-300 border-border",
   general:  "bg-muted text-muted-foreground border-border",
 };
 
@@ -416,7 +416,7 @@ export default function AgentNew() {
           <p className="text-muted-foreground">Configure a new AI voice agent pipeline.</p>
         </div>
         <Button type="button" variant="outline" onClick={() => setTemplatesOpen(true)} className="gap-2">
-          <Sparkles className="h-4 w-4 text-zinc-600" />
+          <Sparkles className="h-4 w-4 text-foreground" />
           Use Template
         </Button>
       </div>
@@ -426,9 +426,9 @@ export default function AgentNew() {
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-zinc-600" /> Start from a template
+              <Sparkles className="h-4 w-4 text-foreground" /> Start from a template
             </DialogTitle>
-            <DialogDescription className="text-gray-400">
+            <DialogDescription className="text-muted-foreground">
               Pick a template to prefill the form. You can customise everything afterwards.
             </DialogDescription>
           </DialogHeader>
@@ -445,9 +445,9 @@ export default function AgentNew() {
                     {tpl.category}
                   </Badge>
                 </div>
-                <p className="text-xs text-gray-500 leading-relaxed">{tpl.description}</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">{tpl.description}</p>
                 {tpl.llmProvider && (
-                  <p className="text-[11px] text-gray-400 mt-2 font-mono">
+                  <p className="text-[11px] text-muted-foreground mt-2 font-mono">
                     {tpl.asrProvider} · {tpl.llmProvider} · {tpl.ttsProvider}
                   </p>
                 )}

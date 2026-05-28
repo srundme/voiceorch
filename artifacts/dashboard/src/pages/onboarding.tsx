@@ -35,7 +35,7 @@ const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 function ProgressBar({ current, total }: { current: number; total: number }) {
   const pct = Math.round((current / total) * 100);
   return (
-    <div className="fixed top-0 inset-x-0 z-50 h-1 bg-gray-100">
+    <div className="fixed top-0 inset-x-0 z-50 h-1 bg-muted">
       <motion.div
         className="h-full bg-black"
         initial={false}
@@ -48,7 +48,7 @@ function ProgressBar({ current, total }: { current: number; total: number }) {
 
 function StepCounter({ current, total }: { current: number; total: number }) {
   return (
-    <div className="flex items-center gap-1.5 text-[13px] text-gray-400 font-medium tracking-wide">
+    <div className="flex items-center gap-1.5 text-[13px] text-muted-foreground font-medium tracking-wide">
       <span className="text-black font-semibold">{current}</span>
       <span>/</span>
       <span>{total}</span>
@@ -77,8 +77,8 @@ function ContinueButton({
         mt-8 flex items-center gap-2.5 px-6 py-3 rounded-lg font-semibold text-sm
         transition-all duration-150 select-none
         ${disabled
-          ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-          : "bg-black text-gray-900 hover:bg-gray-800 cursor-pointer shadow-sm"
+          ? "bg-muted text-muted-foreground cursor-not-allowed"
+          : "bg-primary text-primary-foreground hover:opacity-90 cursor-pointer shadow-sm"
         }
       `}
     >
@@ -87,7 +87,7 @@ function ContinueButton({
       ) : (
         <>
           {label}
-          <div className="flex items-center gap-0.5 bg-white/70 backdrop-blur-lg/15 rounded px-1.5 py-0.5 text-[11px]">
+          <div className="flex items-center gap-0.5 bg-card/70 backdrop-blur-lg/15 rounded px-1.5 py-0.5 text-[11px]">
             <span>press</span>
             <kbd className="font-bold">↵</kbd>
           </div>
@@ -109,18 +109,18 @@ function NameStep({ value, onChange, onNext }: { value: string; onChange: (v: st
 
   return (
     <div className="w-full max-w-xl">
-      <p className="text-[13px] font-semibold text-zinc-600 tracking-widest uppercase mb-4">Question 1</p>
-      <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 leading-tight mb-2">
+      <p className="text-[13px] font-semibold text-foreground tracking-widest uppercase mb-4">Question 1</p>
+      <h2 className="text-3xl sm:text-4xl font-bold text-foreground leading-tight mb-2">
         What's your name? <span className="text-black/75">*</span>
       </h2>
-      <p className="text-gray-400 text-base mb-8">We'll use this to personalise your experience.</p>
+      <p className="text-muted-foreground text-base mb-8">We'll use this to personalise your experience.</p>
       <input
         ref={ref}
         value={value}
         onChange={e => onChange(e.target.value)}
         onKeyDown={handleKey}
         placeholder="Type your full name here…"
-        className="w-full border-b-2 border-gray-200 focus:border-black outline-none text-2xl py-3 bg-transparent text-gray-900 placeholder:text-gray-300 transition-colors"
+        className="w-full border-b-2 border-border focus:border-black outline-none text-2xl py-3 bg-transparent text-foreground placeholder:text-muted-foreground transition-colors"
       />
       <ContinueButton onClick={onNext} disabled={!value.trim()} />
     </div>
@@ -154,11 +154,11 @@ function RoleStep({
 
   return (
     <div className="w-full max-w-xl">
-      <p className="text-[13px] font-semibold text-zinc-600 tracking-widest uppercase mb-4">Question 2</p>
-      <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 leading-tight mb-2">
+      <p className="text-[13px] font-semibold text-foreground tracking-widest uppercase mb-4">Question 2</p>
+      <h2 className="text-3xl sm:text-4xl font-bold text-foreground leading-tight mb-2">
         Are you a student or a professional?
       </h2>
-      <p className="text-gray-400 text-base mb-8">Helps us show you the most relevant features.</p>
+      <p className="text-muted-foreground text-base mb-8">Helps us show you the most relevant features.</p>
       <div className="flex flex-col gap-3">
         {options.map((opt, idx) => (
           <motion.button
@@ -169,8 +169,8 @@ function RoleStep({
             className={`
               flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all duration-150 cursor-pointer
               ${value === opt.id
-                ? "border-black bg-black text-gray-900"
-                : "border-gray-200 hover:border-gray-400 text-gray-800"
+                ? "border-black bg-black text-foreground"
+                : "border-border hover:border-border text-foreground"
               }
             `}
           >
@@ -179,7 +179,7 @@ function RoleStep({
                 <span className="text-[11px] font-bold opacity-40">{idx + 1}</span>
                 <span className="font-semibold text-base">{opt.label}</span>
               </div>
-              <p className={`text-sm mt-0.5 ${value === opt.id ? "text-gray-300" : "text-gray-400"}`}>{opt.desc}</p>
+              <p className={`text-sm mt-0.5 ${value === opt.id ? "text-muted-foreground" : "text-muted-foreground"}`}>{opt.desc}</p>
             </div>
             {value === opt.id && <Check className="h-5 w-5 shrink-0" />}
           </motion.button>
@@ -221,11 +221,11 @@ function ReferralStep({
 
   return (
     <div className="w-full max-w-xl">
-      <p className="text-[13px] font-semibold text-zinc-600 tracking-widest uppercase mb-4">Question 3</p>
-      <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 leading-tight mb-2">
+      <p className="text-[13px] font-semibold text-foreground tracking-widest uppercase mb-4">Question 3</p>
+      <h2 className="text-3xl sm:text-4xl font-bold text-foreground leading-tight mb-2">
         How did you hear about us?
       </h2>
-      <p className="text-gray-400 text-base mb-8">So we know where our community is growing.</p>
+      <p className="text-muted-foreground text-base mb-8">So we know where our community is growing.</p>
       <div className="flex flex-col gap-2.5">
         {options.map((opt, idx) => (
           <motion.button
@@ -236,13 +236,13 @@ function ReferralStep({
             className={`
               flex items-center gap-3.5 px-4 py-3.5 rounded-xl border-2 text-left transition-all duration-150 cursor-pointer
               ${value === opt.id
-                ? "border-black bg-black text-gray-900"
-                : "border-gray-200 hover:border-gray-400 text-gray-800"
+                ? "border-black bg-black text-foreground"
+                : "border-border hover:border-border text-foreground"
               }
             `}
           >
             <div className="flex items-center gap-2 flex-1">
-              <span className={`text-[11px] font-bold ${value === opt.id ? "text-gray-400" : "opacity-30"}`}>{idx + 1}</span>
+              <span className={`text-[11px] font-bold ${value === opt.id ? "text-muted-foreground" : "opacity-30"}`}>{idx + 1}</span>
               <span className="font-medium text-[15px]">{opt.label}</span>
             </div>
             {value === opt.id && <Check className="h-4 w-4 shrink-0" />}
@@ -275,11 +275,11 @@ function VoiceAgentStep({
 
   return (
     <div className="w-full max-w-xl">
-      <p className="text-[13px] font-semibold text-zinc-600 tracking-widest uppercase mb-4">Question 4</p>
-      <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 leading-tight mb-2">
+      <p className="text-[13px] font-semibold text-foreground tracking-widest uppercase mb-4">Question 4</p>
+      <h2 className="text-3xl sm:text-4xl font-bold text-foreground leading-tight mb-2">
         Have you ever used AI voice agents before?
       </h2>
-      <p className="text-gray-400 text-base mb-8">No wrong answer — we just want to set the right starting point.</p>
+      <p className="text-muted-foreground text-base mb-8">No wrong answer — we just want to set the right starting point.</p>
       <div className="flex gap-3">
         {[
           { v: true,  label: "Yes", key: "Y" },
@@ -293,13 +293,13 @@ function VoiceAgentStep({
             className={`
               flex-1 flex flex-col items-center gap-2 py-6 rounded-2xl border-2 font-semibold text-base transition-all cursor-pointer
               ${value === opt.v
-                ? "border-black bg-black text-gray-900"
-                : "border-gray-200 hover:border-gray-400 text-gray-800"
+                ? "border-black bg-black text-foreground"
+                : "border-border hover:border-border text-foreground"
               }
             `}
           >
             <div className="flex items-center gap-1.5">
-              <span className={`text-[11px] ${value === opt.v ? "text-gray-400" : "text-gray-300"}`}>{opt.key}</span>
+              <span className={`text-[11px] ${value === opt.v ? "text-muted-foreground" : "text-muted-foreground"}`}>{opt.key}</span>
               <span>{opt.label}</span>
             </div>
           </motion.button>
@@ -316,10 +316,10 @@ function PlatformsStep({ value, onChange, onNext, loading }: {
   loading: boolean;
 }) {
   const options: { id: PriorPlatform; label: string; desc: string; color: string }[] = [
-    { id: "vapi",   label: "Vapi.ai",   desc: "Voice AI infrastructure",    color: "bg-zinc-50 border-zinc-200" },
-    { id: "retell", label: "Retell.ai",  desc: "AI calling platform",        color: "bg-zinc-50 border-zinc-200" },
-    { id: "bolna",  label: "Bolna.ai",   desc: "Open-source voice agents",   color: "bg-zinc-50 border-zinc-200" },
-    { id: "other",  label: "Other",      desc: "Something else",             color: "bg-gray-50 border-gray-200" },
+    { id: "vapi",   label: "Vapi.ai",   desc: "Voice AI infrastructure",    color: "bg-muted border-border" },
+    { id: "retell", label: "Retell.ai",  desc: "AI calling platform",        color: "bg-muted border-border" },
+    { id: "bolna",  label: "Bolna.ai",   desc: "Open-source voice agents",   color: "bg-muted border-border" },
+    { id: "other",  label: "Other",      desc: "Something else",             color: "bg-muted border-border" },
   ];
 
   const toggle = (id: PriorPlatform) => {
@@ -339,11 +339,11 @@ function PlatformsStep({ value, onChange, onNext, loading }: {
 
   return (
     <div className="w-full max-w-xl">
-      <p className="text-[13px] font-semibold text-zinc-600 tracking-widest uppercase mb-4">Question 5</p>
-      <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 leading-tight mb-2">
+      <p className="text-[13px] font-semibold text-foreground tracking-widest uppercase mb-4">Question 5</p>
+      <h2 className="text-3xl sm:text-4xl font-bold text-foreground leading-tight mb-2">
         Which platforms have you used?
       </h2>
-      <p className="text-gray-400 text-base mb-8">Select all that apply.</p>
+      <p className="text-muted-foreground text-base mb-8">Select all that apply.</p>
       <div className="grid grid-cols-2 gap-3">
         {options.map((opt, idx) => {
           const selected = value.includes(opt.id);
@@ -356,20 +356,20 @@ function PlatformsStep({ value, onChange, onNext, loading }: {
               className={`
                 relative flex flex-col items-start p-4 rounded-xl border-2 text-left transition-all cursor-pointer
                 ${selected
-                  ? "border-black bg-black text-gray-900"
-                  : `border-gray-200 hover:border-gray-400 text-gray-800 ${opt.color}`
+                  ? "border-black bg-black text-foreground"
+                  : `border-border hover:border-border text-foreground ${opt.color}`
                 }
               `}
             >
               <div className="flex w-full items-start justify-between mb-2">
-                <span className={`text-[11px] font-bold ${selected ? "text-gray-400" : "text-gray-300"}`}>{idx + 1}</span>
+                <span className={`text-[11px] font-bold ${selected ? "text-muted-foreground" : "text-muted-foreground"}`}>{idx + 1}</span>
                 <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all
-                  ${selected ? "border-white bg-white/70 backdrop-blur-lg" : "border-gray-300"}`}>
+                  ${selected ? "border-white bg-card/70 backdrop-blur-lg" : "border-border"}`}>
                   {selected && <Check className="h-3 w-3 text-black" />}
                 </div>
               </div>
               <p className="font-semibold text-[15px]">{opt.label}</p>
-              <p className={`text-xs mt-0.5 ${selected ? "text-gray-300" : "text-gray-400"}`}>{opt.desc}</p>
+              <p className={`text-xs mt-0.5 ${selected ? "text-muted-foreground" : "text-muted-foreground"}`}>{opt.desc}</p>
             </motion.button>
           );
         })}
@@ -406,17 +406,17 @@ function DoneScreen({ name }: { name: string }) {
       >
         <Check className="h-10 w-10 text-black/85" strokeWidth={2.5} />
       </motion.div>
-      <h2 className="text-4xl font-bold text-gray-900 mb-3">
+      <h2 className="text-4xl font-bold text-foreground mb-3">
         You're all set{name ? `, ${name.split(" ")[0]}` : ""}!
       </h2>
-      <p className="text-gray-400 text-lg mb-10 leading-relaxed">
+      <p className="text-muted-foreground text-lg mb-10 leading-relaxed">
         Welcome to SnapServe. Let's build your first AI voice agent.
       </p>
       <motion.button
         whileHover={{ scale: 1.03 }}
         whileTap={{ scale: 0.97 }}
         onClick={goToDashboard}
-        className="flex items-center gap-2.5 px-8 py-4 bg-black text-gray-900 rounded-xl font-semibold text-base hover:bg-gray-800 transition-colors shadow-md cursor-pointer"
+        className="flex items-center gap-2.5 px-8 py-4 bg-black text-foreground rounded-xl font-semibold text-base hover:bg-black/60 transition-colors shadow-md cursor-pointer"
       >
         Go to Dashboard
         <ArrowRight className="h-5 w-5" />
@@ -478,8 +478,8 @@ export default function OnboardingPage() {
 
   if (statusLoading || step === 0) {
     return (
-      <div className="min-h-screen bg-white/70 backdrop-blur-lg flex items-center justify-center">
-        <div className="h-8 w-8 rounded-full border-2 border-gray-200 border-t-black animate-spin" />
+      <div className="min-h-screen bg-card/70 backdrop-blur-lg flex items-center justify-center">
+        <div className="h-8 w-8 rounded-full border-2 border-border border-t-black animate-spin" />
       </div>
     );
   }
@@ -487,7 +487,7 @@ export default function OnboardingPage() {
   const stepNum = Math.min(step, totalSteps);
 
   return (
-    <div className="min-h-screen bg-white/70 backdrop-blur-lg flex flex-col select-none">
+    <div className="min-h-screen bg-card/70 backdrop-blur-lg flex flex-col select-none">
       {step < 6 && (
         <>
           <ProgressBar current={stepNum - 1} total={totalSteps} />
@@ -496,7 +496,7 @@ export default function OnboardingPage() {
               <div className="w-7 h-7 rounded-lg bg-black flex items-center justify-center">
                 <span className="text-black/85 text-xs font-bold">V</span>
               </div>
-              <SnapServeLogo size="sm" className="text-gray-900" />
+              <SnapServeLogo size="sm" className="text-foreground" />
             </div>
             <StepCounter current={stepNum} total={totalSteps} />
           </header>
@@ -585,15 +585,15 @@ export default function OnboardingPage() {
       </main>
 
       {step < 6 && (
-        <footer className="flex items-center justify-center gap-4 pb-6 text-[12px] text-gray-300">
+        <footer className="flex items-center justify-center gap-4 pb-6 text-[12px] text-muted-foreground">
           <span className="flex items-center gap-1">
-            <kbd className="bg-gray-100 text-gray-500 rounded px-1.5 py-0.5 font-mono text-[11px]">↵ Enter</kbd>
+            <kbd className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 font-mono text-[11px]">↵ Enter</kbd>
             <span>to continue</span>
           </span>
           {step > 1 && (
             <button
               onClick={() => setStep(s => Math.max(1, s - 1))}
-              className="text-gray-400 hover:text-gray-600 transition-colors flex items-center gap-0.5"
+              className="text-muted-foreground hover:text-muted-foreground transition-colors flex items-center gap-0.5"
             >
               ← back
             </button>

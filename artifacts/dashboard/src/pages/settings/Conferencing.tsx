@@ -137,12 +137,12 @@ export default function ConferencingPage({ embedded = false }: { embedded?: bool
       )}
 
       {/* Google Meet card */}
-      <Card className={hasConnections ? "border-zinc-300 bg-zinc-50/20" : ""}>
+      <Card className={hasConnections ? "border-zinc-300 bg-muted/20" : ""}>
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-3">
               {/* Google color icon */}
-              <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shrink-0 border">
+              <div className="w-10 h-10 rounded-xl bg-card flex items-center justify-center shrink-0 border">
                 <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none">
                   <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#a1a1aa"/>
                   <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#a1a1aa"/>
@@ -154,7 +154,7 @@ export default function ConferencingPage({ embedded = false }: { embedded?: bool
                 <div className="flex items-center gap-2">
                   <CardTitle className="text-base">Google Meet</CardTitle>
                   {hasConnections && (
-                    <Badge className="bg-zinc-100 text-zinc-700 border-zinc-200 text-xs">
+                    <Badge className="bg-muted text-foreground border-border text-xs">
                       <CheckCircle2 className="h-3 w-3 mr-1" />
                       {connections.length === 1 ? "1 account" : `${connections.length} accounts`}
                     </Badge>
@@ -188,9 +188,9 @@ export default function ConferencingPage({ embedded = false }: { embedded?: bool
             </div>
           ) : hasConnections ? (
             <>
-              <div className="p-3 bg-zinc-50 border border-zinc-200 rounded-lg text-xs text-zinc-700">
+              <div className="p-3 bg-muted border border-border rounded-lg text-xs text-foreground">
                 <p className="font-medium">✓ Active — Google Meet links are generated for new bookings</p>
-                <p className="mt-0.5 text-zinc-600">
+                <p className="mt-0.5 text-foreground">
                   Assign a specific account to each calendar from the{" "}
                   <a href={`${BASE}/app/scheduling/calendars`} className="underline underline-offset-2">Calendars</a>{" "}
                   page. Unassigned calendars use the first connected account.
@@ -204,8 +204,8 @@ export default function ConferencingPage({ embedded = false }: { embedded?: bool
                     className="flex items-center justify-between p-3 bg-background border rounded-lg"
                   >
                     <div className="flex items-center gap-2 min-w-0">
-                      <div className="w-7 h-7 rounded-full bg-zinc-100 flex items-center justify-center shrink-0">
-                        <span className="text-xs font-semibold text-zinc-700">
+                      <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center shrink-0">
+                        <span className="text-xs font-semibold text-foreground">
                           {conn.email[0]?.toUpperCase()}
                         </span>
                       </div>

@@ -215,7 +215,7 @@ export default function AgentsList() {
                           </DropdownMenuItem>
                         </Link>
                         <DropdownMenuItem
-                          className="cursor-pointer text-zinc-600 dark:text-gray-700 focus:text-zinc-600 dark:focus:text-gray-700"
+                          className="cursor-pointer text-foreground dark:text-foreground focus:text-foreground dark:focus:text-foreground"
                           onClick={() => { setOutboundAgent({ id: agent.id, name: agent.name }); setToNumber(""); }}
                         >
                           <PhoneCall className="mr-2 h-4 w-4" />
@@ -291,7 +291,7 @@ export default function AgentsList() {
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <PhoneCall className="h-4 w-4 text-gray-700" />
+              <PhoneCall className="h-4 w-4 text-foreground" />
               Outbound Call
             </DialogTitle>
             <DialogDescription>
