@@ -11,7 +11,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeSync } from "@/components/theme-sync";
 
 import { Layout } from "@/components/layout";
-import { SnapServeLoader, SnapServeIcon } from "@/components/logo";
+import { SnapServeLoader } from "@/components/logo";
 import { VoiceAssistant } from "@/components/VoiceAssistant";
 import LandingPage from "@/pages/landing";
 import AssistantsPage from "@/pages/assistants";

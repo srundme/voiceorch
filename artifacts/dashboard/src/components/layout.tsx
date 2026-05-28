@@ -10,7 +10,7 @@ import { useTheme } from "@/components/theme-provider";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useClerk, useUser } from "@clerk/react";
 import { useGetWallet } from "@workspace/api-client-react";
-import { SnapServeLogo } from "@/components/logo";
+import { BrandMark } from "@/components/logo";
 
 /* ── Nav structure ─────────────────────────────────────────────────────── */
 const NAV_SECTIONS = [
@@ -225,7 +225,7 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
       {/* Logo — image icon + image wordmark */}
       <div className="flex items-center gap-2 px-4 h-14 shrink-0 border-b border-sidebar-border">
         <Link href="/app" onClick={onNavClick} className="flex items-center">
-          <SnapServeLogo size="md" showIcon iconSize={20} className="text-sidebar-foreground" />
+          <BrandMark iconSize={20} wordmarkHeight={14} />
         </Link>
         <span
           className="text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-md border border-border bg-muted text-muted-foreground"
@@ -274,7 +274,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </button>
           </SheetTrigger>
           <Link href="/app" className="ml-3 flex items-center">
-            <SnapServeLogo size="sm" showIcon iconSize={18} className="text-sidebar-foreground" />
+            <BrandMark iconSize={18} wordmarkHeight={12} />
           </Link>
         </div>
         <SheetContent side="left" className="p-0 w-[240px]">

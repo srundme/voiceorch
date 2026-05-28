@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { SnapServeLogo } from "@/components/logo";
+import { BrandMark } from "@/components/logo";
 
 interface PageHeaderProps {
   /** Optional href the logo links to. Defaults to "/" */
@@ -38,7 +38,7 @@ export function PageHeader({
       >
         <Link href={href}>
           <span className="inline-flex items-center cursor-pointer">
-            <SnapServeLogo size="md" showIcon iconSize={22} className="text-foreground" />
+            <BrandMark iconSize={22} wordmarkHeight={16} />
           </span>
         </Link>
         {actions && <div className="flex items-center gap-3">{actions}</div>}

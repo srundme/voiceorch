@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 import { useEffect, useRef, useState } from "react";
-import { SnapServeLogo, SnapServeIcon } from "@/components/logo";
+import { BrandMark } from "@/components/logo";
 import { ArrowRight, Check } from "lucide-react";
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -390,7 +390,7 @@ export default function LandingPage() {
       <header className="fixed top-0 inset-x-0 z-50 flex items-center justify-between px-8 h-14 border-b border-border bg-black/60 backdrop-blur-xl">
         <Link href={`${basePath}/`}>
           <span className="inline-flex items-center cursor-pointer">
-            <SnapServeLogo size="md" showIcon iconSize={20} className="text-foreground" />
+            <BrandMark iconSize={20} wordmarkHeight={14} />
           </span>
         </Link>
 
@@ -670,12 +670,7 @@ export default function LandingPage() {
       {/* ── Footer ────────────────────────────────────────────────── */}
       <footer className="border-t border-border py-7 px-8">
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <div className="flex h-5 w-5 items-center justify-center rounded-md bg-zinc-600/70">
-              <SnapServeIcon size={11} className="text-foreground" />
-            </div>
-            <span className="text-[12px] font-bold text-muted-foreground">SnapServe</span>
-          </div>
+          <BrandMark iconSize={20} wordmarkHeight={12} />
           <p className="text-[11px] text-white/15">AI Voice Agent Orchestration Platform</p>
           <div className="flex items-center gap-5">
             {["Privacy", "Terms", "Docs", "Status"].map(l => (

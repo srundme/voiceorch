@@ -6,6 +6,45 @@
 
 const FONT = "'Poppins', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif";
 
+/* ── BrandMark (image-based lockup, mirrors admin) ----------------------- */
+
+interface BrandMarkProps {
+  /** Pixel size of the icon (height & width). */
+  iconSize?: number;
+  /** Pixel height of the wordmark image. */
+  wordmarkHeight?: number;
+  /** Tailwind gap class between icon and wordmark. */
+  gapClass?: string;
+  className?: string;
+}
+
+export function BrandMark({
+  iconSize = 20,
+  wordmarkHeight = 14,
+  gapClass = "gap-1.5",
+  className = "",
+}: BrandMarkProps) {
+  return (
+    <span className={`inline-flex items-center select-none ${gapClass} ${className}`}>
+      <img
+        src={`${import.meta.env.BASE_URL}snapserve-icon-light.png`}
+        alt=""
+        aria-hidden
+        width={iconSize}
+        height={iconSize}
+        style={{ width: iconSize, height: iconSize }}
+        className="shrink-0"
+      />
+      <img
+        src={`${import.meta.env.BASE_URL}snapserve-wordmark-light.png`}
+        alt="SnapServe"
+        style={{ height: wordmarkHeight }}
+        className="shrink-0"
+      />
+    </span>
+  );
+}
+
 /* ── Icon ----------------------------------------------------------------- */
 
 interface IconProps {

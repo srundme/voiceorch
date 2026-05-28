@@ -16,7 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatApiError } from "@/lib/format-api-error";
-import { SnapServeLogo } from "@/components/logo";
+import { BrandMark } from "@/components/logo";
 
 
 export default function PublicBookingPage() {
@@ -107,7 +107,7 @@ export default function PublicBookingPage() {
 
   const BrandHeader = () => (
     <div className="flex justify-center mb-8">
-      <SnapServeLogo size="lg" showIcon iconSize={26} className="text-foreground" />
+      <BrandMark iconSize={26} wordmarkHeight={20} />
     </div>
   );
 
