@@ -1,6 +1,6 @@
 import nodemailer from "nodemailer";
 import { db, platformSettingsTable, alertNotificationLogTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 import type { AlertType } from "./usage/alert-engine.js";
 
@@ -8,12 +8,16 @@ const ALERT_EMAIL_KEY = "alert_notification_email";
 const ALERT_SLACK_KEY = "alert_slack_webhook_url";
 const ALERT_MIN_SEVERITY_KEY = "alert_min_severity";
 const ALERT_COOLDOWN_KEY = "alert_notification_cooldown_minutes";
+const ALERT_LAST_NOTIFIED_AT_KEY = "alert_last_notified_at";
+const ALERT_LAST_NOTIFIED_SEVERITY_KEY = "alert_last_notified_severity";
 const DEFAULT_COOLDOWN_MINUTES = 10;
 
 /** In-process cooldown: tracks the last time a notification was dispatched (across all channels). */
 let _lastNotifiedAt: number | null = null;
 /** Severity of the most recently dispatched notification. Used to detect severity escalation. */
 let _lastNotifiedSeverity: string | null = null;
+/** Whether we've loaded persisted cooldown state from the DB yet. */
+let _cooldownStateLoaded = false;
 
 const SEVERITY_RANK: Record<string, number> = {
   info: 0,
@@ -64,6 +68,69 @@ async function getNotificationSettings(): Promise<{
     minSeverity: severityRow?.value ?? "warning",
     cooldownMinutes: Number.isFinite(parsedCooldown) && parsedCooldown >= 0 ? parsedCooldown : DEFAULT_COOLDOWN_MINUTES,
   };
+}
+
+/**
+ * Loads persisted cooldown state from the DB into in-process variables.
+ * Called lazily on the first dispatch attempt so restarts pick up where they left off.
+ */
+async function loadCooldownState(): Promise<void> {
+  if (_cooldownStateLoaded) return;
+  _cooldownStateLoaded = true;
+
+  try {
+    const [atRow, severityRow] = await Promise.all([
+      db
+        .select({ value: platformSettingsTable.value })
+        .from(platformSettingsTable)
+        .where(eq(platformSettingsTable.key, ALERT_LAST_NOTIFIED_AT_KEY))
+        .then(([r]) => r),
+      db
+        .select({ value: platformSettingsTable.value })
+        .from(platformSettingsTable)
+        .where(eq(platformSettingsTable.key, ALERT_LAST_NOTIFIED_SEVERITY_KEY))
+        .then(([r]) => r),
+    ]);
+
+    if (atRow?.value) {
+      const parsed = parseInt(atRow.value, 10);
+      if (Number.isFinite(parsed)) {
+        _lastNotifiedAt = parsed;
+      }
+    }
+    if (severityRow?.value) {
+      _lastNotifiedSeverity = severityRow.value;
+    }
+
+    logger.info(
+      { lastNotifiedAt: _lastNotifiedAt, lastNotifiedSeverity: _lastNotifiedSeverity },
+      "Alert cooldown state loaded from DB",
+    );
+  } catch (err) {
+    logger.warn({ err }, "Failed to load alert cooldown state from DB — starting fresh");
+  }
+}
+
+/**
+ * Persists the current cooldown state to the DB so it survives server restarts.
+ */
+async function persistCooldownState(lastNotifiedAt: number, lastNotifiedSeverity: string): Promise<void> {
+  await Promise.all([
+    db
+      .insert(platformSettingsTable)
+      .values({ key: ALERT_LAST_NOTIFIED_AT_KEY, value: String(lastNotifiedAt) })
+      .onConflictDoUpdate({
+        target: platformSettingsTable.key,
+        set: { value: String(lastNotifiedAt), updatedAt: sql`now()` },
+      }),
+    db
+      .insert(platformSettingsTable)
+      .values({ key: ALERT_LAST_NOTIFIED_SEVERITY_KEY, value: lastNotifiedSeverity })
+      .onConflictDoUpdate({
+        target: platformSettingsTable.key,
+        set: { value: lastNotifiedSeverity, updatedAt: sql`now()` },
+      }),
+  ]);
 }
 
 function formatAlertEmail(opts: {
@@ -210,6 +277,9 @@ export async function sendTestAlertNotification(): Promise<{ email: boolean; sla
  * At most one notification batch is dispatched within the cooldown window regardless of
  * how many alerts fire simultaneously (prevents inbox flooding during outages).
  * Logs each delivery attempt (sent / failed) to alert_notification_log.
+ *
+ * Cooldown state (`last_notified_at`, `last_notified_severity`) is persisted to the
+ * `platform_settings` table so a server restart does not reset the rate limiter.
  */
 export async function dispatchAlertNotification(opts: {
   type: AlertType;
@@ -221,6 +291,8 @@ export async function dispatchAlertNotification(opts: {
   alertId?: number | null;
 }): Promise<void> {
   try {
+    await loadCooldownState();
+
     const settings = await getNotificationSettings();
 
     const minRank = SEVERITY_RANK[settings.minSeverity] ?? 1;
@@ -288,9 +360,17 @@ export async function dispatchAlertNotification(opts: {
         })()
       : Promise.resolve();
 
-    _lastNotifiedAt = Date.now();
+    const now = Date.now();
+    _lastNotifiedAt = now;
     _lastNotifiedSeverity = opts.severity;
-    await Promise.all([emailP, slackP]);
+
+    await Promise.all([
+      emailP,
+      slackP,
+      persistCooldownState(now, opts.severity).catch((err) =>
+        logger.warn({ err }, "Failed to persist alert cooldown state to DB"),
+      ),
+    ]);
   } catch (err) {
     logger.warn({ err, type: opts.type }, "dispatchAlertNotification unexpected error");
   }
