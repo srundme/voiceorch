@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Mic } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -42,17 +42,48 @@ function getSpeechRecognitionCtor(): SpeechRecognitionCtor | null {
 
 const FATAL_ERRORS = new Set(["not-allowed", "service-not-allowed"]);
 
+export interface VoiceInputState {
+  recording: boolean;
+  finalText: string;
+  interimText: string;
+}
+
 interface VoiceInputButtonProps {
   onTranscript: (text: string) => void;
   className?: string;
+  onStateChange?: (state: VoiceInputState) => void;
+  children?: (state: VoiceInputState) => ReactNode;
 }
 
-export function VoiceInputButton({ onTranscript, className }: VoiceInputButtonProps) {
+function joinTranscript(prev: string, addition: string): string {
+  if (!addition) return prev;
+  if (!prev) return addition;
+  const sep = /\s$/.test(prev) || /^\s/.test(addition) ? "" : " ";
+  return prev + sep + addition;
+}
+
+export function VoiceInputButton({ onTranscript, className, onStateChange, children }: VoiceInputButtonProps) {
   const [supported, setSupported] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [interimText, setInterimText] = useState("");
+  const [finalText, setFinalText] = useState("");
+  const finalTranscriptRef = useRef("");
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const intentRef = useRef(false);
   const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onStateChangeRef = useRef(onStateChange);
+  const onTranscriptRef = useRef(onTranscript);
+
+  useEffect(() => {
+    onStateChangeRef.current = onStateChange;
+  }, [onStateChange]);
+  useEffect(() => {
+    onTranscriptRef.current = onTranscript;
+  }, [onTranscript]);
+
+  useEffect(() => {
+    onStateChangeRef.current?.({ recording, finalText, interimText });
+  }, [recording, finalText, interimText]);
 
   useEffect(() => {
     setSupported(getSpeechRecognitionCtor() !== null);
@@ -89,44 +120,77 @@ export function VoiceInputButton({ onTranscript, className }: VoiceInputButtonPr
     }
   };
 
+  const commitAndReset = () => {
+    const text = finalTranscriptRef.current.trim();
+    finalTranscriptRef.current = "";
+    setFinalText("");
+    setInterimText("");
+    if (text) {
+      try {
+        onTranscriptRef.current(text);
+      } catch {
+        /* noop */
+      }
+    }
+  };
+
   const start = () => {
     const Ctor = getSpeechRecognitionCtor();
     if (!Ctor) return;
     try {
       const rec = new Ctor();
       rec.continuous = true;
-      rec.interimResults = false;
+      rec.interimResults = true;
       rec.lang =
         (typeof document !== "undefined" && document.documentElement.lang) ||
         (typeof navigator !== "undefined" && navigator.language) ||
         "en-US";
       rec.onresult = (event) => {
-        let finalText = "";
+        let newFinal = "";
+        let interim = "";
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const result = event.results[i];
+          const transcript = result[0].transcript;
           if (result.isFinal) {
-            finalText += result[0].transcript;
+            newFinal += transcript;
+          } else {
+            interim += transcript;
           }
         }
-        if (finalText) onTranscript(finalText);
+        if (newFinal) {
+          finalTranscriptRef.current = joinTranscript(finalTranscriptRef.current, newFinal);
+          setFinalText(finalTranscriptRef.current);
+        }
+        setInterimText(interim);
       };
       rec.onerror = (event) => {
         const err = event.error;
         if (err && FATAL_ERRORS.has(err)) {
           intentRef.current = false;
+          try {
+            rec.abort();
+          } catch {
+            /* noop */
+          }
           setRecording(false);
+          commitAndReset();
         }
         /* benign errors (no-speech, aborted, audio-capture) — let onend auto-restart */
       };
       rec.onend = () => {
         if (intentRef.current) {
+          setInterimText("");
           safeStart(rec);
         } else {
           setRecording(false);
+          commitAndReset();
         }
       };
       recognitionRef.current = rec;
       intentRef.current = true;
+      finalTranscriptRef.current = "";
+      setFinalText("");
+      setInterimText("");
       setRecording(true);
       safeStart(rec);
     } catch {
@@ -146,6 +210,7 @@ export function VoiceInputButton({ onTranscript, className }: VoiceInputButtonPr
     } catch {
       /* noop */
     }
+    /* commit happens in onend; if onend doesn't fire promptly, still flush */
     setRecording(false);
   };
 
@@ -156,7 +221,7 @@ export function VoiceInputButton({ onTranscript, className }: VoiceInputButtonPr
     else start();
   };
 
-  return (
+  const button = (
     <button
       type="button"
       onClick={toggle}
@@ -173,4 +238,15 @@ export function VoiceInputButton({ onTranscript, className }: VoiceInputButtonPr
       <Mic className="h-3.5 w-3.5" />
     </button>
   );
+
+  if (children) {
+    return (
+      <>
+        {children({ recording, finalText, interimText })}
+        {button}
+      </>
+    );
+  }
+
+  return button;
 }

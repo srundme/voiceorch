@@ -946,6 +946,32 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                       <div>
                         <p className="text-muted-foreground text-xs uppercase tracking-[0.15em] mb-3 font-semibold">Option B — Type role &amp; requirements manually</p>
                         <div className="relative">
+                          <VoiceInputButton
+                            onTranscript={text => {
+                              const next = [...microAnswers.answers];
+                              const current = next[0] ?? "";
+                              const sep = current && !/\s$/.test(current) ? " " : "";
+                              next[0] = current + sep + text;
+                              updateMicro({ answers: next });
+                            }}
+                          >
+                            {({ recording, finalText, interimText }) =>
+                              recording ? (
+                                <div className="mb-2 max-h-32 overflow-y-auto rounded-xl border border-border bg-muted/50 px-4 py-2 text-sm leading-relaxed">
+                                  {finalText && <span className="text-foreground">{finalText}</span>}
+                                  {interimText && (
+                                    <span className="text-muted-foreground/70">
+                                      {finalText ? " " : ""}
+                                      {interimText}
+                                    </span>
+                                  )}
+                                  {!finalText && !interimText && (
+                                    <span className="text-muted-foreground/70 italic">Listening…</span>
+                                  )}
+                                </div>
+                              ) : null
+                            }
+                          </VoiceInputButton>
                           <textarea
                             rows={4}
                             placeholder={q.placeholder}
@@ -956,15 +982,6 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                               updateMicro({ answers: next });
                             }}
                             className="w-full bg-muted border border-border rounded-xl px-4 pt-3.5 pb-11 text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:border-foreground transition-all resize-none leading-relaxed"
-                          />
-                          <VoiceInputButton
-                            onTranscript={text => {
-                              const next = [...microAnswers.answers];
-                              const current = next[0] ?? "";
-                              const sep = current && !/\s$/.test(current) ? " " : "";
-                              next[0] = current + sep + text;
-                              updateMicro({ answers: next });
-                            }}
                           />
                         </div>
                       </div>
@@ -981,6 +998,32 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                     <h2 className="text-3xl font-bold text-foreground mb-2">{q.q}</h2>
                     <p className="text-muted-foreground text-sm mb-8">{q.hint}</p>
                     <div className="relative">
+                      <VoiceInputButton
+                        onTranscript={text => {
+                          const next = [...microAnswers.answers];
+                          const current = next[microStep] ?? "";
+                          const sep = current && !/\s$/.test(current) ? " " : "";
+                          next[microStep] = current + sep + text;
+                          updateMicro({ answers: next });
+                        }}
+                      >
+                        {({ recording, finalText, interimText }) =>
+                          recording ? (
+                            <div className="mb-2 max-h-32 overflow-y-auto rounded-xl border border-border bg-muted/50 px-4 py-2 text-sm leading-relaxed">
+                              {finalText && <span className="text-foreground">{finalText}</span>}
+                              {interimText && (
+                                <span className="text-muted-foreground/70">
+                                  {finalText ? " " : ""}
+                                  {interimText}
+                                </span>
+                              )}
+                              {!finalText && !interimText && (
+                                <span className="text-muted-foreground/70 italic">Listening…</span>
+                              )}
+                            </div>
+                          ) : null
+                        }
+                      </VoiceInputButton>
                       <textarea
                         autoFocus
                         rows={5}
@@ -992,15 +1035,6 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                           updateMicro({ answers: next });
                         }}
                         className="w-full bg-muted border border-border rounded-xl px-4 pt-3.5 pb-11 text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:border-foreground transition-all resize-none leading-relaxed"
-                      />
-                      <VoiceInputButton
-                        onTranscript={text => {
-                          const next = [...microAnswers.answers];
-                          const current = next[microStep] ?? "";
-                          const sep = current && !/\s$/.test(current) ? " " : "";
-                          next[microStep] = current + sep + text;
-                          updateMicro({ answers: next });
-                        }}
                       />
                     </div>
                     {microStep === 4 && (
