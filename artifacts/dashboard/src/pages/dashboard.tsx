@@ -174,7 +174,8 @@ export default function Dashboard() {
   }, [callsByStatus]);
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6 animate-fade-in">
+    <div className="flex-1 overflow-y-auto animate-fade-in">
+      <div className="mx-auto w-full max-w-7xl px-6 py-8 md:px-8 space-y-6">
 
       {/* ── Header ── */}
       <div>
@@ -460,6 +461,7 @@ export default function Dashboard() {
           )}
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }

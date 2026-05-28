@@ -111,7 +111,7 @@
   --chart-4: 0 0% 72%;
   --chart-5: 0 0% 85%;
 
-  --app-font-sans:  'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  --app-font-sans:  'Poppins', -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
   --app-font-serif: Georgia, serif;
   --app-font-mono:  'JetBrains Mono', 'SF Mono', 'Menlo', monospace;
   --radius: 0.625rem;

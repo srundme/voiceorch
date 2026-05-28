@@ -117,7 +117,7 @@ export default function AgentsList() {
   );
 
   return (
-    <div className="flex-1 space-y-6 p-6 md:p-8 pt-6 h-full flex flex-col">
+    <div className="flex-1 space-y-6 p-6 md:p-8 pt-6 h-full flex flex-col max-w-7xl mx-auto w-full">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Agents</h2>

@@ -388,12 +388,11 @@ export default function LandingPage() {
 
       {/* ── Nav ───────────────────────────────────────────────────── */}
       <header className="fixed top-0 inset-x-0 z-50 flex items-center justify-between px-8 h-14 border-b border-border bg-black/60 backdrop-blur-xl">
-        <div className="flex items-center gap-2">
-          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-zinc-600">
-            <SnapServeIcon size={13} className="text-foreground" />
-          </div>
-          <SnapServeLogo size="sm" className="text-foreground" />
-        </div>
+        <Link href={`${basePath}/`}>
+          <span className="inline-flex items-center cursor-pointer">
+            <SnapServeLogo size="md" showIcon iconSize={20} className="text-foreground" />
+          </span>
+        </Link>
 
         <nav className="hidden md:flex items-center gap-7">
           {[["Product", "#product"], ["Use Cases", "#use-cases"], ["Pricing", "#pricing"], ["Docs", "#"]].map(([l, h]) => (

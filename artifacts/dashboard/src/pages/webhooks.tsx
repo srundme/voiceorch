@@ -188,7 +188,8 @@ export default function WebhooksPage() {
         </Button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-5xl px-6 py-8 md:px-8">
         {isLoading ? (
           <div className="space-y-3">
             {[1, 2].map((i) => (
@@ -291,6 +292,7 @@ X-SnapServe-Signature: hmac-sha256 of body
 }`}</pre>
           </div>
         )}
+        </div>
       </div>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { SnapServeLogo } from "@/components/logo";
+import { SnapServeLogo, SnapServeIcon } from "@/components/logo";
 import { useLocation } from "wouter";
 import { useCompleteOnboarding, useGetOnboardingStatus, getGetOnboardingStatusQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -491,12 +491,10 @@ export default function OnboardingPage() {
       {step < 6 && (
         <>
           <ProgressBar current={stepNum - 1} total={totalSteps} />
-          <header className="flex items-center justify-between px-6 pt-6 pb-2">
+          <header className="flex items-center justify-between px-6 pt-6 pb-2 max-w-6xl mx-auto w-full">
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-black flex items-center justify-center">
-                <span className="text-black/85 text-xs font-bold">V</span>
-              </div>
-              <SnapServeLogo size="sm" className="text-foreground" />
+              <SnapServeIcon size={22} className="text-foreground" />
+              <SnapServeLogo size="md" className="text-foreground" />
             </div>
             <StepCounter current={stepNum} total={totalSteps} />
           </header>

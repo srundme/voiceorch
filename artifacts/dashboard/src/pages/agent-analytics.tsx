@@ -129,7 +129,8 @@ export default function AgentAnalyticsPage() {
         </Badge>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6 space-y-6">
+      <div className="flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-7xl px-6 py-8 md:px-8 space-y-6">
         {/* KPI grid */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <StatCard label="Total calls" value={stats.totalCalls} icon={Phone} accent="zinc" />
@@ -223,6 +224,7 @@ export default function AgentAnalyticsPage() {
             <LatencyPill label="TTS first chunk" ms={stats.avgTtsFirstChunkMs} />
           </div>
         )}
+        </div>
       </div>
     </div>
   );

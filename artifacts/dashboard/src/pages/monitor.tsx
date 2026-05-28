@@ -253,7 +253,8 @@ export default function MonitorPage() {
       {/* Status strip — always visible */}
       <StatusStrip calls={calls} now={now} />
 
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-7xl px-6 py-8 md:px-8">
         {isLoading ? (
           <div className="space-y-3">
             {[1, 2, 3].map((i) => (
@@ -308,6 +309,7 @@ export default function MonitorPage() {
             </div>
           </div>
         )}
+        </div>
       </div>
     </div>
   );

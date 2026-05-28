@@ -4,7 +4,7 @@
    SnapServeLoader — full-screen splash with animated bars
    ─────────────────────────────────────────────────────────────────────────*/
 
-const FONT = "'Tex Gyre Heros', 'Helvetica Neue', Helvetica, Arial, sans-serif";
+const FONT = "'Poppins', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif";
 
 /* ── Icon ----------------------------------------------------------------- */
 

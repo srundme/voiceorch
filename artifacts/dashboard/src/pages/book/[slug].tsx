@@ -16,8 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatApiError } from "@/lib/format-api-error";
-
-const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+import { SnapServeLogo } from "@/components/logo";
 
 
 export default function PublicBookingPage() {
@@ -108,19 +107,7 @@ export default function PublicBookingPage() {
 
   const BrandHeader = () => (
     <div className="flex justify-center mb-8">
-      <div className="flex items-center gap-2">
-        <img
-          src={`${BASE}/snapserve-icon.png`}
-          alt=""
-          aria-hidden
-          className="h-7 w-7 shrink-0 select-none"
-        />
-        <img
-          src={`${BASE}/snapserve-wordmark.png`}
-          alt="SnapServe"
-          className="h-5 select-none"
-        />
-      </div>
+      <SnapServeLogo size="lg" showIcon iconSize={26} className="text-foreground" />
     </div>
   );
 
