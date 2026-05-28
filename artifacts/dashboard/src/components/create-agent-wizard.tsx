@@ -407,7 +407,23 @@ export function buildCreateAgentPayload(state: WizardState) {
 
   if (isManaged) {
     const leadEnabled = state.leadSource.enabled;
+    const wizardInputs = {
+      useCase: state.useCase,
+      role: state.useCaseRole,
+      serviceDescription: state.useCaseService,
+      agentName: state.agentName,
+      companyName: state.companyName,
+      agentDirection: state.agentDirection,
+      languages: [state.primaryLanguage, ...state.additionalLanguages],
+      callFlowDescription: state.callFlowDescription,
+      productDetails: state.productDetails,
+      ...(leadEnabled && {
+        leadSourceType: state.leadSource.type,
+        leadFields: state.leadSource.fields,
+      }),
+    } as Record<string, unknown>;
     return {
+      wizardInputs,
       agentMode: "managed" as const,
       name: state.agentName || `${STEP_LABELS["use-case"]} Agent`,
       language: LANG_CODE_MAP[state.primaryLanguage] ?? "en-US",
@@ -658,8 +674,13 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
         const body = await res.json().catch(() => ({}));
         throw new Error((body as any).error ?? `HTTP ${res.status}`);
       }
-      const { prompt } = await res.json();
-      update({ generatedPrompt: prompt });
+      const data = await res.json() as { callFlowSteps?: string };
+      const flow = (data.callFlowSteps ?? "").trim();
+      if (!flow) throw new Error("Empty call flow returned");
+      // Store the human-readable call flow only. The orchestration-grade
+      // system prompt is generated server-side from the admin master template
+      // on agent create — never exposed here.
+      update({ generatedPrompt: flow });
       setDirection("forward");
       setStepIdx(i => i + 1);
       setRenderKey(k => k + 1);

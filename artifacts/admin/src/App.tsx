@@ -15,6 +15,8 @@ import Growth from "@/pages/growth";
 import ManagedKeys from "@/pages/managed-keys";
 import Voices from "@/pages/voices";
 import PlatformSettings from "@/pages/settings";
+import PromptTemplatePage from "@/pages/prompt-template";
+import AllAgentsPage from "@/pages/all-agents";
 
 import UsageOverviewPage from "@/pages/usage/overview";
 import ServicePage from "@/pages/usage/service";
@@ -77,6 +79,8 @@ function Router() {
       <ProtectedRoute path="/usage/allocations" component={AllocationsPage} />
       <ProtectedRoute path="/usage/alerts" component={AlertsPage} />
 
+      <ProtectedRoute path="/prompt-template" component={PromptTemplatePage} />
+      <ProtectedRoute path="/all-agents" component={AllAgentsPage} />
       <ProtectedRoute path="/settings" component={PlatformSettings} />
       <Route component={NotFound} />
     </Switch>

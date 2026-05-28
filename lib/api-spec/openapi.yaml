@@ -2296,8 +2296,211 @@ paths:
                   saved:
                     type: integer
 
+  # ── Admin: prompt templates ────────────────────────────────────────────────
+  /admin/prompt-templates:
+    get:
+      summary: List all prompt template versions (admin)
+      tags: [Admin]
+      parameters: [{ $ref: '#/components/parameters/AdminToken' }]
+      responses:
+        '200':
+          description: List of template versions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [templates]
+                properties:
+                  templates:
+                    type: array
+                    items: { $ref: '#/components/schemas/PromptTemplate' }
+        '403': { description: Forbidden }
+    post:
+      summary: Upload a new master prompt template (becomes active, PDF or DOCX)
+      tags: [Admin]
+      parameters: [{ $ref: '#/components/parameters/AdminToken' }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: PDF or DOCX file (max 5 MB)
+      responses:
+        '201':
+          description: Uploaded and activated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PromptTemplate' }
+        '400': { description: Invalid upload }
+        '403': { description: Forbidden }
+
+  /admin/prompt-templates/{id}:
+    get:
+      summary: Get a specific prompt template version (admin)
+      tags: [Admin]
+      parameters:
+        - { $ref: '#/components/parameters/AdminToken' }
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Template
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PromptTemplate' }
+        '404': { description: Not found }
+
+  /admin/prompt-templates/{id}/activate:
+    post:
+      summary: Activate a specific prompt template version (admin)
+      tags: [Admin]
+      parameters:
+        - { $ref: '#/components/parameters/AdminToken' }
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Activated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PromptTemplate' }
+        '404': { description: Not found }
+
+  /admin/prompt-templates/preview:
+    post:
+      summary: Render the active master template against sample wizard inputs (admin)
+      tags: [Admin]
+      parameters: [{ $ref: '#/components/parameters/AdminToken' }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                wizardInputs:
+                  type: object
+                  additionalProperties: true
+                  description: Optional sample inputs; if omitted, the server uses canned dummy inputs
+      responses:
+        '200':
+          description: Rendered prompt
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [prompt, templateVersion]
+                properties:
+                  prompt: { type: string }
+                  templateVersion: { type: integer }
+        '503': { description: No active template }
+
+  /admin/agents:
+    get:
+      summary: List every agent across all tenants (admin)
+      tags: [Admin]
+      parameters: [{ $ref: '#/components/parameters/AdminToken' }]
+      responses:
+        '200':
+          description: All agents
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [agents]
+                properties:
+                  agents:
+                    type: array
+                    items: { $ref: '#/components/schemas/AdminAgentSummary' }
+        '403': { description: Forbidden }
+
+  /admin/agents/{id}/prompt:
+    get:
+      summary: Get the stored generated prompt for an agent (admin only)
+      tags: [Admin]
+      parameters:
+        - { $ref: '#/components/parameters/AdminToken' }
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Agent prompt detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminAgentPrompt' }
+        '404': { description: Not found }
+
+  /admin/agents/{id}/regenerate:
+    post:
+      summary: Regenerate the agent's prompt using the active master template
+      tags: [Admin]
+      parameters:
+        - { $ref: '#/components/parameters/AdminToken' }
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Regenerated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminAgentPrompt' }
+        '404': { description: Not found }
+        '502': { description: Generation failed }
+        '503': { description: No active template }
+
 components:
+  parameters:
+    AdminToken:
+      name: X-Admin-Token
+      in: header
+      required: true
+      schema: { type: string }
+      description: Platform admin token (matches ADMIN_TOKEN env var).
   schemas:
+    PromptTemplate:
+      type: object
+      required: [id, version, isActive, filename, mimeType, sizeBytes, createdAt]
+      properties:
+        id: { type: integer }
+        version: { type: integer }
+        isActive: { type: boolean }
+        filename: { type: string }
+        mimeType: { type: string }
+        sizeBytes: { type: integer }
+        text:
+          type: string
+          description: Extracted template text (omitted from list responses)
+        uploadedBy: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+
+    AdminAgentSummary:
+      type: object
+      required: [id, name, status, hasGeneratedPrompt, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        userId: { type: ["integer", "null"] }
+        name: { type: string }
+        status: { type: string }
+        agentMode: { type: ["string", "null"] }
+        agentType: { type: ["string", "null"] }
+        hasGeneratedPrompt: { type: boolean }
+        promptTemplateVersion: { type: ["integer", "null"] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    AdminAgentPrompt:
+      type: object
+      required: [agentId, generatedPrompt, promptTemplateVersion]
+      properties:
+        agentId: { type: integer }
+        generatedPrompt: { type: ["string", "null"] }
+        promptTemplateVersion: { type: ["integer", "null"] }
+        wizardInputs:
+          type: ["object", "null"]
+          additionalProperties: true
+
     HealthStatus:
       type: object
       properties:
@@ -2635,6 +2838,10 @@ components:
         productDetails:
           type: string
           description: "Product or service details for the agent's context"
+        wizardInputs:
+          type: object
+          additionalProperties: true
+          description: "Raw wizard answers passed from the dashboard. When present, the server generates the agent's system prompt server-side using the active admin master template (Gemini) and stores the result. Never returned in responses."
 
     AgentUpdate:
       type: object

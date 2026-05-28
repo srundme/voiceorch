@@ -82,7 +82,7 @@ export async function createSession(params: {
   const agentConfig: AgentConfig = {
     id: agent.id,
     name: agent.name,
-    systemPrompt: agent.systemPrompt,
+    systemPrompt: agent.generatedPrompt ?? agent.systemPrompt,
     temperature: agent.temperature ?? 0.5,
     maxDuration: agent.maxDuration ?? 600,
     asrProvider: agent.asrProvider,

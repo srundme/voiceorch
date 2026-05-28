@@ -227,7 +227,7 @@ export async function handleWebCallWebSocket(
 
   // We keep a mutable copy of the system prompt so gender detection can patch it in-place.
   // The original is preserved separately so we can restore it if a handoff is detected.
-  const originalSystemPrompt = agent.systemPrompt ?? "";
+  const originalSystemPrompt = agent.generatedPrompt ?? agent.systemPrompt ?? "";
   let systemPrompt          = originalSystemPrompt;
   let genderDetected        = false;
   let genderDetectPromise: Promise<void> | null = null;  // in-flight detection

@@ -5,6 +5,52 @@
  * VoiceOrch - AI Voice Agent Orchestration Platform API
  * OpenAPI spec version: 0.1.0
  */
+export interface PromptTemplate {
+  id: number;
+  version: number;
+  isActive: boolean;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  /** Extracted template text (omitted from list responses) */
+  text?: string;
+  /** @nullable */
+  uploadedBy?: string | null;
+  createdAt: string;
+}
+
+export interface AdminAgentSummary {
+  id: number;
+  /** @nullable */
+  userId?: number | null;
+  name: string;
+  status: string;
+  /** @nullable */
+  agentMode?: string | null;
+  /** @nullable */
+  agentType?: string | null;
+  hasGeneratedPrompt: boolean;
+  /** @nullable */
+  promptTemplateVersion?: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * @nullable
+ */
+export type AdminAgentPromptWizardInputs = { [key: string]: unknown } | null;
+
+export interface AdminAgentPrompt {
+  agentId: number;
+  /** @nullable */
+  generatedPrompt: string | null;
+  /** @nullable */
+  promptTemplateVersion: number | null;
+  /** @nullable */
+  wizardInputs?: AdminAgentPromptWizardInputs;
+}
+
 export interface HealthStatus {
   status: string;
 }
@@ -364,6 +410,11 @@ export const AgentInputAgentMode = {
  */
 export type AgentInputAgentConfig = { [key: string]: unknown };
 
+/**
+ * Raw wizard answers passed from the dashboard. When present, the server generates the agent's system prompt server-side using the active admin master template (Gemini) and stores the result. Never returned in responses.
+ */
+export type AgentInputWizardInputs = { [key: string]: unknown };
+
 export interface AgentInput {
   /**
      * @minLength 1
@@ -414,6 +465,8 @@ export interface AgentInput {
   leadFields?: string[];
   /** Product or service details for the agent's context */
   productDetails?: string;
+  /** Raw wizard answers passed from the dashboard. When present, the server generates the agent's system prompt server-side using the active admin master template (Gemini) and stores the result. Never returned in responses. */
+  wizardInputs?: AgentInputWizardInputs;
 }
 
 /**
@@ -1866,6 +1919,11 @@ export interface AdminAlertsResponse {
   unacknowledgedCount: number;
 }
 
+/**
+ * Platform admin token (matches ADMIN_TOKEN env var).
+ */
+export type AdminTokenParameter = string;
+
 export type ListCallsParams = {
 /**
  * @nullable
@@ -2086,5 +2144,33 @@ export type AdminGetListedVoices200 = {
 
 export type AdminSaveListedVoices200 = {
   saved: number;
+};
+
+export type GetAdminPromptTemplates200 = {
+  templates: PromptTemplate[];
+};
+
+export type PostAdminPromptTemplatesBody = {
+  /** PDF or DOCX file (max 5 MB) */
+  file: Blob;
+};
+
+/**
+ * Optional sample inputs; if omitted, the server uses canned dummy inputs
+ */
+export type PostAdminPromptTemplatesPreviewBodyWizardInputs = { [key: string]: unknown };
+
+export type PostAdminPromptTemplatesPreviewBody = {
+  /** Optional sample inputs; if omitted, the server uses canned dummy inputs */
+  wizardInputs?: PostAdminPromptTemplatesPreviewBodyWizardInputs;
+};
+
+export type PostAdminPromptTemplatesPreview200 = {
+  prompt: string;
+  templateVersion: number;
+};
+
+export type GetAdminAgents200 = {
+  agents: AdminAgentSummary[];
 };
 

@@ -18,6 +18,7 @@ import onboardingRouter from "./onboarding.js";
 import adminRouter from "./admin.js";
 import adminVoicesRouter from "./admin-voices.js";
 import adminUsageRouter from "./admin-usage.js";
+import adminPromptTemplatesRouter from "./admin-prompt-templates.js";
 import wizardRouter from "./wizard.js";
 import campaignsRouter from "./campaigns.js";
 import campaignWebhookRouter from "./campaign-webhook.js";
@@ -33,6 +34,7 @@ const router: IRouter = Router();
 router.use(adminRouter);
 router.use(adminVoicesRouter);
 router.use(adminUsageRouter);
+router.use(adminPromptTemplatesRouter);
 
 // Public campaign lead webhook — must be before provisionUser (no Clerk session needed)
 router.use(campaignWebhookRouter);

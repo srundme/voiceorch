@@ -20,3 +20,4 @@ export * from "./provider-pricing";
 export * from "./provider-allocations";
 export * from "./admin-alerts";
 export * from "./alert-notification-log";
+export * from "./prompt-templates";

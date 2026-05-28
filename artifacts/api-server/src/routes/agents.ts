@@ -16,6 +16,11 @@ import {
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logActivity } from "../lib/activity.js";
 import { encryptKey, decryptKey } from "../lib/crypto.js";
+import {
+  getActiveTemplate,
+  generateAgentPrompt,
+  type WizardInputs,
+} from "../services/prompt-template.js";
 
 const router: IRouter = Router();
 
@@ -27,8 +32,10 @@ function maskLeadToken(token: string | null | undefined): string | null {
 }
 
 function prepareAgentForResponse(agent: typeof agentsTable.$inferSelect) {
+  // Strip admin-only fields from dashboard responses
+  const { generatedPrompt: _gp, promptTemplateVersion: _pv, wizardInputs: _wi, ...rest } = agent;
   return {
-    ...agent,
+    ...rest,
     leadSourceToken: maskLeadToken(agent.leadSourceToken),
   };
 }
@@ -52,13 +59,42 @@ router.post("/agents", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: "Validation failed", issues });
     return;
   }
-  const insertData = { ...parsed.data, userId: clerkId };
-  if (insertData.leadSourceToken) {
-    insertData.leadSourceToken = encryptKey(insertData.leadSourceToken);
+  // wizardInputs is an admin-managed pass-through (not in DB schema strict type)
+  const rawBody = (req.body ?? {}) as Record<string, unknown>;
+  const wizardInputs = (rawBody["wizardInputs"] ?? null) as WizardInputs | null;
+
+  const insertData: Record<string, unknown> = { ...parsed.data, userId: clerkId };
+  if (insertData["leadSourceToken"]) {
+    insertData["leadSourceToken"] = encryptKey(insertData["leadSourceToken"] as string);
   }
+
+  // If wizard submit included inputs, run the admin master template through Gemini
+  // and store the generated prompt + template version. Fail loudly if no active template.
+  if (wizardInputs && typeof wizardInputs === "object") {
+    const active = await getActiveTemplate();
+    if (!active) {
+      res.status(503).json({
+        error:
+          "Agent creation is currently unavailable: no active prompt template configured. Please contact the platform administrator.",
+      });
+      return;
+    }
+    try {
+      const generated = await generateAgentPrompt(wizardInputs, active.extractedText);
+      insertData["generatedPrompt"] = generated;
+      insertData["promptTemplateVersion"] = active.version;
+      insertData["wizardInputs"] = wizardInputs;
+    } catch (err) {
+      req.log.error({ err }, "Failed to generate agent prompt from master template");
+      const message = err instanceof Error ? err.message : "Prompt generation failed";
+      res.status(502).json({ error: `Failed to generate agent prompt: ${message}` });
+      return;
+    }
+  }
+
   const [agent] = await db
     .insert(agentsTable)
-    .values(insertData)
+    .values(insertData as typeof agentsTable.$inferInsert)
     .returning();
   await logActivity({ userId: clerkId, eventType: "agent.created", resourceType: "agent", resourceId: String(agent.id), description: `Agent "${agent.name}" created` });
   db.insert(schedulingCalendarsTable)

@@ -17,112 +17,6 @@ function requireDbUser(req: Request, res: Response, next: NextFunction): void {
   next();
 }
 
-// ── Master prompt template ───────────────────────────────────────────────────
-
-const MASTER_TEMPLATE = `[Identity]
-You are a {ROLE} working for {COMPANY_NAME}. Your name is {AGENT_NAME}. You help customers with {SERVICE_DESCRIPTION}. Speak as a helpful, friendly, and confident representative of the company.
-
-[Style]
-• Speak in everyday, casual, colloquial {LANGUAGE} throughout the call — never use formal, literary, traditional, or bookish version of the language under any circumstance.
-• Use local/regional spoken style (exactly like how normal people speak in daily life in that region).
-• Regional colloquial speech naturally mixes English business and finance words — always use the English word for business terms, never translate them.
-• Always use the approved colloquial word list: {LANGUAGE_SPECIFIC_COLLOQUIAL_WORD_LIST}
-• Use short, direct sentences — maximum one to two ideas per sentence.
-• Tone must be warm, friendly, and professional — never rush, never pitch aggressively.
-• Speak at a moderate pace.
-• Say ALL numbers as English words only. Never use numerals anywhere in the output — including when repeating phone numbers or email addresses.
-• Never deliver formal or elaborate explanations.
-• Never sound like you are reading from a script or checklist.
-• Start/continue the conversation right away when the user says "hello" for the first time in the conversation.
-
-[Fillers & Transitions]
-Allowed fillers between turns: {LANGUAGE_SPECIFIC_FILLERS}
-Use these naturally as bridges before moving to the next question or topic shift.
-Do NOT use: {FORBIDDEN_WORDS}
-Every question must be preceded by one of these fillers — never ask a bare question.
-Never repeat, echo, or paraphrase what the customer just said. Just use a filler and move on.
-
-[Response Guidelines]
-• Always maintain the conversational stage and never restart the conversation from the beginning.
-• When user says "Hello" or similar mid-conversation, simply say "Hello," and continue from the current stage.
-• Wait for user response whenever noted as <wait for response>.
-• Focus only on the call objective — do not get drawn into unrelated discussions.
-• If asked something outside scope, politely redirect: "That's outside what I handle right now — let's focus on [current topic]."
-• Never reveal that you are an AI unless the user directly asks. If asked, acknowledge it briefly and professionally, then return to the call objective.
-• If the user is unresponsive for more than 5 seconds, ask "Are you there?" once. If still no response, end the call politely.
-
-[Call Flow]
-{CALL_FLOW_STEPS}
-
-[End of Call]
-• Once the call objective is complete or the user indicates they're done, close warmly.
-• Use a brief sign-off like "Thanks for your time. Have a great day!" — in the colloquial language style.
-• Never ask "Is there anything else?" after all steps are complete.`;
-
-// ── Language values library ──────────────────────────────────────────────────
-
-const LANGUAGE_VALUES: Record<string, {
-  displayName: string;
-  colloquialWordList: string;
-  fillers: string;
-  forbiddenWords: string;
-}> = {
-  english: {
-    displayName: "English",
-    colloquialWordList: "okay, sure, right, got it, no worries, sounds good",
-    fillers: "okay, sure, alright, so, now, right",
-    forbiddenWords: "wow, amazing, fantastic, superb, outstanding, incredible",
-  },
-  hindi: {
-    displayName: "Hindi (Hinglish)",
-    colloquialWordList: "haan, theek hai, karo, bolo, suno, aap, samjhe, kya baat",
-    fillers: "haan, achha, theek hai, okay, bilkul, suno",
-    forbiddenWords: "waah, jabardast, amazing, superb, shandar",
-  },
-  tamil: {
-    displayName: "Tamil (Chennai spoken)",
-    colloquialWordList: "sari, okay, enna, appuram, paakalam, sollunga, vanakkam",
-    fillers: "sari, okay, appuram, haan, enna",
-    forbiddenWords: "super, wow, amazing, azhagaa, marvellous",
-  },
-  telugu: {
-    displayName: "Telugu (Hyderabadi)",
-    colloquialWordList: "నా (NOT నేను in casual flow), మీరు/మీ, అవుద్ది (NOT అవుతుంది), చేయాల (NOT చేయాలి), okay, సరే",
-    fillers: "సరే, okay, అప్పుడు, హా సరే",
-    forbiddenWords: "వావ్, సూపర్, అద్భుతం, బాగుంది అండి",
-  },
-  kannada: {
-    displayName: "Kannada (Bengaluru spoken)",
-    colloquialWordList: "sari, hange, okay, nimma, maadi, heli, nodi, enu",
-    fillers: "haan, sari, okay, hoge, nodi",
-    forbiddenWords: "wow, amazing, super, channaagide, huchhu",
-  },
-  marathi: {
-    displayName: "Marathi (Mumbai spoken)",
-    colloquialWordList: "ahe, karto, nahi, bagh, tumhi, tumhala, theek aahe, haan sanga",
-    fillers: "achha, theek aahe, haan, bagh",
-    forbiddenWords: "amazing, fantastic, superr, wah, अरे व्वा",
-  },
-  gujarati: {
-    displayName: "Gujarati (Ahmedabad/Surat)",
-    colloquialWordList: "che (NOT chhe formal), shu, aap, karo (add to English — call karo, check karo), male che, jaay che",
-    fillers: "Haa, Bilkul, Acha, Okay, Samjhyaa, Sari vaat che",
-    forbiddenWords: "Wow, Amazing, Super, Great, Jordar, Shabash",
-  },
-  bengali: {
-    displayName: "Bengali (Kolkata spoken)",
-    colloquialWordList: "haan, thik ache, bolo, shono, amra, tumi, ki, koro",
-    fillers: "haan, thik ache, okay, shono, acha",
-    forbiddenWords: "wow, amazing, darun, oshadharon, osadharon",
-  },
-  malayalam: {
-    displayName: "Malayalam (Kerala spoken)",
-    colloquialWordList: "aathe, sari, okay, ningal, cheyyu, parayoo, ennitt, enthaa",
-    fillers: "aathe, okay, ennitt, ingane, sari",
-    forbiddenWords: "wow, amazing, super, adipoli, kidu",
-  },
-};
-
 // ── Known-good Cartesia voice IDs (verified real) ────────────────────────────
 // Only Arushi is used as fallback — all others come from live Cartesia API.
 const ARUSHI_VOICE = { id: "2ee87190-8f84-4925-97da-e52547f9462c", name: "Arushi", gender: "Female", language: "en", description: "Warm Indian English female" };
@@ -291,12 +185,15 @@ router.post("/wizard/preview-voice", requireDbUser, async (req, res): Promise<vo
 });
 
 // ── POST /wizard/generate-prompt ─────────────────────────────────────────────
+//
+// Returns ONLY a human-readable call flow (5–10 numbered steps) for the dashboard
+// to preview. The full system prompt is generated server-side from the admin
+// master template on agent create — never exposed to dashboard users.
 
 router.post("/wizard/generate-prompt", requireDbUser, async (req, res): Promise<void> => {
   const {
     useCase, role, companyName, agentName, serviceDescription,
-    agentDirection, callFlowDescription, languages,
-    leadSourceType, leadFields, productDetails,
+    agentDirection, callFlowDescription,
   } = req.body as {
     useCase?: string;
     role?: string;
@@ -305,10 +202,6 @@ router.post("/wizard/generate-prompt", requireDbUser, async (req, res): Promise<
     serviceDescription?: string;
     agentDirection?: string;
     callFlowDescription?: string;
-    languages?: string[];
-    leadSourceType?: string;
-    leadFields?: string[];
-    productDetails?: string;
   };
 
   if (!callFlowDescription?.trim()) {
@@ -316,11 +209,7 @@ router.post("/wizard/generate-prompt", requireDbUser, async (req, res): Promise<
     return;
   }
 
-  const primaryLang = (languages?.[0] ?? "english").toLowerCase();
-  const langValues = LANGUAGE_VALUES[primaryLang] ?? LANGUAGE_VALUES["english"]!;
-
   const geminiKey = await getSetting("managed_gemini_key");
-
   let callFlowSteps = "";
 
   if (geminiKey) {
@@ -354,7 +243,7 @@ Write ONLY numbered call flow steps (5-10 steps). Each step should be clear, nat
         callFlowSteps = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
       }
     } catch (err) {
-      logger.warn({ err }, "Gemini call failed — using rule-based fallback");
+      logger.warn({ err }, "Gemini call flow generation failed — using rule-based fallback");
     }
   }
 
@@ -362,34 +251,10 @@ Write ONLY numbered call flow steps (5-10 steps). Each step should be clear, nat
     callFlowSteps = generateFallbackCallFlow(useCase ?? "general", agentDirection ?? "inbound", callFlowDescription);
   }
 
-  let basePrompt = MASTER_TEMPLATE
-    .replace("{ROLE}", role ?? useCase ?? "AI assistant")
-    .replace("{COMPANY_NAME}", companyName ?? "{COMPANY_NAME}")
-    .replace("{AGENT_NAME}", agentName ?? "{AGENT_NAME}")
-    .replace("{SERVICE_DESCRIPTION}", serviceDescription ?? callFlowDescription.slice(0, 120))
-    .replace("{LANGUAGE}", langValues.displayName)
-    .replace("{LANGUAGE_SPECIFIC_COLLOQUIAL_WORD_LIST}", langValues.colloquialWordList)
-    .replace("{LANGUAGE_SPECIFIC_FILLERS}", langValues.fillers)
-    .replace("{FORBIDDEN_WORDS}", langValues.forbiddenWords)
-    .replace("{CALL_FLOW_STEPS}", callFlowSteps.trim());
-
-  if (leadSourceType) {
-    const fields = Array.isArray(leadFields) && leadFields.length > 0 ? leadFields : ["name", "email", "message"];
-    const varList = fields.map(f => `{{lead_${f}}}`).join(", ");
-    const leadBlock = [
-      "",
-      "## Lead Source Context",
-      `This agent receives leads from ${leadSourceType.charAt(0).toUpperCase() + leadSourceType.slice(1)}. Each call will include the following lead variables that you can reference in your conversation:`,
-      fields.map(f => `- {{lead_${f}}} — the lead's ${f}`).join("\n"),
-      `Available lead variables: ${varList}`,
-      ...(productDetails?.trim()
-        ? ["", "## Product / Service Details", "Use the following context about what you are selling or offering:", productDetails.trim(), "", "This is also available as {{product_details}} in your call flow templates."]
-        : []),
-    ].join("\n");
-    basePrompt += leadBlock;
-  }
-
-  res.json({ prompt: basePrompt, callFlowSteps });
+  // Return only the human-readable call flow. The orchestration-grade system
+  // prompt is generated server-side from the admin master template at agent
+  // create time and is never exposed to dashboard users.
+  res.json({ callFlowSteps: callFlowSteps.trim() });
 });
 
 function generateFallbackCallFlow(useCase: string, direction: string, description: string): string {

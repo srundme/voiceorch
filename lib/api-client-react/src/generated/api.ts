@@ -23,6 +23,7 @@ import type {
   AccountInfo,
   ActiveCall,
   ActivityLog,
+  AdminAgentPrompt,
   AdminAlert,
   AdminAlertsResponse,
   AdminAllocationInput,
@@ -76,6 +77,8 @@ import type {
   EventType,
   EventTypeInput,
   EventTypeUpdate,
+  GetAdminAgents200,
+  GetAdminPromptTemplates200,
   GetAvailableSlotsParams,
   GetPublicSlotsParams,
   HealthStatus,
@@ -104,6 +107,10 @@ import type {
   OnboardingStatus,
   OutboundCallBody,
   PhoneNumber,
+  PostAdminPromptTemplatesBody,
+  PostAdminPromptTemplatesPreview200,
+  PostAdminPromptTemplatesPreviewBody,
+  PromptTemplate,
   ProviderConfig,
   ProviderInput,
   ProviderUpdate,
@@ -8164,5 +8171,597 @@ export const useAdminSaveListedVoices = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getAdminSaveListedVoicesMutationOptions(options));
+    }
+
+export const getGetAdminPromptTemplatesUrl = () => {
+
+
+
+
+  return `/api/admin/prompt-templates`
+}
+
+/**
+ * @summary List all prompt template versions (admin)
+ */
+export const getAdminPromptTemplates = async ( options?: RequestInit): Promise<GetAdminPromptTemplates200> => {
+
+  return customFetch<GetAdminPromptTemplates200>(getGetAdminPromptTemplatesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAdminPromptTemplatesQueryKey = () => {
+    return [
+    `/api/admin/prompt-templates`
+    ] as const;
+    }
+
+
+export const getGetAdminPromptTemplatesQueryOptions = <TData = Awaited<ReturnType<typeof getAdminPromptTemplates>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminPromptTemplates>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAdminPromptTemplatesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminPromptTemplates>>> = ({ signal }) => getAdminPromptTemplates({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAdminPromptTemplates>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAdminPromptTemplatesQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminPromptTemplates>>>
+export type GetAdminPromptTemplatesQueryError = ErrorType<void>
+
+
+/**
+ * @summary List all prompt template versions (admin)
+ */
+
+export function useGetAdminPromptTemplates<TData = Awaited<ReturnType<typeof getAdminPromptTemplates>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminPromptTemplates>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAdminPromptTemplatesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getPostAdminPromptTemplatesUrl = () => {
+
+
+
+
+  return `/api/admin/prompt-templates`
+}
+
+/**
+ * @summary Upload a new master prompt template (becomes active, PDF or DOCX)
+ */
+export const postAdminPromptTemplates = async (postAdminPromptTemplatesBody: PostAdminPromptTemplatesBody, options?: RequestInit): Promise<PromptTemplate> => {
+    const formData = new FormData();
+formData.append(`file`, postAdminPromptTemplatesBody.file);
+
+  return customFetch<PromptTemplate>(getPostAdminPromptTemplatesUrl(),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body:
+      formData,
+  }
+);}
+
+
+
+
+export const getPostAdminPromptTemplatesMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postAdminPromptTemplates>>, TError,{data: BodyType<PostAdminPromptTemplatesBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postAdminPromptTemplates>>, TError,{data: BodyType<PostAdminPromptTemplatesBody>}, TContext> => {
+
+const mutationKey = ['postAdminPromptTemplates'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postAdminPromptTemplates>>, {data: BodyType<PostAdminPromptTemplatesBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  postAdminPromptTemplates(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostAdminPromptTemplatesMutationResult = NonNullable<Awaited<ReturnType<typeof postAdminPromptTemplates>>>
+    export type PostAdminPromptTemplatesMutationBody = BodyType<PostAdminPromptTemplatesBody>
+    export type PostAdminPromptTemplatesMutationError = ErrorType<void>
+
+    /**
+ * @summary Upload a new master prompt template (becomes active, PDF or DOCX)
+ */
+export const usePostAdminPromptTemplates = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postAdminPromptTemplates>>, TError,{data: BodyType<PostAdminPromptTemplatesBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postAdminPromptTemplates>>,
+        TError,
+        {data: BodyType<PostAdminPromptTemplatesBody>},
+        TContext
+      > => {
+      return useMutation(getPostAdminPromptTemplatesMutationOptions(options));
+    }
+
+export const getGetAdminPromptTemplatesIdUrl = (id: number,) => {
+
+
+
+
+  return `/api/admin/prompt-templates/${id}`
+}
+
+/**
+ * @summary Get a specific prompt template version (admin)
+ */
+export const getAdminPromptTemplatesId = async (id: number, options?: RequestInit): Promise<PromptTemplate> => {
+
+  return customFetch<PromptTemplate>(getGetAdminPromptTemplatesIdUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAdminPromptTemplatesIdQueryKey = (id: number,) => {
+    return [
+    `/api/admin/prompt-templates/${id}`
+    ] as const;
+    }
+
+
+export const getGetAdminPromptTemplatesIdQueryOptions = <TData = Awaited<ReturnType<typeof getAdminPromptTemplatesId>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminPromptTemplatesId>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAdminPromptTemplatesIdQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminPromptTemplatesId>>> = ({ signal }) => getAdminPromptTemplatesId(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAdminPromptTemplatesId>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAdminPromptTemplatesIdQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminPromptTemplatesId>>>
+export type GetAdminPromptTemplatesIdQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get a specific prompt template version (admin)
+ */
+
+export function useGetAdminPromptTemplatesId<TData = Awaited<ReturnType<typeof getAdminPromptTemplatesId>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminPromptTemplatesId>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAdminPromptTemplatesIdQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getPostAdminPromptTemplatesIdActivateUrl = (id: number,) => {
+
+
+
+
+  return `/api/admin/prompt-templates/${id}/activate`
+}
+
+/**
+ * @summary Activate a specific prompt template version (admin)
+ */
+export const postAdminPromptTemplatesIdActivate = async (id: number, options?: RequestInit): Promise<PromptTemplate> => {
+
+  return customFetch<PromptTemplate>(getPostAdminPromptTemplatesIdActivateUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getPostAdminPromptTemplatesIdActivateMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postAdminPromptTemplatesIdActivate>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postAdminPromptTemplatesIdActivate>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['postAdminPromptTemplatesIdActivate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postAdminPromptTemplatesIdActivate>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  postAdminPromptTemplatesIdActivate(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostAdminPromptTemplatesIdActivateMutationResult = NonNullable<Awaited<ReturnType<typeof postAdminPromptTemplatesIdActivate>>>
+
+    export type PostAdminPromptTemplatesIdActivateMutationError = ErrorType<void>
+
+    /**
+ * @summary Activate a specific prompt template version (admin)
+ */
+export const usePostAdminPromptTemplatesIdActivate = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postAdminPromptTemplatesIdActivate>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postAdminPromptTemplatesIdActivate>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getPostAdminPromptTemplatesIdActivateMutationOptions(options));
+    }
+
+export const getPostAdminPromptTemplatesPreviewUrl = () => {
+
+
+
+
+  return `/api/admin/prompt-templates/preview`
+}
+
+/**
+ * @summary Render the active master template against sample wizard inputs (admin)
+ */
+export const postAdminPromptTemplatesPreview = async (postAdminPromptTemplatesPreviewBody?: PostAdminPromptTemplatesPreviewBody, options?: RequestInit): Promise<PostAdminPromptTemplatesPreview200> => {
+
+  return customFetch<PostAdminPromptTemplatesPreview200>(getPostAdminPromptTemplatesPreviewUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      postAdminPromptTemplatesPreviewBody,)
+  }
+);}
+
+
+
+
+export const getPostAdminPromptTemplatesPreviewMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postAdminPromptTemplatesPreview>>, TError,{data?: BodyType<PostAdminPromptTemplatesPreviewBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postAdminPromptTemplatesPreview>>, TError,{data?: BodyType<PostAdminPromptTemplatesPreviewBody>}, TContext> => {
+
+const mutationKey = ['postAdminPromptTemplatesPreview'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postAdminPromptTemplatesPreview>>, {data?: BodyType<PostAdminPromptTemplatesPreviewBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  postAdminPromptTemplatesPreview(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostAdminPromptTemplatesPreviewMutationResult = NonNullable<Awaited<ReturnType<typeof postAdminPromptTemplatesPreview>>>
+    export type PostAdminPromptTemplatesPreviewMutationBody = BodyType<PostAdminPromptTemplatesPreviewBody> | undefined
+    export type PostAdminPromptTemplatesPreviewMutationError = ErrorType<void>
+
+    /**
+ * @summary Render the active master template against sample wizard inputs (admin)
+ */
+export const usePostAdminPromptTemplatesPreview = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postAdminPromptTemplatesPreview>>, TError,{data?: BodyType<PostAdminPromptTemplatesPreviewBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postAdminPromptTemplatesPreview>>,
+        TError,
+        {data?: BodyType<PostAdminPromptTemplatesPreviewBody>},
+        TContext
+      > => {
+      return useMutation(getPostAdminPromptTemplatesPreviewMutationOptions(options));
+    }
+
+export const getGetAdminAgentsUrl = () => {
+
+
+
+
+  return `/api/admin/agents`
+}
+
+/**
+ * @summary List every agent across all tenants (admin)
+ */
+export const getAdminAgents = async ( options?: RequestInit): Promise<GetAdminAgents200> => {
+
+  return customFetch<GetAdminAgents200>(getGetAdminAgentsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAdminAgentsQueryKey = () => {
+    return [
+    `/api/admin/agents`
+    ] as const;
+    }
+
+
+export const getGetAdminAgentsQueryOptions = <TData = Awaited<ReturnType<typeof getAdminAgents>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminAgents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAdminAgentsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminAgents>>> = ({ signal }) => getAdminAgents({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAdminAgents>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAdminAgentsQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminAgents>>>
+export type GetAdminAgentsQueryError = ErrorType<void>
+
+
+/**
+ * @summary List every agent across all tenants (admin)
+ */
+
+export function useGetAdminAgents<TData = Awaited<ReturnType<typeof getAdminAgents>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminAgents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAdminAgentsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetAdminAgentsIdPromptUrl = (id: number,) => {
+
+
+
+
+  return `/api/admin/agents/${id}/prompt`
+}
+
+/**
+ * @summary Get the stored generated prompt for an agent (admin only)
+ */
+export const getAdminAgentsIdPrompt = async (id: number, options?: RequestInit): Promise<AdminAgentPrompt> => {
+
+  return customFetch<AdminAgentPrompt>(getGetAdminAgentsIdPromptUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAdminAgentsIdPromptQueryKey = (id: number,) => {
+    return [
+    `/api/admin/agents/${id}/prompt`
+    ] as const;
+    }
+
+
+export const getGetAdminAgentsIdPromptQueryOptions = <TData = Awaited<ReturnType<typeof getAdminAgentsIdPrompt>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminAgentsIdPrompt>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAdminAgentsIdPromptQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminAgentsIdPrompt>>> = ({ signal }) => getAdminAgentsIdPrompt(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAdminAgentsIdPrompt>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAdminAgentsIdPromptQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminAgentsIdPrompt>>>
+export type GetAdminAgentsIdPromptQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get the stored generated prompt for an agent (admin only)
+ */
+
+export function useGetAdminAgentsIdPrompt<TData = Awaited<ReturnType<typeof getAdminAgentsIdPrompt>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminAgentsIdPrompt>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAdminAgentsIdPromptQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getPostAdminAgentsIdRegenerateUrl = (id: number,) => {
+
+
+
+
+  return `/api/admin/agents/${id}/regenerate`
+}
+
+/**
+ * @summary Regenerate the agent's prompt using the active master template
+ */
+export const postAdminAgentsIdRegenerate = async (id: number, options?: RequestInit): Promise<AdminAgentPrompt> => {
+
+  return customFetch<AdminAgentPrompt>(getPostAdminAgentsIdRegenerateUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getPostAdminAgentsIdRegenerateMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postAdminAgentsIdRegenerate>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postAdminAgentsIdRegenerate>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['postAdminAgentsIdRegenerate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postAdminAgentsIdRegenerate>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  postAdminAgentsIdRegenerate(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostAdminAgentsIdRegenerateMutationResult = NonNullable<Awaited<ReturnType<typeof postAdminAgentsIdRegenerate>>>
+
+    export type PostAdminAgentsIdRegenerateMutationError = ErrorType<void>
+
+    /**
+ * @summary Regenerate the agent's prompt using the active master template
+ */
+export const usePostAdminAgentsIdRegenerate = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postAdminAgentsIdRegenerate>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postAdminAgentsIdRegenerate>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getPostAdminAgentsIdRegenerateMutationOptions(options));
     }
 

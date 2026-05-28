@@ -158,7 +158,8 @@ export const CreateAgentBody = zod.object({
   "leadSourceType": zod.string().optional().describe('Lead source platform (e.g. instagram)'),
   "leadSourceToken": zod.string().optional().describe('Page Access Token for the lead source (encrypted at rest)'),
   "leadFields": zod.array(zod.string()).optional().describe('Lead fields to capture per incoming lead'),
-  "productDetails": zod.string().optional().describe('Product or service details for the agent\'s context')
+  "productDetails": zod.string().optional().describe('Product or service details for the agent\'s context'),
+  "wizardInputs": zod.record(zod.string(), zod.unknown()).optional().describe('Raw wizard answers passed from the dashboard. When present, the server generates the agent\'s system prompt server-side using the active admin master template (Gemini) and stores the result. Never returned in responses.')
 })
 
 
@@ -2591,6 +2592,166 @@ export const AdminSaveListedVoicesBody = zod.object({
 
 export const AdminSaveListedVoicesResponse = zod.object({
   "saved": zod.number()
+})
+
+
+/**
+ * @summary List all prompt template versions (admin)
+ */
+export const GetAdminPromptTemplatesHeader = zod.object({
+  "X-Admin-Token": zod.string().describe('Platform admin token (matches ADMIN_TOKEN env var).')
+})
+
+export const GetAdminPromptTemplatesResponse = zod.object({
+  "templates": zod.array(zod.object({
+  "id": zod.number(),
+  "version": zod.number(),
+  "isActive": zod.boolean(),
+  "filename": zod.string(),
+  "mimeType": zod.string(),
+  "sizeBytes": zod.number(),
+  "text": zod.string().optional().describe('Extracted template text (omitted from list responses)'),
+  "uploadedBy": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Upload a new master prompt template (becomes active, PDF or DOCX)
+ */
+export const PostAdminPromptTemplatesHeader = zod.object({
+  "X-Admin-Token": zod.string().describe('Platform admin token (matches ADMIN_TOKEN env var).')
+})
+
+export const PostAdminPromptTemplatesBody = zod.object({
+  "file": zod.instanceof(File).describe('PDF or DOCX file (max 5 MB)')
+})
+
+
+/**
+ * @summary Get a specific prompt template version (admin)
+ */
+export const GetAdminPromptTemplatesIdParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetAdminPromptTemplatesIdHeader = zod.object({
+  "X-Admin-Token": zod.string().describe('Platform admin token (matches ADMIN_TOKEN env var).')
+})
+
+export const GetAdminPromptTemplatesIdResponse = zod.object({
+  "id": zod.number(),
+  "version": zod.number(),
+  "isActive": zod.boolean(),
+  "filename": zod.string(),
+  "mimeType": zod.string(),
+  "sizeBytes": zod.number(),
+  "text": zod.string().optional().describe('Extracted template text (omitted from list responses)'),
+  "uploadedBy": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Activate a specific prompt template version (admin)
+ */
+export const PostAdminPromptTemplatesIdActivateParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const PostAdminPromptTemplatesIdActivateHeader = zod.object({
+  "X-Admin-Token": zod.string().describe('Platform admin token (matches ADMIN_TOKEN env var).')
+})
+
+export const PostAdminPromptTemplatesIdActivateResponse = zod.object({
+  "id": zod.number(),
+  "version": zod.number(),
+  "isActive": zod.boolean(),
+  "filename": zod.string(),
+  "mimeType": zod.string(),
+  "sizeBytes": zod.number(),
+  "text": zod.string().optional().describe('Extracted template text (omitted from list responses)'),
+  "uploadedBy": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Render the active master template against sample wizard inputs (admin)
+ */
+export const PostAdminPromptTemplatesPreviewHeader = zod.object({
+  "X-Admin-Token": zod.string().describe('Platform admin token (matches ADMIN_TOKEN env var).')
+})
+
+export const PostAdminPromptTemplatesPreviewBody = zod.object({
+  "wizardInputs": zod.record(zod.string(), zod.unknown()).optional().describe('Optional sample inputs; if omitted, the server uses canned dummy inputs')
+})
+
+export const PostAdminPromptTemplatesPreviewResponse = zod.object({
+  "prompt": zod.string(),
+  "templateVersion": zod.number()
+})
+
+
+/**
+ * @summary List every agent across all tenants (admin)
+ */
+export const GetAdminAgentsHeader = zod.object({
+  "X-Admin-Token": zod.string().describe('Platform admin token (matches ADMIN_TOKEN env var).')
+})
+
+export const GetAdminAgentsResponse = zod.object({
+  "agents": zod.array(zod.object({
+  "id": zod.number(),
+  "userId": zod.number().nullish(),
+  "name": zod.string(),
+  "status": zod.string(),
+  "agentMode": zod.string().nullish(),
+  "agentType": zod.string().nullish(),
+  "hasGeneratedPrompt": zod.boolean(),
+  "promptTemplateVersion": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Get the stored generated prompt for an agent (admin only)
+ */
+export const GetAdminAgentsIdPromptParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetAdminAgentsIdPromptHeader = zod.object({
+  "X-Admin-Token": zod.string().describe('Platform admin token (matches ADMIN_TOKEN env var).')
+})
+
+export const GetAdminAgentsIdPromptResponse = zod.object({
+  "agentId": zod.number(),
+  "generatedPrompt": zod.string().nullable(),
+  "promptTemplateVersion": zod.number().nullable(),
+  "wizardInputs": zod.record(zod.string(), zod.unknown()).nullish()
+})
+
+
+/**
+ * @summary Regenerate the agent's prompt using the active master template
+ */
+export const PostAdminAgentsIdRegenerateParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const PostAdminAgentsIdRegenerateHeader = zod.object({
+  "X-Admin-Token": zod.string().describe('Platform admin token (matches ADMIN_TOKEN env var).')
+})
+
+export const PostAdminAgentsIdRegenerateResponse = zod.object({
+  "agentId": zod.number(),
+  "generatedPrompt": zod.string().nullable(),
+  "promptTemplateVersion": zod.number().nullable(),
+  "wizardInputs": zod.record(zod.string(), zod.unknown()).nullish()
 })
 
 
