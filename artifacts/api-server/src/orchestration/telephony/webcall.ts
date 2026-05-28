@@ -16,18 +16,24 @@ const activeCalls = new Map<string, number>();
 const MAX_CONCURRENT_CALLS = 5;
 
 // ── Tuning constants ─────────────────────────────────────────────────────────
-const VAD_SILENCE_MS        = 700;   // raised from 300ms — prevents splitting mid-sentence pauses into separate turns
-const SPEECH_RMS_THRESHOLD  = 400;    // normal VAD — user speaking (agent silent)
-const BARGE_IN_RMS          = 2000;   // much higher bar while agent is speaking to avoid false barge-ins from
-                                       // ambient noise, TV, nearby conversation, or mic echo bleed
-const BARGE_IN_MIN_FRAMES   = 4;      // require ~160ms of sustained speech before interrupting
-                                       // (4 × 40ms chunks) — prevents a single word/noise from cutting the agent
-const MIN_PCM_BYTES         = 6400;   // ~200ms at 16kHz Int16
-const AUDIO_CHUNK_BYTES     = 1280;   // 40ms per WS frame
-const HANDOFF_SILENCE_MS    = 3000;   // sustained silence that may indicate a phone handoff
-const TTS_VOLUME_GAIN       = 2.5;    // PCM amplitude multiplier for outbound TTS audio —
-                                       // most TTS providers output at ~40% of full scale; this brings
-                                       // the perceived loudness up to a comfortable level
+const VAD_SILENCE_MS           = 700;   // raised from 300ms — prevents splitting mid-sentence pauses into separate turns
+const SPEECH_RMS_THRESHOLD     = 400;   // normal VAD — user speaking (agent silent)
+const BARGE_IN_RMS             = 2000;  // much higher bar while agent is speaking to avoid false barge-ins from
+                                        // ambient noise, TV, nearby conversation, or mic echo bleed
+const BARGE_IN_MIN_FRAMES      = 4;     // require ~160ms of sustained speech before interrupting
+                                        // (4 × 40ms chunks) — prevents a single word/noise from cutting the agent
+const BARGE_IN_ECHO_GRACE_MS   = 1000; // suppress barge-in for this long after each TTS turn begins —
+                                        // browser echo cancellation needs ~500–800 ms to adapt; without this the
+                                        // mic echo of the agent's own voice triggers false barge-ins that cut off
+                                        // the last word(s) of every response
+const AUDIO_TAIL_SILENCE_MS    = 250;  // extra wait after the last chunk so the client's audio buffer drains
+                                        // before the server signals "listening" (prevents last-word cutoff)
+const MIN_PCM_BYTES            = 6400; // ~200ms at 16kHz Int16
+const AUDIO_CHUNK_BYTES        = 1280; // 40ms per WS frame
+const HANDOFF_SILENCE_MS       = 3000; // sustained silence that may indicate a phone handoff
+const TTS_VOLUME_GAIN          = 2.5;  // PCM amplitude multiplier for outbound TTS audio —
+                                        // most TTS providers output at ~40% of full scale; this brings
+                                        // the perceived loudness up to a comfortable level
 
 /** Transcript phrases that strongly suggest the caller is handing the phone to someone else. */
 const HANDOFF_PHRASES = [
@@ -308,8 +314,9 @@ export async function handleWebCallWebSocket(
   const audioChunks: Buffer[] = [];
   let silenceTimer: ReturnType<typeof setTimeout> | null = null;
   let processing  = false;
-  let speaking    = false;   // true while audio frames are being sent to client
-  let speakingEndedAt = 0;  // timestamp (ms) when speaking last transitioned to false
+  let speaking        = false; // true while audio frames are being sent to client
+  let speakingStartedAt = 0;  // timestamp (ms) when speaking last transitioned to true
+  let speakingEndedAt = 0;    // timestamp (ms) when speaking last transitioned to false
   const SPEAKING_ECHO_GRACE_MS = 400; // skip gender accumulation for this long after agent stops
   let interrupted = false;        // barge-in flag; checked inside audio loop
   let bargeInFrames = 0;         // consecutive high-RMS frames counted while agent is speaking
@@ -435,6 +442,7 @@ export async function handleWebCallWebSocket(
       history.push({ role: "assistant", content: cleanReply });
       sendStatus("speaking");
       speaking = true;
+      speakingStartedAt = Date.now();
 
       // Drop any audio that accumulated while the LLM was generating.
       // Without this, speech spoken during the "thinking" phase would be
@@ -467,6 +475,15 @@ export async function handleWebCallWebSocket(
           sendAudio(amplifyPcm(chunk, TTS_VOLUME_GAIN));
           await new Promise(r => setTimeout(r, 40));
         }
+      }
+
+      // Tail silence: give the client's audio buffer time to drain before
+      // transitioning. Without this, the server sends "status: listening" while
+      // the last few chunks are still in the browser's audio queue, and any
+      // subsequent state change can cause the browser to drop the end of the
+      // last word.
+      if (!interrupted && !closed) {
+        await new Promise(r => setTimeout(r, AUDIO_TAIL_SILENCE_MS));
       }
 
       speaking = false;
@@ -596,7 +613,13 @@ export async function handleWebCallWebSocket(
       // Agent is speaking — use elevated threshold to ignore echo / ambient noise.
       // Require BARGE_IN_MIN_FRAMES consecutive loud frames before accepting a barge-in,
       // so a single word, cough, or background voice doesn't stop the agent mid-sentence.
-      if (rms > BARGE_IN_RMS) {
+      //
+      // Echo grace period: suppress barge-in for BARGE_IN_ECHO_GRACE_MS after speaking
+      // begins. Browser echo cancellation needs ~500–800 ms to adapt; without this the
+      // mic picks up the agent's own TTS audio and fires a false barge-in, cutting off
+      // the last word(s) of every response.
+      const inEchoGrace = Date.now() - speakingStartedAt < BARGE_IN_ECHO_GRACE_MS;
+      if (!inEchoGrace && rms > BARGE_IN_RMS) {
         bargeInFrames++;
         audioChunks.push(Buffer.from(data)); // accumulate speech for next turn
         if (!interrupted && bargeInFrames >= BARGE_IN_MIN_FRAMES) {
@@ -606,7 +629,7 @@ export async function handleWebCallWebSocket(
           logger.info({ callId, rms, bargeInFrames }, "Barge-in triggered");
         }
       } else {
-        bargeInFrames = 0; // frame dropped below threshold — reset the run
+        bargeInFrames = 0; // frame dropped below threshold (or in grace period) — reset the run
       }
       return; // don't touch silence timer while speaking
     }
