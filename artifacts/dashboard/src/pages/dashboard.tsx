@@ -1,14 +1,6 @@
 import React, { useMemo } from "react";
 import { Link } from "wouter";
-import {
-  Users,
-  Phone,
-  CheckCircle2,
-  Clock,
-  ArrowRight,
-  Activity,
-  TrendingUp,
-} from "lucide-react";
+import { Phone, Activity, ArrowRight, TrendingUp } from "lucide-react";
 import {
   useGetDashboardStats,
   useGetRecentCalls,
@@ -19,8 +11,6 @@ import {
   getGetCallsByStatusQueryKey,
   getGetDailyCallVolumeQueryKey,
 } from "@workspace/api-client-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { useChartTheme } from "@/hooks/use-chart-theme";
 import {
   AreaChart,
   Area,
@@ -29,8 +19,8 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  PieChart,
-  Pie,
+  BarChart,
+  Bar,
   Cell,
 } from "recharts";
 import { format, parseISO } from "date-fns";
@@ -43,117 +33,76 @@ const formatDuration = (seconds: number) => {
   return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
 };
 
-const getStatusBadge = (status: string) => {
-  const base = "inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-full";
-  switch (status) {
-    case "completed":
-      return (
-        <span className={`${base} bg-zinc-500/10 text-zinc-300 border border-zinc-500/20`}>
-          <span className="h-1.5 w-1.5 rounded-full bg-zinc-300" />Completed
-        </span>
-      );
-    case "failed":
-      return (
-        <span className={`${base} bg-muted text-foreground border border-border`}>
-          <span className="h-1.5 w-1.5 rounded-full bg-foreground" />Failed
-        </span>
-      );
-    case "in_progress":
-      return (
-        <span className={`${base} bg-zinc-500/10 text-zinc-300 border border-zinc-500/20`}>
-          <span className="h-1.5 w-1.5 rounded-full bg-zinc-300 animate-pulse" />In Progress
-        </span>
-      );
-    case "pending":
-      return (
-        <span className={`${base} bg-muted text-muted-foreground border border-border`}>
-          Pending
-        </span>
-      );
-    default:
-      return (
-        <span className={`${base} bg-muted text-muted-foreground border border-border`}>
-          {status}
-        </span>
-      );
-  }
-};
+/* ── Status badge ────────────────────────────────────────────────────────── */
+function StatusBadge({ status }: { status: string }) {
+  const base = "inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-md";
+  const map: Record<string, string> = {
+    completed:   "bg-foreground/[0.07] text-foreground/60 border border-foreground/[0.07]",
+    failed:      "bg-foreground/[0.04] text-muted-foreground border border-foreground/[0.05]",
+    in_progress: "bg-foreground/[0.06] text-foreground/70 border border-foreground/[0.06]",
+    pending:     "bg-foreground/[0.04] text-muted-foreground/60 border border-foreground/[0.04]",
+    cancelled:   "bg-foreground/[0.04] text-muted-foreground/40 border border-foreground/[0.04]",
+  };
+  const dotMap: Record<string, string> = {
+    completed:   "bg-foreground/30",
+    failed:      "bg-foreground/15",
+    in_progress: "bg-foreground/25 animate-pulse",
+    pending:     "bg-foreground/10",
+    cancelled:   "bg-foreground/10",
+  };
+  return (
+    <span className={`${base} ${map[status] ?? map.pending}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${dotMap[status] ?? dotMap.pending}`} />
+      {status.replace("_", " ")}
+    </span>
+  );
+}
 
-const STATUS_COLORS: Record<string, string> = {
-  completed:   "hsl(var(--chart-1))",
-  failed:      "hsl(var(--chart-4))",
-  in_progress: "hsl(var(--chart-2))",
-  pending:     "hsl(var(--chart-3))",
-  cancelled:   "hsl(var(--chart-5))",
-};
-
-/* ── Stat cards ──────────────────────────────────────────────────────────── */
+/* ── Stat cards config ───────────────────────────────────────────────────── */
 const STAT_CARDS = [
   {
     title:    "Total Agents",
-    icon:     Users,
     testId:   "text-total-agents",
     getValue: (s: any) => s?.totalAgents ?? 0,
-    getSub:   (s: any) => `${s?.activeAgents ?? 0} active`,
+    getSub:   (s: any) => `${s?.activeAgents ?? 0} active now`,
   },
   {
     title:    "Calls Today",
-    icon:     Phone,
     testId:   "text-calls-today",
     getValue: (s: any) => s?.callsToday ?? 0,
     getSub:   (s: any) => `${s?.callsThisWeek ?? 0} this week`,
   },
   {
     title:    "Success Rate",
-    icon:     CheckCircle2,
     testId:   "text-success-rate",
     getValue: (s: any) => s?.successRate ? `${s.successRate.toFixed(1)}%` : "0%",
     getSub:   (_: any) => "completed / total",
   },
   {
     title:    "Avg Duration",
-    icon:     Clock,
     testId:   "text-avg-duration",
     getValue: (s: any) => formatDuration(s?.avgDurationSeconds ?? 0),
     getSub:   (_: any) => "per successful call",
   },
 ];
 
-/* ── Status strip ────────────────────────────────────────────────────────── */
-function StatusStrip({ stats }: { stats: any }) {
-  if (!stats) return null;
-  const total      = stats.callsToday ?? 0;
-  const successful = stats.callsThisWeek ? Math.round((stats.successRate ?? 0) / 100 * total) : 0;
-  const active     = stats.activeAgents ?? 0;
-  const pct        = stats.successRate ? `${stats.successRate.toFixed(0)}%` : "—";
-
+/* ── Custom tooltip ──────────────────────────────────────────────────────── */
+function MonoTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-0 py-2 text-[11px] border-b border-border mb-2">
-      <div className="flex items-center gap-1.5">
-        <div className="h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_6px_hsl(var(--primary))]" />
-        <span className="text-muted-foreground">{active} agent{active !== 1 ? "s" : ""} active</span>
-      </div>
-      <div className="flex items-center gap-1.5">
-        <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground" />
-        <span className="text-muted-foreground">{total} calls today</span>
-      </div>
-      <div className="flex items-center gap-1.5">
-        <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground" />
-        <span className="text-muted-foreground">{successful} completed</span>
-      </div>
-      <div className="ml-auto">
-        <span className="px-2 py-0.5 rounded-md bg-muted text-foreground font-mono font-semibold border border-border">
-          {pct} success
-        </span>
-      </div>
+    <div style={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 10, padding: "10px 14px", fontSize: 12, color: "hsl(var(--foreground))", boxShadow: "0 8px 24px rgba(0,0,0,0.5)" }}>
+      <p style={{ color: "hsl(var(--muted-foreground))", fontSize: 10, marginBottom: 6 }}>{label}</p>
+      {payload.map((p: any) => (
+        <p key={p.dataKey} style={{ color: "hsl(var(--foreground))", fontWeight: 500, marginBottom: 2 }}>
+          <span style={{ color: "hsl(var(--muted-foreground))" }}>{p.dataKey}: </span>{p.value}
+        </p>
+      ))}
     </div>
   );
 }
 
 /* ── Dashboard ───────────────────────────────────────────────────────────── */
 export default function Dashboard() {
-  const { tickColor, gridColor, tooltipBg, tooltipBorder, tooltipText, tooltipShadow, palette } = useChartTheme();
-
   const { data: stats,       isLoading: statsLoading }       = useGetDashboardStats({ query: { queryKey: getGetDashboardStatsQueryKey() } });
   const { data: recentCalls, isLoading: recentCallsLoading } = useGetRecentCalls({ query: { queryKey: getGetRecentCallsQueryKey() } });
   const { data: callsByStatus }                               = useGetCallsByStatus({ query: { queryKey: getGetCallsByStatusQueryKey() } });
@@ -173,294 +122,213 @@ export default function Dashboard() {
     }));
   }, [callsByStatus]);
 
+  const totalCalls = pieData.reduce((s, e) => s + e.value, 0);
+
   return (
     <div className="flex-1 overflow-y-auto animate-fade-in">
-      <div className="mx-auto w-full max-w-7xl px-6 py-8 md:px-8 space-y-6">
+      <div className="mx-auto w-full max-w-6xl px-8 py-8 space-y-7">
 
-      {/* ── Header ── */}
-      <div>
-        <div className="flex items-start justify-between mb-4">
+        {/* Header */}
+        <div className="flex items-end justify-between">
           <div>
-            <h1 className="text-[22px] font-semibold tracking-tight text-foreground">
-              Analytics
-            </h1>
-            <p className="text-[13.5px] mt-1 text-muted-foreground">
-              Overview of your voice agents and call activity.
-            </p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/50 mb-1.5">Overview</p>
+            <h1 className="text-[22px] font-semibold tracking-tight text-foreground leading-none">Analytics</h1>
+            <p className="text-[12.5px] mt-1.5 text-muted-foreground/70">Voice agent activity across your platform.</p>
           </div>
           <Link href="/app">
-            <button
-              data-testid="button-create-agent"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-medium text-primary-foreground bg-primary hover:opacity-90 transition-opacity"
-            >
-              <Users className="h-3.5 w-3.5" />
+            <button className="text-[12px] font-medium text-muted-foreground hover:text-foreground transition-colors border border-border rounded-lg px-3.5 py-2 hover:bg-accent">
               Manage Agents
             </button>
           </Link>
         </div>
-        <StatusStrip stats={stats} />
-      </div>
 
-      {/* ── Stat cards ── */}
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {STAT_CARDS.map(({ title, icon: Icon, testId, getValue, getSub }) => (
-          <div
-            key={title}
-            className="card-hover bg-card rounded-2xl p-5 border border-border"
-            style={{ boxShadow: "var(--shadow-card)" }}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+        {/* Stat cards */}
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {STAT_CARDS.map(({ title, testId, getValue, getSub }) => (
+            <div
+              key={title}
+              className="bg-card rounded-2xl p-5 border border-border card-hover"
+            >
+              <p className="text-[10px] font-semibold uppercase tracking-[0.09em] text-muted-foreground/60 mb-3">
                 {title}
-              </span>
-              <div className="h-7 w-7 rounded-lg flex items-center justify-center bg-muted border border-border">
-                <Icon className="h-3.5 w-3.5 text-muted-foreground" />
-              </div>
-            </div>
-
-            {statsLoading ? (
-              <div className="space-y-2">
-                <div className="h-7 w-20 rounded-lg animate-pulse bg-muted" />
-                <div className="h-3.5 w-16 rounded animate-pulse bg-muted/70" />
-              </div>
-            ) : (
-              <>
-                <div
-                  className="text-[26px] font-semibold leading-none mb-1.5 tabular-nums text-foreground"
-                  data-testid={testId}
-                >
-                  {getValue(stats)}
+              </p>
+              {statsLoading ? (
+                <div className="space-y-2">
+                  <div className="h-8 w-20 rounded-lg animate-pulse bg-elevated" />
+                  <div className="h-3 w-16 rounded animate-pulse bg-elevated/70" />
                 </div>
-                <p className="text-[12px] text-muted-foreground">{getSub(stats)}</p>
-              </>
-            )}
-          </div>
-        ))}
-      </div>
+              ) : (
+                <>
+                  <div className="text-[28px] font-semibold leading-none mb-2 tabular-nums text-foreground tracking-tight" data-testid={testId}>
+                    {getValue(stats)}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground/60">{getSub(stats)}</p>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
 
-      {/* ── Charts ── */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+        {/* Charts row */}
+        <div className="grid gap-3 lg:grid-cols-7">
 
-        {/* Area chart */}
-        <Card className="col-span-4">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
+          {/* Area chart — call volume */}
+          <div className="col-span-4 bg-card rounded-2xl p-6 border border-border">
+            <div className="flex items-start justify-between mb-6">
               <div>
-                <CardTitle className="text-[14.5px] font-semibold text-foreground">
-                  Call Volume
-                </CardTitle>
-                <CardDescription className="text-[12.5px] mt-0.5">
-                  Completed vs failed calls — last 14 days
-                </CardDescription>
+                <p className="text-[13.5px] font-semibold text-foreground tracking-tight">Call Volume</p>
+                <p className="text-[11px] text-muted-foreground/60 mt-0.5">Last 14 days · completed vs failed</p>
               </div>
               <div className="flex items-center gap-4">
-                <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                  <span className="h-2 w-2 rounded-full" style={{ background: palette.completed }} />Completed
+                <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground/50">
+                  <span className="h-2 w-2 rounded-full bg-foreground/30" />Completed
                 </span>
-                <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                  <span className="h-2 w-2 rounded-full" style={{ background: palette.failed }} />Failed
+                <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground/50">
+                  <span className="h-2 w-2 rounded-full bg-foreground/10" />Failed
                 </span>
               </div>
             </div>
-          </CardHeader>
-          <CardContent className="pl-2">
+
             {dailyVolumeLoading ? (
-              <div className="h-[260px] flex items-center justify-center">
-                <div className="h-[220px] w-full rounded-xl animate-pulse bg-muted" />
-              </div>
+              <div className="h-[220px] rounded-xl animate-pulse bg-elevated/50" />
             ) : chartData.length > 0 ? (
-              <div className="h-[260px] w-full">
+              <div className="h-[220px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
+                  <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                     <defs>
-                      <linearGradient id="colorCompleted" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%"  stopColor={palette.completed} stopOpacity={0.18} />
-                        <stop offset="95%" stopColor={palette.completed} stopOpacity={0} />
+                      <linearGradient id="gCompleted" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%"  stopColor="hsl(var(--foreground))" stopOpacity={0.10} />
+                        <stop offset="95%" stopColor="hsl(var(--foreground))" stopOpacity={0} />
                       </linearGradient>
-                      <linearGradient id="colorFailed" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%"  stopColor={palette.failed} stopOpacity={0.15} />
-                        <stop offset="95%" stopColor={palette.failed} stopOpacity={0} />
+                      <linearGradient id="gFailed" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%"  stopColor="hsl(var(--foreground))" stopOpacity={0.04} />
+                        <stop offset="95%" stopColor="hsl(var(--foreground))" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <XAxis
-                      dataKey="formattedDate"
-                      stroke="transparent"
-                      tick={{ fill: tickColor, fontSize: 11 }}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <YAxis
-                      stroke="transparent"
-                      tick={{ fill: tickColor, fontSize: 11 }}
-                      tickLine={false}
-                      axisLine={false}
-                      width={28}
-                    />
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridColor} />
-                    <Tooltip
-                      contentStyle={{
-                        background:   tooltipBg,
-                        border:       `1px solid ${tooltipBorder}`,
-                        borderRadius: "12px",
-                        color:        tooltipText,
-                        fontSize:     "12px",
-                        boxShadow:    tooltipShadow,
-                      }}
-                      itemStyle={{ color: tooltipText }}
-                      cursor={{ stroke: tooltipBorder, strokeWidth: 1 }}
-                    />
-                    <Area type="monotone" dataKey="completed" stroke={palette.completed} strokeWidth={1.5} fillOpacity={1} fill="url(#colorCompleted)" dot={false} />
-                    <Area type="monotone" dataKey="failed"    stroke={palette.failed}    strokeWidth={1.5} fillOpacity={1} fill="url(#colorFailed)"    dot={false} />
+                    <XAxis dataKey="formattedDate" stroke="transparent" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10, opacity: 0.5 }} tickLine={false} axisLine={false} />
+                    <YAxis stroke="transparent" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10, opacity: 0.5 }} tickLine={false} axisLine={false} width={24} />
+                    <CartesianGrid strokeDasharray="2 4" vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.6} />
+                    <Tooltip content={<MonoTooltip />} cursor={{ stroke: "hsl(var(--muted-foreground))", strokeWidth: 1, opacity: 0.2 }} />
+                    <Area type="monotone" dataKey="completed" stroke="hsl(var(--foreground))" strokeWidth={1.5} fillOpacity={1} fill="url(#gCompleted)" dot={false} strokeOpacity={0.35} />
+                    <Area type="monotone" dataKey="failed"    stroke="hsl(var(--foreground))" strokeWidth={1} fillOpacity={1} fill="url(#gFailed)"    dot={false} strokeOpacity={0.15} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
             ) : (
-              <div className="h-[260px] flex flex-col items-center justify-center gap-3">
-                <div className="h-10 w-10 rounded-xl flex items-center justify-center bg-muted border border-border">
-                  <Activity className="h-4 w-4 text-muted-foreground" />
-                </div>
-                <p className="text-[13px] text-muted-foreground">No call data yet</p>
+              <div className="h-[220px] flex flex-col items-center justify-center gap-3 text-muted-foreground/40">
+                <Activity className="h-8 w-8" />
+                <p className="text-[12px]">No call data yet</p>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
 
-        {/* Status pie */}
-        <Card className="col-span-3">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-[14.5px] font-semibold text-foreground">
-              Status Breakdown
-            </CardTitle>
-            <CardDescription className="text-[12.5px] mt-0.5">
-              Distribution of calls by status
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+          {/* Status breakdown */}
+          <div className="col-span-3 bg-card rounded-2xl p-6 border border-border">
+            <p className="text-[13.5px] font-semibold text-foreground tracking-tight mb-1">Status Breakdown</p>
+            <p className="text-[11px] text-muted-foreground/60 mb-6">Distribution by outcome</p>
+
             {pieData.length > 0 ? (
-              <div className="flex flex-col gap-4">
-                <div className="h-[160px] w-full">
+              <>
+                {/* Horizontal bar chart */}
+                <div className="h-[120px] mb-6">
                   <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={pieData} cx="50%" cy="50%" innerRadius={48} outerRadius={72} paddingAngle={2} dataKey="value" strokeWidth={0}>
-                        {pieData.map((entry) => (
-                          <Cell key={entry.status} fill={STATUS_COLORS[entry.status] ?? "hsl(var(--muted-foreground))"} />
+                    <BarChart data={pieData} layout="vertical" margin={{ top: 0, right: 0, left: 0, bottom: 0 }} barSize={8}>
+                      <XAxis type="number" hide />
+                      <YAxis type="category" dataKey="name" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10, opacity: 0.6 }} tickLine={false} axisLine={false} width={68} />
+                      <Tooltip content={<MonoTooltip />} cursor={{ fill: "rgba(255,255,255,0.02)" }} />
+                      <Bar dataKey="value" radius={[0, 3, 3, 0]}>
+                        {pieData.map((_, i) => (
+                          <Cell key={i} fill={`hsl(var(--foreground) / ${0.25 - i * 0.06})`} />
                         ))}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{
-                          background:   tooltipBg,
-                          border:       `1px solid ${tooltipBorder}`,
-                          borderRadius: "12px",
-                          color:        tooltipText,
-                          fontSize:     "12px",
-                          boxShadow:    tooltipShadow,
-                        }}
-                      />
-                    </PieChart>
+                      </Bar>
+                    </BarChart>
                   </ResponsiveContainer>
                 </div>
-                {/* Status strip — label + dot + count + pct pill */}
-                <div className="space-y-2">
+
+                {/* Legend */}
+                <div className="space-y-2.5">
                   {pieData.map(entry => {
-                    const total = pieData.reduce((s, e) => s + e.value, 0);
-                    const pct   = total ? Math.round((entry.value / total) * 100) : 0;
+                    const pct = totalCalls ? Math.round((entry.value / totalCalls) * 100) : 0;
                     return (
-                      <div key={entry.status} className="flex items-center gap-2.5">
-                        <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: STATUS_COLORS[entry.status] ?? "hsl(var(--muted-foreground))" }} />
-                        <span className="text-[12px] flex-1 capitalize text-muted-foreground">
-                          {entry.name}
-                        </span>
-                        <span className="text-[12px] font-semibold tabular-nums text-foreground">
-                          {entry.value}
-                        </span>
-                        <span className="text-[11px] w-8 text-right tabular-nums px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground font-mono">{pct}%</span>
+                      <div key={entry.status} className="flex items-center gap-2">
+                        <span className="text-[11px] flex-1 capitalize text-muted-foreground/60">{entry.name}</span>
+                        <span className="text-[12px] font-semibold tabular-nums text-foreground/70">{entry.value}</span>
+                        <span className="text-[10px] w-8 text-right tabular-nums text-muted-foreground/40 font-mono">{pct}%</span>
                       </div>
                     );
                   })}
                 </div>
-              </div>
+              </>
             ) : (
-              <div className="h-[200px] flex flex-col items-center justify-center gap-3">
-                <div className="h-10 w-10 rounded-xl flex items-center justify-center bg-muted border border-border">
-                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                </div>
-                <p className="text-[13px] text-muted-foreground">No status data yet</p>
+              <div className="h-[200px] flex flex-col items-center justify-center gap-3 text-muted-foreground/40">
+                <TrendingUp className="h-8 w-8" />
+                <p className="text-[12px]">No status data yet</p>
               </div>
             )}
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </div>
 
-      {/* ── Recent calls ── */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
+        {/* Recent calls */}
+        <div className="bg-card rounded-2xl border border-border overflow-hidden">
+          <div className="px-6 py-4 border-b border-border flex items-center justify-between">
             <div>
-              <CardTitle className="text-[14.5px] font-semibold text-foreground">Recent Calls</CardTitle>
-              <CardDescription className="text-[12.5px] mt-0.5">Latest voice interactions across all agents</CardDescription>
+              <p className="text-[13.5px] font-semibold text-foreground tracking-tight">Recent Calls</p>
+              <p className="text-[11px] text-muted-foreground/60 mt-0.5">Latest interactions across all agents</p>
             </div>
             <Link href="/app/calls">
-              <button
-                className="flex items-center gap-1 text-[12px] font-medium text-muted-foreground hover:text-foreground transition-colors"
-              >
-                View all <ArrowRight className="h-3.5 w-3.5" />
+              <button className="flex items-center gap-1 text-[11.5px] font-medium text-muted-foreground/60 hover:text-foreground transition-colors">
+                View all <ArrowRight className="h-3 w-3" />
               </button>
             </Link>
           </div>
-        </CardHeader>
-        <CardContent className="p-0">
+
           {recentCallsLoading ? (
-            <div className="px-6 pb-6 space-y-3 pt-2">
+            <div className="px-6 py-5 space-y-3">
               {[1, 2, 3, 4].map(i => (
                 <div key={i} className="flex items-center gap-3">
-                  <div className="h-8 w-8 rounded-lg animate-pulse bg-muted" />
+                  <div className="h-7 w-7 rounded-lg animate-pulse bg-elevated" />
                   <div className="flex-1 space-y-1.5">
-                    <div className="h-3.5 w-36 rounded animate-pulse bg-muted" />
-                    <div className="h-3 w-24 rounded animate-pulse bg-muted/70" />
+                    <div className="h-3 w-32 rounded animate-pulse bg-elevated" />
+                    <div className="h-2.5 w-20 rounded animate-pulse bg-elevated/70" />
                   </div>
-                  <div className="h-5 w-16 rounded-full animate-pulse bg-muted" />
+                  <div className="h-5 w-16 rounded-md animate-pulse bg-elevated" />
                 </div>
               ))}
             </div>
           ) : recentCalls && recentCalls.length > 0 ? (
-            <div className="divide-y divide-border">
-              {recentCalls.slice(0, 6).map(call => (
+            <div>
+              {/* Table header */}
+              <div className="grid grid-cols-[1fr_1fr_auto_auto] gap-4 px-6 py-2 bg-elevated/40 border-b border-border">
+                {["Agent", "Number", "Duration", "Status"].map(h => (
+                  <span key={h} className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50">{h}</span>
+                ))}
+              </div>
+              {recentCalls.slice(0, 8).map((call, i) => (
                 <div
                   key={call.id}
-                  className="flex items-center gap-4 px-6 py-3 transition-colors hover:bg-muted/40 cursor-default"
+                  className="grid grid-cols-[1fr_1fr_auto_auto] gap-4 items-center px-6 py-3 border-b border-border/50 last:border-0 hover:bg-accent/30 transition-colors cursor-default"
                 >
-                  <div className="h-7 w-7 rounded-lg flex items-center justify-center shrink-0 bg-muted border border-border">
-                    <Phone className="h-3.5 w-3.5 text-muted-foreground" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-medium truncate text-foreground">
-                      {(call as any).agentName ?? `Agent #${call.agentId}`}
-                    </p>
-                    <p className="text-[11.5px] font-mono truncate text-muted-foreground">
-                      {call.fromNumber ?? call.toNumber ?? `#${call.id}`}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    {call.durationSeconds != null && (
-                      <span className="text-[11.5px] tabular-nums text-muted-foreground">
-                        {formatDuration(call.durationSeconds)}
-                      </span>
-                    )}
-                    {getStatusBadge(call.status)}
-                  </div>
+                  <p className="text-[12.5px] font-medium truncate text-foreground/80">
+                    {(call as any).agentName ?? `Agent #${call.agentId}`}
+                  </p>
+                  <p className="text-[11.5px] font-mono truncate text-muted-foreground/50">
+                    {call.fromNumber ?? call.toNumber ?? `#${call.id}`}
+                  </p>
+                  <p className="text-[11.5px] tabular-nums text-muted-foreground/50">
+                    {call.durationSeconds != null ? formatDuration(call.durationSeconds) : "—"}
+                  </p>
+                  <StatusBadge status={call.status} />
                 </div>
               ))}
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center py-12 gap-3">
-              <div className="h-10 w-10 rounded-xl flex items-center justify-center bg-muted border border-border">
-                <Phone className="h-4 w-4 text-muted-foreground" />
-              </div>
-              <p className="text-[13px] text-muted-foreground">No calls yet</p>
+            <div className="flex flex-col items-center justify-center py-14 gap-3 text-muted-foreground/30">
+              <Phone className="h-8 w-8" />
+              <p className="text-[12px]">No calls yet</p>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+
       </div>
     </div>
   );
