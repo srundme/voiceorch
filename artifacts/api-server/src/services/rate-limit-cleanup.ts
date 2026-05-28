@@ -86,3 +86,14 @@ export function startRateLimitCleanup(): void {
   const timer = setInterval(() => void pruneTransientRows(), CLEANUP_INTERVAL_MS);
   timer.unref();
 }
+
+/** @internal Exposed for unit tests only. */
+export async function __pruneTransientRows(): Promise<void> {
+  return pruneTransientRows();
+}
+
+/** @internal Exposed for unit tests only — clears the registry and re-registers built-ins. */
+export function __resetRegistry(entries: TransientKeyConfig[] = []): void {
+  transientKeyRegistry.length = 0;
+  for (const e of entries) transientKeyRegistry.push(e);
+}
