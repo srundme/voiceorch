@@ -6,9 +6,11 @@
   "scripts": {
     "hello": "tsx ./src/hello.ts",
     "seed-provider-pricing": "tsx ./src/seed-provider-pricing.ts",
+    "backfill-user-identity": "tsx ./src/backfill-user-identity.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@clerk/backend": "^3.4.14",
     "@workspace/db": "workspace:*",
     "drizzle-orm": "catalog:"
   },

@@ -81,7 +81,7 @@ export default function Growth() {
                     <TableRow key={user.clerkId || idx}>
                       <TableCell>
                         <Link href={`/users/${user.clerkId}`} className="text-primary hover:underline block truncate max-w-[200px]">
-                          {user.email || 'Unknown'}
+                          {user.name || user.email || (user.clerkId ? `${String(user.clerkId).slice(0, 12)}…` : 'Unknown')}
                         </Link>
                       </TableCell>
                       <TableCell className="text-right font-mono tabular-nums font-medium">{user.callCount?.toLocaleString() || 0}</TableCell>
@@ -121,7 +121,7 @@ export default function Growth() {
                     <TableRow key={user.clerkId || idx}>
                       <TableCell>
                         <Link href={`/users/${user.clerkId}`} className="text-muted-foreground hover:text-primary hover:underline block truncate max-w-[200px]">
-                          {user.email || 'Unknown'}
+                          {user.name || user.email || (user.clerkId ? `${String(user.clerkId).slice(0, 12)}…` : 'Unknown')}
                         </Link>
                       </TableCell>
                       <TableCell className="text-right font-mono text-xs text-muted-foreground">
