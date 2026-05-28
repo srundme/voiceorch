@@ -112,7 +112,7 @@ const clerkAppearance = {
     logoBox: "",
     logoImage: "w-8 h-8",
     socialButtonsBlockButton: "border-zinc-800 hover:bg-zinc-900",
-    formButtonPrimary: "bg-muted hover:bg-card text-black font-semibold",
+    formButtonPrimary: "bg-zinc-100 hover:bg-white text-zinc-900 font-semibold",
     formFieldInput: "bg-zinc-900 border-zinc-800 text-white placeholder-zinc-500",
     footerAction: "",
     dividerLine: "bg-zinc-800",

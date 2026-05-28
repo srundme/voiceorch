@@ -4,7 +4,7 @@
    SnapServeLoader — full-screen splash with animated bars
    ─────────────────────────────────────────────────────────────────────────*/
 
-const FONT = "'Poppins', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif";
+const FONT = "'Tex Gyre Heros', Helvetica, Arial, sans-serif";
 
 /* ── BrandMark (image-based lockup, mirrors admin) ----------------------- */
 
@@ -138,7 +138,7 @@ export function SnapServeLoader() {
 
       {/* Wordmark */}
       <span
-        style={{ fontFamily: FONT, fontSize: 18, color: "#1a1a2e", letterSpacing: "-0.01em" }}
+        style={{ fontFamily: FONT, fontSize: 18, color: "#ffffff", letterSpacing: "-0.01em" }}
         className="select-none"
       >
         <span style={{ fontWeight: 700 }}>Snap</span>
