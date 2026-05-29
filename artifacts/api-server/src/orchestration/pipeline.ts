@@ -1469,19 +1469,34 @@ export class OrchestrationPipeline {
 
     try {
       // ── Authorization: resolve the owning userId for this agent ──
-      const [agentCalendar] = await db
-        .select({ userId: schedulingCalendarsTable.userId })
-        .from(schedulingCalendarsTable)
-        .where(eq(schedulingCalendarsTable.agentId, this.agent.id));
+      // Always start by resolving the agent owner so we can verify any stored
+      // calendarId actually belongs to this agent's tenant.
+      const [agentRow] = await db
+        .select({ userId: agentsTable.userId })
+        .from(agentsTable)
+        .where(eq(agentsTable.id, this.agent.id));
+      const agentOwnerId = agentRow?.userId ?? null;
+
       let authorizedUserId: string | null = null;
-      if (agentCalendar) {
-        authorizedUserId = agentCalendar.userId;
+      if (tool.calendarId) {
+        // Verify the stored calendarId belongs to the agent owner — prevents a
+        // malicious/forged calendarId from authorizing cross-tenant cancellations.
+        const [calRow] = await db
+          .select({ userId: schedulingCalendarsTable.userId })
+          .from(schedulingCalendarsTable)
+          .where(eq(schedulingCalendarsTable.id, tool.calendarId));
+        if (!calRow || calRow.userId !== agentOwnerId) {
+          logger.warn({ callId: this.config.callId, toolCalendarId: tool.calendarId, agentOwnerId }, "Native cancel: stored calendarId does not belong to agent owner — rejected");
+          return `error: no booking found with reference ${bookingId}`;
+        }
+        authorizedUserId = calRow.userId;
       } else {
-        const [agentRow] = await db
-          .select({ userId: agentsTable.userId })
-          .from(agentsTable)
-          .where(eq(agentsTable.id, this.agent.id));
-        authorizedUserId = agentRow?.userId ?? null;
+        // Fallback: find a calendar linked to this agent, then fall back to agent owner
+        const [agentCalendar] = await db
+          .select({ userId: schedulingCalendarsTable.userId })
+          .from(schedulingCalendarsTable)
+          .where(eq(schedulingCalendarsTable.agentId, this.agent.id));
+        authorizedUserId = agentCalendar?.userId ?? agentOwnerId;
       }
 
       const [existing] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId));

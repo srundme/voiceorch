@@ -2713,7 +2713,7 @@ components:
           description: (cal_com / native_booking / native_check_availability) Event type ID
         calendarId:
           type: integer
-          description: (native_booking / native_check_availability) Calendar the event type belongs to — UI hint for cascading selects
+          description: (native_booking / native_check_availability / native_cancel) Calendar the event type belongs to — UI hint for cascading selects
         timezone:
           type: string
           description: (cal_com / send_sms / native_booking / native_check_availability) Default timezone for bookings (e.g. America/New_York)

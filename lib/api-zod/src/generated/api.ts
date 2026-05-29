@@ -69,7 +69,7 @@ export const ListAgentsResponseItem = zod.object({
   "goodbyeMessage": zod.string().optional().describe('(end_call) Optional message spoken to the caller before hanging up'),
   "apiKey": zod.string().optional().describe('(cal_com) Cal.com API key'),
   "eventTypeId": zod.number().optional().describe('(cal_com \/ native_booking \/ native_check_availability) Event type ID'),
-  "calendarId": zod.number().optional().describe('(native_booking \/ native_check_availability) Calendar the event type belongs to — UI hint for cascading selects'),
+  "calendarId": zod.number().optional().describe('(native_booking \/ native_check_availability \/ native_cancel) Calendar the event type belongs to — UI hint for cascading selects'),
   "timezone": zod.string().optional().describe('(cal_com \/ send_sms \/ native_booking \/ native_check_availability) Default timezone for bookings (e.g. America\/New_York)'),
   "taskName": zod.string().optional().describe('(native_booking) Friendly task name shown in the agent UI; mirrors `name` by default'),
   "preToolMessage": zod.string().optional().describe('(native_booking) Optional sentence the agent should say just before invoking the booking tool')
@@ -155,7 +155,7 @@ export const CreateAgentBody = zod.object({
   "goodbyeMessage": zod.string().optional().describe('(end_call) Optional message spoken to the caller before hanging up'),
   "apiKey": zod.string().optional().describe('(cal_com) Cal.com API key'),
   "eventTypeId": zod.number().optional().describe('(cal_com \/ native_booking \/ native_check_availability) Event type ID'),
-  "calendarId": zod.number().optional().describe('(native_booking \/ native_check_availability) Calendar the event type belongs to — UI hint for cascading selects'),
+  "calendarId": zod.number().optional().describe('(native_booking \/ native_check_availability \/ native_cancel) Calendar the event type belongs to — UI hint for cascading selects'),
   "timezone": zod.string().optional().describe('(cal_com \/ send_sms \/ native_booking \/ native_check_availability) Default timezone for bookings (e.g. America\/New_York)'),
   "taskName": zod.string().optional().describe('(native_booking) Friendly task name shown in the agent UI; mirrors `name` by default'),
   "preToolMessage": zod.string().optional().describe('(native_booking) Optional sentence the agent should say just before invoking the booking tool')
@@ -226,7 +226,7 @@ export const GetAgentResponse = zod.object({
   "goodbyeMessage": zod.string().optional().describe('(end_call) Optional message spoken to the caller before hanging up'),
   "apiKey": zod.string().optional().describe('(cal_com) Cal.com API key'),
   "eventTypeId": zod.number().optional().describe('(cal_com \/ native_booking \/ native_check_availability) Event type ID'),
-  "calendarId": zod.number().optional().describe('(native_booking \/ native_check_availability) Calendar the event type belongs to — UI hint for cascading selects'),
+  "calendarId": zod.number().optional().describe('(native_booking \/ native_check_availability \/ native_cancel) Calendar the event type belongs to — UI hint for cascading selects'),
   "timezone": zod.string().optional().describe('(cal_com \/ send_sms \/ native_booking \/ native_check_availability) Default timezone for bookings (e.g. America\/New_York)'),
   "taskName": zod.string().optional().describe('(native_booking) Friendly task name shown in the agent UI; mirrors `name` by default'),
   "preToolMessage": zod.string().optional().describe('(native_booking) Optional sentence the agent should say just before invoking the booking tool')
@@ -316,7 +316,7 @@ export const UpdateAgentBody = zod.object({
   "goodbyeMessage": zod.string().optional().describe('(end_call) Optional message spoken to the caller before hanging up'),
   "apiKey": zod.string().optional().describe('(cal_com) Cal.com API key'),
   "eventTypeId": zod.number().optional().describe('(cal_com \/ native_booking \/ native_check_availability) Event type ID'),
-  "calendarId": zod.number().optional().describe('(native_booking \/ native_check_availability) Calendar the event type belongs to — UI hint for cascading selects'),
+  "calendarId": zod.number().optional().describe('(native_booking \/ native_check_availability \/ native_cancel) Calendar the event type belongs to — UI hint for cascading selects'),
   "timezone": zod.string().optional().describe('(cal_com \/ send_sms \/ native_booking \/ native_check_availability) Default timezone for bookings (e.g. America\/New_York)'),
   "taskName": zod.string().optional().describe('(native_booking) Friendly task name shown in the agent UI; mirrors `name` by default'),
   "preToolMessage": zod.string().optional().describe('(native_booking) Optional sentence the agent should say just before invoking the booking tool')
@@ -388,7 +388,7 @@ export const UpdateAgentResponse = zod.object({
   "goodbyeMessage": zod.string().optional().describe('(end_call) Optional message spoken to the caller before hanging up'),
   "apiKey": zod.string().optional().describe('(cal_com) Cal.com API key'),
   "eventTypeId": zod.number().optional().describe('(cal_com \/ native_booking \/ native_check_availability) Event type ID'),
-  "calendarId": zod.number().optional().describe('(native_booking \/ native_check_availability) Calendar the event type belongs to — UI hint for cascading selects'),
+  "calendarId": zod.number().optional().describe('(native_booking \/ native_check_availability \/ native_cancel) Calendar the event type belongs to — UI hint for cascading selects'),
   "timezone": zod.string().optional().describe('(cal_com \/ send_sms \/ native_booking \/ native_check_availability) Default timezone for bookings (e.g. America\/New_York)'),
   "taskName": zod.string().optional().describe('(native_booking) Friendly task name shown in the agent UI; mirrors `name` by default'),
   "preToolMessage": zod.string().optional().describe('(native_booking) Optional sentence the agent should say just before invoking the booking tool')
@@ -483,7 +483,7 @@ export const ToggleAgentResponse = zod.object({
   "goodbyeMessage": zod.string().optional().describe('(end_call) Optional message spoken to the caller before hanging up'),
   "apiKey": zod.string().optional().describe('(cal_com) Cal.com API key'),
   "eventTypeId": zod.number().optional().describe('(cal_com \/ native_booking \/ native_check_availability) Event type ID'),
-  "calendarId": zod.number().optional().describe('(native_booking \/ native_check_availability) Calendar the event type belongs to — UI hint for cascading selects'),
+  "calendarId": zod.number().optional().describe('(native_booking \/ native_check_availability \/ native_cancel) Calendar the event type belongs to — UI hint for cascading selects'),
   "timezone": zod.string().optional().describe('(cal_com \/ send_sms \/ native_booking \/ native_check_availability) Default timezone for bookings (e.g. America\/New_York)'),
   "taskName": zod.string().optional().describe('(native_booking) Friendly task name shown in the agent UI; mirrors `name` by default'),
   "preToolMessage": zod.string().optional().describe('(native_booking) Optional sentence the agent should say just before invoking the booking tool')

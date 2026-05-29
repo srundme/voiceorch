@@ -142,7 +142,7 @@ export interface AgentTool {
   apiKey?: string;
   /** (cal_com / native_booking / native_check_availability) Event type ID */
   eventTypeId?: number;
-  /** (native_booking / native_check_availability) Calendar the event type belongs to — UI hint for cascading selects */
+  /** (native_booking / native_check_availability / native_cancel) Calendar the event type belongs to — UI hint for cascading selects */
   calendarId?: number;
   /** (cal_com / send_sms / native_booking / native_check_availability) Default timezone for bookings (e.g. America/New_York) */
   timezone?: string;

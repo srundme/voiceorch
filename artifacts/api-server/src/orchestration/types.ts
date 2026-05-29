@@ -66,6 +66,10 @@ export interface NativeCancelTool {
   type: "native_cancel";
   name: string;
   description: string;
+  /** Optional: calendar id stored in tool config — used for scoped ownership check */
+  calendarId?: number;
+  /** Optional: event type id (UI only; runtime uses calendarId for auth) */
+  eventTypeId?: number;
 }
 
 export interface NativeCheckAvailabilityTool {
