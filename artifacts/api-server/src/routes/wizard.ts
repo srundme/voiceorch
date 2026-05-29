@@ -5,7 +5,7 @@ import { platformSettingsTable, platformListedVoicesTable } from "@workspace/db"
 import { eq } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { logger } from "../lib/logger.js";
-import { getActiveTemplate } from "../services/prompt-template.js";
+import { getActiveTemplate, generateAgentPrompt } from "../services/prompt-template.js";
 
 interface FlowNode { label: string; badge?: string; branch?: boolean }
 
@@ -182,6 +182,70 @@ router.post("/wizard/preview-voice", requireDbUser, async (req, res): Promise<vo
   } catch (err) {
     logger.error({ err }, "Voice preview failed");
     res.status(500).json({ error: "Voice preview failed" });
+  }
+});
+
+// ── POST /wizard/generate-master-prompt ──────────────────────────────────────
+//
+// Calls Gemini with the active Master Prompt Template to produce a complete,
+// production-ready system prompt from the user's call flow + agent details.
+// Returns { systemPrompt: string } on success.
+// Returns non-2xx + { error, reason } on failure — no silent fallbacks.
+
+router.post("/wizard/generate-master-prompt", requireDbUser, async (req, res): Promise<void> => {
+  const {
+    callFlowDescription, agentName, companyName, useCase, selectedLanguages,
+    role, agentDirection, serviceDescription,
+  } = req.body as {
+    callFlowDescription?: string;
+    agentName?: string;
+    companyName?: string;
+    useCase?: string;
+    selectedLanguages?: string[];
+    role?: string;
+    agentDirection?: string;
+    serviceDescription?: string;
+  };
+
+  if (!callFlowDescription?.trim()) {
+    res.status(400).json({ error: "callFlowDescription is required", reason: "validation" });
+    return;
+  }
+
+  const activeTemplate = await getActiveTemplate().catch((err) => {
+    req.log.warn({ err }, "getActiveTemplate failed during master prompt generation");
+    return null;
+  });
+
+  if (!activeTemplate) {
+    res.status(503).json({
+      error: "No active master prompt template is configured. Ask your admin to upload and activate one.",
+      reason: "no_active_template",
+    });
+    return;
+  }
+
+  try {
+    const wizardInputs = {
+      useCase,
+      role,
+      agentName,
+      companyName,
+      serviceDescription,
+      agentDirection,
+      callFlowDescription,
+      languages: selectedLanguages,
+    };
+    const systemPrompt = await generateAgentPrompt(wizardInputs, activeTemplate.extractedText);
+    res.json({ systemPrompt });
+  } catch (err: unknown) {
+    req.log.error({ err }, "Master prompt generation failed");
+    const msg = (err as Error)?.message ?? "Prompt generation failed";
+    if (msg.includes("Managed Gemini key not configured")) {
+      res.status(503).json({ error: msg, reason: "gemini_key_missing" });
+    } else {
+      res.status(502).json({ error: msg, reason: "gemini_request_failed" });
+    }
   }
 });
 

@@ -499,7 +499,7 @@ function SlideStep({ children, direction }: { children: React.ReactNode; directi
 /* ═══════════════════════════════════════════════════════════════════════════
    MAIN WIZARD
 ═══════════════════════════════════════════════════════════════════════════ */
-interface Props { open: boolean; onClose: () => void; onCreated: (id: number) => void }
+interface Props { open: boolean; onClose: () => void; onCreated: (id: number, navigateTo?: string) => void }
 
 export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
   const [state, setState]             = useState<WizardState>(INITIAL);
@@ -728,40 +728,61 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
     }
   }
 
-  /* AI prompt generation */
+  /* AI prompt generation — calls Gemini master template, creates agent, PATCHes systemPrompt */
   async function generatePrompt() {
     setGenerating(true);
     setGenError("");
     try {
       const langs = [state.primaryLanguage, ...state.additionalLanguages];
-      const res = await apiFetch("/api/wizard/generate-prompt", {
+
+      // Step 1: generate the full system prompt from the master template
+      const genRes = await apiFetch("/api/wizard/generate-master-prompt", {
         method: "POST",
         body: JSON.stringify({
-          useCase: state.useCase, role: state.useCaseRole, companyName: state.companyName,
-          agentName: state.agentName, serviceDescription: state.useCaseService,
-          agentDirection: state.agentDirection, callFlowDescription: state.callFlowDescription,
-          languages: langs,
-          ...(state.leadSource.enabled && {
-            leadSourceType: state.leadSource.type,
-            leadFields: state.leadSource.fields,
-            productDetails: state.productDetails.trim() || undefined,
-          }),
+          useCase: state.useCase,
+          role: state.useCaseRole,
+          companyName: state.companyName,
+          agentName: state.agentName,
+          serviceDescription: state.useCaseService,
+          agentDirection: state.agentDirection,
+          callFlowDescription: state.callFlowDescription,
+          selectedLanguages: langs,
         }),
       });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error((body as any).error ?? `HTTP ${res.status}`);
+      if (!genRes.ok) {
+        const body = await genRes.json().catch(() => ({})) as any;
+        throw new Error(body.error ?? `Prompt generation failed (HTTP ${genRes.status})`);
       }
-      const data = await res.json() as { callFlowSteps?: string };
-      const flow = (data.callFlowSteps ?? "").trim();
-      if (!flow) throw new Error("Empty call flow returned");
-      // Store the human-readable call flow only. The orchestration-grade
-      // system prompt is generated server-side from the admin master template
-      // on agent create — never exposed here.
-      update({ generatedPrompt: flow });
-      setDirection("forward");
-      setStepIdx(i => i + 1);
-      setRenderKey(k => k + 1);
+      const genData = await genRes.json() as { systemPrompt: string };
+      const systemPrompt = (genData.systemPrompt ?? "").trim();
+      if (!systemPrompt) throw new Error("Gemini returned an empty prompt — please retry.");
+
+      // Step 2: create the agent with the current wizard state
+      const payload = buildCreateAgentPayload({ ...state, generatedPrompt: systemPrompt });
+      const createRes = await apiFetch("/api/agents", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      if (!createRes.ok) {
+        const body = await createRes.json().catch(() => ({})) as any;
+        throw new Error(body.error ?? `Agent creation failed (HTTP ${createRes.status})`);
+      }
+      const created = await createRes.json() as { id: number; name: string };
+
+      // Step 3: PATCH systemPrompt onto the newly created agent (belt-and-suspenders)
+      await apiFetch(`/api/agents/${created.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ systemPrompt }),
+      }).catch(() => {
+        // Non-fatal: agent was created with the prompt already embedded; PATCH failure
+        // just means the UI may not immediately reflect the stored value.
+      });
+
+      // Step 4: close wizard, navigate to agent Prompt tab
+      qc.invalidateQueries({ queryKey: getListAgentsQueryKey() });
+      toast({ title: `${created.name} is ready!` });
+      setState(INITIAL); setStepIdx(0);
+      onCreated(created.id, "prompt");
     } catch (err: any) {
       setGenError(err?.message ?? "Generation failed — you can still continue manually.");
     } finally { setGenerating(false); }

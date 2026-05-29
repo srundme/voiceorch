@@ -833,11 +833,11 @@ const CARTESIA_FALLBACK_VOICES: CartesiaVoice[] = [ARUSHI_VOICE];
 
 const PREVIEW_TEXT = "Hello! I'm your AI voice assistant. How can I help you today?";
 
-function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: () => void }) {
+function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number; onDeleted: () => void; initialTab?: string }) {
   const queryClient = useQueryClient();
   const { getToken } = useAuth();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState(initialTab ?? "overview");
   const [outboundDialogOpen, setOutboundDialogOpen] = useState(false);
   const [toNumber, setToNumber] = useState("");
 
@@ -2341,6 +2341,7 @@ function NewAgentPanel({ onCreated }: { onCreated: (id: number) => void }) {
 
 export default function AssistantsPage() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [pendingTab, setPendingTab] = useState<string | undefined>(undefined);
   const [search, setSearch]         = useState("");
   const [wizardOpen, setWizardOpen] = useState(false);
 
@@ -2461,7 +2462,7 @@ export default function AssistantsPage() {
       {/* ── Config / Editor Panel ─────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0 bg-background">
         {selectedId !== null ? (
-          <AgentConfigPanel agentId={selectedId} onDeleted={() => setSelectedId(agents?.[0]?.id ?? null)} />
+          <AgentConfigPanel key={selectedId} agentId={selectedId} initialTab={pendingTab} onDeleted={() => { setPendingTab(undefined); setSelectedId(agents?.[0]?.id ?? null); }} />
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-center gap-4">
             <div className="h-16 w-16 rounded-2xl flex items-center justify-center bg-elevated border border-border">
@@ -2484,7 +2485,7 @@ export default function AssistantsPage() {
       <CreateAgentWizard
         open={wizardOpen}
         onClose={() => setWizardOpen(false)}
-        onCreated={(id) => { setWizardOpen(false); setSelectedId(id); }}
+        onCreated={(id, navigateTo) => { setWizardOpen(false); setPendingTab(navigateTo); setSelectedId(id); }}
       />
     </div>
   );
