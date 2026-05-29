@@ -12,3 +12,9 @@ id = "ueDK8vYnu2MUNJttsQHHr"
 uri = "file://.local/agent-features-doc.md"
 type = "text"
 title = "Agent Creation & Features Reference"
+
+[[outputs]]
+id = "1xndBT8NpxXzvrjetvo9W"
+uri = "file://docs/vobiz-wallet-management.md"
+type = "text"
+title = "Vobiz Wallet Management Guide"
