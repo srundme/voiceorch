@@ -393,29 +393,76 @@ router.post("/wizard/generate-call-flow", requireDbUser, async (req, res): Promi
   }
 
   function parseGeminiNodes(text: string): FlowNode[] | null {
+    // Strip markdown code fences (Gemini sometimes wraps even with responseMimeType set)
+    const stripped = text
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```\s*$/, "")
+      .trim();
+
     let parsed: unknown;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      const match = text.match(/\[[\s\S]*\]/);
-      if (!match) return null;
-      try { parsed = JSON.parse(match[0]); } catch { return null; }
+
+    // Attempt 1: direct parse
+    try { parsed = JSON.parse(stripped); } catch { /* fall through */ }
+
+    // Attempt 2: extract first [...] block from raw text
+    if (parsed === undefined) {
+      const arrMatch = stripped.match(/\[[\s\S]*\]/);
+      if (arrMatch) {
+        try { parsed = JSON.parse(arrMatch[0]); } catch { /* fall through */ }
+      }
     }
+
+    // Attempt 3: Gemini may wrap array in an object {"nodes":[...]} or {"steps":[...]} etc.
+    if (parsed !== undefined && !Array.isArray(parsed) && typeof parsed === "object" && parsed !== null) {
+      const obj = parsed as Record<string, unknown>;
+      for (const key of ["nodes", "steps", "flow", "callFlow", "call_flow", "items"]) {
+        if (Array.isArray(obj[key])) { parsed = obj[key]; break; }
+      }
+    }
+
     if (!Array.isArray(parsed)) return null;
-    const nodes: FlowNode[] = parsed
+
+    const nodes: FlowNode[] = (parsed as unknown[])
       .map((n) => {
         const obj = (n ?? {}) as Record<string, unknown>;
-        const label = typeof obj.label === "string" ? obj.label.trim() : "";
-        const badgeRaw = typeof obj.badge === "string" ? obj.badge.trim() : "";
+        // label may be a string or number
+        const rawLabel = obj.label ?? obj.step ?? obj.text ?? obj.description ?? "";
+        const label = String(rawLabel).trim();
+        const badgeRaw = typeof obj.badge === "string" ? obj.badge.trim()
+          : typeof obj.type === "string" ? obj.type.trim() : "";
         return {
           label,
           ...(badgeRaw ? { badge: badgeRaw } : {}),
-          branch: Boolean(obj.branch),
+          branch: Boolean(obj.branch ?? obj.isBranch ?? obj.is_branch),
         };
       })
       .filter((n) => n.label.length > 0)
       .slice(0, 12);
-    return nodes.length >= 3 ? nodes : null;
+
+    return nodes.length >= 2 ? nodes : null;
+  }
+
+  function buildFallbackNodes(): FlowNode[] {
+    const isInbound = (agentDirection ?? "inbound") !== "outbound";
+    const greeting = isInbound
+      ? `Greet the caller, introduce ${ag} from ${co}, and ask how you can help today.`
+      : `Call the contact, introduce ${ag} from ${co}, and ask if this is a good time to talk.`;
+
+    const nodes: FlowNode[] = [
+      { label: greeting, badge: "Greeting" },
+    ];
+
+    for (const a of nonEmpty.slice(0, 5)) {
+      nodes.push({ label: a.answer, badge: "Flow" });
+    }
+
+    if (nodes.length < 4) {
+      nodes.push({ label: "Handle any questions or objections calmly and clearly.", badge: "Handle Objections" });
+      nodes.push({ label: "Confirm the next step or outcome with the caller.", badge: "Confirm" });
+    }
+
+    nodes.push({ label: `Thank the caller and close the conversation warmly.`, badge: "Close" });
+    return nodes;
   }
 
   type GeminiResult =
@@ -503,19 +550,21 @@ ${activeTemplate!.extractedText}
   }
 
   const first = await callGemini("");
-  if (!first.ok) {
-    const status = first.reason === "gemini_request_failed" ? 502 : 502;
-    res.status(status).json({
-      error: first.reason === "gemini_request_failed"
-        ? "Gemini API request failed."
-        : "Gemini returned a response we could not parse.",
-      reason: first.reason,
+
+  // If Gemini request itself failed (network/HTTP), surface that as an error.
+  // But for parse failures, always fall back to rule-based nodes — never show the
+  // "Couldn't parse Gemini's response" screen to the user.
+  if (!first.ok && first.reason === "gemini_request_failed") {
+    res.status(502).json({
+      error: "Gemini API request failed.",
+      reason: "gemini_request_failed",
     });
     return;
   }
 
-  let nodes = first.nodes;
-  if (nonEmpty.length > 0) {
+  let nodes = first.ok ? first.nodes : buildFallbackNodes();
+
+  if (first.ok && nonEmpty.length > 0) {
     const haystack = nodes.map((n) => n.label).join(" ").toLowerCase();
     const missing = nonEmpty.filter((a) => {
       const ans = a.answer.toLowerCase();
