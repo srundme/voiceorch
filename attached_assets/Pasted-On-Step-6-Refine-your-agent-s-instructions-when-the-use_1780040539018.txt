@@ -1,0 +1,105 @@
+On Step 6 ("Refine your agent's instructions"), when the user clicks 
+"Generate AI Prompt & Continue", do the following:
+
+1. Collect the call flow steps already displayed in the textarea
+   (the Gemini-generated call flow from the previous wizard steps).
+
+2. Also collect all agent details gathered from the wizard steps 1–5:
+   - Agent name
+   - Business/company name
+   - Agent use case / purpose
+   - Selected language(s)
+   - Any other fields collected during the wizard
+
+3. Make a Gemini API call (using GEMINI_API_KEY stored in Replit 
+   Secrets/environment variables — never expose it in frontend code) 
+   with this exact prompt structure:
+
+   PROMPT TO SEND TO GEMINI:
+   """
+   You are an expert AI Agent Prompt Generator. Using the Master Prompt 
+   Template below and the user's specific call flow and agent details, 
+   generate a complete, production-ready system prompt for the AI agent.
+   Output ONLY the final system prompt. No explanations, no commentary, 
+   no markdown headers outside the prompt itself.
+
+   MASTER PROMPT TEMPLATE:
+   ---
+   You are an expert AI Agent Prompt Generator powered by Gemini. Your 
+   role is to create highly effective, production-ready system prompts 
+   for specialized AI agents based on user requirements.
+
+   CORE DEFAULT INSTRUCTIONS (These must ALWAYS remain unchanged):
+   • You are a professional, helpful, and empathetic AI agent.
+   • Maintain a friendly, conversational, and natural tone.
+   • Be concise yet complete. Avoid unnecessary repetition.
+   • Always prioritize user safety, ethical guidelines, and compliance 
+     with platform policies.
+   • Never engage in harmful, illegal, or unethical activities.
+   • Detect user intent accurately and respond accordingly.
+   • If information is unclear, politely ask clarifying questions 
+     (one at a time when possible).
+   • Use structured reasoning internally when handling complex queries.
+   • Always confirm important details or actions with the user 
+     before proceeding.
+   • Handle errors gracefully and provide helpful alternatives.
+
+   LANGUAGE ADAPTATION:
+   The agent must fully support the language(s): {selected_languages}
+   - Respond naturally in the user's chosen language using appropriate 
+     colloquial, regional, and conversational style.
+   - Adapt tone, slang, greetings, idioms, and expressions to match 
+     cultural norms of the selected language(s).
+   - For multilingual support: Detect the user's language automatically 
+     and respond in the same language.
+   - If the user switches languages mid-conversation, seamlessly switch 
+     while maintaining context.
+   - Handle code-switching naturally if it occurs.
+   - Ensure translations are natural and not literal — preserve meaning, 
+     warmth, and cultural nuance.
+
+   CALL FLOW:
+   {call_flow_steps_from_textarea}
+
+   OUTPUT FORMAT — Generate the final system prompt with these sections:
+   1. Agent Identity & Role
+   2. Core Behaviors & Guardrails
+   3. Language & Communication Style
+   4. Call Flow / Conversation Structure
+   5. Tools & Capabilities (if applicable)
+   6. Response Guidelines
+   ---
+
+   USER'S AGENT DETAILS:
+   - Agent Name: {agent_name}
+   - Company Name: {company_name}
+   - Use Case: {use_case}
+   - Language(s): {selected_languages}
+
+   Now generate the complete final system prompt using the Master Template 
+   above, filling in all dynamic sections with the provided agent details 
+   and call flow. Output ONLY the final system prompt, nothing else.
+   """
+
+4. After receiving the Gemini response:
+   - Identify the current agent's ID that is being configured 
+     in the wizard (e.g., agent #0044)
+   - Make an API/database call to update THAT specific agent's 
+     prompt field with the full Gemini output text
+   - Then navigate the user to that agent's Settings → Prompt page
+   - The "Agent Prompt" textarea must automatically display the 
+     newly generated prompt — no manual copy-pasting by the user
+   - The "Welcome Message" field must remain untouched — only the 
+     "Agent Prompt" textarea gets updated
+   - If the textarea previously had placeholder or partial text, 
+     it must be fully replaced with the new Gemini output
+
+5. Do NOT use any locally generated or hardcoded prompt text anywhere. 
+   The final prompt pasted in the Agent Prompt textarea must always 
+   come exclusively from this Gemini API call using the Master Template.
+
+6. Error handling:
+   - If the Gemini API call fails, show a clear error message to 
+     the user on the same page
+   - Do not navigate away or clear the textarea if the API call fails
+   - Allow the user to retry without losing their call flow data

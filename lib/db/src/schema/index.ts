@@ -24,3 +24,4 @@ export * from "./prompt-templates";
 export * from "./api-keys";
 export * from "./meta";
 export * from "./call-transfers";
+export * from "./provider-minute-rates";

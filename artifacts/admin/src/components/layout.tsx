@@ -14,6 +14,7 @@ import {
   FileText,
   Bot,
   Calendar,
+  PhoneCall,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -67,6 +68,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/prompt-template", label: "Prompt Template", icon: FileText },
     { href: "/all-agents",   label: "All Agents",   icon: Bot },
     { href: "/scheduling",   label: "Scheduling",   icon: Calendar },
+    { href: "/call-pricing", label: "Call Pricing",  icon: PhoneCall },
     { href: "/settings",     label: "Settings",     icon: Settings },
   ];
 

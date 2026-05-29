@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link } from "wouter";
-import { Search, Plus, Filter, MoreHorizontal, Settings2, PlayCircle, BarChart2, Phone, Users, Pencil, TrendingUp, PhoneCall } from "lucide-react";
+import { Search, Plus, Filter, MoreHorizontal, Settings2, PlayCircle, BarChart2, Phone, Users, Pencil, TrendingUp, PhoneCall, IndianRupee } from "lucide-react";
 import { 
   useListAgents, 
   useToggleAgent,
@@ -9,6 +9,7 @@ import {
   getListAgentsQueryKey,
   getListCallsQueryKey,
 } from "@workspace/api-client-react";
+import { useMinuteRatesMap, computeAgentRateCents } from "@/hooks/use-minute-rates";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +42,7 @@ export default function AgentsList() {
   const { data: agents, isLoading } = useListAgents({
     query: { queryKey: getListAgentsQueryKey() }
   });
+  const rateMap = useMinuteRatesMap();
   
   const toggleAgent = useToggleAgent();
   const deleteAgent = useDeleteAgent();
@@ -246,6 +248,21 @@ export default function AgentsList() {
                       <span className="text-xs font-medium truncate w-full px-1">{agent.ttsProvider} + {agent.telephonyProvider}</span>
                     </div>
                   </div>
+
+                  {/* Per-minute cost badge */}
+                  {(() => {
+                    const costCents = computeAgentRateCents(rateMap, agent);
+                    if (costCents <= 0) return null;
+                    return (
+                      <div className="flex items-center gap-1.5 mb-3 px-2 py-1.5 rounded-md border border-border bg-muted/30 w-fit text-xs">
+                        <IndianRupee className="h-3 w-3 text-muted-foreground shrink-0" />
+                        <span className="font-semibold text-foreground">
+                          ₹{(costCents / 100).toFixed(2)}
+                        </span>
+                        <span className="text-muted-foreground">/ min</span>
+                      </div>
+                    );
+                  })()}
 
                   <div className="mt-auto pt-4 border-t border-border/50 flex items-center justify-between text-xs text-muted-foreground">
                     <div className="flex items-center gap-3">

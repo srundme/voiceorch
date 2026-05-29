@@ -29,6 +29,7 @@ import usageMeRouter from "./usage-me.js";
 import userApiKeysRouter from "./user-api-keys.js";
 import metaRouter from "./meta.js";
 import callTransfersRouter from "./call-transfers.js";
+import billingRouter from "./billing.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
 const router: IRouter = Router();
@@ -68,5 +69,6 @@ router.use(usageMeRouter);
 router.use(userApiKeysRouter);
 router.use(metaRouter);
 router.use(callTransfersRouter);
+router.use(billingRouter);
 
 export default router;

@@ -10,6 +10,8 @@ export async function dialTwilio(opts: {
   toNumber: string;
   webhookUrl: string;
   statusCallbackUrl: string;
+  /** Max call duration in seconds. Twilio hangs up at this limit. */
+  maxDurationSeconds?: number;
   /** AMD — omit to disable */
   machineDetection?: "Enable" | "DetectMessageEnd";
   machineDetectionUrl?: string;
@@ -24,6 +26,9 @@ export async function dialTwilio(opts: {
     Url: opts.webhookUrl, StatusCallback: opts.statusCallbackUrl,
     StatusCallbackMethod: "POST",
   });
+  if (opts.maxDurationSeconds && opts.maxDurationSeconds > 0) {
+    body.append("TimeLimit", String(Math.floor(opts.maxDurationSeconds)));
+  }
   if (opts.machineDetection) {
     body.append("MachineDetection", opts.machineDetection);
     if (opts.machineDetectionUrl) body.append("MachineDetectionUrl", opts.machineDetectionUrl);
@@ -49,16 +54,21 @@ export async function dialPlivo(opts: {
   fromNumber: string;
   toNumber: string;
   answerUrl: string;
+  /** Max call duration in seconds. Plivo hangs up at this limit. */
+  maxDurationSeconds?: number;
   /** AMD — omit to disable */
   machineDetectionEnabled?: boolean;
   machineDetectionUrl?: string;
 }): Promise<string> {
   const url   = `https://api.plivo.com/v1/Account/${opts.authId}/Call/`;
   const creds = Buffer.from(`${opts.authId}:${opts.authToken}`).toString("base64");
-  const callBody: Record<string, string | boolean> = {
+  const callBody: Record<string, string | boolean | number> = {
     to: opts.toNumber, from: opts.fromNumber,
     answer_url: opts.answerUrl, answer_method: "POST",
   };
+  if (opts.maxDurationSeconds && opts.maxDurationSeconds > 0) {
+    callBody["time_limit"] = Math.floor(opts.maxDurationSeconds);
+  }
   if (opts.machineDetectionEnabled) {
     callBody["machine_detection"] = "enable";
     if (opts.machineDetectionUrl) callBody["machine_detection_url"] = opts.machineDetectionUrl;
@@ -80,6 +90,8 @@ export async function dialVobiz(opts: {
   toNumber: string;
   answerUrl: string;
   hangupUrl: string;
+  /** Max call duration in seconds. Vobiz hangs up at this limit (time_limit param). */
+  maxDurationSeconds?: number;
   /** P2-B: AMD options — omit to disable machine detection */
   machineDetection?: "Enable" | "DetectMessageEnd";
   machineDetectionUrl?: string;
@@ -89,6 +101,9 @@ export async function dialVobiz(opts: {
     to: opts.toNumber, from: opts.fromNumber,
     answer_url: opts.answerUrl, hangup_url: opts.hangupUrl,
   };
+  if (opts.maxDurationSeconds && opts.maxDurationSeconds > 0) {
+    body["time_limit"] = String(Math.floor(opts.maxDurationSeconds));
+  }
   if (opts.machineDetection) {
     body["machine_detection"]        = opts.machineDetection;
     body["machine_detection_method"] = "POST";

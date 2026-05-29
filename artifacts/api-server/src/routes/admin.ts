@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { db, usersTable, walletTransactionsTable, callsTable, agentsTable, scheduledCallbacksTable, bookingsTable, eventTypesTable, schedulingCalendarsTable, platformSettingsTable, usageSpikeDismissalsTable, usageSpikeNotificationsTable, alertNotificationLogTable } from "@workspace/db";
+import { db, usersTable, walletTransactionsTable, callsTable, agentsTable, scheduledCallbacksTable, bookingsTable, eventTypesTable, schedulingCalendarsTable, platformSettingsTable, usageSpikeDismissalsTable, usageSpikeNotificationsTable, alertNotificationLogTable, providerMinuteRatesTable } from "@workspace/db";
+import { invalidateMinuteRatesCache } from "../services/minute-rates.js";
 import { eq, sql, count, sum, desc, lt, gt, and, inArray, ilike, like } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { getAllSessions } from "../orchestration/session.js";
@@ -948,6 +949,106 @@ router.get("/admin/alert-notification-log", async (req, res): Promise<void> => {
     });
   } catch (err) {
     req.log.error({ err }, "admin/alert-notification-log GET failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ── Per-minute reseller rates ─────────────────────────────────────────────────
+
+router.get("/admin/minute-rates", async (req, res): Promise<void> => {
+  try {
+    const rows = await db
+      .select()
+      .from(providerMinuteRatesTable)
+      .orderBy(providerMinuteRatesTable.category, providerMinuteRatesTable.providerName);
+    res.json(rows);
+  } catch (err) {
+    req.log.error({ err }, "admin/minute-rates GET failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.put("/admin/minute-rates", async (req, res): Promise<void> => {
+  const { category, providerName, rateCentsPerMin, label } = req.body as {
+    category?: string;
+    providerName?: string;
+    rateCentsPerMin?: number;
+    label?: string;
+  };
+  if (!category || !providerName || typeof rateCentsPerMin !== "number") {
+    res.status(400).json({ error: "category, providerName, and rateCentsPerMin are required" });
+    return;
+  }
+  const validCategories = ["llm", "asr", "tts", "telephony"];
+  if (!validCategories.includes(category)) {
+    res.status(400).json({ error: `category must be one of: ${validCategories.join(", ")}` });
+    return;
+  }
+  try {
+    const [row] = await db
+      .insert(providerMinuteRatesTable)
+      .values({ category, providerName: providerName.toLowerCase(), rateCentsPerMin, label: label ?? null })
+      .onConflictDoUpdate({
+        target: [providerMinuteRatesTable.category, providerMinuteRatesTable.providerName],
+        set: {
+          rateCentsPerMin,
+          label: label ?? null,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    invalidateMinuteRatesCache();
+    res.json(row);
+  } catch (err) {
+    req.log.error({ err }, "admin/minute-rates PUT failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.delete("/admin/minute-rates/:id", async (req, res): Promise<void> => {
+  const id = parseInt(req.params["id"] ?? "");
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  try {
+    await db.delete(providerMinuteRatesTable).where(eq(providerMinuteRatesTable.id, id));
+    invalidateMinuteRatesCache();
+    res.status(204).send();
+  } catch (err) {
+    req.log.error({ err }, "admin/minute-rates DELETE failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ── Vobiz master wallet balance ───────────────────────────────────────────────
+
+router.get("/admin/vobiz-balance", async (req, res): Promise<void> => {
+  const authId    = process.env["VOBIZ_AUTH_ID"];
+  const authToken = process.env["VOBIZ_AUTH_TOKEN"];
+  if (!authId || !authToken) {
+    res.status(503).json({ error: "VOBIZ_AUTH_ID / VOBIZ_AUTH_TOKEN not configured on the server" });
+    return;
+  }
+  try {
+    const resp = await fetch(`https://api.vobiz.ai/api/v1/Account/${authId}/`, {
+      headers: {
+        "X-Auth-ID":    authId,
+        "X-Auth-Token": authToken,
+        "Accept":       "application/json",
+      },
+    });
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => "");
+      req.log.warn({ status: resp.status, body }, "Vobiz balance fetch failed");
+      res.status(502).json({ error: `Vobiz API returned ${resp.status}`, detail: body });
+      return;
+    }
+    const data = await resp.json() as Record<string, unknown>;
+    res.json({
+      cashCredits:    data["cash_credits"] ?? data["balance"] ?? data["credit_balance"] ?? null,
+      currency:       data["currency"] ?? "INR",
+      raw:            data,
+    });
+  } catch (err) {
+    req.log.error({ err }, "admin/vobiz-balance failed");
     res.status(500).json({ error: "Internal server error" });
   }
 });

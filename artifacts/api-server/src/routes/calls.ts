@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { randomBytes } from "crypto";
 import { eq, desc, and, sql, gte } from "drizzle-orm";
 import { db, callsTable, agentsTable, providersTable, usersTable, walletTransactionsTable, activityLogsTable, callTransfersTable } from "@workspace/db";
+import { getAgentRateCentsPerMin } from "../services/minute-rates.js";
 import {
   InitiateCallBody,
   InitiateOutboundCallBody,
@@ -95,13 +96,22 @@ router.post("/calls/outbound", async (req, res): Promise<void> => {
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
 
-  // Balance gate — block if wallet is empty
+  // Balance gate + max call duration limiter
+  let maxDurationSeconds: number | undefined;
   if (agent.userId) {
     const [user] = await db.select({ walletBalanceCents: usersTable.walletBalanceCents })
       .from(usersTable).where(eq(usersTable.clerkId, agent.userId));
     if (user && user.walletBalanceCents <= 0) {
       res.status(402).json({ error: "Insufficient balance. Please top up your wallet to start calls." });
       return;
+    }
+    // Cap call duration so the user can never spend more than their current balance
+    if (user && user.walletBalanceCents > 0) {
+      const agentRate = await getAgentRateCentsPerMin(agent);
+      if (agentRate > 0) {
+        const maxMinutes = Math.floor(user.walletBalanceCents / agentRate);
+        maxDurationSeconds = Math.max(60, maxMinutes * 60); // at least 60 s
+      }
     }
   }
 
@@ -134,6 +144,7 @@ router.post("/calls/outbound", async (req, res): Promise<void> => {
         fromNumber: cfg["fromNumber"]!, toNumber,
         webhookUrl: `${baseUrl}/api/webhooks/twilio/voice?agentId=${agentId}`,
         statusCallbackUrl: `${baseUrl}/api/webhooks/twilio/status`,
+        maxDurationSeconds,
       });
     } else if (provider === "plivo") {
       const cfg = providerRow.extraConfig ? JSON.parse(providerRow.extraConfig) as Record<string, string> : {};
@@ -143,6 +154,7 @@ router.post("/calls/outbound", async (req, res): Promise<void> => {
         authId: cfg["authId"]!, authToken: providerRow.apiKey,
         fromNumber: cfg["fromNumber"]!, toNumber,
         answerUrl: `${baseUrl}/api/webhooks/plivo/voice?agentId=${agentId}`,
+        maxDurationSeconds,
       });
     } else if (provider === "vobiz") {
       const cfg = providerRow.extraConfig ? JSON.parse(providerRow.extraConfig) as Record<string, string> : {};
@@ -156,6 +168,7 @@ router.post("/calls/outbound", async (req, res): Promise<void> => {
         fromNumber: cfg["fromNumber"]!, toNumber,
         answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${agentId}`,
         hangupUrl:  `${baseUrl}/api/webhooks/vobiz/status`,
+        maxDurationSeconds,
         // P2-B: pass AMD config when voicemail detection is enabled
         ...(amdEnabled && {
           machineDetection:    amdMode,
@@ -439,12 +452,12 @@ router.patch("/calls/:id/end", async (req, res): Promise<void> => {
   // Parse optional latency payload
   const latency = parseLatencyBody(req.body);
 
-  // Pre-compute billing cost so we can store costCents on the call record in one update
-  let callMeta: Record<string, unknown> = {};
-  try { callMeta = JSON.parse(existing.metadata ?? "{}"); } catch { /* ok */ }
-  const isPlatformTelephony = callMeta["platformTelephony"] === true;
-  const rateCentsPerMin = isPlatformTelephony ? 3.5 : 3;
-  const rateLabel       = isPlatformTelephony ? "$0.035" : "$0.030";
+  // Fetch agent early — needed for rate lookup and metrics update
+  const [agentForBilling] = await db.select().from(agentsTable).where(eq(agentsTable.id, existing.agentId));
+
+  // Compute per-minute rate from admin-set minute rates (falls back to 1 cent if no rates configured)
+  const rateCentsPerMin = agentForBilling ? await getAgentRateCentsPerMin(agentForBilling) : 1;
+  const rateLabel = `$${(rateCentsPerMin / 100).toFixed(3)}/min`;
   // Pricing: < 30 s → half the per-minute rate flat; ≥ 30 s → ceil(seconds/60) × full rate.
   const debitCents = durationSeconds <= 0
     ? 0
@@ -474,7 +487,7 @@ router.patch("/calls/:id/end", async (req, res): Promise<void> => {
     return;
   }
 
-  const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, call.agentId));
+  const agent = agentForBilling;
   if (agent) {
     const prevCount = agent.successfulCalls;
     const newSuccessful = prevCount + 1;
@@ -510,7 +523,7 @@ router.patch("/calls/:id/end", async (req, res): Promise<void> => {
         userId:      user.id,
         type:        "call_debit",
         amountCents: -debitCents,
-        description: `Call #${call.id} — ${billableMinutes} min × ${rateLabel}${isPlatformTelephony ? " (incl. platform telephony)" : ""}`,
+        description: `Call #${call.id} — ${billableMinutes} min × ${rateLabel}`,
         status:      "completed",
         callId:      call.id,
       });
