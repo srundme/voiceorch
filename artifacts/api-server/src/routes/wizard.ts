@@ -274,7 +274,7 @@ router.post("/wizard/generate-prompt", requireDbUser, async (req, res): Promise<
     return;
   }
 
-  const geminiKey = await getSetting("managed_gemini_key");
+  const geminiKey = (await getSetting("managed_gemini_key") ?? "").trim() || (process.env["GEMINI_API_KEY"] ?? "").trim();
   let callFlowSteps = "";
 
   if (geminiKey) {
@@ -360,7 +360,7 @@ router.post("/wizard/generate-call-flow", requireDbUser, async (req, res): Promi
 
   const nonEmpty = cleaned.filter((a) => a.answer.length > 0);
 
-  const geminiKey = (await getSetting("managed_gemini_key") ?? "").trim();
+  const geminiKey = (await getSetting("managed_gemini_key") ?? "").trim() || (process.env["GEMINI_API_KEY"] ?? "").trim();
   if (!geminiKey) {
     req.log.warn("managed_gemini_key not set in admin — call-flow preview unavailable");
     res.status(503).json({

@@ -13,6 +13,9 @@ import { handleTwilioWebSocket } from "./orchestration/telephony/twilio.js";
 import { handlePlivoWebSocket } from "./orchestration/telephony/plivo.js";
 import { handleVobizWebSocket } from "./orchestration/telephony/vobiz.js";
 import { handleWebCallWebSocket } from "./orchestration/telephony/webcall.js";
+import { db } from "@workspace/db";
+import { platformSettingsTable } from "@workspace/db";
+import { eq, sql } from "drizzle-orm";
 
 // Initialise the audio worker pool before any WebSocket connections arrive.
 // Both dev (build+start) and prod run from dist/, where esbuild emits the worker as
@@ -57,8 +60,23 @@ server.on("upgrade", (request, socket, head) => {
   });
 });
 
+async function seedGeminiKeyFromEnv(): Promise<void> {
+  const envKey = (process.env["GEMINI_API_KEY"] ?? "").trim();
+  if (!envKey) return;
+  try {
+    await db
+      .insert(platformSettingsTable)
+      .values({ key: "managed_gemini_key", value: envKey })
+      .onConflictDoNothing();
+    logger.info("seedGeminiKeyFromEnv: managed_gemini_key seeded from GEMINI_API_KEY env var (skipped if already set)");
+  } catch (err) {
+    logger.warn({ err }, "seedGeminiKeyFromEnv: failed to seed managed_gemini_key");
+  }
+}
+
 server.listen(port, () => {
   logger.info({ port }, "Server listening");
+  void seedGeminiKeyFromEnv();
   startCallbackPoller();
   startSpikeChecker();
   startAlertSweep();

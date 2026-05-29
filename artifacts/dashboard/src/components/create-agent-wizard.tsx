@@ -1104,7 +1104,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                       const COPY: Record<string, { title: string; body: string }> = {
                         gemini_key_missing: {
                           title: "AI call-flow generation isn't configured",
-                          body: "The Gemini API key is not set on the server. Ask an administrator to add the GEMINI_API_KEY environment variable so the wizard can generate a contextual call flow.",
+                          body: "The Gemini API key has not been set. Ask an administrator to add it in the Admin panel under Managed Stack Keys.",
                         },
                         no_active_template: {
                           title: "Master prompt template is missing",
