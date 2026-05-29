@@ -833,7 +833,25 @@ const ARUSHI_VOICE: CartesiaVoice = {
 // Only Arushi is a confirmed real Cartesia Indian voice — used until API fetch succeeds
 const CARTESIA_FALLBACK_VOICES: CartesiaVoice[] = [ARUSHI_VOICE];
 
-const PREVIEW_TEXT = "Hello! I'm your AI voice assistant. How can I help you today?";
+const PREVIEW_TEXTS: Record<string, string> = {
+  en:    "Hello! I'm your AI voice assistant. How can I help you today?",
+  hi:    "नमस्ते! मैं आपकी कैसे मदद कर सकता हूं?",
+  ta:    "வணக்கம்! நான் உங்களுக்கு எப்படி உதவலாம்?",
+  te:    "నమస్కారం! నేను మీకు ఎలా సహాయం చేయగలను?",
+  kn:    "ನಮಸ್ಕಾರ! ನಾನು ನಿಮಗೆ ಹೇಗೆ ಸಹಾಯ ಮಾಡಲಿ?",
+  mr:    "नमस्कार! मी तुमच्यासाठी काय करू शकतो?",
+  gu:    "નમસ્તે! હું તમારી કેવી રીતે મદદ કરી શકું?",
+  bn:    "নমস্কার! আমি আপনাকে কীভাবে সাহায্য করতে পারি?",
+  ml:    "ഹലോ! ഞാൻ നിങ്ങളെ എങ്ങനെ സഹായിക്കട്ടെ?",
+  es:    "¡Hola! Soy tu asistente de voz. ¿En qué puedo ayudarte?",
+  fr:    "Bonjour! Je suis votre assistant vocal. Comment puis-je vous aider?",
+  de:    "Hallo! Ich bin Ihr Sprachassistent. Wie kann ich Ihnen helfen?",
+  ar:    "مرحباً! أنا مساعدك الصوتي. كيف يمكنني مساعدتك اليوم؟",
+};
+function getPreviewText(lang: string): string {
+  const prefix = lang.split("-")[0] ?? "en";
+  return PREVIEW_TEXTS[lang] ?? PREVIEW_TEXTS[prefix] ?? PREVIEW_TEXTS["en"]!;
+}
 
 function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number; onDeleted: () => void; initialTab?: string }) {
   const queryClient = useQueryClient();
@@ -885,14 +903,14 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
   const [agentName, setAgentName]                           = useState("");
   const [agentType, setAgentType]                           = useState("general");
   const [systemPrompt, setSystemPrompt]                     = useState("");
-  const [greetingMessage, setGreetingMessage]               = useState("");
+  const [greetingMessage, setGreetingMessage]               = useState("Hello");
   const [webhookUrl, setWebhookUrl]                         = useState("");
   const [knowledgeBaseId, setKnowledgeBaseId]               = useState<number | null>(null);
 
   // ── Tab 2 — LLM ─────────────────────────────────────────────────
   const [llmProvider, setLlmProvider]                       = useState("");
   const [llmModel, setLlmModel]                             = useState("");
-  const [temperature, setTemperature]                       = useState(0.7);
+  const [temperature, setTemperature]                       = useState(0.10);
 
   // ── Tab 3 — Audio ───────────────────────────────────────────────
   const [agentTools, setAgentTools]                         = useState<AgentToolLocal[]>([]);
@@ -905,7 +923,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
   const [asrEndOfTurnTimeout, setAsrEndOfTurnTimeout]       = useState(5000);
   const [asrKeyterms, setAsrKeyterms]                       = useState("");
   const [asrSmartEndpointing, setAsrSmartEndpointing]       = useState("off");
-  const [asrAutoFallback, setAsrAutoFallback]               = useState(false);
+  const [asrAutoFallback, setAsrAutoFallback]               = useState(true);
   const [ttsProvider, setTtsProvider]                       = useState("");
   const [ttsModel, setTtsModel]                             = useState("");
   const [ttsVoice, setTtsVoice]                             = useState("");
@@ -917,9 +935,9 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
   const [telephony, setTelephony]                           = useState("");
 
   // ── Tab 4 — Engine ──────────────────────────────────────────────
-  const [backchannelingEnabled, setBackchannelingEnabled]   = useState(false);
+  const [backchannelingEnabled, setBackchannelingEnabled]   = useState(true);
   const [backchannelingFrequency, setBackchannelingFrequency] = useState(0.3);
-  const [noiseCancellationEnabled, setNoiseCancellationEnabled] = useState(false);
+  const [noiseCancellationEnabled, setNoiseCancellationEnabled] = useState(true);
   const [endCallPhrases, setEndCallPhrases]                 = useState("");
   const [inactivityMessage, setInactivityMessage]           = useState("");
 
@@ -963,7 +981,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
       const res = await apiFetch("/api/wizard/preview-voice", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ voiceId, text: PREVIEW_TEXT, modelId: ttsModel || "sonic-3.5" }),
+        body: JSON.stringify({ voiceId, text: getPreviewText(asrLanguage), modelId: ttsModel || "sonic-3.5" }),
       });
       if (!res.ok) throw new Error("preview failed");
       const blob = await res.blob();
@@ -976,7 +994,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
     } catch {
       // Fallback to browser TTS
       const voice = cartesiaVoices.find(v => v.id === voiceId);
-      const utt = new SpeechSynthesisUtterance(PREVIEW_TEXT);
+      const utt = new SpeechSynthesisUtterance(getPreviewText(asrLanguage));
       window.speechSynthesis.cancel();
       window.speechSynthesis.speak(utt);
       utt.onend = () => setVoicePlaying(null);
@@ -989,7 +1007,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
   const [silenceTimeout, setSilenceTimeout]                 = useState(30);
 
   // ── Tab 7 — Analytics ───────────────────────────────────────────
-  const [dispositionSchema, setDispositionSchema]           = useState<Array<{ key: string; label: string; type: string; required?: boolean; options?: string }>>([]);
+  const [dispositionSchema, setDispositionSchema]           = useState<Array<{ key: string; label: string; type: string; required?: boolean; options?: string; description?: string }>>([]);
 
   // ── Advanced (agentConfig JSONB) covers LLM/Audio/Engine/Call/Analytics/Inbound/WhatsApp advanced fields
   const [agentConfig, setAgentConfig]                       = useState<AgentCfg>({});
@@ -1012,12 +1030,12 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
     setAgentName(agent.name ?? "");
     setAgentType((a.agentType as string) ?? "general");
     setSystemPrompt(agent.systemPrompt ?? "");
-    setGreetingMessage(agent.greetingMessage ?? "");
+    setGreetingMessage(agent.greetingMessage ?? "Hello");
     setWebhookUrl((agent.webhookUrl ?? "") as string);
     setKnowledgeBaseId(agent.knowledgeBaseId ?? null);
     setLlmProvider(agent.llmProvider ?? "");
     setLlmModel(agent.llmModel ?? "");
-    setTemperature((agent.temperature ?? 0.7) as number);
+    setTemperature((agent.temperature ?? 0.10) as number);
     setAsrProvider(agent.asrProvider ?? "");
     setAsrModel(agent.asrModel ?? "");
     const LANG_NORM: Record<string, string> = {
@@ -1033,21 +1051,21 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
     setAsrEndOfTurnTimeout((agent.asrEndOfTurnTimeout ?? 5000) as number);
     setAsrKeyterms(agent.asrKeyterms ?? "");
     setAsrSmartEndpointing(agent.asrSmartEndpointing ?? "off");
-    setAsrAutoFallback(agent.asrAutoFallback ?? false);
+    setAsrAutoFallback(agent.asrAutoFallback ?? true);
     setTtsProvider(agent.ttsProvider ?? "");
     setTtsModel(agent.ttsModel ?? (agent.ttsProvider === "cartesia" ? "sonic-2" : ""));
     setTtsVoice((agent as unknown as Record<string, unknown>).ttsVoice as string ?? "");
     setTelephony(agent.telephonyProvider ?? "");
-    setBackchannelingEnabled(agent.backchannelingEnabled ?? false);
+    setBackchannelingEnabled(agent.backchannelingEnabled ?? true);
     setBackchannelingFrequency((agent.backchannelingFrequency ?? 0.3) as number);
-    setNoiseCancellationEnabled(agent.noiseCancellationEnabled ?? false);
+    setNoiseCancellationEnabled(agent.noiseCancellationEnabled ?? true);
     setEndCallPhrases(agent.endCallPhrases ?? "");
     setInactivityMessage(agent.inactivityMessage ?? "");
     setMaxDuration((agent.maxDuration ?? 300) as number);
     setSilenceTimeout((agent.silenceTimeoutSeconds ?? 30) as number);
     setDispositionSchema(
-      ((a.dispositionSchema as Array<{ key: string; label: string; type: string; required?: boolean; options?: string[] }> | undefined) ?? [])
-        .map(f => ({ ...f, options: f.options?.join(", ") ?? "" }))
+      ((a.dispositionSchema as Array<{ key: string; label: string; type: string; required?: boolean; options?: string[]; description?: string }> | undefined) ?? [])
+        .map(f => ({ ...f, options: f.options?.join(", ") ?? "", description: f.description ?? "" }))
     );
     const existingCfg = ((a.agentConfig as AgentCfg) ?? {}) as AgentCfg;
     const rawTools = (a.tools as AgentToolLocal[] | undefined) ?? [];
@@ -1097,6 +1115,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
             .map(f => ({
               key: f.key.trim(), label: f.label.trim(), type: f.type as "text" | "number" | "boolean" | "choice",
               required: f.required,
+              description: f.description?.trim() || undefined,
               options: f.type === "choice" && f.options ? f.options.split(",").map(s => s.trim()).filter(Boolean) : undefined,
             })),
           agentConfig: (() => {
@@ -1273,6 +1292,19 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                         {LANGUAGES.map(l => <SelectItem key={l.value} value={l.value} className="text-foreground text-xs">{l.label}</SelectItem>)}
                       </SelectContent>
                     </Select>
+                    {(() => {
+                      const secLangs: string[] = cfg.secondaryLanguages ?? (cfg.secondaryLanguage ? [cfg.secondaryLanguage as string] : []);
+                      if (!secLangs.length) return null;
+                      return (
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {secLangs.map((lang: string) => (
+                            <span key={lang} className="text-[10px] px-1.5 py-0.5 rounded bg-muted border border-border/60 text-muted-foreground">
+                              {LANG_LABEL[lang] ?? lang}
+                            </span>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
                 {/* Brain card */}
@@ -1483,7 +1515,6 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                 </div>
                 <SliderRow label="Confidence Threshold" desc="Discard transcripts below this score" value={asrConfidenceThreshold} onChange={v => { setAsrConfidenceThreshold(v); setDirty(true); }} min={0} max={1} step={0.01} />
                 <SliderRow label="End-of-Turn Timeout" desc="Max wait after speech ends" value={asrEndOfTurnTimeout} onChange={v => { setAsrEndOfTurnTimeout(v); setDirty(true); }} min={500} max={10000} step={100} unit="ms" />
-                <ToggleRow label="Background Denoising" desc="Filter background noise from caller audio" checked={asrBackgroundDenoising} onChange={v => { setAsrBackgroundDenoising(v); setDirty(true); }} />
                 <ToggleRow label="Auto Fallback" desc="Switch to backup STT if primary fails" checked={asrAutoFallback} onChange={v => { setAsrAutoFallback(v); setDirty(true); }} />
                 <div>
                   <p className="text-xs text-muted-foreground mb-1.5">Smart Endpointing</p>
@@ -1525,13 +1556,20 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">Voice</p>
                     <div className="flex gap-2">
-                      <Select value={ttsVoice || ARUSHI_VOICE.id} onValueChange={v => { setTtsVoice(v); setDirty(true); }}>
-                        <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground flex-1"><SelectValue placeholder={loadingCartesiaVoices ? "Loading voices…" : "Select voice"} /></SelectTrigger>
-                        <SelectContent className="bg-card border-border max-h-72">
-                          {loadingCartesiaVoices ? <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Loading…</div>
-                            : cartesiaVoices.map(v => <SelectItem key={v.id} value={v.id} className="text-foreground text-xs">{v.name} · {langLabel(v.language)}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
+                      {(() => {
+                        const langPrefix = (asrLanguage || "en").split("-")[0]!;
+                        const filtered = cartesiaVoices.filter(v => !v.language || v.language.split("-")[0] === langPrefix);
+                        const displayVoices = filtered.length > 0 ? filtered : cartesiaVoices;
+                        return (
+                          <Select value={ttsVoice || ARUSHI_VOICE.id} onValueChange={v => { setTtsVoice(v); setDirty(true); }}>
+                            <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground flex-1"><SelectValue placeholder={loadingCartesiaVoices ? "Loading voices…" : "Select voice"} /></SelectTrigger>
+                            <SelectContent className="bg-card border-border max-h-72">
+                              {loadingCartesiaVoices ? <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Loading…</div>
+                                : displayVoices.map(v => <SelectItem key={v.id} value={v.id} className="text-foreground text-xs">{v.name} · {langLabel(v.language)}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        );
+                      })()}
                       <button type="button" onClick={() => void previewVoice(ttsVoice || ARUSHI_VOICE.id)}
                         className="h-7 w-7 shrink-0 flex items-center justify-center rounded-md border border-border bg-card/70 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
                         {voicePlaying === (ttsVoice || ARUSHI_VOICE.id) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Volume2 className="h-3.5 w-3.5" />}
@@ -1804,7 +1842,6 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                     </div>
                     <SliderRow label="Confidence Threshold" desc="Discard transcripts below this score" value={asrConfidenceThreshold} onChange={v => { setAsrConfidenceThreshold(v); setDirty(true); }} min={0} max={1} step={0.01} />
                     <SliderRow label="End-of-Turn Timeout" desc="Max wait after speech ends" value={asrEndOfTurnTimeout} onChange={v => { setAsrEndOfTurnTimeout(v); setDirty(true); }} min={500} max={10000} step={100} unit="ms" />
-                    <ToggleRow label="Background Denoising" desc="Filter noise from caller audio" checked={asrBackgroundDenoising} onChange={v => { setAsrBackgroundDenoising(v); setDirty(true); }} />
                     <ToggleRow label="Auto Fallback" desc="Switch to backup STT if primary fails" checked={asrAutoFallback} onChange={v => { setAsrAutoFallback(v); setDirty(true); }} />
                   </>}
                   {activeDrawer === "llm" && <>
@@ -1973,7 +2010,6 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
               <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-4">
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Messages</p>
                 <div><p className="text-xs text-muted-foreground mb-1">Inactivity Message</p><Input value={inactivityMessage} onChange={e => { setInactivityMessage(e.target.value); setDirty(true); }} placeholder="Are you still there?" className="h-8 text-xs bg-card border-border text-foreground placeholder:text-muted-foreground" /></div>
-                <div><p className="text-xs text-muted-foreground mb-1">Cancellation Prompt</p><Textarea value={cfg.callCancellationPrompt ?? ""} onChange={e => setCfg({ callCancellationPrompt: e.target.value })} placeholder="What to say when cancelling…" rows={2} className="bg-card border-border text-foreground text-xs resize-none placeholder:text-muted-foreground" /></div>
               </div>
               <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-4">
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Voicemail / AMD</p>
@@ -2057,10 +2093,13 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                     <ClipboardList className="h-3.5 w-3.5 text-foreground" />
                     <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Disposition Fields</p>
                   </div>
-                  <button type="button" onClick={() => { setDispositionSchema(prev => [...prev, { key: "", label: "", type: "text", required: false, options: "" }]); setDirty(true); }} className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1"><Plus className="h-3 w-3" /> Add Field</button>
+                  <button type="button" onClick={() => { setDispositionSchema(prev => [...prev, { key: "", label: "", type: "text", required: false, options: "", description: "" }]); setDirty(true); }} className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1"><Plus className="h-3 w-3" /> Add Field</button>
                 </div>
                 {dispositionSchema.length === 0 ? (
-                  <p className="text-[11px] text-muted-foreground px-4 py-3">No fields defined. Fields are extracted from call transcripts by the LLM after each call.</p>
+                  <div className="px-4 py-4 space-y-1.5">
+                    <p className="text-[11px] text-muted-foreground">No fields defined yet.</p>
+                    <p className="text-[10px] text-muted-foreground/60">Disposition fields are automatically extracted from call transcripts by the AI after each call ends. For example: "Call Outcome" (choice: resolved / escalated / callback), "Customer Sentiment" (text), or "Appointment Booked" (yes/no).</p>
+                  </div>
                 ) : (
                   <div className="divide-y divide-border">
                     {dispositionSchema.map((field, i) => (
@@ -2074,6 +2113,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                           </Select>
                           <button type="button" onClick={() => { setDispositionSchema(prev => prev.filter((_, j) => j !== i)); setDirty(true); }} className="text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
                         </div>
+                        <input value={field.description ?? ""} onChange={e => { const n = [...dispositionSchema]; n[i] = { ...n[i]!, description: e.target.value }; setDispositionSchema(n); setDirty(true); }} placeholder="Instruction for AI — e.g. Identify whether the customer's issue was resolved, escalated, or requires a callback" className="w-full h-7 rounded-md bg-card border border-border text-foreground text-xs px-2.5 placeholder:text-muted-foreground focus:outline-none" />
                         {field.type === "choice" && <input value={field.options ?? ""} onChange={e => { const n = [...dispositionSchema]; n[i] = { ...n[i]!, options: e.target.value }; setDispositionSchema(n); setDirty(true); }} placeholder="Options: resolved, escalated, callback" className="w-full h-7 rounded-md bg-card border border-border text-foreground text-xs px-2.5 placeholder:text-muted-foreground focus:outline-none" />}
                       </div>
                     ))}

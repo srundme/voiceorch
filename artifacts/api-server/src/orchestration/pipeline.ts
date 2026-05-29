@@ -1030,16 +1030,31 @@ export class OrchestrationPipeline {
 
     // ── If LLM called a tool, execute it and skip TTS ──
     if (triggeredToolName) {
-      // Enqueue a brief filler so the caller hears something while the tool
-      // runs (tool calls can take 1–3 s — without this the caller hears dead silence).
+      // Push the assistant's tool-invocation turn to history BEFORE executing the tool.
+      // Without this, continueWithToolResult would see two consecutive "user" messages
+      // (the caller's speech + the tool result), which breaks Sarvam's strict turn
+      // alternation and confuses all LLMs lacking a tool-result role.
+      const assistantToolContent = llmResponse.trim() || `[calling tool: ${triggeredToolName}]`;
+      this.conversationHistory.push({ role: "assistant", content: assistantToolContent });
+
+      // Enqueue a brief filler (language-aware) so the caller hears something while
+      // the tool runs (tool calls can take 1–3 s — without this there is dead silence).
+      const TOOL_FILLERS: Record<string, string> = {
+        en: "One moment…", hi: "एक क्षण…", ta: "ஒரு நிமிடம்…",
+        te: "ఒక్క నిమిషం…", kn: "ಒಂದು ಕ್ಷಣ…", mr: "एक क्षण…",
+        gu: "એક ક્ષણ…", bn: "একটু অপেক্ষা করুন…", ml: "ഒരു നിമിഷം…",
+        es: "Un momento…", fr: "Un instant…", de: "Einen Moment…", ar: "لحظة…",
+      };
+      const langPrefix = (this.agent.language ?? "en").split("-")[0] ?? "en";
+      const filler = TOOL_FILLERS[langPrefix] ?? TOOL_FILLERS["en"]!;
       if (!this.closed && !this.bargeInRequested) {
-        enqueue("One moment…");
+        enqueue(filler);
       }
       allEnqueued = true;
       const finalWake = wakePlayer as (() => void) | null;
       wakePlayer = null;
       if (finalWake) finalWake();
-      await playPromise; // plays "One moment…" (and any earlier backchannel) before continuing
+      await playPromise; // plays filler (and any earlier backchannel) before continuing
       const toolResult = await this.handleToolCall(triggeredToolName, triggeredToolArgs);
       if (toolResult !== undefined) {
         await this.continueWithToolResult(triggeredToolName, toolResult);

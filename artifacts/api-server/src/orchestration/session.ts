@@ -79,10 +79,35 @@ export async function createSession(params: {
   // Read agentConfig JSONB for advanced settings
   const agentCfg = (agent.agentConfig ?? {}) as Record<string, unknown>;
 
+  // Build effective system prompt with date/time context + strict language enforcement
+  const LANG_NAMES: Record<string, string> = {
+    "en-US": "English", "en-GB": "English", "en-IN": "English", "en": "English",
+    "hi": "Hindi", "ta": "Tamil", "ta-IN": "Tamil",
+    "te": "Telugu", "te-IN": "Telugu", "kn": "Kannada", "kn-IN": "Kannada",
+    "mr": "Marathi", "mr-IN": "Marathi", "gu": "Gujarati", "gu-IN": "Gujarati",
+    "bn": "Bengali", "bn-IN": "Bengali", "ml": "Malayalam", "ml-IN": "Malayalam",
+    "es": "Spanish", "es-MX": "Spanish (Mexico)", "fr": "French", "de": "German",
+    "it": "Italian", "pt-BR": "Portuguese (Brazil)", "ja": "Japanese",
+    "ko": "Korean", "zh": "Mandarin Chinese", "ar": "Arabic",
+  };
+  const nowIST = new Date();
+  const dateCtxParts = nowIST.toLocaleDateString("en-IN", {
+    weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Kolkata",
+  });
+  const timeCtxParts = nowIST.toLocaleTimeString("en-IN", {
+    hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata",
+  });
+  let effectiveSystemPrompt = agent.generatedPrompt ?? agent.systemPrompt;
+  effectiveSystemPrompt += `\n\n[DATE/TIME CONTEXT] Today is ${dateCtxParts}. Current time is ${timeCtxParts} IST.`;
+  if (agent.language) {
+    const langName = LANG_NAMES[agent.language] ?? agent.language;
+    effectiveSystemPrompt += `\n\n[STRICT LANGUAGE RULE] You MUST respond ONLY in ${langName} at ALL times. Never switch to any other language under any circumstances, even if the caller speaks a different language. Always reply in ${langName} regardless of what language the caller uses.`;
+  }
+
   const agentConfig: AgentConfig = {
     id: agent.id,
     name: agent.name,
-    systemPrompt: agent.generatedPrompt ?? agent.systemPrompt,
+    systemPrompt: effectiveSystemPrompt,
     temperature: agent.temperature ?? 0.5,
     maxDuration: agent.maxDuration ?? 600,
     asrProvider: agent.asrProvider,
@@ -130,7 +155,7 @@ export async function createSession(params: {
     // P1-C: Webhook HMAC secret
     webhookSecret: (agentCfg["webhookSecret"] as string | undefined) ?? null,
     // P1-D: VAD / Barge-in tuning (defaults match the hardcoded pipeline constants)
-    vadSilenceMs:           (agentCfg["vadSilenceMs"]           as number  | undefined) ?? 250,
+    vadSilenceMs:           (agentCfg["vadSilenceMs"]           as number  | undefined) ?? 2000,
     bargeInEnabled:         (agentCfg["bargeInEnabled"]         as boolean | undefined) ?? true,
     bargeInEnergyThreshold: (agentCfg["bargeInEnergyThreshold"] as number  | undefined) ?? 1200,
     bargeInMinFrames:       (agentCfg["bargeInMinFrames"]       as number  | undefined) ?? 4,

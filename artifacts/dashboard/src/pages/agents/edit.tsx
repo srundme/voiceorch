@@ -176,11 +176,11 @@ export default function AgentEdit() {
       name: "", description: "", asrProvider: "azure", asrModel: "",
       llmProvider: "openai", llmModel: "", ttsProvider: "elevenlabs",
       ttsVoice: "", ttsModel: "", telephonyProvider: "twilio",
-      systemPrompt: "", temperature: 0.7, maxDuration: 600,
-      greetingMessage: "", endCallPhrases: "", silenceTimeoutSeconds: 30,
-      language: "en-US", backchannelingEnabled: false, backchannelingFrequency: 0.5,
-      webhookUrl: "", webhookSecret: "", noiseCancellationEnabled: false,
-      promptVariables: [], vadSilenceMs: 250, bargeInEnabled: true, bargeInEnergyThreshold: 1200, bargeInMinFrames: 4,
+      systemPrompt: "", temperature: 0.10, maxDuration: 300,
+      greetingMessage: "Hello", endCallPhrases: "", silenceTimeoutSeconds: 30,
+      language: "en-US", backchannelingEnabled: true, backchannelingFrequency: 0.5,
+      webhookUrl: "", webhookSecret: "", noiseCancellationEnabled: true,
+      promptVariables: [], vadSilenceMs: 2000, bargeInEnabled: true, bargeInEnergyThreshold: 1200, bargeInMinFrames: 4,
       tools: [],
       dispositionSchema: [],
     },
@@ -219,19 +219,19 @@ export default function AgentEdit() {
       ttsModel:          agent.ttsModel || TTS_MODELS[agent.ttsProvider]?.[0]?.value || "",
       telephonyProvider: agent.telephonyProvider,
       systemPrompt:      agent.systemPrompt,
-      temperature:       agent.temperature ?? 0.7,
-      maxDuration:       agent.maxDuration ?? 600,
-      greetingMessage:         agent.greetingMessage ?? "",
+      temperature:       agent.temperature ?? 0.10,
+      maxDuration:       agent.maxDuration ?? 300,
+      greetingMessage:         agent.greetingMessage ?? "Hello",
       endCallPhrases:          agent.endCallPhrases ?? "",
       silenceTimeoutSeconds:   agent.silenceTimeoutSeconds ?? 30,
       language:                agent.language ?? "en-US",
-      backchannelingEnabled:    agent.backchannelingEnabled ?? false,
+      backchannelingEnabled:    agent.backchannelingEnabled ?? true,
       backchannelingFrequency:  agent.backchannelingFrequency ?? 0.5,
       webhookUrl:               agent.webhookUrl ?? "",
       webhookSecret:            ((agent as any).agentConfig?.webhookSecret as string | undefined) ?? "",
-      noiseCancellationEnabled: agent.noiseCancellationEnabled ?? false,
+      noiseCancellationEnabled: agent.noiseCancellationEnabled ?? true,
       promptVariables:          (((agent as any).agentConfig?.promptVariables ?? []) as AgentFormValues["promptVariables"]),
-      vadSilenceMs:             ((agent as any).agentConfig?.vadSilenceMs as number | undefined) ?? 250,
+      vadSilenceMs:             ((agent as any).agentConfig?.vadSilenceMs as number | undefined) ?? 2000,
       bargeInEnabled:           ((agent as any).agentConfig?.bargeInEnabled as boolean | undefined) ?? true,
       bargeInEnergyThreshold:   ((agent as any).agentConfig?.bargeInEnergyThreshold as number | undefined) ?? 1200,
       bargeInMinFrames:         ((agent as any).agentConfig?.bargeInMinFrames as number | undefined) ?? 4,
@@ -729,7 +729,7 @@ export default function AgentEdit() {
                         value={field.value ?? 250}
                         onChange={e => field.onChange(parseInt(e.target.value, 10))} />
                     </FormControl>
-                    <FormDescription className="text-[11px]">Silence before STT flushes. Default: 250 ms</FormDescription>
+                    <FormDescription className="text-[11px]">Silence before STT flushes. Default: 2000 ms</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )} />
