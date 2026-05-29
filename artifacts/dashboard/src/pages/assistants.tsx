@@ -49,7 +49,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { useToast } from "@/hooks/use-toast";
-import { formatApiError } from "@/lib/format-api-error";
+import { formatApiError, isKycError } from "@/lib/format-api-error";
 import { format } from "date-fns";
 import { AgentMetricsBar } from "@/components/agent-metrics-bar";
 
@@ -856,6 +856,7 @@ function getPreviewText(lang: string): string {
 function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number; onDeleted: () => void; initialTab?: string }) {
   const queryClient = useQueryClient();
   const { getToken } = useAuth();
+  const [, navigate] = useLocation();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState(initialTab ?? "overview");
   const [outboundDialogOpen, setOutboundDialogOpen] = useState(false);
@@ -2176,7 +2177,14 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                 { data: { agentId: agent.id, toNumber: toNumber.trim(), webhookBaseUrl: window.location.origin } },
                 {
                   onSuccess: () => { toast({ title: "Call initiated", description: `Dialing ${toNumber} via ${agent.name}.` }); setOutboundDialogOpen(false); setToNumber(""); },
-                  onError: (err: unknown) => { toast({ title: "Call failed", description: formatApiError(err), variant: "destructive" }); },
+                  onError: (err: unknown) => {
+                    if (isKycError(err)) {
+                      toast({ title: "Verification required", description: "Complete identity verification before making telephony calls.", variant: "destructive" });
+                      navigate("/app/kyc");
+                    } else {
+                      toast({ title: "Call failed", description: formatApiError(err), variant: "destructive" });
+                    }
+                  },
                 }
               )}>
               {initiateOutbound.isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Dialing…</> : <><PhoneOutgoing className="h-4 w-4 mr-2" /> Call Now</>}

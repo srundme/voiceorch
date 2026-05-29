@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Search, Plus, Filter, MoreHorizontal, Settings2, PlayCircle, BarChart2, Phone, Users, Pencil, TrendingUp, PhoneCall, IndianRupee } from "lucide-react";
 import { 
   useListAgents, 
@@ -30,7 +30,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
-import { formatApiError } from "@/lib/format-api-error";
+import { formatApiError, isKycError } from "@/lib/format-api-error";
 
 export default function AgentsList() {
   const [search, setSearch] = useState("");
@@ -38,6 +38,7 @@ export default function AgentsList() {
   const [toNumber, setToNumber] = useState("");
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   
   const { data: agents, isLoading } = useListAgents({
     query: { queryKey: getListAgentsQueryKey() }
@@ -61,7 +62,12 @@ export default function AgentsList() {
           setToNumber("");
         },
         onError: (err: unknown) => {
-          toast({ title: "Error", description: formatApiError(err), variant: "destructive" });
+          if (isKycError(err)) {
+            toast({ title: "Verification required", description: "Complete identity verification before making telephony calls.", variant: "destructive" });
+            navigate("/app/kyc");
+          } else {
+            toast({ title: "Error", description: formatApiError(err), variant: "destructive" });
+          }
         },
       }
     );

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { Link, useParams } from "wouter";
+import { Link, useParams, useLocation } from "wouter";
 import { format, parseISO } from "date-fns";
 import {
   ArrowLeft, Settings2, Activity, Phone, BarChart2, Clock,
@@ -26,7 +26,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { formatApiError } from "@/lib/format-api-error";
+import { formatApiError, isKycError } from "@/lib/format-api-error";
 
 /* ── Web Call Panel ───────────────────────────────────────────────────────── */
 
@@ -389,6 +389,7 @@ export default function AgentDetail() {
   });
 
   const outboundCall = useInitiateOutboundCall();
+  const [, navigate] = useLocation();
 
   function handleMakeCall() {
     if (!toNumber.trim()) return;
@@ -401,7 +402,12 @@ export default function AgentDetail() {
           setToNumber("");
         },
         onError: (err: unknown) => {
-          toast({ title: "Call failed", description: formatApiError(err), variant: "destructive" });
+          if (isKycError(err)) {
+            toast({ title: "Verification required", description: "Complete identity verification before making telephony calls.", variant: "destructive" });
+            navigate("/app/kyc");
+          } else {
+            toast({ title: "Call failed", description: formatApiError(err), variant: "destructive" });
+          }
         },
       }
     );

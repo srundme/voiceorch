@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { randomBytes } from "crypto";
 import { eq, desc, and, sql, gte } from "drizzle-orm";
-import { db, callsTable, agentsTable, providersTable, usersTable, walletTransactionsTable, activityLogsTable, callTransfersTable } from "@workspace/db";
+import { db, callsTable, agentsTable, providersTable, usersTable, walletTransactionsTable, activityLogsTable, callTransfersTable, vobizAccountsTable } from "@workspace/db";
 import { getAgentRateCentsPerMin } from "../services/minute-rates.js";
 import {
   InitiateCallBody,
@@ -95,6 +95,21 @@ router.post("/calls/outbound", async (req, res): Promise<void> => {
 
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+
+  // KYC gate — telephony calls require completed identity verification
+  if (agent.userId) {
+    const [kycAccount] = await db
+      .select({ kycStatus: vobizAccountsTable.kycStatus })
+      .from(vobizAccountsTable)
+      .where(eq(vobizAccountsTable.userId, agent.userId));
+    if (!kycAccount || kycAccount.kycStatus !== "completed") {
+      res.status(403).json({
+        error: "Identity verification is required before making telephony calls. Please complete KYC in the Verification section.",
+        code: "KYC_REQUIRED",
+      });
+      return;
+    }
+  }
 
   // Balance gate + max call duration limiter
   let maxDurationSeconds: number | undefined;

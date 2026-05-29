@@ -52,6 +52,18 @@ export function formatApiError(err: unknown): string {
 }
 
 /**
+ * Returns true when the API responded with a KYC_REQUIRED error code (403),
+ * indicating the user must complete identity verification before proceeding.
+ */
+export function isKycError(err: unknown): boolean {
+  if (err instanceof ApiError) {
+    const data = err.data as (ApiErrorData & { code?: string }) | null;
+    return data?.code === "KYC_REQUIRED";
+  }
+  return false;
+}
+
+/**
  * Maps Zod validation issues from an API error to a flat record of
  * `fieldPath → errorMessage`. Nested paths (e.g. `["tools", 0, "name"]`) are
  * joined with dots so they match react-hook-form field names.
