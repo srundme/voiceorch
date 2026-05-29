@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { Phone, Plus, Trash2, Link2, Link2Off, Search, Loader2, Globe, AlertCircle, GitFork, IndianRupee, ShieldCheck, ShieldAlert, ExternalLink, CheckCircle2 } from "lucide-react";
+import { Phone, Plus, Trash2, Link2, Link2Off, Search, Loader2, Globe, AlertCircle, GitFork, IndianRupee, ShieldCheck, ShieldAlert, ExternalLink, CheckCircle2, Lock } from "lucide-react";
 import {
   useListPhoneNumbers,
   useListAvailablePhoneNumbers,
@@ -60,7 +60,6 @@ function KycBanner() {
   const { data: kycData, isLoading } = useGetKycStatus({ query: { queryKey: getGetKycStatusQueryKey() } });
   const startKyc = useStartKyc();
 
-  // Refresh KYC status whenever the user returns to this tab
   useEffect(() => {
     function handleFocus() {
       void queryClient.invalidateQueries({ queryKey: getGetKycStatusQueryKey() });
@@ -117,19 +116,19 @@ function KycBanner() {
         : <ShieldAlert className="h-4 w-4 text-zinc-500 mt-0.5 shrink-0" />
       }
       <div className="flex-1 space-y-1">
-        <p className={`font-medium ${isFailed ? "text-foreground" : "text-foreground"}`}>
+        <p className="font-medium text-foreground">
           {isFailed
             ? "Identity verification failed"
             : hasActiveSession
               ? "Identity verification in progress"
               : "Identity verification required"}
         </p>
-        <p className={`text-xs leading-relaxed ${isFailed ? "text-foreground/70" : "text-foreground/70"}`}>
+        <p className="text-xs leading-relaxed text-foreground/70">
           {isFailed
             ? "Your KYC verification was unsuccessful. Common reasons include a name mismatch or OTP failure. Click below to try again."
             : hasActiveSession
               ? "A verification session is open. If you closed the tab, click 'Resume Verification' to start a fresh session."
-              : "Indian DID numbers require Aadhaar verification (PAN + Aadhaar OTP for individuals, PAN + GSTIN for businesses). No document uploads — Vobiz uses government APIs."}
+              : "Indian DID numbers require Aadhaar verification (PAN + Aadhaar OTP for individuals, PAN + GSTIN for businesses). No document uploads — verified instantly via government APIs."}
         </p>
       </div>
       <Button
@@ -149,6 +148,54 @@ function KycBanner() {
         {hasActiveSession ? "Resume Verification" : "Verify Identity"}
       </Button>
     </div>
+  );
+}
+
+// ── KYC Gate Dialog ───────────────────────────────────────────────────────────
+// Shown when user tries to buy a number before completing KYC.
+
+function KycGateDialog({ onClose, onStartKyc, isPending }: {
+  onClose: () => void;
+  onStartKyc: () => void;
+  isPending: boolean;
+}) {
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Lock className="h-4 w-4" /> Identity Verification Required
+          </DialogTitle>
+          <DialogDescription>
+            You must complete KYC before purchasing a phone number.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-1">
+          <div className="flex items-start gap-3 p-3 rounded-lg border border-zinc-500/20 bg-zinc-500/5 text-sm">
+            <ShieldAlert className="h-4 w-4 text-zinc-400 mt-0.5 shrink-0" />
+            <div className="space-y-1 text-foreground/80 text-xs leading-relaxed">
+              <p className="text-foreground font-medium text-sm">Why is this required?</p>
+              <p>Indian telecom regulations (DoT) mandate Aadhaar-based identity verification before a DID number can be provisioned. This is a one-time process.</p>
+              <p className="mt-1">You'll need: <span className="text-foreground">PAN card + Aadhaar OTP</span> (individuals) or <span className="text-foreground">PAN + GSTIN</span> (businesses). No document uploads — verified instantly via government APIs.</p>
+            </div>
+          </div>
+        </div>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button
+            className="gap-1.5"
+            onClick={onStartKyc}
+            disabled={isPending}
+          >
+            {isPending
+              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              : <ExternalLink className="h-3.5 w-3.5" />
+            }
+            Start Verification
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -274,7 +321,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
           if (code === "KYC_REQUIRED") {
             toast({
               title: "Identity verification required",
-              description: "This number requires Aadhaar verification. Complete KYC first using the banner on the Phone Numbers page.",
+              description: "Complete KYC verification first using the banner on the Phone Numbers page.",
               variant: "destructive",
             });
             onClose();
@@ -309,13 +356,17 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
               </div>
             )}
             <div className="flex justify-between px-4 py-2.5">
+              <span className="text-muted-foreground">Provider</span>
+              <span className="text-foreground font-medium">Airtel</span>
+            </div>
+            <div className="flex justify-between px-4 py-2.5">
               <span className="text-muted-foreground">Monthly fee</span>
               <span className="font-semibold text-foreground">{totalCents > 0 ? `₹${(totalCents / 100).toFixed(0)}/mo` : "Free"}</span>
             </div>
           </div>
           <div className="flex items-start gap-3 p-3 rounded-lg border border-zinc-500/20 bg-zinc-500/5 text-foreground text-xs">
             <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-            <span>Setup fee + first month's fee will be deducted from your wallet immediately. This action cannot be undone.</span>
+            <span>Setup fee + first month's fee will be deducted from your SnapServe wallet immediately. This action cannot be undone.</span>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirming(false)}>Back</Button>
@@ -339,7 +390,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
         <DialogHeader>
           <DialogTitle>Get a Phone Number</DialogTitle>
           <DialogDescription>
-            Browse Vobiz's live number inventory. Pricing varies by country and number type — fees are deducted from your wallet.
+            Browse live number inventory from Airtel. Pricing varies by country and number type — fees are deducted from your SnapServe wallet.
           </DialogDescription>
         </DialogHeader>
 
@@ -579,21 +630,25 @@ function RoutingRulesDialog({ number, onClose }: { number: PhoneNumber; onClose:
 export default function PhoneNumbersPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [location, setLocation] = useLocation();
+  const [, setLocation] = useLocation();
   const { data: numbers, isLoading } = useListPhoneNumbers({ query: { queryKey: getListPhoneNumbersQueryKey() } });
+  const { data: kycData, isLoading: kycLoading } = useGetKycStatus({ query: { queryKey: getGetKycStatusQueryKey() } });
+  const startKyc = useStartKyc();
   const release = useReleasePhoneNumber();
   const [buyOpen, setBuyOpen] = useState(false);
+  const [kycGateOpen, setKycGateOpen] = useState(false);
   const [assignTarget, setAssignTarget] = useState<PhoneNumber | null>(null);
   const [releaseTarget, setReleaseTarget] = useState<PhoneNumber | null>(null);
   const [routingTarget, setRoutingTarget] = useState<PhoneNumber | null>(null);
 
-  // Handle return from Vobiz KYC widget redirect
+  const kycCompleted = kycData?.kycStatus === "completed";
+
+  // Handle return from KYC redirect
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const kyc = params.get("kyc");
     if (!kyc) return;
 
-    // Strip the query param so refreshing doesn't re-trigger
     setLocation("/phone-numbers", { replace: true });
 
     if (kyc === "kyc_completed" || kyc === "completed") {
@@ -603,7 +658,7 @@ export default function PhoneNumbersPage() {
         description: (
           <div className="flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4 text-zinc-500 shrink-0" />
-            <span>Your Aadhaar verification is complete. You can now purchase Indian DID numbers.</span>
+            <span>Your verification is complete. You can now purchase phone numbers.</span>
           </div>
         ) as any,
       });
@@ -616,6 +671,36 @@ export default function PhoneNumbersPage() {
       });
     }
   }, []);
+
+  function handleGetNumber() {
+    if (!kycLoading && !kycCompleted) {
+      setKycGateOpen(true);
+    } else {
+      setBuyOpen(true);
+    }
+  }
+
+  function handleStartKycFromGate() {
+    startKyc.mutate(undefined, {
+      onSuccess: (data) => {
+        queryClient.invalidateQueries({ queryKey: getGetKycStatusQueryKey() });
+        setKycGateOpen(false);
+        if (data.widgetUrl) {
+          window.open(data.widgetUrl, "_blank", "noopener,noreferrer");
+          toast({
+            title: "KYC verification opened",
+            description: "Complete your identity verification in the new tab, then come back to purchase a number.",
+          });
+        } else if (data.status === "kyc_completed") {
+          toast({ title: "Already verified!", description: "Your identity is already verified." });
+          setBuyOpen(true);
+        }
+      },
+      onError: (err: unknown) => {
+        toast({ title: "Verification failed to start", description: formatApiError(err), variant: "destructive" });
+      },
+    });
+  }
 
   function handleRelease(n: PhoneNumber) {
     release.mutate(
@@ -637,11 +722,11 @@ export default function PhoneNumbersPage() {
       <div className="border-b border-border px-6 py-4 flex items-center gap-3 shrink-0">
         <Phone className="w-5 h-5 text-foreground" />
         <h1 className="font-semibold text-foreground text-lg">Phone Numbers</h1>
-        <span className="text-xs text-muted-foreground ml-auto">Powered by Vobiz · live inventory</span>
+        <span className="text-xs text-muted-foreground ml-auto">Powered by Airtel</span>
         <Button
           size="sm"
           className="h-8 gap-1.5 bg-black/85 hover:bg-black/90 text-foreground"
-          onClick={() => setBuyOpen(true)}
+          onClick={handleGetNumber}
         >
           <Plus className="h-3.5 w-3.5" /> Get Number
         </Button>
@@ -656,7 +741,7 @@ export default function PhoneNumbersPage() {
           <Globe className="h-5 w-5 text-foreground mt-0.5 shrink-0" />
           <div className="text-sm text-muted-foreground space-y-0.5">
             <p className="text-foreground font-medium">Self-serve number provisioning</p>
-            <p>Search Vobiz's live inventory across 130+ countries. Purchase a number and it's immediately active — assign it to any agent and inbound calls route straight to its pipeline. <span className="text-muted-foreground">Releasing returns the number to Vobiz inventory.</span></p>
+            <p>Search live inventory across 130+ countries via Airtel. Purchase a number and it's immediately active — assign it to any agent and inbound calls route straight to its pipeline. <span className="text-muted-foreground">Releasing returns the number to inventory.</span></p>
           </div>
         </div>
 
@@ -675,7 +760,7 @@ export default function PhoneNumbersPage() {
           <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
             <Phone className="w-12 h-12 mb-4 opacity-30" />
             <p className="text-sm mb-3">No phone numbers yet.</p>
-            <Button size="sm" className="gap-1.5 bg-black/85 hover:bg-black/90 text-foreground" onClick={() => setBuyOpen(true)}>
+            <Button size="sm" className="gap-1.5 bg-black/85 hover:bg-black/90 text-foreground" onClick={handleGetNumber}>
               <Plus className="h-3.5 w-3.5" /> Get your first number
             </Button>
           </div>
@@ -748,41 +833,44 @@ export default function PhoneNumbersPage() {
             ))}
           </div>
         )}
+
+        {/* Release confirm */}
+        {releaseTarget && (
+          <Dialog open onOpenChange={() => setReleaseTarget(null)}>
+            <DialogContent className="sm:max-w-sm">
+              <DialogHeader>
+                <DialogTitle>Release Number</DialogTitle>
+                <DialogDescription>
+                  Return <span className="font-mono text-foreground">{releaseTarget.number}</span> to inventory? This cannot be undone — you'll lose this number permanently.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setReleaseTarget(null)}>Cancel</Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => handleRelease(releaseTarget)}
+                  disabled={release.isPending}
+                >
+                  {release.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                  Release
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
       {/* Dialogs */}
+      {kycGateOpen && (
+        <KycGateDialog
+          onClose={() => setKycGateOpen(false)}
+          onStartKyc={handleStartKycFromGate}
+          isPending={startKyc.isPending}
+        />
+      )}
       {buyOpen && <BuyNumberDialog onClose={() => setBuyOpen(false)} />}
       {assignTarget && <AssignDialog number={assignTarget} onClose={() => setAssignTarget(null)} />}
       {routingTarget && <RoutingRulesDialog number={routingTarget} onClose={() => setRoutingTarget(null)} />}
-
-      {/* Release confirmation */}
-      {releaseTarget && (
-        <Dialog open onOpenChange={() => setReleaseTarget(null)}>
-          <DialogContent className="sm:max-w-sm">
-            <DialogHeader>
-              <DialogTitle>Release number?</DialogTitle>
-              <DialogDescription>
-                <span className="font-mono text-foreground">{releaseTarget.number}</span> will be returned to Vobiz inventory. This cannot be undone — someone else may claim it.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="flex items-start gap-2.5 p-3 rounded-lg border border-border bg-muted/40 text-foreground text-xs">
-              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-              Any active calls or agent assignments using this number will stop working.
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setReleaseTarget(null)}>Cancel</Button>
-              <Button
-                variant="destructive"
-                onClick={() => handleRelease(releaseTarget)}
-                disabled={release.isPending}
-              >
-                {release.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
-                Release Number
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
     </div>
   );
 }

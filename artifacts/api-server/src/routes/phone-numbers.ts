@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
-import { db, usersTable, walletTransactionsTable, phoneNumbersTable, agentsTable } from "@workspace/db";
+import { db, usersTable, walletTransactionsTable, phoneNumbersTable, agentsTable, vobizAccountsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logActivity } from "../lib/activity.js";
 import {
@@ -15,6 +15,15 @@ import {
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
+
+// ── Pricing ───────────────────────────────────────────────────────────────────
+// SnapServe adds a ₹250/mo reseller margin on top of the carrier's monthly fee.
+// The original carrier price is never surfaced to end-users.
+const RESELLER_MARKUP_CENTS = 25000; // ₹250 in paisa
+
+function addMarkup(monthlyRateCents: number): number {
+  return monthlyRateCents > 0 ? monthlyRateCents + RESELLER_MARKUP_CENTS : 0;
+}
 
 // ── Platform-level Vobiz credentials ────────────────────────────────────────
 function getPlatformVobizCreds() {
@@ -192,7 +201,8 @@ router.get("/phone-numbers/available", requireAuth, async (req, res): Promise<vo
         countryCode:      n.country.toUpperCase(),
         region:           n.region ?? null,
         numberType:       "local" as const,
-        monthlyRateCents: Math.round((n.monthly_fee ?? 0) * 100),
+        // Apply reseller markup — never expose carrier's raw price to end-users
+        monthlyRateCents: addMarkup(Math.round((n.monthly_fee ?? 0) * 100)),
       }));
 
     res.json(ListAvailablePhoneNumbersResponse.parse(available));
@@ -213,6 +223,21 @@ router.post("/phone-numbers/purchase", requireAuth, async (req, res): Promise<vo
 
   const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
+
+  // KYC gate — Indian numbers require completed identity verification
+  if (!countryCode || countryCode.toUpperCase() === "IN") {
+    const [kycAccount] = await db
+      .select({ kycStatus: vobizAccountsTable.kycStatus })
+      .from(vobizAccountsTable)
+      .where(eq(vobizAccountsTable.userId, clerkId));
+    if (!kycAccount || kycAccount.kycStatus !== "completed") {
+      res.status(403).json({
+        error: "Identity verification required to purchase Indian numbers.",
+        code: "KYC_REQUIRED",
+      });
+      return;
+    }
+  }
 
   // Check not already claimed by another user
   const [existing] = await db.select({ id: phoneNumbersTable.id }).from(phoneNumbersTable)
@@ -243,19 +268,23 @@ router.post("/phone-numbers/purchase", requireAuth, async (req, res): Promise<vo
     return;
   }
 
-  // 2. Deduct cost from user's SnapServe wallet (setup_fee + monthly_fee in paisa → cents)
-  const setupCents   = Math.round((vobizNumber.setup_fee   ?? 0) * 100);
-  const monthlyCents = Math.round((vobizNumber.monthly_fee ?? 0) * 100);
-  const totalCents   = setupCents + monthlyCents;
+  // 2. Deduct marked-up cost from user's SnapServe wallet.
+  //    Vobiz already deducted the carrier's raw cost from the platform master wallet above.
+  //    SnapServe charges the user the marked-up price; the margin stays with the platform.
+  const setupCents          = Math.round((vobizNumber.setup_fee   ?? 0) * 100);
+  const carrierMonthlyCents = Math.round((vobizNumber.monthly_fee ?? 0) * 100);
+  const markedUpMonthlyCents = addMarkup(carrierMonthlyCents);
+  // User is charged: setup fee (at cost) + first month at marked-up rate
+  const totalCents = setupCents + markedUpMonthlyCents;
 
   if (totalCents > 0 && user.walletBalanceCents < totalCents) {
     // Rollback: release the number back since we can't charge the user
     try {
       await releaseVobizNumber(authId!, authToken!, number);
     } catch (rollbackErr) {
-      req.log.error({ rollbackErr, number }, "Failed to rollback Vobiz number after wallet check failure");
+      req.log.error({ rollbackErr, number }, "Failed to rollback number after wallet check failure");
     }
-    const totalDisplay = `$${(totalCents / 100).toFixed(2)}`;
+    const totalDisplay = `₹${(totalCents / 100).toFixed(0)}`;
     res.status(402).json({ error: `Insufficient balance. This number costs ${totalDisplay} (setup + first month). Top up your wallet.` });
     return;
   }
@@ -281,7 +310,8 @@ router.post("/phone-numbers/purchase", requireAuth, async (req, res): Promise<vo
     numberType:       numberType ?? "local",
     vobizNumberId:    vobizNumber.id,
     status:           "active",
-    monthlyRateCents: Math.round((vobizNumber.monthly_fee ?? 0) * 100),
+    // Store the marked-up monthly rate — this is what we show and charge the user
+    monthlyRateCents: markedUpMonthlyCents,
   }).returning();
 
   await logActivity({
@@ -289,10 +319,10 @@ router.post("/phone-numbers/purchase", requireAuth, async (req, res): Promise<vo
     eventType:    "phone_number.purchased",
     resourceType: "phone_number",
     resourceId:   String(row.id),
-    description:  `Phone number ${number} purchased${totalCents > 0 ? ` ($${(totalCents / 100).toFixed(2)})` : ""}`,
+    description:  `Phone number ${number} purchased${totalCents > 0 ? ` (₹${(totalCents / 100).toFixed(0)})` : ""}`,
   });
 
-  req.log.info({ number, userId: clerkId, vobizId: vobizNumber.id }, "Phone number purchased from Vobiz");
+  req.log.info({ number, userId: clerkId, vobizId: vobizNumber.id }, "Phone number purchased and provisioned");
   res.status(201).json(await enrichNumber(row));
 });
 
