@@ -467,6 +467,15 @@ export default function CalendarsPage({ embedded = false }: { embedded?: boolean
     return () => { try { ch?.close(); } catch { /* noop */ } };
   }, [toast, loadGoogleData]);
 
+  // Safety timeout: if the popup is closed without completing OAuth (or the
+  // BroadcastChannel message never arrives), clear the connecting state after
+  // 60 seconds so the button never stays permanently stuck.
+  useEffect(() => {
+    if (!connecting) return;
+    const timer = setTimeout(() => setConnecting(false), 60_000);
+    return () => clearTimeout(timer);
+  }, [connecting]);
+
   async function handleConnect() {
     setConnecting(true);
     try {
