@@ -25,7 +25,10 @@ interface MinuteRate {
 }
 
 interface VobizBalance {
-  cashCredits: string | number | null;
+  balance: number | null;
+  availableBalance: number | null;
+  lowBalanceThreshold: number | null;
+  status: string | null;
   currency: string;
   raw: Record<string, unknown>;
 }
@@ -187,15 +190,18 @@ function RateDialog({
 function VobizWalletCard() {
   const { data, isLoading, error, refetch, isFetching } = useVobizBalance();
 
+  const fmt = (n: number | null | undefined, currency: string) =>
+    n != null ? `${currency === "INR" ? "₹" : ""}${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : null;
+
   const balanceDisplay = () => {
     if (isLoading) return "Loading…";
-    if (error) return "Unavailable";
-    if (data?.cashCredits == null) return "Unknown";
-    return `${data.currency === "INR" ? "₹" : ""}${Number(data.cashCredits).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
+    if (error)     return "Unavailable";
+    return fmt(data?.availableBalance ?? data?.balance, data?.currency ?? "INR") ?? "Unknown";
   };
 
-  const balanceNum = data?.cashCredits != null ? Number(data.cashCredits) : null;
-  const isLow = balanceNum !== null && balanceNum < 5000; // < ₹5,000 → warning
+  const balanceNum = data?.availableBalance ?? data?.balance ?? null;
+  const threshold  = data?.lowBalanceThreshold ?? 5000;
+  const isLow      = balanceNum !== null && balanceNum < threshold;
 
   return (
     <Card className={isLow ? "border-orange-500/50" : ""}>
@@ -218,11 +224,21 @@ function VobizWalletCard() {
           {data && !error && (
             <span className="text-sm text-muted-foreground mb-0.5">{data.currency}</span>
           )}
+          {data?.status && !error && (
+            <span className={`mb-1 text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded ${data.status === "active" ? "bg-emerald-500/15 text-emerald-400" : "bg-yellow-500/15 text-yellow-400"}`}>
+              {data.status}
+            </span>
+          )}
         </div>
+        {data && !error && data.availableBalance !== data.balance && data.balance != null && (
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Total: {fmt(data.balance, data.currency ?? "INR")} &nbsp;·&nbsp; Available: {fmt(data.availableBalance, data.currency ?? "INR")}
+          </p>
+        )}
         {isLow && !error && (
           <div className="flex items-center gap-1.5 mt-2 text-xs text-orange-400">
             <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-            Balance is low — top up the Vobiz master account to avoid call failures.
+            Balance below ₹{threshold.toLocaleString("en-IN")} threshold — top up the Vobiz account to avoid call failures.
           </div>
         )}
         {error && (

@@ -1,0 +1,329 @@
+> ## Documentation Index
+> Fetch the complete documentation index at: https://docs.vobiz.ai/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# Balance & Transactions
+
+> Check your Vobiz account balance by currency and retrieve a full transaction ledger - credits, debits, and invoice history for voice usage worldwide.
+
+## Get Transactions
+
+```http theme={null}
+GET https://api.vobiz.ai/api/v1/Account/{auth_id}/transactions
+```
+
+Returns a list of transactions for a specific account.
+
+<Info>
+  **Authentication required:**
+
+  * `X-Auth-ID` - Your account Auth ID
+  * `X-Auth-Token` - Your account Auth Token
+  * `Content-Type: application/json`
+</Info>
+
+### Request
+
+```bash cURL theme={null}
+curl --location 'https://api.vobiz.ai/api/v1/Account/YOUR_AUTH_ID/transactions?limit=50&offset=0' \
+--header 'X-Auth-ID: YOUR_AUTH_ID' \
+--header 'X-Auth-Token: YOUR_AUTH_TOKEN' \
+--header 'Accept: application/json'
+```
+
+### Response
+
+```json JSON Response theme={null}
+{
+    "auth_id": "MA_XXXXXX",
+    "total": 125,
+    "page": 1,
+    "per_page": 50,
+    "total_pages": 3,
+    "transactions": [
+        {
+            "id": "txn_6883ee37-4085-465f-97c2-e1c67c50aab9",
+            "auth_id": "MA_XXXXXX",
+            "balance_id": "bal_a84cd3a6-21f4-4b4c-99f2-3d069cb65459",
+            "type": "debit",
+            "amount": 0.9,
+            "currency": "INR",
+            "description": "Stream session (70s)",
+            "reference": "cdr_e565c2de-975c-4ba5-b115-44b1042cd397",
+            "reference_type": "cdr",
+            "status": "completed",
+            "processed_at": "2025-12-08T09:38:06.923988Z",
+            "created_at": "2025-12-08T09:38:06.923988Z",
+            "updated_at": "2025-12-08T09:38:06.923988Z"
+        },
+        {
+            "id": "txn_6aa3bf01-9158-4f1a-9980-8b3416b57e5a",
+            "auth_id": "MA_XXXXXX",
+            "balance_id": "bal_a84cd3a6-21f4-4b4c-99f2-3d069cb65459",
+            "type": "debit",
+            "amount": 0.45,
+            "currency": "INR",
+            "description": "Stream session (30s)",
+            "reference": "cdr_f876d3ef-1234-5678-90ab-cdef12345678",
+            "reference_type": "cdr",
+            "status": "completed",
+            "processed_at": "2025-12-08T09:40:15.123456Z",
+            "created_at": "2025-12-08T09:40:15.123456Z",
+            "updated_at": "2025-12-08T09:40:15.123456Z"
+        }
+    ],
+    "summary": {
+        "total_transactions": 125,
+        "total_debit": 150.75,
+        "total_credit": 500.00,
+        "net_amount": 349.25,
+        "by_reference_type": [
+            {
+                "reference_type": "cdr",
+                "total_debit": 140.25,
+                "total_credit": 0.00,
+                "count": 110
+            },
+            {
+                "reference_type": "payment",
+                "total_debit": 0.00,
+                "total_credit": 500.00,
+                "count": 1
+            },
+            {
+                "reference_type": "refund",
+                "total_debit": 10.50,
+                "total_credit": 0.00,
+                "count": 14
+            }
+        ]
+    }
+}
+```
+
+## Get Balance
+
+```http theme={null}
+GET https://api.vobiz.ai/api/v1/Account/{auth_id}/balance/{currency}
+```
+
+Returns the balance for a specific account and currency.
+
+<Info>
+  **Authentication required:**
+
+  * `X-Auth-ID` - Your account Auth ID
+  * `X-Auth-Token` - Your account Auth Token
+  * `Content-Type: application/json`
+</Info>
+
+### Request
+
+```bash cURL theme={null}
+curl --location 'https://api.vobiz.ai/api/v1/Account/YOUR_AUTH_ID/balance/INR' \
+--header 'X-Auth-ID: YOUR_AUTH_ID' \
+--header 'X-Auth-Token: YOUR_AUTH_TOKEN' \
+--header 'Accept: application/json'
+```
+
+### Response
+
+```json JSON Response theme={null}
+{
+    "id": "aabbccdd-1234-5678-90ab-cdef12345678",
+    "account_id": "MA_XXXXXXXX",
+    "currency": "INR",
+    "balance": 1000.00,
+    "reserved_funds": 0,
+    "promotional_balance": 0,
+    "promotional_reserved_balance": 0,
+    "available_balance": 1000.00,
+    "credit_limit": 1000,
+    "is_postpaid": true,
+    "credit_limit_type": "soft",
+    "low_balance_threshold": 50,
+    "status": "active",
+    "created_at": "2026-01-19T18:39:15.050543Z",
+    "updated_at": "2026-05-11T06:59:32.802705Z"
+}
+```
+
+
+## OpenAPI
+
+````yaml GET /api/v1/Account/{auth_id}/balance/{currency}
+openapi: 3.0.3
+info:
+  title: Vobiz API
+  description: >
+    The Vobiz API lets you make calls, manage phone numbers, configure SIP
+    trunks, 
+
+    and access account data programmatically.
+
+
+    **Base URL:** `https://api.vobiz.ai`
+
+
+    **Authentication:** All requests require `X-Auth-ID` and `X-Auth-Token`
+    headers.
+
+    Obtain these from your [Vobiz Console](https://console.vobiz.ai).
+  version: '1.0'
+  contact:
+    email: support@vobiz.ai
+    url: https://vobiz.ai
+servers:
+  - url: https://api.vobiz.ai
+    description: Production
+security:
+  - AuthID: []
+    AuthToken: []
+tags:
+  - name: Account
+    description: Manage your account details and credentials
+  - name: Balance
+    description: Retrieve balance and transaction history
+  - name: Calls
+    description: Make and manage outbound calls
+  - name: Live Calls
+    description: Retrieve and control in-progress calls
+  - name: CDR
+    description: Call detail records and history
+  - name: Sub-Accounts
+    description: Create and manage sub-accounts
+  - name: Phone Numbers
+    description: Manage phone numbers on your account
+  - name: Trunks
+    description: Configure SIP trunks for inbound and outbound calling
+  - name: Conference
+    description: Manage conference calls and members
+  - name: Applications
+    description: Manage voice and messaging applications with webhook URLs
+  - name: Endpoints
+    description: Manage SIP endpoints for IP phones, softphones, and SIP clients
+  - name: Partner API
+    description: >-
+      Reseller and white-label endpoints for managing customer sub-accounts,
+      balance transfers, transactions, CDRs, and DIDs across your partner
+      ecosystem
+  - name: Sub-Account KYC
+    description: >-
+      Per-sub-account KYC verification (PAN, GST, CIN, Aadhaar, DigiLocker) and
+      hosted email/redirect KYC sessions. Authenticated as the parent main
+      account.
+  - name: Sub-Account KYC (Test Mode)
+    description: >-
+      Mock KYC endpoints that never call the upstream provider. Drive verified /
+      failed / pending / error outcomes with magic inputs for integration
+      testing.
+paths:
+  /api/v1/Account/{auth_id}/balance/{currency}:
+    get:
+      tags:
+        - Balance
+      summary: Get balance
+      description: Retrieve the current account balance for a specific currency.
+      operationId: get-balance
+      parameters:
+        - $ref: '#/components/parameters/AuthId'
+        - name: currency
+          in: path
+          required: true
+          description: Currency code (e.g. INR, USD)
+          schema:
+            type: string
+            example: INR
+      responses:
+        '200':
+          description: Account balance
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  account_id:
+                    type: string
+                  currency:
+                    type: string
+                  balance:
+                    type: number
+                  reserved_funds:
+                    type: integer
+                  promotional_balance:
+                    type: integer
+                  promotional_reserved_balance:
+                    type: integer
+                  available_balance:
+                    type: number
+                  credit_limit:
+                    type: integer
+                  is_postpaid:
+                    type: boolean
+                  credit_limit_type:
+                    type: string
+                  low_balance_threshold:
+                    type: integer
+                  status:
+                    type: string
+                  created_at:
+                    type: string
+                  updated_at:
+                    type: string
+                required:
+                  - id
+                  - account_id
+                  - currency
+                  - balance
+                  - reserved_funds
+                  - promotional_balance
+                  - promotional_reserved_balance
+                  - available_balance
+                  - credit_limit
+                  - is_postpaid
+                  - credit_limit_type
+                  - low_balance_threshold
+                  - status
+                  - created_at
+                  - updated_at
+              example:
+                id: aabbccdd-1234-5678-90ab-cdef12345678
+                account_id: MA_XXXXXXXX
+                currency: INR
+                balance: 23906.83
+                reserved_funds: 0
+                promotional_balance: 0
+                promotional_reserved_balance: 0
+                available_balance: 23906.83
+                credit_limit: 1000
+                is_postpaid: true
+                credit_limit_type: soft
+                low_balance_threshold: 50
+                status: active
+                created_at: '2026-01-19T18:39:15.050543Z'
+                updated_at: '2026-05-11T06:59:32.802705Z'
+components:
+  parameters:
+    AuthId:
+      name: auth_id
+      in: path
+      required: true
+      description: Your account Auth ID
+      schema:
+        type: string
+        example: MA_XXXXXX
+  securitySchemes:
+    AuthID:
+      type: apiKey
+      in: header
+      name: X-Auth-ID
+      description: Your Vobiz account Auth ID
+    AuthToken:
+      type: apiKey
+      in: header
+      name: X-Auth-Token
+      description: Your Vobiz account Auth Token
+
+````

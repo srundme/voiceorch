@@ -1028,13 +1028,16 @@ router.get("/admin/vobiz-balance", async (req, res): Promise<void> => {
     return;
   }
   try {
-    const resp = await fetch(`https://api.vobiz.ai/api/v1/Account/${authId}/`, {
-      headers: {
-        "X-Auth-ID":    authId,
-        "X-Auth-Token": authToken,
-        "Accept":       "application/json",
-      },
-    });
+    const headers = {
+      "X-Auth-ID":    authId,
+      "X-Auth-Token": authToken,
+      "Accept":       "application/json",
+    };
+
+    const resp = await fetch(
+      `https://api.vobiz.ai/api/v1/Account/${authId}/balance/INR`,
+      { headers },
+    );
     if (!resp.ok) {
       const body = await resp.text().catch(() => "");
       req.log.warn({ status: resp.status, body }, "Vobiz balance fetch failed");
@@ -1043,9 +1046,12 @@ router.get("/admin/vobiz-balance", async (req, res): Promise<void> => {
     }
     const data = await resp.json() as Record<string, unknown>;
     res.json({
-      cashCredits:    data["cash_credits"] ?? data["balance"] ?? data["credit_balance"] ?? null,
-      currency:       data["currency"] ?? "INR",
-      raw:            data,
+      balance:          data["balance"]           ?? null,
+      availableBalance: data["available_balance"] ?? null,
+      currency:         (data["currency"] as string) ?? "INR",
+      lowBalanceThreshold: data["low_balance_threshold"] ?? null,
+      status:           data["status"] ?? null,
+      raw:              data,
     });
   } catch (err) {
     req.log.error({ err }, "admin/vobiz-balance failed");
