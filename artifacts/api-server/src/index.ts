@@ -67,8 +67,12 @@ async function seedGeminiKeyFromEnv(): Promise<void> {
     await db
       .insert(platformSettingsTable)
       .values({ key: "managed_gemini_key", value: envKey })
-      .onConflictDoNothing();
-    logger.info("seedGeminiKeyFromEnv: managed_gemini_key seeded from GEMINI_API_KEY env var (skipped if already set)");
+      .onConflictDoUpdate({
+        target: platformSettingsTable.key,
+        set: { value: envKey },
+        setWhere: sql`${platformSettingsTable.value} IS NULL OR ${platformSettingsTable.value} = ''`,
+      });
+    logger.info("seedGeminiKeyFromEnv: managed_gemini_key seeded from GEMINI_API_KEY env var (overwrites blank rows)");
   } catch (err) {
     logger.warn({ err }, "seedGeminiKeyFromEnv: failed to seed managed_gemini_key");
   }

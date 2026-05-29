@@ -111,7 +111,10 @@ async function getManagedGeminiKey(): Promise<string | null> {
     .select()
     .from(platformSettingsTable)
     .where(eq(platformSettingsTable.key, "managed_gemini_key"));
-  return row?.value ?? null;
+  const dbValue = (row?.value ?? "").trim();
+  if (dbValue) return dbValue;
+  const envValue = (process.env["GEMINI_API_KEY"] ?? "").trim();
+  return envValue || null;
 }
 
 /**
