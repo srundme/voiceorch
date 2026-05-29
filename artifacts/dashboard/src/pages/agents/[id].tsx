@@ -34,12 +34,25 @@ type CallStatus = "idle" | "connecting" | "listening" | "thinking" | "speaking" 
 
 interface Msg { speaker: "user" | "agent"; text: string }
 
+function useWebcallKeyStatus() {
+  const [keys, setKeys]       = useState<Record<string, boolean> | null>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    fetch("/api/billing/webcall-key-status", { credentials: "include" })
+      .then(r => r.ok ? r.json() : null)
+      .then((d: Record<string, boolean> | null) => { setKeys(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+  return { keys, loading };
+}
+
 function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: string }) {
   const [status, setStatus]     = useState<CallStatus>("idle");
   const [msgs, setMsgs]         = useState<Msg[]>([]);
   const [error, setError]       = useState<string | null>(null);
   const [duration, setDuration] = useState<number | null>(null);
   const [copied, setCopied]     = useState(false);
+  const { keys: keyStatus, loading: keyLoading } = useWebcallKeyStatus();
 
   const wsRef          = useRef<WebSocket | null>(null);
   const audioCtxRef    = useRef<AudioContext | null>(null);
@@ -228,6 +241,16 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
   const sc = statusConfig[status];
   const isActive = status !== "idle" && status !== "ended";
 
+  // Pre-flight: determine which managed keys are missing based on the agent's providers
+  const missingKeys: string[] = [];
+  if (keyStatus !== null) {
+    // These are the two platform-managed providers always required for webcall
+    if (!keyStatus["sarvam"] && !keyStatus["deepgram"] && !keyStatus["openai"]) missingKeys.push("ASR (sarvam/deepgram)");
+    if (!keyStatus["cartesia"] && !keyStatus["openai"]) missingKeys.push("TTS (cartesia)");
+    if (!keyStatus["gemini"] && !keyStatus["openai"]) missingKeys.push("LLM (gemini)");
+  }
+  const keysReady = !keyLoading && keyStatus !== null && missingKeys.length === 0;
+
   return (
     <div className="space-y-5">
       {/* Call interface */}
@@ -251,6 +274,13 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
               <span className="text-xs text-muted-foreground ml-auto">Duration: {Math.floor(duration / 60)}m {duration % 60}s</span>
             )}
           </div>
+
+          {/* Missing keys warning */}
+          {!keyLoading && missingKeys.length > 0 && (
+            <div className="text-sm text-amber-400 bg-amber-400/10 border border-amber-400/20 rounded-lg px-4 py-3">
+              Missing API keys for: <strong>{missingKeys.join(", ")}</strong>. Contact the platform administrator to configure them.
+            </div>
+          )}
 
           {/* Error */}
           {error && (
@@ -293,8 +323,13 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
               <Button
                 className="flex-1 gap-2"
                 onClick={() => void startCall()}
+                disabled={keyLoading || !keysReady}
+                title={!keysReady && !keyLoading ? `Missing keys: ${missingKeys.join(", ")}` : undefined}
               >
-                <Mic className="h-4 w-4" /> Start Call
+                {keyLoading
+                  ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking…</>
+                  : <><Mic className="h-4 w-4" /> Start Test Call</>
+                }
               </Button>
             ) : (
               <Button

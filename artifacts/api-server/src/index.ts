@@ -60,27 +60,29 @@ server.on("upgrade", (request, socket, head) => {
   });
 });
 
-async function seedGeminiKeyFromEnv(): Promise<void> {
-  const envKey = (process.env["GEMINI_API_KEY"] ?? "").trim();
+async function seedManagedKeyFromEnv(dbKey: string, envVar: string): Promise<void> {
+  const envKey = (process.env[envVar] ?? "").trim();
   if (!envKey) return;
   try {
     await db
       .insert(platformSettingsTable)
-      .values({ key: "managed_gemini_key", value: envKey })
+      .values({ key: dbKey, value: envKey })
       .onConflictDoUpdate({
         target: platformSettingsTable.key,
         set: { value: envKey },
         setWhere: sql`${platformSettingsTable.value} IS NULL OR ${platformSettingsTable.value} = ''`,
       });
-    logger.info("seedGeminiKeyFromEnv: managed_gemini_key seeded from GEMINI_API_KEY env var (overwrites blank rows)");
+    logger.info({ dbKey, envVar }, "Managed key seeded from env var (overwrites blank rows)");
   } catch (err) {
-    logger.warn({ err }, "seedGeminiKeyFromEnv: failed to seed managed_gemini_key");
+    logger.warn({ err, dbKey }, "Failed to seed managed key from env var");
   }
 }
 
 server.listen(port, () => {
   logger.info({ port }, "Server listening");
-  void seedGeminiKeyFromEnv();
+  void seedManagedKeyFromEnv("managed_gemini_key",   "GEMINI_API_KEY");
+  void seedManagedKeyFromEnv("managed_sarvam_key",   "SARVAM_API_KEY");
+  void seedManagedKeyFromEnv("managed_cartesia_key", "CARTESIA_API_KEY");
   startCallbackPoller();
   startSpikeChecker();
   startAlertSweep();
