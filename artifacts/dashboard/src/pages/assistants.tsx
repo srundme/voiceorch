@@ -858,23 +858,10 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
   const { data: eventTypes } = useListEventTypes();
   const { data: calendars } = useListCalendars();
 
-  // ── Google calendars for the Book Appointment dropdown ────────────────
-  type GoogleCalEntry = {
-    connectionId: string;
-    connectionEmail: string;
-    googleCalendarId: string;
-    summary: string;
-    primary: boolean;
-    schedulingCalendarId: number | null;
-  };
-  const [googleCals, setGoogleCals] = useState<GoogleCalEntry[] | null>(null);
-  const [googleCalsLoading, setGoogleCalsLoading] = useState(false);
-
   // ── Booking-tool modal state (Tools tab) ───────────────────────────────
   const [bookingModal, setBookingModal] = useState<null | {
     editIdx: number | null;
-    calendarId: number | null;        // scheduling_calendars.id (used for event types + saving)
-    googleCalendarKey: string | null; // connectionId|googleCalendarId (what the dropdown selects)
+    calendarId: number | null;
     eventTypeId: number | null;
     timezone: string;
     taskName: string;
@@ -944,18 +931,6 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
       headers: { ...(init?.headers ?? {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     });
   }, [getToken]);
-
-  // ── Google sub-calendar loader (for Book Appointment dropdown) ───
-  useEffect(() => {
-    let cancelled = false;
-    setGoogleCalsLoading(true);
-    apiFetch("/api/scheduling/google/calendars")
-      .then(r => r.ok ? r.json() as Promise<GoogleCalEntry[]> : null)
-      .then(data => { if (!cancelled) setGoogleCals(data ?? []); })
-      .catch(() => { if (!cancelled) setGoogleCals([]); })
-      .finally(() => { if (!cancelled) setGoogleCalsLoading(false); });
-    return () => { cancelled = true; };
-  }, [apiFetch]);
 
   // ── Cartesia voice loader ────────────────────────────────────────
   useEffect(() => {
@@ -1648,7 +1623,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                   { label: "Call Transfer",    icon: PhoneForwarded, onClick: () => { setAgentTools(prev => [...prev, { type: "call_transfer" as const, name: "transfer_to_human", description: "Transfer the call to a human agent when the caller requests escalation.", transferTo: "", warmHandoffMessage: "" }]); setDirty(true); } },
                   { label: "End Call",         icon: PhoneOff,       onClick: () => { setAgentTools(prev => [...prev, { type: "end_call" as const, name: "end_call", description: "End the call when the conversation is complete.", goodbyeMessage: "" }]); setDirty(true); } },
                   { label: "Cal.com",          icon: Clock,          onClick: () => { setAgentTools(prev => [...prev, { type: "cal_com" as const, name: "book_appointment", description: "Book an appointment on Cal.com when the caller wants to schedule.", apiKey: "", eventTypeId: 0, timezone: "UTC" }]); setDirty(true); } },
-                  { label: "Book Appointment", icon: CalendarPlus,   onClick: () => setBookingModal({ editIdx: null, calendarId: null, googleCalendarKey: null, eventTypeId: null, timezone: "UTC", taskName: "book_appointment", description: "Book an appointment when the caller wants to schedule a meeting.", preToolMessage: "" }) },
+                  { label: "Book Appointment", icon: CalendarPlus,   onClick: () => setBookingModal({ editIdx: null, calendarId: null, eventTypeId: null, timezone: "UTC", taskName: "book_appointment", description: "Book an appointment when the caller wants to schedule a meeting.", preToolMessage: "" }) },
                   { label: "Availability",     icon: CalendarCheck,  onClick: () => { setAgentTools(prev => [...prev, { type: "native_check_availability" as const, name: "check_availability", description: "Check available slots when the caller asks what times are open.", eventTypeId: 0 }]); setDirty(true); } },
                   { label: "Reschedule",       icon: CalendarClock,  onClick: () => { setAgentTools(prev => [...prev, { type: "native_reschedule" as const, name: "reschedule_appointment", description: "Reschedule an existing booking when the caller provides their booking reference." }]); setDirty(true); } },
                   { label: "Cancel Booking",   icon: CalendarX,      onClick: () => { setAgentTools(prev => [...prev, { type: "native_cancel" as const, name: "cancel_appointment", description: "Cancel an existing booking when the caller provides their booking reference." }]); setDirty(true); } },
@@ -1720,8 +1695,7 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
                         <div><p className="text-muted-foreground mb-0.5">Timezone</p><p className="text-foreground">{tool.timezone || "UTC"}</p></div>
                       </div>
                       <button type="button" onClick={() => {
-                        const match = (googleCals ?? []).find(g => g.schedulingCalendarId === tool.calendarId);
-                        setBookingModal({ editIdx: idx, calendarId: tool.calendarId ?? null, googleCalendarKey: match ? `${match.connectionId}|${match.googleCalendarId}` : null, eventTypeId: tool.eventTypeId || null, timezone: tool.timezone ?? "UTC", taskName: tool.taskName ?? tool.name, description: tool.description, preToolMessage: tool.preToolMessage ?? "" });
+                        setBookingModal({ editIdx: idx, calendarId: tool.calendarId ?? null, eventTypeId: tool.eventTypeId || null, timezone: tool.timezone ?? "UTC", taskName: tool.taskName ?? tool.name, description: tool.description, preToolMessage: tool.preToolMessage ?? "" });
                       }} className="text-xs text-foreground underline underline-offset-2 hover:text-foreground">Edit configuration</button>
                       {!tool.eventTypeId && <p className="text-[10px] text-muted-foreground">⚠ Event type not selected — booking will fail at runtime.</p>}
                     </div>;
@@ -2164,27 +2138,17 @@ function AgentConfigPanel({ agentId, onDeleted }: { agentId: number; onDeleted: 
             <div className="space-y-3 py-1">
               <div className="space-y-1">
                 <Label className="text-xs">Calendar <span className="text-foreground">*</span></Label>
-                <Select value={bookingModal.googleCalendarKey ?? ""} onValueChange={v => {
-                  const entry = (googleCals ?? []).find(g => `${g.connectionId}|${g.googleCalendarId}` === v);
-                  setBookingModal({ ...bookingModal, googleCalendarKey: v, calendarId: entry?.schedulingCalendarId ?? null, eventTypeId: null });
-                }} disabled={googleCalsLoading}>
-                  <SelectTrigger className="h-9 text-sm"><SelectValue placeholder={googleCalsLoading ? "Loading…" : "Select a Google calendar…"} /></SelectTrigger>
+                <Select value={bookingModal.calendarId ? String(bookingModal.calendarId) : ""} onValueChange={v => {
+                  setBookingModal({ ...bookingModal, calendarId: parseInt(v) || null, eventTypeId: null });
+                }}>
+                  <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select a calendar…" /></SelectTrigger>
                   <SelectContent>
-                    {(() => {
-                      const cals = googleCals ?? [];
-                      if (!googleCalsLoading && cals.length === 0) return <SelectItem value="__none" disabled>No Google calendars — connect in Scheduling</SelectItem>;
-                      const byEmail = new Map<string, typeof cals>();
-                      for (const c of cals) { const arr = byEmail.get(c.connectionEmail) ?? []; arr.push(c); byEmail.set(c.connectionEmail, arr); }
-                      return Array.from(byEmail.entries()).map(([email, items]) => (
-                        <div key={email}>
-                          <div className="px-2 py-1 text-[10px] uppercase tracking-wider text-muted-foreground">{email}</div>
-                          {items.map(c => { const key = `${c.connectionId}|${c.googleCalendarId}`; return <SelectItem key={key} value={key}>{c.summary}{c.primary ? " (Primary)" : ""}{c.schedulingCalendarId == null ? " — not linked" : ""}</SelectItem>; })}
-                        </div>
-                      ));
-                    })()}
+                    {(calendars ?? []).length === 0
+                      ? <SelectItem value="__none" disabled>No calendars — create one in Scheduling</SelectItem>
+                      : (calendars ?? []).map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)
+                    }
                   </SelectContent>
                 </Select>
-                {bookingModal.googleCalendarKey && bookingModal.calendarId == null && <p className="text-[10px] text-amber-600 dark:text-amber-400">This calendar isn&apos;t linked yet. Go to Scheduling → Calendars to link it.</p>}
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Event Type <span className="text-foreground">*</span></Label>
