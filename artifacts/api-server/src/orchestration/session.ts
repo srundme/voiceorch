@@ -90,15 +90,16 @@ export async function createSession(params: {
     "it": "Italian", "pt-BR": "Portuguese (Brazil)", "ja": "Japanese",
     "ko": "Korean", "zh": "Mandarin Chinese", "ar": "Arabic",
   };
-  const nowIST = new Date();
-  const dateCtxParts = nowIST.toLocaleDateString("en-IN", {
-    weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Kolkata",
+  const agentTimezone = (agentCfg["timezone"] as string | undefined) || "Asia/Kolkata";
+  const nowForCtx = new Date();
+  const dateCtxParts = nowForCtx.toLocaleDateString("en-IN", {
+    weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: agentTimezone,
   });
-  const timeCtxParts = nowIST.toLocaleTimeString("en-IN", {
-    hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata",
+  const timeCtxParts = nowForCtx.toLocaleTimeString("en-IN", {
+    hour: "2-digit", minute: "2-digit", timeZone: agentTimezone,
   });
   let effectiveSystemPrompt = agent.generatedPrompt ?? agent.systemPrompt;
-  effectiveSystemPrompt += `\n\n[DATE/TIME CONTEXT] Today is ${dateCtxParts}. Current time is ${timeCtxParts} IST.`;
+  effectiveSystemPrompt += `\n\n[DATE/TIME CONTEXT] Today is ${dateCtxParts}. Current time is ${timeCtxParts} (${agentTimezone}).`;
   if (agent.language) {
     const langName = LANG_NAMES[agent.language] ?? agent.language;
     effectiveSystemPrompt += `\n\n[STRICT LANGUAGE RULE] You MUST respond ONLY in ${langName} at ALL times. Never switch to any other language under any circumstances, even if the caller speaks a different language. Always reply in ${langName} regardless of what language the caller uses.`;
@@ -160,6 +161,8 @@ export async function createSession(params: {
     bargeInEnergyThreshold: (agentCfg["bargeInEnergyThreshold"] as number  | undefined) ?? 1200,
     bargeInMinFrames:       (agentCfg["bargeInMinFrames"]       as number  | undefined) ?? 4,
     bargeInEchoGraceMs:     (agentCfg["bargeInEchoGraceMs"]    as number  | undefined) ?? 600,
+    // P1-E: Agent timezone
+    timezone: agentTimezone,
   };
 
   // ── Cross-call caller memory ────────────────────────────────────────────────

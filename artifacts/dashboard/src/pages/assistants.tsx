@@ -707,6 +707,8 @@ type AgentCfg = {
   genderDetectionMaleSalutation?: string;
   genderDetectionFemaleSalutation?: string;
   genderDetectionNeutralSalutation?: string;
+  // Agent timezone for date/time context injection
+  timezone?: string;
 };
 
 type AgentToolLocal =
@@ -2010,6 +2012,40 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                 <SliderRow label="Max Call Duration" desc="Auto-terminate after this duration" value={maxDuration} onChange={v => { setMaxDuration(v); setDirty(true); }} min={30} max={3600} step={30} unit="s" />
                 <SliderRow label="Hangup After Silence" desc="End call if caller is silent this long" value={silenceTimeout} onChange={v => { setSilenceTimeout(v); setDirty(true); }} min={5} max={120} step={5} unit="s" />
                 <ToggleRow label="Hangup After LLM Call" desc="Hang up automatically when the LLM finishes responding" checked={cfg.hangupAfterLlmCall ?? false} onChange={v => setCfg({ hangupAfterLlmCall: v })} />
+              </div>
+              <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-4">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Timezone & Date</p>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Agent Timezone</p>
+                  <p className="text-[10px] text-muted-foreground/60 mb-2">The current date and time are injected into the system prompt using this timezone, so the agent knows what day/time it is when speaking with callers.</p>
+                  <Select value={cfg.timezone ?? "Asia/Kolkata"} onValueChange={v => { setCfg({ timezone: v }); setDirty(true); }}>
+                    <SelectTrigger className="h-8 text-xs border bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-card border-border max-h-60">
+                      {[
+                        { label: "Asia/Kolkata (IST)", value: "Asia/Kolkata" },
+                        { label: "Asia/Dubai (GST)", value: "Asia/Dubai" },
+                        { label: "Asia/Singapore (SGT)", value: "Asia/Singapore" },
+                        { label: "Asia/Tokyo (JST)", value: "Asia/Tokyo" },
+                        { label: "Asia/Shanghai (CST)", value: "Asia/Shanghai" },
+                        { label: "Asia/Seoul (KST)", value: "Asia/Seoul" },
+                        { label: "Asia/Riyadh (AST)", value: "Asia/Riyadh" },
+                        { label: "UTC", value: "UTC" },
+                        { label: "Europe/London (GMT/BST)", value: "Europe/London" },
+                        { label: "Europe/Paris (CET)", value: "Europe/Paris" },
+                        { label: "Europe/Berlin (CET)", value: "Europe/Berlin" },
+                        { label: "America/New_York (ET)", value: "America/New_York" },
+                        { label: "America/Chicago (CT)", value: "America/Chicago" },
+                        { label: "America/Denver (MT)", value: "America/Denver" },
+                        { label: "America/Los_Angeles (PT)", value: "America/Los_Angeles" },
+                        { label: "America/Sao_Paulo (BRT)", value: "America/Sao_Paulo" },
+                        { label: "Australia/Sydney (AEST)", value: "Australia/Sydney" },
+                        { label: "Pacific/Auckland (NZST)", value: "Pacific/Auckland" },
+                      ].map(tz => (
+                        <SelectItem key={tz.value} value={tz.value} className="text-foreground text-xs">{tz.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-4">
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Messages</p>

@@ -164,6 +164,9 @@ export interface AgentConfig {
   bargeInEnergyThreshold: number;
   bargeInMinFrames: number;
   bargeInEchoGraceMs: number;
+
+  // P1-E: Agent timezone (used for date/time context in system prompt)
+  timezone: string;
 }
 
 export interface ProviderKey {

@@ -581,6 +581,12 @@ export class OrchestrationPipeline {
   private async handleToolCall(toolName: string, args: Record<string, unknown>): Promise<string | undefined> {
     const tool = this.agent.tools.find((t) => t.name === toolName);
     if (!tool) {
+      // Built-in end_call: always available even if not explicitly in agent tools
+      if (toolName === "end_call") {
+        logger.info({ callId: this.config.callId }, "Built-in end_call invoked by LLM");
+        this.config.onCallEnd();
+        return undefined;
+      }
       logger.warn({ callId: this.config.callId, toolName }, "LLM called unknown tool — ignoring");
       return undefined;
     }
@@ -824,7 +830,16 @@ export class OrchestrationPipeline {
     }
 
     // ── Build tool definitions from agent config ──
-    const toolDefs: ToolDefinition[] = this.agent.tools.map((t): ToolDefinition => {
+    // Always inject a built-in end_call tool so the LLM can end the call at the
+    // right moment, even if the user hasn't explicitly added an end_call tool.
+    const hasExplicitEndCall = this.agent.tools.some(t => t.type === "end_call");
+    const builtInEndCall: ToolDefinition[] = hasExplicitEndCall ? [] : [{
+      name: "end_call",
+      description: "End the phone call. Call this when the conversation is complete, the caller says goodbye, all objectives are met, or the caller requests to end the call.",
+      parameters: { type: "object", properties: {}, required: [] },
+    }];
+
+    const toolDefs: ToolDefinition[] = [...builtInEndCall, ...this.agent.tools.map((t): ToolDefinition => {
       if (t.type === "native_booking") {
         return {
           name: t.name,
@@ -891,7 +906,7 @@ export class OrchestrationPipeline {
           required: [],
         },
       };
-    });
+    })];
 
     const llmStart = Date.now();
     let llmFirstTokenAt: number | null = null;
