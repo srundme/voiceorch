@@ -47,7 +47,7 @@ SnapServe Wallet (stored as paise/cents)
 | LLM | ₹1.50/min | ₹0 (user's own API key) |
 | ASR | ₹0.50/min | ₹0 (user's own API key) |
 | TTS | ₹0.30/min | ₹0 (user's own API key) |
-| Telephony (Vobiz/Airtel) | ₹0.70/min | ₹0.65/min |
+| Telephony (Vobiz/Aitel) | ₹0.70/min | ₹0.65/min |
 | **Total** | **₹3.00/min** | **₹0.65/min** |
 
 > Platform margin per minute: ₹3.00 − ₹0.65 = **₹2.35/min (78%)**

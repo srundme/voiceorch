@@ -357,7 +357,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
             )}
             <div className="flex justify-between px-4 py-2.5">
               <span className="text-muted-foreground">Provider</span>
-              <span className="text-foreground font-medium">Airtel</span>
+              <span className="text-foreground font-medium">Aitel</span>
             </div>
             <div className="flex justify-between px-4 py-2.5">
               <span className="text-muted-foreground">Monthly fee</span>
@@ -390,7 +390,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
         <DialogHeader>
           <DialogTitle>Get a Phone Number</DialogTitle>
           <DialogDescription>
-            Browse live number inventory from Airtel. Pricing varies by country and number type — fees are deducted from your SnapServe wallet.
+            Browse live number inventory from Aitel. Pricing varies by country and number type — fees are deducted from your SnapServe wallet.
           </DialogDescription>
         </DialogHeader>
 
@@ -722,7 +722,7 @@ export default function PhoneNumbersPage() {
       <div className="border-b border-border px-6 py-4 flex items-center gap-3 shrink-0">
         <Phone className="w-5 h-5 text-foreground" />
         <h1 className="font-semibold text-foreground text-lg">Phone Numbers</h1>
-        <span className="text-xs text-muted-foreground ml-auto">Powered by Airtel</span>
+        <span className="text-xs text-muted-foreground ml-auto">Powered by Aitel</span>
         <Button
           size="sm"
           className="h-8 gap-1.5 bg-black/85 hover:bg-black/90 text-foreground"
@@ -741,7 +741,7 @@ export default function PhoneNumbersPage() {
           <Globe className="h-5 w-5 text-foreground mt-0.5 shrink-0" />
           <div className="text-sm text-muted-foreground space-y-0.5">
             <p className="text-foreground font-medium">Self-serve number provisioning</p>
-            <p>Search live inventory across 130+ countries via Airtel. Purchase a number and it's immediately active — assign it to any agent and inbound calls route straight to its pipeline. <span className="text-muted-foreground">Releasing returns the number to inventory.</span></p>
+            <p>Search live inventory across 130+ countries via Aitel. Purchase a number and it's immediately active — assign it to any agent and inbound calls route straight to its pipeline. <span className="text-muted-foreground">Releasing returns the number to inventory.</span></p>
           </div>
         </div>
 
