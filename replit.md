@@ -11,6 +11,7 @@ AI voice agent orchestration SaaS platform — users bring their own provider AP
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - `pnpm --filter @workspace/scripts run backfill-user-identity` — backfill `email`/`name` from Clerk for users with NULL identity (requires `CLERK_SECRET_KEY`)
+- `DATABASE_URL=<url> pnpm --filter @workspace/scripts run wipe-beta-data` — delete all agents, calls, campaigns, scheduling data from a database while keeping users, providers, wallets, and platform config (use prod URL for production wipe)
 - Required env: `DATABASE_URL` — Postgres connection string; `GEMINI_API_KEY` — Google Gemini API key used by the Create Agent wizard's Step 5 AI-generated call-flow preview
 
 ## Stack

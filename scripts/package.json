@@ -7,6 +7,7 @@
     "hello": "tsx ./src/hello.ts",
     "seed-provider-pricing": "tsx ./src/seed-provider-pricing.ts",
     "backfill-user-identity": "tsx ./src/backfill-user-identity.ts",
+    "wipe-beta-data": "tsx ./src/wipe-beta-data.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
