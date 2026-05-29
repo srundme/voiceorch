@@ -30,7 +30,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
-import { formatApiError, isKycError } from "@/lib/format-api-error";
+import { formatApiError, isKycError, isDestinationUnverifiedError } from "@/lib/format-api-error";
+import { DestinationOtpDialog } from "@/components/destination-otp-dialog";
 
 export default function AgentsList() {
   const [search, setSearch] = useState("");
@@ -39,7 +40,9 @@ export default function AgentsList() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [, navigate] = useLocation();
-  
+  const [otpDialogOpen, setOtpDialogOpen]       = useState(false);
+  const [pendingCallNumber, setPendingCallNumber] = useState("");
+
   const { data: agents, isLoading } = useListAgents({
     query: { queryKey: getListAgentsQueryKey() }
   });
@@ -65,6 +68,9 @@ export default function AgentsList() {
           if (isKycError(err)) {
             toast({ title: "Verification required", description: "Complete identity verification before making telephony calls.", variant: "destructive" });
             navigate("/app/kyc");
+          } else if (isDestinationUnverifiedError(err)) {
+            setPendingCallNumber(toNumber.trim());
+            setOtpDialogOpen(true);
           } else {
             toast({ title: "Error", description: formatApiError(err), variant: "destructive" });
           }
@@ -308,6 +314,28 @@ export default function AgentsList() {
           </div>
         )}
       </div>
+
+      <DestinationOtpDialog
+        open={otpDialogOpen}
+        phoneNumber={pendingCallNumber}
+        onClose={() => setOtpDialogOpen(false)}
+        onVerified={() => {
+          setOtpDialogOpen(false);
+          if (!outboundAgent) return;
+          initiateOutbound.mutate(
+            { data: { agentId: outboundAgent.id, toNumber: pendingCallNumber } },
+            {
+              onSuccess: (call) => {
+                toast({ title: "Call initiated", description: `Calling ${pendingCallNumber} via ${outboundAgent.name}. Call ID: #${call.id}` });
+                queryClient.invalidateQueries({ queryKey: getListCallsQueryKey() });
+                setOutboundAgent(null);
+                setToNumber("");
+              },
+              onError: (err) => toast({ title: "Error", description: formatApiError(err), variant: "destructive" }),
+            },
+          );
+        }}
+      />
 
       {/* ── Outbound Call Dialog ── */}
       <Dialog open={!!outboundAgent} onOpenChange={(open) => { if (!open) setOutboundAgent(null); }}>

@@ -146,6 +146,33 @@ export function useSaveManagedKeys() {
   });
 }
 
+// Managed Phone Numbers
+export interface ManagedPhoneNumbersData {
+  selected: string[];
+  available: Array<{ number: string; numberType?: string; region?: string }>;
+}
+
+export function useManagedPhoneNumbers() {
+  return useQuery({
+    queryKey: ["admin", "managed-phone-numbers"],
+    queryFn: () => adminFetch<ManagedPhoneNumbersData>("/managed-phone-numbers"),
+  });
+}
+
+export function useSaveManagedPhoneNumbers() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (numbers: string[]) =>
+      adminFetch<{ saved: number; numbers: string[] }>("/managed-phone-numbers", {
+        method: "POST",
+        body: JSON.stringify({ numbers }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "managed-phone-numbers"] });
+    },
+  });
+}
+
 // Admin Voices
 export interface AdminVoice {
   id: string;

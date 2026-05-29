@@ -26,7 +26,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { formatApiError, isKycError } from "@/lib/format-api-error";
+import { formatApiError, isKycError, isDestinationUnverifiedError } from "@/lib/format-api-error";
+import { DestinationOtpDialog } from "@/components/destination-otp-dialog";
 
 /* ── Web Call Panel ───────────────────────────────────────────────────────── */
 
@@ -390,14 +391,17 @@ export default function AgentDetail() {
 
   const outboundCall = useInitiateOutboundCall();
   const [, navigate] = useLocation();
+  const [otpDialogOpen, setOtpDialogOpen]       = useState(false);
+  const [pendingCallNumber, setPendingCallNumber] = useState("");
 
-  function handleMakeCall() {
-    if (!toNumber.trim()) return;
+  function handleMakeCall(overrideNumber?: string) {
+    const dest = (overrideNumber ?? toNumber).trim();
+    if (!dest) return;
     outboundCall.mutate(
-      { data: { agentId: id, toNumber: toNumber.trim(), webhookBaseUrl: window.location.origin } },
+      { data: { agentId: id, toNumber: dest, webhookBaseUrl: window.location.origin } },
       {
         onSuccess: () => {
-          toast({ title: "Call initiated", description: `Dialing ${toNumber} — the agent will connect momentarily.` });
+          toast({ title: "Call initiated", description: `Dialing ${dest} — the agent will connect momentarily.` });
           setCallDialogOpen(false);
           setToNumber("");
         },
@@ -405,6 +409,9 @@ export default function AgentDetail() {
           if (isKycError(err)) {
             toast({ title: "Verification required", description: "Complete identity verification before making telephony calls.", variant: "destructive" });
             navigate("/app/kyc");
+          } else if (isDestinationUnverifiedError(err)) {
+            setPendingCallNumber(dest);
+            setOtpDialogOpen(true);
           } else {
             toast({ title: "Call failed", description: formatApiError(err), variant: "destructive" });
           }
@@ -484,7 +491,7 @@ export default function AgentDetail() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setCallDialogOpen(false)}>Cancel</Button>
             <Button
-              onClick={handleMakeCall}
+              onClick={() => handleMakeCall()}
               disabled={!toNumber.trim() || outboundCall.isPending}
               className="gap-2"
             >
@@ -494,6 +501,16 @@ export default function AgentDetail() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <DestinationOtpDialog
+        open={otpDialogOpen}
+        phoneNumber={pendingCallNumber}
+        onClose={() => setOtpDialogOpen(false)}
+        onVerified={() => {
+          setOtpDialogOpen(false);
+          handleMakeCall(pendingCallNumber);
+        }}
+      />
 
       <div className="flex items-center gap-4">
         <Link href="/agents">

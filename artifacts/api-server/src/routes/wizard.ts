@@ -553,6 +553,54 @@ function generateFallbackCallFlow(useCase: string, direction: string, descriptio
 6. Thank them for their time and close the call warmly.`;
 }
 
+// ── Admin: GET /admin/managed-phone-numbers ───────────────────────────────────
+
+router.get("/admin/managed-phone-numbers", requireAdmin, async (_req, res): Promise<void> => {
+  const [row] = await db.select().from(platformSettingsTable).where(eq(platformSettingsTable.key, "managed_phone_numbers"));
+  const selected: string[] = row?.value ? (JSON.parse(row.value) as string[]) : [];
+
+  // Fetch available numbers from master Vobiz account
+  const authId    = process.env["VOBIZ_AUTH_ID"];
+  const authToken = process.env["VOBIZ_AUTH_TOKEN"];
+  let available: Array<{ number: string; numberType?: string; region?: string }> = [];
+
+  if (authId && authToken) {
+    try {
+      const resp = await fetch(`https://api.vobiz.ai/api/v1/Account/${authId}/Number/`, {
+        headers: { "X-Auth-ID": authId, "X-Auth-Token": authToken, "Accept": "application/json" },
+      });
+      if (resp.ok) {
+        const data = await resp.json() as { objects?: Array<{ number: string; number_type?: string; region?: string }> };
+        available = (data.objects ?? []).map(n => ({
+          number:     n.number,
+          numberType: n.number_type,
+          region:     n.region,
+        }));
+      }
+    } catch {
+      // Non-fatal — return empty list
+    }
+  }
+
+  res.json({ selected, available });
+});
+
+// ── Admin: POST /admin/managed-phone-numbers ──────────────────────────────────
+
+router.post("/admin/managed-phone-numbers", requireAdmin, async (req, res): Promise<void> => {
+  const { numbers } = req.body as { numbers?: unknown };
+  if (!Array.isArray(numbers)) {
+    res.status(400).json({ error: "numbers must be an array of phone number strings" });
+    return;
+  }
+  const clean = (numbers as unknown[]).filter((n): n is string => typeof n === "string" && !!n.trim()).map(n => n.trim());
+  await db
+    .insert(platformSettingsTable)
+    .values({ key: "managed_phone_numbers", value: JSON.stringify(clean) })
+    .onConflictDoUpdate({ target: platformSettingsTable.key, set: { value: JSON.stringify(clean), updatedAt: new Date() } });
+  res.json({ saved: clean.length, numbers: clean });
+});
+
 // ── Admin: GET /admin/managed-keys ────────────────────────────────────────────
 
 const MANAGED_KEY_NAMES = [

@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { randomBytes } from "crypto";
-import { eq, desc, and, sql, gte } from "drizzle-orm";
-import { db, callsTable, agentsTable, providersTable, usersTable, walletTransactionsTable, activityLogsTable, callTransfersTable, vobizAccountsTable } from "@workspace/db";
+import { eq, desc, and, sql, gte, gt } from "drizzle-orm";
+import { db, callsTable, agentsTable, providersTable, usersTable, walletTransactionsTable, activityLogsTable, callTransfersTable, vobizAccountsTable, verifiedPhoneDestinationsTable, platformSettingsTable } from "@workspace/db";
 import { getAgentRateCentsPerMin } from "../services/minute-rates.js";
 import {
   InitiateCallBody,
@@ -82,6 +82,8 @@ function resolveWebhookBase(req: Parameters<Parameters<IRouter["post"]>[1]>[0], 
 
 import { dialTwilio, dialPlivo, dialVobiz } from "../orchestration/telephony/dial.js";
 import { triggerTransfer } from "../orchestration/session.js";
+import { sendBrevoSms } from "../services/brevo.js";
+import { generateAndStoreOtp, verifyDestinationOtp } from "../services/phone-otp.js";
 
 /* ── POST /calls/outbound ─────────────────────────────────────────────────── */
 
@@ -96,21 +98,6 @@ router.post("/calls/outbound", async (req, res): Promise<void> => {
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
 
-  // KYC gate — telephony calls require completed identity verification
-  if (agent.userId) {
-    const [kycAccount] = await db
-      .select({ kycStatus: vobizAccountsTable.kycStatus })
-      .from(vobizAccountsTable)
-      .where(eq(vobizAccountsTable.userId, agent.userId));
-    if (!kycAccount || kycAccount.kycStatus !== "completed") {
-      res.status(403).json({
-        error: "Identity verification is required before making telephony calls. Please complete KYC in the Verification section.",
-        code: "KYC_REQUIRED",
-      });
-      return;
-    }
-  }
-
   // Balance gate + max call duration limiter
   let maxDurationSeconds: number | undefined;
   if (agent.userId) {
@@ -120,12 +107,11 @@ router.post("/calls/outbound", async (req, res): Promise<void> => {
       res.status(402).json({ error: "Insufficient balance. Please top up your wallet to start calls." });
       return;
     }
-    // Cap call duration so the user can never spend more than their current balance
     if (user && user.walletBalanceCents > 0) {
       const agentRate = await getAgentRateCentsPerMin(agent);
       if (agentRate > 0) {
         const maxMinutes = Math.floor(user.walletBalanceCents / agentRate);
-        maxDurationSeconds = Math.max(60, maxMinutes * 60); // at least 60 s
+        maxDurationSeconds = Math.max(60, maxMinutes * 60);
       }
     }
   }
@@ -141,55 +127,133 @@ router.post("/calls/outbound", async (req, res): Promise<void> => {
     .where(eq(providersTable.providerName, provider))
     .limit(1);
 
-  if (!providerRow) {
+  // Vobiz can fall back to managed platform numbers — all other providers need their own credentials
+  if (!providerRow && provider !== "vobiz") {
     res.status(404).json({ error: `No "${provider}" telephony provider key configured. Add it on the Providers page.` });
     return;
   }
 
   const baseUrl = resolveWebhookBase(req, webhookBaseUrl);
   let providerCallId: string;
+  let effectiveFromNumber = "outbound";
 
   try {
     if (provider === "twilio") {
-      const cfg = providerRow.extraConfig ? JSON.parse(providerRow.extraConfig) as Record<string, string> : {};
+      const cfg = providerRow!.extraConfig ? JSON.parse(providerRow!.extraConfig) as Record<string, string> : {};
       if (!cfg["accountSid"]) { res.status(400).json({ error: 'Twilio provider is missing "accountSid" in Extra Config. Edit the provider and add: {"accountSid":"ACxxx","fromNumber":"+1xxx"}' }); return; }
       if (!cfg["fromNumber"]) { res.status(400).json({ error: 'Twilio provider is missing "fromNumber" in Extra Config. Edit the provider and add a "fromNumber" field.' }); return; }
+      effectiveFromNumber = cfg["fromNumber"]!;
       providerCallId = await dialTwilio({
-        accountSid: cfg["accountSid"]!, authToken: providerRow.apiKey,
+        accountSid: cfg["accountSid"]!, authToken: providerRow!.apiKey,
         fromNumber: cfg["fromNumber"]!, toNumber,
         webhookUrl: `${baseUrl}/api/webhooks/twilio/voice?agentId=${agentId}`,
         statusCallbackUrl: `${baseUrl}/api/webhooks/twilio/status`,
         maxDurationSeconds,
       });
     } else if (provider === "plivo") {
-      const cfg = providerRow.extraConfig ? JSON.parse(providerRow.extraConfig) as Record<string, string> : {};
+      const cfg = providerRow!.extraConfig ? JSON.parse(providerRow!.extraConfig) as Record<string, string> : {};
       if (!cfg["authId"]) { res.status(400).json({ error: 'Plivo provider is missing "authId" in Extra Config. Edit the provider and add: {"authId":"MAxx","fromNumber":"+1xxx"}' }); return; }
       if (!cfg["fromNumber"]) { res.status(400).json({ error: 'Plivo provider is missing "fromNumber" in Extra Config.' }); return; }
+      effectiveFromNumber = cfg["fromNumber"]!;
       providerCallId = await dialPlivo({
-        authId: cfg["authId"]!, authToken: providerRow.apiKey,
+        authId: cfg["authId"]!, authToken: providerRow!.apiKey,
         fromNumber: cfg["fromNumber"]!, toNumber,
         answerUrl: `${baseUrl}/api/webhooks/plivo/voice?agentId=${agentId}`,
         maxDurationSeconds,
       });
     } else if (provider === "vobiz") {
-      const cfg = providerRow.extraConfig ? JSON.parse(providerRow.extraConfig) as Record<string, string> : {};
-      if (!cfg["authId"]) { res.status(400).json({ error: 'Vobiz provider is missing "authId" in Extra Config. Edit the provider and add: {"authId":"MA_XXXXXXXX","fromNumber":"+1xxx"}' }); return; }
-      if (!cfg["fromNumber"]) { res.status(400).json({ error: 'Vobiz provider is missing "fromNumber" in Extra Config.' }); return; }
-      const agentCfg2 = (agent.agentConfig ?? {}) as Record<string, unknown>;
-      const amdEnabled = agentCfg2["voicemailDetection"] === true;
-      const amdMode    = (agentCfg2["machineDetectionMode"] as "Enable" | "DetectMessageEnd" | undefined) ?? "DetectMessageEnd";
-      providerCallId = await dialVobiz({
-        authId: cfg["authId"]!, authToken: providerRow.apiKey,
-        fromNumber: cfg["fromNumber"]!, toNumber,
-        answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${agentId}`,
-        hangupUrl:  `${baseUrl}/api/webhooks/vobiz/status`,
-        maxDurationSeconds,
-        // P2-B: pass AMD config when voicemail detection is enabled
-        ...(amdEnabled && {
-          machineDetection:    amdMode,
-          machineDetectionUrl: `${baseUrl}/api/webhooks/vobiz/amd?agentId=${agentId}`,
-        }),
-      });
+      const agentCfg2    = (agent.agentConfig ?? {}) as Record<string, unknown>;
+      const amdEnabled   = agentCfg2["voicemailDetection"] === true;
+      const amdMode      = (agentCfg2["machineDetectionMode"] as "Enable" | "DetectMessageEnd" | undefined) ?? "DetectMessageEnd";
+      const cfg          = providerRow?.extraConfig ? JSON.parse(providerRow.extraConfig) as Record<string, string> : {};
+      const hasOwnCreds  = !!(providerRow && cfg["authId"] && cfg["fromNumber"]);
+
+      if (hasOwnCreds) {
+        // ── Own Vobiz sub-account — KYC required for regulatory compliance ──
+        if (agent.userId) {
+          const [kycAccount] = await db
+            .select({ kycStatus: vobizAccountsTable.kycStatus })
+            .from(vobizAccountsTable)
+            .where(eq(vobizAccountsTable.userId, agent.userId));
+          if (!kycAccount || kycAccount.kycStatus !== "completed") {
+            res.status(403).json({
+              error: "Identity verification is required to use your own Vobiz number. Please complete KYC in the Verification section.",
+              code: "KYC_REQUIRED",
+            });
+            return;
+          }
+        }
+        effectiveFromNumber = cfg["fromNumber"]!;
+        providerCallId = await dialVobiz({
+          authId: cfg["authId"]!, authToken: providerRow!.apiKey,
+          fromNumber: cfg["fromNumber"]!, toNumber,
+          answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${agentId}`,
+          hangupUrl:  `${baseUrl}/api/webhooks/vobiz/status`,
+          maxDurationSeconds,
+          ...(amdEnabled && { machineDetection: amdMode, machineDetectionUrl: `${baseUrl}/api/webhooks/vobiz/amd?agentId=${agentId}` }),
+        });
+      } else {
+        // ── Managed platform number — no personal number/KYC required ──
+        if (agent.userId) {
+          const [kycAccount] = await db
+            .select({ kycStatus: vobizAccountsTable.kycStatus })
+            .from(vobizAccountsTable)
+            .where(eq(vobizAccountsTable.userId, agent.userId));
+          const hasKyc = kycAccount?.kycStatus === "completed";
+
+          if (!hasKyc) {
+            // Without KYC the destination must have been OTP-verified first
+            const now = new Date();
+            const [verified] = await db
+              .select()
+              .from(verifiedPhoneDestinationsTable)
+              .where(and(
+                eq(verifiedPhoneDestinationsTable.userId, agent.userId),
+                eq(verifiedPhoneDestinationsTable.phoneNumber, toNumber),
+                gt(verifiedPhoneDestinationsTable.expiresAt, now),
+              ));
+            if (!verified) {
+              res.status(403).json({
+                error: "Please verify the destination number via OTP before calling without KYC.",
+                code: "DESTINATION_UNVERIFIED",
+              });
+              return;
+            }
+          }
+        }
+
+        // Load platform managed credentials
+        const [authIdRow, authTokenRow, numbersRow] = await Promise.all([
+          db.select().from(platformSettingsTable).where(eq(platformSettingsTable.key, "managed_vobiz_auth_id")).then(r => r[0]),
+          db.select().from(platformSettingsTable).where(eq(platformSettingsTable.key, "managed_vobiz_auth_token")).then(r => r[0]),
+          db.select().from(platformSettingsTable).where(eq(platformSettingsTable.key, "managed_phone_numbers")).then(r => r[0]),
+        ]);
+
+        const managedAuthId    = authIdRow?.value    || process.env["VOBIZ_AUTH_ID"];
+        const managedAuthToken = authTokenRow?.value  || process.env["VOBIZ_AUTH_TOKEN"];
+        const numbers: string[] = numbersRow?.value ? (JSON.parse(numbersRow.value) as string[]) : [];
+
+        if (!managedAuthId || !managedAuthToken) {
+          res.status(503).json({ error: "Managed telephony is not configured. Please add your own Vobiz provider or contact support." });
+          return;
+        }
+        if (numbers.length === 0) {
+          res.status(503).json({ error: "No managed phone numbers are configured. Please add your own Vobiz provider or contact support." });
+          return;
+        }
+
+        const fromNumber = numbers[Math.floor(Math.random() * numbers.length)]!;
+        effectiveFromNumber = fromNumber;
+        providerCallId = await dialVobiz({
+          authId: managedAuthId, authToken: managedAuthToken,
+          fromNumber, toNumber,
+          answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${agentId}&pt=1`,
+          hangupUrl:  `${baseUrl}/api/webhooks/vobiz/status`,
+          maxDurationSeconds,
+          ...(amdEnabled && { machineDetection: amdMode, machineDetectionUrl: `${baseUrl}/api/webhooks/vobiz/amd?agentId=${agentId}` }),
+        });
+        req.log.info({ agentId, toNumber, fromNumber, managedAuthId }, "Outbound call via managed number");
+      }
     } else {
       res.status(400).json({ error: `Outbound calling is not yet supported for provider: ${provider}` });
       return;
@@ -203,7 +267,7 @@ router.post("/calls/outbound", async (req, res): Promise<void> => {
 
   const executionId = `exec_${randomBytes(4).toString("hex")}`;
   const [call] = await db.insert(callsTable).values({
-    agentId, toNumber, fromNumber: "outbound", status: "in_progress",
+    agentId, toNumber, fromNumber: effectiveFromNumber, status: "in_progress",
     executionId,
     metadata: JSON.stringify({ providerCallId, provider }),
   }).returning();
@@ -212,6 +276,91 @@ router.post("/calls/outbound", async (req, res): Promise<void> => {
 
   req.log.info({ agentId, toNumber, providerCallId }, "Outbound call initiated");
   res.status(201).json(GetCallResponse.parse(await enrichCall(call)));
+});
+
+/* ── POST /calls/send-destination-otp ────────────────────────────────────── */
+
+router.post("/calls/send-destination-otp", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  if (!clerkId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const { phoneNumber } = req.body as { phoneNumber?: string };
+  if (!phoneNumber?.trim()) { res.status(400).json({ error: "phoneNumber is required" }); return; }
+
+  const phone = phoneNumber.trim();
+  if (!/^\+?[1-9]\d{6,14}$/.test(phone.replace(/[\s\-()]/g, ""))) {
+    res.status(400).json({ error: "Invalid phone number format. Include country code (e.g. +91XXXXXXXXXX)." });
+    return;
+  }
+
+  try {
+    const otp = await generateAndStoreOtp(clerkId, phone);
+    await sendBrevoSms(phone, `Your SnapServe verification code is ${otp}. Valid for 10 minutes. Do not share this with anyone.`);
+    req.log.info({ clerkId, phone }, "Destination OTP sent");
+    res.json({ sent: true });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    req.log.error({ err, clerkId, phone }, "Failed to send destination OTP");
+    res.status(500).json({ error: msg });
+  }
+});
+
+/* ── POST /calls/verify-destination-otp ──────────────────────────────────── */
+
+router.post("/calls/verify-destination-otp", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  if (!clerkId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const { phoneNumber, otp } = req.body as { phoneNumber?: string; otp?: string };
+  if (!phoneNumber?.trim() || !otp?.trim()) {
+    res.status(400).json({ error: "phoneNumber and otp are required" });
+    return;
+  }
+
+  const phone = phoneNumber.trim();
+  const valid = await verifyDestinationOtp(clerkId, phone, otp.trim());
+  if (!valid) {
+    res.status(400).json({ error: "Invalid or expired OTP. Please request a new one." });
+    return;
+  }
+
+  const now       = new Date();
+  const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days
+
+  // Upsert: delete any stale row then insert fresh
+  await db
+    .delete(verifiedPhoneDestinationsTable)
+    .where(and(
+      eq(verifiedPhoneDestinationsTable.userId, clerkId),
+      eq(verifiedPhoneDestinationsTable.phoneNumber, phone),
+    ));
+  await db.insert(verifiedPhoneDestinationsTable).values({ userId: clerkId, phoneNumber: phone, expiresAt });
+
+  req.log.info({ clerkId, phone }, "Destination phone verified");
+  res.json({ verified: true, expiresAt: expiresAt.toISOString() });
+});
+
+/* ── GET /calls/verified-destinations ────────────────────────────────────── */
+
+router.get("/calls/verified-destinations", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  if (!clerkId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const now = new Date();
+  const rows = await db
+    .select()
+    .from(verifiedPhoneDestinationsTable)
+    .where(and(
+      eq(verifiedPhoneDestinationsTable.userId, clerkId),
+      gt(verifiedPhoneDestinationsTable.expiresAt, now),
+    ))
+    .orderBy(desc(verifiedPhoneDestinationsTable.verifiedAt));
+
+  res.json(rows.map(r => ({
+    phoneNumber: r.phoneNumber,
+    verifiedAt:  r.verifiedAt.toISOString(),
+    expiresAt:   r.expiresAt.toISOString(),
+  })));
 });
 
 /* ── GET /calls/active ────────────────────────────────────────────────────── */

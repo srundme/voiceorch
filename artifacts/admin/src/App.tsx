@@ -14,6 +14,7 @@ import Finance from "@/pages/finance";
 import Platform from "@/pages/platform";
 import Growth from "@/pages/growth";
 import ManagedKeys from "@/pages/managed-keys";
+import ManagedNumbers from "@/pages/managed-numbers";
 import Voices from "@/pages/voices";
 import PlatformSettings from "@/pages/settings";
 import PromptTemplatePage from "@/pages/prompt-template";
@@ -69,6 +70,7 @@ function Router() {
       <ProtectedRoute path="/platform" component={Platform} />
       <ProtectedRoute path="/growth" component={Growth} />
       <ProtectedRoute path="/managed-keys" component={ManagedKeys} />
+      <ProtectedRoute path="/managed-numbers" component={ManagedNumbers} />
       <ProtectedRoute path="/voices" component={Voices} />
 
       <ProtectedRoute path="/usage" component={UsageOverviewPage} />

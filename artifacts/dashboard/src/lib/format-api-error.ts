@@ -52,6 +52,18 @@ export function formatApiError(err: unknown): string {
 }
 
 /**
+ * Returns true when the API responded with a DESTINATION_UNVERIFIED error code (403),
+ * indicating the caller must OTP-verify the destination number before calling.
+ */
+export function isDestinationUnverifiedError(err: unknown): boolean {
+  if (err instanceof ApiError) {
+    const data = err.data as (ApiErrorData & { code?: string }) | null;
+    return data?.code === "DESTINATION_UNVERIFIED";
+  }
+  return false;
+}
+
+/**
  * Returns true when the API responded with a KYC_REQUIRED error code (403),
  * indicating the user must complete identity verification before proceeding.
  */
