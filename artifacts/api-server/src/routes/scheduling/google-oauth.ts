@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request } from "express";
 import { requireAuth } from "../../middlewares/requireAuth.js";
 import {
   getAuthUrl,
@@ -41,6 +41,39 @@ function isTrustedOrigin(origin: string): boolean {
   }
 }
 
+/**
+ * Derive the OAuth redirect URI from the current request's externally-visible
+ * host (honoring the shared proxy's x-forwarded-host / x-forwarded-proto
+ * headers). The host is validated against the trusted-origin rules before use
+ * so an attacker-controlled Host header cannot forge an arbitrary redirect URI.
+ *
+ * Derivation order:
+ *   1. Request's forwarded host (externally-visible dev/prod domain)
+ *   2. GOOGLE_REDIRECT_URI env var (optional explicit override)
+ *   3. First domain in REPLIT_DOMAINS (existing fallback)
+ *   4. localhost:80 (last resort, never reaches Google in practice)
+ */
+function deriveRedirectUri(req: Request): string {
+  const forwardedHost  = (req.headers["x-forwarded-host"]  as string | undefined)?.split(",")[0]?.trim();
+  const forwardedProto = (req.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0]?.trim() ?? "https";
+  const host = forwardedHost ?? req.hostname;
+
+  if (host && isTrustedOrigin(`${forwardedProto}://${host}`)) {
+    return `${forwardedProto}://${host}/api/scheduling/google/callback`;
+  }
+
+  // Explicit env-var override (kept as second priority for backward compat)
+  if (process.env["GOOGLE_REDIRECT_URI"]) {
+    return process.env["GOOGLE_REDIRECT_URI"];
+  }
+
+  // Auto-detect from REPLIT_DOMAINS
+  const domain = process.env["REPLIT_DOMAINS"]?.split(",")[0];
+  return domain
+    ? `https://${domain}/api/scheduling/google/callback`
+    : "http://localhost:80/api/scheduling/google/callback";
+}
+
 // ── List connected Google accounts ───────────────────────────────────────────
 
 router.get("/scheduling/google/connections", requireAuth, async (req, res): Promise<void> => {
@@ -65,7 +98,13 @@ router.get("/scheduling/google/connect", requireAuth, (req, res): void => {
     return;
   }
 
-  const url = getAuthUrl(clerkId, returnTo, returnOrigin && isTrustedOrigin(returnOrigin) ? returnOrigin : undefined);
+  const redirectUri = deriveRedirectUri(req);
+  const url = getAuthUrl(
+    clerkId,
+    returnTo,
+    returnOrigin && isTrustedOrigin(returnOrigin) ? returnOrigin : undefined,
+    redirectUri,
+  );
   res.redirect(url);
 });
 
@@ -81,7 +120,13 @@ router.get("/scheduling/google/connect-url", requireAuth, (req, res): void => {
     return;
   }
 
-  const url = getAuthUrl(clerkId, returnTo, returnOrigin && isTrustedOrigin(returnOrigin) ? returnOrigin : undefined);
+  const redirectUri = deriveRedirectUri(req);
+  const url = getAuthUrl(
+    clerkId,
+    returnTo,
+    returnOrigin && isTrustedOrigin(returnOrigin) ? returnOrigin : undefined,
+    redirectUri,
+  );
   res.json({ url });
 });
 
@@ -122,7 +167,8 @@ router.get("/scheduling/google/callback", async (req, res): Promise<void> => {
   }
 
   try {
-    const tokens = await exchangeCode(code);
+    const redirectUri = deriveRedirectUri(req);
+    const tokens = await exchangeCode(code, redirectUri);
     await upsertConnection(
       clerkId,
       tokens.email,

@@ -35,13 +35,19 @@ function callbackUrl(): string {
     : "http://localhost:80/api/scheduling/google/callback";
 }
 
-export function makePlatformOAuth2Client() {
+/**
+ * Build an OAuth2 client. When `redirectUri` is supplied (derived from the
+ * current request's externally-visible host) it takes precedence over the
+ * static env-var / REPLIT_DOMAINS fallbacks so the same URI is used on both
+ * legs of the flow (Google requires an exact match).
+ */
+export function makePlatformOAuth2Client(redirectUri?: string) {
   const clientId     = process.env["GOOGLE_CLIENT_ID"];
   const clientSecret = process.env["GOOGLE_CLIENT_SECRET"];
   if (!clientId || !clientSecret) {
     throw new Error("GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set in environment");
   }
-  return new google.auth.OAuth2(clientId, clientSecret, callbackUrl());
+  return new google.auth.OAuth2(clientId, clientSecret, redirectUri ?? callbackUrl());
 }
 
 // ── Auth URL generation ──────────────────────────────────────────────────────
@@ -51,8 +57,13 @@ export function makePlatformOAuth2Client() {
  * `state` is a JSON object `{ clerkId, returnTo? }` so the callback can map
  * the account AND redirect back to whichever page initiated the flow.
  */
-export function getAuthUrl(clerkId: string, returnTo?: string, returnOrigin?: string): string {
-  const client = makePlatformOAuth2Client();
+export function getAuthUrl(
+  clerkId: string,
+  returnTo?: string,
+  returnOrigin?: string,
+  redirectUri?: string,
+): string {
+  const client = makePlatformOAuth2Client(redirectUri);
   const state = JSON.stringify({
     clerkId,
     returnTo: returnTo ?? "conferencing",
@@ -70,13 +81,13 @@ export function getAuthUrl(clerkId: string, returnTo?: string, returnOrigin?: st
 
 // ── Code exchange ────────────────────────────────────────────────────────────
 
-export async function exchangeCode(code: string): Promise<{
+export async function exchangeCode(code: string, redirectUri?: string): Promise<{
   accessToken: string;
   refreshToken: string;
   expiry: Date;
   email: string;
 }> {
-  const client = makePlatformOAuth2Client();
+  const client = makePlatformOAuth2Client(redirectUri);
   const { tokens } = await client.getToken(code);
   if (!tokens.access_token) {
     throw new Error("Missing access_token from Google OAuth response");
