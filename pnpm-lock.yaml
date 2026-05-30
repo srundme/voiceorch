@@ -694,6 +694,8 @@ importers:
         specifier: 'catalog:'
         version: 3.25.76
 
+  artifacts/gender-service: {}
+
   artifacts/landing:
     devDependencies:
       '@hookform/resolvers':
