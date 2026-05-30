@@ -17,24 +17,20 @@ const activeCalls = new Map<string, number>();
 const MAX_CONCURRENT_CALLS = 5;
 
 // ── Tuning constants ─────────────────────────────────────────────────────────
-const VAD_SILENCE_MS           = 700;   // raised from 300ms — prevents splitting mid-sentence pauses into separate turns
+const VAD_SILENCE_MS           = 450;   // silence window before sending audio to STT (ms)
 const SPEECH_RMS_THRESHOLD     = 400;   // normal VAD — user speaking (agent silent)
 const BARGE_IN_RMS             = 2000;  // much higher bar while agent is speaking to avoid false barge-ins from
                                         // ambient noise, TV, nearby conversation, or mic echo bleed
 const BARGE_IN_MIN_FRAMES      = 4;     // require ~160ms of sustained speech before interrupting
                                         // (4 × 40ms chunks) — prevents a single word/noise from cutting the agent
-const BARGE_IN_ECHO_GRACE_MS   = 1000; // suppress barge-in for this long after each TTS turn begins —
-                                        // browser echo cancellation needs ~500–800 ms to adapt; without this the
-                                        // mic echo of the agent's own voice triggers false barge-ins that cut off
-                                        // the last word(s) of every response
+const BARGE_IN_ECHO_GRACE_MS   = 700;  // suppress barge-in after TTS starts — allows browser echo cancellation to adapt
 const AUDIO_TAIL_SILENCE_MS    = 250;  // extra wait after the last chunk so the client's audio buffer drains
                                         // before the server signals "listening" (prevents last-word cutoff)
-const MIN_PCM_BYTES            = 6400; // ~200ms at 16kHz Int16
+const MIN_PCM_BYTES            = 3200; // ~100ms at 16kHz Int16 — minimum speech before processing
 const AUDIO_CHUNK_BYTES        = 1280; // 40ms per WS frame
+const STREAM_ACCUM_BYTES       = 1280; // accumulate TTS stream data before flushing to queue (= one frame)
 const HANDOFF_SILENCE_MS       = 3000; // sustained silence that may indicate a phone handoff
-const TTS_VOLUME_GAIN          = 2.5;  // PCM amplitude multiplier for outbound TTS audio —
-                                        // most TTS providers output at ~40% of full scale; this brings
-                                        // the perceived loudness up to a comfortable level
+const TTS_VOLUME_GAIN          = 1.5;  // PCM amplitude multiplier — reduced from 2.5 to prevent hard-clipping distortion
 
 /** Transcript phrases that strongly suggest the caller is handing the phone to someone else. */
 const HANDOFF_PHRASES = [
@@ -280,8 +276,8 @@ export async function handleWebCallWebSocket(
       send({ type: "transcript", speaker: "user", text: userText });
       history.push({ role: "user", content: userText });
 
-      // 2. LLM — stream tokens, queue TTS per sentence
-      const sentenceJobs: Promise<Buffer>[] = [];
+      // 2. LLM — stream tokens, collect sentences for sequential TTS playback
+      const pendingSentences: string[] = [];
       let tokenBuf  = "";   // filtered text waiting to be split into sentences
       let fullReply = "";   // raw LLM output (may include <think> blocks)
 
@@ -323,14 +319,87 @@ export async function handleWebCallWebSocket(
 
       function queueSentence(text: string) {
         const t = text.trim();
-        if (!t) return;
-        // synthesize() now returns { audio, characters }; extract just the audio for playback.
-        const job = tts.synthesize(t).then(({ audio }) => audio);
-        // Attach a no-op catch immediately so Node.js doesn't fire
-        // unhandledRejection before the for-loop below awaits the job.
-        // The rejection still propagates when we await in the loop.
-        job.catch(() => {});
-        sentenceJobs.push(job);
+        if (t) pendingSentences.push(t);
+      }
+
+      // ── Streaming TTS playback (producer-consumer) ─────────────────────────
+      // When synthesizeStream is available (e.g. Cartesia), audio starts
+      // playing ~80-150ms after the sentence is ready rather than waiting
+      // for the full synthesis to complete.
+      async function playSentence(text: string): Promise<void> {
+        if (!text.trim() || closed || interrupted) return;
+
+        if (tts.synthesizeStream) {
+          const queue: Buffer[] = [];
+          let ttsDone = false;
+
+          const drainLoop = async (): Promise<void> => {
+            while (!closed && !interrupted) {
+              if (queue.length > 0) {
+                const chunk = queue.shift()!;
+                recording.addAgentChunk(chunk);
+                sendAudio(amplifyPcm(chunk, TTS_VOLUME_GAIN));
+                await new Promise<void>(r => setTimeout(r, 40));
+              } else if (ttsDone) {
+                break;
+              } else {
+                await new Promise<void>(r => setTimeout(r, 5));
+              }
+            }
+          };
+
+          let accum: Buffer[] = [];
+          let accumSize = 0;
+          const flush = (): void => {
+            if (accum.length === 0 || closed || interrupted) { accum = []; accumSize = 0; return; }
+            const merged = Buffer.concat(accum);
+            accum = []; accumSize = 0;
+            for (let i = 0; i < merged.length; i += AUDIO_CHUNK_BYTES) {
+              queue.push(merged.slice(i, i + AUDIO_CHUNK_BYTES));
+            }
+          };
+
+          const aborter = new AbortController();
+          const closedWatcher = setInterval(() => {
+            if (closed || interrupted) aborter.abort();
+          }, 50);
+
+          const drainPromise = drainLoop();
+
+          try {
+            await tts.synthesizeStream(
+              text,
+              (chunk: Buffer) => {
+                if (closed || interrupted) return;
+                accum.push(chunk);
+                accumSize += chunk.length;
+                if (accumSize >= STREAM_ACCUM_BYTES) flush();
+              },
+              () => { flush(); },
+              aborter.signal,
+            );
+          } catch (err) {
+            const isAbort = err instanceof Error && err.name === "AbortError";
+            if (!isAbort) throw err;
+          } finally {
+            clearInterval(closedWatcher);
+          }
+
+          flush();
+          ttsDone = true;
+          await drainPromise;
+        } else {
+          // Fallback: wait for full synthesis then play
+          const { audio: pcmOut } = await tts.synthesize(text);
+          if (closed || interrupted) return;
+          for (let j = 0; j < pcmOut.length; j += AUDIO_CHUNK_BYTES) {
+            if (closed || interrupted) break;
+            const chunk = pcmOut.slice(j, j + AUDIO_CHUNK_BYTES);
+            recording.addAgentChunk(chunk);
+            sendAudio(amplifyPcm(chunk, TTS_VOLUME_GAIN));
+            await new Promise<void>(r => setTimeout(r, 40));
+          }
+        }
       }
 
       try {
@@ -364,13 +433,15 @@ export async function handleWebCallWebSocket(
       // Clean the stored reply — strip think blocks from transcript + history
       const cleanReply = fullReply.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
 
-      if (!cleanReply || sentenceJobs.length === 0) {
+      if (!cleanReply || pendingSentences.length === 0) {
         sendStatus("listening");
         processing = false;
         return;
       }
 
       history.push({ role: "assistant", content: cleanReply });
+      // Send transcript before audio starts so the UI updates immediately
+      send({ type: "transcript", speaker: "agent", text: cleanReply });
       sendStatus("speaking");
       speaking = true;
       speakingStartedAt = Date.now();
@@ -385,15 +456,12 @@ export async function handleWebCallWebSocket(
       }
       bargeInFrames = 0;
 
-      // 3. Pipelined sentence playback — barge-in checks at every frame
-      let transcriptSent = false;
-
-      for (let i = 0; i < sentenceJobs.length; i++) {
+      // 3. Stream sentences sequentially — with synthesizeStream, first audio
+      // arrives in ~80-150ms rather than waiting for full synthesis to complete.
+      for (const sentence of pendingSentences) {
         if (closed || interrupted) break;
-
-        let pcmOut: Buffer;
         try {
-          pcmOut = await sentenceJobs[i]!;
+          await playSentence(sentence);
         } catch (ttsErr) {
           const reason = toReadableError(ttsErr, "TTS error");
           logger.error({ callId, err: ttsErr }, reason);
@@ -403,20 +471,6 @@ export async function handleWebCallWebSocket(
           processing = false;
           if (!closed) void hangup("error", reason);
           return;
-        }
-        if (interrupted || closed) break;
-
-        if (!transcriptSent) {
-          send({ type: "transcript", speaker: "agent", text: cleanReply });
-          transcriptSent = true;
-        }
-
-        for (let j = 0; j < pcmOut.length; j += AUDIO_CHUNK_BYTES) {
-          if (closed || interrupted) break;
-          const chunk = pcmOut.slice(j, j + AUDIO_CHUNK_BYTES);
-          recording.addAgentChunk(chunk);  // record pre-amplification for natural levels
-          sendAudio(amplifyPcm(chunk, TTS_VOLUME_GAIN));
-          await new Promise(r => setTimeout(r, 40));
         }
       }
 

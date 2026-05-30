@@ -1,6 +1,5 @@
 import type { WebSocket } from "ws";
 import { createSession, getSession, endSession, failSession } from "../session.js";
-import { decodeMulaw } from "../audio.js";
 import { toReadableError } from "../utils.js";
 import { logger } from "../../lib/logger.js";
 
@@ -61,17 +60,17 @@ export async function handleVobizWebSocket(
 
   /**
    * Send audio to Vobiz caller via the playAudio WebSocket event.
-   * Pipeline delivers mulaw chunks; decode them back to LINEAR16 PCM (audio/x-l16).
+   * Pipeline delivers raw 8kHz LINEAR16 PCM (rawPcmOutput: true in session config)
+   * so no mulaw decode is needed — the buffer is sent directly.
    */
-  function sendAudioToVobiz(mulawChunk: Buffer): void {
+  function sendAudioToVobiz(pcmChunk: Buffer): void {
     if (ws.readyState !== ws.OPEN) return;
-    const pcm = decodeMulaw(mulawChunk);
     ws.send(JSON.stringify({
       event: "playAudio",
       media: {
         contentType: "audio/x-l16",
         sampleRate: 8000,
-        payload: pcm.toString("base64"),
+        payload: pcmChunk.toString("base64"),
       },
     }));
   }

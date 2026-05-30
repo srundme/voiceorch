@@ -330,6 +330,7 @@ export async function createSession(params: {
     telephonyProvider: params.telephonyProvider,
     callerPhone,
     onAudioOut: params.onAudioOut,
+    rawPcmOutput: params.telephonyProvider === "vobiz",
     onTranscript: (speaker, text) => {
       logger.debug({ callId: callRecord.id, speaker, text: text.slice(0, 80) }, "Transcript");
     },

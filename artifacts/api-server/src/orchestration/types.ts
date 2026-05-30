@@ -253,4 +253,8 @@ export interface SessionConfig {
   onConversationUpdate?: (history: ConversationTurn[]) => void;
   /** Called when a fatal pipeline error occurs (STT/LLM/TTS failure) so the caller can fail the session with a human-readable reason */
   onFatalError?: (reason: string) => void;
+  /** When true, onAudioOut receives raw 8 kHz LINEAR16 PCM instead of G.711 μ-law.
+   *  Used for telephony providers (e.g. Vobiz) that natively accept PCM, avoiding a
+   *  lossy mulaw encode→decode round-trip. */
+  rawPcmOutput?: boolean;
 }

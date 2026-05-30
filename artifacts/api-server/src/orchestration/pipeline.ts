@@ -471,7 +471,10 @@ export class OrchestrationPipeline {
           if (queue.length > 0) {
             const chunk = queue.shift()!;
             if (!this.firstAudioSentAt) this.firstAudioSentAt = Date.now();
-            const outChunk = this.ambientStream ? this.ambientStream.mixIntoMulaw(chunk) : chunk;
+            // Ambient mixing only applies to mulaw output; skip when sending raw PCM
+            const outChunk = (!this.config.rawPcmOutput && this.ambientStream)
+              ? this.ambientStream.mixIntoMulaw(chunk)
+              : chunk;
             this.config.onAudioOut(outChunk);
             await new Promise<void>((r) => setTimeout(r, 20));
           } else if (ttsDone) {
@@ -499,9 +502,17 @@ export class OrchestrationPipeline {
         const pcm8k = downsample16to8(pcm16k);
         // Record agent audio (downsampled to match recording sample rate)
         this.recording.addAgentChunk(pcm8k);
-        const mulaw = encodeMulaw(pcm8k);
-        for (let i = 0; i < mulaw.length; i += CHUNK_SIZE_MULAW) {
-          queue.push(mulaw.slice(i, i + CHUNK_SIZE_MULAW));
+        if (this.config.rawPcmOutput) {
+          // Vobiz accepts LINEAR16 PCM natively — skip mulaw encode to avoid lossy round-trip
+          const PCM_CHUNK = CHUNK_SIZE_MULAW * 2; // 320 bytes = 20ms @ 8kHz 16-bit
+          for (let i = 0; i < pcm8k.length; i += PCM_CHUNK) {
+            queue.push(pcm8k.slice(i, i + PCM_CHUNK));
+          }
+        } else {
+          const mulaw = encodeMulaw(pcm8k);
+          for (let i = 0; i < mulaw.length; i += CHUNK_SIZE_MULAW) {
+            queue.push(mulaw.slice(i, i + CHUNK_SIZE_MULAW));
+          }
         }
       };
 
@@ -561,17 +572,26 @@ export class OrchestrationPipeline {
     } else {
       const { audio: ttsPcm16k } = await this.tts.synthesize(text);
       if (this.bargeInRequested) return;
-      const ttsPcm8k  = downsample16to8(ttsPcm16k);
-      // Record agent audio
+      const ttsPcm8k = downsample16to8(ttsPcm16k);
       this.recording.addAgentChunk(ttsPcm8k);
-      const ttsMusaw  = encodeMulaw(ttsPcm8k);
-      for (let i = 0; i < ttsMusaw.length; i += CHUNK_SIZE_MULAW) {
-        if (this.closed || this.bargeInRequested) break;
-        if (!this.firstAudioSentAt) this.firstAudioSentAt = Date.now();
-        const chunk = ttsMusaw.slice(i, i + CHUNK_SIZE_MULAW);
-        const outChunk = this.ambientStream ? this.ambientStream.mixIntoMulaw(chunk) : chunk;
-        this.config.onAudioOut(outChunk);
-        await new Promise<void>((r) => setTimeout(r, 20));
+      if (this.config.rawPcmOutput) {
+        const PCM_CHUNK = CHUNK_SIZE_MULAW * 2; // 320 bytes = 20ms @ 8kHz 16-bit
+        for (let i = 0; i < ttsPcm8k.length; i += PCM_CHUNK) {
+          if (this.closed || this.bargeInRequested) break;
+          if (!this.firstAudioSentAt) this.firstAudioSentAt = Date.now();
+          this.config.onAudioOut(ttsPcm8k.slice(i, i + PCM_CHUNK));
+          await new Promise<void>((r) => setTimeout(r, 20));
+        }
+      } else {
+        const ttsMusaw = encodeMulaw(ttsPcm8k);
+        for (let i = 0; i < ttsMusaw.length; i += CHUNK_SIZE_MULAW) {
+          if (this.closed || this.bargeInRequested) break;
+          if (!this.firstAudioSentAt) this.firstAudioSentAt = Date.now();
+          const chunk = ttsMusaw.slice(i, i + CHUNK_SIZE_MULAW);
+          const outChunk = this.ambientStream ? this.ambientStream.mixIntoMulaw(chunk) : chunk;
+          this.config.onAudioOut(outChunk);
+          await new Promise<void>((r) => setTimeout(r, 20));
+        }
       }
     }
   }
