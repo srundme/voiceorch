@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@clerk/react";
 import { useLocation } from "wouter";
+import { CreateAgentDialog } from "@/components/create-agent-dialog";
 import {
   Search, Plus, Phone, Mic, MicOff, PhoneOff, Volume2,
   Settings2, MoreHorizontal, Pencil, Trash2, PlayCircle,
@@ -2314,159 +2315,13 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
   );
 }
 
-/* ── New Agent Quick-Create ───────────────────────────────────────────────── */
-
-function NewAgentPanel({ onCreated }: { onCreated: (id: number) => void }) {
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
-  const [name, setName]       = useState("New Assistant");
-  const [asr, setAsr]         = useState("assemblyai");
-  const [llm, setLlm]         = useState("openai");
-  const [llmModel, setLlmModel] = useState(LLM_MODELS["openai"]?.[0]?.value ?? "");
-  const [tts, setTts]         = useState("elevenlabs");
-  const [ttsModel, setTtsModel] = useState("");
-  const [tel, setTel]         = useState("twilio");
-  const [prompt, setPrompt]   = useState("You are a helpful AI voice assistant. Be concise and professional.");
-
-  const create = useCreateAgent();
-
-  function handleCreate() {
-    create.mutate(
-      {
-        data: {
-          name,
-          asrProvider: asr,
-          llmProvider: llm,
-          llmModel: llmModel || LLM_MODELS[llm]?.[0]?.value || undefined,
-          ttsProvider: tts,
-          ttsModel: ttsModel || undefined,
-          telephonyProvider: tel,
-          systemPrompt: prompt,
-          maxDuration: 300,
-        } as Parameters<typeof create.mutate>[0]["data"],
-      },
-      {
-        onSuccess: (created) => {
-          queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
-          toast({ title: "Assistant created" });
-          onCreated(created.id);
-        },
-        onError: (err: unknown) => toast({ title: "Error", description: formatApiError(err), variant: "destructive" }),
-      }
-    );
-  }
-
-  return (
-    <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-      <div className="flex items-center gap-3 px-5 h-12 border-b border-border shrink-0">
-        <span className="font-semibold text-sm text-foreground">New Assistant</span>
-      </div>
-      <div className="flex-1 overflow-y-auto px-5 py-5">
-        <div className="max-w-2xl space-y-5">
-          <div>
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Name</p>
-            <Input
-              value={name}
-              onChange={e => setName(e.target.value)}
-              className="bg-muted border-border text-foreground"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-muted border border-border rounded-xl p-3.5 space-y-2">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Transcriber</p>
-              <Select value={asr} onValueChange={setAsr}>
-                <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
-                <SelectContent className="bg-card border-border">
-                  {ASR_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="bg-muted border border-border rounded-xl p-3.5 space-y-2">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Model</p>
-              <Select value={llm} onValueChange={(v) => { setLlm(v); setLlmModel(LLM_MODELS[v]?.[0]?.value ?? ""); }}>
-                <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
-                <SelectContent className="bg-card border-border">
-                  {LLM_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              {LLM_MODELS[llm] && (
-                <Select value={llmModel} onValueChange={setLlmModel}>
-                  <SelectTrigger className="h-7 text-xs bg-card border-border text-muted-foreground"><SelectValue placeholder="Select model" /></SelectTrigger>
-                  <SelectContent className="bg-card border-border">
-                    {LLM_MODELS[llm]!.map(m => (
-                      <SelectItem key={m.value} value={m.value} className="text-foreground text-xs">{m.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-            <div className="bg-muted border border-border rounded-xl p-3.5 space-y-2">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Voice</p>
-              <Select
-                value={tts}
-                onValueChange={(v) => {
-                  setTts(v);
-                  setTtsModel(TTS_MODELS[v]?.[0]?.value ?? "");
-                }}
-              >
-                <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
-                <SelectContent className="bg-card border-border">
-                  {TTS_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              {TTS_MODELS[tts] && (
-                <Select value={ttsModel} onValueChange={setTtsModel}>
-                  <SelectTrigger className="h-7 text-xs bg-card border-border text-muted-foreground"><SelectValue placeholder="Select model / voice" /></SelectTrigger>
-                  <SelectContent className="bg-card border-border">
-                    {TTS_MODELS[tts]!.map(m => (
-                      <SelectItem key={m.value} value={m.value} className="text-foreground text-xs">{m.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-            <div className="bg-muted border border-border rounded-xl p-3.5 space-y-2">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Telephony</p>
-              <Select value={tel} onValueChange={setTel}>
-                <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
-                <SelectContent className="bg-card border-border">
-                  {TELEPHONY_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div>
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">System Prompt</p>
-            <Textarea
-              value={prompt}
-              onChange={e => setPrompt(e.target.value)}
-              className="bg-muted border-border text-foreground text-sm min-h-[120px] resize-none placeholder:text-muted-foreground"
-            />
-          </div>
-
-          <Button
-            className="w-full bg-primary hover:opacity-90 text-primary-foreground gap-2"
-            onClick={handleCreate}
-            disabled={!name.trim() || create.isPending}
-          >
-            {create.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-            Create Assistant
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ── Main Page ───────────────────────────────────────────────────────────── */
 
 export default function AssistantsPage() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [pendingTab, setPendingTab] = useState<string | undefined>(undefined);
   const [search, setSearch]         = useState("");
-  const [, setLocation]             = useLocation();
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   const { data: agents, isLoading } = useListAgents({
     query: { queryKey: getListAgentsQueryKey() },
@@ -2501,7 +2356,7 @@ export default function AssistantsPage() {
             </span>
           )}
           <button
-            onClick={() => setLocation("/app/agents/new")}
+            onClick={() => setDialogOpen(true)}
             title="Create assistant"
             className="h-7 w-7 flex items-center justify-center rounded-lg transition-colors border border-border bg-elevated text-muted-foreground hover:text-foreground hover:bg-accent"
           >
@@ -2512,7 +2367,7 @@ export default function AssistantsPage() {
         {/* Create button */}
         <div className="px-3 pt-3 pb-2 shrink-0">
           <button
-            onClick={() => setLocation("/app/agents/new")}
+            onClick={() => setDialogOpen(true)}
             className="w-full flex items-center justify-center gap-2 h-9 rounded-xl text-[12.5px] font-medium transition-colors border border-dashed border-border/60 bg-transparent text-muted-foreground hover:text-foreground hover:bg-accent/50 hover:border-border"
           >
             <Plus className="h-3.5 w-3.5" /> Create Assistant
@@ -2596,7 +2451,7 @@ export default function AssistantsPage() {
               <p className="text-[12px] mt-1 text-muted-foreground/40">Choose one from the list or create a new one.</p>
             </div>
             <button
-              onClick={() => setLocation("/app/agents/new")}
+              onClick={() => setDialogOpen(true)}
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-medium border border-border bg-elevated text-foreground/80 hover:text-foreground hover:bg-accent transition-colors"
             >
               <Plus className="h-4 w-4" /> Create Assistant
@@ -2605,6 +2460,11 @@ export default function AssistantsPage() {
         )}
       </div>
 
+      <CreateAgentDialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        onCreated={(id) => { setPendingTab("prompt"); setSelectedId(id); }}
+      />
     </div>
   );
 }
