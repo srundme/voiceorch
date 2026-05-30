@@ -1,0 +1,8 @@
+{
+  "name": "@workspace/gender-service",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "python3 main.py"
+  }
+}
