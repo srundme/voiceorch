@@ -101,6 +101,8 @@ export function injectCallerMemory(
     return isRecentDrop ? `${base} (call dropped — this is a continuation)` : base;
   })();
 
+  const isReturning = profile.callCount > 1;
+
   const lines: string[] = [
     "=== CALLER MEMORY (from previous calls) ===",
     profile.name    ? `Name: ${profile.name}`                     : "Name: unknown",
@@ -108,8 +110,10 @@ export function injectCallerMemory(
     lastCallStr     ? `Last call: ${lastCallStr}`                 : null,
     profile.summary ? `Context: ${profile.summary}`              : null,
     isRecentDrop
-      ? "IMPORTANT: The previous call was disconnected unexpectedly. This caller is calling back. Resume naturally from where you left off — acknowledge the drop briefly and continue the conversation without starting over."
-      : null,
+      ? "IMPORTANT: The previous call was disconnected unexpectedly. This is a continuation — acknowledge the drop briefly and pick up where you left off. Do NOT start over or re-introduce yourself."
+      : isReturning
+        ? `IMPORTANT: This is a RETURNING caller (call #${profile.callCount}). Greet them warmly as someone you recognise from previous conversations. Do NOT introduce yourself as if this is a first call. Reference the prior context naturally if relevant.`
+        : null,
     "===========================================",
   ].filter((l): l is string => l !== null);
 
