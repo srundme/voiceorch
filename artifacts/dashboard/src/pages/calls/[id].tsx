@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Link, useParams } from "wouter";
 import { format, parseISO } from "date-fns";
-import { ArrowLeft, PlayCircle, Download, FileText, AlertTriangle, Info, Bot, User, Receipt, Sparkles, ClipboardList, Pencil, Check, X } from "lucide-react";
+import { ArrowLeft, Download, FileText, AlertTriangle, Info, Bot, User, Receipt, Sparkles, ClipboardList, Pencil, Check, X, Zap, ChevronDown, ChevronUp } from "lucide-react";
 import {
   useGetCall,
   useGetAgent,
@@ -17,6 +17,101 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
+
+interface ToolEvent {
+  toolName: string;
+  result: string;
+  status: "success" | "error";
+}
+
+const TOOL_CALL_RE = /\[calling tool:\s*([^\]]+)\]/i;
+const TOOL_RESULT_RE = /\[Tool result for ([^\]]+)\]:\s*(.*)/i;
+
+function parseToolEventsFromLines(lines: string[]): ToolEvent[] {
+  const events: ToolEvent[] = [];
+
+  for (const line of lines) {
+    const resultMatch = TOOL_RESULT_RE.exec(line);
+    if (resultMatch) {
+      const toolName = resultMatch[1].trim();
+      const result = resultMatch[2].trim();
+      const status = result.toLowerCase().startsWith("error:") ? "error" : "success";
+      events.push({ toolName, result, status });
+    }
+  }
+
+  return events;
+}
+
+function PlainTranscriptLine({ line, index }: { line: string; index: number }) {
+  const isToolCall = TOOL_CALL_RE.test(line);
+  const isToolResult = TOOL_RESULT_RE.test(line);
+
+  if (isToolCall || isToolResult) {
+    return (
+      <div
+        key={index}
+        className="flex items-start gap-2 px-3 py-2 rounded-md bg-muted/40 border border-border/60 my-1"
+      >
+        <Zap className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-500" />
+        <span className="font-mono text-xs text-muted-foreground leading-relaxed break-all">
+          {line}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div key={index} className="font-mono text-sm leading-relaxed whitespace-pre-wrap">
+      {line}
+    </div>
+  );
+}
+
+function ToolEventRow({ event }: { event: ToolEvent }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = event.result.length > 120;
+  const displayResult = !isLong || expanded ? event.result : event.result.slice(0, 120) + "…";
+
+  return (
+    <div className="p-3 border-b border-border last:border-0">
+      <div className="flex items-center gap-2 flex-wrap">
+        <Zap className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+        <Badge variant="outline" className="font-mono text-xs px-2 py-0 h-5">
+          {event.toolName}
+        </Badge>
+        {event.status === "success" ? (
+          <Badge variant="default" className="text-xs h-5 px-2 py-0 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-transparent hover:bg-emerald-500/20">
+            Success
+          </Badge>
+        ) : (
+          <Badge variant="destructive" className="text-xs h-5 px-2 py-0 bg-destructive/15 text-destructive border-transparent hover:bg-destructive/20">
+            Error
+          </Badge>
+        )}
+      </div>
+      {event.result && (
+        <div className="mt-2">
+          <p className="font-mono text-xs text-muted-foreground leading-relaxed break-all">
+            {displayResult}
+          </p>
+          {isLong && (
+            <button
+              onClick={() => setExpanded(v => !v)}
+              className="mt-1 flex items-center gap-0.5 text-xs text-primary hover:underline"
+            >
+              {expanded ? (
+                <><ChevronUp className="h-3 w-3" /> Show less</>
+              ) : (
+                <><ChevronDown className="h-3 w-3" /> Show more</>
+              )}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function CallDetail() {
   const params = useParams();
@@ -125,6 +220,16 @@ export default function CallDetail() {
     }
   }
 
+  const plainLines = (!isJsonTranscript && call.transcript)
+    ? call.transcript.split(/\r?\n/)
+    : [];
+
+  const toolEvents: ToolEvent[] = isJsonTranscript
+    ? parseToolEventsFromLines(transcriptLines.map((l: any) => String(l.content ?? "")))
+    : call.transcript
+      ? parseToolEventsFromLines(call.transcript.split(/\r?\n/))
+      : [];
+
   const callSummary = (call as any).callSummary as string | null | undefined;
   const rawEval = (call as any).successEvaluation as string | null | undefined;
   const evalVerdict = rawEval ? rawEval.split(/\r?\n/)[0]?.trim().toUpperCase() : undefined;
@@ -218,30 +323,34 @@ export default function CallDetail() {
               </div>
             )}
 
-            <div className="p-6 space-y-6">
+            <div className="p-6 space-y-1">
               {!call.transcript ? (
                 <div className="text-center text-muted-foreground py-10 italic">
                   No transcript available for this call.
                 </div>
               ) : isJsonTranscript ? (
-                transcriptLines.map((line, i) => (
-                  <div key={i} className={`flex gap-4 ${line.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${line.role === 'user' ? 'bg-secondary' : 'bg-primary/20 text-primary'}`}>
-                      {line.role === 'user' ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
+                <div className="space-y-6">
+                  {transcriptLines.map((line, i) => (
+                    <div key={i} className={`flex gap-4 ${line.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${line.role === 'user' ? 'bg-secondary' : 'bg-primary/20 text-primary'}`}>
+                        {line.role === 'user' ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
+                      </div>
+                      <div className={`max-w-[80%] rounded-2xl p-4 ${line.role === 'user' ? 'bg-secondary text-secondary-foreground rounded-tr-sm' : 'bg-card border border-border shadow-sm rounded-tl-sm'}`}>
+                        <p className="text-sm leading-relaxed">{line.content}</p>
+                        {line.timestamp && (
+                          <span className="text-[10px] text-muted-foreground mt-2 block opacity-70">
+                            {line.timestamp}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className={`max-w-[80%] rounded-2xl p-4 ${line.role === 'user' ? 'bg-secondary text-secondary-foreground rounded-tr-sm' : 'bg-card border border-border shadow-sm rounded-tl-sm'}`}>
-                      <p className="text-sm leading-relaxed">{line.content}</p>
-                      {line.timestamp && (
-                        <span className="text-[10px] text-muted-foreground mt-2 block opacity-70">
-                          {line.timestamp}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))
+                  ))}
+                </div>
               ) : (
-                <div className="font-mono text-sm leading-relaxed whitespace-pre-wrap p-4 bg-card rounded-md border border-border">
-                  {call.transcript}
+                <div className="p-4 bg-card rounded-md border border-border space-y-0.5">
+                  {plainLines.map((line, i) => (
+                    <PlainTranscriptLine key={i} line={line} index={i} />
+                  ))}
                 </div>
               )}
             </div>
@@ -295,6 +404,34 @@ export default function CallDetail() {
                   </div>
                 )}
               </dl>
+            </CardContent>
+          </Card>
+
+          {/* Tool Calls */}
+          <Card>
+            <CardHeader className="py-3 border-b">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Zap className="h-4 w-4 text-amber-500" />
+                Tool Calls
+                {toolEvents.length > 0 && (
+                  <Badge variant="secondary" className="ml-auto text-xs h-5 px-2">
+                    {toolEvents.length}
+                  </Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {toolEvents.length === 0 ? (
+                <p className="px-4 py-5 text-xs text-muted-foreground italic text-center">
+                  No tool calls during this call.
+                </p>
+              ) : (
+                <div>
+                  {toolEvents.map((event, i) => (
+                    <ToolEventRow key={i} event={event} />
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 
