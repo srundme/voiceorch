@@ -31,7 +31,11 @@ const SAMPLE_BYTES = BITS / 8;
  */
 const TARGET_BYTES = 2 * SAMPLE_RATE * SAMPLE_BYTES;
 
-const GENDER_SERVICE_URL = "http://localhost:5000/voice-analysis/gender";
+// Route through the shared reverse-proxy (port 80) so this works in both dev
+// and production. Calling localhost:5000 directly is unreliable in Replit's
+// production container where each artifact process may not share a network
+// namespace. The proxy always routes /voice-analysis/* to the gender service.
+const GENDER_SERVICE_URL = "http://localhost:80/voice-analysis/gender";
 
 // ── WAV builder ──────────────────────────────────────────────────────────────
 
@@ -89,7 +93,10 @@ export class GenderDetector {
       this.fired = true;
       const combined = Buffer.concat(this.chunks);
       this.chunks = [];   // free memory
-      this._detect(combined).catch(() => {/* swallowed — non-fatal */});
+      this.log.info({ callId: this.callId, bytes: combined.byteLength }, "Gender detection firing");
+      this._detect(combined).catch((err) => {
+        this.log.warn({ callId: this.callId, err }, "Gender detection promise rejected unexpectedly");
+      });
     }
   }
 
