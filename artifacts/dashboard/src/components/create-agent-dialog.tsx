@@ -34,8 +34,8 @@ export function CreateAgentDialog({ open, onClose, onCreated }: Props) {
         data: {
           name: name.trim(),
           agentMode:         "managed",
-          asrProvider:       "deepgram",
-          asrModel:          "nova-3",
+          asrProvider:       "sarvam",
+          asrModel:          undefined,
           llmProvider:       "google",
           llmModel:          "gemini-2.5-flash",
           ttsProvider:       "cartesia",
