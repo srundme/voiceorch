@@ -93,6 +93,11 @@ export type AgentConfig = {
   bargeInEchoGraceMs?: number;
   // Post-call success evaluation
   successCriteria?: string;  // Free-text criteria; LLM judges PASS/FAIL after each call
+  // P1-F: Caller gender detection
+  genderDetectionEnabled?: boolean;
+  genderDetectionMaleSalutation?: string;
+  genderDetectionFemaleSalutation?: string;
+  genderDetectionNeutralSalutation?: string;
 };
 
 export const agentsTable = pgTable("agents", {

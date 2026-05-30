@@ -134,7 +134,9 @@ export class OrchestrationPipeline {
     this.bargeInEnergyThreshold = config.agentConfig.bargeInEnergyThreshold;
     this.bargeInMinFrames       = config.agentConfig.bargeInMinFrames;
     this.bargeInEchoGraceMs     = config.agentConfig.bargeInEchoGraceMs;
-    this.genderDetector         = new GenderDetector(config.callId);
+    this.genderDetector = config.agentConfig.genderDetectionEnabled
+      ? new GenderDetector(config.callId)
+      : null as unknown as GenderDetector;
 
     const keys = config.providerKeys;
 
@@ -311,13 +313,13 @@ export class OrchestrationPipeline {
     // Streaming STT path: feed all audio directly to Deepgram — no local VAD needed
     if (this.streamSTT) {
       // Feed all frames (not just speech) — librosa pyin handles silence gracefully
-      this.genderDetector.addSpeechChunk(pcm8k);
+      this.genderDetector?.addSpeechChunk(pcm8k);
       this.streamSTT.sendAudio(pcm16k);
       return;
     }
 
     // Feed all frames to the gender detector (fires async once after 2 s of audio, then no-ops)
-    this.genderDetector.addSpeechChunk(pcm8k);
+    this.genderDetector?.addSpeechChunk(pcm8k);
 
     // Batch STT path with local VAD + barge-in detection
     if (hasSpeech) {
@@ -1027,11 +1029,16 @@ export class OrchestrationPipeline {
     }
 
     // Inject gender-based salutation directive once detection has resolved
-    const detectedGender = this.genderDetector.gender;
+    const detectedGender = this.genderDetector?.gender ?? null;
     if (detectedGender === "male") {
-      systemPromptForTurn += "\n\n[CALLER GENDER] The caller has been identified as male. Always address them respectfully as \"Sir\" when appropriate (e.g. \"Yes, Sir\", \"Of course, Sir\"). Never use \"Ma'am\".";
+      const sal = this.agent.genderDetectionMaleSalutation;
+      systemPromptForTurn += `\n\n[CALLER GENDER] The caller has been identified as male. Always address them respectfully as "${sal}" when appropriate (e.g. "Yes, ${sal}", "Of course, ${sal}"). Never use "${this.agent.genderDetectionFemaleSalutation}".`;
     } else if (detectedGender === "female") {
-      systemPromptForTurn += "\n\n[CALLER GENDER] The caller has been identified as female. Always address them respectfully as \"Ma'am\" when appropriate (e.g. \"Yes, Ma'am\", \"Of course, Ma'am\"). Never use \"Sir\".";
+      const sal = this.agent.genderDetectionFemaleSalutation;
+      systemPromptForTurn += `\n\n[CALLER GENDER] The caller has been identified as female. Always address them respectfully as "${sal}" when appropriate (e.g. "Yes, ${sal}", "Of course, ${sal}"). Never use "${this.agent.genderDetectionMaleSalutation}".`;
+    } else if (detectedGender === null && this.agent.genderDetectionNeutralSalutation) {
+      const sal = this.agent.genderDetectionNeutralSalutation;
+      systemPromptForTurn += `\n\n[CALLER GENDER] Gender could not be determined. Use "${sal}" as a neutral salutation when appropriate.`;
     }
 
     try {

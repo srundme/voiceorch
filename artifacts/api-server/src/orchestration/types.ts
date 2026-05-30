@@ -167,6 +167,12 @@ export interface AgentConfig {
 
   // P1-E: Agent timezone (used for date/time context in system prompt)
   timezone: string;
+
+  // P1-F: Caller gender detection
+  genderDetectionEnabled: boolean;
+  genderDetectionMaleSalutation: string;
+  genderDetectionFemaleSalutation: string;
+  genderDetectionNeutralSalutation: string;
 }
 
 export interface ProviderKey {

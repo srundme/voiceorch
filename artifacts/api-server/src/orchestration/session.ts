@@ -163,6 +163,11 @@ export async function createSession(params: {
     bargeInEchoGraceMs:     (agentCfg["bargeInEchoGraceMs"]    as number  | undefined) ?? 600,
     // P1-E: Agent timezone
     timezone: agentTimezone,
+    // P1-F: Caller gender detection
+    genderDetectionEnabled:        (agentCfg["genderDetectionEnabled"]        as boolean | undefined) ?? true,
+    genderDetectionMaleSalutation: (agentCfg["genderDetectionMaleSalutation"] as string  | undefined) ?? "Sir",
+    genderDetectionFemaleSalutation: (agentCfg["genderDetectionFemaleSalutation"] as string | undefined) ?? "Ma'am",
+    genderDetectionNeutralSalutation: (agentCfg["genderDetectionNeutralSalutation"] as string | undefined) ?? "",
   };
 
   // ── Cross-call caller memory ────────────────────────────────────────────────
