@@ -16,17 +16,39 @@ Future modules (same router):
 
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
 import io
 import os
 
 import httpx
 import uvicorn
+from contextlib import asynccontextmanager
 from fastapi import APIRouter, FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-# gender_detector is imported lazily (inside each handler) so uvicorn binds
-# to the port immediately — librosa/numpy load on first request, not at startup.
+
+async def _bg_warmup() -> None:
+    """Import librosa in a thread so the first real request is not slow.
+
+    Uses asyncio.create_task() (called from lifespan) so uvicorn completes
+    startup immediately — this coroutine runs fully in the background.
+    """
+    loop = asyncio.get_running_loop()
+    def _load():
+        try:
+            from gender_detector import classify_audio_bytes  # noqa: PLC0415
+        except Exception:
+            pass
+    await loop.run_in_executor(concurrent.futures.ThreadPoolExecutor(max_workers=1), _load)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    asyncio.create_task(_bg_warmup())
+    yield
+
 
 # ── App setup ─────────────────────────────────────────────────────────────────
 
@@ -34,6 +56,7 @@ app = FastAPI(
     title="SnapServe Voice Analysis",
     version="1.0.0",
     description="Real-time speaker characteristic detection from audio",
+    lifespan=lifespan,
 )
 
 

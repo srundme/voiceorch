@@ -112,7 +112,7 @@ export class GenderDetector {
       const res = await fetch(GENDER_SERVICE_URL, {
         method: "POST",
         body:   form,
-        signal: AbortSignal.timeout(10_000),
+        signal: AbortSignal.timeout(60_000),
       });
 
       if (!res.ok) {
