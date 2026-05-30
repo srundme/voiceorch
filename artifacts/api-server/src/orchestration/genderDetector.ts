@@ -31,11 +31,11 @@ const SAMPLE_BYTES = BITS / 8;
  */
 const TARGET_BYTES = 2 * SAMPLE_RATE * SAMPLE_BYTES;
 
-// Route through the shared reverse-proxy (port 80) so this works in both dev
-// and production. Calling localhost:5000 directly is unreliable in Replit's
-// production container where each artifact process may not share a network
-// namespace. The proxy always routes /voice-analysis/* to the gender service.
-const GENDER_SERVICE_URL = "http://localhost:80/voice-analysis/gender";
+// Call the gender service directly on its bound port. Both the api-server and
+// the gender service run on the same VM in both dev and production, so
+// localhost:5000 is always reachable. The shared proxy (port 80) is NOT
+// available as a localhost listener inside the production container.
+const GENDER_SERVICE_URL = "http://localhost:5000/voice-analysis/gender";
 
 // ── WAV builder ──────────────────────────────────────────────────────────────
 
