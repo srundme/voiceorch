@@ -1,1462 +1,691 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SnapServe | AI Voice Orchestration Platform</title>
-    <meta name="description" content="The API-first infrastructure for autonomous AI telecalling. Build, deploy, and scale voice agents that capture leads, retain memory, and route calls.">
-    
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Space+Grotesk:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
-    
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
-
-    <style>
-        /* ==========================================================================
-           1. GLOBAL DESIGN SYSTEM & VARIABLES
-           ========================================================================== */
-        :root {
-            /* Strict Grayscale Palette */
-            --color-void: #000000;
-            --color-graphite-dark: #080808;
-            --color-graphite-mid: #121212;
-            --color-graphite-light: #1c1c1c;
-            --color-ash: #333333;
-            --color-silver: #888888;
-            --color-platinum: #cccccc;
-            --color-white: #ffffff;
-            
-            /* Glassmorphism & Alpha Layers */
-            --glass-bg-subtle: rgba(255, 255, 255, 0.02);
-            --glass-bg-hover: rgba(255, 255, 255, 0.04);
-            --glass-border-light: rgba(255, 255, 255, 0.05);
-            --glass-border-strong: rgba(255, 255, 255, 0.15);
-            --glow-ambient: rgba(255, 255, 255, 0.1);
-            
-            /* Typography */
-            --font-sans: 'Inter', sans-serif;
-            --font-display: 'Space Grotesk', sans-serif;
-            --font-mono: 'Fira Code', monospace;
-            
-            /* Spacing & Layout */
-            --section-pad-y: 10rem;
-            --container-max: 1400px;
-        }
-
-        /* ==========================================================================
-           2. RESET & BASE STYLES
-           ========================================================================== */
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            cursor: crosshair; /* Futuristic interaction */
-        }
-
-        html {
-            scroll-behavior: smooth;
-        }
-
-        body {
-            background-color: var(--color-void);
-            color: var(--color-white);
-            font-family: var(--font-sans);
-            overflow-x: hidden;
-            overflow-y: hidden; /* Locked until boot finishes */
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
-            line-height: 1.6;
-        }
-
-        ::selection {
-            background: var(--color-white);
-            color: var(--color-void);
-        }
-
-        /* ==========================================================================
-           3. CINEMATIC BOOT SEQUENCE
-           ========================================================================== */
-        #boot-screen {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background-color: var(--color-void);
-            z-index: 99999;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            flex-direction: column;
-            perspective: 1000px;
-        }
-
-        .boot-wrapper {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 2rem;
-        }
-
-        #init-btn {
-            padding: 1.2rem 4rem;
-            background: transparent;
-            border: 1px solid var(--glass-border-strong);
-            color: var(--color-platinum);
-            font-family: var(--font-display);
-            letter-spacing: 6px;
-            font-size: 0.85rem;
-            text-transform: uppercase;
-            border-radius: 2px;
-            transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-            position: relative;
-            overflow: hidden;
-            cursor: pointer;
-        }
-
-        #init-btn::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-            transition: left 0.5s;
-        }
-
-        #init-btn:hover {
-            background: var(--color-white);
-            color: var(--color-void);
-            border-color: var(--color-white);
-            box-shadow: 0 0 40px var(--glow-ambient);
-        }
-
-        #init-btn:hover::before {
-            left: 100%;
-        }
-
-        .boot-system-text {
-            font-family: var(--font-mono);
-            font-size: 0.7rem;
-            color: var(--color-silver);
-            opacity: 0.5;
-            letter-spacing: 2px;
-        }
-
-        #boot-logo-reveal {
-            display: none;
-            opacity: 0;
-            flex-direction: column;
-            align-items: center;
-            gap: 1.5rem;
-            transform: scale(0.9) translateZ(-100px);
-        }
-
-        .reveal-logo-mark {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            width: 60px;
-        }
-
-        .reveal-logo-mark div {
-            height: 12px;
-            border-radius: 6px;
-        }
-
-        .reveal-logo-mark .top { width: 35px; background: var(--color-white); align-self: flex-start; }
-        .reveal-logo-mark .mid { width: 45px; background: var(--color-silver); align-self: center; }
-        .reveal-logo-mark .bot { width: 35px; background: var(--color-ash); align-self: flex-end; }
-
-        .reveal-logo-text {
-            font-family: var(--font-display);
-            font-size: 6rem;
-            font-weight: 700;
-            letter-spacing: -3px;
-            background: linear-gradient(180deg, #FFFFFF 0%, #333333 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
-        /* ==========================================================================
-           4. 3D PARTICLE ENGINE BACKGROUND
-           ========================================================================== */
-        #engine-canvas {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            z-index: 0;
-            pointer-events: none;
-            opacity: 0.6;
-        }
-
-        /* ==========================================================================
-           5. MAIN UI ARCHITECTURE
-           ========================================================================== */
-        .ui-layer {
-            position: relative;
-            z-index: 10;
-            opacity: 0; /* Revealed after boot */
-        }
-
-        /* --- NAVIGATION --- */
-        nav {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1.5rem 4%;
-            position: fixed;
-            width: 100%;
-            top: 0;
-            z-index: 1000;
-            background: linear-gradient(to bottom, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.6) 60%, transparent 100%);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border-bottom: 1px solid var(--glass-border-light);
-        }
-
-        .nav-brand {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            text-decoration: none;
-        }
-
-        .snapserve-logo-mark {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-            width: 32px;
-        }
-
-        .snapserve-logo-mark .pill {
-            height: 7px;
-            border-radius: 4px;
-            transition: all 0.3s ease;
-        }
-
-        .snapserve-logo-mark .pill.top { width: 18px; background: var(--color-white); align-self: flex-start; }
-        .snapserve-logo-mark .pill.mid { width: 24px; background: var(--color-silver); align-self: center; }
-        .snapserve-logo-mark .pill.bot { width: 18px; background: var(--color-ash); align-self: flex-end; }
-
-        .nav-brand:hover .snapserve-logo-mark .pill {
-            background: var(--color-white);
-            width: 24px;
-            align-self: center;
-        }
-
-        .nav-brand-text {
-            font-family: var(--font-display);
-            font-size: 1.5rem;
-            font-weight: 700;
-            letter-spacing: -0.5px;
-            color: var(--color-white);
-        }
-
-        .nav-links {
-            display: flex;
-            gap: 2.5rem;
-            align-items: center;
-        }
-
-        .nav-link {
-            color: var(--color-silver);
-            text-decoration: none;
-            font-size: 0.85rem;
-            font-weight: 500;
-            letter-spacing: 0.5px;
-            transition: color 0.3s ease;
-            position: relative;
-        }
-
-        .nav-link:hover {
-            color: var(--color-white);
-        }
-
-        .nav-cta {
-            background: var(--color-white);
-            color: var(--color-void);
-            padding: 0.6rem 1.5rem;
-            border-radius: 4px;
-            text-decoration: none;
-            font-family: var(--font-display);
-            font-size: 0.8rem;
-            font-weight: 600;
-            letter-spacing: 1px;
-            text-transform: uppercase;
-            transition: all 0.3s ease;
-        }
-
-        .nav-cta:hover {
-            box-shadow: 0 0 20px rgba(255,255,255,0.2);
-            transform: translateY(-1px);
-        }
-
-        /* --- HERO SECTION --- */
-        .hero {
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            text-align: center;
-            padding: 8rem 5% 4rem 5%;
-            position: relative;
-        }
-
-        .system-badge {
-            font-family: var(--font-mono);
-            font-size: 0.75rem;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            color: var(--color-silver);
-            border: 1px solid var(--glass-border-strong);
-            padding: 0.5rem 1.5rem;
-            border-radius: 100px;
-            background: var(--glass-bg-subtle);
-            margin-bottom: 2rem;
-            display: inline-flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .status-dot {
-            width: 6px;
-            height: 6px;
-            background-color: var(--color-white);
-            border-radius: 50%;
-            box-shadow: 0 0 10px var(--color-white);
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0% { opacity: 1; box-shadow: 0 0 10px var(--color-white); }
-            50% { opacity: 0.3; box-shadow: 0 0 2px var(--color-white); }
-            100% { opacity: 1; box-shadow: 0 0 10px var(--color-white); }
-        }
-
-        .hero-title {
-            font-family: var(--font-display);
-            font-size: clamp(3rem, 7vw, 7.5rem);
-            line-height: 1.05;
-            font-weight: 700;
-            letter-spacing: -3px;
-            margin-bottom: 1.5rem;
-            max-width: 1200px;
-            background: linear-gradient(180deg, #FFFFFF 0%, #777777 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
-        .hero-subtitle {
-            font-size: 1.25rem;
-            color: var(--color-platinum);
-            max-width: 800px;
-            line-height: 1.7;
-            margin-bottom: 3.5rem;
-            font-weight: 300;
-        }
-
-        .hero-cta-group {
-            display: flex;
-            gap: 1.5rem;
-            align-items: center;
-        }
-
-        .btn-primary {
-            background: var(--color-white);
-            color: var(--color-void);
-            padding: 1.2rem 3rem;
-            border-radius: 4px;
-            text-decoration: none;
-            font-family: var(--font-display);
-            font-weight: 600;
-            font-size: 0.9rem;
-            letter-spacing: 1px;
-            text-transform: uppercase;
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .btn-primary:hover {
-            box-shadow: 0 0 40px rgba(255, 255, 255, 0.25);
-            transform: scale(1.02);
-        }
-
-        .btn-secondary {
-            background: transparent;
-            border: 1px solid var(--glass-border-strong);
-            color: var(--color-white);
-            padding: 1.2rem 3rem;
-            border-radius: 4px;
-            text-decoration: none;
-            font-family: var(--font-display);
-            font-weight: 600;
-            font-size: 0.9rem;
-            letter-spacing: 1px;
-            text-transform: uppercase;
-            transition: all 0.3s ease;
-            backdrop-filter: blur(10px);
-        }
-
-        .btn-secondary:hover {
-            background: var(--glass-bg-hover);
-            border-color: var(--color-white);
-        }
-
-        /* --- CLEAN CINEMATIC VIDEO INTERFACE --- */
-        .video-orchestration-container {
-            width: 90%;
-            max-width: 1200px;
-            margin: 0 auto 8rem auto;
-            border-radius: 12px;
-            border: 1px solid var(--glass-border-strong);
-            background: var(--color-void);
-            box-shadow: 0 40px 100px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,255,255,0.05);
-            position: relative;
-            transform: translateY(-40px);
-            z-index: 20;
-            overflow: hidden;
-        }
-
-        .video-wrapper {
-            position: relative;
-            width: 100%;
-            aspect-ratio: 16/9;
-            background: var(--color-void);
-            display: flex;
-        }
-
-        /* The actual realistic playing video */
-        #orchestration-video {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            opacity: 0.9;
-            filter: grayscale(20%) contrast(1.1);
-        }
-
-        /* --- CORE PRODUCT FEATURES (THE ENGINE) --- */
-        .features-section {
-            padding: var(--section-pad-y) 5%;
-            position: relative;
-        }
-
-        .section-header {
-            text-align: center;
-            margin-bottom: 6rem;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 1rem;
-        }
-
-        .section-title {
-            font-family: var(--font-display);
-            font-size: clamp(2.5rem, 4vw, 4rem);
-            letter-spacing: -1.5px;
-            font-weight: 700;
-        }
-
-        .section-desc {
-            color: var(--color-silver);
-            max-width: 600px;
-            font-size: 1.1rem;
-            line-height: 1.6;
-        }
-
-        .bento-grid {
-            display: grid;
-            grid-template-columns: repeat(12, 1fr);
-            grid-auto-rows: minmax(300px, auto);
-            gap: 1.5rem;
-            max-width: var(--container-max);
-            margin: 0 auto;
-        }
-
-        .bento-card {
-            background: var(--glass-bg-subtle);
-            border: 1px solid var(--glass-border-light);
-            border-radius: 12px;
-            padding: 3rem;
-            position: relative;
-            overflow: hidden;
-            transition: all 0.4s ease;
-            display: flex;
-            flex-direction: column;
-            justify-content: flex-end;
-        }
-
-        .bento-card:hover {
-            border-color: var(--glass-border-strong);
-            background: var(--glass-bg-hover);
-            transform: translateY(-2px);
-        }
-
-        /* Dynamic Mouse Glow */
-        .bento-card::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: radial-gradient(circle 600px at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(255,255,255,0.06), transparent 40%);
-            z-index: 0;
-            pointer-events: none;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-        }
-
-        .bento-card:hover::before {
-            opacity: 1;
-        }
-
-        .card-content {
-            position: relative;
-            z-index: 1;
-        }
-
-        .card-icon {
-            width: 48px;
-            height: 48px;
-            margin-bottom: 2rem;
-            border-radius: 8px;
-            background: var(--glass-bg-hover);
-            border: 1px solid var(--glass-border-strong);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .card-icon svg {
-            width: 24px;
-            height: 24px;
-            stroke: var(--color-white);
-            stroke-width: 1.5;
-            fill: none;
-        }
-
-        .bento-card h3 {
-            font-family: var(--font-display);
-            font-size: 1.8rem;
-            font-weight: 600;
-            letter-spacing: -0.5px;
-            margin-bottom: 1rem;
-        }
-
-        .bento-card p {
-            color: var(--color-silver);
-            font-size: 1rem;
-            line-height: 1.6;
-            font-weight: 300;
-        }
-
-        /* Specific Grid Spans */
-        .card-wide { grid-column: span 8; }
-        .card-square { grid-column: span 4; }
-        .card-half { grid-column: span 6; }
-
-        @media (max-width: 1024px) {
-            .card-wide, .card-square, .card-half { grid-column: span 12; }
-        }
-
-        /* --- VISUAL WORKFLOW: META INTEGRATION --- */
-        .workflow-section {
-            padding: var(--section-pad-y) 0;
-            background: var(--color-graphite-dark);
-            border-top: 1px solid var(--glass-border-light);
-            border-bottom: 1px solid var(--glass-border-light);
-            overflow: hidden;
-        }
-
-        .workflow-visualizer {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            max-width: 1200px;
-            margin: 4rem auto 0 auto;
-            padding: 0 5%;
-            position: relative;
-        }
-
-        /* Connecting Line */
-        .workflow-line {
-            position: absolute;
-            top: 50%;
-            left: 10%;
-            right: 10%;
-            height: 2px;
-            background: var(--glass-border-strong);
-            z-index: 0;
-            transform: translateY(-50%);
-        }
-
-        .workflow-progress {
-            position: absolute;
-            top: 0;
-            left: 0;
-            height: 100%;
-            width: 0%;
-            background: var(--color-white);
-            box-shadow: 0 0 10px var(--color-white);
-        }
-
-        .node {
-            position: relative;
-            z-index: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 1rem;
-            width: 200px;
-        }
-
-        .node-circle {
-            width: 80px;
-            height: 80px;
-            border-radius: 50%;
-            background: var(--color-void);
-            border: 1px solid var(--glass-border-strong);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.3s ease;
-        }
-
-        .node-circle svg {
-            width: 32px;
-            height: 32px;
-            stroke: var(--color-white);
-            fill: none;
-            stroke-width: 1.5;
-        }
-
-        .node-title {
-            font-family: var(--font-display);
-            font-weight: 600;
-            font-size: 1.1rem;
-            text-align: center;
-        }
-
-        .node-desc {
-            font-size: 0.85rem;
-            color: var(--color-silver);
-            text-align: center;
-        }
-
-        .node.active .node-circle {
-            border-color: var(--color-white);
-            box-shadow: 0 0 30px rgba(255,255,255,0.2);
-            transform: scale(1.1);
-        }
-
-        /* --- DEVELOPER API TERMINAL --- */
-        .api-section {
-            padding: var(--section-pad-y) 5%;
-            max-width: var(--container-max);
-            margin: 0 auto;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 4rem;
-            align-items: center;
-        }
-
-        @media (max-width: 1024px) {
-            .api-section { grid-template-columns: 1fr; }
-        }
-
-        .api-content {
-            display: flex;
-            flex-direction: column;
-            gap: 1.5rem;
-        }
-
-        .api-terminal {
-            background: var(--color-graphite-dark);
-            border: 1px solid var(--glass-border-strong);
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
-        }
-
-        .terminal-header {
-            background: var(--color-graphite-light);
-            padding: 1rem;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            border-bottom: 1px solid var(--glass-border-light);
-        }
-
-        .terminal-dot {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background: var(--color-ash);
-        }
-
-        .terminal-title {
-            margin-left: 1rem;
-            font-family: var(--font-mono);
-            font-size: 0.8rem;
-            color: var(--color-silver);
-        }
-
-        .terminal-body {
-            padding: 2rem;
-            font-family: var(--font-mono);
-            font-size: 0.9rem;
-            line-height: 1.6;
-            color: var(--color-platinum);
-            overflow-x: auto;
-        }
-
-        .token-keyword { color: var(--color-silver); }
-        .token-string { color: var(--color-white); }
-        .token-property { color: #aaaaaa; }
-
-        /* --- PRICING INFRASTRUCTURE --- */
-        .pricing-section {
-            padding: var(--section-pad-y) 5%;
-            background: var(--color-graphite-dark);
-            border-top: 1px solid var(--glass-border-light);
-        }
-
-        .pricing-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-            gap: 2rem;
-            max-width: 1200px;
-            margin: 4rem auto 0 auto;
-        }
-
-        .pricing-card {
-            background: var(--color-void);
-            border: 1px solid var(--glass-border-strong);
-            border-radius: 8px;
-            padding: 4rem 3rem;
-            display: flex;
-            flex-direction: column;
-            gap: 1.5rem;
-        }
-
-        .pricing-tier {
-            font-family: var(--font-display);
-            font-size: 1.5rem;
-            font-weight: 600;
-        }
-
-        .pricing-price {
-            font-family: var(--font-display);
-            font-size: 4rem;
-            font-weight: 700;
-            line-height: 1;
-        }
-
-        .pricing-unit {
-            font-family: var(--font-mono);
-            font-size: 0.9rem;
-            color: var(--color-silver);
-        }
-
-        .pricing-list {
-            list-style: none;
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-            margin-top: 1rem;
-            margin-bottom: 2rem;
-        }
-
-        .pricing-list li {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            color: var(--color-platinum);
-            font-size: 0.95rem;
-        }
-
-        .pricing-list li::before {
-            content: '✓';
-            color: var(--color-white);
-            font-weight: bold;
-        }
-
-        .card-highlight {
-            border-color: var(--color-white);
-            box-shadow: 0 0 30px rgba(255,255,255,0.05);
-            transform: scale(1.02);
-        }
-
-        /* --- MASSIVE FOOTER --- */
-        footer {
-            background: var(--color-void);
-            border-top: 1px solid var(--glass-border-strong);
-            padding: 6rem 5% 2rem 5%;
-        }
-
-        .footer-grid {
-            display: grid;
-            grid-template-columns: 2fr 1fr 1fr 1fr;
-            gap: 4rem;
-            max-width: var(--container-max);
-            margin: 0 auto 4rem auto;
-        }
-
-        @media (max-width: 1024px) {
-            .footer-grid { grid-template-columns: 1fr 1fr; }
-        }
-        @media (max-width: 600px) {
-            .footer-grid { grid-template-columns: 1fr; }
-        }
-
-        .footer-col h4 {
-            font-family: var(--font-display);
-            font-weight: 600;
-            margin-bottom: 1.5rem;
-            color: var(--color-white);
-        }
-
-        .footer-col ul {
-            list-style: none;
-            display: flex;
-            flex-direction: column;
-            gap: 0.8rem;
-        }
-
-        .footer-col a {
-            color: var(--color-silver);
-            text-decoration: none;
-            transition: color 0.3s;
-            font-size: 0.9rem;
-        }
-
-        .footer-col a:hover {
-            color: var(--color-white);
-        }
-
-        .footer-bottom {
-            max-width: var(--container-max);
-            margin: 0 auto;
-            border-top: 1px solid var(--glass-border-light);
-            padding-top: 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            color: var(--color-silver);
-            font-size: 0.8rem;
-            font-family: var(--font-mono);
-        }
-
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SnapServe | AI Voice Orchestration Platform</title>
+  <meta name="description" content="Build AI voice agents with persistent caller memory, real-time pipeline orchestration, and complete provider freedom. Ship in minutes, not months." />
+  <meta property="og:title" content="SnapServe | AI Voice Orchestration Platform" />
+  <meta property="og:description" content="Build AI voice agents with persistent caller memory, real-time pipeline orchestration, and complete provider freedom." />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary_large_image" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Space+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #080808;
+      --bg-subtle: #111111;
+      --border: rgba(255,255,255,0.10);
+      --border-strong: rgba(255,255,255,0.18);
+      --text-primary: #ffffff;
+      --text-muted: #888888;
+      --text-dimmed: #444444;
+      --font-sans: 'Inter', sans-serif;
+      --font-display: 'Space Grotesk', sans-serif;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      -webkit-font-smoothing: antialiased;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 2.5rem;
+      height: 60px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(8,8,8,0.85);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+    }
+
+    .logo-mark {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      width: 22px;
+    }
+
+    .logo-mark .p { height: 5px; border-radius: 3px; }
+    .logo-mark .p.t { width: 13px; background: #fff; }
+    .logo-mark .p.m { width: 17px; background: #777; }
+    .logo-mark .p.b { width: 13px; background: #444; }
+
+    .nav-wordmark {
+      font-family: var(--font-display);
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: -0.3px;
+    }
+
+    .nav-wordmark span { color: var(--text-muted); font-weight: 400; }
+
+    .nav-center {
+      display: flex;
+      gap: 2.5rem;
+    }
+
+    .nav-link {
+      font-size: 0.875rem;
+      font-weight: 400;
+      color: var(--text-muted);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .nav-link:hover { color: #fff; }
+
+    .nav-right {
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+    }
+
+    .btn-ghost {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .btn-ghost:hover { color: #fff; }
+
+    .btn-nav-cta {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #fff;
+      color: #000;
+      font-size: 0.875rem;
+      font-weight: 600;
+      font-family: var(--font-sans);
+      padding: 0.5rem 1.1rem;
+      border-radius: 100px;
+      text-decoration: none;
+      transition: opacity 0.2s, box-shadow 0.2s;
+    }
+
+    .btn-nav-cta:hover {
+      opacity: 0.9;
+      box-shadow: 0 0 16px rgba(255,255,255,0.15);
+    }
+
+    /* ── HERO ── */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 9rem 2.5rem 5rem;
+      max-width: 900px;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      padding: 0.3rem 0.85rem;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-bottom: 2.25rem;
+      width: fit-content;
+    }
+
+    .badge-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 0 8px rgba(255,255,255,0.6);
+      animation: blink 2.5s ease-in-out infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.35; }
+    }
+
+    .hero-heading {
+      font-family: var(--font-display);
+      font-size: clamp(3.2rem, 7.5vw, 6.5rem);
+      font-weight: 800;
+      line-height: 1.05;
+      letter-spacing: -2px;
+      margin-bottom: 1.75rem;
+    }
+
+    .hero-heading .muted { color: #3a3a3a; }
+
+    .hero-sub {
+      font-size: clamp(0.95rem, 1.6vw, 1.125rem);
+      color: var(--text-muted);
+      line-height: 1.65;
+      max-width: 520px;
+      font-weight: 400;
+      margin-bottom: 2.75rem;
+    }
+
+    .hero-ctas {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-bottom: 1.25rem;
+    }
+
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #fff;
+      color: #000;
+      font-size: 0.95rem;
+      font-weight: 600;
+      font-family: var(--font-sans);
+      padding: 0.8rem 1.75rem;
+      border-radius: 100px;
+      text-decoration: none;
+      transition: opacity 0.2s, box-shadow 0.2s;
+    }
+
+    .btn-primary:hover {
+      opacity: 0.92;
+      box-shadow: 0 0 24px rgba(255,255,255,0.18);
+    }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: transparent;
+      color: #fff;
+      font-size: 0.95rem;
+      font-weight: 500;
+      font-family: var(--font-sans);
+      padding: 0.8rem 1.75rem;
+      border-radius: 100px;
+      border: 1px solid var(--border-strong);
+      text-decoration: none;
+      transition: border-color 0.2s, background 0.2s;
+    }
+
+    .btn-secondary:hover {
+      border-color: rgba(255,255,255,0.35);
+      background: rgba(255,255,255,0.04);
+    }
+
+    .hero-note {
+      font-size: 0.8rem;
+      color: var(--text-dimmed);
+    }
+
+    /* ── FEATURES ── */
+    .features {
+      padding: 6rem 2.5rem;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .section-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 3rem;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    .feature-card {
+      padding: 2.5rem 2rem;
+      background: var(--bg-subtle);
+      border-right: 1px solid var(--border);
+      transition: background 0.2s;
+    }
+
+    .feature-card:last-child { border-right: none; }
+    .feature-card:hover { background: rgba(255,255,255,0.03); }
+
+    .feature-icon {
+      width: 40px;
+      height: 40px;
+      border: 1px solid var(--border-strong);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .feature-icon svg {
+      width: 20px; height: 20px;
+      stroke: #fff; fill: none; stroke-width: 1.5;
+    }
+
+    .feature-card h3 {
+      font-family: var(--font-display);
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin-bottom: 0.6rem;
+    }
+
+    .feature-card p {
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    /* ── PRICING ── */
+    .pricing {
+      padding: 6rem 2.5rem;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .pricing-header {
+      margin-bottom: 3rem;
+    }
+
+    .pricing-header h2 {
+      font-family: var(--font-display);
+      font-size: clamp(2rem, 4vw, 3rem);
+      font-weight: 700;
+      letter-spacing: -1px;
+      margin-bottom: 0.75rem;
+    }
+
+    .pricing-header p {
+      color: var(--text-muted);
+      font-size: 1rem;
+    }
+
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.5rem;
+    }
+
+    .pricing-card {
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+      transition: border-color 0.2s;
+    }
+
+    .pricing-card:hover { border-color: var(--border-strong); }
+
+    .pricing-card.featured {
+      border-color: rgba(255,255,255,0.3);
+      background: rgba(255,255,255,0.03);
+    }
+
+    .pricing-tier {
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .pricing-price {
+      font-family: var(--font-display);
+      font-size: 2.5rem;
+      font-weight: 700;
+      letter-spacing: -1px;
+    }
+
+    .pricing-price sub {
+      font-size: 1rem;
+      font-weight: 400;
+      color: var(--text-muted);
+    }
+
+    .pricing-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .pricing-list li {
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .pricing-list li::before {
+      content: '';
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.25);
+      flex-shrink: 0;
+    }
+
+    .pricing-cta {
+      display: block;
+      text-align: center;
+      padding: 0.7rem 1.5rem;
+      border-radius: 100px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      text-decoration: none;
+      border: 1px solid var(--border-strong);
+      color: #fff;
+      transition: background 0.2s, border-color 0.2s;
+    }
+
+    .pricing-cta:hover {
+      background: rgba(255,255,255,0.06);
+      border-color: rgba(255,255,255,0.35);
+    }
+
+    .pricing-cta.primary-cta {
+      background: #fff;
+      color: #000;
+      border-color: #fff;
+    }
+
+    .pricing-cta.primary-cta:hover {
+      background: rgba(255,255,255,0.9);
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 3rem 2.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .footer-copy {
+      font-size: 0.825rem;
+      color: var(--text-dimmed);
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 2rem;
+    }
+
+    .footer-links a {
+      font-size: 0.825rem;
+      color: var(--text-dimmed);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .footer-links a:hover { color: var(--text-muted); }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 768px) {
+      nav { padding: 0 1.25rem; }
+      .nav-center { display: none; }
+      .hero { padding: 7rem 1.25rem 4rem; }
+      .hero-heading { letter-spacing: -1px; }
+      .features { padding: 4rem 1.25rem; }
+      .features-grid { grid-template-columns: 1fr; }
+      .feature-card { border-right: none; border-bottom: 1px solid var(--border); }
+      .feature-card:last-child { border-bottom: none; }
+      .pricing { padding: 4rem 1.25rem; }
+      .pricing-grid { grid-template-columns: 1fr; }
+      footer { padding: 2rem 1.25rem; }
+    }
+  </style>
 </head>
 <body>
 
-    <div id="boot-screen">
-        <div class="boot-wrapper" id="pre-init">
-            <div class="boot-system-text">SYSTEM STANDBY. AWAITING MANUAL INITIALIZATION.</div>
-            <button id="init-btn">Initialize SnapServe</button>
-        </div>
-        
-        <div id="boot-logo-reveal">
-            <div class="reveal-logo-mark">
-                <div class="top"></div>
-                <div class="mid"></div>
-                <div class="bot"></div>
-            </div>
-            <div class="reveal-logo-text">SnapServe</div>
-            <div class="boot-system-text">ORCHESTRATION ENGINE V2.4 BOOTING...</div>
-        </div>
+  <!-- NAV -->
+  <nav>
+    <a href="#" class="nav-brand">
+      <div class="logo-mark">
+        <div class="p t"></div>
+        <div class="p m"></div>
+        <div class="p b"></div>
+      </div>
+      <span class="nav-wordmark">Snap<span>Serve</span></span>
+    </a>
+
+    <div class="nav-center">
+      <a href="#features" class="nav-link">Features</a>
+      <a href="#how-it-works" class="nav-link">How it works</a>
+      <a href="#pricing" class="nav-link">Pricing</a>
     </div>
 
-    <canvas id="engine-canvas"></canvas>
+    <div class="nav-right">
+      <a href="/" class="btn-ghost">Sign in</a>
+      <a href="/" class="btn-nav-cta">Get started &rarr;</a>
+    </div>
+  </nav>
 
-    <div class="ui-layer">
-        
-        <nav>
-            <a href="#" class="nav-brand">
-                <div class="snapserve-logo-mark">
-                    <div class="pill top"></div>
-                    <div class="pill mid"></div>
-                    <div class="pill bot"></div>
-                </div>
-                <span class="nav-brand-text">SnapServe</span>
-            </a>
-            <div class="nav-links">
-                <a href="#engine" class="nav-link">The Engine</a>
-                <a href="#workflow" class="nav-link">Workflows</a>
-                <a href="#api" class="nav-link">Developers</a>
-                <a href="#pricing" class="nav-link">Pricing</a>
-                <a href="#" class="nav-cta">Dashboard Login</a>
-            </div>
-        </nav>
-
-        <section class="hero">
-            <div class="system-badge gs-up">
-                <div class="status-dot"></div>
-                API Operational • All Systems Green
-            </div>
-            <h1 class="hero-title gs-up">Orchestrate Autonomous<br>Calling at Scale.</h1>
-            <p class="hero-subtitle gs-up">The API-first infrastructure for voice. Build and deploy intelligent telecalling agents that capture Meta leads instantly, retain persistent memory, and seamlessly escalate to human reps. No manual prompting required.</p>
-            <div class="hero-cta-group gs-up">
-                <a href="#" class="btn-primary">Start Building Free</a>
-                <a href="#api" class="btn-secondary">Read Documentation</a>
-            </div>
-        </section>
-
-        <div class="video-orchestration-container gs-up">
-            <div class="video-wrapper">
-                <video id="orchestration-video" autoplay loop muted playsinline>
-                    <source src="https://assets.mixkit.co/videos/preview/mixkit-woman-working-in-a-call-center-4818-large.mp4" type="video/mp4">
-                    Your browser does not support the video tag.
-                </video>
-            </div>
-        </div>
-
-        <section id="engine" class="features-section">
-            <div class="section-header gs-up">
-                <h2 class="section-title text-gradient">The Logic of Conversation.</h2>
-                <p class="section-desc">A complete command center designed for frictionless routing, deep analytics, and zero-drop handoffs. Built for developers, scaled for enterprise.</p>
-            </div>
-
-            <div class="bento-grid">
-                
-                <div class="bento-card card-wide gs-up bento-hover-target">
-                    <div class="card-content">
-                        <div class="card-icon">
-                            <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-                        </div>
-                        <h3>Persistent Contextual Memory</h3>
-                        <p>Your agents never start from zero. SnapServe maintains a continuous state across interactions via an integrated Key-Value store. The AI seamlessly references past pain points, preferences, and objections without database lookups.</p>
-                    </div>
-                </div>
-
-                <div class="bento-card card-square gs-up bento-hover-target">
-                    <div class="card-content">
-                        <div class="card-icon">
-                            <svg viewBox="0 0 24 24"><path d="M12 2v20M17 5v14M7 5v14M22 9v6M2 9v6"></path></svg>
-                        </div>
-                        <h3>Ultra-Human Synthesis</h3>
-                        <p>Eradicate the robotic tone. We orchestrate the lowest-latency synthesis models capable of dynamic pacing, breathing artifacts, and emotional adaptation.</p>
-                    </div>
-                </div>
-
-                <div class="bento-card card-half gs-up bento-hover-target">
-                    <div class="card-content">
-                        <div class="card-icon">
-                            <svg viewBox="0 0 24 24"><polyline points="16 3 21 3 21 8"></polyline><line x1="4" y1="20" x2="21" y2="3"></line><polyline points="21 16 21 21 16 21"></polyline><line x1="15" y1="15" x2="21" y2="21"></line><line x1="4" y1="4" x2="9" y2="9"></line></svg>
-                        </div>
-                        <h3>Smart Escalation Routing</h3>
-                        <p>Omniscient call monitoring detects complex nuances or frustration. When required, calls are smoothly transferred via SIP to human representatives, injecting a real-time transcript directly into their dashboard.</p>
-                    </div>
-                </div>
-
-                <div class="bento-card card-half gs-up bento-hover-target">
-                    <div class="card-content">
-                        <div class="card-icon">
-                            <svg viewBox="0 0 24 24"><polyline points="4 7 4 4 20 4 20 7"></polyline><line x1="9" y1="20" x2="15" y2="20"></line><line x1="12" y1="4" x2="12" y2="20"></line></svg>
-                        </div>
-                        <h3>Zero-Shot Prompt Generation</h3>
-                        <p>Bypass manual prompt engineering. Define your business objective in plain JSON, and our internal LLM orchestration dynamically compiles an optimized neural prompt layer designed specifically for voice interaction.</p>
-                    </div>
-                </div>
-
-            </div>
-        </section>
-
-        <section id="workflow" class="workflow-section">
-            <div class="section-header gs-up">
-                <h2 class="section-title text-gradient">Speed to Lead. Redefined.</h2>
-                <p class="section-desc">Automate your entire outbound sales pipeline. Connect Meta Lead Ads directly to SnapServe. Reach prospects while they are still holding their phones.</p>
-            </div>
-
-            <div class="workflow-visualizer gs-up">
-                <div class="workflow-line">
-                    <div class="workflow-progress" id="wf-progress"></div>
-                </div>
-
-                <div class="node wf-node">
-                    <div class="node-circle">
-                        <svg viewBox="0 0 24 24"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"></path></svg>
-                    </div>
-                    <div class="node-title">Lead Captured</div>
-                    <div class="node-desc">User submits form on Facebook/IG Ad.</div>
-                </div>
-
-                <div class="node wf-node">
-                    <div class="node-circle">
-                        <svg viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><path d="M13 6h3a2 2 0 0 1 2 2v7"></path><line x1="6" y1="9" x2="6" y2="21"></line></svg>
-                    </div>
-                    <div class="node-title">Webhook Fired</div>
-                    <div class="node-desc">Payload sent to SnapServe API instantly.</div>
-                </div>
-
-                <div class="node wf-node">
-                    <div class="node-circle">
-                        <div class="snapserve-logo-mark">
-                            <div class="pill top" style="background:var(--color-white)"></div>
-                            <div class="pill mid" style="background:var(--color-white)"></div>
-                            <div class="pill bot" style="background:var(--color-white)"></div>
-                        </div>
-                    </div>
-                    <div class="node-title">AI Orchestration</div>
-                    <div class="node-desc">Context loaded. Agent dials outbound.</div>
-                </div>
-
-                <div class="node wf-node">
-                    <div class="node-circle">
-                        <svg viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
-                    </div>
-                    <div class="node-title">Call Connected</div>
-                    <div class="node-desc">&lt; 1 second after form submission.</div>
-                </div>
-            </div>
-        </section>
-
-        <section id="api" class="api-section">
-            <div class="api-content gs-up">
-                <h2 class="section-title text-gradient" style="text-align: left;">Built for Builders.</h2>
-                <p class="section-desc" style="text-align: left; margin-bottom: 2rem;">Integrate enterprise-grade voice AI into your stack with a few lines of code. Our RESTful API and comprehensive webhooks give you complete programmatic control over every conversation.</p>
-                <a href="#" class="btn-primary" style="align-self: flex-start;">View Full API Reference</a>
-            </div>
-
-            <div class="api-terminal gs-up">
-                <div class="terminal-header">
-                    <div class="terminal-dot" style="background: #ff5f56;"></div>
-                    <div class="terminal-dot" style="background: #ffbd2e;"></div>
-                    <div class="terminal-dot" style="background: #27c93f;"></div>
-                    <span class="terminal-title">POST /v1/calls/outbound</span>
-                </div>
-                <div class="terminal-body" id="code-block">
-<span class="token-keyword">const</span> axios <span class="token-keyword">= require</span>(<span class="token-string">'axios'</span>);
-
-<span class="token-keyword">const</span> payload <span class="token-keyword">=</span> {
-  <span class="token-property">"agent_id"</span>: <span class="token-string">"agt_x89f2md"</span>,
-  <span class="token-property">"customer_phone"</span>: <span class="token-string">"+1234567890"</span>,
-  <span class="token-property">"context"</span>: {
-    <span class="token-property">"lead_source"</span>: <span class="token-string">"Meta_Ad_Camp_04"</span>,
-    <span class="token-property">"name"</span>: <span class="token-string">"Sarah Jenkins"</span>
-  },
-  <span class="token-property">"webhook_url"</span>: <span class="token-string">"https://api.yourcrm.com/snapserve"</span>
-};
-
-<span class="token-keyword">await</span> axios.<span class="token-keyword">post</span>(<span class="token-string">'https://api.snapserve.com/v1/call'</span>, payload, {
-  <span class="token-property">headers</span>: { <span class="token-string">'Authorization'</span>: <span class="token-string">'Bearer sk_live_...'</span> }
-});
-                </div>
-            </div>
-        </section>
-
-        <section id="pricing" class="pricing-section">
-            <div class="section-header gs-up">
-                <h2 class="section-title text-gradient">Transparent Infrastructure Pricing.</h2>
-                <p class="section-desc">Pay only for the seconds you use. No seat licenses. No hidden service fees. Scale from prototype to millions of minutes effortlessly.</p>
-            </div>
-
-            <div class="pricing-grid">
-                <div class="pricing-card gs-up">
-                    <div class="pricing-tier">Developer</div>
-                    <p style="color: var(--color-silver);">For testing and small projects.</p>
-                    <div class="pricing-price">$0.08<span class="pricing-unit"> / minute</span></div>
-                    <ul class="pricing-list">
-                        <li>Standard LLM Models</li>
-                        <li>Basic Voice Clones</li>
-                        <li>Email Support</li>
-                        <li>Up to 10 Concurrent Calls</li>
-                    </ul>
-                    <a href="#" class="btn-secondary" style="text-align: center;">Start Free</a>
-                </div>
-
-                <div class="pricing-card card-highlight gs-up">
-                    <div class="pricing-tier">Production</div>
-                    <p style="color: var(--color-silver);">For scaling applications.</p>
-                    <div class="pricing-price">$0.12<span class="pricing-unit"> / minute</span></div>
-                    <ul class="pricing-list">
-                        <li>Zero-Shot Prompt Engine</li>
-                        <li>Ultra-Low Latency Voices</li>
-                        <li>Persistent Memory Store</li>
-                        <li>Smart SIP Escalation routing</li>
-                        <li>Up to 500 Concurrent Calls</li>
-                    </ul>
-                    <a href="#" class="btn-primary" style="text-align: center;">Scale Now</a>
-                </div>
-
-                <div class="pricing-card gs-up">
-                    <div class="pricing-tier">Enterprise</div>
-                    <p style="color: var(--color-silver);">For mission-critical infrastructure.</p>
-                    <div class="pricing-price">Custom</div>
-                    <ul class="pricing-list">
-                        <li>Dedicated Infrastructure Nodes</li>
-                        <li>Custom Model Fine-tuning</li>
-                        <li>HIPAA & SOC2 Compliance</li>
-                        <li>24/7 Slack Connect Support</li>
-                        <li>Unlimited Concurrency</li>
-                    </ul>
-                    <a href="#" class="btn-secondary" style="text-align: center;">Contact Sales</a>
-                </div>
-            </div>
-        </section>
-
-        <footer>
-            <div class="footer-grid">
-                <div class="footer-col">
-                    <div class="snapserve-logo-mark" style="margin-bottom: 1.5rem;">
-                        <div class="pill top"></div>
-                        <div class="pill mid"></div>
-                        <div class="pill bot"></div>
-                    </div>
-                    <p style="color: var(--color-silver); font-size: 0.9rem; max-width: 250px;">
-                        The Operating System for Voice AI. Building the infrastructure for autonomous conversation.
-                    </p>
-                </div>
-                
-                <div class="footer-col">
-                    <h4>Product</h4>
-                    <ul>
-                        <li><a href="#">Orchestration Engine</a></li>
-                        <li><a href="#">Agent Memory</a></li>
-                        <li><a href="#">Voice Synthesis</a></li>
-                        <li><a href="#">Meta Integrations</a></li>
-                        <li><a href="#">Pricing</a></li>
-                    </ul>
-                </div>
-
-                <div class="footer-col">
-                    <h4>Developers</h4>
-                    <ul>
-                        <li><a href="#">Documentation</a></li>
-                        <li><a href="#">API Reference</a></li>
-                        <li><a href="#">Webhooks</a></li>
-                        <li><a href="#">GitHub SDKs</a></li>
-                        <li><a href="#">System Status</a></li>
-                    </ul>
-                </div>
-
-                <div class="footer-col">
-                    <h4>Company</h4>
-                    <ul>
-                        <li><a href="#">About Us</a></li>
-                        <li><a href="#">Blog</a></li>
-                        <li><a href="#">Careers</a></li>
-                        <li><a href="#">Twitter / X</a></li>
-                        <li><a href="#">Contact Support</a></li>
-                    </ul>
-                </div>
-            </div>
-            
-            <div class="footer-bottom">
-                <div>&copy; 2026 SnapServe Inc. All rights reserved.</div>
-                <div style="display: flex; gap: 2rem;">
-                    <a href="#" style="color: var(--color-silver); text-decoration: none;">Privacy Policy</a>
-                    <a href="#" style="color: var(--color-silver); text-decoration: none;">Terms of Service</a>
-                </div>
-            </div>
-        </footer>
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-badge">
+      <span class="badge-dot"></span>
+      Beta &middot; Now live
     </div>
 
-    <script>
-        /**
-         * 1. CINEMATIC AUDIO SYNTHESIZER (No external MP3s needed)
-         * Generates a deep, startup-style boot sound using the Web Audio API.
-         */
-        function playCinematicBootSound() {
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
-            const ctx = new AudioContext();
-            
-            // Deep Sub-Bass Drone
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
-            osc.type = 'sine';
-            osc.frequency.setValueAtTime(40, ctx.currentTime); 
-            osc.frequency.exponentialRampToValueAtTime(10, ctx.currentTime + 4);
-            
-            gain.gain.setValueAtTime(0, ctx.currentTime);
-            gain.gain.linearRampToValueAtTime(1, ctx.currentTime + 0.8);
-            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 5);
-            
-            osc.connect(gain);
-            gain.connect(ctx.destination);
-            osc.start();
-            osc.stop(ctx.currentTime + 5);
+    <h1 class="hero-heading">
+      Voice agents<br />
+      <span class="muted">that never</span><br />
+      forget.
+    </h1>
 
-            // Digital High-Pitch 'Ping' for tech feel
-            const ping = ctx.createOscillator();
-            const pingGain = ctx.createGain();
-            ping.type = 'triangle';
-            ping.frequency.setValueAtTime(1200, ctx.currentTime + 1.2);
-            pingGain.gain.setValueAtTime(0, ctx.currentTime + 1.2);
-            pingGain.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 1.3);
-            pingGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 2.5);
-            
-            ping.connect(pingGain);
-            pingGain.connect(ctx.destination);
-            ping.start(ctx.currentTime + 1.2);
-            ping.stop(ctx.currentTime + 2.5);
-        }
+    <p class="hero-sub">
+      Build AI voice agents with persistent caller memory,
+      real-time pipeline orchestration, and complete
+      provider freedom. Ship in minutes, not months.
+    </p>
 
-        /**
-         * 2. BOOT SEQUENCE CONTROLLER
-         * Handles the Netflix-style opening animation
-         */
-        const initBtn = document.getElementById('init-btn');
-        const preInit = document.getElementById('pre-init');
-        const bootScreen = document.getElementById('boot-screen');
-        const bootLogoReveal = document.getElementById('boot-logo-reveal');
-        const uiLayer = document.querySelector('.ui-layer');
+    <div class="hero-ctas">
+      <a href="/" class="btn-primary">Start building free &rarr;</a>
+      <a href="#features" class="btn-secondary">See features</a>
+    </div>
 
-        initBtn.addEventListener('click', () => {
-            // Hide initial button state
-            preInit.style.display = 'none';
-            
-            // Show Logo construct
-            bootLogoReveal.style.display = 'flex';
-            
-            // Play Audio
-            playCinematicBootSound();
+    <p class="hero-note">$5 free credit &middot; No card required</p>
+  </section>
 
-            // GSAP Timeline for cinematic reveal
-            const tl = gsap.timeline();
-            
-            tl.to(bootLogoReveal, { 
-                opacity: 1, 
-                z: 0, 
-                scale: 1, 
-                duration: 2, 
-                ease: "power3.out" 
-            })
-            .to(bootLogoReveal, { 
-                opacity: 0, 
-                scale: 2, 
-                filter: "blur(10px)",
-                duration: 1, 
-                ease: "power4.in" 
-            }, "+=0.5")
-            .to(bootScreen, { 
-                opacity: 0, 
-                duration: 0.8, 
-                onComplete: () => {
-                    bootScreen.style.display = 'none';
-                    document.body.style.overflowY = 'auto'; // Unlock scrolling
-                    
-                    // Fade in UI
-                    gsap.to(uiLayer, { opacity: 1, duration: 1.5 });
-                    
-                    // Stagger animate Hero elements up
-                    gsap.fromTo(".gs-up", 
-                        { y: 60, opacity: 0 }, 
-                        { y: 0, opacity: 1, duration: 1.2, stagger: 0.15, ease: "power3.out" }
-                    );
+  <!-- FEATURES -->
+  <section id="features" class="features">
+    <p class="section-label">Platform</p>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/><path d="M12 8v4l3 3"/></svg>
+        </div>
+        <h3>Persistent Memory</h3>
+        <p>Agents remember every caller across sessions. Context carries forward automatically — no repeated intros, no forgotten preferences.</p>
+      </div>
 
-                    // Start workflow animation
-                    startWorkflowAnimation();
-                }
-            });
-        });
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        </div>
+        <h3>Real-Time Orchestration</h3>
+        <p>Sub-100ms latency pipeline with hot-swap providers. Route ASR → LLM → TTS without dropped audio or context loss.</p>
+      </div>
 
-        /**
-         * 3. ADVANCED 3D PARTICLE ENGINE (Interactive Canvas)
-         * Creates depth, connections, and mouse repulsion.
-         */
-        const canvas = document.getElementById('engine-canvas');
-        const ctx = canvas.getContext('2d');
-        let width, height;
-        let particles = [];
-        let mouse = { x: null, y: null, radius: 150 };
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </div>
+        <h3>Bring Your Own Keys</h3>
+        <p>Connect Deepgram, OpenAI, ElevenLabs, Twilio and more. Your API keys, your costs — we handle the orchestration layer only.</p>
+      </div>
 
-        function resize() {
-            width = canvas.width = window.innerWidth;
-            height = canvas.height = window.innerHeight;
-        }
-        window.addEventListener('resize', resize);
-        resize();
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.13 11.8a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.04 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.09 8.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21 16.92z"/></svg>
+        </div>
+        <h3>Outbound Campaigns</h3>
+        <p>Schedule and run bulk outbound call campaigns with smart retry logic, disposition tracking, and CRM webhook delivery.</p>
+      </div>
 
-        window.addEventListener('mousemove', (e) => {
-            mouse.x = e.x;
-            mouse.y = e.y;
-        });
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24"><path d="M3 3h18v18H3zM3 9h18M9 21V9"/></svg>
+        </div>
+        <h3>Live Call Monitoring</h3>
+        <p>Watch active calls in real time. Inspect transcript, sentiment, and pipeline state from the dashboard without interrupting the agent.</p>
+      </div>
 
-        class Particle {
-            constructor() {
-                this.x = Math.random() * width;
-                this.y = Math.random() * height;
-                this.size = Math.random() * 2 + 0.5;
-                this.baseX = this.x;
-                this.baseY = this.y;
-                this.density = (Math.random() * 30) + 1;
-                this.vx = (Math.random() - 0.5) * 0.5;
-                this.vy = (Math.random() - 0.5) * 0.5;
-            }
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+        </div>
+        <h3>Smart Scheduling</h3>
+        <p>Built-in booking engine with availability windows, timezone awareness, and Google Calendar sync — no third-party scheduler needed.</p>
+      </div>
+    </div>
+  </section>
 
-            draw() {
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-                ctx.closePath();
-                ctx.fill();
-            }
+  <!-- HOW IT WORKS -->
+  <section id="how-it-works" style="padding: 6rem 2.5rem; max-width: 1100px; margin: 0 auto;">
+    <p class="section-label">How it works</p>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4rem; align-items: center;">
+      <div>
+        <h2 style="font-family: var(--font-display); font-size: clamp(1.8rem, 3.5vw, 2.8rem); font-weight: 700; letter-spacing: -1px; margin-bottom: 1.25rem; line-height: 1.15;">
+          Your call pipeline,<br/>in three lines of code.
+        </h2>
+        <p style="color: var(--text-muted); font-size: 1rem; line-height: 1.65; margin-bottom: 2rem;">
+          Add your provider API keys, configure your agent's voice and prompt, then hit the API. SnapServe handles the WebSocket orchestration, fallback logic, and memory persistence automatically.
+        </p>
+        <a href="/" class="btn-primary">View API docs &rarr;</a>
+      </div>
 
-            update() {
-                // Drift
-                this.x += this.vx;
-                this.y += this.vy;
+      <div style="background: #0e0e0e; border: 1px solid var(--border-strong); border-radius: 14px; overflow: hidden;">
+        <div style="background: #161616; padding: 0.875rem 1rem; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--border);">
+          <div style="width: 11px; height: 11px; border-radius: 50%; background: #ff5f56;"></div>
+          <div style="width: 11px; height: 11px; border-radius: 50%; background: #ffbd2e;"></div>
+          <div style="width: 11px; height: 11px; border-radius: 50%; background: #27c93f;"></div>
+          <span style="font-size: 0.75rem; color: var(--text-muted); margin-left: 8px; font-family: 'Fira Code', monospace;">POST /api/calls/outbound</span>
+        </div>
+        <div style="padding: 1.5rem; font-family: 'Courier New', monospace; font-size: 0.82rem; line-height: 1.8; color: #bbb;">
+          <span style="color: #777;">const</span> response <span style="color: #777;">=</span> <span style="color: #777;">await</span> fetch(<span style="color: #aaa;">'https://api.snapserve.ai/calls/outbound'</span>, {<br/>
+          &nbsp;&nbsp;<span style="color: #888;">method</span>: <span style="color: #aaa;">'POST'</span>,<br/>
+          &nbsp;&nbsp;<span style="color: #888;">headers</span>: {<br/>
+          &nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #aaa;">'Authorization'</span>: <span style="color: #aaa;">`Bearer ${<span style="color: #bbb;">API_KEY</span>}`</span><br/>
+          &nbsp;&nbsp;},<br/>
+          &nbsp;&nbsp;<span style="color: #888;">body</span>: JSON.stringify({<br/>
+          &nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #888;">agent_id</span>: <span style="color: #aaa;">'agt_8f2k9d'</span>,<br/>
+          &nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #888;">to</span>: <span style="color: #aaa;">'+14155550192'</span><br/>
+          &nbsp;&nbsp;})<br/>
+          });
+        </div>
+      </div>
+    </div>
+  </section>
 
-                // Bounce
-                if(this.x < 0 || this.x > width) this.vx *= -1;
-                if(this.y < 0 || this.y > height) this.vy *= -1;
+  <!-- PRICING -->
+  <section id="pricing" class="pricing">
+    <div class="pricing-header">
+      <p class="section-label">Pricing</p>
+      <h2>Pay per minute.<br/>No surprises.</h2>
+      <p>Bring your own provider keys — you only pay SnapServe for orchestration.</p>
+    </div>
 
-                // Mouse Repulsion
-                let dx = mouse.x - this.x;
-                let dy = mouse.y - this.y;
-                let distance = Math.sqrt(dx * dx + dy * dy);
-                
-                if (distance < mouse.radius) {
-                    let forceDirectionX = dx / distance;
-                    let forceDirectionY = dy / distance;
-                    let force = (mouse.radius - distance) / mouse.radius;
-                    let directionX = forceDirectionX * force * this.density;
-                    let directionY = forceDirectionY * force * this.density;
-                    
-                    this.x -= directionX;
-                    this.y -= directionY;
-                }
-            }
-        }
+    <div class="pricing-grid">
+      <div class="pricing-card">
+        <div>
+          <div class="pricing-tier">Developer</div>
+          <div class="pricing-price">$0.08 <sub>/ min</sub></div>
+        </div>
+        <ul class="pricing-list">
+          <li>Standard LLM models</li>
+          <li>Basic voice clones</li>
+          <li>Up to 10 concurrent calls</li>
+          <li>Email support</li>
+        </ul>
+        <a href="/" class="pricing-cta">Start free</a>
+      </div>
 
-        function initParticles() {
-            particles = [];
-            let numParticles = (width * height) / 12000; 
-            for (let i = 0; i < numParticles; i++) {
-                particles.push(new Particle());
-            }
-        }
+      <div class="pricing-card featured">
+        <div>
+          <div class="pricing-tier">Production</div>
+          <div class="pricing-price">$0.12 <sub>/ min</sub></div>
+        </div>
+        <ul class="pricing-list">
+          <li>Zero-shot prompt engine</li>
+          <li>Ultra-low latency voices</li>
+          <li>Persistent memory store</li>
+          <li>Smart SIP escalation</li>
+          <li>Up to 500 concurrent calls</li>
+        </ul>
+        <a href="/" class="pricing-cta primary-cta">Get started</a>
+      </div>
 
-        function animateParticles() {
-            ctx.clearRect(0, 0, width, height);
-            
-            for (let i = 0; i < particles.length; i++) {
-                particles[i].update();
-                particles[i].draw();
-                
-                // Draw connecting neural lines
-                for (let j = i; j < particles.length; j++) {
-                    let dx = particles[i].x - particles[j].x;
-                    let dy = particles[i].y - particles[j].y;
-                    let distance = Math.sqrt(dx * dx + dy * dy);
-                    
-                    if (distance < 100) {
-                        ctx.beginPath();
-                        ctx.strokeStyle = `rgba(255, 255, 255, ${0.1 - distance/1000})`;
-                        ctx.lineWidth = 1;
-                        ctx.moveTo(particles[i].x, particles[i].y);
-                        ctx.lineTo(particles[j].x, particles[j].y);
-                        ctx.stroke();
-                        ctx.closePath();
-                    }
-                }
-            }
-            requestAnimationFrame(animateParticles);
-        }
+      <div class="pricing-card">
+        <div>
+          <div class="pricing-tier">Enterprise</div>
+          <div class="pricing-price">Custom</div>
+        </div>
+        <ul class="pricing-list">
+          <li>Dedicated infrastructure</li>
+          <li>Custom model fine-tuning</li>
+          <li>HIPAA &amp; SOC2 compliance</li>
+          <li>24/7 Slack Connect support</li>
+          <li>Unlimited concurrency</li>
+        </ul>
+        <a href="mailto:sales@snapserve.ai" class="pricing-cta">Contact sales</a>
+      </div>
+    </div>
+  </section>
 
-        initParticles();
-        animateParticles();
+  <!-- FOOTER -->
+  <footer>
+    <p class="footer-copy">&copy; 2026 SnapServe Inc.</p>
+    <div class="footer-links">
+      <a href="#">Privacy</a>
+      <a href="#">Terms</a>
+      <a href="#">Docs</a>
+      <a href="#">Status</a>
+    </div>
+  </footer>
 
-        /**
-         * 4. BENTO CARD MOUSE GLOW
-         * Tracks mouse over feature cards to create a spotlight effect.
-         */
-        const cards = document.querySelectorAll('.bento-hover-target');
-        cards.forEach(card => {
-            card.addEventListener('mousemove', (e) => {
-                const rect = card.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const y = e.clientY - rect.top;
-                card.style.setProperty('--mouse-x', `${x}px`);
-                card.style.setProperty('--mouse-y', `${y}px`);
-            });
-        });
-
-        /**
-         * 5. SCROLL TRIGGER ANIMATIONS
-         * Uses GSAP ScrollTrigger to reveal elements as they enter viewport.
-         */
-        gsap.registerPlugin(ScrollTrigger);
-
-        // General fade up for elements with .gs-up class (after boot sequence)
-        setTimeout(() => {
-            gsap.utils.toArray('.gs-up:not(.hero *)').forEach((elem) => {
-                gsap.fromTo(elem, 
-                    { y: 50, opacity: 0 },
-                    {
-                        y: 0,
-                        opacity: 1,
-                        duration: 1,
-                        ease: "power3.out",
-                        scrollTrigger: {
-                            trigger: elem,
-                            start: "top 85%", // Trigger when element is 85% down the viewport
-                        }
-                    }
-                );
-            });
-        }, 3000); // Wait for boot
-
-        /**
-         * 6. WORKFLOW VISUALIZER LOGIC
-         * Animates the progression bar and highlights nodes sequentially.
-         */
-        function startWorkflowAnimation() {
-            const nodes = document.querySelectorAll('.wf-node');
-            const progress = document.getElementById('wf-progress');
-            
-            // Timeline tied to scroll
-            let wfTimeline = gsap.timeline({
-                scrollTrigger: {
-                    trigger: ".workflow-visualizer",
-                    start: "top 70%",
-                    end: "bottom 50%",
-                    scrub: 1 // Smooth scrubbing
-                }
-            });
-
-            // Animate progress line width
-            wfTimeline.to(progress, { width: "100%", duration: 4, ease: "none" });
-
-            // Activate nodes at specific points in the timeline
-            nodes.forEach((node, index) => {
-                let triggerPoint = index * (4 / (nodes.length - 1)); // distribute evenly
-                wfTimeline.call(() => {
-                    node.classList.add('active');
-                }, null, triggerPoint);
-                
-                // Remove active if scrolling up
-                wfTimeline.call(() => {
-                    node.classList.remove('active');
-                }, null, triggerPoint - 0.1); 
-            });
-        }
-        
-        /**
-         * 7. FAILSAFE VIDEO AUTOPLAY TRIGGER
-         * Ensures the cinematic video plays regardless of browser strictness.
-         */
-        window.addEventListener('load', () => {
-            const vid = document.getElementById('orchestration-video');
-            if (vid) {
-                let playPromise = vid.play();
-                if (playPromise !== undefined) {
-                    playPromise.catch(error => {
-                        console.log("Autoplay prevented. Forcing muted play.");
-                        vid.muted = true;
-                        vid.play();
-                    });
-                }
-            }
-        });
-
-    </script>
 </body>
 </html>
