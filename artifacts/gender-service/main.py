@@ -17,9 +17,7 @@ Future modules (same router):
 from __future__ import annotations
 
 import io
-import math
 import os
-import struct
 
 import httpx
 import uvicorn
@@ -28,23 +26,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # gender_detector is imported lazily (inside each handler) so uvicorn binds
-# to the port immediately. librosa/numpy JIT compilation happens in the
-# background warmup thread and does not block server startup.
-
-
-def _make_warmup_wav() -> bytes:
-    """Generate a minimal 0.5-second 200 Hz WAV for warmup — no deps needed."""
-    sr, freq, dur = 16_000, 200, 0.5
-    n = int(sr * dur)
-    samples = [int(32767 * math.sin(2 * math.pi * freq * i / sr)) for i in range(n)]
-    data = struct.pack(f"<{n}h", *samples)
-    hdr = (
-        b"RIFF" + struct.pack("<I", 36 + len(data)) + b"WAVE" +
-        b"fmt " + struct.pack("<I", 16) +
-        struct.pack("<HHIIHH", 1, 1, sr, sr * 2, 2, 16) +
-        b"data" + struct.pack("<I", len(data))
-    )
-    return hdr + data
+# to the port immediately — librosa/numpy load on first request, not at startup.
 
 # ── App setup ─────────────────────────────────────────────────────────────────
 
@@ -53,27 +35,6 @@ app = FastAPI(
     version="1.0.0",
     description="Real-time speaker characteristic detection from audio",
 )
-
-
-@app.on_event("startup")
-async def _warmup():
-    """
-    Pre-load librosa / numpy JIT so the first real request isn't slow.
-
-    Runs in a thread so the server binds to port 5000 immediately.
-    The deployment health check responds right away; librosa loads in the
-    background (~40 s on cold start). Any gender request that arrives before
-    warmup finishes pays the cold-start cost once — subsequent calls are fast.
-    """
-    import asyncio, concurrent.futures
-    loop = asyncio.get_event_loop()
-    def _do_warmup():
-        try:
-            from gender_detector import classify_audio_bytes  # noqa: PLC0415
-            classify_audio_bytes(_make_warmup_wav())
-        except Exception:
-            pass
-    loop.run_in_executor(concurrent.futures.ThreadPoolExecutor(max_workers=1), _do_warmup)
 
 
 app.add_middleware(
