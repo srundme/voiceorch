@@ -10,6 +10,7 @@ import { logger } from "../../lib/logger.js";
 import { RecordingBuffer } from "../recorder.js";
 import type { ConversationTurn, STTConfig } from "../types.js";
 import { decryptKey } from "../../lib/crypto.js";
+import { loadCallerProfile, injectCallerMemory, updateCallerProfile } from "../callerMemory.js";
 
 // ── Per-user concurrent call rate limit ──────────────────────────────────────
 const activeCalls = new Map<string, number>();
@@ -216,7 +217,24 @@ export async function handleWebCallWebSocket(
   const history: ConversationTurn[] = [];
   let closed      = false;
 
-  const systemPrompt = agent.generatedPrompt ?? agent.systemPrompt ?? "";
+  // ── Webcall caller memory ─────────────────────────────────────────────────
+  // Use "webcall:<userId>" as a stable identifier since there's no phone number.
+  // This gives logged-in users the same cross-call memory that telephony callers get.
+  const webcallIdentifier = agent.userId ? `webcall:${agent.userId}` : null;
+  let webcallProfile: import("../callerMemory.js").CallerProfile | null = null;
+  let systemPrompt = agent.generatedPrompt ?? agent.systemPrompt ?? "";
+
+  if (webcallIdentifier) {
+    try {
+      webcallProfile = await loadCallerProfile(agentId, webcallIdentifier);
+      if (webcallProfile) {
+        systemPrompt = injectCallerMemory(systemPrompt, webcallProfile);
+        logger.info({ callId, agentId, callCount: webcallProfile.callCount }, "Webcall caller memory injected");
+      }
+    } catch (memErr) {
+      logger.warn({ callId, agentId, memErr }, "Failed to load webcall caller profile — continuing without memory");
+    }
+  }
 
   // ── State ─────────────────────────────────────────────────────────────────
   const audioChunks: Buffer[] = [];
@@ -528,6 +546,21 @@ export async function handleWebCallWebSocket(
       }
     } catch (err) {
       logger.error({ callId, err }, "Error finalising webcall");
+    }
+
+    // ── Post-call webcall memory update (fire-and-forget) ────────────────────
+    if (webcallIdentifier && history.length >= 2) {
+      void updateCallerProfile({
+        agentId,
+        phoneNumber: webcallIdentifier,
+        history,
+        llm,
+        existing: webcallProfile,
+        callId,
+        wasDropped: false,
+      }).catch((memErr) => {
+        logger.warn({ callId, memErr }, "Post-call webcall memory update failed");
+      });
     }
 
     send({ type: "ended", durationSeconds, reason });
