@@ -119,8 +119,17 @@ export function injectCallerMemory(
 // ── Update after call ─────────────────────────────────────────────────────────
 
 /**
- * Use the LLM to extract name + summary from the conversation, then upsert
- * the caller profile.  Should be called fire-and-forget after a call ends.
+ * Persist the caller profile after a call ends.
+ *
+ * Two-phase approach so that a failing LLM extraction never prevents the
+ * basic counters from being written:
+ *
+ * Phase 1 (always runs): upsert call count, last-call timestamp, drop flag.
+ * Phase 2 (best-effort): use the LLM to extract name + summary, then update
+ *          those columns.  Any failure here is logged but does NOT roll back
+ *          the Phase-1 row.
+ *
+ * Should be called fire-and-forget after a call ends.
  */
 export async function updateCallerProfile(opts: {
   agentId: number;
@@ -133,7 +142,39 @@ export async function updateCallerProfile(opts: {
 }): Promise<void> {
   const { agentId, phoneNumber, history, llm, existing, callId, wasDropped = false } = opts;
 
-  if (history.length < 2) return;   // too short to extract anything
+  if (history.length < 1) return;   // nothing to record
+
+  const now      = new Date();
+  const newCount = (existing?.callCount ?? 0) + 1;
+
+  // ── Phase 1: always write the counter/timestamp row ───────────────────────
+  await db
+    .insert(callerProfilesTable)
+    .values({
+      agentId,
+      phoneNumber,
+      name:              existing?.name    ?? null,
+      summary:           existing?.summary ?? null,
+      callCount:         newCount,
+      lastCalledAt:      now,
+      lastCallDropped:   wasDropped,
+      lastCallDroppedAt: wasDropped ? now : null,
+    })
+    .onConflictDoUpdate({
+      target: [callerProfilesTable.agentId, callerProfilesTable.phoneNumber],
+      set: {
+        callCount:         newCount,
+        lastCalledAt:      now,
+        lastCallDropped:   wasDropped,
+        lastCallDroppedAt: wasDropped ? now : null,
+        updatedAt:         now,
+      },
+    });
+
+  logger.info({ agentId, phoneNumber, callId, callCount: newCount, wasDropped }, "Caller profile counter updated");
+
+  // ── Phase 2: LLM extraction (best-effort, never blocks Phase 1) ──────────
+  if (history.length < 2) return;   // too short to extract meaningful info
 
   const transcript = history
     .map((t) => `${t.role === "user" ? "Caller" : "Agent"}: ${t.content}`)
@@ -144,61 +185,57 @@ export async function updateCallerProfile(opts: {
     : "";
 
   let raw = "";
-  await llm.chat(
-    [
-      {
-        role: "user",
-        content:
-          `${priorContext}Given this call transcript, extract caller information.\n` +
-          `Return ONLY valid JSON with exactly these fields:\n` +
-          `- "name": caller's name if explicitly stated, otherwise null\n` +
-          `- "summary": 1–3 sentences capturing key interests, issues, preferences, and follow-ups. Merge with prior context if available.\n\n` +
-          `Transcript:\n${transcript.slice(0, 6000)}`,
-      },
-    ],
-    "You extract caller profile information from voice call transcripts. Return only a JSON object with 'name' (string|null) and 'summary' (string) fields. Be concise and factual.",
-    () => {},
-    (full) => { raw = full; },
-  );
-
-  let extracted: { name?: string | null; summary?: string | null } = {};
   try {
-    const jsonStr = raw.replace(/```(?:json)?\s*/gi, "").replace(/```\s*/g, "").trim();
-    extracted = JSON.parse(jsonStr) as typeof extracted;
-  } catch {
-    logger.warn({ agentId, phoneNumber, callId }, "Caller profile JSON parse failed — skipping update");
+    await llm.chat(
+      [
+        {
+          role: "user",
+          content:
+            `${priorContext}Given this call transcript, extract caller information.\n` +
+            `Return ONLY valid JSON with exactly these fields:\n` +
+            `- "name": caller's name if explicitly stated, otherwise null\n` +
+            `- "summary": 1–3 sentences capturing key interests, issues, preferences, and follow-ups. Merge with prior context if available.\n\n` +
+            `Transcript:\n${transcript.slice(0, 6000)}`,
+        },
+      ],
+      "You extract caller profile information from voice call transcripts. Return only a JSON object with 'name' (string|null) and 'summary' (string) fields. Be concise and factual.",
+      () => {},
+      (full) => { raw = full; },
+    );
+  } catch (llmErr) {
+    logger.warn({ agentId, phoneNumber, callId, llmErr }, "Caller profile LLM extraction failed — summary not updated");
     return;
   }
 
-  const now      = new Date();
-  const newCount = (existing?.callCount ?? 0) + 1;
+  let extracted: { name?: string | null; summary?: string | null } = {};
+  try {
+    // Strip markdown code fences that some LLMs wrap JSON in
+    const jsonStr = raw
+      .replace(/^```(?:json)?\s*/im, "")
+      .replace(/\s*```\s*$/im, "")
+      .trim();
+    extracted = JSON.parse(jsonStr) as typeof extracted;
+  } catch {
+    logger.warn({ agentId, phoneNumber, callId, raw: raw.slice(0, 200) }, "Caller profile JSON parse failed — summary not updated");
+    return;
+  }
 
+  // Only update name + summary; counters already written in Phase 1
   await db
-    .insert(callerProfilesTable)
-    .values({
-      agentId,
-      phoneNumber,
-      name:              extracted.name    ?? null,
-      summary:           extracted.summary ?? null,
-      callCount:         newCount,
-      lastCalledAt:      now,
-      lastCallDropped:   wasDropped,
-      lastCallDroppedAt: wasDropped ? now : null,
+    .update(callerProfilesTable)
+    .set({
+      name:      extracted.name    ? extracted.name    : sql`caller_profiles.name`,
+      summary:   extracted.summary ? extracted.summary : sql`caller_profiles.summary`,
+      updatedAt: now,
     })
-    .onConflictDoUpdate({
-      target: [callerProfilesTable.agentId, callerProfilesTable.phoneNumber],
-      set: {
-        name:              extracted.name ? extracted.name : sql`caller_profiles.name`,
-        summary:           extracted.summary ?? null,
-        callCount:         newCount,
-        lastCalledAt:      now,
-        lastCallDropped:   wasDropped,
-        lastCallDroppedAt: wasDropped ? now : null,
-        updatedAt:         now,
-      },
-    });
+    .where(
+      and(
+        eq(callerProfilesTable.agentId,     agentId),
+        eq(callerProfilesTable.phoneNumber, phoneNumber),
+      ),
+    );
 
-  logger.info({ agentId, phoneNumber, callId, callCount: newCount, wasDropped }, "Caller profile updated");
+  logger.info({ agentId, phoneNumber, callId }, "Caller profile summary updated via LLM");
 }
 
 // ── Detect callback requests ──────────────────────────────────────────────────
