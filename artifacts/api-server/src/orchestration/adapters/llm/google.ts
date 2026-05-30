@@ -64,10 +64,16 @@ export class GoogleLLM implements LLMAdapter {
     });
 
     // Build chat history (all turns except the last user message)
-    const history = messages.slice(0, -1).map((m) => ({
+    const rawHistory = messages.slice(0, -1).map((m) => ({
       role: m.role === "user" ? ("user" as const) : ("model" as const),
       parts: [{ text: m.content }],
     }));
+
+    // Gemini requires history to start with 'user' role.
+    // If the agent sent a greeting before any user turn, drop leading model
+    // entries so startChat() doesn't throw.
+    let firstUser = rawHistory.findIndex((h) => h.role === "user");
+    const history = firstUser === -1 ? [] : rawHistory.slice(firstUser);
 
     const lastMessage = messages[messages.length - 1]?.content ?? "";
 
