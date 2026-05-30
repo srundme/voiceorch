@@ -11,6 +11,7 @@ import { RecordingBuffer } from "../recorder.js";
 import type { ConversationTurn, STTConfig } from "../types.js";
 import { decryptKey } from "../../lib/crypto.js";
 import { loadCallerProfile, injectCallerMemory, updateCallerProfile } from "../callerMemory.js";
+import { GenderDetector } from "../genderDetector.js";
 
 // ── Per-user concurrent call rate limit ──────────────────────────────────────
 const activeCalls = new Map<string, number>();
@@ -231,6 +232,14 @@ export async function handleWebCallWebSocket(
     }
   }
 
+  // ── Gender detection ──────────────────────────────────────────────────────
+  const agentCfg = (agent.agentConfig ?? {}) as Record<string, unknown>;
+  const genderEnabled = (agentCfg["genderDetectionEnabled"] as boolean | undefined) ?? true;
+  const maleSal     = (agentCfg["genderDetectionMaleSalutation"]    as string | undefined) ?? "Sir";
+  const femaleSal   = (agentCfg["genderDetectionFemaleSalutation"]  as string | undefined) ?? "Ma'am";
+  const neutralSal  = (agentCfg["genderDetectionNeutralSalutation"] as string | undefined) ?? "";
+  const genderDetector = genderEnabled ? new GenderDetector(callId, logger) : null;
+
   // ── State ─────────────────────────────────────────────────────────────────
   const audioChunks: Buffer[] = [];
   let silenceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -343,10 +352,21 @@ export async function handleWebCallWebSocket(
         sentenceJobs.push(job);
       }
 
+      // Build per-turn system prompt with gender salutation injected
+      let systemPromptForTurn = systemPrompt;
+      const detectedGender = genderDetector?.gender ?? null;
+      if (detectedGender === "male") {
+        systemPromptForTurn += `\n\n[CALLER GENDER] The caller has been identified as male. Always address them respectfully as "${maleSal}" when appropriate (e.g. "Yes, ${maleSal}", "Of course, ${maleSal}"). Never use "${femaleSal}".`;
+      } else if (detectedGender === "female") {
+        systemPromptForTurn += `\n\n[CALLER GENDER] The caller has been identified as female. Always address them respectfully as "${femaleSal}" when appropriate (e.g. "Yes, ${femaleSal}", "Of course, ${femaleSal}"). Never use "${maleSal}".`;
+      } else if (neutralSal) {
+        systemPromptForTurn += `\n\n[CALLER GENDER] Gender could not be determined. Use "${neutralSal}" as a neutral salutation when appropriate.`;
+      }
+
       try {
        await llm.chat(
         history,
-        systemPrompt,
+        systemPromptForTurn,
         (token) => {
           fullReply += token;                        // keep raw (for cleaning later)
           const filtered = filterThinkToken(token);  // strip <think>…</think>
@@ -592,6 +612,9 @@ export async function handleWebCallWebSocket(
     // Record every frame from the caller's microphone (captures full timeline
     // including silence, maintaining alignment with the agent track)
     recording.addCallerChunk(data as Buffer);
+
+    // Feed all frames to gender detector (browser sends 16 kHz → downsample to 8 kHz)
+    if (genderDetector) genderDetector.addSpeechChunk(downsample16to8(data as Buffer));
 
     const rms = rmsEnergy(data);
 
