@@ -23,8 +23,13 @@ const BITS         = 16;
 const CHANNELS     = 1;
 const SAMPLE_BYTES = BITS / 8;
 
-/** Collect 5 s of active speech before calling the API (= 80 000 bytes @ 8 kHz 16-bit mono) */
-const TARGET_BYTES = 5 * SAMPLE_RATE * SAMPLE_BYTES;
+/**
+ * Collect 2 s of total caller audio before calling the API (= 32 000 bytes @ 8 kHz 16-bit mono).
+ * We include all frames (not just hasSpeech) — librosa pyin ignores silent frames when
+ * computing the median pitch, so silence doesn't hurt detection accuracy.
+ * 2 s is plenty for a reliable F0 estimate and fires well within the first caller turn.
+ */
+const TARGET_BYTES = 2 * SAMPLE_RATE * SAMPLE_BYTES;
 
 const GENDER_SERVICE_URL = "http://localhost:5000/voice-analysis/gender";
 

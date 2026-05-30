@@ -310,16 +310,17 @@ export class OrchestrationPipeline {
 
     // Streaming STT path: feed all audio directly to Deepgram — no local VAD needed
     if (this.streamSTT) {
-      // Still feed gender detector even on the streaming path (uses pcm8k, not pcm16k)
-      if (hasSpeech) this.genderDetector.addSpeechChunk(pcm8k);
+      // Feed all frames (not just speech) — librosa pyin handles silence gracefully
+      this.genderDetector.addSpeechChunk(pcm8k);
       this.streamSTT.sendAudio(pcm16k);
       return;
     }
 
+    // Feed all frames to the gender detector (fires async once after 2 s of audio, then no-ops)
+    this.genderDetector.addSpeechChunk(pcm8k);
+
     // Batch STT path with local VAD + barge-in detection
     if (hasSpeech) {
-      // Feed early speech frames into the gender detector (fires async once, then no-ops)
-      this.genderDetector.addSpeechChunk(pcm8k);
       this.resetHangupTimer();
 
       if (this.bargeInEnabled && this.isPlaying && !this.bargeInRequested) {
