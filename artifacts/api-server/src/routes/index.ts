@@ -30,6 +30,7 @@ import userApiKeysRouter from "./user-api-keys.js";
 import metaRouter from "./meta.js";
 import callTransfersRouter from "./call-transfers.js";
 import billingRouter from "./billing.js";
+import utilsRouter from "./utils.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
 const router: IRouter = Router();
@@ -42,6 +43,9 @@ router.use(adminPromptTemplatesRouter);
 
 // Public campaign lead webhook — must be before provisionUser (no Clerk session needed)
 router.use(campaignWebhookRouter);
+
+// Public utility routes — no auth required
+router.use(utilsRouter);
 
 router.use(storageRouter);
 router.use(provisionUser);
