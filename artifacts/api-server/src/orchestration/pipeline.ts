@@ -1,3 +1,4 @@
+import { GenderDetector } from "./genderDetector.js";
 import { createSTTAdapter } from "./adapters/stt/index.js";
 import { toReadableError } from "./utils.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
@@ -120,6 +121,9 @@ export class OrchestrationPipeline {
   private dtmfResolver: ((digit: string | null) => void) | null = null;
   private dtmfTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
+  // Gender detection — fires once per call using early caller speech
+  private genderDetector: GenderDetector;
+
   constructor(config: SessionConfig) {
     this.config = config;
     this.agent = config.agentConfig;
@@ -130,6 +134,7 @@ export class OrchestrationPipeline {
     this.bargeInEnergyThreshold = config.agentConfig.bargeInEnergyThreshold;
     this.bargeInMinFrames       = config.agentConfig.bargeInMinFrames;
     this.bargeInEchoGraceMs     = config.agentConfig.bargeInEchoGraceMs;
+    this.genderDetector         = new GenderDetector(config.callId);
 
     const keys = config.providerKeys;
 
@@ -305,12 +310,16 @@ export class OrchestrationPipeline {
 
     // Streaming STT path: feed all audio directly to Deepgram — no local VAD needed
     if (this.streamSTT) {
+      // Still feed gender detector even on the streaming path (uses pcm8k, not pcm16k)
+      if (hasSpeech) this.genderDetector.addSpeechChunk(pcm8k);
       this.streamSTT.sendAudio(pcm16k);
       return;
     }
 
     // Batch STT path with local VAD + barge-in detection
     if (hasSpeech) {
+      // Feed early speech frames into the gender detector (fires async once, then no-ops)
+      this.genderDetector.addSpeechChunk(pcm8k);
       this.resetHangupTimer();
 
       if (this.bargeInEnabled && this.isPlaying && !this.bargeInRequested) {
@@ -1014,6 +1023,14 @@ export class OrchestrationPipeline {
     const kbContext = await kbContextPromise;
     if (kbContext) {
       systemPromptForTurn = `${systemPromptForTurn}\n\n## Relevant Knowledge Base Context\n\n${kbContext}`;
+    }
+
+    // Inject gender-based salutation directive once detection has resolved
+    const detectedGender = this.genderDetector.gender;
+    if (detectedGender === "male") {
+      systemPromptForTurn += "\n\n[CALLER GENDER] The caller has been identified as male. Always address them respectfully as \"Sir\" when appropriate (e.g. \"Yes, Sir\", \"Of course, Sir\"). Never use \"Ma'am\".";
+    } else if (detectedGender === "female") {
+      systemPromptForTurn += "\n\n[CALLER GENDER] The caller has been identified as female. Always address them respectfully as \"Ma'am\" when appropriate (e.g. \"Yes, Ma'am\", \"Of course, Ma'am\"). Never use \"Sir\".";
     }
 
     try {
