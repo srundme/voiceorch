@@ -54,12 +54,23 @@ app = FastAPI(
 
 
 @app.on_event("startup")
-def _warmup():
-    """Pre-load librosa / numpy JIT so the first real request isn't slow."""
-    try:
-        classify_audio_bytes(_make_warmup_wav())
-    except Exception:
-        pass  # warmup failure is non-fatal
+async def _warmup():
+    """
+    Pre-load librosa / numpy JIT so the first real request isn't slow.
+
+    Runs in a thread so the server binds to port 5000 immediately.
+    The deployment health check responds right away; librosa loads in the
+    background (~40 s on cold start). Any gender request that arrives before
+    warmup finishes pays the cold-start cost once — subsequent calls are fast.
+    """
+    import asyncio, concurrent.futures
+    loop = asyncio.get_event_loop()
+    def _do_warmup():
+        try:
+            classify_audio_bytes(_make_warmup_wav())
+        except Exception:
+            pass
+    loop.run_in_executor(concurrent.futures.ThreadPoolExecutor(max_workers=1), _do_warmup)
 
 
 app.add_middleware(
