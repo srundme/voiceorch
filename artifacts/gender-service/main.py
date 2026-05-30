@@ -27,7 +27,9 @@ from fastapi import APIRouter, FastAPI, File, HTTPException, UploadFile, WebSock
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from gender_detector import classify_audio_bytes
+# gender_detector is imported lazily (inside each handler) so uvicorn binds
+# to the port immediately. librosa/numpy JIT compilation happens in the
+# background warmup thread and does not block server startup.
 
 
 def _make_warmup_wav() -> bytes:
@@ -67,6 +69,7 @@ async def _warmup():
     loop = asyncio.get_event_loop()
     def _do_warmup():
         try:
+            from gender_detector import classify_audio_bytes  # noqa: PLC0415
             classify_audio_bytes(_make_warmup_wav())
         except Exception:
             pass
@@ -112,6 +115,7 @@ async def detect_gender_upload(file: UploadFile = File(...)):
     audio_bytes = await file.read()
     if not audio_bytes:
         raise HTTPException(status_code=400, detail="Empty audio file")
+    from gender_detector import classify_audio_bytes  # noqa: PLC0415
     return classify_audio_bytes(audio_bytes)
 
 
@@ -144,6 +148,7 @@ async def detect_gender_url(req: GenderByUrlRequest):
     if not audio_bytes:
         raise HTTPException(status_code=400, detail="Downloaded audio is empty")
 
+    from gender_detector import classify_audio_bytes  # noqa: PLC0415
     return classify_audio_bytes(audio_bytes)
 
 
@@ -179,6 +184,7 @@ async def ws_gender(websocket: WebSocket):
             buffer.extend(data)
 
             if len(buffer) >= WS_TRIGGER_BYTES:
+                from gender_detector import classify_audio_bytes  # noqa: PLC0415
                 result = classify_audio_bytes(bytes(buffer))
                 await websocket.send_json(result)
                 buffer.clear()
