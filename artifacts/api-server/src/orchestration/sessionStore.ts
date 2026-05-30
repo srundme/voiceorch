@@ -61,9 +61,9 @@ export async function patchSessionMeta(
   const r = getRedis();
   if (!r) return;
   try {
-    const existing = await r.get<string>(sessionKey(sessionId));
+    const existing = await r.get(sessionKey(sessionId));
     const current: SessionMeta = existing
-      ? (JSON.parse(existing as string) as SessionMeta)
+      ? (typeof existing === "string" ? JSON.parse(existing) : existing) as SessionMeta
       : ({} as SessionMeta);
     const updated = { ...current, ...patch };
     await r.set(sessionKey(sessionId), JSON.stringify(updated), { ex: ttlSeconds });
@@ -106,8 +106,8 @@ export async function getSessionMeta(sessionId: string): Promise<SessionMeta | n
   const r = getRedis();
   if (!r) return null;
   try {
-    const raw = await r.get<string>(sessionKey(sessionId));
-    return raw ? (JSON.parse(raw as string) as SessionMeta) : null;
+    const raw = await r.get(sessionKey(sessionId));
+    return raw ? ((typeof raw === "string" ? JSON.parse(raw) : raw) as SessionMeta) : null;
   } catch (err) {
     logger.warn({ sessionId, err }, "Redis: getSessionMeta failed");
     return null;
