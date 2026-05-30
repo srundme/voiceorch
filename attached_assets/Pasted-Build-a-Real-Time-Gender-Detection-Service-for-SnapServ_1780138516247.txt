@@ -1,0 +1,113 @@
+Build a Real-Time Gender Detection Service for SnapServe.
+
+Recommended Open-Source Stack:
+
+1. SpeechBrain (Primary Recommendation)
+   - Repository: https://github.com/speechbrain/speechbrain
+   - Framework: PyTorch
+   - Purpose: Extract speaker embeddings from voice samples.
+   - Model: ECAPA-TDNN Speaker Embeddings
+
+2. PyTorch
+   - Used for inference and model execution.
+
+3. Torchaudio
+   - Audio preprocessing and feature extraction.
+
+4. Librosa
+   - Additional audio feature extraction if required.
+
+Architecture:
+
+Incoming Audio Stream
+        ↓
+First 3-5 Seconds Audio
+        ↓
+SpeechBrain ECAPA-TDNN
+        ↓
+Speaker Embedding Vector
+        ↓
+Gender Classification Layer
+        ↓
+Result:
+{
+  "estimated_gender": "male",
+  "confidence": 0.91
+}
+
+Implementation Steps:
+
+Step 1:
+Capture the first 3-5 seconds of speech after call pickup.
+
+Step 2:
+Convert audio to:
+- Mono
+- 16 kHz
+- WAV format
+
+Step 3:
+Use SpeechBrain ECAPA-TDNN model to generate speaker embeddings.
+
+Step 4:
+Pass embeddings through a lightweight gender classifier.
+
+Step 5:
+Return:
+{
+  "estimated_gender": "male",
+  "confidence": 0.91
+}
+
+Confidence Rules:
+
+If confidence >= 0.75:
+Return male or female.
+
+If confidence < 0.75:
+Return unknown.
+
+API Endpoint:
+
+POST /voice-analysis/gender
+
+Request:
+{
+  "audio_url": "call_sample.wav"
+}
+
+Response:
+{
+  "estimated_gender": "female",
+  "confidence": 0.88,
+  "processing_time_ms": 420
+}
+
+Performance Requirements:
+
+- Response under 1 second.
+- Works on live streaming calls.
+- Supports thousands of concurrent requests.
+- Deployable via Docker.
+- Expose REST and WebSocket APIs.
+
+Future Upgrades:
+
+Keep architecture modular so future modules can be added:
+- Age estimation
+- Sentiment detection
+- Accent detection
+- Emotion detection
+- Speaker verification
+
+Recommended Choice:
+
+Use SpeechBrain + ECAPA-TDNN + a lightweight gender classification model.
+
+Avoid building a custom model from scratch in V1.
+Avoid relying on LLMs for gender detection.
+Run inference locally to reduce API costs and latency.
+
+Goal:
+
+Provide a production-ready gender detection microservice that integrates into SnapServe's orchestration engine and returns perceived gender estimates with confidence scores in real time.
