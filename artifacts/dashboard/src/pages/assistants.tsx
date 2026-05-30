@@ -10,7 +10,6 @@ import {
   PhoneForwarded, Globe, CalendarPlus, CalendarClock, CalendarX, CalendarCheck, Wrench,
   ChevronRight, ChevronUp, GitBranch, MessageSquare, LayoutGrid, Workflow,
 } from "lucide-react";
-import { CreateAgentWizard } from "@/components/create-agent-wizard";
 import {
   useListAgents,
   useGetAgent,
@@ -2467,7 +2466,7 @@ export default function AssistantsPage() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [pendingTab, setPendingTab] = useState<string | undefined>(undefined);
   const [search, setSearch]         = useState("");
-  const [wizardOpen, setWizardOpen] = useState(false);
+  const [, setLocation]             = useLocation();
 
   const { data: agents, isLoading } = useListAgents({
     query: { queryKey: getListAgentsQueryKey() },
@@ -2502,7 +2501,7 @@ export default function AssistantsPage() {
             </span>
           )}
           <button
-            onClick={() => setWizardOpen(true)}
+            onClick={() => setLocation("/app/agents/new")}
             title="Create assistant"
             className="h-7 w-7 flex items-center justify-center rounded-lg transition-colors border border-border bg-elevated text-muted-foreground hover:text-foreground hover:bg-accent"
           >
@@ -2513,7 +2512,7 @@ export default function AssistantsPage() {
         {/* Create button */}
         <div className="px-3 pt-3 pb-2 shrink-0">
           <button
-            onClick={() => setWizardOpen(true)}
+            onClick={() => setLocation("/app/agents/new")}
             className="w-full flex items-center justify-center gap-2 h-9 rounded-xl text-[12.5px] font-medium transition-colors border border-dashed border-border/60 bg-transparent text-muted-foreground hover:text-foreground hover:bg-accent/50 hover:border-border"
           >
             <Plus className="h-3.5 w-3.5" /> Create Assistant
@@ -2597,7 +2596,7 @@ export default function AssistantsPage() {
               <p className="text-[12px] mt-1 text-muted-foreground/40">Choose one from the list or create a new one.</p>
             </div>
             <button
-              onClick={() => setWizardOpen(true)}
+              onClick={() => setLocation("/app/agents/new")}
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-medium border border-border bg-elevated text-foreground/80 hover:text-foreground hover:bg-accent transition-colors"
             >
               <Plus className="h-4 w-4" /> Create Assistant
@@ -2606,11 +2605,6 @@ export default function AssistantsPage() {
         )}
       </div>
 
-      <CreateAgentWizard
-        open={wizardOpen}
-        onClose={() => setWizardOpen(false)}
-        onCreated={(id, navigateTo) => { setWizardOpen(false); setPendingTab(navigateTo); setSelectedId(id); }}
-      />
     </div>
   );
 }

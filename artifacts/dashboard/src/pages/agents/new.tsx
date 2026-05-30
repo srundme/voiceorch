@@ -269,6 +269,7 @@ export default function AgentNew() {
   const createAgent = useCreateAgent();
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [showAdvancedSTT, setShowAdvancedSTT] = useState(false);
+  const [agentMode, setAgentMode] = useState<"managed" | "byop">("byop");
   const { data: templates } = useListAgentTemplates();
   const { data: knowledgeBases } = useListKnowledgeBases();
 
@@ -348,6 +349,18 @@ export default function AgentNew() {
   useEffect(() => { form.setValue("ttsVoice", DEFAULT_TTS_VOICE(ttsProvider)); }, [ttsProvider]);
   useEffect(() => { form.setValue("ttsModel", TTS_MODELS[ttsProvider]?.[0]?.value ?? ""); }, [ttsProvider]);
 
+  // When switching to managed mode, lock in platform-default providers
+  useEffect(() => {
+    if (agentMode === "managed") {
+      form.setValue("asrProvider", "deepgram");
+      form.setValue("asrModel", "nova-3");
+      form.setValue("llmProvider", "google");
+      form.setValue("llmModel", "gemini-2.5-flash");
+      form.setValue("ttsProvider", "cartesia");
+      form.setValue("ttsModel", "sonic-3");
+    }
+  }, [agentMode]);
+
   const applyTemplate = (tpl: any) => {
     form.setValue("name", tpl.name);
     form.setValue("description", tpl.description);
@@ -379,7 +392,7 @@ export default function AgentNew() {
         options: f.options ? f.options.split(",").map(s => s.trim()).filter(Boolean) : undefined,
       })),
     };
-    createAgent.mutate({ data: submitData as any }, {
+    createAgent.mutate({ data: { ...submitData, agentMode } as any }, {
       onSuccess: (agent) => {
         queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
         toast({ title: "Agent Created", description: "Your new voice agent has been created." });
@@ -456,6 +469,46 @@ export default function AgentNew() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ── Mode Selector ── */}
+      <div className="grid grid-cols-2 gap-4">
+        <button
+          type="button"
+          onClick={() => setAgentMode("managed")}
+          className={`text-left p-4 rounded-xl border-2 transition-all ${
+            agentMode === "managed"
+              ? "border-primary bg-primary/5"
+              : "border-border bg-card hover:border-muted-foreground/40 hover:bg-muted/40"
+          }`}
+        >
+          <div className="flex items-center gap-2 mb-1.5">
+            <Sparkles className={`h-4 w-4 ${agentMode === "managed" ? "text-primary" : "text-muted-foreground"}`} />
+            <span className="font-semibold text-sm text-foreground">Managed</span>
+            <span className="ml-auto text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">Recommended</span>
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Platform handles ASR, LLM, and TTS using managed API keys. Just write your system prompt.
+          </p>
+          <p className="text-[10px] text-muted-foreground/60 mt-2 font-mono">Deepgram · Gemini 2.5 Flash · Cartesia</p>
+        </button>
+        <button
+          type="button"
+          onClick={() => setAgentMode("byop")}
+          className={`text-left p-4 rounded-xl border-2 transition-all ${
+            agentMode === "byop"
+              ? "border-primary bg-primary/5"
+              : "border-border bg-card hover:border-muted-foreground/40 hover:bg-muted/40"
+          }`}
+        >
+          <div className="flex items-center gap-2 mb-1.5">
+            <Bot className={`h-4 w-4 ${agentMode === "byop" ? "text-primary" : "text-muted-foreground"}`} />
+            <span className="font-semibold text-sm text-foreground">Bring Your Own Providers</span>
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Use your own API keys for each pipeline stage. Full control over ASR, LLM, TTS, and telephony.
+          </p>
+        </button>
+      </div>
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 pb-20">
@@ -682,6 +735,18 @@ export default function AgentNew() {
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
 
+                  {agentMode === "managed" ? (
+                    <div className="md:col-span-3 flex items-center gap-3 p-4 rounded-xl border border-primary/20 bg-primary/5">
+                      <Sparkles className="h-5 w-5 text-primary shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium text-foreground">Platform-managed pipeline</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Deepgram Nova-3 (ASR) · Gemini 2.5 Flash (LLM) · Cartesia Sonic-3 (TTS) — powered by managed API keys.
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
                   {/* Step 1 — ASR */}
                   <div className="space-y-4 p-4 border rounded-md bg-muted/20 relative">
                     <div className="absolute top-0 right-0 -mt-3 -mr-3 bg-card border border-border rounded-full px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Step 1</div>
@@ -799,6 +864,8 @@ export default function AgentNew() {
                       </FormItem>
                     )} />
                   </div>
+                    </>
+                  )}
 
                   {/* Step 4 — Telephony */}
                   <div className="space-y-4 p-4 border rounded-md bg-muted/20 relative">
