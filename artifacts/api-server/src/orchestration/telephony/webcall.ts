@@ -12,6 +12,14 @@ import type { ConversationTurn, STTConfig } from "../types.js";
 import { decryptKey } from "../../lib/crypto.js";
 import { loadCallerProfile, injectCallerMemory, updateCallerProfile } from "../callerMemory.js";
 import { GenderDetector } from "../genderDetector.js";
+import {
+  buildToolDefs,
+  executeNativeBooking,
+  executeNativeCheckAvailability,
+  executeNativeReschedule,
+  executeNativeCancel,
+  executeWebhookTool,
+} from "../../services/tool-executor.js";
 
 // ── Per-user concurrent call rate limit ──────────────────────────────────────
 const activeCalls = new Map<string, number>();
@@ -363,6 +371,12 @@ export async function handleWebCallWebSocket(
         systemPromptForTurn += `\n\n[CALLER GENDER] Gender could not be determined. Use "${neutralSal}" as a neutral salutation when appropriate.`;
       }
 
+      // ── Build tool definitions for this agent ─────────────────────────────
+      const agentTools = (agent.tools ?? []) as unknown as import("../types.js").AgentTool[];
+      const toolDefs = buildToolDefs(agentTools);
+      let triggeredToolName: string | null = null;
+      let triggeredToolArgs: Record<string, unknown> = {};
+
       try {
        await llm.chat(
         history,
@@ -376,7 +390,16 @@ export async function handleWebCallWebSocket(
           for (const s of sentences) queueSentence(s);
           tokenBuf = rest;
         },
-        (full) => { fullReply = full; }
+        (full) => { fullReply = full; },
+        toolDefs.length > 0
+          ? {
+              tools: toolDefs,
+              onToolCall: (name, args) => {
+                triggeredToolName = name;
+                triggeredToolArgs = args;
+              },
+            }
+          : undefined,
       );
       } catch (llmErr) {
         const reason = toReadableError(llmErr, "LLM error");
@@ -390,6 +413,203 @@ export async function handleWebCallWebSocket(
       }
 
       if (tokenBuf.trim()) queueSentence(tokenBuf);
+
+      // ── Tool call handling ─────────────────────────────────────────────────
+      if (triggeredToolName) {
+        // Push the assistant's tool-invocation turn to history
+        const assistantToolContent = fullReply.replace(/<think>[\s\S]*?<\/think>/g, "").trim()
+          || `[calling tool: ${triggeredToolName}]`;
+        history.push({ role: "assistant", content: assistantToolContent });
+
+        // Skip telephony-only tools
+        if (triggeredToolName === "call_transfer" || triggeredToolName === "send_sms") {
+          logger.warn({ callId, triggeredToolName }, "Webcall: skipping telephony-only tool (no-op)");
+          sendStatus("listening");
+          processing = false;
+          return;
+        }
+
+        // Handle built-in end_call
+        if (triggeredToolName === "end_call") {
+          const endTool = agentTools.find((t) => t.type === "end_call" && t.name === triggeredToolName);
+          const goodbye = endTool && endTool.type === "end_call" ? (endTool.goodbyeMessage ?? "") : "";
+          if (goodbye.trim()) {
+            try {
+              const { audio } = await tts.synthesize(goodbye);
+              if (!closed) {
+                sendStatus("speaking");
+                speaking = true;
+                speakingStartedAt = Date.now();
+                for (let j = 0; j < audio.length; j += AUDIO_CHUNK_BYTES) {
+                  if (closed || interrupted) break;
+                  sendAudio(amplifyPcm(audio.slice(j, j + AUDIO_CHUNK_BYTES), TTS_VOLUME_GAIN));
+                  await new Promise<void>((r) => setTimeout(r, 40));
+                }
+                speaking = false;
+                speakingEndedAt = Date.now();
+              }
+            } catch { /* ignore TTS errors on goodbye */ }
+          }
+          if (!closed) void hangup("normal");
+          processing = false;
+          return;
+        }
+
+        // Execute the tool via the shared executor
+        let toolResult: string | undefined;
+        try {
+          const tool = agentTools.find((t) => t.name === triggeredToolName);
+          if (!tool) {
+            logger.warn({ callId, triggeredToolName }, "Webcall: LLM called unknown tool — ignoring");
+          } else if (tool.type === "native_booking") {
+            toolResult = await executeNativeBooking(callId, agentId, tool, triggeredToolArgs);
+          } else if (tool.type === "native_check_availability") {
+            toolResult = await executeNativeCheckAvailability(callId, agentId, tool, triggeredToolArgs);
+          } else if (tool.type === "native_reschedule") {
+            toolResult = await executeNativeReschedule(callId, agentId, tool, triggeredToolArgs);
+          } else if (tool.type === "native_cancel") {
+            toolResult = await executeNativeCancel(callId, agentId, tool, triggeredToolArgs);
+          } else if (tool.type === "webhook") {
+            toolResult = await executeWebhookTool(callId, tool, triggeredToolArgs);
+          } else {
+            logger.warn({ callId, toolType: tool.type }, "Webcall: unhandled tool type — ignoring");
+          }
+        } catch (toolErr) {
+          logger.error({ callId, err: toolErr, triggeredToolName }, "Webcall: tool execution error");
+          toolResult = "error: tool execution failed";
+        }
+
+        if (toolResult !== undefined) {
+          // Record tool result in history (same pattern as pipeline.ts continueWithToolResult)
+          history.push({ role: "user", content: `[Tool result for ${triggeredToolName}]: ${toolResult}` });
+
+          // Re-invoke LLM so the agent speaks a natural-language follow-up
+          const followUpJobs: Promise<Buffer>[] = [];
+          let followUpBuf = "";
+          let followUpFull = "";
+          let followUpInThink = false;
+          let followUpThinkBuf = "";
+
+          function filterFollowUp(token: string): string {
+            followUpThinkBuf += token;
+            let out = "";
+            while (followUpThinkBuf.length > 0) {
+              if (followUpInThink) {
+                const ci = followUpThinkBuf.indexOf("</think>");
+                if (ci !== -1) { followUpInThink = false; followUpThinkBuf = followUpThinkBuf.slice(ci + 8); }
+                else { followUpThinkBuf = followUpThinkBuf.slice(Math.max(0, followUpThinkBuf.length - 7)); break; }
+              } else {
+                const oi = followUpThinkBuf.indexOf("<think>");
+                if (oi !== -1) { out += followUpThinkBuf.slice(0, oi); followUpInThink = true; followUpThinkBuf = followUpThinkBuf.slice(oi + 7); }
+                else { const tail = Math.max(0, followUpThinkBuf.length - 6); out += followUpThinkBuf.slice(0, tail); followUpThinkBuf = followUpThinkBuf.slice(tail); break; }
+              }
+            }
+            return out;
+          }
+
+          function queueFollowUp(text: string) {
+            const t = text.trim();
+            if (!t) return;
+            let job: Promise<Buffer>;
+            if (tts.synthesizeStream) {
+              job = (async () => {
+                const chunks: Buffer[] = [];
+                await tts.synthesizeStream!(t, (c) => chunks.push(c), () => {});
+                return Buffer.concat(chunks);
+              })();
+            } else {
+              job = tts.synthesize(t).then(({ audio }) => audio);
+            }
+            job.catch(() => {});
+            followUpJobs.push(job);
+          }
+
+          try {
+            await llm.chat(
+              history,
+              systemPromptForTurn,
+              (token) => {
+                followUpFull += token;
+                const filtered = filterFollowUp(token);
+                if (!filtered) return;
+                followUpBuf += filtered;
+                const [sentences, rest] = extractSentences(followUpBuf);
+                for (const s of sentences) queueFollowUp(s);
+                followUpBuf = rest;
+              },
+              (full) => { followUpFull = full; },
+            );
+          } catch (llmErr2) {
+            const reason = toReadableError(llmErr2, "LLM error (tool follow-up)");
+            logger.error({ callId, err: llmErr2 }, reason);
+            send({ type: "error", message: reason });
+            speaking = false;
+            speakingEndedAt = Date.now();
+            processing = false;
+            if (!closed) void hangup("error", reason);
+            return;
+          }
+
+          if (followUpBuf.trim()) queueFollowUp(followUpBuf);
+
+          const cleanFollowUp = followUpFull.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+
+          if (cleanFollowUp && followUpJobs.length > 0) {
+            history.push({ role: "assistant", content: cleanFollowUp });
+            sendStatus("speaking");
+            speaking = true;
+            speakingStartedAt = Date.now();
+            if (audioChunks.length > 0) audioChunks.splice(0);
+            bargeInFrames = 0;
+
+            let transcriptSent = false;
+            for (let i = 0; i < followUpJobs.length; i++) {
+              if (closed || interrupted) break;
+              let pcmOut: Buffer;
+              try { pcmOut = await followUpJobs[i]!; }
+              catch (ttsErr) {
+                const reason = toReadableError(ttsErr, "TTS error");
+                logger.error({ callId, err: ttsErr }, reason);
+                send({ type: "error", message: reason });
+                speaking = false;
+                speakingEndedAt = Date.now();
+                processing = false;
+                if (!closed) void hangup("error", reason);
+                return;
+              }
+              if (interrupted || closed) break;
+              if (!transcriptSent) {
+                send({ type: "transcript", speaker: "agent", text: cleanFollowUp });
+                transcriptSent = true;
+              }
+              for (let j = 0; j < pcmOut.length; j += AUDIO_CHUNK_BYTES) {
+                if (closed || interrupted) break;
+                const chunk = pcmOut.slice(j, j + AUDIO_CHUNK_BYTES);
+                recording.addAgentChunk(chunk);
+                sendAudio(amplifyPcm(chunk, TTS_VOLUME_GAIN));
+                await new Promise<void>((r) => setTimeout(r, 40));
+              }
+            }
+            if (!interrupted && !closed) await new Promise((r) => setTimeout(r, AUDIO_TAIL_SILENCE_MS));
+            speaking = false;
+            speakingEndedAt = Date.now();
+            if (interrupted) {
+              if (audioChunks.length > 0) void process();
+            } else if (!closed) {
+              sendStatus("listening");
+            }
+          } else {
+            sendStatus("listening");
+          }
+        } else {
+          sendStatus("listening");
+        }
+
+        processing = false;
+        return;
+      }
+
+      // ── Normal (non-tool) TTS playback path ───────────────────────────────
 
       // Clean the stored reply — strip think blocks from transcript + history
       const cleanReply = fullReply.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
