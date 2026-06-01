@@ -38,6 +38,8 @@ const BARGE_IN_END_GRACE_MS    = 600;  // suppress barge-in for 600ms after the 
                                         // of the final word triggering a false barge-in and cutting it off
 const AUDIO_TAIL_SILENCE_MS    = 300;  // extra wait after the last chunk so the client's audio buffer drains
                                         // before the server signals "listening" (prevents last-word cutoff)
+const TTS_TAIL_SILENCE_MS      = 150;  // PCM silence appended to every TTS buffer so the last word isn't clipped
+                                        // by the client's AudioContext reaching the end of its scheduled queue
 const MIN_PCM_BYTES            = 3200; // ~100ms at 16kHz Int16 — minimum speech before processing
 const AUDIO_CHUNK_BYTES        = 1280; // 40ms per WS frame
 const HANDOFF_SILENCE_MS       = 3000; // sustained silence that may indicate a phone handoff
@@ -72,6 +74,17 @@ function extractSentences(buf: string): [string[], string] {
   if (parts.length <= 1) return [[], buf];
   const complete = parts.slice(0, -1).map(s => s.trim()).filter(Boolean);
   return [complete, parts[parts.length - 1] ?? ""];
+}
+
+/**
+ * Append a short PCM silence trailer to every TTS audio buffer.
+ * Ensures the client's AudioContext has samples queued PAST the final word,
+ * so the last phoneme is never truncated when the scheduled queue empties.
+ * (150 ms = 4800 bytes of PCM16 at 16 kHz)
+ */
+function withTailSilence(audio: Buffer): Buffer {
+  const silenceBytes = Math.round((TTS_TAIL_SILENCE_MS / 1000) * 16000) * 2;
+  return Buffer.concat([audio, Buffer.alloc(silenceBytes, 0)]);
 }
 
 type Status = "idle" | "listening" | "thinking" | "speaking";
@@ -353,10 +366,15 @@ export async function handleWebCallWebSocket(
           job = (async () => {
             const chunks: Buffer[] = [];
             await tts.synthesizeStream!(t, (c) => chunks.push(c), () => {});
-            return Buffer.concat(chunks);
+            const audio = Buffer.concat(chunks);
+            logger.info({ callId, sentenceText: t, audioBytes: audio.length }, "TTS sentence synthesized");
+            return withTailSilence(audio);
           })();
         } else {
-          job = tts.synthesize(t).then(({ audio }) => audio);
+          job = tts.synthesize(t).then(({ audio }) => {
+            logger.info({ callId, sentenceText: t, audioBytes: audio.length }, "TTS sentence synthesized");
+            return withTailSilence(audio);
+          });
         }
         // Attach a no-op catch immediately so Node.js doesn't fire
         // unhandledRejection before the for-loop below awaits the job.
@@ -522,10 +540,15 @@ export async function handleWebCallWebSocket(
               job = (async () => {
                 const chunks: Buffer[] = [];
                 await tts.synthesizeStream!(t, (c) => chunks.push(c), () => {});
-                return Buffer.concat(chunks);
+                const audio = Buffer.concat(chunks);
+                logger.info({ callId, sentenceText: t, audioBytes: audio.length }, "TTS follow-up synthesized");
+                return withTailSilence(audio);
               })();
             } else {
-              job = tts.synthesize(t).then(({ audio }) => audio);
+              job = tts.synthesize(t).then(({ audio }) => {
+                logger.info({ callId, sentenceText: t, audioBytes: audio.length }, "TTS follow-up synthesized");
+                return withTailSilence(audio);
+              });
             }
             job.catch(() => {});
             followUpJobs.push(job);
