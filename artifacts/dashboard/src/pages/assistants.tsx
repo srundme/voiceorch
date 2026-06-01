@@ -52,7 +52,7 @@ import { useToast } from "@/hooks/use-toast";
 import { formatApiError, isKycError, isDestinationUnverifiedError } from "@/lib/format-api-error";
 import { DestinationOtpDialog } from "@/components/destination-otp-dialog";
 import { format } from "date-fns";
-import { AgentMetricsBar } from "@/components/agent-metrics-bar";
+import { computePipelineCost } from "@/lib/provider-pricing";
 
 /* ── Provider catalogues ─────────────────────────────────────────────────── */
 
@@ -1268,13 +1268,8 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
           {/* ═══ OVERVIEW ════════════════════════════════════════════════ */}
           {activeTab === "overview" && (
             <div className="p-5 space-y-4 max-w-3xl">
-              <AgentMetricsBar
-                asrProvider={agent.asrProvider} llmProvider={agent.llmProvider} llmModel={agent.llmModel}
-                ttsProvider={agent.ttsProvider} telephonyProvider={agent.telephonyProvider}
-                avgSttLatencyMs={agent.avgSttLatencyMs} avgLlmLatencyMs={agent.avgLlmLatencyMs} avgTtsFirstChunkMs={agent.avgTtsFirstChunkMs}
-              />
               <div className="grid grid-cols-2 gap-3">
-                {/* Identity card */}
+                {/* Card 1 — Identity */}
                 <div className="bg-card border border-border rounded-2xl p-4 space-y-3">
                   <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50">Identity</p>
                   <div>
@@ -1286,7 +1281,13 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                     <Select value={agentType} onValueChange={mark(setAgentType)}>
                       <SelectTrigger className="h-8 text-xs border"><SelectValue /></SelectTrigger>
                       <SelectContent className="bg-popover border-border">
-                        {[["general","General Purpose"],["lead_qualification","Lead Qualification"],["customer_support","Customer Support"],["appointment_booking","Appointment Booking"],["survey","Survey"]].map(([v,l]) => (
+                        {[
+                          ["general", "General Purpose"],
+                          ["lead_qualification", "Lead Qualification"],
+                          ["customer_support", "Customer Support"],
+                          ["appointment_booking", "Appointment Booking"],
+                          ["survey", "Survey"],
+                        ].map(([v, l]) => (
                           <SelectItem key={v} value={v} className="text-foreground text-xs">{l}</SelectItem>
                         ))}
                       </SelectContent>
@@ -1315,7 +1316,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                     })()}
                   </div>
                 </div>
-                {/* Brain card */}
+                {/* Card 2 — Brain */}
                 <div className="bg-card border border-border rounded-2xl p-4 space-y-3">
                   <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50">Brain</p>
                   <div>
@@ -1340,7 +1341,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                   )}
                   <SliderRow label="Temperature" desc="Creativity" value={temperature} onChange={v => { setTemperature(v); setDirty(true); }} min={0} max={2} step={0.01} />
                 </div>
-                {/* Voice card */}
+                {/* Card 3 — Voice */}
                 <div className="bg-card border border-border rounded-2xl p-4 space-y-3">
                   <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50">Voice</p>
                   <div>
@@ -1381,75 +1382,31 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                     </div>
                   )}
                 </div>
-                {/* Knowledge card */}
-                <div className="bg-card border border-border rounded-2xl p-4 space-y-3">
-                  <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50">Knowledge</p>
-                  <div>
-                    <p className="text-[10px] text-muted-foreground/60 mb-1">Knowledge Base</p>
-                    <Select value={knowledgeBaseId?.toString() ?? "none"} onValueChange={v => { setKnowledgeBaseId(v === "none" ? null : parseInt(v)); setDirty(true); }}>
-                      <SelectTrigger className="h-8 text-xs border"><SelectValue /></SelectTrigger>
-                      <SelectContent className="bg-popover border-border">
-                        <SelectItem value="none" className="text-muted-foreground text-xs">— None —</SelectItem>
-                        {(kbs ?? []).map(kb => <SelectItem key={kb.id} value={kb.id.toString()} className="text-foreground text-xs">{kb.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-muted-foreground/60 mb-1">Webhook URL</p>
-                    <Input value={webhookUrl} onChange={e => { setWebhookUrl(e.target.value); setDirty(true); }} placeholder="https://…/webhook" className="h-8 text-xs border" />
-                  </div>
-                  <div className="flex items-center justify-between pt-1 border-t border-border/40">
-                    <span className="text-[11px] text-muted-foreground/50">{agentTools.length} tool{agentTools.length !== 1 ? "s" : ""}</span>
-                    <button onClick={() => setActiveTab("tools")} className="text-[11px] text-foreground/50 hover:text-foreground underline underline-offset-2 transition-colors">Manage →</button>
-                  </div>
-                </div>
-              </div>
-              {/* Mini pipeline */}
-              <div className="bg-card border border-border rounded-2xl p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50">Pipeline</p>
-                  <button onClick={() => setActiveTab("pipeline")} className="text-[11px] text-foreground/50 hover:text-foreground underline underline-offset-2 transition-colors">Configure →</button>
-                </div>
-                <div className="flex items-center gap-2 overflow-x-auto">
-                  {([
-                    { label: "Caller",    sub: "",                 icon: Phone },
-                    { label: "STT",       sub: asrProvider || "—", icon: Mic },
-                    { label: "LLM",       sub: llmProvider || "—", icon: Sparkles },
-                    { label: "TTS",       sub: ttsProvider || "—", icon: Volume2 },
-                    { label: "Telephony", sub: telephony || "—",   icon: PhoneOutgoing },
-                  ] as { label: string; sub: string; icon: React.ComponentType<{ className?: string }> }[]).map((node, i, arr) => (
-                    <React.Fragment key={node.label}>
-                      <div className="flex flex-col items-center gap-1 shrink-0">
-                        <div className="h-9 w-9 rounded-xl bg-elevated border border-border flex items-center justify-center">
-                          <node.icon className="h-4 w-4 text-muted-foreground/40" />
+                {/* Card 4 — Pipeline */}
+                <div className="bg-card border border-border rounded-2xl p-4">
+                  <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50 mb-3">Pipeline</p>
+                  <div className="flex items-center gap-2 overflow-x-auto">
+                    {([
+                      { label: "Caller",    sub: "",                  icon: Phone },
+                      { label: "STT",       sub: asrProvider || "—",  icon: Mic },
+                      { label: "LLM",       sub: llmProvider || "—",  icon: Sparkles },
+                      { label: "TTS",       sub: ttsProvider || "—",  icon: Volume2 },
+                      { label: "Telephony", sub: telephony || "—",    icon: PhoneOutgoing },
+                    ] as { label: string; sub: string; icon: React.ComponentType<{ className?: string }> }[]).map((node, i, arr) => (
+                      <React.Fragment key={node.label}>
+                        <div className="flex flex-col items-center gap-1 shrink-0">
+                          <div className="h-9 w-9 rounded-xl bg-elevated border border-border flex items-center justify-center">
+                            <node.icon className="h-4 w-4 text-muted-foreground/40" />
+                          </div>
+                          <p className="text-[9px] font-semibold text-muted-foreground/50 uppercase tracking-wide">{node.label}</p>
+                          {node.sub && <p className="text-[9px] text-muted-foreground/40 capitalize">{node.sub}</p>}
                         </div>
-                        <p className="text-[9px] font-semibold text-muted-foreground/50 uppercase tracking-wide">{node.label}</p>
-                        {node.sub && <p className="text-[9px] text-muted-foreground/40 capitalize">{node.sub}</p>}
-                      </div>
-                      {i < arr.length - 1 && <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/15 shrink-0" />}
-                    </React.Fragment>
-                  ))}
+                        {i < arr.length - 1 && <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/15 shrink-0" />}
+                      </React.Fragment>
+                    ))}
+                  </div>
                 </div>
               </div>
-              {/* Recent calls */}
-              {calls && calls.length > 0 && (
-                <div className="bg-card border border-border rounded-2xl p-4 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50">Recent Calls</p>
-                    <button onClick={() => setActiveTab("logs")} className="text-[11px] text-foreground/50 hover:text-foreground underline underline-offset-2 transition-colors">All logs →</button>
-                  </div>
-                  {calls.slice(0, 4).map(call => (
-                    <div key={call.id} className="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-elevated/40">
-                      <span className="text-[11px] font-mono truncate flex-1 text-muted-foreground/60">{call.fromNumber ?? `#${call.id}`}</span>
-                      <span className={`text-[10px] font-semibold shrink-0 px-1.5 py-0.5 rounded border ${
-                        call.status === "completed" ? "text-foreground/60 bg-foreground/[0.05] border-foreground/[0.07]" :
-                        call.status === "failed"    ? "text-muted-foreground/60 bg-transparent border-border" :
-                                                      "text-muted-foreground/40 bg-transparent border-border/50"
-                      }`}>{call.status === "completed" ? "OK" : call.status === "failed" ? "Fail" : "—"}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           )}
 
@@ -2175,6 +2132,69 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
           {/* ═══ LOGS ═══════════════════════════════════════════════════ */}
           {activeTab === "logs" && (
             <div className="px-5 py-4 max-w-2xl space-y-2">
+              {/* Summary metrics bar */}
+              {(() => {
+                const completed = (calls ?? []).filter(c => c.status === "completed" && c.durationSeconds);
+                const totalMin = completed.reduce((s, c) => s + (c.durationSeconds ?? 0), 0) / 60;
+                const cost = computePipelineCost(agent.asrProvider, agent.llmProvider, agent.llmModel, agent.ttsProvider, agent.telephonyProvider);
+                const avgCost = totalMin > 0 ? cost.totalPerMin : 0;
+                const avgStt = completed.filter(c => c.sttLatencyMs).reduce((s, c, _, arr) => s + (c.sttLatencyMs ?? 0) / arr.length, 0);
+                const avgLlm = completed.filter(c => c.llmLatencyMs).reduce((s, c, _, arr) => s + (c.llmLatencyMs ?? 0) / arr.length, 0);
+                const avgTts = completed.filter(c => c.ttsFirstChunkMs).reduce((s, c, _, arr) => s + (c.ttsFirstChunkMs ?? 0) / arr.length, 0);
+                const hasAny = completed.length > 0 && (avgStt || avgLlm || avgTts);
+                return (
+                  <div className="flex gap-3 mb-4">
+                    <div className="flex-1 bg-muted border border-border rounded-xl px-4 py-3 space-y-1.5">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-[9px] font-bold tracking-[0.15em] uppercase text-muted-foreground">Avg Cost</span>
+                        <span className="text-xs font-bold text-foreground tabular-nums ml-auto">~${avgCost.toFixed(2)}<span className="text-[10px] font-normal text-muted-foreground ml-0.5">/min</span></span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {([
+                          { key: "asr", label: "ASR", val: cost.asr.costPerMin },
+                          { key: "llm", label: "LLM", val: cost.llm.costPerMin },
+                          { key: "tts", label: "TTS", val: cost.tts.costPerMin },
+                          { key: "tel", label: "Tel", val: cost.telephony.costPerMin },
+                          { key: "fee", label: "Fee", val: cost.platform.costPerMin },
+                        ]).map(s => (
+                          <span key={s.key} className="text-[9px] text-muted-foreground flex items-center gap-0.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 inline-block opacity-80" />
+                            {s.label}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex-1 bg-muted border border-border rounded-xl px-4 py-3 space-y-1.5">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-[9px] font-bold tracking-[0.15em] uppercase text-muted-foreground">Avg Latency</span>
+                        {hasAny ? (
+                          <span className="text-xs font-bold text-foreground tabular-nums ml-auto">
+                            {(() => {
+                              const e2e = (avgStt || 0) + (avgLlm || 0) + (avgTts || 0);
+                              return e2e >= 1000 ? `~${(e2e / 1000).toFixed(1)}s` : `~${Math.round(e2e)}ms`;
+                            })()}
+                            <span className="text-[10px] font-normal text-muted-foreground ml-0.5">e2e</span>
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground italic ml-auto">no data yet</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {([
+                          { key: "stt", label: "STT", val: avgStt },
+                          { key: "llm", label: "LLM", val: avgLlm },
+                          { key: "tts", label: "TTS", val: avgTts },
+                        ]).map(s => (
+                          <span key={s.key} className="text-[9px] text-muted-foreground flex items-center gap-0.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 inline-block opacity-80" />
+                            {s.label} {s.val ? `${Math.round(s.val)}ms` : "\u2014"}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
               {callsLoading ? (
                 <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-12 w-full rounded-xl bg-muted animate-pulse" />)}</div>
               ) : (calls ?? []).length === 0 ? (
