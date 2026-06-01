@@ -394,23 +394,22 @@ router.get("/calls/active", requireAuth, async (req, res): Promise<void> => {
   res.json(ListActiveCallsResponse.parse(result));
 });
 
-router.get("/calls", async (req, res): Promise<void> => {
+router.get("/calls", requireAuth, async (req, res): Promise<void> => {
   const query = ListCallsQueryParams.safeParse(req.query);
   if (!query.success) {
     res.status(400).json({ error: query.error.message });
     return;
   }
 
-  const clerkId = (req as any).clerkUserId as string | undefined;
+  const clerkId = (req as any).clerkUserId as string;
 
-  const conditions: ReturnType<typeof eq>[] = [];
-  if (clerkId) conditions.push(eq(callsTable.userId, clerkId));
+  const conditions: ReturnType<typeof eq>[] = [eq(callsTable.userId, clerkId)];
   if (query.data.agentId != null) conditions.push(eq(callsTable.agentId, query.data.agentId));
 
   let dbQuery = db.select().from(callsTable).$dynamic();
   if (conditions.length === 1) {
     dbQuery = dbQuery.where(conditions[0]) as typeof dbQuery;
-  } else if (conditions.length > 1) {
+  } else {
     dbQuery = dbQuery.where(and(...conditions)) as typeof dbQuery;
   }
 
@@ -461,16 +460,31 @@ router.post("/calls", async (req, res): Promise<void> => {
   res.status(201).json(GetCallResponse.parse(enriched));
 });
 
-router.get("/calls/:id", async (req, res): Promise<void> => {
+router.get("/calls/:id", requireAuth, async (req, res): Promise<void> => {
   const params = GetCallParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: "Validation failed", issues: params.error.issues });
     return;
   }
+  const clerkId = (req as any).clerkUserId as string;
   const [call] = await db.select().from(callsTable).where(eq(callsTable.id, params.data.id));
   if (!call) {
     res.status(404).json({ error: "Call not found" });
     return;
+  }
+  // Ownership check: call.userId must match the requester, or (for legacy rows
+  // where userId is null) the call's agent must belong to the requester.
+  if (call.userId && call.userId !== clerkId) {
+    res.status(404).json({ error: "Call not found" });
+    return;
+  }
+  if (!call.userId) {
+    const [agent] = await db.select({ userId: agentsTable.userId })
+      .from(agentsTable).where(eq(agentsTable.id, call.agentId));
+    if (agent?.userId && agent.userId !== clerkId) {
+      res.status(404).json({ error: "Call not found" });
+      return;
+    }
   }
   const enriched = await enrichCall(call);
   res.json(GetCallResponse.parse(enriched));

@@ -13,13 +13,16 @@ import { requireAuth } from "../middlewares/requireAuth.js";
 
 const router: IRouter = Router();
 
-router.get("/analytics/dashboard", async (req, res): Promise<void> => {
+router.get("/analytics/dashboard", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+
   const [agentStats] = await db
     .select({
       total: sql<number>`count(*)::int`,
       active: sql<number>`count(*) filter (where status = 'active')::int`,
     })
-    .from(agentsTable);
+    .from(agentsTable)
+    .where(eq(agentsTable.userId, clerkId));
 
   const [callStats] = await db
     .select({
@@ -27,25 +30,27 @@ router.get("/analytics/dashboard", async (req, res): Promise<void> => {
       successful: sql<number>`count(*) filter (where status = 'completed')::int`,
       avgDuration: sql<number>`avg(duration_seconds) filter (where duration_seconds is not null)::int`,
     })
-    .from(callsTable);
+    .from(callsTable)
+    .where(eq(callsTable.userId, clerkId));
 
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
   const [todayCalls] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(callsTable)
-    .where(gte(callsTable.createdAt, todayStart));
+    .where(and(eq(callsTable.userId, clerkId), gte(callsTable.createdAt, todayStart)));
 
   const weekStart = new Date();
   weekStart.setDate(weekStart.getDate() - 7);
   const [weekCalls] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(callsTable)
-    .where(gte(callsTable.createdAt, weekStart));
+    .where(and(eq(callsTable.userId, clerkId), gte(callsTable.createdAt, weekStart)));
 
   const [providerCount] = await db
     .select({ count: sql<number>`count(*)::int` })
-    .from(providersTable);
+    .from(providersTable)
+    .where(eq(providersTable.userId, clerkId));
 
   const totalCalls = callStats?.total ?? 0;
   const successfulCalls = callStats?.successful ?? 0;
@@ -65,7 +70,9 @@ router.get("/analytics/dashboard", async (req, res): Promise<void> => {
   );
 });
 
-router.get("/analytics/calls/recent", async (req, res): Promise<void> => {
+router.get("/analytics/calls/recent", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+
   const calls = await db
     .select({
       id: callsTable.id,
@@ -84,6 +91,7 @@ router.get("/analytics/calls/recent", async (req, res): Promise<void> => {
     })
     .from(callsTable)
     .leftJoin(agentsTable, eq(callsTable.agentId, agentsTable.id))
+    .where(eq(callsTable.userId, clerkId))
     .orderBy(desc(callsTable.createdAt))
     .limit(20);
 
@@ -97,19 +105,24 @@ router.get("/analytics/calls/recent", async (req, res): Promise<void> => {
   res.json(GetRecentCallsResponse.parse(mapped));
 });
 
-router.get("/analytics/calls/by-status", async (req, res): Promise<void> => {
+router.get("/analytics/calls/by-status", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+
   const rows = await db
     .select({
       status: callsTable.status,
       count: sql<number>`count(*)::int`,
     })
     .from(callsTable)
+    .where(eq(callsTable.userId, clerkId))
     .groupBy(callsTable.status);
 
   res.json(GetCallsByStatusResponse.parse(rows));
 });
 
-router.get("/analytics/calls/daily", async (req, res): Promise<void> => {
+router.get("/analytics/calls/daily", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
   sevenDaysAgo.setHours(0, 0, 0, 0);
@@ -122,7 +135,7 @@ router.get("/analytics/calls/daily", async (req, res): Promise<void> => {
       failed: sql<number>`count(*) filter (where status = 'failed')::int`,
     })
     .from(callsTable)
-    .where(gte(callsTable.createdAt, sevenDaysAgo))
+    .where(and(eq(callsTable.userId, clerkId), gte(callsTable.createdAt, sevenDaysAgo)))
     .groupBy(sql`to_char(created_at at time zone 'UTC', 'YYYY-MM-DD')`)
     .orderBy(sql`to_char(created_at at time zone 'UTC', 'YYYY-MM-DD')`);
 

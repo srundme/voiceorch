@@ -3,6 +3,7 @@ import { eq, and, sql } from "drizzle-orm";
 import OpenAI from "openai";
 import { db, knowledgeBasesTable, kbDocumentsTable, kbChunksTable, providersTable } from "@workspace/db";
 import { decryptKey } from "../lib/crypto.js";
+import { requireAuth } from "../middlewares/requireAuth.js";
 
 const router: IRouter = Router();
 
@@ -190,14 +191,18 @@ async function ingestDocument(docId: number, kbId: number, content: string, chun
 
 /* ── Routes ──────────────────────────────────────────────────────────────── */
 
-// List all knowledge bases
-router.get("/knowledge-bases", async (req, res): Promise<void> => {
-  const kbs = await db.select().from(knowledgeBasesTable).orderBy(knowledgeBasesTable.createdAt);
+// List all knowledge bases (scoped to the authenticated user)
+router.get("/knowledge-bases", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const kbs = await db.select().from(knowledgeBasesTable)
+    .where(eq(knowledgeBasesTable.userId, clerkId))
+    .orderBy(knowledgeBasesTable.createdAt);
   res.json(kbs);
 });
 
-// Create knowledge base
-router.post("/knowledge-bases", async (req, res): Promise<void> => {
+// Create knowledge base (associates with authenticated user)
+router.post("/knowledge-bases", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
   const { name, description, embeddingModel, chunkSize, chunkOverlap } = req.body as {
     name?: string; description?: string; embeddingModel?: string; chunkSize?: number; chunkOverlap?: number;
   };
@@ -206,6 +211,7 @@ router.post("/knowledge-bases", async (req, res): Promise<void> => {
     return;
   }
   const [kb] = await db.insert(knowledgeBasesTable).values({
+    userId: clerkId,
     name: name.trim(),
     description: description ?? undefined,
     embeddingModel: embeddingModel ?? "text-embedding-3-small",
@@ -215,11 +221,13 @@ router.post("/knowledge-bases", async (req, res): Promise<void> => {
   res.status(201).json(kb);
 });
 
-// Get KB with documents
-router.get("/knowledge-bases/:id", async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id ?? "");
+// Get KB with documents (ownership enforced)
+router.get("/knowledge-bases/:id", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const id = parseInt(String(req.params["id"] ?? ""), 10);
   if (isNaN(id)) { res.status(400).json({ error: "invalid id" }); return; }
-  const [kb] = await db.select().from(knowledgeBasesTable).where(eq(knowledgeBasesTable.id, id));
+  const [kb] = await db.select().from(knowledgeBasesTable)
+    .where(and(eq(knowledgeBasesTable.id, id), eq(knowledgeBasesTable.userId, clerkId)));
   if (!kb) { res.status(404).json({ error: "Not found" }); return; }
   const documents = await db.select().from(kbDocumentsTable)
     .where(eq(kbDocumentsTable.knowledgeBaseId, id))
@@ -227,43 +235,56 @@ router.get("/knowledge-bases/:id", async (req, res): Promise<void> => {
   res.json({ ...kb, documents });
 });
 
-// Update KB
-router.patch("/knowledge-bases/:id", async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id ?? "");
+// Update KB (ownership enforced)
+router.patch("/knowledge-bases/:id", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const id = parseInt(String(req.params["id"] ?? ""), 10);
   if (isNaN(id)) { res.status(400).json({ error: "invalid id" }); return; }
   const { name, description } = req.body as { name?: string; description?: string };
   const [kb] = await db.update(knowledgeBasesTable)
     .set({ ...(name ? { name } : {}), ...(description !== undefined ? { description } : {}) })
-    .where(eq(knowledgeBasesTable.id, id))
+    .where(and(eq(knowledgeBasesTable.id, id), eq(knowledgeBasesTable.userId, clerkId)))
     .returning();
   if (!kb) { res.status(404).json({ error: "Not found" }); return; }
   res.json(kb);
 });
 
-// Delete KB (cascades to documents + chunks)
-router.delete("/knowledge-bases/:id", async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id ?? "");
+// Delete KB (ownership enforced; cascades to documents + chunks)
+router.delete("/knowledge-bases/:id", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const id = parseInt(String(req.params["id"] ?? ""), 10);
   if (isNaN(id)) { res.status(400).json({ error: "invalid id" }); return; }
+  const [kb] = await db.select({ id: knowledgeBasesTable.id })
+    .from(knowledgeBasesTable)
+    .where(and(eq(knowledgeBasesTable.id, id), eq(knowledgeBasesTable.userId, clerkId)));
+  if (!kb) { res.status(404).json({ error: "Not found" }); return; }
   await db.delete(knowledgeBasesTable).where(eq(knowledgeBasesTable.id, id));
   res.status(204).end();
 });
 
-// List documents
-router.get("/knowledge-bases/:id/documents", async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id ?? "");
+// List documents (KB ownership enforced)
+router.get("/knowledge-bases/:id/documents", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const id = parseInt(String(req.params["id"] ?? ""), 10);
   if (isNaN(id)) { res.status(400).json({ error: "invalid id" }); return; }
+  const [kb] = await db.select({ id: knowledgeBasesTable.id })
+    .from(knowledgeBasesTable)
+    .where(and(eq(knowledgeBasesTable.id, id), eq(knowledgeBasesTable.userId, clerkId)));
+  if (!kb) { res.status(404).json({ error: "Not found" }); return; }
   const docs = await db.select().from(kbDocumentsTable)
     .where(eq(kbDocumentsTable.knowledgeBaseId, id))
     .orderBy(kbDocumentsTable.createdAt);
   res.json(docs);
 });
 
-// Add document — async ingestion
-router.post("/knowledge-bases/:id/documents", async (req, res): Promise<void> => {
-  const kbId = parseInt(req.params.id ?? "");
+// Add document — async ingestion (KB ownership enforced)
+router.post("/knowledge-bases/:id/documents", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const kbId = parseInt(String(req.params["id"] ?? ""), 10);
   if (isNaN(kbId)) { res.status(400).json({ error: "invalid id" }); return; }
 
-  const [kb] = await db.select().from(knowledgeBasesTable).where(eq(knowledgeBasesTable.id, kbId));
+  const [kb] = await db.select().from(knowledgeBasesTable)
+    .where(and(eq(knowledgeBasesTable.id, kbId), eq(knowledgeBasesTable.userId, clerkId)));
   if (!kb) { res.status(404).json({ error: "Knowledge base not found" }); return; }
 
   const { name, sourceType, content, sourceUrl } = req.body as {
@@ -308,11 +329,16 @@ router.post("/knowledge-bases/:id/documents", async (req, res): Promise<void> =>
   res.status(202).json(doc);
 });
 
-// Delete document
-router.delete("/knowledge-bases/:id/documents/:docId", async (req, res): Promise<void> => {
-  const kbId = parseInt(req.params.id ?? "");
-  const docId = parseInt(req.params.docId ?? "");
+// Delete document (KB ownership enforced)
+router.delete("/knowledge-bases/:id/documents/:docId", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const kbId = parseInt(String(req.params["id"] ?? ""), 10);
+  const docId = parseInt(String(req.params["docId"] ?? ""), 10);
   if (isNaN(kbId) || isNaN(docId)) { res.status(400).json({ error: "invalid id" }); return; }
+  const [kb] = await db.select({ id: knowledgeBasesTable.id })
+    .from(knowledgeBasesTable)
+    .where(and(eq(knowledgeBasesTable.id, kbId), eq(knowledgeBasesTable.userId, clerkId)));
+  if (!kb) { res.status(404).json({ error: "Not found" }); return; }
   await db.delete(kbDocumentsTable)
     .where(and(eq(kbDocumentsTable.id, docId), eq(kbDocumentsTable.knowledgeBaseId, kbId)));
 
@@ -331,14 +357,16 @@ router.delete("/knowledge-bases/:id/documents/:docId", async (req, res): Promise
   res.status(204).end();
 });
 
-// Query (test retrieval) — hybrid vector + FTS with RRF
-router.post("/knowledge-bases/:id/query", async (req, res): Promise<void> => {
-  const kbId = parseInt(req.params.id ?? "");
+// Query (test retrieval) — hybrid vector + FTS with RRF (KB ownership enforced)
+router.post("/knowledge-bases/:id/query", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const kbId = parseInt(String(req.params["id"] ?? ""), 10);
   if (isNaN(kbId)) { res.status(400).json({ error: "invalid id" }); return; }
   const { query, topK = 5 } = req.body as { query?: string; topK?: number };
   if (!query?.trim()) { res.status(400).json({ error: "query is required" }); return; }
 
-  const [kb] = await db.select().from(knowledgeBasesTable).where(eq(knowledgeBasesTable.id, kbId));
+  const [kb] = await db.select().from(knowledgeBasesTable)
+    .where(and(eq(knowledgeBasesTable.id, kbId), eq(knowledgeBasesTable.userId, clerkId)));
   if (!kb) { res.status(404).json({ error: "Not found" }); return; }
 
   const apiKey = await getOpenAiKey();
