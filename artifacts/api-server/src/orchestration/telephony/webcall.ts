@@ -437,7 +437,18 @@ export async function handleWebCallWebSocket(
         return;
       }
 
-      if (tokenBuf.trim()) queueSentence(tokenBuf);
+      // The LLM token stream occasionally ends a few words early while fullReply
+      // (set by the onComplete callback) has the complete text.  Re-run
+      // extractSentences on the full clean reply to get the definitive last
+      // segment, and use it instead of the potentially-truncated tokenBuf.
+      {
+        const cleanForFlush = fullReply.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+        const [, trueRemainder] = extractSentences(cleanForFlush);
+        const flushText = trueRemainder.trim().length > tokenBuf.trim().length
+          ? trueRemainder
+          : tokenBuf;
+        if (flushText.trim()) queueSentence(flushText);
+      }
 
       // ── Tool call handling ─────────────────────────────────────────────────
       if (triggeredToolName) {
@@ -580,7 +591,15 @@ export async function handleWebCallWebSocket(
             return;
           }
 
-          if (followUpBuf.trim()) queueFollowUp(followUpBuf);
+          // Same streaming-gap reconciliation as the main LLM path.
+          {
+            const cleanForFlush = followUpFull.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+            const [, trueRemainder] = extractSentences(cleanForFlush);
+            const flushText = trueRemainder.trim().length > followUpBuf.trim().length
+              ? trueRemainder
+              : followUpBuf;
+            if (flushText.trim()) queueFollowUp(flushText);
+          }
 
           const cleanFollowUp = followUpFull.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
 
