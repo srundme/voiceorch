@@ -262,7 +262,6 @@ export async function handleWebCallWebSocket(
   // When this call was triggered by an incoming-callback notification, load the
   // prior call's summary so the agent can greet the user with context and then
   // speak an opening greeting immediately (instead of waiting for the user).
-  let callbackOpeningGreeting: string | null = null;
   if (callbackId) {
     try {
       const [cb] = await db
@@ -294,12 +293,6 @@ export async function handleWebCallWebSocket(
         "====================",
       ].join("\n");
       systemPrompt = `${callbackHeader}\n\n${systemPrompt}`;
-
-      // Build a short TTS opening greeting (synthesized immediately on connection)
-      const topicSnippet = priorSummary
-        ? ` We were discussing — ${priorSummary.slice(0, 80).replace(/\n/g, " ").trim()} — and you`
-        : " You";
-      callbackOpeningGreeting = `Hi, this is ${agent.name}.${topicSnippet} had asked to be called back. Shall we continue?`;
 
       logger.info({ callId, callbackId, hasPriorSummary: !!priorSummary }, "Callback context injected into system prompt");
     } catch (cbCtxErr) {
@@ -830,35 +823,76 @@ export async function handleWebCallWebSocket(
   logger.info({ callId, agentId, agentName: agent.name }, "WebCall session started");
 
   // ── Callback opening greeting ─────────────────────────────────────────────
-  // For callback calls, the agent speaks first with a context-aware greeting
-  // instead of waiting for the user to initiate.
-  if (callbackOpeningGreeting && !closed) {
+  // For callback calls the agent speaks FIRST. We ask the LLM to generate the
+  // opening so it is (a) in the agent's configured language and (b) contextually
+  // dynamic based on the prior-call summary injected into systemPrompt above.
+  if (callbackId && !closed) {
     try {
-      sendStatus("speaking");
-      speaking = true;
-      speakingStartedAt = Date.now();
-      const { audio } = await tts.synthesize(callbackOpeningGreeting);
-      const paddedAudio = withTailSilence(audio);
-      for (let j = 0; j < paddedAudio.length; j += AUDIO_CHUNK_BYTES) {
-        if (closed || interrupted) break;
-        sendAudio(amplifyPcm(paddedAudio.slice(j, j + AUDIO_CHUNK_BYTES), TTS_VOLUME_GAIN));
-        await new Promise<void>(r => setTimeout(r, 40));
-      }
-      speaking = false;
-      speakingEndedAt = Date.now();
-      history.push({ role: "assistant", content: callbackOpeningGreeting });
-      send({ type: "transcript", speaker: "agent", text: callbackOpeningGreeting });
-      if (!closed) {
-        // Small drain pause so the client's audio buffer empties before we switch to listening
-        const drainFrames = Math.ceil(AUDIO_TAIL_SILENCE_MS / 40);
-        for (let j = 0; j < drainFrames; j++) {
-          if (closed) break;
+      sendStatus("thinking");
+
+      // Build the same per-turn system prompt that process() uses
+      const agentTimezone = (agentCfg["timezone"] as string | undefined) || "Asia/Kolkata";
+      const greetSystemPrompt = `${buildDatetimeInjection(agentTimezone)}\n\n${systemPrompt}`;
+
+      // Synthetic trigger: tells the LLM to open the conversation now.
+      // We do NOT add this to history so the real dialogue starts clean
+      // with just the assistant's greeting turn.
+      const triggerHistory: import("../types.js").ConversationTurn[] = [
+        { role: "user", content: "[callback connected — please open the conversation with your greeting now]" },
+      ];
+
+      let greetingText = "";
+      await llm.chat(
+        triggerHistory,
+        greetSystemPrompt,
+        (token) => { greetingText += token; },
+        (full) => { greetingText = full; },
+      );
+
+      // Strip any <think>…</think> blocks
+      greetingText = greetingText.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+
+      if (greetingText && !closed) {
+        sendStatus("speaking");
+        speaking = true;
+        speakingStartedAt = Date.now();
+
+        // Use streaming TTS if available, otherwise one-shot
+        let greetAudio: Buffer;
+        if (tts.synthesizeStream) {
+          const chunks: Buffer[] = [];
+          await tts.synthesizeStream(greetingText, (c) => chunks.push(c), () => {});
+          greetAudio = withTailSilence(Buffer.concat(chunks));
+        } else {
+          const { audio } = await tts.synthesize(greetingText);
+          greetAudio = withTailSilence(audio);
+        }
+
+        for (let j = 0; j < greetAudio.length; j += AUDIO_CHUNK_BYTES) {
+          if (closed || interrupted) break;
+          sendAudio(amplifyPcm(greetAudio.slice(j, j + AUDIO_CHUNK_BYTES), TTS_VOLUME_GAIN));
           await new Promise<void>(r => setTimeout(r, 40));
         }
+
+        speaking = false;
+        speakingEndedAt = Date.now();
+        // Only push the assistant turn — the synthetic trigger stays out of history
+        history.push({ role: "assistant", content: greetingText });
+        send({ type: "transcript", speaker: "agent", text: greetingText });
+
+        if (!closed) {
+          const drainFrames = Math.ceil(AUDIO_TAIL_SILENCE_MS / 40);
+          for (let j = 0; j < drainFrames; j++) {
+            if (closed) break;
+            await new Promise<void>(r => setTimeout(r, 40));
+          }
+          sendStatus("listening");
+        }
+      } else if (!closed) {
         sendStatus("listening");
       }
     } catch (greetErr) {
-      logger.warn({ callId, greetErr }, "Callback opening greeting TTS failed — continuing normally");
+      logger.warn({ callId, greetErr }, "Callback opening greeting failed — continuing normally");
       speaking = false;
       speakingEndedAt = Date.now();
       if (!closed) sendStatus("listening");
