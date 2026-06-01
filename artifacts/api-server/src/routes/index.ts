@@ -31,6 +31,7 @@ import metaRouter from "./meta.js";
 import callTransfersRouter from "./call-transfers.js";
 import billingRouter from "./billing.js";
 import utilsRouter from "./utils.js";
+import webcallNotifyRouter from "./webcall-notify.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
 const router: IRouter = Router();
@@ -74,5 +75,6 @@ router.use(userApiKeysRouter);
 router.use(metaRouter);
 router.use(callTransfersRouter);
 router.use(billingRouter);
+router.use(webcallNotifyRouter);
 
 export default router;

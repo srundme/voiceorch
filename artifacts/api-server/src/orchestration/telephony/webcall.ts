@@ -10,7 +10,7 @@ import { logger } from "../../lib/logger.js";
 import { RecordingBuffer } from "../recorder.js";
 import type { ConversationTurn, STTConfig } from "../types.js";
 import { decryptKey } from "../../lib/crypto.js";
-import { loadCallerProfile, injectCallerMemory, updateCallerProfile } from "../callerMemory.js";
+import { loadCallerProfile, injectCallerMemory, updateCallerProfile, detectCallbackRequest } from "../callerMemory.js";
 import { GenderDetector } from "../genderDetector.js";
 import { buildDatetimeInjection } from "../datetimeInject.js";
 import {
@@ -860,7 +860,7 @@ export async function handleWebCallWebSocket(
       logger.error({ callId, err }, "Error finalising webcall");
     }
 
-    // ── Post-call webcall memory update (fire-and-forget) ────────────────────
+    // ── Post-call webcall memory update + callback detection (fire-and-forget) ─
     if (webcallIdentifier && history.length >= 2) {
       void updateCallerProfile({
         agentId,
@@ -872,6 +872,20 @@ export async function handleWebCallWebSocket(
         wasDropped: false,
       }).catch((memErr) => {
         logger.warn({ callId, memErr }, "Post-call webcall memory update failed");
+      });
+
+      // Detect "call me back in X minutes" requests from webcall users.
+      // Stores userId so the callback poller can push an SSE notification instead
+      // of trying to dial a phone number.
+      void detectCallbackRequest({
+        agentId,
+        toNumber: webcallIdentifier,
+        userId: agent.userId ?? null,
+        history,
+        llm,
+        callId,
+      }).catch((cbErr) => {
+        logger.warn({ callId, cbErr }, "Post-call webcall callback detection failed");
       });
     }
 

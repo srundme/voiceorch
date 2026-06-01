@@ -6,6 +6,7 @@ export const scheduledCallbacksTable = pgTable("scheduled_callbacks", {
   id:                serial("id").primaryKey(),
   agentId:           integer("agent_id").references(() => agentsTable.id, { onDelete: "cascade" }).notNull(),
   toNumber:          text("to_number").notNull(),
+  userId:            text("user_id"),  // Clerk userId — set for webcall callbacks so SSE can route to the right browser
   scheduledAt:       timestamp("scheduled_at").notNull(),
   createdFromCallId: integer("created_from_call_id").references(() => callsTable.id, { onDelete: "set null" }),
   status:            text("status").notNull().default("pending"),  // pending | triggering | triggered | failed

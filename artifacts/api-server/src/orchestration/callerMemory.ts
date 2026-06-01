@@ -252,12 +252,13 @@ export async function updateCallerProfile(opts: {
  */
 export async function detectCallbackRequest(opts: {
   agentId: number;
-  toNumber: string;    // human's phone number
+  toNumber: string;    // human's phone number (or "webcall:<userId>")
+  userId?: string | null;   // Clerk userId — stored so the poller can route webcall callbacks via SSE
   history: ConversationTurn[];
   llm: LLMAdapter;
   callId: number;
 }): Promise<void> {
-  const { agentId, toNumber, history, llm, callId } = opts;
+  const { agentId, toNumber, userId, history, llm, callId } = opts;
 
   if (history.length < 2) return;
 
@@ -298,6 +299,7 @@ export async function detectCallbackRequest(opts: {
   await db.insert(scheduledCallbacksTable).values({
     agentId,
     toNumber,
+    userId: userId ?? null,
     scheduledAt,
     createdFromCallId: callId,
     status: "pending",

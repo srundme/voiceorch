@@ -376,7 +376,10 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
 export default function AgentDetail() {
   const params = useParams();
   const id = parseInt(params.id || "0", 10);
-  const [activeTab, setActiveTab] = useState("overview");
+  // Support ?tab=test URL param so the incoming-call notification can deep-link
+  // straight to the Test Call tab when the user accepts a scheduled callback.
+  const initialTab = new URLSearchParams(window.location.search).get("tab") === "test" ? "test" : "overview";
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [callDialogOpen, setCallDialogOpen] = useState(false);
   const [toNumber, setToNumber] = useState("");
   const { toast } = useToast();

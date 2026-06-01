@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Link, useLocation } from "wouter";
+import { IncomingCallNotification } from "@/components/incoming-call-notification";
 import {
   Users, Phone, Key, Settings, Menu,
   LayoutDashboard, BarChart3, BookOpen,
@@ -264,6 +265,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <main className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden bg-background">
         {children}
       </main>
+
+      {/* Incoming webcall callback notification — renders globally over all pages */}
+      <IncomingCallNotification />
     </div>
   );
 }
