@@ -5,6 +5,32 @@ import type { TTSAdapter } from "../../types.js";
  * Docs: https://docs.cartesia.ai/api-reference/tts/bytes
  * Returns raw PCM audio (supports body streaming for low latency)
  */
+
+const MAX_RETRIES = 2;
+const RETRY_BASE_MS = 300;
+
+/** Retry a fetch call on transient network failures (ETIMEDOUT, ECONNRESET, etc.). */
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  retries = MAX_RETRIES,
+): Promise<Response> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fetch(url, init);
+    } catch (err) {
+      lastErr = err;
+      // Only retry on network-level errors (TypeError: fetch failed / ETIMEDOUT).
+      // Don't retry on AbortError (caller cancelled).
+      const isNetwork = err instanceof TypeError && !(err.name === "AbortError");
+      if (!isNetwork || attempt === retries) throw err;
+      await new Promise<void>((r) => setTimeout(r, RETRY_BASE_MS * 2 ** attempt));
+    }
+  }
+  throw lastErr;
+}
+
 export class CartesiaTTS implements TTSAdapter {
   private key: string;
   private voiceId: string;
@@ -47,14 +73,18 @@ export class CartesiaTTS implements TTSAdapter {
     return JSON.stringify(body);
   }
 
+  private get headers() {
+    return {
+      "X-API-Key": this.key,
+      "Cartesia-Version": "2026-03-01",
+      "Content-Type": "application/json",
+    };
+  }
+
   async synthesize(text: string): Promise<{ audio: Buffer; characters: number }> {
-    const resp = await fetch("https://api.cartesia.ai/tts/bytes", {
+    const resp = await fetchWithRetry("https://api.cartesia.ai/tts/bytes", {
       method: "POST",
-      headers: {
-        "X-API-Key": this.key,
-        "Cartesia-Version": "2026-03-01",
-        "Content-Type": "application/json",
-      },
+      headers: this.headers,
       body: this.buildRequestBody(text),
     });
 
@@ -70,6 +100,7 @@ export class CartesiaTTS implements TTSAdapter {
    * Streaming synthesis — calls onChunk for each PCM buffer fragment as it
    * arrives over HTTP, so playback can begin before synthesis is complete.
    * First chunk typically arrives in ~80-150ms.
+   * Retries up to MAX_RETRIES times on transient network failures.
    */
   async synthesizeStream(
     text: string,
@@ -77,13 +108,9 @@ export class CartesiaTTS implements TTSAdapter {
     onDone: (characters: number) => void,
     signal?: AbortSignal
   ): Promise<void> {
-    const resp = await fetch("https://api.cartesia.ai/tts/bytes", {
+    const resp = await fetchWithRetry("https://api.cartesia.ai/tts/bytes", {
       method: "POST",
-      headers: {
-        "X-API-Key": this.key,
-        "Cartesia-Version": "2026-03-01",
-        "Content-Type": "application/json",
-      },
+      headers: this.headers,
       body: this.buildRequestBody(text),
       signal,
     });
