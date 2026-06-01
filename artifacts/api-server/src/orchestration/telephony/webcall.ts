@@ -363,7 +363,8 @@ export async function handleWebCallWebSocket(
 
       // Build per-turn system prompt with datetime + gender salutation injected
       let systemPromptForTurn = systemPrompt;
-      const dtInjection = buildDatetimeInjection(agentCfg["timezone"] as string | undefined);
+      const agentTimezone = (agentCfg["timezone"] as string | undefined) || "Asia/Kolkata";
+      const dtInjection = buildDatetimeInjection(agentTimezone);
       systemPromptForTurn = `${dtInjection}\n\n${systemPromptForTurn}`;
       const detectedGender = genderDetector?.gender ?? null;
       if (detectedGender === "male") {

@@ -155,6 +155,17 @@ router.patch("/agents/:id", requireAuth, async (req, res): Promise<void> => {
   if (updateData.leadSourceToken) {
     updateData.leadSourceToken = encryptKey(updateData.leadSourceToken as string);
   }
+  // Merge agentConfig with the existing one instead of replacing it wholesale,
+  // so saving one tab's fields doesn't wipe another tab's saved values.
+  if (updateData.agentConfig != null) {
+    const [existing] = await db
+      .select({ agentConfig: agentsTable.agentConfig })
+      .from(agentsTable)
+      .where(and(eq(agentsTable.id, params.data.id), eq(agentsTable.userId, clerkId)));
+    if (existing) {
+      updateData.agentConfig = { ...(existing.agentConfig as object ?? {}), ...(updateData.agentConfig as object) };
+    }
+  }
   const [agent] = await db
     .update(agentsTable)
     .set({ ...updateData, updatedAt: new Date() })
