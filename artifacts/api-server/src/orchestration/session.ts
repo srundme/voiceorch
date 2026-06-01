@@ -692,8 +692,9 @@ export async function endSession(sessionId: string): Promise<void> {
           let callSummary = "";
           let dispositionResult: Record<string, unknown> | null = null;
 
-          // 1. Generate call summary
-          if (transcript && transcript.length > 100 && ag.userId) {
+          // 1. Generate call summary (only when agent has summarization enabled)
+          const summarizationEnabled = (agCfgForWebhook["summarizationEnabled"] as boolean | undefined) ?? false;
+          if (summarizationEnabled && transcript && transcript.length > 100 && ag.userId) {
             try {
               const llmProvs = await db.select().from(providersTable).where(
                 and(
@@ -705,10 +706,14 @@ export async function endSession(sessionId: string): Promise<void> {
               const llmKey = llmProvs[0]?.apiKey;
               if (llmKey) {
                 const llm = createLLMAdapter(ag.llmProvider, llmKey, ag.llmModel);
+                const customPrompt = (agCfgForWebhook["summarizationPrompt"] as string | undefined) ?? "";
+                const userContent = customPrompt
+                  ? `${customPrompt}\n\nTranscript:\n${transcript.slice(0, 6000)}`
+                  : `Summarize this call transcript in exactly 3 concise bullet points:\n\n${transcript.slice(0, 6000)}`;
                 let summary = "";
                 await llm.chat(
-                  [{ role: "user", content: `Summarize this call transcript in exactly 3 concise bullet points:\n\n${transcript.slice(0, 6000)}` }],
-                  "You are a call analyst. Summarize the call in exactly 3 bullet points covering: main topic, key outcomes, and action items. Be brief and factual. Start each bullet with '•'.",
+                  [{ role: "user", content: userContent }],
+                  "You are a call analyst. Summarize the call concisely and factually. Start each bullet with '•'.",
                   () => {},
                   (full) => { summary = full; }
                 );

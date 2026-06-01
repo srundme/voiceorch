@@ -1,0 +1,71 @@
+My SnapServe voice agent is successfully booking appointments 
+via Cal.com and the confirmation email is reaching the 
+prospect (attendee). But I have the following issues to fix:
+
+---
+
+ISSUE 1 — HOST/ORGANIZER EMAIL NOT RECEIVING CONFIRMATION
+
+The organizer (host) is not getting any confirmation email 
+when an appointment is booked by the agent.
+
+I need to:
+- Find where the host/organizer email notification setting 
+  exists in the application (SnapServe or Cal.com)
+- Enable confirmation emails to be sent to the host on 
+  every booking
+
+---
+
+ISSUE 2 — MULTIPLE HOSTS
+
+In addition to the Google account already linked to the 
+calendar, I need to add 2 more email addresses as hosts.
+
+Requirements:
+- When the agent books an appointment, confirmation email 
+  must go to:
+  1. The prospect (attendee) — already working
+  2. The primary Google account host — needs to be fixed
+  3. Two additional host email addresses — needs to be added
+
+I need to know:
+- Where in Cal.com or SnapServe can I add multiple hosts 
+  or additional notification recipients?
+- What is the exact step by step process to add them?
+- Is this done via Cal.com event settings, workflows, 
+  or email notifications?
+
+---
+
+ISSUE 3 — CONFERENCE/MEETING LINK NOT ADDED TO BOOKING
+
+When an appointment is booked, there is no Google Meet or 
+Zoom link being generated or added to the calendar event.
+
+I need to:
+- Check where the conference app connection setting exists
+- Know how to connect Google Meet or Zoom to the calendar 
+  event so a meeting link is auto-generated on every booking
+- Give the user the option to choose between Google Meet 
+  and Zoom as their preferred conference app
+
+---
+
+MY SETUP
+- Voice agent platform: SnapServe
+- Calendar platform: Cal.com
+- Connected calendar: Google Calendar
+- Booking tool: book_appointment (configured in SnapServe)
+- Event type: One to one 15 mins (15 min)
+- Timezone: Asia/Kolkata (IST)
+
+---
+
+WHAT I NEED
+For each of the 3 issues above please give me:
+1. Where exactly the setting exists in the UI 
+   (Cal.com or SnapServe)
+2. Step by step instructions to configure it
+3. Any limitations I should know about (e.g. max hosts, 
+   paid plan requirements)

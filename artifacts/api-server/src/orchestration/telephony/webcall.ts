@@ -985,6 +985,31 @@ export async function handleWebCallWebSocket(
       logger.error({ callId, err }, "Error finalising webcall");
     }
 
+    // ── Post-call AI summary (fire-and-forget) ────────────────────────────────
+    const summarizationEnabled = (agentCfg["summarizationEnabled"] as boolean | undefined) ?? false;
+    if (summarizationEnabled && transcript && transcript.length > 100) {
+      void (async () => {
+        try {
+          const customPrompt = (agentCfg["summarizationPrompt"] as string | undefined) ?? "";
+          const userContent = customPrompt
+            ? `${customPrompt}\n\nTranscript:\n${transcript.slice(0, 6000)}`
+            : `Summarize this call transcript in exactly 3 concise bullet points:\n\n${transcript.slice(0, 6000)}`;
+          let summary = "";
+          await llm.chat(
+            [{ role: "user", content: userContent }],
+            "You are a call analyst. Summarize the call concisely and factually. Start each bullet with '•'.",
+            () => {},
+            (full) => { summary = full; }
+          );
+          if (summary) {
+            await db.update(callsTable).set({ callSummary: summary }).where(eq(callsTable.id, callId));
+          }
+        } catch (summaryErr) {
+          logger.warn({ callId, summaryErr }, "Post-call webcall summary generation failed");
+        }
+      })();
+    }
+
     // ── Post-call webcall memory update + callback detection (fire-and-forget) ─
     if (webcallIdentifier && history.length >= 2) {
       void updateCallerProfile({
