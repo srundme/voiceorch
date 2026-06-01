@@ -396,6 +396,9 @@ export async function handleWebCallWebSocket(
         systemPromptForTurn += `\n\n[CALLER GENDER] Gender could not be determined. Use "${neutralSal}" as a neutral salutation when appropriate.`;
       }
 
+      // Callback scheduling capability hint — always injected for webcalls
+      systemPromptForTurn += `\n\n[CALLBACK SCHEDULING] If the user asks you to call them back after a delay (e.g. "call me back in 10 minutes", "remind me in an hour"), you MUST agree and confirm the request. Say something like "Sure, I'll call you back in X minutes." Do NOT say you are unable to schedule callbacks or make outbound calls — the platform will automatically schedule and deliver the callback. Simply confirm the time and end the conversation naturally.`;
+
       // ── Build tool definitions for this agent ─────────────────────────────
       const agentTools = (agent.tools ?? []) as unknown as import("../types.js").AgentTool[];
       const toolDefs = buildToolDefs(agentTools);
