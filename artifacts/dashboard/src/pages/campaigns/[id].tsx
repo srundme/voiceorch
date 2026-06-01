@@ -2,29 +2,33 @@ import { useState, useRef, useCallback } from "react";
 import { useRoute, Link } from "wouter";
 import {
   useGetCampaign,
-  useListCampaignLeads,
   useUpdateCampaign,
-  useRetryCampaignLead,
-  useImportCampaignLeads,
-  getListCampaignLeadsQueryKey,
   getGetCampaignQueryKey,
+  useListCampaignBatches,
+  useCreateCampaignBatch,
+  useUpdateCampaignBatch,
+  useDeleteCampaignBatch,
+  getListCampaignBatchesQueryKey,
 } from "@workspace/api-client-react";
-import type { CampaignLead } from "@workspace/api-client-react";
+import type { CampaignBatch } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
-  ArrowLeft, Copy, Check, RefreshCw, Phone, Mail,
-  Clock, RotateCcw, Megaphone, Upload, FileText,
-  AlertCircle, CheckCircle2, X,
+  ArrowLeft, Copy, Check, Phone, Megaphone, Upload, FileText,
+  AlertCircle, CheckCircle2, X, Play, Pause, Square, Trash2,
+  ChevronRight, Calendar, Layers,
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 
@@ -35,7 +39,6 @@ const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 function parseCsv(text: string): { headers: string[]; rows: Record<string, string>[] } {
   const lines = text.split(/\r?\n/).filter(l => l.trim());
   if (lines.length === 0) return { headers: [], rows: [] };
-
   function parseRow(line: string): string[] {
     const fields: string[] = [];
     let current = "";
@@ -55,7 +58,6 @@ function parseCsv(text: string): { headers: string[]; rows: Record<string, strin
     fields.push(current.trim());
     return fields;
   }
-
   const headers = parseRow(lines[0]!);
   const rows = lines.slice(1).map(line => {
     const values = parseRow(line);
@@ -63,27 +65,20 @@ function parseCsv(text: string): { headers: string[]; rows: Record<string, strin
     headers.forEach((h, i) => { if (h) obj[h] = values[i] ?? ""; });
     return obj;
   }).filter(row => Object.values(row).some(v => v.trim()));
-
   return { headers, rows };
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function statusBadge(status: string) {
+function batchStatusBadge(status: string) {
   const map: Record<string, string> = {
-    pending:   "bg-muted text-muted-foreground border-border",
-    calling:   "bg-muted text-foreground border-border",
-    completed: "bg-muted text-foreground border-border",
-    failed:    "bg-muted text-foreground border-border",
-    skipped:   "bg-muted text-foreground border-border",
+    draft:     "bg-muted text-muted-foreground border-border",
+    running:   "bg-blue-50 text-blue-700 border-blue-200",
+    paused:    "bg-amber-50 text-amber-700 border-amber-200",
+    completed: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    stopped:   "bg-muted text-muted-foreground border-border",
   };
   return map[status] ?? "bg-muted text-muted-foreground border-border";
-}
-
-function sourceLabel(source: string) {
-  if (source === "instagram_ads") return "Instagram";
-  if (source === "csv")           return "CSV";
-  return "Webhook";
 }
 
 function WebhookUrlBox({ token }: { token: string }) {
@@ -101,98 +96,79 @@ function WebhookUrlBox({ token }: { token: string }) {
       </p>
       <div className="flex items-center gap-2">
         <code className="text-xs font-mono text-zinc-900 flex-1 truncate">{url}</code>
-        <button
-          onClick={copy}
-          className="shrink-0 p-1.5 rounded-lg hover:bg-muted text-foreground transition-colors"
-        >
+        <button onClick={copy} className="shrink-0 p-1.5 rounded-lg hover:bg-muted text-foreground transition-colors">
           {copied ? <Check className="h-3.5 w-3.5 text-zinc-500" /> : <Copy className="h-3.5 w-3.5" />}
         </button>
       </div>
       <p className="text-[11px] text-foreground/70 mt-2">
-        POST JSON leads here — or use as Meta Lead Ads webhook URL (GET for verification, POST for leads).
+        POST JSON leads here — or use as Meta Lead Ads webhook URL.
       </p>
     </div>
   );
 }
 
-// ── CSV Upload Modal ──────────────────────────────────────────────────────────
+// ── Upload Batch Modal ────────────────────────────────────────────────────────
 
-type ImportResult = { imported: number; skipped: number; errors?: string[] };
-
-function UploadCsvModal({
-  open,
-  onClose,
-  campaignId,
-  fieldMappings,
-  onSuccess,
+function UploadBatchModal({
+  open, onClose, campaignId, fieldMappings, onSuccess,
 }: {
-  open: boolean;
-  onClose: () => void;
-  campaignId: number;
-  fieldMappings: Record<string, string>;
-  onSuccess: () => void;
+  open: boolean; onClose: () => void; campaignId: number;
+  fieldMappings: Record<string, string>; onSuccess: () => void;
 }) {
   const { toast } = useToast();
-  const importLeads = useImportCampaignLeads();
+  const createBatch = useCreateCampaignBatch();
 
-  const [dragging, setDragging] = useState(false);
-  const [fileName, setFileName] = useState<string | null>(null);
-  const [parsed, setParsed] = useState<{ headers: string[]; rows: Record<string, string>[] } | null>(null);
-  const [result, setResult] = useState<ImportResult | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [batchName, setBatchName]         = useState("");
+  const [scheduledAt, setScheduledAt]     = useState("");
+  const [dragging, setDragging]           = useState(false);
+  const [fileName, setFileName]           = useState<string | null>(null);
+  const [parsed, setParsed]               = useState<{ headers: string[]; rows: Record<string, string>[] } | null>(null);
+  const [done, setDone]                   = useState(false);
+  const fileInputRef                       = useRef<HTMLInputElement>(null);
 
   const phoneField = fieldMappings["phone"] ?? "phone";
   const nameField  = fieldMappings["name"]  ?? "name";
   const emailField = fieldMappings["email"] ?? "email";
 
   function reset() {
-    setDragging(false);
-    setFileName(null);
-    setParsed(null);
-    setResult(null);
+    setBatchName(""); setScheduledAt(""); setDragging(false);
+    setFileName(null); setParsed(null); setDone(false);
   }
-
-  function handleClose() {
-    reset();
-    onClose();
-  }
+  function handleClose() { reset(); onClose(); }
 
   function loadFile(file: File) {
     setFileName(file.name);
+    if (!batchName) setBatchName(file.name.replace(/\.csv$/i, ""));
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = e => {
       const text = e.target?.result as string;
-      const data = parseCsv(text);
-      setParsed(data);
+      setParsed(parseCsv(text));
     };
     reader.readAsText(file);
   }
 
-  function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (file) loadFile(file);
-  }
-
   const onDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setDragging(false);
+    e.preventDefault(); setDragging(false);
     const file = e.dataTransfer.files[0];
     if (file && file.name.endsWith(".csv")) loadFile(file);
     else toast({ title: "Please drop a .csv file", variant: "destructive" });
   }, []);
 
-  async function doImport() {
+  async function doCreate() {
+    if (!batchName.trim()) { toast({ title: "Batch name required", variant: "destructive" }); return; }
     if (!parsed) return;
     try {
-      const res = await importLeads.mutateAsync({
+      await createBatch.mutateAsync({
         id: campaignId,
-        data: { leads: parsed.rows },
+        data: {
+          name: batchName.trim(),
+          leads: parsed.rows,
+          scheduledStartAt: scheduledAt || null,
+        } as Parameters<typeof createBatch.mutateAsync>[0]["data"],
       });
-      setResult(res);
+      setDone(true);
       onSuccess();
-    } catch {
-      toast({ title: "Import failed", variant: "destructive" });
-    }
+    } catch { toast({ title: "Failed to create batch", variant: "destructive" }); }
   }
 
   const phoneDetected = parsed ? parsed.headers.includes(phoneField) : null;
@@ -203,51 +179,44 @@ function UploadCsvModal({
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Upload className="h-4 w-4 text-foreground" /> Upload CSV
+            <Upload className="h-4 w-4" /> Upload Batch
           </DialogTitle>
-          <DialogDescription>
-            Upload a CSV file to bulk-import leads into this campaign.
-          </DialogDescription>
+          <DialogDescription>Upload a CSV to create a new batch of leads.</DialogDescription>
         </DialogHeader>
 
-        {/* Success result */}
-        {result ? (
+        {done ? (
           <div className="space-y-4">
             <div className="flex flex-col items-center gap-3 py-6 text-center">
               <div className="p-3 rounded-full bg-muted text-foreground">
                 <CheckCircle2 className="h-8 w-8" />
               </div>
               <div>
-                <p className="text-lg font-bold text-foreground">Import complete</p>
+                <p className="text-lg font-bold text-foreground">Batch created</p>
                 <p className="text-sm text-muted-foreground mt-0.5">
-                  <span className="font-semibold text-foreground">{result.imported} leads imported</span>
-                  {result.skipped > 0 && (
-                    <span className="text-foreground">, {result.skipped} rows skipped</span>
-                  )}
+                  <strong>{parsed?.rows.length.toLocaleString()}</strong> leads imported
+                  {scheduledAt && <span> — scheduled for {format(new Date(scheduledAt), "MMM d, HH:mm")}</span>}
                 </p>
               </div>
-              {(result.errors ?? []).length > 0 && (
-                <div className="w-full bg-muted border border-border rounded-lg p-3 text-left">
-                  <p className="text-xs font-semibold text-foreground mb-1.5 flex items-center gap-1">
-                    <AlertCircle className="h-3.5 w-3.5" /> Skipped rows
-                  </p>
-                  <ul className="space-y-0.5">
-                    {(result.errors ?? []).map((e, i) => (
-                      <li key={i} className="text-xs text-foreground font-mono">{e}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
             </div>
-            <DialogFooter>
-              <Button onClick={handleClose}>Done</Button>
-            </DialogFooter>
+            <DialogFooter><Button onClick={handleClose}>Done</Button></DialogFooter>
           </div>
         ) : (
           <div className="space-y-4">
-            {/* Field mapping reference */}
+            {/* Batch name + schedule */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Batch name *</Label>
+                <Input value={batchName} onChange={e => setBatchName(e.target.value)} placeholder="e.g. Week 1 Leads" />
+              </div>
+              <div>
+                <Label>Scheduled start (optional)</Label>
+                <Input type="datetime-local" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} />
+              </div>
+            </div>
+
+            {/* Field mapping ref */}
             <div className="bg-muted rounded-lg p-3 text-xs">
-              <p className="font-semibold text-muted-foreground mb-2">This campaign maps CSV columns:</p>
+              <p className="font-semibold text-muted-foreground mb-2">Campaign field mappings:</p>
               <div className="flex flex-wrap gap-2">
                 {[
                   { role: "Phone (required)", field: phoneField },
@@ -261,9 +230,6 @@ function UploadCsvModal({
                   </div>
                 ))}
               </div>
-              <p className="text-muted-foreground mt-1.5">
-                Make sure your CSV has a column named exactly <code className="font-mono text-foreground">{phoneField}</code>.
-              </p>
             </div>
 
             {/* Drop zone */}
@@ -274,61 +240,38 @@ function UploadCsvModal({
                 onDrop={onDrop}
                 onClick={() => fileInputRef.current?.click()}
                 className={`border-2 border-dashed rounded-xl p-10 flex flex-col items-center gap-3 cursor-pointer transition-colors ${
-                  dragging
-                    ? "border-zinc-400 bg-muted"
-                    : "border-border hover:border-zinc-300 hover:bg-muted"
+                  dragging ? "border-zinc-400 bg-muted" : "border-border hover:border-zinc-300 hover:bg-muted"
                 }`}
               >
                 <div className="p-3 rounded-full bg-muted text-zinc-400">
                   <FileText className="h-7 w-7" />
                 </div>
                 <div className="text-center">
-                  <p className="text-sm font-medium text-foreground">
-                    Drop your CSV file here, or click to browse
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Must include a <code className="font-mono">{phoneField}</code> column • Any number of rows
-                  </p>
+                  <p className="text-sm font-medium text-foreground">Drop your CSV file here, or click to browse</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Must include a <code className="font-mono">{phoneField}</code> column</p>
                 </div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".csv,text/csv"
-                  className="hidden"
-                  onChange={onFileChange}
-                />
+                <input ref={fileInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) loadFile(f); }} />
               </div>
             ) : (
               <div className="space-y-3">
-                {/* File name + clear */}
                 <div className="flex items-center justify-between bg-muted border border-border rounded-lg px-3 py-2">
                   <div className="flex items-center gap-2">
                     <FileText className="h-4 w-4 text-zinc-500" />
-                    <span className="text-sm font-medium text-zinc-800">{fileName}</span>
-                    <span className="text-xs text-zinc-500">
-                      {parsed.rows.length.toLocaleString()} rows detected
-                    </span>
+                    <span className="text-sm font-medium">{fileName}</span>
+                    <span className="text-xs text-zinc-500">{parsed.rows.length.toLocaleString()} rows</span>
                   </div>
-                  <button
-                    onClick={reset}
-                    className="text-zinc-400 hover:text-foreground transition-colors"
-                  >
+                  <button onClick={() => { setParsed(null); setFileName(null); }} className="text-zinc-400 hover:text-foreground transition-colors">
                     <X className="h-4 w-4" />
                   </button>
                 </div>
 
-                {/* Column detection status */}
                 {phoneDetected === false && (
                   <div className="flex items-start gap-2 bg-muted border border-border rounded-lg p-3">
                     <AlertCircle className="h-4 w-4 text-foreground mt-0.5 shrink-0" />
-                    <div className="text-sm text-foreground">
+                    <div className="text-sm">
                       <p className="font-semibold">Phone column not found</p>
-                      <p className="text-xs mt-0.5">
-                        Your CSV headers: <code className="font-mono">{parsed.headers.join(", ")}</code>
-                        <br />
-                        Expected column: <code className="font-mono text-foreground">{phoneField}</code>
-                        <br />
-                        Update the campaign's field mappings to match your column names.
+                      <p className="text-xs mt-0.5 text-muted-foreground">
+                        Headers: <code className="font-mono">{parsed.headers.join(", ")}</code> — expected <code className="font-mono">{phoneField}</code>
                       </p>
                     </div>
                   </div>
@@ -337,71 +280,37 @@ function UploadCsvModal({
                 {phoneDetected && (
                   <div className="flex items-center gap-2 bg-muted border border-border rounded-lg px-3 py-2">
                     <CheckCircle2 className="h-4 w-4 text-zinc-500 shrink-0" />
-                    <p className="text-xs text-foreground">
+                    <p className="text-xs">
                       Phone column <code className="font-mono font-bold">{phoneField}</code> detected —{" "}
                       ready to import <strong>{parsed.rows.length.toLocaleString()}</strong> leads
                     </p>
                   </div>
                 )}
 
-                {/* Preview table */}
-                {parsed.headers.length > 0 && (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
-                      Preview (first {Math.min(previewRows.length, 5)} rows)
-                    </p>
-                    <div className="overflow-x-auto rounded-lg border border-border">
-                      <table className="text-xs w-full">
-                        <thead>
-                          <tr className="bg-muted border-b border-border">
+                {parsed.headers.length > 0 && previewRows.length > 0 && (
+                  <div className="overflow-x-auto rounded-lg border border-border">
+                    <table className="text-xs w-full">
+                      <thead>
+                        <tr className="bg-muted border-b border-border">
+                          {parsed.headers.map(h => (
+                            <th key={h} className={`px-3 py-2 text-left font-medium ${h === phoneField ? "text-foreground" : "text-muted-foreground"}`}>
+                              {h}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {previewRows.map((row, i) => (
+                          <tr key={i} className="border-b border-border last:border-0">
                             {parsed.headers.map(h => (
-                              <th
-                                key={h}
-                                className={`px-3 py-2 text-left font-medium ${
-                                  h === phoneField
-                                    ? "text-foreground bg-muted"
-                                    : h === nameField || h === emailField
-                                    ? "text-foreground"
-                                    : "text-muted-foreground"
-                                }`}
-                              >
-                                {h}
-                                {h === phoneField && (
-                                  <span className="ml-1 text-[9px] bg-muted text-foreground px-1 rounded">phone</span>
-                                )}
-                                {h === nameField && h !== phoneField && (
-                                  <span className="ml-1 text-[9px] bg-muted text-foreground px-1 rounded">name</span>
-                                )}
-                                {h === emailField && h !== phoneField && (
-                                  <span className="ml-1 text-[9px] bg-muted text-foreground px-1 rounded">email</span>
-                                )}
-                              </th>
+                              <td key={h} className={`px-3 py-1.5 truncate max-w-[160px] ${h === phoneField ? "font-mono font-medium text-foreground" : "text-muted-foreground"}`}>
+                                {row[h] ?? ""}
+                              </td>
                             ))}
                           </tr>
-                        </thead>
-                        <tbody>
-                          {previewRows.map((row, i) => (
-                            <tr key={i} className="border-b border-border last:border-0">
-                              {parsed.headers.map(h => (
-                                <td
-                                  key={h}
-                                  className={`px-3 py-1.5 truncate max-w-[160px] ${
-                                    h === phoneField ? "font-mono font-medium text-foreground" : "text-muted-foreground"
-                                  }`}
-                                >
-                                  {row[h] ?? ""}
-                                </td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    {parsed.rows.length > 5 && (
-                      <p className="text-[11px] text-muted-foreground mt-1">
-                        …and {(parsed.rows.length - 5).toLocaleString()} more rows
-                      </p>
-                    )}
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </div>
@@ -410,16 +319,12 @@ function UploadCsvModal({
             <DialogFooter>
               <Button variant="outline" onClick={handleClose}>Cancel</Button>
               <Button
-                onClick={() => void doImport()}
-                disabled={!parsed || !phoneDetected || importLeads.isPending}
+                onClick={() => void doCreate()}
+                disabled={!parsed || !phoneDetected || !batchName.trim() || createBatch.isPending}
                 className="gap-2"
               >
                 <Upload className="h-3.5 w-3.5" />
-                {importLeads.isPending
-                  ? "Importing…"
-                  : parsed
-                  ? `Import ${parsed.rows.length.toLocaleString()} leads`
-                  : "Import leads"}
+                {createBatch.isPending ? "Creating…" : parsed ? `Create batch (${parsed.rows.length.toLocaleString()} leads)` : "Create batch"}
               </Button>
             </DialogFooter>
           </div>
@@ -429,84 +334,113 @@ function UploadCsvModal({
   );
 }
 
-// ── Lead row ──────────────────────────────────────────────────────────────────
+// ── Batch card ────────────────────────────────────────────────────────────────
 
-function LeadRow({ lead, onRetry }: { lead: CampaignLead; onRetry: () => void }) {
-  const [open, setOpen] = useState(false);
-  const canRetry = lead.callStatus === "failed" || lead.callStatus === "skipped";
+function BatchCard({ batch, campaignId }: { batch: CampaignBatch; campaignId: number }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const update = useUpdateCampaignBatch();
+  const remove = useDeleteCampaignBatch();
+  const [deleteOpen, setDeleteOpen] = useState(false);
+
+  const progress = batch.totalLeads > 0 ? Math.round((batch.calledLeads / batch.totalLeads) * 100) : 0;
+
+  async function setStatus(status: string) {
+    try {
+      await update.mutateAsync({ id: campaignId, batchId: batch.id, data: { status } as Parameters<typeof update.mutateAsync>[0]["data"] });
+      await qc.invalidateQueries({ queryKey: getListCampaignBatchesQueryKey(campaignId) });
+      toast({ title: `Batch ${status}` });
+    } catch { toast({ title: "Action failed", variant: "destructive" }); }
+  }
+
+  async function confirmDelete() {
+    try {
+      await remove.mutateAsync({ id: campaignId, batchId: batch.id });
+      await qc.invalidateQueries({ queryKey: getListCampaignBatchesQueryKey(campaignId) });
+      toast({ title: "Batch deleted" });
+    } catch { toast({ title: "Delete failed", variant: "destructive" }); }
+  }
 
   return (
     <>
-      <tr
-        className="border-b border-border hover:bg-muted/50 cursor-pointer transition-colors"
-        onClick={() => setOpen(o => !o)}
-      >
-        <td className="py-3 px-4">
-          <div className="flex items-center gap-2">
-            <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-            <span className="text-sm font-mono font-medium text-foreground">{lead.phone}</span>
-          </div>
-          {lead.name && <p className="text-xs text-muted-foreground mt-0.5 ml-5.5">{lead.name}</p>}
-        </td>
-        <td className="py-3 px-4">
-          <Badge variant="outline" className={`text-[10px] ${statusBadge(lead.callStatus)}`}>
-            {lead.callStatus}
-          </Badge>
-        </td>
-        <td className="py-3 px-4 text-xs text-muted-foreground">{lead.callAttempts}</td>
-        <td className="py-3 px-4 text-xs text-muted-foreground">{sourceLabel(lead.source)}</td>
-        <td className="py-3 px-4 text-xs text-muted-foreground">
-          {formatDistanceToNow(new Date(lead.createdAt), { addSuffix: true })}
-        </td>
-        <td className="py-3 px-4">
-          {canRetry && (
-            <Button
-              variant="ghost" size="sm"
-              className="h-6 text-xs gap-1"
-              onClick={e => { e.stopPropagation(); onRetry(); }}
-            >
-              <RotateCcw className="h-3 w-3" /> Retry
-            </Button>
-          )}
-        </td>
-      </tr>
-      {open && (
-        <tr className="bg-muted/30">
-          <td colSpan={6} className="px-4 py-3">
-            <div className="grid grid-cols-2 gap-4 text-xs">
-              {lead.email && (
-                <div className="flex items-center gap-1.5 text-muted-foreground">
-                  <Mail className="h-3.5 w-3.5" /> {lead.email}
-                </div>
-              )}
-              {lead.lastAttemptAt && (
-                <div className="flex items-center gap-1.5 text-muted-foreground">
-                  <Clock className="h-3.5 w-3.5" /> Last attempt: {format(new Date(lead.lastAttemptAt), "MMM d, HH:mm")}
-                </div>
-              )}
-              {lead.externalLeadId && (
-                <div className="text-muted-foreground">Lead ID: <code className="font-mono">{lead.externalLeadId}</code></div>
-              )}
-              {lead.notes && (
-                <div className="col-span-2 text-foreground">{lead.notes}</div>
-              )}
-              {Object.keys(lead.leadData ?? {}).length > 0 && (
-                <div className="col-span-2">
-                  <p className="font-medium text-muted-foreground mb-1">Form data</p>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                    {Object.entries(lead.leadData as Record<string, string>).map(([k, v]) => (
-                      <div key={k} className="flex gap-1">
-                        <span className="text-muted-foreground font-mono">{k}:</span>
-                        <span className="text-muted-foreground truncate">{v}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+      <div className="bg-card border border-border rounded-2xl p-4 hover:border-border/80 transition-colors">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="h-8 w-8 rounded-lg bg-elevated border border-border flex items-center justify-center shrink-0">
+              <Layers className="h-3.5 w-3.5 text-muted-foreground/60" />
+            </div>
+            <div className="min-w-0">
+              <p className="font-semibold text-sm text-foreground truncate">{batch.name}</p>
+              {batch.scheduledStartAt && (
+                <p className="text-[11px] text-muted-foreground/50 flex items-center gap-1 mt-0.5">
+                  <Calendar className="h-3 w-3" />
+                  {format(new Date(batch.scheduledStartAt), "MMM d, HH:mm")}
+                </p>
               )}
             </div>
-          </td>
-        </tr>
-      )}
+          </div>
+          <Badge variant="outline" className={`text-[10px] shrink-0 ${batchStatusBadge(batch.status)}`}>
+            {batch.status}
+          </Badge>
+        </div>
+
+        {/* Progress bar */}
+        <div className="mt-3">
+          <div className="flex justify-between text-[10px] text-muted-foreground/50 mb-1">
+            <span>{batch.calledLeads}/{batch.totalLeads} called</span>
+            <span>{progress}%</span>
+          </div>
+          <div className="h-1.5 bg-elevated rounded-full overflow-hidden">
+            <div
+              className="h-full bg-foreground/40 rounded-full transition-all"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="mt-3 flex items-center gap-2">
+          {batch.status === "draft" || batch.status === "paused" || batch.status === "stopped" ? (
+            <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => void setStatus("running")} disabled={update.isPending}>
+              <Play className="h-3 w-3" /> Start
+            </Button>
+          ) : null}
+          {batch.status === "running" && (
+            <>
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => void setStatus("paused")} disabled={update.isPending}>
+                <Pause className="h-3 w-3" /> Pause
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => void setStatus("stopped")} disabled={update.isPending}>
+                <Square className="h-3 w-3" /> Stop
+              </Button>
+            </>
+          )}
+
+          <div className="ml-auto flex items-center gap-1">
+            <Link href={`/app/campaigns/${campaignId}/batches/${batch.id}`}>
+              <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground">
+                View leads <ChevronRight className="h-3 w-3" />
+              </Button>
+            </Link>
+            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground/50 hover:text-foreground" onClick={() => setDeleteOpen(true)}>
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete batch?</AlertDialogTitle>
+            <AlertDialogDescription>This will delete <strong>{batch.name}</strong> and all {batch.totalLeads} leads. Cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-foreground hover:bg-foreground">Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
@@ -519,20 +453,12 @@ export default function CampaignDetailPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
 
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [page, setPage] = useState(0);
   const [uploadOpen, setUploadOpen] = useState(false);
-  const PAGE_SIZE = 25;
 
   const { data: campaign, isLoading: loadingCampaign } = useGetCampaign(id);
-  const { data: leadsData, isLoading: loadingLeads, refetch } = useListCampaignLeads(id, {
-    status: statusFilter === "all" ? undefined : statusFilter,
-    limit:  PAGE_SIZE,
-    offset: page * PAGE_SIZE,
-  });
+  const { data: batches, isLoading: loadingBatches }   = useListCampaignBatches(id);
 
-  const upd   = useUpdateCampaign();
-  const retry = useRetryCampaignLead();
+  const upd = useUpdateCampaign();
 
   async function toggleActive() {
     if (!campaign) return;
@@ -540,92 +466,71 @@ export default function CampaignDetailPage() {
     await qc.invalidateQueries({ queryKey: getGetCampaignQueryKey(id) });
   }
 
-  async function handleRetry(leadId: number) {
-    try {
-      await retry.mutateAsync({ id, leadId });
-      await qc.invalidateQueries({ queryKey: getListCampaignLeadsQueryKey(id) });
-      toast({ title: "Retry queued" });
-    } catch {
-      toast({ title: "Retry failed", variant: "destructive" });
-    }
-  }
-
-  async function handleImportSuccess() {
-    await Promise.all([
-      qc.invalidateQueries({ queryKey: getListCampaignLeadsQueryKey(id) }),
-      qc.invalidateQueries({ queryKey: getGetCampaignQueryKey(id) }),
-    ]);
-    toast({ title: "Leads imported — campaign updated" });
+  async function handleBatchSuccess() {
+    await qc.invalidateQueries({ queryKey: getListCampaignBatchesQueryKey(id) });
+    await qc.invalidateQueries({ queryKey: getGetCampaignQueryKey(id) });
+    setUploadOpen(false);
   }
 
   if (loadingCampaign) {
     return (
       <div className="p-6 max-w-5xl mx-auto">
         <div className="h-8 w-48 bg-muted rounded animate-pulse mb-6" />
-        <div className="h-40 bg-muted rounded-2xl animate-pulse" />
+        <div className="h-40 bg-card border border-border rounded-2xl animate-pulse" />
       </div>
     );
   }
 
   if (!campaign) {
     return (
-      <div className="p-6 text-center">
+      <div className="p-6 max-w-5xl mx-auto text-center py-24">
         <p className="text-muted-foreground">Campaign not found.</p>
-        <Link href="/app/campaigns"><Button variant="ghost" className="mt-2">Back to campaigns</Button></Link>
+        <Link href="/app/campaigns">
+          <Button variant="outline" className="mt-4">Back to Campaigns</Button>
+        </Link>
       </div>
     );
   }
 
-  const leads = leadsData?.leads ?? [];
-  const total = leadsData?.total ?? 0;
-  const totalPages = Math.ceil(total / PAGE_SIZE);
   const fieldMappings = campaign.fieldMappings as Record<string, string>;
+  const successRate = campaign.totalLeads > 0
+    ? Math.round((campaign.calledLeads / campaign.totalLeads) * 100) : 0;
+
+  const batchList = batches as CampaignBatch[] | undefined ?? [];
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
-      {/* Back */}
-      <Link href="/app/campaigns">
-        <button className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4 transition-colors">
-          <ArrowLeft className="h-3.5 w-3.5" /> Campaigns
-        </button>
-      </Link>
-
       {/* Header */}
-      <div className="flex items-start justify-between gap-4 mb-6">
-        <div className="flex items-center gap-3">
-          <div className="p-3 rounded-xl bg-muted text-foreground">
-            <Megaphone className="h-5 w-5" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-foreground">{campaign.name}</h1>
-            {campaign.description && <p className="text-sm text-muted-foreground">{campaign.description}</p>}
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5 text-sm"
-            onClick={() => setUploadOpen(true)}
-          >
-            <Upload className="h-3.5 w-3.5" /> Upload CSV
+      <div className="flex items-center gap-3 mb-6">
+        <Link href="/app/campaigns">
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+            <ArrowLeft className="h-4 w-4" />
           </Button>
-          <span className="text-sm text-muted-foreground">{campaign.isActive ? "Active" : "Inactive"}</span>
-          <Switch checked={campaign.isActive} onCheckedChange={() => void toggleActive()} />
+        </Link>
+        <div className="flex-1 min-w-0">
+          <h1 className="text-xl font-semibold text-foreground truncate">{campaign.name}</h1>
+          {campaign.description && <p className="text-sm text-muted-foreground/60">{campaign.description}</p>}
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
+          <span className="text-xs text-muted-foreground/60">{campaign.isActive ? "Active" : "Inactive"}</span>
+          <Switch
+            checked={campaign.isActive}
+            onCheckedChange={() => { void toggleActive(); }}
+          />
         </div>
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         {[
-          { label: "Total leads",  value: campaign.totalLeads  },
-          { label: "Calls made",   value: campaign.calledLeads  },
-          { label: "Max attempts", value: campaign.maxAttempts  },
-          { label: "Delay (s)",    value: campaign.callDelaySeconds },
-        ].map(s => (
-          <div key={s.label} className="bg-card border border-border rounded-xl p-3 text-center">
-            <p className="text-[11px] text-muted-foreground">{s.label}</p>
-            <p className="text-2xl font-bold text-foreground">{s.value}</p>
+          { label: "Total leads",  value: campaign.totalLeads },
+          { label: "Called",       value: campaign.calledLeads },
+          { label: "Called %",     value: `${successRate}%` },
+          { label: "Batches",      value: batchList.length },
+        ].map(stat => (
+          <div key={stat.label} className="bg-card border border-border rounded-xl p-3 text-center">
+            <p className="text-[10px] text-muted-foreground/50 mb-1 uppercase tracking-widest font-semibold">{stat.label}</p>
+            <p className="text-lg font-bold text-foreground tabular-nums">{stat.value}</p>
           </div>
         ))}
       </div>
@@ -635,112 +540,60 @@ export default function CampaignDetailPage() {
         <WebhookUrlBox token={campaign.webhookToken} />
       </div>
 
-      {/* Field mappings */}
-      <div className="mb-6 bg-card border border-border rounded-xl p-4">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Field Mappings</p>
-        <div className="flex flex-wrap gap-2">
-          {Object.entries(fieldMappings).map(([role, field]) => (
-            <div key={role} className="flex items-center gap-1.5 bg-muted rounded-lg px-3 py-1.5 text-xs">
-              <span className="font-medium text-foreground">{role}</span>
-              <span className="text-muted-foreground">←</span>
-              <code className="font-mono text-foreground">{field}</code>
-            </div>
-          ))}
+      {/* Batches section */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-base font-semibold text-foreground">Batches</h2>
+            <p className="text-xs text-muted-foreground/60 mt-0.5">Upload CSV batches and control calling per batch</p>
+          </div>
+          <Button onClick={() => setUploadOpen(true)} className="h-8 text-xs gap-2">
+            <Upload className="h-3.5 w-3.5" /> Upload Batch
+          </Button>
         </div>
-        <p className="text-[11px] text-muted-foreground mt-2">
-          Use <code className="font-mono">{"{{name}}"}</code>, <code className="font-mono">{"{{phone}}"}</code>, etc. as variables in your agent's system prompt.
-          When uploading CSV, column names must match these field mappings exactly.
+
+        {loadingBatches ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {[1, 2].map(i => <div key={i} className="bg-card border border-border rounded-2xl h-32 animate-pulse" />)}
+          </div>
+        ) : batchList.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center bg-card border border-border rounded-2xl">
+            <div className="h-10 w-10 rounded-2xl bg-elevated border border-border flex items-center justify-center mb-3">
+              <Layers className="h-4 w-4 text-muted-foreground/40" />
+            </div>
+            <h3 className="text-sm font-semibold text-foreground mb-1">No batches yet</h3>
+            <p className="text-xs text-muted-foreground/60 max-w-xs mb-4">
+              Upload a CSV to create your first batch of leads. You can schedule it or start it immediately.
+            </p>
+            <Button onClick={() => setUploadOpen(true)} className="h-8 text-xs gap-2">
+              <Upload className="h-3.5 w-3.5" /> Upload first batch
+            </Button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {batchList.map(b => <BatchCard key={b.id} batch={b} campaignId={id} />)}
+          </div>
+        )}
+      </div>
+
+      {/* Webhook leads note */}
+      <div className="mt-6 flex items-start gap-2 p-3 bg-elevated/30 border border-border rounded-xl">
+        <Phone className="h-4 w-4 text-muted-foreground/40 mt-0.5 shrink-0" />
+        <p className="text-xs text-muted-foreground/60">
+          Webhook and Instagram Ads leads appear in the{" "}
+          <Link href="/app/campaigns">
+            <span className="underline cursor-pointer hover:text-foreground">Campaigns overview</span>
+          </Link>{" "}
+          under Meta Campaign Leads.
         </p>
       </div>
 
-      {/* Leads table */}
-      <div className="bg-card border border-border rounded-2xl overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-          <p className="text-sm font-semibold text-foreground">
-            Leads <span className="text-muted-foreground font-normal">({total})</span>
-          </p>
-          <div className="flex items-center gap-2">
-            <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); setPage(0); }}>
-              <SelectTrigger className="h-7 text-xs w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All statuses</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="calling">Calling</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-                <SelectItem value="failed">Failed</SelectItem>
-                <SelectItem value="skipped">Skipped</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 gap-1.5 text-xs"
-              onClick={() => setUploadOpen(true)}
-            >
-              <Upload className="h-3 w-3" /> Upload CSV
-            </Button>
-            <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => void refetch()}>
-              <RefreshCw className="h-3 w-3" /> Refresh
-            </Button>
-          </div>
-        </div>
-
-        {loadingLeads ? (
-          <div className="p-8 text-center text-sm text-muted-foreground">Loading leads…</div>
-        ) : !leads.length ? (
-          <div className="p-12 text-center">
-            <div className="inline-flex flex-col items-center gap-3">
-              <div className="p-3 rounded-full bg-muted text-muted-foreground">
-                <FileText className="h-7 w-7" />
-              </div>
-              <p className="text-muted-foreground text-sm font-medium">No leads yet</p>
-              <div className="flex gap-2 mt-1">
-                <Button size="sm" className="gap-1.5 text-xs" onClick={() => setUploadOpen(true)}>
-                  <Upload className="h-3.5 w-3.5" /> Upload CSV
-                </Button>
-                <Button variant="outline" size="sm" className="text-xs">
-                  or POST to webhook
-                </Button>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <table className="w-full text-left">
-            <thead>
-              <tr className="border-b border-border">
-                {["Phone / Name", "Status", "Attempts", "Source", "Received", ""].map(h => (
-                  <th key={h} className="py-2 px-4 text-[11px] font-medium text-muted-foreground uppercase tracking-wide">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {leads.map(lead => (
-                <LeadRow key={lead.id} lead={lead} onRetry={() => void handleRetry(lead.id)} />
-              ))}
-            </tbody>
-          </table>
-        )}
-
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-border">
-            <p className="text-xs text-muted-foreground">Page {page + 1} of {totalPages}</p>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" className="h-7 text-xs" disabled={page === 0} onClick={() => setPage(p => p - 1)}>Prev</Button>
-              <Button variant="outline" size="sm" className="h-7 text-xs" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next</Button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* CSV Upload Modal */}
-      <UploadCsvModal
+      <UploadBatchModal
         open={uploadOpen}
         onClose={() => setUploadOpen(false)}
         campaignId={id}
         fieldMappings={fieldMappings}
-        onSuccess={() => void handleImportSuccess()}
+        onSuccess={() => void handleBatchSuccess()}
       />
     </div>
   );

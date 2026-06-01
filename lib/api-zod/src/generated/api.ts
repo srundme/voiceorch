@@ -1649,11 +1649,13 @@ export const ListCampaignLeadsResponse = zod.object({
   "leads": zod.array(zod.object({
   "id": zod.number(),
   "campaignId": zod.number(),
+  "batchId": zod.number().nullish(),
   "phone": zod.string(),
   "name": zod.string().nullish(),
   "email": zod.string().nullish(),
   "leadData": zod.record(zod.string(), zod.string()).optional(),
   "callStatus": zod.enum(['pending', 'calling', 'completed', 'failed', 'skipped']),
+  "disposition": zod.string().nullish(),
   "callId": zod.number().nullish(),
   "callAttempts": zod.number(),
   "lastAttemptAt": zod.coerce.date().nullish(),
@@ -1695,11 +1697,13 @@ export const RetryCampaignLeadParams = zod.object({
 export const RetryCampaignLeadResponse = zod.object({
   "id": zod.number(),
   "campaignId": zod.number(),
+  "batchId": zod.number().nullish(),
   "phone": zod.string(),
   "name": zod.string().nullish(),
   "email": zod.string().nullish(),
   "leadData": zod.record(zod.string(), zod.string()).optional(),
   "callStatus": zod.enum(['pending', 'calling', 'completed', 'failed', 'skipped']),
+  "disposition": zod.string().nullish(),
   "callId": zod.number().nullish(),
   "callAttempts": zod.number(),
   "lastAttemptAt": zod.coerce.date().nullish(),
@@ -1707,6 +1711,199 @@ export const RetryCampaignLeadResponse = zod.object({
   "externalLeadId": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary List all webhook/Meta-sourced leads across all campaigns
+ */
+export const listMetaCampaignLeadsQueryLimitDefault = 50;
+export const listMetaCampaignLeadsQueryOffsetDefault = 0;
+
+export const ListMetaCampaignLeadsQueryParams = zod.object({
+  "filter": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().default(listMetaCampaignLeadsQueryLimitDefault),
+  "offset": zod.coerce.number().default(listMetaCampaignLeadsQueryOffsetDefault)
+})
+
+export const ListMetaCampaignLeadsResponse = zod.object({
+  "leads": zod.array(zod.object({
+  "id": zod.number(),
+  "campaignId": zod.number(),
+  "campaignName": zod.string(),
+  "batchId": zod.number().nullish(),
+  "batchName": zod.string().nullish(),
+  "phone": zod.string(),
+  "name": zod.string().nullish(),
+  "callStatus": zod.string(),
+  "disposition": zod.string().nullish(),
+  "callId": zod.number().nullish(),
+  "fromNumber": zod.string().nullish(),
+  "toNumber": zod.string().nullish(),
+  "durationSeconds": zod.number().nullish(),
+  "source": zod.string(),
+  "hasCallback": zod.boolean().optional(),
+  "callbackStatus": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Re-queue all no-pickup leads in a campaign
+ */
+export const RedialCampaignNoPickupParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const RedialCampaignNoPickupResponse = zod.object({
+  "queued": zod.number()
+})
+
+
+/**
+ * @summary List batches for a campaign
+ */
+export const ListCampaignBatchesParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListCampaignBatchesResponseItem = zod.object({
+  "id": zod.number(),
+  "campaignId": zod.number(),
+  "name": zod.string(),
+  "status": zod.enum(['draft', 'running', 'paused', 'stopped']),
+  "scheduledStartAt": zod.coerce.date().nullish(),
+  "totalLeads": zod.number(),
+  "calledLeads": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListCampaignBatchesResponse = zod.array(ListCampaignBatchesResponseItem)
+
+
+/**
+ * @summary Create a batch with CSV leads and optional scheduled start
+ */
+export const CreateCampaignBatchParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const CreateCampaignBatchBody = zod.object({
+  "name": zod.string(),
+  "leads": zod.array(zod.record(zod.string(), zod.string())),
+  "scheduledStartAt": zod.coerce.date().nullish()
+})
+
+
+/**
+ * @summary Get batch details
+ */
+export const GetCampaignBatchParams = zod.object({
+  "id": zod.coerce.number(),
+  "batchId": zod.coerce.number()
+})
+
+export const GetCampaignBatchResponse = zod.object({
+  "id": zod.number(),
+  "campaignId": zod.number(),
+  "name": zod.string(),
+  "status": zod.enum(['draft', 'running', 'paused', 'stopped']),
+  "scheduledStartAt": zod.coerce.date().nullish(),
+  "totalLeads": zod.number(),
+  "calledLeads": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update batch status (start/pause/stop)
+ */
+export const UpdateCampaignBatchParams = zod.object({
+  "id": zod.coerce.number(),
+  "batchId": zod.coerce.number()
+})
+
+export const UpdateCampaignBatchBody = zod.object({
+  "status": zod.enum(['draft', 'running', 'paused', 'stopped']).optional(),
+  "scheduledStartAt": zod.coerce.date().nullish()
+})
+
+export const UpdateCampaignBatchResponse = zod.object({
+  "id": zod.number(),
+  "campaignId": zod.number(),
+  "name": zod.string(),
+  "status": zod.enum(['draft', 'running', 'paused', 'stopped']),
+  "scheduledStartAt": zod.coerce.date().nullish(),
+  "totalLeads": zod.number(),
+  "calledLeads": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a batch and all its leads
+ */
+export const DeleteCampaignBatchParams = zod.object({
+  "id": zod.coerce.number(),
+  "batchId": zod.coerce.number()
+})
+
+
+/**
+ * @summary List leads for a batch with call detail
+ */
+export const ListBatchLeadsParams = zod.object({
+  "id": zod.coerce.number(),
+  "batchId": zod.coerce.number()
+})
+
+export const listBatchLeadsQueryLimitDefault = 50;
+export const listBatchLeadsQueryOffsetDefault = 0;
+
+export const ListBatchLeadsQueryParams = zod.object({
+  "filter": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().default(listBatchLeadsQueryLimitDefault),
+  "offset": zod.coerce.number().default(listBatchLeadsQueryOffsetDefault)
+})
+
+export const ListBatchLeadsResponse = zod.object({
+  "leads": zod.array(zod.object({
+  "id": zod.number(),
+  "campaignId": zod.number(),
+  "campaignName": zod.string(),
+  "batchId": zod.number().nullish(),
+  "batchName": zod.string().nullish(),
+  "phone": zod.string(),
+  "name": zod.string().nullish(),
+  "callStatus": zod.string(),
+  "disposition": zod.string().nullish(),
+  "callId": zod.number().nullish(),
+  "fromNumber": zod.string().nullish(),
+  "toNumber": zod.string().nullish(),
+  "durationSeconds": zod.number().nullish(),
+  "source": zod.string(),
+  "hasCallback": zod.boolean().optional(),
+  "callbackStatus": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Re-queue no-pickup leads in a batch
+ */
+export const RedialBatchNoPickupParams = zod.object({
+  "id": zod.coerce.number(),
+  "batchId": zod.coerce.number()
+})
+
+export const RedialBatchNoPickupResponse = zod.object({
+  "queued": zod.number()
 })
 
 

@@ -1480,6 +1480,289 @@ paths:
         "404":
           description: Not found
 
+  /campaigns/meta-leads:
+    get:
+      operationId: listMetaCampaignLeads
+      tags: [campaigns]
+      summary: List all webhook/Meta-sourced leads across all campaigns
+      parameters:
+        - name: filter
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Meta lead list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [leads, total]
+                properties:
+                  leads:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MetaLeadItem"
+                  total:
+                    type: integer
+        "401":
+          description: Unauthorized
+
+  /campaigns/{id}/redial:
+    post:
+      operationId: redialCampaignNoPickup
+      tags: [campaigns]
+      summary: Re-queue all no-pickup leads in a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Redial result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [queued]
+                properties:
+                  queued:
+                    type: integer
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+
+  /campaigns/{id}/batches:
+    get:
+      operationId: listCampaignBatches
+      tags: [campaigns]
+      summary: List batches for a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Batch list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CampaignBatch"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+    post:
+      operationId: createCampaignBatch
+      tags: [campaigns]
+      summary: Create a batch with CSV leads and optional scheduled start
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CampaignBatchCreate"
+      responses:
+        "201":
+          description: Batch created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignBatch"
+        "400":
+          description: Validation error
+        "401":
+          description: Unauthorized
+        "404":
+          description: Campaign not found
+
+  /campaigns/{id}/batches/{batchId}:
+    get:
+      operationId: getCampaignBatch
+      tags: [campaigns]
+      summary: Get batch details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: batchId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Batch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignBatch"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+    patch:
+      operationId: updateCampaignBatch
+      tags: [campaigns]
+      summary: Update batch status (start/pause/stop)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: batchId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CampaignBatchUpdate"
+      responses:
+        "200":
+          description: Updated batch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignBatch"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteCampaignBatch
+      tags: [campaigns]
+      summary: Delete a batch and all its leads
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: batchId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+
+  /campaigns/{id}/batches/{batchId}/leads:
+    get:
+      operationId: listBatchLeads
+      tags: [campaigns]
+      summary: List leads for a batch with call detail
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: batchId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: filter
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Lead list with call data
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [leads, total]
+                properties:
+                  leads:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MetaLeadItem"
+                  total:
+                    type: integer
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+
+  /campaigns/{id}/batches/{batchId}/redial:
+    post:
+      operationId: redialBatchNoPickup
+      tags: [campaigns]
+      summary: Re-queue no-pickup leads in a batch
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: batchId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Redial result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [queued]
+                properties:
+                  queued:
+                    type: integer
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+
   # ── Scheduling ───────────────────────────────────────────────────────────────
   /scheduling/calendars:
     get:
@@ -4024,6 +4307,9 @@ components:
           type: integer
         campaignId:
           type: integer
+        batchId:
+          type: integer
+          nullable: true
         phone:
           type: string
         name:
@@ -4039,6 +4325,9 @@ components:
         callStatus:
           type: string
           enum: [pending, calling, completed, failed, skipped]
+        disposition:
+          type: string
+          nullable: true
         callId:
           type: integer
           nullable: true
@@ -4054,6 +4343,111 @@ components:
           type: string
           nullable: true
         notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    CampaignBatch:
+      type: object
+      required: [id, campaignId, name, status, totalLeads, calledLeads, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        campaignId:
+          type: integer
+        name:
+          type: string
+        status:
+          type: string
+          enum: [draft, running, paused, stopped]
+        scheduledStartAt:
+          type: string
+          format: date-time
+          nullable: true
+        totalLeads:
+          type: integer
+        calledLeads:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CampaignBatchCreate:
+      type: object
+      required: [name, leads]
+      properties:
+        name:
+          type: string
+        leads:
+          type: array
+          items:
+            type: object
+            additionalProperties:
+              type: string
+        scheduledStartAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    CampaignBatchUpdate:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [draft, running, paused, stopped]
+        scheduledStartAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    MetaLeadItem:
+      type: object
+      required: [id, campaignId, campaignName, phone, callStatus, source, createdAt]
+      properties:
+        id:
+          type: integer
+        campaignId:
+          type: integer
+        campaignName:
+          type: string
+        batchId:
+          type: integer
+          nullable: true
+        batchName:
+          type: string
+          nullable: true
+        phone:
+          type: string
+        name:
+          type: string
+          nullable: true
+        callStatus:
+          type: string
+        disposition:
+          type: string
+          nullable: true
+        callId:
+          type: integer
+          nullable: true
+        fromNumber:
+          type: string
+          nullable: true
+        toNumber:
+          type: string
+          nullable: true
+        durationSeconds:
+          type: integer
+          nullable: true
+        source:
+          type: string
+        hasCallback:
+          type: boolean
+        callbackStatus:
           type: string
           nullable: true
         createdAt:

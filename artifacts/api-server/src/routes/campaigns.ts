@@ -5,8 +5,8 @@ import {
   CreateCampaignBody,
   UpdateCampaignBody,
 } from "@workspace/api-zod";
-import { db, campaignsTable, campaignLeadsTable, type CampaignFieldMappings } from "@workspace/db";
-import { eq, and, count, desc } from "drizzle-orm";
+import { db, campaignsTable, campaignLeadsTable, callsTable, type CampaignFieldMappings } from "@workspace/db";
+import { eq, and, count, desc, inArray } from "drizzle-orm";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
 
 const router: IRouter = Router();
@@ -237,6 +237,109 @@ router.post("/campaigns/:id/import-leads", async (req, res): Promise<void> => {
 
   req.log.info({ campaignId, imported, skipped }, "CSV leads imported");
   res.json({ imported, skipped, errors });
+});
+
+// ── GET /campaigns/meta-leads ──────────────────────────────────────────────
+// Must be registered BEFORE /campaigns/:id to avoid "meta-leads" matching as id
+router.get("/campaigns/meta-leads", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const limitVal  = Math.min(parseInt(String(req.query["limit"]  ?? "50"), 10), 200);
+  const offsetVal = parseInt(String(req.query["offset"] ?? "0"), 10);
+  const filter    = String(req.query["filter"] ?? "all");
+
+  // Get all campaigns for this user
+  const campaigns = await db.select().from(campaignsTable).where(eq(campaignsTable.userId, userId));
+  if (!campaigns.length) { res.json({ leads: [], total: 0 }); return; }
+
+  const campaignIds = campaigns.map(c => c.id);
+  const campaignMap = new Map(campaigns.map(c => [c.id, c]));
+
+  // Base: non-CSV leads (webhook + instagram_ads sources) across all user campaigns
+  let whereClause = and(
+    inArray(campaignLeadsTable.campaignId, campaignIds),
+    inArray(campaignLeadsTable.source, ["webhook", "instagram_ads"]),
+  );
+
+  if (filter === "no_pickup") {
+    whereClause = and(whereClause, inArray(campaignLeadsTable.callStatus, ["failed", "skipped"]));
+  } else if (filter === "inbound") {
+    // Inbound calls not tracked yet — return empty
+    res.json({ leads: [], total: 0 }); return;
+  } else if (filter !== "all" && filter !== "callbacks") {
+    // Dynamic disposition filter
+    whereClause = and(whereClause, eq(campaignLeadsTable.disposition, filter));
+  }
+
+  const [leads, [{ total }]] = await Promise.all([
+    db.select().from(campaignLeadsTable)
+      .where(whereClause)
+      .orderBy(desc(campaignLeadsTable.createdAt))
+      .limit(limitVal).offset(offsetVal),
+    db.select({ total: count() }).from(campaignLeadsTable).where(whereClause),
+  ]);
+
+  const callIds = leads.filter(l => l.callId).map(l => l.callId!);
+  const callsMap = new Map<number, typeof callsTable.$inferSelect>();
+  if (callIds.length > 0) {
+    const calls = await db.select().from(callsTable).where(inArray(callsTable.id, callIds));
+    for (const c of calls) callsMap.set(c.id, c);
+  }
+
+  const items = leads.map(lead => {
+    const call     = lead.callId ? callsMap.get(lead.callId) : undefined;
+    const campaign = campaignMap.get(lead.campaignId);
+    return {
+      id:              lead.id,
+      campaignId:      lead.campaignId,
+      campaignName:    campaign?.name ?? "",
+      batchId:         lead.batchId ?? null,
+      batchName:       null as string | null,
+      phone:           lead.phone,
+      name:            lead.name ?? null,
+      callStatus:      lead.callStatus,
+      disposition:     lead.disposition ?? null,
+      callId:          lead.callId ?? null,
+      fromNumber:      call?.fromNumber ?? null,
+      toNumber:        call?.toNumber ?? null,
+      durationSeconds: call?.durationSeconds ?? null,
+      source:          lead.source,
+      hasCallback:     false,
+      callbackStatus:  null as string | null,
+      createdAt:       lead.createdAt.toISOString(),
+    };
+  });
+
+  res.json({ leads: items, total: Number(total) });
+});
+
+// ── POST /campaigns/:id/redial ─────────────────────────────────────────────
+router.post("/campaigns/:id/redial", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const campaignId = parseInt(req.params["id"]!, 10);
+  const [campaign] = await db.select().from(campaignsTable)
+    .where(and(eq(campaignsTable.id, campaignId), eq(campaignsTable.userId, userId)));
+  if (!campaign) { res.status(404).json({ error: "Not found" }); return; }
+
+  const noPickup = await db.select().from(campaignLeadsTable)
+    .where(and(
+      eq(campaignLeadsTable.campaignId, campaignId),
+      inArray(campaignLeadsTable.callStatus, ["failed", "skipped"]),
+    ));
+
+  let queued = 0;
+  for (const lead of noPickup) {
+    const [updated] = await db.update(campaignLeadsTable)
+      .set({ callStatus: "pending", notes: null })
+      .where(eq(campaignLeadsTable.id, lead.id))
+      .returning();
+    if (updated) { scheduleCampaignCall(updated, campaign); queued++; }
+  }
+
+  res.json({ queued });
 });
 
 // ── POST /campaigns/:id/leads/:leadId/retry ────────────────────────────────

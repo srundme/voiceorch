@@ -68,6 +68,9 @@ import type {
   CallStatusCount,
   CallUpdate,
   Campaign,
+  CampaignBatch,
+  CampaignBatchCreate,
+  CampaignBatchUpdate,
   CampaignCreate,
   CampaignLead,
   CampaignUpdate,
@@ -98,11 +101,15 @@ import type {
   ListAvailabilityOverridesParams,
   ListAvailabilityParams,
   ListAvailablePhoneNumbersParams,
+  ListBatchLeads200,
+  ListBatchLeadsParams,
   ListBookingsParams,
   ListCallsParams,
   ListCampaignLeads200,
   ListCampaignLeadsParams,
   ListEventTypesParams,
+  ListMetaCampaignLeads200,
+  ListMetaCampaignLeadsParams,
   ListTransactionsParams,
   MyUsageResponse,
   OnboardingData,
@@ -123,6 +130,8 @@ import type {
   PublicNow,
   PublicRescheduleByTokenBody,
   PurchasePhoneNumberInput,
+  RedialBatchNoPickup200,
+  RedialCampaignNoPickup200,
   SchedulingCalendar,
   SchedulingCalendarInput,
   SchedulingCalendarUpdate,
@@ -5127,6 +5136,703 @@ export const useRetryCampaignLead = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getRetryCampaignLeadMutationOptions(options));
+    }
+
+export const getListMetaCampaignLeadsUrl = (params?: ListMetaCampaignLeadsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/campaigns/meta-leads?${stringifiedParams}` : `/api/campaigns/meta-leads`
+}
+
+/**
+ * @summary List all webhook/Meta-sourced leads across all campaigns
+ */
+export const listMetaCampaignLeads = async (params?: ListMetaCampaignLeadsParams, options?: RequestInit): Promise<ListMetaCampaignLeads200> => {
+
+  return customFetch<ListMetaCampaignLeads200>(getListMetaCampaignLeadsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListMetaCampaignLeadsQueryKey = (params?: ListMetaCampaignLeadsParams,) => {
+    return [
+    `/api/campaigns/meta-leads`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListMetaCampaignLeadsQueryOptions = <TData = Awaited<ReturnType<typeof listMetaCampaignLeads>>, TError = ErrorType<void>>(params?: ListMetaCampaignLeadsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMetaCampaignLeads>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListMetaCampaignLeadsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listMetaCampaignLeads>>> = ({ signal }) => listMetaCampaignLeads(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listMetaCampaignLeads>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListMetaCampaignLeadsQueryResult = NonNullable<Awaited<ReturnType<typeof listMetaCampaignLeads>>>
+export type ListMetaCampaignLeadsQueryError = ErrorType<void>
+
+
+/**
+ * @summary List all webhook/Meta-sourced leads across all campaigns
+ */
+
+export function useListMetaCampaignLeads<TData = Awaited<ReturnType<typeof listMetaCampaignLeads>>, TError = ErrorType<void>>(
+ params?: ListMetaCampaignLeadsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMetaCampaignLeads>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListMetaCampaignLeadsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getRedialCampaignNoPickupUrl = (id: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/redial`
+}
+
+/**
+ * @summary Re-queue all no-pickup leads in a campaign
+ */
+export const redialCampaignNoPickup = async (id: number, options?: RequestInit): Promise<RedialCampaignNoPickup200> => {
+
+  return customFetch<RedialCampaignNoPickup200>(getRedialCampaignNoPickupUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRedialCampaignNoPickupMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof redialCampaignNoPickup>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof redialCampaignNoPickup>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['redialCampaignNoPickup'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof redialCampaignNoPickup>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  redialCampaignNoPickup(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RedialCampaignNoPickupMutationResult = NonNullable<Awaited<ReturnType<typeof redialCampaignNoPickup>>>
+
+    export type RedialCampaignNoPickupMutationError = ErrorType<void>
+
+    /**
+ * @summary Re-queue all no-pickup leads in a campaign
+ */
+export const useRedialCampaignNoPickup = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof redialCampaignNoPickup>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof redialCampaignNoPickup>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getRedialCampaignNoPickupMutationOptions(options));
+    }
+
+export const getListCampaignBatchesUrl = (id: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/batches`
+}
+
+/**
+ * @summary List batches for a campaign
+ */
+export const listCampaignBatches = async (id: number, options?: RequestInit): Promise<CampaignBatch[]> => {
+
+  return customFetch<CampaignBatch[]>(getListCampaignBatchesUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCampaignBatchesQueryKey = (id: number,) => {
+    return [
+    `/api/campaigns/${id}/batches`
+    ] as const;
+    }
+
+
+export const getListCampaignBatchesQueryOptions = <TData = Awaited<ReturnType<typeof listCampaignBatches>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCampaignBatches>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCampaignBatchesQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCampaignBatches>>> = ({ signal }) => listCampaignBatches(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCampaignBatches>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListCampaignBatchesQueryResult = NonNullable<Awaited<ReturnType<typeof listCampaignBatches>>>
+export type ListCampaignBatchesQueryError = ErrorType<void>
+
+
+/**
+ * @summary List batches for a campaign
+ */
+
+export function useListCampaignBatches<TData = Awaited<ReturnType<typeof listCampaignBatches>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCampaignBatches>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListCampaignBatchesQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateCampaignBatchUrl = (id: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/batches`
+}
+
+/**
+ * @summary Create a batch with CSV leads and optional scheduled start
+ */
+export const createCampaignBatch = async (id: number,
+    campaignBatchCreate: CampaignBatchCreate, options?: RequestInit): Promise<CampaignBatch> => {
+
+  return customFetch<CampaignBatch>(getCreateCampaignBatchUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      campaignBatchCreate,)
+  }
+);}
+
+
+
+
+export const getCreateCampaignBatchMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCampaignBatch>>, TError,{id: number;data: BodyType<CampaignBatchCreate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createCampaignBatch>>, TError,{id: number;data: BodyType<CampaignBatchCreate>}, TContext> => {
+
+const mutationKey = ['createCampaignBatch'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createCampaignBatch>>, {id: number;data: BodyType<CampaignBatchCreate>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  createCampaignBatch(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateCampaignBatchMutationResult = NonNullable<Awaited<ReturnType<typeof createCampaignBatch>>>
+    export type CreateCampaignBatchMutationBody = BodyType<CampaignBatchCreate>
+    export type CreateCampaignBatchMutationError = ErrorType<void>
+
+    /**
+ * @summary Create a batch with CSV leads and optional scheduled start
+ */
+export const useCreateCampaignBatch = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCampaignBatch>>, TError,{id: number;data: BodyType<CampaignBatchCreate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createCampaignBatch>>,
+        TError,
+        {id: number;data: BodyType<CampaignBatchCreate>},
+        TContext
+      > => {
+      return useMutation(getCreateCampaignBatchMutationOptions(options));
+    }
+
+export const getGetCampaignBatchUrl = (id: number,
+    batchId: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/batches/${batchId}`
+}
+
+/**
+ * @summary Get batch details
+ */
+export const getCampaignBatch = async (id: number,
+    batchId: number, options?: RequestInit): Promise<CampaignBatch> => {
+
+  return customFetch<CampaignBatch>(getGetCampaignBatchUrl(id,batchId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCampaignBatchQueryKey = (id: number,
+    batchId: number,) => {
+    return [
+    `/api/campaigns/${id}/batches/${batchId}`
+    ] as const;
+    }
+
+
+export const getGetCampaignBatchQueryOptions = <TData = Awaited<ReturnType<typeof getCampaignBatch>>, TError = ErrorType<void>>(id: number,
+    batchId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCampaignBatch>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCampaignBatchQueryKey(id,batchId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCampaignBatch>>> = ({ signal }) => getCampaignBatch(id,batchId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id && batchId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCampaignBatch>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCampaignBatchQueryResult = NonNullable<Awaited<ReturnType<typeof getCampaignBatch>>>
+export type GetCampaignBatchQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get batch details
+ */
+
+export function useGetCampaignBatch<TData = Awaited<ReturnType<typeof getCampaignBatch>>, TError = ErrorType<void>>(
+ id: number,
+    batchId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCampaignBatch>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCampaignBatchQueryOptions(id,batchId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getUpdateCampaignBatchUrl = (id: number,
+    batchId: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/batches/${batchId}`
+}
+
+/**
+ * @summary Update batch status (start/pause/stop)
+ */
+export const updateCampaignBatch = async (id: number,
+    batchId: number,
+    campaignBatchUpdate: CampaignBatchUpdate, options?: RequestInit): Promise<CampaignBatch> => {
+
+  return customFetch<CampaignBatch>(getUpdateCampaignBatchUrl(id,batchId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      campaignBatchUpdate,)
+  }
+);}
+
+
+
+
+export const getUpdateCampaignBatchMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCampaignBatch>>, TError,{id: number;batchId: number;data: BodyType<CampaignBatchUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateCampaignBatch>>, TError,{id: number;batchId: number;data: BodyType<CampaignBatchUpdate>}, TContext> => {
+
+const mutationKey = ['updateCampaignBatch'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateCampaignBatch>>, {id: number;batchId: number;data: BodyType<CampaignBatchUpdate>}> = (props) => {
+          const {id,batchId,data} = props ?? {};
+
+          return  updateCampaignBatch(id,batchId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateCampaignBatchMutationResult = NonNullable<Awaited<ReturnType<typeof updateCampaignBatch>>>
+    export type UpdateCampaignBatchMutationBody = BodyType<CampaignBatchUpdate>
+    export type UpdateCampaignBatchMutationError = ErrorType<void>
+
+    /**
+ * @summary Update batch status (start/pause/stop)
+ */
+export const useUpdateCampaignBatch = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCampaignBatch>>, TError,{id: number;batchId: number;data: BodyType<CampaignBatchUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateCampaignBatch>>,
+        TError,
+        {id: number;batchId: number;data: BodyType<CampaignBatchUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateCampaignBatchMutationOptions(options));
+    }
+
+export const getDeleteCampaignBatchUrl = (id: number,
+    batchId: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/batches/${batchId}`
+}
+
+/**
+ * @summary Delete a batch and all its leads
+ */
+export const deleteCampaignBatch = async (id: number,
+    batchId: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteCampaignBatchUrl(id,batchId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteCampaignBatchMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteCampaignBatch>>, TError,{id: number;batchId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteCampaignBatch>>, TError,{id: number;batchId: number}, TContext> => {
+
+const mutationKey = ['deleteCampaignBatch'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteCampaignBatch>>, {id: number;batchId: number}> = (props) => {
+          const {id,batchId} = props ?? {};
+
+          return  deleteCampaignBatch(id,batchId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteCampaignBatchMutationResult = NonNullable<Awaited<ReturnType<typeof deleteCampaignBatch>>>
+
+    export type DeleteCampaignBatchMutationError = ErrorType<void>
+
+    /**
+ * @summary Delete a batch and all its leads
+ */
+export const useDeleteCampaignBatch = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteCampaignBatch>>, TError,{id: number;batchId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteCampaignBatch>>,
+        TError,
+        {id: number;batchId: number},
+        TContext
+      > => {
+      return useMutation(getDeleteCampaignBatchMutationOptions(options));
+    }
+
+export const getListBatchLeadsUrl = (id: number,
+    batchId: number,
+    params?: ListBatchLeadsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/campaigns/${id}/batches/${batchId}/leads?${stringifiedParams}` : `/api/campaigns/${id}/batches/${batchId}/leads`
+}
+
+/**
+ * @summary List leads for a batch with call detail
+ */
+export const listBatchLeads = async (id: number,
+    batchId: number,
+    params?: ListBatchLeadsParams, options?: RequestInit): Promise<ListBatchLeads200> => {
+
+  return customFetch<ListBatchLeads200>(getListBatchLeadsUrl(id,batchId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListBatchLeadsQueryKey = (id: number,
+    batchId: number,
+    params?: ListBatchLeadsParams,) => {
+    return [
+    `/api/campaigns/${id}/batches/${batchId}/leads`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListBatchLeadsQueryOptions = <TData = Awaited<ReturnType<typeof listBatchLeads>>, TError = ErrorType<void>>(id: number,
+    batchId: number,
+    params?: ListBatchLeadsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBatchLeads>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListBatchLeadsQueryKey(id,batchId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listBatchLeads>>> = ({ signal }) => listBatchLeads(id,batchId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id && batchId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listBatchLeads>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListBatchLeadsQueryResult = NonNullable<Awaited<ReturnType<typeof listBatchLeads>>>
+export type ListBatchLeadsQueryError = ErrorType<void>
+
+
+/**
+ * @summary List leads for a batch with call detail
+ */
+
+export function useListBatchLeads<TData = Awaited<ReturnType<typeof listBatchLeads>>, TError = ErrorType<void>>(
+ id: number,
+    batchId: number,
+    params?: ListBatchLeadsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBatchLeads>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListBatchLeadsQueryOptions(id,batchId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getRedialBatchNoPickupUrl = (id: number,
+    batchId: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/batches/${batchId}/redial`
+}
+
+/**
+ * @summary Re-queue no-pickup leads in a batch
+ */
+export const redialBatchNoPickup = async (id: number,
+    batchId: number, options?: RequestInit): Promise<RedialBatchNoPickup200> => {
+
+  return customFetch<RedialBatchNoPickup200>(getRedialBatchNoPickupUrl(id,batchId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRedialBatchNoPickupMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof redialBatchNoPickup>>, TError,{id: number;batchId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof redialBatchNoPickup>>, TError,{id: number;batchId: number}, TContext> => {
+
+const mutationKey = ['redialBatchNoPickup'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof redialBatchNoPickup>>, {id: number;batchId: number}> = (props) => {
+          const {id,batchId} = props ?? {};
+
+          return  redialBatchNoPickup(id,batchId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RedialBatchNoPickupMutationResult = NonNullable<Awaited<ReturnType<typeof redialBatchNoPickup>>>
+
+    export type RedialBatchNoPickupMutationError = ErrorType<void>
+
+    /**
+ * @summary Re-queue no-pickup leads in a batch
+ */
+export const useRedialBatchNoPickup = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof redialBatchNoPickup>>, TError,{id: number;batchId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof redialBatchNoPickup>>,
+        TError,
+        {id: number;batchId: number},
+        TContext
+      > => {
+      return useMutation(getRedialBatchNoPickupMutationOptions(options));
     }
 
 export const getListCalendarsUrl = () => {

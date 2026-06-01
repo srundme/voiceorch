@@ -1373,17 +1373,84 @@ export const CampaignLeadCallStatus = {
 export interface CampaignLead {
   id: number;
   campaignId: number;
+  batchId?: number | null;
   phone: string;
   name?: string | null;
   email?: string | null;
   leadData?: CampaignLeadLeadData;
   callStatus: CampaignLeadCallStatus;
+  disposition?: string | null;
   callId?: number | null;
   callAttempts: number;
   lastAttemptAt?: string | null;
   source: string;
   externalLeadId?: string | null;
   notes?: string | null;
+  createdAt: string;
+}
+
+export type CampaignBatchStatus = typeof CampaignBatchStatus[keyof typeof CampaignBatchStatus];
+
+
+export const CampaignBatchStatus = {
+  draft: 'draft',
+  running: 'running',
+  paused: 'paused',
+  stopped: 'stopped',
+} as const;
+
+export interface CampaignBatch {
+  id: number;
+  campaignId: number;
+  name: string;
+  status: CampaignBatchStatus;
+  scheduledStartAt?: string | null;
+  totalLeads: number;
+  calledLeads: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CampaignBatchCreateLeadsItem = {[key: string]: string};
+
+export interface CampaignBatchCreate {
+  name: string;
+  leads: CampaignBatchCreateLeadsItem[];
+  scheduledStartAt?: string | null;
+}
+
+export type CampaignBatchUpdateStatus = typeof CampaignBatchUpdateStatus[keyof typeof CampaignBatchUpdateStatus];
+
+
+export const CampaignBatchUpdateStatus = {
+  draft: 'draft',
+  running: 'running',
+  paused: 'paused',
+  stopped: 'stopped',
+} as const;
+
+export interface CampaignBatchUpdate {
+  status?: CampaignBatchUpdateStatus;
+  scheduledStartAt?: string | null;
+}
+
+export interface MetaLeadItem {
+  id: number;
+  campaignId: number;
+  campaignName: string;
+  batchId?: number | null;
+  batchName?: string | null;
+  phone: string;
+  name?: string | null;
+  callStatus: string;
+  disposition?: string | null;
+  callId?: number | null;
+  fromNumber?: string | null;
+  toNumber?: string | null;
+  durationSeconds?: number | null;
+  source: string;
+  hasCallback?: boolean;
+  callbackStatus?: string | null;
   createdAt: string;
 }
 
@@ -2093,6 +2160,36 @@ offset?: number;
 export type ListCampaignLeads200 = {
   leads: CampaignLead[];
   total: number;
+};
+
+export type ListMetaCampaignLeadsParams = {
+filter?: string;
+limit?: number;
+offset?: number;
+};
+
+export type ListMetaCampaignLeads200 = {
+  leads: MetaLeadItem[];
+  total: number;
+};
+
+export type RedialCampaignNoPickup200 = {
+  queued: number;
+};
+
+export type ListBatchLeadsParams = {
+filter?: string;
+limit?: number;
+offset?: number;
+};
+
+export type ListBatchLeads200 = {
+  leads: MetaLeadItem[];
+  total: number;
+};
+
+export type RedialBatchNoPickup200 = {
+  queued: number;
 };
 
 export type ListEventTypesParams = {
