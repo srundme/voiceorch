@@ -1,0 +1,151 @@
+I need the Campaigns page to have two distinct sections:
+
+SECTION 1 — Meta Campaign Leads
+This section displays all calls that were automatically triggered via Meta Lead Ads.
+Display these calls in a call log format with the following:
+
+Call status badge (e.g., "completed")
+Date & timestamp
+From number / To number
+Call duration
+Eye icon to view call details
+Chevron to expand
+
+Filter bar above the call log:
+
+All Calls — fixed
+No Pickup — fixed, includes both no pickup and voicemail calls. At the bottom of this view there is a Redial button that re-triggers calls for all No Pickup and Voicemail numbers. After redial is triggered, calls that get attended automatically move to their correct disposition. Calls still not answered remain in No Pickup
+Inbound — fixed, displays all inbound calls received
+Callbacks — fixed, displays all scheduled callback calls with sub-indicators per record:
+
+Callback Made — callback was successfully completed
+Pending — callback is scheduled but not yet made
+
+
+Remaining filters are dynamic disposition tags pulled from the assigned agent's configuration
+
+
+SECTION 2 — Create Campaign / New Campaign
+Creating a Campaign:
+
+User clicks "New Campaign" button
+A modal opens with the following fields:
+
+Campaign name
+Description (optional)
+Agent selector dropdown — each agent must show a minimal text indicator next to their name:
+
+Agent Name LIVE — agent has an ongoing active campaign
+Agent Name NOT LIVE — agent has no active campaign
+
+
+Field Mappings (Phone field, Name field, Email field)
+Call delay (seconds)
+Max attempts
+From number (optional override)
+
+
+On submit, the campaign appears as a card showing: campaign name, status (Draft), Total Leads, Called, Called %, Webhook URL, Created time
+
+
+Campaign Detail View (clicking into a campaign):
+
+Top section remains exactly as is:
+
+Total leads, Calls made, Max attempts, Delay stats
+Webhook URL
+Field Mappings
+
+
+Bottom section — Batches:
+
+If no batches uploaded → display: "No batches yet. Upload a batch to get started."
+If batches exist → list them as Batch 1, Batch 2, Batch 3, etc.
+Each batch is clickable and opens the batch detail view
+An "Upload Batch" button at the top right to upload new batches
+
+
+
+
+Upload Batch Modal (clicking "Upload Batch"):
+
+Batch Name — pre-filled as "Batch 1" by default, auto-increments for subsequent batches
+CSV Upload — file upload input
+Data Preview — after CSV is uploaded, a preview table is displayed inside the modal showing the first few rows of data so the user can verify the data is correct before confirming
+Scheduled Start Time — a date & time picker where the user sets when the campaign should automatically start
+
+Once the scheduled time is reached, the campaign launches automatically
+User can still manually click Start Campaign to launch immediately
+
+
+Confirm / Upload button to save the batch
+
+
+Batch Detail View (clicking into a batch):
+
+Campaign Control Buttons at the top:
+
+Start Campaign — launches calls immediately or at scheduled time
+Pause Campaign — pauses ongoing calls for that batch
+Stop Campaign — stops the campaign for that batch completely
+Each batch has its own independent campaign controls — one batch's controls do not affect other batches
+
+
+Displays call log with:
+
+Call status badge
+Date & timestamp
+From / To numbers
+Duration
+Eye icon + chevron
+
+
+Filter bar:
+
+All Calls — fixed
+No Pickup — fixed, includes both no pickup and voicemail calls. At the bottom of this view there is a Redial button that re-triggers calls for all No Pickup and Voicemail numbers. After redial is triggered:
+
+Calls that get attended automatically move out of No Pickup and update to their correct disposition
+Calls still not answered remain in No Pickup
+The No Pickup list updates in real time as leads get attended
+
+
+Inbound — fixed, displays all inbound calls received for that batch
+Callbacks — fixed, displays all scheduled callback calls for that batch with sub-indicators per record:
+
+Callback Made — callback was successfully completed
+Pending — callback is scheduled but not yet made
+
+
+All other filters are fully dynamic based on the assigned agent's configured dispositions
+
+
+
+
+CALLBACK LOGIC
+
+When a lead requests a callback at a specific time (e.g. "call me back in 30 minutes"), the AI automatically detects this and schedules the callback
+The callback triggers automatically at the requested time without any manual intervention
+Each callback record displays:
+
+Scheduled callback time
+Status: Callback Made or Pending
+Associated lead details (name, number)
+
+
+
+
+REDIAL LOGIC
+
+No Pickup and Voicemail calls are grouped together under the No Pickup filter
+Clicking Redial re-triggers calls for all numbers in the No Pickup view
+After redial, calls that get attended automatically move to their correct disposition
+Calls still not answered remain in No Pickup
+The No Pickup list updates in real time reflecting the current status of all leads
+
+
+DISPOSITION LOGIC
+
+All Calls, No Pickup, Inbound and Callbacks are always present as fixed filters
+All other disposition tags are dynamic and agent-specific
+Dispositions are defined at the agent configuration level and automatically reflect on any campaign or batch using that agent
