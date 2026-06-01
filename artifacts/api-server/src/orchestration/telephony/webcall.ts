@@ -597,7 +597,13 @@ export async function handleWebCallWebSocket(
                 await new Promise<void>((r) => setTimeout(r, 40));
               }
             }
-            if (!interrupted && !closed) await new Promise((r) => setTimeout(r, AUDIO_TAIL_SILENCE_MS));
+            if (!interrupted && !closed) {
+              const silenceChunk = Buffer.alloc(AUDIO_CHUNK_BYTES, 0);
+              const silenceFrames = Math.ceil(AUDIO_TAIL_SILENCE_MS / 40);
+              for (let s = 0; s < silenceFrames && !interrupted && !closed; s++) {
+                sendAudio(silenceChunk); await new Promise<void>(r => setTimeout(r, 40));
+              }
+            }
             speaking = false;
             speakingEndedAt = Date.now();
             if (interrupted) {
@@ -678,13 +684,19 @@ export async function handleWebCallWebSocket(
         }
       }
 
-      // Tail silence: give the client's audio buffer time to drain before
-      // transitioning. Without this, the server sends "status: listening" while
-      // the last few chunks are still in the browser's audio queue, and any
-      // subsequent state change can cause the browser to drop the end of the
-      // last word.
+      // Tail silence: send real PCM silence frames so the browser's AudioContext
+      // queues them AFTER the last word. A passive wait alone doesn't help —
+      // the client's Web Audio API schedules buffers independently and has
+      // already reached the end of the queue while "today?" is mid-play.
+      // Sending silence frames extends the scheduled timeline past the last
+      // word, ensuring it plays to completion before the queue empties.
       if (!interrupted && !closed) {
-        await new Promise(r => setTimeout(r, AUDIO_TAIL_SILENCE_MS));
+        const silenceChunk = Buffer.alloc(AUDIO_CHUNK_BYTES, 0);
+        const silenceFrames = Math.ceil(AUDIO_TAIL_SILENCE_MS / 40);
+        for (let s = 0; s < silenceFrames && !interrupted && !closed; s++) {
+          sendAudio(silenceChunk);
+          await new Promise<void>(r => setTimeout(r, 40));
+        }
       }
 
       speaking = false;
