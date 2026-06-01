@@ -34,7 +34,9 @@ const BARGE_IN_RMS             = 2000;  // much higher bar while agent is speaki
 const BARGE_IN_MIN_FRAMES      = 4;     // require ~160ms of sustained speech before interrupting
                                         // (4 × 40ms chunks) — prevents a single word/noise from cutting the agent
 const BARGE_IN_ECHO_GRACE_MS   = 700;  // suppress barge-in after TTS starts — allows browser echo cancellation to adapt
-const AUDIO_TAIL_SILENCE_MS    = 250;  // extra wait after the last chunk so the client's audio buffer drains
+const BARGE_IN_END_GRACE_MS    = 600;  // suppress barge-in for 600ms after the last TTS chunk — prevents mic echo
+                                        // of the final word triggering a false barge-in and cutting it off
+const AUDIO_TAIL_SILENCE_MS    = 300;  // extra wait after the last chunk so the client's audio buffer drains
                                         // before the server signals "listening" (prevents last-word cutoff)
 const MIN_PCM_BYTES            = 3200; // ~100ms at 16kHz Int16 — minimum speech before processing
 const AUDIO_CHUNK_BYTES        = 1280; // 40ms per WS frame
@@ -107,7 +109,7 @@ export async function handleWebCallWebSocket(
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(data));
   }
   function sendStatus(status: Status) { send({ type: "status", status }); }
-  function sendAudio(pcm: Buffer) { if (ws.readyState === ws.OPEN) ws.send(pcm); }
+  function sendAudio(pcm: Buffer) { if (ws.readyState === ws.OPEN) { ws.send(pcm); lastChunkSentAt = Date.now(); } }
 
   // ── Load agent + provider keys ────────────────────────────────────────────
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId));
@@ -256,6 +258,7 @@ export async function handleWebCallWebSocket(
   let speaking        = false; // true while audio frames are being sent to client
   let speakingStartedAt = 0;  // timestamp (ms) when speaking last transitioned to true
   let speakingEndedAt = 0;    // timestamp (ms) when speaking last transitioned to false
+  let lastChunkSentAt = 0;    // timestamp (ms) of the most recent TTS audio chunk sent to client
   let interrupted = false;        // barge-in flag; checked inside audio loop
   let bargeInFrames = 0;         // consecutive high-RMS frames counted while agent is speaking
 
@@ -847,12 +850,14 @@ export async function handleWebCallWebSocket(
       // Require BARGE_IN_MIN_FRAMES consecutive loud frames before accepting a barge-in,
       // so a single word, cough, or background voice doesn't stop the agent mid-sentence.
       //
-      // Echo grace period: suppress barge-in for BARGE_IN_ECHO_GRACE_MS after speaking
-      // begins. Browser echo cancellation needs ~500–800 ms to adapt; without this the
-      // mic picks up the agent's own TTS audio and fires a false barge-in, cutting off
-      // the last word(s) of every response.
-      const inEchoGrace = Date.now() - speakingStartedAt < BARGE_IN_ECHO_GRACE_MS;
-      if (!inEchoGrace && rms > BARGE_IN_RMS) {
+      // Echo grace periods — suppress barge-in when:
+      //   a) speaking just started (browser AEC needs 500–800 ms to adapt), OR
+      //   b) within 600 ms of the last TTS chunk sent (trailing echo of the final word).
+      // Without (b), the mic picks up the echo of the last word and fires a false
+      // barge-in that cuts it off before the caller hears it.
+      const inStartGrace = Date.now() - speakingStartedAt < BARGE_IN_ECHO_GRACE_MS;
+      const inEndGrace   = lastChunkSentAt > 0 && Date.now() - lastChunkSentAt < BARGE_IN_END_GRACE_MS;
+      if (!inStartGrace && !inEndGrace && rms > BARGE_IN_RMS) {
         bargeInFrames++;
         audioChunks.push(Buffer.from(data)); // accumulate speech for next turn
         if (!interrupted && bargeInFrames >= BARGE_IN_MIN_FRAMES) {
