@@ -909,7 +909,7 @@ export class OrchestrationPipeline {
     // playback instead of adding to LLM start latency.
     let systemPromptForTurn = this.agent.systemPrompt;
     const dtInjection = buildDatetimeInjection(this.agent.timezone);
-    if (dtInjection) systemPromptForTurn = `${dtInjection}\n\n${systemPromptForTurn}`;
+    systemPromptForTurn = `${dtInjection}\n\n${systemPromptForTurn}`;
     let kbContextPromise: Promise<string | null> = Promise.resolve(null);
     if (this.agent.knowledgeBaseId) {
       const openaiKey = this.config.providerKeys.get("openai");

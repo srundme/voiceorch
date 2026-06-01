@@ -364,7 +364,7 @@ export async function handleWebCallWebSocket(
       // Build per-turn system prompt with datetime + gender salutation injected
       let systemPromptForTurn = systemPrompt;
       const dtInjection = buildDatetimeInjection(agentCfg["timezone"] as string | undefined);
-      if (dtInjection) systemPromptForTurn = `${dtInjection}\n\n${systemPromptForTurn}`;
+      systemPromptForTurn = `${dtInjection}\n\n${systemPromptForTurn}`;
       const detectedGender = genderDetector?.gender ?? null;
       if (detectedGender === "male") {
         systemPromptForTurn += `\n\n[CALLER GENDER] The caller has been identified as male. Always address them respectfully as "${maleSal}" when appropriate (e.g. "Yes, ${maleSal}", "Of course, ${maleSal}"). Never use "${femaleSal}".`;
