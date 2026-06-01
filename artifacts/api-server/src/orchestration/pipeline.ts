@@ -235,7 +235,7 @@ export class OrchestrationPipeline {
           }, backoffMs);
         }
       );
-      logger.info({ callId: this.config.callId }, "Streaming STT initialized (Deepgram)");
+      logger.info({ callId: this.config.callId, provider: this.agent.asrProvider }, "Streaming STT initialized");
     } catch (err) {
       logger.error({ callId: this.config.callId, err }, "Streaming STT init failed — falling back to batch");
     }
