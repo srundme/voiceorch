@@ -1,20 +1,17 @@
-import { useState, useRef, useCallback } from "react";
-import { useRoute, Link } from "wouter";
+import { useState, useRef } from "react";
+import { useRoute, Link, useLocation } from "wouter";
 import {
   useGetCampaign,
-  useUpdateCampaign,
-  getGetCampaignQueryKey,
   useListCampaignBatches,
   useCreateCampaignBatch,
-  useUpdateCampaignBatch,
   useDeleteCampaignBatch,
   getListCampaignBatchesQueryKey,
+  getGetCampaignQueryKey,
 } from "@workspace/api-client-react";
 import type { CampaignBatch } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -26,11 +23,11 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
-  ArrowLeft, Copy, Check, Phone, Megaphone, Upload, FileText,
-  AlertCircle, CheckCircle2, X, Play, Pause, Square, Trash2,
-  ChevronRight, Calendar, Layers,
+  ArrowLeft, Copy, Check, Megaphone, Upload, FileText, Layers,
+  ChevronRight, Calendar, Trash2, Play, Pause, Square, Users,
+  Clock, AlertCircle, CheckCircle2, X,
 } from "lucide-react";
-import { formatDistanceToNow, format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -70,531 +67,480 @@ function parseCsv(text: string): { headers: string[]; rows: Record<string, strin
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function batchStatusBadge(status: string) {
+function batchStatusColors(status: string): string {
   const map: Record<string, string> = {
-    draft:     "bg-muted text-muted-foreground border-border",
-    running:   "bg-blue-50 text-blue-700 border-blue-200",
-    paused:    "bg-amber-50 text-amber-700 border-amber-200",
+    draft:     "bg-zinc-100 text-zinc-500 border-zinc-200",
+    running:   "bg-blue-50 text-blue-600 border-blue-200",
+    paused:    "bg-amber-50 text-amber-600 border-amber-200",
     completed: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    stopped:   "bg-muted text-muted-foreground border-border",
+    stopped:   "bg-red-50 text-red-600 border-red-200",
   };
   return map[status] ?? "bg-muted text-muted-foreground border-border";
 }
 
-function WebhookUrlBox({ token }: { token: string }) {
+function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
-  const url = `${window.location.origin}${BASE}/api/webhooks/lead/${token}`;
-  function copy() {
-    void navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
   return (
-    <div className="border border-dashed border-border rounded-xl bg-muted/50 p-4">
-      <p className="text-xs font-semibold text-foreground mb-2 flex items-center gap-1.5">
-        <Megaphone className="h-3.5 w-3.5" /> Webhook URL
-      </p>
-      <div className="flex items-center gap-2">
-        <code className="text-xs font-mono text-zinc-900 flex-1 truncate">{url}</code>
-        <button onClick={copy} className="shrink-0 p-1.5 rounded-lg hover:bg-muted text-foreground transition-colors">
-          {copied ? <Check className="h-3.5 w-3.5 text-zinc-500" /> : <Copy className="h-3.5 w-3.5" />}
-        </button>
-      </div>
-      <p className="text-[11px] text-foreground/70 mt-2">
-        POST JSON leads here — or use as Meta Lead Ads webhook URL.
-      </p>
-    </div>
+    <button
+      type="button"
+      onClick={() => {
+        void navigator.clipboard.writeText(text).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        });
+      }}
+      className="text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+    >
+      {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+    </button>
   );
 }
 
 // ── Upload Batch Modal ────────────────────────────────────────────────────────
 
 function UploadBatchModal({
-  open, onClose, campaignId, fieldMappings, onSuccess,
+  open,
+  onClose,
+  campaignId,
+  nextBatchNumber,
 }: {
-  open: boolean; onClose: () => void; campaignId: number;
-  fieldMappings: Record<string, string>; onSuccess: () => void;
+  open: boolean;
+  onClose: () => void;
+  campaignId: number;
+  nextBatchNumber: number;
 }) {
-  const { toast } = useToast();
-  const createBatch = useCreateCampaignBatch();
+  const qc            = useQueryClient();
+  const { toast }     = useToast();
+  const create        = useCreateCampaignBatch();
+  const fileRef       = useRef<HTMLInputElement>(null);
 
-  const [batchName, setBatchName]         = useState("");
-  const [scheduledAt, setScheduledAt]     = useState("");
-  const [dragging, setDragging]           = useState(false);
-  const [fileName, setFileName]           = useState<string | null>(null);
-  const [parsed, setParsed]               = useState<{ headers: string[]; rows: Record<string, string>[] } | null>(null);
-  const [done, setDone]                   = useState(false);
-  const fileInputRef                       = useRef<HTMLInputElement>(null);
+  const [batchName, setBatchName]   = useState(`Batch ${nextBatchNumber}`);
+  const [schedTime, SchedTime]      = useState("");
+  const [csvData, setCsvData]       = useState<{ headers: string[]; rows: Record<string, string>[] } | null>(null);
+  const [fileName, setFileName]     = useState("");
+  const [parseErr, setParseErr]     = useState("");
 
-  const phoneField = fieldMappings["phone"] ?? "phone";
-  const nameField  = fieldMappings["name"]  ?? "name";
-  const emailField = fieldMappings["email"] ?? "email";
-
-  function reset() {
-    setBatchName(""); setScheduledAt(""); setDragging(false);
-    setFileName(null); setParsed(null); setDone(false);
+  function resetState() {
+    setBatchName(`Batch ${nextBatchNumber}`);
+    SchedTime("");
+    setCsvData(null);
+    setFileName("");
+    setParseErr("");
   }
-  function handleClose() { reset(); onClose(); }
 
-  function loadFile(file: File) {
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
     setFileName(file.name);
-    if (!batchName) setBatchName(file.name.replace(/\.csv$/i, ""));
+    setParseErr("");
     const reader = new FileReader();
-    reader.onload = e => {
-      const text = e.target?.result as string;
-      setParsed(parseCsv(text));
+    reader.onload = ev => {
+      const text = ev.target?.result as string;
+      const parsed = parseCsv(text);
+      if (parsed.rows.length === 0) {
+        setParseErr("No valid rows found in CSV.");
+        setCsvData(null);
+      } else {
+        setCsvData(parsed);
+      }
     };
     reader.readAsText(file);
   }
 
-  const onDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault(); setDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file && file.name.endsWith(".csv")) loadFile(file);
-    else toast({ title: "Please drop a .csv file", variant: "destructive" });
-  }, []);
-
-  async function doCreate() {
-    if (!batchName.trim()) { toast({ title: "Batch name required", variant: "destructive" }); return; }
-    if (!parsed) return;
+  async function handleConfirm() {
+    if (!csvData || csvData.rows.length === 0) return;
     try {
-      await createBatch.mutateAsync({
+      await create.mutateAsync({
         id: campaignId,
         data: {
-          name: batchName.trim(),
-          leads: parsed.rows,
-          scheduledStartAt: scheduledAt || null,
-        } as Parameters<typeof createBatch.mutateAsync>[0]["data"],
+          name: batchName.trim() || `Batch ${nextBatchNumber}`,
+          leads: csvData.rows,
+          scheduledStartAt: schedTime ? new Date(schedTime).toISOString() : null,
+        },
       });
-      setDone(true);
-      onSuccess();
-    } catch { toast({ title: "Failed to create batch", variant: "destructive" }); }
+      await qc.invalidateQueries({ queryKey: getListCampaignBatchesQueryKey(campaignId) });
+      await qc.invalidateQueries({ queryKey: getGetCampaignQueryKey(campaignId) });
+      toast({ title: "Batch uploaded", description: `${csvData.rows.length} leads imported.` });
+      resetState();
+      onClose();
+    } catch {
+      toast({ title: "Upload failed", description: "Check your CSV format and try again.", variant: "destructive" });
+    }
   }
 
-  const phoneDetected = parsed ? parsed.headers.includes(phoneField) : null;
-  const previewRows   = parsed?.rows.slice(0, 5) ?? [];
-
   return (
-    <Dialog open={open} onOpenChange={v => { if (!v) handleClose(); }}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={v => { if (!v) { resetState(); onClose(); } }}>
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Upload className="h-4 w-4" /> Upload Batch
-          </DialogTitle>
-          <DialogDescription>Upload a CSV to create a new batch of leads.</DialogDescription>
+          <DialogTitle>Upload Batch</DialogTitle>
+          <DialogDescription>Upload a CSV of leads to add to this campaign batch.</DialogDescription>
         </DialogHeader>
 
-        {done ? (
-          <div className="space-y-4">
-            <div className="flex flex-col items-center gap-3 py-6 text-center">
-              <div className="p-3 rounded-full bg-muted text-foreground">
-                <CheckCircle2 className="h-8 w-8" />
-              </div>
-              <div>
-                <p className="text-lg font-bold text-foreground">Batch created</p>
-                <p className="text-sm text-muted-foreground mt-0.5">
-                  <strong>{parsed?.rows.length.toLocaleString()}</strong> leads imported
-                  {scheduledAt && <span> — scheduled for {format(new Date(scheduledAt), "MMM d, HH:mm")}</span>}
-                </p>
-              </div>
+        <div className="space-y-4 mt-2">
+          {/* Batch name */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label>Batch Name</Label>
+              <Input value={batchName} onChange={e => setBatchName(e.target.value)} />
             </div>
-            <DialogFooter><Button onClick={handleClose}>Done</Button></DialogFooter>
+            <div className="space-y-1.5">
+              <Label>Scheduled Start Time <span className="text-muted-foreground/50 text-[10px]">(optional)</span></Label>
+              <Input type="datetime-local" value={schedTime} onChange={e => SchedTime(e.target.value)} className="text-xs" />
+            </div>
           </div>
-        ) : (
-          <div className="space-y-4">
-            {/* Batch name + schedule */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Batch name *</Label>
-                <Input value={batchName} onChange={e => setBatchName(e.target.value)} placeholder="e.g. Week 1 Leads" />
-              </div>
-              <div>
-                <Label>Scheduled start (optional)</Label>
-                <Input type="datetime-local" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} />
-              </div>
+
+          {/* CSV upload */}
+          <div className="space-y-2">
+            <Label>CSV File</Label>
+            <div
+              className="border-2 border-dashed border-border rounded-xl p-6 text-center cursor-pointer hover:border-foreground/20 transition-colors"
+              onClick={() => fileRef.current?.click()}
+            >
+              <Upload className="h-6 w-6 text-muted-foreground/30 mx-auto mb-2" />
+              {fileName ? (
+                <div className="flex items-center justify-center gap-2">
+                  <FileText className="h-4 w-4 text-muted-foreground/50" />
+                  <span className="text-sm text-foreground/70">{fileName}</span>
+                  {csvData && <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm text-muted-foreground/50">Click to select CSV file</p>
+                  <p className="text-xs text-muted-foreground/30 mt-1">Must include a phone column</p>
+                </>
+              )}
+              {parseErr && (
+                <div className="flex items-center justify-center gap-1.5 mt-2 text-xs text-destructive">
+                  <AlertCircle className="h-3.5 w-3.5" /> {parseErr}
+                </div>
+              )}
             </div>
+            <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleFile} />
+          </div>
 
-            {/* Field mapping ref */}
-            <div className="bg-muted rounded-lg p-3 text-xs">
-              <p className="font-semibold text-muted-foreground mb-2">Campaign field mappings:</p>
-              <div className="flex flex-wrap gap-2">
-                {[
-                  { role: "Phone (required)", field: phoneField },
-                  ...(fieldMappings["name"]  ? [{ role: "Name",  field: nameField  }] : []),
-                  ...(fieldMappings["email"] ? [{ role: "Email", field: emailField }] : []),
-                ].map(({ role, field }) => (
-                  <div key={role} className="flex items-center gap-1.5 bg-card border border-border rounded px-2 py-1">
-                    <span className="text-muted-foreground">{role}</span>
-                    <span className="text-muted-foreground">←</span>
-                    <code className="font-mono text-foreground">{field}</code>
-                  </div>
-                ))}
+          {/* CSV Preview */}
+          {csvData && csvData.rows.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Data Preview</Label>
+                <span className="text-xs text-muted-foreground/50">{csvData.rows.length} rows total — showing first 5</span>
               </div>
-            </div>
-
-            {/* Drop zone */}
-            {!parsed ? (
-              <div
-                onDragOver={e => { e.preventDefault(); setDragging(true); }}
-                onDragLeave={() => setDragging(false)}
-                onDrop={onDrop}
-                onClick={() => fileInputRef.current?.click()}
-                className={`border-2 border-dashed rounded-xl p-10 flex flex-col items-center gap-3 cursor-pointer transition-colors ${
-                  dragging ? "border-zinc-400 bg-muted" : "border-border hover:border-zinc-300 hover:bg-muted"
-                }`}
-              >
-                <div className="p-3 rounded-full bg-muted text-zinc-400">
-                  <FileText className="h-7 w-7" />
-                </div>
-                <div className="text-center">
-                  <p className="text-sm font-medium text-foreground">Drop your CSV file here, or click to browse</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Must include a <code className="font-mono">{phoneField}</code> column</p>
-                </div>
-                <input ref={fileInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) loadFile(f); }} />
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between bg-muted border border-border rounded-lg px-3 py-2">
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-zinc-500" />
-                    <span className="text-sm font-medium">{fileName}</span>
-                    <span className="text-xs text-zinc-500">{parsed.rows.length.toLocaleString()} rows</span>
-                  </div>
-                  <button onClick={() => { setParsed(null); setFileName(null); }} className="text-zinc-400 hover:text-foreground transition-colors">
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-
-                {phoneDetected === false && (
-                  <div className="flex items-start gap-2 bg-muted border border-border rounded-lg p-3">
-                    <AlertCircle className="h-4 w-4 text-foreground mt-0.5 shrink-0" />
-                    <div className="text-sm">
-                      <p className="font-semibold">Phone column not found</p>
-                      <p className="text-xs mt-0.5 text-muted-foreground">
-                        Headers: <code className="font-mono">{parsed.headers.join(", ")}</code> — expected <code className="font-mono">{phoneField}</code>
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {phoneDetected && (
-                  <div className="flex items-center gap-2 bg-muted border border-border rounded-lg px-3 py-2">
-                    <CheckCircle2 className="h-4 w-4 text-zinc-500 shrink-0" />
-                    <p className="text-xs">
-                      Phone column <code className="font-mono font-bold">{phoneField}</code> detected —{" "}
-                      ready to import <strong>{parsed.rows.length.toLocaleString()}</strong> leads
-                    </p>
-                  </div>
-                )}
-
-                {parsed.headers.length > 0 && previewRows.length > 0 && (
-                  <div className="overflow-x-auto rounded-lg border border-border">
-                    <table className="text-xs w-full">
-                      <thead>
-                        <tr className="bg-muted border-b border-border">
-                          {parsed.headers.map(h => (
-                            <th key={h} className={`px-3 py-2 text-left font-medium ${h === phoneField ? "text-foreground" : "text-muted-foreground"}`}>
-                              {h}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {previewRows.map((row, i) => (
-                          <tr key={i} className="border-b border-border last:border-0">
-                            {parsed.headers.map(h => (
-                              <td key={h} className={`px-3 py-1.5 truncate max-w-[160px] ${h === phoneField ? "font-mono font-medium text-foreground" : "text-muted-foreground"}`}>
-                                {row[h] ?? ""}
-                              </td>
-                            ))}
-                          </tr>
+              <div className="border border-border rounded-xl overflow-hidden max-h-48 overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-elevated/40 border-b border-border">
+                      {csvData.headers.map(h => (
+                        <th key={h} className="px-3 py-2 text-left text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/50">
+                    {csvData.rows.slice(0, 5).map((row, i) => (
+                      <tr key={i}>
+                        {csvData.headers.map(h => (
+                          <td key={h} className="px-3 py-2 text-foreground/70 truncate max-w-[150px]">{row[h] ?? ""}</td>
                         ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            )}
+            </div>
+          )}
+        </div>
 
-            <DialogFooter>
-              <Button variant="outline" onClick={handleClose}>Cancel</Button>
-              <Button
-                onClick={() => void doCreate()}
-                disabled={!parsed || !phoneDetected || !batchName.trim() || createBatch.isPending}
-                className="gap-2"
-              >
-                <Upload className="h-3.5 w-3.5" />
-                {createBatch.isPending ? "Creating…" : parsed ? `Create batch (${parsed.rows.length.toLocaleString()} leads)` : "Create batch"}
-              </Button>
-            </DialogFooter>
-          </div>
-        )}
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => { resetState(); onClose(); }}>Cancel</Button>
+          <Button
+            onClick={() => void handleConfirm()}
+            disabled={!csvData || create.isPending}
+            className="gap-2"
+          >
+            <Upload className="h-3.5 w-3.5" />
+            {create.isPending ? "Uploading…" : "Confirm & Upload"}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
 
-// ── Batch card ────────────────────────────────────────────────────────────────
+// ── Batch row ─────────────────────────────────────────────────────────────────
 
-function BatchCard({ batch, campaignId }: { batch: CampaignBatch; campaignId: number }) {
-  const qc = useQueryClient();
-  const { toast } = useToast();
-  const update = useUpdateCampaignBatch();
-  const remove = useDeleteCampaignBatch();
-  const [deleteOpen, setDeleteOpen] = useState(false);
-
-  const progress = batch.totalLeads > 0 ? Math.round((batch.calledLeads / batch.totalLeads) * 100) : 0;
-
-  async function setStatus(status: string) {
-    try {
-      await update.mutateAsync({ id: campaignId, batchId: batch.id, data: { status } as Parameters<typeof update.mutateAsync>[0]["data"] });
-      await qc.invalidateQueries({ queryKey: getListCampaignBatchesQueryKey(campaignId) });
-      toast({ title: `Batch ${status}` });
-    } catch { toast({ title: "Action failed", variant: "destructive" }); }
-  }
-
-  async function confirmDelete() {
-    try {
-      await remove.mutateAsync({ id: campaignId, batchId: batch.id });
-      await qc.invalidateQueries({ queryKey: getListCampaignBatchesQueryKey(campaignId) });
-      toast({ title: "Batch deleted" });
-    } catch { toast({ title: "Delete failed", variant: "destructive" }); }
-  }
+function BatchRow({
+  batch,
+  index,
+  campaignId,
+  onDelete,
+}: {
+  batch: CampaignBatch;
+  index: number;
+  campaignId: number;
+  onDelete: (b: CampaignBatch) => void;
+}) {
+  const [, navigate] = useLocation();
+  const calledPct = batch.totalLeads > 0
+    ? Math.round((batch.calledLeads / batch.totalLeads) * 100)
+    : 0;
 
   return (
-    <>
-      <div className="bg-card border border-border rounded-2xl p-4 hover:border-border/80 transition-colors">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="h-8 w-8 rounded-lg bg-elevated border border-border flex items-center justify-center shrink-0">
-              <Layers className="h-3.5 w-3.5 text-muted-foreground/60" />
-            </div>
-            <div className="min-w-0">
-              <p className="font-semibold text-sm text-foreground truncate">{batch.name}</p>
-              {batch.scheduledStartAt && (
-                <p className="text-[11px] text-muted-foreground/50 flex items-center gap-1 mt-0.5">
-                  <Calendar className="h-3 w-3" />
-                  {format(new Date(batch.scheduledStartAt), "MMM d, HH:mm")}
-                </p>
-              )}
-            </div>
-          </div>
-          <Badge variant="outline" className={`text-[10px] shrink-0 ${batchStatusBadge(batch.status)}`}>
+    <div
+      className="flex items-center gap-4 px-5 py-4 hover:bg-elevated/20 transition-colors cursor-pointer group"
+      onClick={() => navigate(`/app/campaigns/${campaignId}/batches/${batch.id}`)}
+    >
+      {/* Batch number icon */}
+      <div className="h-8 w-8 rounded-lg bg-elevated border border-border flex items-center justify-center shrink-0">
+        <span className="text-xs font-semibold text-muted-foreground">{index}</span>
+      </div>
+
+      {/* Name + meta */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-0.5">
+          <p className="text-sm font-medium text-foreground">{batch.name}</p>
+          <Badge variant="outline" className={`text-[10px] ${batchStatusColors(batch.status)}`}>
             {batch.status}
           </Badge>
         </div>
-
-        {/* Progress bar */}
-        <div className="mt-3">
-          <div className="flex justify-between text-[10px] text-muted-foreground/50 mb-1">
-            <span>{batch.calledLeads}/{batch.totalLeads} called</span>
-            <span>{progress}%</span>
-          </div>
-          <div className="h-1.5 bg-elevated rounded-full overflow-hidden">
-            <div
-              className="h-full bg-foreground/40 rounded-full transition-all"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="mt-3 flex items-center gap-2">
-          {batch.status === "draft" || batch.status === "paused" || batch.status === "stopped" ? (
-            <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => void setStatus("running")} disabled={update.isPending}>
-              <Play className="h-3 w-3" /> Start
-            </Button>
-          ) : null}
-          {batch.status === "running" && (
-            <>
-              <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => void setStatus("paused")} disabled={update.isPending}>
-                <Pause className="h-3 w-3" /> Pause
-              </Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => void setStatus("stopped")} disabled={update.isPending}>
-                <Square className="h-3 w-3" /> Stop
-              </Button>
-            </>
+        <div className="flex items-center gap-3 text-xs text-muted-foreground/50">
+          <span className="flex items-center gap-1">
+            <Users className="h-3 w-3" />
+            {batch.totalLeads} leads
+          </span>
+          <span>{batch.calledLeads} called ({calledPct}%)</span>
+          {batch.scheduledStartAt && (
+            <span className="flex items-center gap-1">
+              <Calendar className="h-3 w-3" />
+              {format(new Date(batch.scheduledStartAt), "MMM d, HH:mm")}
+            </span>
           )}
-
-          <div className="ml-auto flex items-center gap-1">
-            <Link href={`/app/campaigns/${campaignId}/batches/${batch.id}`}>
-              <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground">
-                View leads <ChevronRight className="h-3 w-3" />
-              </Button>
-            </Link>
-            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground/50 hover:text-foreground" onClick={() => setDeleteOpen(true)}>
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-          </div>
         </div>
       </div>
 
-      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete batch?</AlertDialogTitle>
-            <AlertDialogDescription>This will delete <strong>{batch.name}</strong> and all {batch.totalLeads} leads. Cannot be undone.</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete} className="bg-foreground hover:bg-foreground">Delete</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+      {/* Progress bar */}
+      <div className="hidden sm:flex items-center gap-2 w-28">
+        <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+          <div
+            className="h-full bg-foreground/20 rounded-full transition-all"
+            style={{ width: `${calledPct}%` }}
+          />
+        </div>
+        <span className="text-[10px] text-muted-foreground/40 w-7 text-right">{calledPct}%</span>
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button
+          type="button"
+          className="h-6 w-6 flex items-center justify-center rounded-md hover:bg-muted transition-colors"
+          onClick={e => { e.stopPropagation(); onDelete(batch); }}
+        >
+          <Trash2 className="h-3.5 w-3.5 text-muted-foreground/50 hover:text-destructive" />
+        </button>
+        <ChevronRight className="h-4 w-4 text-muted-foreground/30" />
+      </div>
+    </div>
   );
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function CampaignDetailPage() {
-  const [, params] = useRoute("/app/campaigns/:id");
-  const id = parseInt(params?.id ?? "0", 10);
-  const qc = useQueryClient();
-  const { toast } = useToast();
+  const [, params]    = useRoute("/app/campaigns/:id");
+  const campaignId    = parseInt(params?.id ?? "0", 10);
+  const { toast }     = useToast();
+  const qc            = useQueryClient();
 
-  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadOpen, setUploadOpen]       = useState(false);
+  const [deletingBatch, setDeletingBatch] = useState<CampaignBatch | null>(null);
+  const deleteBatch                       = useDeleteCampaignBatch();
 
-  const { data: campaign, isLoading: loadingCampaign } = useGetCampaign(id);
-  const { data: batches, isLoading: loadingBatches }   = useListCampaignBatches(id);
+  const { data: campaign, isLoading: campLoading } = useGetCampaign(campaignId);
+  const { data: batches, isLoading: batchLoading } = useListCampaignBatches(campaignId);
 
-  const upd = useUpdateCampaign();
+  const webhookUrl = campaign
+    ? `${window.location.origin}${BASE}/api/webhooks/lead/${campaign.webhookToken}`
+    : "";
 
-  async function toggleActive() {
-    if (!campaign) return;
-    await upd.mutateAsync({ id: campaign.id, data: { isActive: !campaign.isActive } });
-    await qc.invalidateQueries({ queryKey: getGetCampaignQueryKey(id) });
+  const fm = campaign?.fieldMappings as Record<string, string> | undefined;
+
+  async function handleDeleteBatch() {
+    if (!deletingBatch) return;
+    try {
+      await deleteBatch.mutateAsync({ id: campaignId, batchId: deletingBatch.id });
+      await qc.invalidateQueries({ queryKey: getListCampaignBatchesQueryKey(campaignId) });
+      toast({ title: "Batch deleted" });
+    } catch {
+      toast({ title: "Error", description: "Failed to delete batch", variant: "destructive" });
+    }
+    setDeletingBatch(null);
   }
 
-  async function handleBatchSuccess() {
-    await qc.invalidateQueries({ queryKey: getListCampaignBatchesQueryKey(id) });
-    await qc.invalidateQueries({ queryKey: getGetCampaignQueryKey(id) });
-    setUploadOpen(false);
-  }
-
-  if (loadingCampaign) {
+  if (campLoading) {
     return (
-      <div className="p-6 max-w-5xl mx-auto">
-        <div className="h-8 w-48 bg-muted rounded animate-pulse mb-6" />
-        <div className="h-40 bg-card border border-border rounded-2xl animate-pulse" />
+      <div className="p-6 max-w-4xl mx-auto space-y-4 animate-pulse">
+        <div className="h-6 w-48 bg-muted rounded" />
+        <div className="h-32 bg-muted rounded-2xl" />
+        <div className="h-64 bg-muted rounded-2xl" />
       </div>
     );
   }
 
   if (!campaign) {
     return (
-      <div className="p-6 max-w-5xl mx-auto text-center py-24">
+      <div className="p-6 max-w-4xl mx-auto text-center py-20">
         <p className="text-muted-foreground">Campaign not found.</p>
-        <Link href="/app/campaigns">
-          <Button variant="outline" className="mt-4">Back to Campaigns</Button>
-        </Link>
+        <Link href="/app/campaigns"><Button variant="outline" className="mt-4">← Back to Campaigns</Button></Link>
       </div>
     );
   }
 
-  const fieldMappings = campaign.fieldMappings as Record<string, string>;
-  const successRate = campaign.totalLeads > 0
-    ? Math.round((campaign.calledLeads / campaign.totalLeads) * 100) : 0;
-
-  const batchList = batches as CampaignBatch[] | undefined ?? [];
-
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
+    <div className="p-6 max-w-4xl mx-auto space-y-6">
+      {/* Breadcrumb */}
+      <div className="flex items-center gap-3">
         <Link href="/app/campaigns">
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+          <Button variant="outline" size="icon" className="h-8 w-8">
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>
-        <div className="flex-1 min-w-0">
-          <h1 className="text-xl font-semibold text-foreground truncate">{campaign.name}</h1>
-          {campaign.description && <p className="text-sm text-muted-foreground/60">{campaign.description}</p>}
+        <div>
+          <h1 className="text-lg font-semibold text-foreground">{campaign.name}</h1>
+          {campaign.description && (
+            <p className="text-xs text-muted-foreground/60 mt-0.5">{campaign.description}</p>
+          )}
         </div>
-        <div className="flex items-center gap-3 shrink-0">
-          <span className="text-xs text-muted-foreground/60">{campaign.isActive ? "Active" : "Inactive"}</span>
-          <Switch
-            checked={campaign.isActive}
-            onCheckedChange={() => { void toggleActive(); }}
-          />
-        </div>
+        <Badge variant="outline" className={`ml-auto text-[10px] font-medium ${campaign.status === "active" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : campaign.status === "paused" ? "bg-amber-50 text-amber-600 border-amber-200" : "bg-zinc-100 text-zinc-500 border-zinc-200"}`}>
+          {campaign.status}
+        </Badge>
       </div>
 
-      {/* Stats row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        {[
-          { label: "Total leads",  value: campaign.totalLeads },
-          { label: "Called",       value: campaign.calledLeads },
-          { label: "Called %",     value: `${successRate}%` },
-          { label: "Batches",      value: batchList.length },
-        ].map(stat => (
-          <div key={stat.label} className="bg-card border border-border rounded-xl p-3 text-center">
-            <p className="text-[10px] text-muted-foreground/50 mb-1 uppercase tracking-widest font-semibold">{stat.label}</p>
-            <p className="text-lg font-bold text-foreground tabular-nums">{stat.value}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Webhook URL */}
-      <div className="mb-6">
-        <WebhookUrlBox token={campaign.webhookToken} />
-      </div>
-
-      {/* Batches section */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-base font-semibold text-foreground">Batches</h2>
-            <p className="text-xs text-muted-foreground/60 mt-0.5">Upload CSV batches and control calling per batch</p>
-          </div>
-          <Button onClick={() => setUploadOpen(true)} className="h-8 text-xs gap-2">
-            <Upload className="h-3.5 w-3.5" /> Upload Batch
-          </Button>
-        </div>
-
-        {loadingBatches ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {[1, 2].map(i => <div key={i} className="bg-card border border-border rounded-2xl h-32 animate-pulse" />)}
-          </div>
-        ) : batchList.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center bg-card border border-border rounded-2xl">
-            <div className="h-10 w-10 rounded-2xl bg-elevated border border-border flex items-center justify-center mb-3">
-              <Layers className="h-4 w-4 text-muted-foreground/40" />
+      {/* ── Top stats ── */}
+      <div className="bg-card border border-border rounded-2xl p-5 space-y-5">
+        {/* Stats grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: "Total Leads",  value: campaign.totalLeads },
+            { label: "Calls Made",   value: campaign.calledLeads },
+            { label: "Max Attempts", value: campaign.maxAttempts },
+            { label: "Call Delay",   value: `${campaign.callDelaySeconds}s` },
+          ].map(s => (
+            <div key={s.label} className="bg-elevated/40 rounded-xl px-4 py-3">
+              <p className="text-[10px] text-muted-foreground/50 uppercase tracking-wider">{s.label}</p>
+              <p className="text-lg font-semibold text-foreground mt-1">{s.value}</p>
             </div>
-            <h3 className="text-sm font-semibold text-foreground mb-1">No batches yet</h3>
-            <p className="text-xs text-muted-foreground/60 max-w-xs mb-4">
-              Upload a CSV to create your first batch of leads. You can schedule it or start it immediately.
-            </p>
-            <Button onClick={() => setUploadOpen(true)} className="h-8 text-xs gap-2">
-              <Upload className="h-3.5 w-3.5" /> Upload first batch
-            </Button>
+          ))}
+        </div>
+
+        {/* Webhook URL */}
+        <div>
+          <p className="text-[10px] text-muted-foreground/40 uppercase tracking-wider mb-1.5">Webhook URL</p>
+          <div className="flex items-center gap-2 bg-elevated/30 rounded-lg px-3 py-2.5">
+            <code className="text-xs font-mono text-muted-foreground/70 flex-1 truncate">{webhookUrl}</code>
+            <CopyButton text={webhookUrl} />
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {batchList.map(b => <BatchCard key={b.id} batch={b} campaignId={id} />)}
+        </div>
+
+        {/* Field Mappings */}
+        {fm && Object.keys(fm).length > 0 && (
+          <div>
+            <p className="text-[10px] text-muted-foreground/40 uppercase tracking-wider mb-2">Field Mappings</p>
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(fm).map(([role, source]) => (
+                <div key={role} className="flex items-center gap-1.5 bg-elevated/40 rounded-lg px-3 py-1.5">
+                  <span className="text-[10px] text-muted-foreground/50 uppercase">{role}</span>
+                  <span className="text-xs text-foreground font-mono">{source as string}</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
 
-      {/* Webhook leads note */}
-      <div className="mt-6 flex items-start gap-2 p-3 bg-elevated/30 border border-border rounded-xl">
-        <Phone className="h-4 w-4 text-muted-foreground/40 mt-0.5 shrink-0" />
-        <p className="text-xs text-muted-foreground/60">
-          Webhook and Instagram Ads leads appear in the{" "}
-          <Link href="/app/campaigns">
-            <span className="underline cursor-pointer hover:text-foreground">Campaigns overview</span>
-          </Link>{" "}
-          under Meta Campaign Leads.
-        </p>
+      {/* ── Batches ── */}
+      <div className="bg-card border border-border rounded-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <div className="flex items-center gap-2">
+            <Layers className="h-4 w-4 text-muted-foreground/50" />
+            <h2 className="text-sm font-semibold text-foreground">Batches</h2>
+            {!batchLoading && batches && (
+              <span className="text-xs text-muted-foreground/40">({batches.length})</span>
+            )}
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs gap-1.5"
+            onClick={() => setUploadOpen(true)}
+          >
+            <Upload className="h-3.5 w-3.5" /> Upload Batch
+          </Button>
+        </div>
+
+        {batchLoading ? (
+          <div className="divide-y divide-border">
+            {[1, 2].map(i => (
+              <div key={i} className="flex items-center gap-4 px-5 py-4 animate-pulse">
+                <div className="h-8 w-8 bg-muted rounded-lg" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3 w-32 bg-muted rounded" />
+                  <div className="h-2.5 w-48 bg-muted rounded" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : !batches?.length ? (
+          <div className="py-16 text-center">
+            <div className="h-10 w-10 rounded-xl bg-elevated border border-border flex items-center justify-center mx-auto mb-3">
+              <Layers className="h-4.5 w-4.5 text-muted-foreground/30" />
+            </div>
+            <p className="text-sm font-medium text-foreground/70 mb-1">No batches yet</p>
+            <p className="text-xs text-muted-foreground/40 mb-4">Upload a batch to get started</p>
+            <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setUploadOpen(true)}>
+              <Upload className="h-3.5 w-3.5" /> Upload First Batch
+            </Button>
+          </div>
+        ) : (
+          <div className="divide-y divide-border/60">
+            {batches.map((batch, i) => (
+              <BatchRow
+                key={batch.id}
+                batch={batch}
+                index={i + 1}
+                campaignId={campaignId}
+                onDelete={setDeletingBatch}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
+      {/* Modals */}
       <UploadBatchModal
         open={uploadOpen}
         onClose={() => setUploadOpen(false)}
-        campaignId={id}
-        fieldMappings={fieldMappings}
-        onSuccess={() => void handleBatchSuccess()}
+        campaignId={campaignId}
+        nextBatchNumber={(batches?.length ?? 0) + 1}
       />
+
+      <AlertDialog open={!!deletingBatch} onOpenChange={v => { if (!v) setDeletingBatch(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete batch?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete <strong>{deletingBatch?.name}</strong> and all its leads. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => void handleDeleteBatch()}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

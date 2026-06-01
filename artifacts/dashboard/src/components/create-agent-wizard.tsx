@@ -1567,29 +1567,35 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
 
                 {state.isMultilingual && (
                   <>
-                    <p className="text-muted-foreground text-xs uppercase tracking-[0.15em] mb-3">Additional regional languages <span className="text-muted-foreground normal-case">(up to 2)</span></p>
+                    <p className="text-muted-foreground text-xs uppercase tracking-[0.15em] mb-3">Additional languages <span className="text-muted-foreground normal-case">(up to 2)</span></p>
                     <div className="grid grid-cols-3 gap-2 mb-4">
-                      {LANGUAGES.filter(l => l.code !== state.primaryLanguage).map(lang => {
-                        const sel   = state.additionalLanguages.includes(lang.code);
-                        const maxed = state.additionalLanguages.length >= 2 && !sel;
+                      {LANGUAGES.filter(l => l.code === "english" || l.code !== state.primaryLanguage).map(lang => {
+                        const isEnglishPrimary = lang.code === "english" && state.primaryLanguage === "english";
+                        const sel   = isEnglishPrimary || state.additionalLanguages.includes(lang.code);
+                        const maxed = !isEnglishPrimary && state.additionalLanguages.length >= 2 && !state.additionalLanguages.includes(lang.code);
                         return (
                           <button
                             key={lang.code}
-                            disabled={maxed}
+                            disabled={isEnglishPrimary || maxed}
                             onClick={() => {
-                              const next = sel
+                              if (isEnglishPrimary) return;
+                              const next = state.additionalLanguages.includes(lang.code)
                                 ? state.additionalLanguages.filter(c => c !== lang.code)
                                 : [...state.additionalLanguages, lang.code];
                               update({ additionalLanguages: next });
                             }}
                             className={cn(
                               "p-3 rounded-xl border flex items-center gap-2.5 transition-all",
-                              sel    ? "border-zinc-400 bg-muted"
+                              sel && isEnglishPrimary ? "border-zinc-400 bg-muted opacity-60 cursor-default"
+                              : sel    ? "border-zinc-400 bg-muted"
                               : maxed ? "border-border opacity-30 cursor-not-allowed"
                               : "border-border bg-muted hover:border-border",
                             )}
                           >
-                            <span className={cn("font-medium text-sm", sel ? "text-foreground" : "text-muted-foreground")}>{lang.label}</span>
+                            <span className={cn("font-medium text-sm", sel ? "text-foreground" : "text-muted-foreground")}>
+                              {lang.label}
+                              {isEnglishPrimary && <span className="ml-1 text-xs font-normal text-muted-foreground">(primary)</span>}
+                            </span>
                             {sel && <Check className="h-3.5 w-3.5 text-foreground ml-auto" />}
                           </button>
                         );
