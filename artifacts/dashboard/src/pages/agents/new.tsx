@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError, mapApiErrors } from "@/lib/format-api-error";
+import { AGENT_TIMEZONES } from "@/lib/agent-providers";
 
 /* ── Provider → model/voice catalogue ────────────────────────────────────── */
 
@@ -210,6 +211,7 @@ const agentFormSchema = z.object({
   bargeInEnabled:         z.boolean().optional(),
   bargeInEnergyThreshold: z.number().min(100).max(5000).optional(),
   bargeInMinFrames:       z.number().min(1).max(20).optional(),
+  timezone:               z.string().optional(),
   maxConcurrentCalls:        z.number().min(1).max(100).optional(),
   monthlySpendLimitCents:    z.number().min(100).optional(),
   tools: z.array(z.object({
@@ -312,6 +314,7 @@ export default function AgentNew() {
       bargeInEnabled:           true,
       bargeInEnergyThreshold:   1200,
       bargeInMinFrames:         4,
+      timezone:                 "",
       tools: [],
       dispositionSchema: [],
     },
@@ -376,7 +379,7 @@ export default function AgentNew() {
   };
 
   const onSubmit = (data: AgentFormValues) => {
-    const { webhookSecret, promptVariables, vadSilenceMs, bargeInEnabled, bargeInEnergyThreshold, bargeInMinFrames, ...rest } = data;
+    const { webhookSecret, promptVariables, vadSilenceMs, bargeInEnabled, bargeInEnergyThreshold, bargeInMinFrames, timezone, ...rest } = data;
     const agentConfig: Record<string, unknown> = {};
     if (webhookSecret) agentConfig["webhookSecret"] = webhookSecret;
     if (promptVariables?.length) agentConfig["promptVariables"] = promptVariables;
@@ -384,6 +387,7 @@ export default function AgentNew() {
     if (bargeInEnabled === false) agentConfig["bargeInEnabled"] = false;
     if (bargeInEnergyThreshold != null && bargeInEnergyThreshold !== 1200) agentConfig["bargeInEnergyThreshold"] = bargeInEnergyThreshold;
     if (bargeInMinFrames != null && bargeInMinFrames !== 4) agentConfig["bargeInMinFrames"] = bargeInMinFrames;
+    if (timezone) agentConfig["timezone"] = timezone;
     const submitData = {
       ...rest,
       ...(Object.keys(agentConfig).length > 0 ? { agentConfig } : {}),
@@ -551,6 +555,25 @@ export default function AgentNew() {
                     <FormControl>
                       <Textarea placeholder="You are a helpful assistant..." className="min-h-[120px] font-mono text-sm" {...field} />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="timezone" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Timezone</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="No timezone (server UTC used)" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent className="max-h-64">
+                        {AGENT_TIMEZONES.map(tz => (
+                          <SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>Current date &amp; time in this timezone is injected into every LLM call so the agent knows the time.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )} />

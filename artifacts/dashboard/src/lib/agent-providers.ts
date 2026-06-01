@@ -104,6 +104,41 @@ export function getModelError(
     : `"${model}" is not available for the selected provider. Choose a model from the dropdown.`;
 }
 
+export const AGENT_TIMEZONES = [
+  { value: "Pacific/Honolulu",    label: "Pacific/Honolulu (UTC-10:00)" },
+  { value: "America/Anchorage",   label: "America/Anchorage (UTC-09:00)" },
+  { value: "America/Los_Angeles", label: "America/Los_Angeles (UTC-08:00)" },
+  { value: "America/Denver",      label: "America/Denver (UTC-07:00)" },
+  { value: "America/Chicago",     label: "America/Chicago (UTC-06:00)" },
+  { value: "America/Mexico_City", label: "America/Mexico_City (UTC-06:00)" },
+  { value: "America/New_York",    label: "America/New_York (UTC-05:00)" },
+  { value: "America/Toronto",     label: "America/Toronto (UTC-05:00)" },
+  { value: "America/Sao_Paulo",   label: "America/Sao_Paulo (UTC-03:00)" },
+  { value: "America/Buenos_Aires", label: "America/Buenos_Aires (UTC-03:00)" },
+  { value: "UTC",                 label: "UTC (UTC+00:00)" },
+  { value: "Europe/London",       label: "Europe/London (UTC+00:00)" },
+  { value: "Europe/Paris",        label: "Europe/Paris (UTC+01:00)" },
+  { value: "Europe/Berlin",       label: "Europe/Berlin (UTC+01:00)" },
+  { value: "Europe/Amsterdam",    label: "Europe/Amsterdam (UTC+01:00)" },
+  { value: "Africa/Cairo",        label: "Africa/Cairo (UTC+02:00)" },
+  { value: "Africa/Johannesburg", label: "Africa/Johannesburg (UTC+02:00)" },
+  { value: "Europe/Moscow",       label: "Europe/Moscow (UTC+03:00)" },
+  { value: "Europe/Istanbul",     label: "Europe/Istanbul (UTC+03:00)" },
+  { value: "Asia/Dubai",          label: "Asia/Dubai (UTC+04:00)" },
+  { value: "Asia/Karachi",        label: "Asia/Karachi (UTC+05:00)" },
+  { value: "Asia/Kolkata",        label: "Asia/Kolkata (UTC+05:30)" },
+  { value: "Asia/Colombo",        label: "Asia/Colombo (UTC+05:30)" },
+  { value: "Asia/Dhaka",          label: "Asia/Dhaka (UTC+06:00)" },
+  { value: "Asia/Bangkok",        label: "Asia/Bangkok (UTC+07:00)" },
+  { value: "Asia/Singapore",      label: "Asia/Singapore (UTC+08:00)" },
+  { value: "Asia/Shanghai",       label: "Asia/Shanghai (UTC+08:00)" },
+  { value: "Asia/Tokyo",          label: "Asia/Tokyo (UTC+09:00)" },
+  { value: "Asia/Seoul",          label: "Asia/Seoul (UTC+09:00)" },
+  { value: "Australia/Perth",     label: "Australia/Perth (UTC+08:00)" },
+  { value: "Australia/Sydney",    label: "Australia/Sydney (UTC+11:00)" },
+  { value: "Pacific/Auckland",    label: "Pacific/Auckland (UTC+13:00)" },
+];
+
 export const LANGUAGES = [
   { value: "en-US", label: "English (US)" },
   { value: "en-GB", label: "English (UK)" },

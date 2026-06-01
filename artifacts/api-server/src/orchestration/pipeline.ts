@@ -1,4 +1,5 @@
 import { GenderDetector } from "./genderDetector.js";
+import { buildDatetimeInjection } from "./datetimeInject.js";
 import { createSTTAdapter } from "./adapters/stt/index.js";
 import { toReadableError } from "./utils.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
@@ -907,6 +908,8 @@ export class OrchestrationPipeline {
     // is even enqueued.  That way KB retrieval overlaps with the backchannel TTS
     // playback instead of adding to LLM start latency.
     let systemPromptForTurn = this.agent.systemPrompt;
+    const dtInjection = buildDatetimeInjection(this.agent.timezone);
+    if (dtInjection) systemPromptForTurn = `${dtInjection}\n\n${systemPromptForTurn}`;
     let kbContextPromise: Promise<string | null> = Promise.resolve(null);
     if (this.agent.knowledgeBaseId) {
       const openaiKey = this.config.providerKeys.get("openai");

@@ -98,6 +98,8 @@ export type AgentConfig = {
   genderDetectionMaleSalutation?: string;
   genderDetectionFemaleSalutation?: string;
   genderDetectionNeutralSalutation?: string;
+  // P1-G: LLM timezone injection — IANA timezone name (e.g. "Asia/Kolkata")
+  timezone?: string;
 };
 
 export const agentsTable = pgTable("agents", {

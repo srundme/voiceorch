@@ -38,6 +38,7 @@ import { useToast } from "@/hooks/use-toast";
 import { formatApiError, mapApiErrors } from "@/lib/format-api-error";
 import {
   ASR_PROVIDERS,
+  AGENT_TIMEZONES,
   LLM_PROVIDERS,
   TTS_PROVIDERS,
   TELEPHONY_PROVIDERS,
@@ -83,6 +84,7 @@ export const agentFormSchema = z.object({
   bargeInEnabled:         z.boolean().optional(),
   bargeInEnergyThreshold: z.number().min(100).max(5000).optional(),
   bargeInMinFrames:       z.number().min(1).max(20).optional(),
+  timezone:               z.string().optional(),
   tools: z.array(z.object({
     type: z.literal("call_transfer"),
     name: z.string().min(1, "Function name required"),
@@ -113,7 +115,7 @@ type AgentFormValues = z.infer<typeof agentFormSchema>;
 export type { AgentFormValues };
 
 export function buildUpdateAgentPayload(data: AgentFormValues) {
-  const { webhookSecret, promptVariables, vadSilenceMs, bargeInEnabled, bargeInEnergyThreshold, bargeInMinFrames, ...rest } = data;
+  const { webhookSecret, promptVariables, vadSilenceMs, bargeInEnabled, bargeInEnergyThreshold, bargeInMinFrames, timezone, ...rest } = data;
   const agentConfig: Record<string, unknown> = {};
   if (webhookSecret) agentConfig["webhookSecret"] = webhookSecret;
   if (promptVariables?.length) agentConfig["promptVariables"] = promptVariables;
@@ -121,6 +123,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   if (bargeInEnabled === false) agentConfig["bargeInEnabled"] = false;
   if (bargeInEnergyThreshold != null && bargeInEnergyThreshold !== 1200) agentConfig["bargeInEnergyThreshold"] = bargeInEnergyThreshold;
   if (bargeInMinFrames != null && bargeInMinFrames !== 4) agentConfig["bargeInMinFrames"] = bargeInMinFrames;
+  if (timezone) agentConfig["timezone"] = timezone;
   return {
     ...rest,
     ...(Object.keys(agentConfig).length > 0 ? { agentConfig } : {}),
@@ -181,6 +184,7 @@ export default function AgentEdit() {
       language: "en-US", backchannelingEnabled: true, backchannelingFrequency: 0.5,
       webhookUrl: "", webhookSecret: "", noiseCancellationEnabled: true,
       promptVariables: [], vadSilenceMs: 2000, bargeInEnabled: true, bargeInEnergyThreshold: 1200, bargeInMinFrames: 4,
+      timezone: "",
       tools: [],
       dispositionSchema: [],
     },
@@ -235,6 +239,7 @@ export default function AgentEdit() {
       bargeInEnabled:           ((agent as any).agentConfig?.bargeInEnabled as boolean | undefined) ?? true,
       bargeInEnergyThreshold:   ((agent as any).agentConfig?.bargeInEnergyThreshold as number | undefined) ?? 1200,
       bargeInMinFrames:         ((agent as any).agentConfig?.bargeInMinFrames as number | undefined) ?? 4,
+      timezone:                 ((agent as any).agentConfig?.timezone as string | undefined) ?? "",
       tools: (agent.tools ?? []) as AgentFormValues["tools"],
       dispositionSchema: ((agent as any).dispositionSchema ?? []).map((f: any) => ({
         ...f,
@@ -348,6 +353,25 @@ export default function AgentEdit() {
                     <FormControl>
                       <Textarea placeholder="You are a helpful assistant..." className="min-h-[120px] font-mono text-sm" {...field} />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="timezone" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Timezone</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="No timezone (server UTC used)" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent className="max-h-64">
+                        {AGENT_TIMEZONES.map(tz => (
+                          <SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>Current date &amp; time in this timezone is injected into every LLM call so the agent knows the time.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )} />

@@ -12,6 +12,7 @@ import type { ConversationTurn, STTConfig } from "../types.js";
 import { decryptKey } from "../../lib/crypto.js";
 import { loadCallerProfile, injectCallerMemory, updateCallerProfile } from "../callerMemory.js";
 import { GenderDetector } from "../genderDetector.js";
+import { buildDatetimeInjection } from "../datetimeInject.js";
 import {
   buildToolDefs,
   executeNativeBooking,
@@ -360,8 +361,10 @@ export async function handleWebCallWebSocket(
         sentenceJobs.push(job);
       }
 
-      // Build per-turn system prompt with gender salutation injected
+      // Build per-turn system prompt with datetime + gender salutation injected
       let systemPromptForTurn = systemPrompt;
+      const dtInjection = buildDatetimeInjection(agentCfg["timezone"] as string | undefined);
+      if (dtInjection) systemPromptForTurn = `${dtInjection}\n\n${systemPromptForTurn}`;
       const detectedGender = genderDetector?.gender ?? null;
       if (detectedGender === "male") {
         systemPromptForTurn += `\n\n[CALLER GENDER] The caller has been identified as male. Always address them respectfully as "${maleSal}" when appropriate (e.g. "Yes, ${maleSal}", "Of course, ${maleSal}"). Never use "${femaleSal}".`;
