@@ -23,7 +23,7 @@ const RING_TIMEOUT_MS = 60_000; // auto-dismiss after 60 s if not answered
 export function IncomingCallNotification() {
   const [incoming, setIncoming]   = useState<CallbackEvent | null>(null);
   const [, navigate]              = useLocation();
-  const { isSignedIn }            = useAuth();
+  const { isSignedIn, getToken }   = useAuth();
   const timerRef                  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const esRef                     = useRef<EventSource | null>(null);
 
@@ -44,9 +44,24 @@ export function IncomingCallNotification() {
     let backoff = 2000;
     let stopped = false;
 
-    function connect() {
+    // EventSource cannot set Authorization headers, so we pass a short-lived
+    // Clerk JWT as a query param (?token=<jwt>) — the server verifies it via
+    // authenticateRequest with a synthetic Bearer-header request.
+    async function connect() {
       if (stopped) return;
-      const es = new EventSource("/api/webcall-notify", { withCredentials: true });
+      // Get a short-lived Clerk JWT — EventSource can't set Authorization headers,
+      // so we pass the token as ?token=<jwt>.  If getToken() returns null (Clerk
+      // session not yet ready), retry after a short delay instead of opening a
+      // no-auth EventSource that will always 401.
+      let token: string | null = null;
+      try { token = await getToken(); } catch { /* will retry */ }
+      if (!token) {
+        if (!stopped) setTimeout(() => { void connect(); }, 2000);
+        return;
+      }
+      if (stopped) return;
+      const url = `/api/webcall-notify?token=${encodeURIComponent(token)}`;
+      const es = new EventSource(url, { withCredentials: true });
       esRef.current = es;
 
       es.addEventListener("callback", (e: MessageEvent) => {
@@ -64,21 +79,21 @@ export function IncomingCallNotification() {
         es.close();
         esRef.current = null;
         if (!stopped) {
-          // Reconnect with exponential backoff (cap at 30 s)
-          setTimeout(connect, Math.min(backoff, 30_000));
+          // Reconnect with exponential backoff (cap at 30 s); get a fresh token each time
+          setTimeout(() => { void connect(); }, Math.min(backoff, 30_000));
           backoff = Math.min(backoff * 2, 30_000);
         }
       };
     }
 
-    connect();
+    void connect();
 
     return () => {
       stopped = true;
       esRef.current?.close();
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [isSignedIn, dismiss]);
+  }, [isSignedIn, getToken, dismiss]);
 
   if (!incoming) return null;
 

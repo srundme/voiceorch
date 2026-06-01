@@ -1,0 +1,109 @@
+I need the Campaigns page to have two distinct sections:
+
+SECTION 1 — Meta Campaign Leads
+This section displays all calls that were automatically triggered via Meta Lead Ads.
+Display these calls in a call log format with the following:
+
+Call status badge (e.g., "completed")
+Date & timestamp
+From number / To number
+Call duration
+Eye icon to view call details
+Chevron to expand
+
+Filter bar above the call log:
+
+All Calls — fixed
+No Pickup — fixed
+Remaining filters are dynamic disposition tags pulled from the assigned agent's configuration
+
+
+SECTION 2 — Create Campaign / New Campaign
+Creating a Campaign:
+
+User clicks "New Campaign" button
+A modal opens with the following fields:
+
+Campaign name
+Description (optional)
+Agent selector dropdown — each agent must show a minimal text indicator next to their name:
+
+Agent Name LIVE — agent has an ongoing active campaign
+Agent Name NOT LIVE — agent has no active campaign
+
+
+Field Mappings (Phone field, Name field, Email field)
+Call delay (seconds)
+Max attempts
+From number (optional override)
+
+
+On submit, the campaign appears as a card showing: campaign name, status (Draft), Total Leads, Called, Called %, Webhook URL, Created time
+
+
+Campaign Detail View (clicking into a campaign):
+
+Top section remains exactly as is:
+
+Total leads, Calls made, Max attempts, Delay stats
+Webhook URL
+Field Mappings
+
+
+Bottom section — Batches:
+
+If no batches uploaded → display: "No batches yet. Upload a batch to get started."
+If batches exist → list them as Batch 1, Batch 2, Batch 3, etc.
+Each batch is clickable and opens the batch detail view
+An "Upload Batch" button at the top right to upload new batches
+
+
+
+
+Upload Batch Modal (clicking "Upload Batch"):
+
+Batch Name — pre-filled as "Batch 1" by default, auto-increments for subsequent batches
+CSV Upload — file upload input
+Data Preview — after CSV is uploaded, a preview table is displayed inside the modal showing the first few rows of data so the user can verify the data is correct before confirming
+Scheduled Start Time — a date & time picker where the user sets when the campaign should automatically start
+
+Once the scheduled time is reached, the campaign launches automatically
+User can still manually click Start Campaign to launch immediately
+
+
+Confirm / Upload button to save the batch
+
+
+Batch Detail View (clicking into a batch):
+
+Campaign Control Buttons at the top:
+
+Start Campaign — launches calls immediately or at scheduled time
+Pause Campaign — pauses ongoing calls for that batch
+Stop Campaign — stops the campaign for that batch completely
+Each batch has its own independent campaign controls — one batch's controls do not affect other batches
+
+
+Displays call log with:
+
+Call status badge
+Date & timestamp
+From / To numbers
+Duration
+Eye icon + chevron
+
+
+Filter bar:
+
+All Calls — fixed
+No Pickup — fixed
+All other filters are fully dynamic based on the assigned agent's configured dispositions
+
+
+
+
+DISPOSITION LOGIC
+
+All Calls and No Pickup are always present as fixed filters
+All other disposition tags are dynamic and agent-specific
+Dispositions are defined at the agent configuration level and automatically reflect on any campaign or batch using that agent
