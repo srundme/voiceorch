@@ -48,7 +48,7 @@ function useWebcallKeyStatus() {
   return { keys, loading };
 }
 
-function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: string }) {
+function WebCallPanel({ agentId, agentName, autostart, callbackId }: { agentId: number; agentName: string; autostart?: boolean; callbackId?: number }) {
   const [status, setStatus]     = useState<CallStatus>("idle");
   const [msgs, setMsgs]         = useState<Msg[]>([]);
   const [error, setError]       = useState<string | null>(null);
@@ -56,6 +56,7 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
   const [copied, setCopied]     = useState(false);
   const { keys: keyStatus, loading: keyLoading } = useWebcallKeyStatus();
   const { userId: callerUserId } = useAuth();
+  const hasAutoStarted          = useRef(false);
 
   const wsRef          = useRef<WebSocket | null>(null);
   const audioCtxRef    = useRef<AudioContext | null>(null);
@@ -129,8 +130,11 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
       streamRef.current = stream;
 
       const proto = location.protocol === "https:" ? "wss" : "ws";
-      const callerParam = callerUserId ? `?callerId=${encodeURIComponent(callerUserId)}` : "";
-      const ws = new WebSocket(`${proto}://${location.host}/api/ws/webcall/${agentId}${callerParam}`);
+      const qsParts: string[] = [];
+      if (callerUserId) qsParts.push(`callerId=${encodeURIComponent(callerUserId)}`);
+      if (callbackId)  qsParts.push(`callbackId=${callbackId}`);
+      const qs = qsParts.length ? `?${qsParts.join("&")}` : "";
+      const ws = new WebSocket(`${proto}://${location.host}/api/ws/webcall/${agentId}${qs}`);
       ws.binaryType = "arraybuffer";
       wsRef.current = ws;
 
@@ -254,6 +258,15 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
     if (!keyStatus["gemini"] && !keyStatus["openai"]) missingKeys.push("LLM (gemini)");
   }
   const keysReady = !keyLoading && keyStatus !== null && missingKeys.length === 0;
+
+  // Auto-start when arriving from an incoming callback notification
+  // Must be after keysReady is declared so the dependency is available.
+  useEffect(() => {
+    if (autostart && keysReady && status === "idle" && !hasAutoStarted.current) {
+      hasAutoStarted.current = true;
+      void startCall();
+    }
+  }, [autostart, keysReady, status, startCall]);
 
   return (
     <div className="space-y-5">
@@ -379,9 +392,12 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
 export default function AgentDetail() {
   const params = useParams();
   const id = parseInt(params.id || "0", 10);
-  // Support ?tab=test URL param so the incoming-call notification can deep-link
-  // straight to the Test Call tab when the user accepts a scheduled callback.
-  const initialTab = new URLSearchParams(window.location.search).get("tab") === "test" ? "test" : "overview";
+  // Support ?tab=test&autostart=1&callbackId=X URL params so the incoming-call notification
+  // can deep-link straight to the Test Call tab and instantly start a callback call.
+  const searchParams = new URLSearchParams(window.location.search);
+  const initialTab    = searchParams.get("tab") === "test" ? "test" : "overview";
+  const isAutostart   = searchParams.get("autostart") === "1";
+  const urlCallbackId = searchParams.get("callbackId") ? parseInt(searchParams.get("callbackId")!, 10) : undefined;
   const [activeTab, setActiveTab] = useState(initialTab);
   const [callDialogOpen, setCallDialogOpen] = useState(false);
   const [toNumber, setToNumber] = useState("");
@@ -626,7 +642,7 @@ export default function AgentDetail() {
 
           {/* ── Test Call ── */}
           <TabsContent value="test" className="m-0">
-            <WebCallPanel agentId={agent.id} agentName={agent.name} />
+            <WebCallPanel agentId={agent.id} agentName={agent.name} autostart={isAutostart} callbackId={urlCallbackId} />
           </TabsContent>
 
           {/* ── Configuration ── */}

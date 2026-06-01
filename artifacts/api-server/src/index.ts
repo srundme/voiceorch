@@ -52,14 +52,15 @@ server.on("upgrade", (request, socket, head) => {
   // callerId: Clerk userId of the dashboard user initiating the webcall.
   // Passed as ?callerId=<clerkId> so the callback poller can ring the right browser tab.
   const callerId          = qs.get("callerId") ?? undefined;
+  const callbackId        = qs.has("callbackId") ? parseInt(qs.get("callbackId")!, 10) : undefined;
 
   wss.handleUpgrade(request, socket, head, (ws: import("ws").WebSocket) => {
     logger.info({ provider, agentId, platformTelephony, campaignLeadId, url }, "WebSocket upgraded");
     switch (provider) {
-      case "twilio":   void handleTwilioWebSocket(ws, agentId, campaignLeadId);                          break;
-      case "plivo":    void handlePlivoWebSocket(ws, agentId, campaignLeadId);                           break;
-      case "vobiz":    void handleVobizWebSocket(ws, agentId, platformTelephony, campaignLeadId);        break;
-      case "webcall":  void handleWebCallWebSocket(ws, agentId, callerId);                               break;
+      case "twilio":   void handleTwilioWebSocket(ws, agentId, campaignLeadId);                                   break;
+      case "plivo":    void handlePlivoWebSocket(ws, agentId, campaignLeadId);                                    break;
+      case "vobiz":    void handleVobizWebSocket(ws, agentId, platformTelephony, campaignLeadId);                 break;
+      case "webcall":  void handleWebCallWebSocket(ws, agentId, callerId, callbackId);                            break;
     }
   });
 });

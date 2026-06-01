@@ -32,9 +32,9 @@ export function IncomingCallNotification() {
     if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
   }, []);
 
-  const accept = useCallback((agentId: number) => {
+  const accept = useCallback((agentId: number, callbackId: number) => {
     dismiss();
-    navigate(`/app/agents/${agentId}?tab=test`);
+    navigate(`/app/agents/${agentId}?tab=test&autostart=1&callbackId=${callbackId}`);
   }, [dismiss, navigate]);
 
   useEffect(() => {
@@ -139,7 +139,7 @@ export function IncomingCallNotification() {
             <Button
               size="sm"
               className="flex-1 gap-1.5 h-9 text-xs"
-              onClick={() => accept(incoming.agentId)}
+              onClick={() => accept(incoming.agentId, incoming.callbackId)}
             >
               <PhoneIncoming className="h-3.5 w-3.5" />
               Accept

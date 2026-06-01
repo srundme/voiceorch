@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { db, agentsTable, callsTable, providersTable, usersTable, walletTransactionsTable, platformSettingsTable } from "@workspace/db";
+import { db, agentsTable, callsTable, scheduledCallbacksTable, providersTable, usersTable, walletTransactionsTable, platformSettingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { createSTTAdapter } from "../adapters/stt/index.js";
 import { createLLMAdapter } from "../adapters/llm/index.js";
@@ -118,6 +118,7 @@ export async function handleWebCallWebSocket(
   ws: WebSocket,
   agentId: number,
   callerUserId?: string,
+  callbackId?: number,
 ): Promise<void> {
   function send(data: Record<string, unknown>) {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(data));
@@ -254,6 +255,55 @@ export async function handleWebCallWebSocket(
       }
     } catch (memErr) {
       logger.warn({ callId, agentId, memErr }, "Failed to load webcall caller profile — continuing without memory");
+    }
+  }
+
+  // ── Callback context ──────────────────────────────────────────────────────
+  // When this call was triggered by an incoming-callback notification, load the
+  // prior call's summary so the agent can greet the user with context and then
+  // speak an opening greeting immediately (instead of waiting for the user).
+  let callbackOpeningGreeting: string | null = null;
+  if (callbackId) {
+    try {
+      const [cb] = await db
+        .select()
+        .from(scheduledCallbacksTable)
+        .where(eq(scheduledCallbacksTable.id, callbackId));
+
+      let priorSummary: string | null = null;
+      if (cb?.createdFromCallId) {
+        const [priorCall] = await db
+          .select({ callSummary: callsTable.callSummary })
+          .from(callsTable)
+          .where(eq(callsTable.id, cb.createdFromCallId));
+        priorSummary = priorCall?.callSummary ?? null;
+      }
+      // Fall back to the cross-call caller profile summary if no per-call summary
+      if (!priorSummary) priorSummary = webcallProfile?.summary ?? null;
+
+      const summaryLine = priorSummary
+        ? `Summary of the prior conversation: ${priorSummary}`
+        : "No summary of the prior conversation is available.";
+
+      const callbackHeader = [
+        "=== CALLBACK CALL ===",
+        "This is a SCHEDULED CALLBACK. The user explicitly asked to be called back after their previous conversation.",
+        summaryLine,
+        `You are calling them back as requested. Open the conversation naturally — introduce yourself as ${agent.name}, briefly reference what was discussed, confirm this is the callback they requested, and ask if they would like to continue. Keep the opening to one or two sentences. Example: "Hi, this is ${agent.name}. We were discussing [topic] and you had asked me to follow up — shall we continue from where we left off?"`,
+        "After the greeting, wait for the user to respond and guide the conversation naturally from there.",
+        "====================",
+      ].join("\n");
+      systemPrompt = `${callbackHeader}\n\n${systemPrompt}`;
+
+      // Build a short TTS opening greeting (synthesized immediately on connection)
+      const topicSnippet = priorSummary
+        ? ` We were discussing — ${priorSummary.slice(0, 80).replace(/\n/g, " ").trim()} — and you`
+        : " You";
+      callbackOpeningGreeting = `Hi, this is ${agent.name}.${topicSnippet} had asked to be called back. Shall we continue?`;
+
+      logger.info({ callId, callbackId, hasPriorSummary: !!priorSummary }, "Callback context injected into system prompt");
+    } catch (cbCtxErr) {
+      logger.warn({ callId, callbackId, cbCtxErr }, "Failed to load callback context — proceeding without it");
     }
   }
 
@@ -777,8 +827,45 @@ export async function handleWebCallWebSocket(
 
   // ── Ready ─────────────────────────────────────────────────────────────────
   send({ type: "ready", agentId, agentName: agent.name, callId });
-  sendStatus("listening");
   logger.info({ callId, agentId, agentName: agent.name }, "WebCall session started");
+
+  // ── Callback opening greeting ─────────────────────────────────────────────
+  // For callback calls, the agent speaks first with a context-aware greeting
+  // instead of waiting for the user to initiate.
+  if (callbackOpeningGreeting && !closed) {
+    try {
+      sendStatus("speaking");
+      speaking = true;
+      speakingStartedAt = Date.now();
+      const { audio } = await tts.synthesize(callbackOpeningGreeting);
+      const paddedAudio = withTailSilence(audio);
+      for (let j = 0; j < paddedAudio.length; j += AUDIO_CHUNK_BYTES) {
+        if (closed || interrupted) break;
+        sendAudio(amplifyPcm(paddedAudio.slice(j, j + AUDIO_CHUNK_BYTES), TTS_VOLUME_GAIN));
+        await new Promise<void>(r => setTimeout(r, 40));
+      }
+      speaking = false;
+      speakingEndedAt = Date.now();
+      history.push({ role: "assistant", content: callbackOpeningGreeting });
+      send({ type: "transcript", speaker: "agent", text: callbackOpeningGreeting });
+      if (!closed) {
+        // Small drain pause so the client's audio buffer empties before we switch to listening
+        const drainFrames = Math.ceil(AUDIO_TAIL_SILENCE_MS / 40);
+        for (let j = 0; j < drainFrames; j++) {
+          if (closed) break;
+          await new Promise<void>(r => setTimeout(r, 40));
+        }
+        sendStatus("listening");
+      }
+    } catch (greetErr) {
+      logger.warn({ callId, greetErr }, "Callback opening greeting TTS failed — continuing normally");
+      speaking = false;
+      speakingEndedAt = Date.now();
+      if (!closed) sendStatus("listening");
+    }
+  } else {
+    sendStatus("listening");
+  }
 
   const maxTimer = setTimeout(() => { void hangup("timeout"); }, (agent.maxDuration ?? 600) * 1000);
 
