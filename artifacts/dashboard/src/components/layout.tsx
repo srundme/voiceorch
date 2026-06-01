@@ -6,7 +6,7 @@ import {
   LayoutDashboard, BarChart3, BookOpen,
   Wallet, LogOut, ChevronDown, AlertCircle, Radio, Webhook,
   Zap, CalendarDays, TrendingUp, ShieldCheck,
-  Facebook, ArrowRightLeft,
+  Facebook, ArrowRightLeft, Mic2,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useClerk, useUser } from "@clerk/react";
@@ -21,6 +21,7 @@ const NAV_SECTIONS = [
       { name: "Assistants",      href: "/app",                 icon: Users,          exact: true },
       { name: "Knowledge Bases", href: "/app/knowledge-bases", icon: BookOpen },
       { name: "Providers",       href: "/app/providers",       icon: Key },
+      { name: "Voices",          href: "/app/voices",          icon: Mic2 },
     ],
   },
   {

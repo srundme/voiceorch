@@ -51,6 +51,7 @@ import KycPage from "@/pages/kyc";
 import ApiKeysPage from "@/pages/api-keys";
 import MetaLeadsPage from "@/pages/meta-leads";
 import TransfersPage from "@/pages/transfers";
+import VoicesPage from "@/pages/voices";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -238,6 +239,7 @@ function AppRoutes() {
         <Route path="/app/api-keys" component={ApiKeysPage} />
         <Route path="/app/meta-leads" component={MetaLeadsPage} />
         <Route path="/app/transfers" component={TransfersPage} />
+        <Route path="/app/voices" component={VoicesPage} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

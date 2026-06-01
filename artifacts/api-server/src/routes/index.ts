@@ -33,6 +33,7 @@ import callTransfersRouter from "./call-transfers.js";
 import billingRouter from "./billing.js";
 import utilsRouter from "./utils.js";
 import webcallNotifyRouter from "./webcall-notify.js";
+import voicesRouter from "./voices.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
 const router: IRouter = Router();
@@ -47,6 +48,7 @@ router.use(adminPromptTemplatesRouter);
 router.use(campaignWebhookRouter);
 
 // Public utility routes — no auth required
+router.use(voicesRouter);
 router.use(utilsRouter);
 
 router.use(storageRouter);
