@@ -116,7 +116,8 @@ function amplifyPcm(buf: Buffer, gain: number): Buffer {
 
 export async function handleWebCallWebSocket(
   ws: WebSocket,
-  agentId: number
+  agentId: number,
+  callerUserId?: string,
 ): Promise<void> {
   function send(data: Record<string, unknown>) {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(data));
@@ -880,10 +881,12 @@ export async function handleWebCallWebSocket(
       // Detect "call me back in X minutes" requests from webcall users.
       // Stores userId so the callback poller can push an SSE notification instead
       // of trying to dial a phone number.
+      // Use callerUserId (the logged-in dashboard user) if provided;
+      // fall back to agent.userId (agent owner) for backward compatibility.
       void detectCallbackRequest({
         agentId,
         toNumber: webcallIdentifier,
-        userId: agent.userId ?? null,
+        userId: callerUserId ?? agent.userId ?? null,
         history,
         llm,
         callId,

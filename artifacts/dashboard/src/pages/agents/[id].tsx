@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useAuth } from "@clerk/react";
 import { Link, useParams, useLocation } from "wouter";
 import { format, parseISO } from "date-fns";
 import {
@@ -54,6 +55,7 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
   const [duration, setDuration] = useState<number | null>(null);
   const [copied, setCopied]     = useState(false);
   const { keys: keyStatus, loading: keyLoading } = useWebcallKeyStatus();
+  const { userId: callerUserId } = useAuth();
 
   const wsRef          = useRef<WebSocket | null>(null);
   const audioCtxRef    = useRef<AudioContext | null>(null);
@@ -127,7 +129,8 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
       streamRef.current = stream;
 
       const proto = location.protocol === "https:" ? "wss" : "ws";
-      const ws = new WebSocket(`${proto}://${location.host}/api/ws/webcall/${agentId}`);
+      const callerParam = callerUserId ? `?callerId=${encodeURIComponent(callerUserId)}` : "";
+      const ws = new WebSocket(`${proto}://${location.host}/api/ws/webcall/${agentId}${callerParam}`);
       ws.binaryType = "arraybuffer";
       wsRef.current = ws;
 

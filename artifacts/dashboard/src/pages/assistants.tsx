@@ -363,6 +363,7 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
   const [duration, setDuration] = useState<number | null>(null);
   const [copied, setCopied]     = useState(false);
   const [elapsed, setElapsed]   = useState(0);
+  const { userId: callerUserId } = useAuth();
 
   const wsRef          = useRef<WebSocket | null>(null);
   const audioCtxRef    = useRef<AudioContext | null>(null);
@@ -421,7 +422,8 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, sampleRate: 16000 } });
       streamRef.current = stream;
       const proto = location.protocol === "https:" ? "wss" : "ws";
-      const ws = new WebSocket(`${proto}://${location.host}/api/ws/webcall/${agentId}`);
+      const callerParam = callerUserId ? `?callerId=${encodeURIComponent(callerUserId)}` : "";
+      const ws = new WebSocket(`${proto}://${location.host}/api/ws/webcall/${agentId}${callerParam}`);
       ws.binaryType = "arraybuffer"; wsRef.current = ws;
       ws.onopen = () => {
         const AudioCtx = (window as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).AudioContext || (window as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -858,7 +860,7 @@ function getPreviewText(lang: string): string {
 
 function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number; onDeleted: () => void; initialTab?: string }) {
   const queryClient = useQueryClient();
-  const { getToken } = useAuth();
+  const { getToken, userId: callerUserId } = useAuth();
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState(initialTab ?? "overview");
