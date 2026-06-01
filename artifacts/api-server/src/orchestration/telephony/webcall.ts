@@ -907,9 +907,14 @@ export async function handleWebCallWebSocket(
       return;
     }
 
-    // Record every frame from the caller's microphone (captures full timeline
-    // including silence, maintaining alignment with the agent track)
-    recording.addCallerChunk(data as Buffer);
+    // Record caller audio only when the agent is NOT speaking.
+    // When the agent is speaking, the agent-chunk loop already pads the caller
+    // track with silence (same length as each TTS chunk), so both tracks stay
+    // perfectly aligned without this call. Adding caller frames here *during*
+    // agent speech would interleave silence blocks into the agent track every
+    // time a mic frame arrives — causing the "on and off" dropouts heard in
+    // call recordings.
+    if (!speaking) recording.addCallerChunk(data as Buffer);
 
     // Feed all frames to gender detector (browser sends 16 kHz → downsample to 8 kHz)
     if (genderDetector) genderDetector.addSpeechChunk(downsample16to8(data as Buffer));
