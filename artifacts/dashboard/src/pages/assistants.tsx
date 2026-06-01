@@ -1358,14 +1358,32 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                       <p className="text-[10px] text-muted-foreground/60 mb-1">Voice</p>
                       <div className="flex gap-1.5">
                         <Select value={ttsVoice || ARUSHI_VOICE.id} onValueChange={v => { setTtsVoice(v); setDirty(true); }}>
-                          <SelectTrigger className="h-8 text-xs border flex-1"><SelectValue placeholder="Select voice" /></SelectTrigger>
+                          <SelectTrigger className="h-8 text-xs border flex-1">
+                            {(() => {
+                              const selectedVoice = cartesiaVoices.find(v => v.id === (ttsVoice || ARUSHI_VOICE.id));
+                              if (!selectedVoice) return <SelectValue placeholder="Select voice" />;
+                              return (
+                                <span className="flex items-center gap-1.5">
+                                  {selectedVoice.name}
+                                  <span className="text-[9px] px-1 py-0.5 rounded bg-muted border border-border/60 text-muted-foreground">{langLabel(selectedVoice.language)}</span>
+                                </span>
+                              );
+                            })()}
+                          </SelectTrigger>
                           <SelectContent className="bg-card border-border max-h-60">
-                            {cartesiaVoices.map(v => <SelectItem key={v.id} value={v.id} className="text-foreground text-xs">{v.name}</SelectItem>)}
+                            {cartesiaVoices.map(v => (
+                              <SelectItem key={v.id} value={v.id} className="text-foreground text-xs">
+                                <span className="flex items-center gap-1.5">
+                                  {v.name}
+                                  <span className="text-[9px] px-1 py-0.5 rounded bg-muted border border-border/60 text-muted-foreground">{langLabel(v.language)}</span>
+                                </span>
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                         <button type="button" onClick={() => void previewVoice(ttsVoice || ARUSHI_VOICE.id)}
                           className="h-8 w-8 shrink-0 flex items-center justify-center rounded-md border border-border bg-elevated hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
-                          {voicePlaying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Volume2 className="h-3.5 w-3.5" />}
+                          {voicePlaying === (ttsVoice || ARUSHI_VOICE.id) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Volume2 className="h-3.5 w-3.5" />}
                         </button>
                       </div>
                     </div>
@@ -1381,6 +1399,49 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                       </Select>
                     </div>
                   )}
+                  {/* Cost & Latency */}
+                  {(() => {
+                    if (!asrProvider || !llmProvider || !ttsProvider || !telephony) return null;
+                    const cost = computePipelineCost(asrProvider, llmProvider, llmModel, ttsProvider, telephony);
+                    const a = agent as unknown as Record<string, unknown>;
+                    const hasLatency = a?.avgSttLatencyMs != null || a?.avgLlmLatencyMs != null || a?.avgTtsFirstChunkMs != null;
+                    const sttMs = (a?.avgSttLatencyMs as number) ?? 0;
+                    const llmMs = (a?.avgLlmLatencyMs as number) ?? 0;
+                    const ttsMs = (a?.avgTtsFirstChunkMs as number) ?? 0;
+                    const totalMs = sttMs + llmMs + ttsMs;
+                    return (
+                      <div className="pt-2 border-t border-border/60 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50">Cost</span>
+                          <span className="text-[11px] font-bold text-foreground tabular-nums">~${cost.totalPerMin.toFixed(2)}<span className="text-[9px] font-normal text-muted-foreground ml-0.5">/min</span></span>
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {(["asr", "llm", "tts", "telephony", "platform"] as const).map((k) => (
+                            <span key={k} className="text-[9px] text-muted-foreground/60 flex items-center gap-0.5">
+                              <span className="w-1 h-1 rounded-full bg-muted-foreground/30 inline-block" />
+                              {k === "telephony" ? "Tel" : k === "platform" ? "Fee" : k.toUpperCase()} ${cost[k].costPerMin.toFixed(3)}
+                            </span>
+                          ))}
+                        </div>
+                        {hasLatency && (
+                          <>
+                            <div className="flex items-center justify-between">
+                              <span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50">Latency</span>
+                              <span className="text-[11px] font-bold text-foreground tabular-nums">
+                                {totalMs >= 1000 ? `~${(totalMs / 1000).toFixed(1)}s` : `~${Math.round(totalMs)}ms`}
+                                <span className="text-[9px] font-normal text-muted-foreground ml-0.5">e2e</span>
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {sttMs > 0 && <span className="text-[9px] text-muted-foreground/60">STT {sttMs}ms</span>}
+                              {llmMs > 0 && <span className="text-[9px] text-muted-foreground/60">LLM {llmMs}ms</span>}
+                              {ttsMs > 0 && <span className="text-[9px] text-muted-foreground/60">TTS {ttsMs}ms</span>}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
                 {/* Card 4 — Pipeline */}
                 <div className="bg-card border border-border rounded-2xl p-4">
@@ -1527,10 +1588,28 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                         const displayVoices = filtered.length > 0 ? filtered : cartesiaVoices;
                         return (
                           <Select value={ttsVoice || ARUSHI_VOICE.id} onValueChange={v => { setTtsVoice(v); setDirty(true); }}>
-                            <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground flex-1"><SelectValue placeholder={loadingCartesiaVoices ? "Loading voices…" : "Select voice"} /></SelectTrigger>
+                            <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground flex-1">
+                              {(() => {
+                                const selectedVoice = cartesiaVoices.find(v => v.id === (ttsVoice || ARUSHI_VOICE.id));
+                                if (!selectedVoice) return <SelectValue placeholder={loadingCartesiaVoices ? "Loading voices…" : "Select voice"} />;
+                                return (
+                                  <span className="flex items-center gap-1.5">
+                                    {selectedVoice.name}
+                                    <span className="text-[9px] px-1 py-0.5 rounded bg-muted border border-border/60 text-muted-foreground">{langLabel(selectedVoice.language)}</span>
+                                  </span>
+                                );
+                              })()}
+                            </SelectTrigger>
                             <SelectContent className="bg-card border-border max-h-72">
                               {loadingCartesiaVoices ? <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Loading…</div>
-                                : displayVoices.map(v => <SelectItem key={v.id} value={v.id} className="text-foreground text-xs">{v.name} · {langLabel(v.language)}</SelectItem>)}
+                                : displayVoices.map(v => (
+                                  <SelectItem key={v.id} value={v.id} className="text-foreground text-xs">
+                                    <span className="flex items-center gap-1.5">
+                                      {v.name}
+                                      <span className="text-[9px] px-1 py-0.5 rounded bg-muted border border-border/60 text-muted-foreground">{langLabel(v.language)}</span>
+                                    </span>
+                                  </SelectItem>
+                                ))}
                             </SelectContent>
                           </Select>
                         );
@@ -1850,10 +1929,28 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                         <p className="text-xs text-muted-foreground mb-1">Voice</p>
                         <div className="flex gap-2">
                           <Select value={ttsVoice || ARUSHI_VOICE.id} onValueChange={v => { setTtsVoice(v); setDirty(true); }}>
-                            <SelectTrigger className="h-7 text-xs bg-muted border-border text-foreground flex-1"><SelectValue placeholder="Select voice" /></SelectTrigger>
+                            <SelectTrigger className="h-7 text-xs bg-muted border-border text-foreground flex-1">
+                              {(() => {
+                                const selectedVoice = cartesiaVoices.find(v => v.id === (ttsVoice || ARUSHI_VOICE.id));
+                                if (!selectedVoice) return <SelectValue placeholder="Select voice" />;
+                                return (
+                                  <span className="flex items-center gap-1.5">
+                                    {selectedVoice.name}
+                                    <span className="text-[9px] px-1 py-0.5 rounded bg-muted border border-border/60 text-muted-foreground">{langLabel(selectedVoice.language)}</span>
+                                  </span>
+                                );
+                              })()}
+                            </SelectTrigger>
                             <SelectContent className="bg-card border-border max-h-72">
                               {loadingCartesiaVoices ? <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Loading…</div>
-                                : cartesiaVoices.map(v => <SelectItem key={v.id} value={v.id} className="text-foreground text-xs">{v.name} · {langLabel(v.language)}</SelectItem>)}
+                                : cartesiaVoices.map(v => (
+                                  <SelectItem key={v.id} value={v.id} className="text-foreground text-xs">
+                                    <span className="flex items-center gap-1.5">
+                                      {v.name}
+                                      <span className="text-[9px] px-1 py-0.5 rounded bg-muted border border-border/60 text-muted-foreground">{langLabel(v.language)}</span>
+                                    </span>
+                                  </SelectItem>
+                                ))}
                             </SelectContent>
                           </Select>
                           <button type="button" onClick={() => void previewVoice(ttsVoice || ARUSHI_VOICE.id)}
