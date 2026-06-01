@@ -253,6 +253,32 @@ export async function listConnectionCalendars(connectionId: string): Promise<Arr
  * Create a Google Calendar event with a Meet link on the specified connection.
  * Returns null if the connection is missing or the API call fails.
  */
+/**
+ * Collect, dedupe and normalize host attendee emails (primary + additional),
+ * excluding the attendee's own email to avoid duplicate attendees.
+ */
+function hostAttendeeEmails(
+  hostEmail: string | null | undefined,
+  additionalHosts: string[] | null | undefined,
+  attendeeEmail?: string,
+): string[] {
+  const all: string[] = [];
+  if (hostEmail) all.push(hostEmail);
+  if (additionalHosts) all.push(...additionalHosts);
+  const seen = new Set<string>();
+  if (attendeeEmail) seen.add(attendeeEmail.trim().toLowerCase());
+  const out: string[] = [];
+  for (const raw of all) {
+    const e = raw.trim();
+    if (!e) continue;
+    const key = e.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(e);
+  }
+  return out;
+}
+
 export async function createCalendarEvent(params: {
   connectionId: string;
   summary: string;
@@ -263,6 +289,7 @@ export async function createCalendarEvent(params: {
   attendeeName: string;
   timezone: string;
   hostEmail?: string | null;
+  additionalHosts?: string[] | null;
 }): Promise<{ meetLink: string | null; eventId: string } | null> {
   const tokens = await getValidAccessToken(params.connectionId);
   if (!tokens) return null;
@@ -275,7 +302,9 @@ export async function createCalendarEvent(params: {
   const attendees: { email: string; displayName?: string }[] = [
     { email: params.attendeeEmail, displayName: params.attendeeName },
   ];
-  if (params.hostEmail) attendees.push({ email: params.hostEmail });
+  for (const email of hostAttendeeEmails(params.hostEmail, params.additionalHosts, params.attendeeEmail)) {
+    attendees.push({ email });
+  }
 
   try {
     const event = await calendar.events.insert({
@@ -336,6 +365,7 @@ export async function updateCalendarEvent(params: {
   attendeeName?: string;
   timezone?: string;
   hostEmail?: string | null;
+  additionalHosts?: string[] | null;
 }): Promise<{ meetLink: string | null; eventId: string } | null> {
   const tokens = await getValidAccessToken(params.connectionId);
   if (!tokens) return null;
@@ -357,7 +387,9 @@ export async function updateCalendarEvent(params: {
     const attendees: { email: string; displayName?: string }[] = [
       { email: params.attendeeEmail, displayName: params.attendeeName },
     ];
-    if (params.hostEmail) attendees.push({ email: params.hostEmail });
+    for (const email of hostAttendeeEmails(params.hostEmail, params.additionalHosts, params.attendeeEmail)) {
+      attendees.push({ email });
+    }
     requestBody["attendees"] = attendees;
   }
 

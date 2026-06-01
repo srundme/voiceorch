@@ -10,6 +10,7 @@ interface BookingEmailData {
   timezone: string;
   hostName?: string;
   hostEmail?: string | null;
+  additionalHosts?: string[] | null;
   bookingId: number;
   notes?: string | null;
   meetLink?: string | null;
@@ -53,6 +54,24 @@ function buildEmailContent(subject: string, body: string): { subject: string; te
     text: body,
     html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#1a1a1a">${htmlBody}<hr style="margin-top:24px;border:none;border-top:1px solid #e5e7eb"/><p style="color:#888;font-size:12px;margin-top:12px">Powered by VoiceOrch Scheduling</p></div>`,
   };
+}
+
+/** Collect, dedupe and normalize the full host recipient list (primary + additional). */
+function hostRecipients(data: { hostEmail?: string | null; additionalHosts?: string[] | null }): string[] {
+  const all: string[] = [];
+  if (data.hostEmail) all.push(data.hostEmail);
+  if (data.additionalHosts) all.push(...data.additionalHosts);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of all) {
+    const e = raw.trim();
+    if (!e) continue;
+    const key = e.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(e);
+  }
+  return out;
 }
 
 async function sendToAll(
@@ -103,10 +122,11 @@ Booking Reference: #${data.bookingId}${selfServiceLines}
 
 We look forward to speaking with you!`;
 
+  const hosts = hostRecipients(data);
   const content = buildEmailContent(`Appointment Confirmed: ${data.eventTypeName}`, attendeeBody);
-  await sendToAll(transporter, data.attendeeEmail, data.hostEmail, content, data.bookingId, "created");
+  await sendToAll(transporter, data.attendeeEmail, hosts.join(", ") || null, content, data.bookingId, "created");
 
-  if (data.hostEmail) {
+  if (hosts.length > 0) {
     const hostBody = `New booking received.
 
 Attendee: ${data.attendeeName} (${data.attendeeEmail})
@@ -116,7 +136,7 @@ Date & Time: ${from} – ${to} (${data.timezone})${meetLine}${data.notes ? `\nNo
 Booking Reference: #${data.bookingId}`;
 
     const hostContent = buildEmailContent(`New Booking: ${data.attendeeName} — ${data.eventTypeName}`, hostBody);
-    await sendToAll(transporter, data.hostEmail, null, hostContent, data.bookingId, "created-host");
+    await sendToAll(transporter, hosts.join(", "), null, hostContent, data.bookingId, "created-host");
   }
 }
 
@@ -138,7 +158,7 @@ Booking Reference: #${data.bookingId}
 See you then!`;
 
   const content = buildEmailContent(`Appointment Confirmed: ${data.eventTypeName}`, body);
-  await sendToAll(transporter, data.attendeeEmail, data.hostEmail, content, data.bookingId, "confirmed");
+  await sendToAll(transporter, data.attendeeEmail, hostRecipients(data).join(", ") || null, content, data.bookingId, "confirmed");
 }
 
 export async function sendBookingCancelledEmail(data: BookingEmailData): Promise<void> {
@@ -158,7 +178,8 @@ If you have any questions, please reach out.`;
   const content = buildEmailContent(`Appointment Cancelled: ${data.eventTypeName}`, attendeeBody);
   await sendToAll(transporter, data.attendeeEmail, null, content, data.bookingId, "cancelled-attendee");
 
-  if (data.hostEmail) {
+  const hosts = hostRecipients(data);
+  if (hosts.length > 0) {
     const hostBody = `A booking has been cancelled.
 
 Attendee: ${data.attendeeName} (${data.attendeeEmail})
@@ -167,7 +188,7 @@ Originally scheduled: ${from} (${data.timezone})
 Booking Reference: #${data.bookingId}`;
 
     const hostContent = buildEmailContent(`Booking Cancelled: ${data.attendeeName} — ${data.eventTypeName}`, hostBody);
-    await sendToAll(transporter, data.hostEmail, null, hostContent, data.bookingId, "cancelled-host");
+    await sendToAll(transporter, hosts.join(", "), null, hostContent, data.bookingId, "cancelled-host");
   }
 }
 
@@ -197,7 +218,8 @@ If you did not request this change, please contact us.`;
   const content = buildEmailContent(`Appointment Rescheduled: ${data.eventTypeName}`, attendeeBody);
   await sendToAll(transporter, data.attendeeEmail, null, content, data.bookingId, "rescheduled-attendee");
 
-  if (data.hostEmail) {
+  const hosts = hostRecipients(data);
+  if (hosts.length > 0) {
     const hostBody = `A booking has been rescheduled.
 
 Attendee: ${data.attendeeName} (${data.attendeeEmail})
@@ -207,6 +229,6 @@ New Date & Time: ${from} – ${to} (${data.timezone})${meetLine}
 Booking Reference: #${data.bookingId}`;
 
     const hostContent = buildEmailContent(`Booking Rescheduled: ${data.attendeeName} — ${data.eventTypeName}`, hostBody);
-    await sendToAll(transporter, data.hostEmail, null, hostContent, data.bookingId, "rescheduled-host");
+    await sendToAll(transporter, hosts.join(", "), null, hostContent, data.bookingId, "rescheduled-host");
   }
 }

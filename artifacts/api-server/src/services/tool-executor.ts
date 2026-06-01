@@ -15,6 +15,11 @@ import {
   sendBookingCancelledEmail,
   sendBookingRescheduledEmail,
 } from "./scheduling/notifications.js";
+import {
+  createCalendarEvent,
+  deleteCalendarEvent,
+  getFirstConnectionForUser,
+} from "./scheduling/google-calendar.js";
 import { dispatchSchedulingWebhooks } from "../routes/scheduling/webhooks.js";
 import type { AgentTool, ToolDefinition } from "../orchestration/types.js";
 import { logger } from "../lib/logger.js";
@@ -273,6 +278,44 @@ export async function executeNativeBooking(
     const dateStr = format(slotStart, "EEEE, MMMM do 'at' h:mm a");
     logger.info({ callId, bookingId: booking.id, slotStart, attendeeEmail }, "Native booking created");
 
+    // Create Google Calendar event with Meet link (best-effort, non-blocking)
+    let meetLink: string | null = null;
+    let googleEventId: string | null = null;
+    try {
+      const calRow = await db.execute(
+        sql`SELECT google_calendar_connection_id FROM scheduling_calendars WHERE id = ${calendar.id}`,
+      );
+      const calendarConnectionId = (calRow.rows[0] as { google_calendar_connection_id?: string | null })
+        ?.google_calendar_connection_id ?? null;
+      const connectionId = calendarConnectionId ?? (await getFirstConnectionForUser(calendar.userId))?.id ?? null;
+
+      const gcalResult = connectionId
+        ? await createCalendarEvent({
+            connectionId,
+            summary: `${eventType.name} — ${booking.attendeeName}`,
+            description: booking.attendeeNotes ?? undefined,
+            startTime: booking.slotStart,
+            endTime: booking.slotEnd,
+            attendeeEmail: booking.attendeeEmail,
+            attendeeName: booking.attendeeName,
+            timezone: calendar.timezone,
+            hostEmail: calendar.hostEmail,
+            additionalHosts: calendar.additionalHosts,
+          })
+        : null;
+      if (gcalResult) {
+        meetLink = gcalResult.meetLink;
+        googleEventId = gcalResult.eventId;
+        if (meetLink || googleEventId) {
+          await db.execute(
+            sql`UPDATE bookings SET meet_link = ${meetLink}, google_event_id = ${googleEventId} WHERE id = ${booking.id}`,
+          );
+        }
+      }
+    } catch (err) {
+      logger.warn({ callId, bookingId: booking.id, err }, "Native booking: Google Calendar event creation failed");
+    }
+
     void sendBookingCreatedEmail({
       attendeeName: booking.attendeeName,
       attendeeEmail: booking.attendeeEmail,
@@ -280,8 +323,11 @@ export async function executeNativeBooking(
       slotStart: booking.slotStart,
       slotEnd: booking.slotEnd,
       timezone: calendar.timezone,
+      hostEmail: calendar.hostEmail,
+      additionalHosts: calendar.additionalHosts,
       bookingId: booking.id,
       notes: booking.attendeeNotes,
+      meetLink,
     });
     void dispatchSchedulingWebhooks(calendar.userId, "scheduling.booking.created", {
       booking: {
@@ -291,6 +337,8 @@ export async function executeNativeBooking(
         cancelledAt: booking.cancelledAt?.toISOString() ?? null,
         createdAt: booking.createdAt.toISOString(),
         updatedAt: booking.updatedAt.toISOString(),
+        meetLink,
+        googleEventId,
       },
     });
 
@@ -516,6 +564,48 @@ export async function executeNativeReschedule(
     const dateStr = format(newStart, "EEEE, MMMM do 'at' h:mm a");
     logger.info({ callId, oldBookingId: bookingId, newBookingId: newBooking.id }, "Native reschedule complete");
 
+    // Google Calendar sync: delete the old event, create a new one with a Meet link (best-effort)
+    let meetLink: string | null = null;
+    try {
+      const oldGcalRow = await db.execute(
+        sql`SELECT google_event_id FROM bookings WHERE id = ${bookingId}`,
+      );
+      const existingGoogleEventId = (oldGcalRow.rows[0] as { google_event_id?: string | null })
+        ?.google_event_id ?? null;
+      const calRow = await db.execute(
+        sql`SELECT google_calendar_connection_id FROM scheduling_calendars WHERE id = ${calendar.id}`,
+      );
+      const calendarConnectionId = (calRow.rows[0] as { google_calendar_connection_id?: string | null })
+        ?.google_calendar_connection_id ?? null;
+      const connectionId = calendarConnectionId ?? (await getFirstConnectionForUser(calendar.userId))?.id ?? null;
+
+      if (existingGoogleEventId && connectionId) {
+        await deleteCalendarEvent(connectionId, existingGoogleEventId);
+      }
+      if (connectionId) {
+        const gcalResult = await createCalendarEvent({
+          connectionId,
+          summary: `${eventType.name} — ${newBooking.attendeeName}`,
+          description: newBooking.attendeeNotes ?? undefined,
+          startTime: newBooking.slotStart,
+          endTime: newBooking.slotEnd,
+          attendeeEmail: newBooking.attendeeEmail,
+          attendeeName: newBooking.attendeeName,
+          timezone: calendar.timezone,
+          hostEmail: calendar.hostEmail,
+          additionalHosts: calendar.additionalHosts,
+        });
+        if (gcalResult) {
+          meetLink = gcalResult.meetLink;
+          await db.execute(
+            sql`UPDATE bookings SET meet_link = ${gcalResult.meetLink}, google_event_id = ${gcalResult.eventId} WHERE id = ${newBooking.id}`,
+          );
+        }
+      }
+    } catch (err) {
+      logger.warn({ callId, bookingId: newBooking.id, err }, "Native reschedule: Google Calendar sync failed");
+    }
+
     void sendBookingRescheduledEmail({
       attendeeName: newBooking.attendeeName,
       attendeeEmail: newBooking.attendeeEmail,
@@ -523,8 +613,11 @@ export async function executeNativeReschedule(
       slotStart: newBooking.slotStart,
       slotEnd: newBooking.slotEnd,
       timezone: calendar.timezone,
+      hostEmail: calendar.hostEmail,
+      additionalHosts: calendar.additionalHosts,
       bookingId: newBooking.id,
       notes: newBooking.attendeeNotes,
+      meetLink,
       oldSlotStart: existing.slotStart,
     });
     void dispatchSchedulingWebhooks(calendar.userId, "scheduling.booking.rescheduled", {
@@ -615,6 +708,29 @@ export async function executeNativeCancel(
     logger.info({ callId, bookingId }, "Native cancel complete");
 
     if (eventType && calendar) {
+      // Delete the Google Calendar event (best-effort, non-blocking)
+      void (async () => {
+        try {
+          const gcalRow = await db.execute(
+            sql`SELECT google_event_id FROM bookings WHERE id = ${bookingId}`,
+          );
+          const existingGoogleEventId = (gcalRow.rows[0] as { google_event_id?: string | null })
+            ?.google_event_id ?? null;
+          if (!existingGoogleEventId) return;
+          const calRow = await db.execute(
+            sql`SELECT google_calendar_connection_id FROM scheduling_calendars WHERE id = ${calendar.id}`,
+          );
+          const calendarConnectionId = (calRow.rows[0] as { google_calendar_connection_id?: string | null })
+            ?.google_calendar_connection_id ?? null;
+          const connectionId = calendarConnectionId ?? (await getFirstConnectionForUser(calendar.userId))?.id ?? null;
+          if (connectionId) {
+            await deleteCalendarEvent(connectionId, existingGoogleEventId);
+          }
+        } catch (err) {
+          logger.warn({ callId, bookingId, err }, "Native cancel: Google Calendar event deletion failed");
+        }
+      })();
+
       void sendBookingCancelledEmail({
         attendeeName: existing.attendeeName,
         attendeeEmail: existing.attendeeEmail,
@@ -622,6 +738,8 @@ export async function executeNativeCancel(
         slotStart: existing.slotStart,
         slotEnd: existing.slotEnd,
         timezone: calendar.timezone,
+        hostEmail: calendar.hostEmail,
+        additionalHosts: calendar.additionalHosts,
         bookingId: existing.id,
         notes: existing.attendeeNotes,
       });

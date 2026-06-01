@@ -226,6 +226,7 @@ router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
       attendeeName: booking.attendeeName,
       timezone: calendar.timezone,
       hostEmail: calendar.hostEmail,
+      additionalHosts: calendar.additionalHosts,
     }) : null;
     if (gcalResult) {
       meetLink = gcalResult.meetLink;
@@ -252,6 +253,8 @@ router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
     slotStart: booking.slotStart,
     slotEnd: booking.slotEnd,
     timezone: calendar.timezone,
+    hostEmail: calendar.hostEmail,
+    additionalHosts: calendar.additionalHosts,
     bookingId: booking.id,
     notes: booking.attendeeNotes,
     meetLink,
@@ -380,6 +383,7 @@ router.post("/scheduling/public/bookings/cancel", async (req, res): Promise<void
     slotEnd: cancelled.slotEnd,
     timezone: calendar?.timezone ?? "UTC",
     hostEmail: calendar?.hostEmail,
+    additionalHosts: calendar?.additionalHosts,
     bookingId: cancelled.id,
   });
 
@@ -536,6 +540,7 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
           attendeeName: newBooking.attendeeName,
           timezone: calendar.timezone,
           hostEmail: calendar.hostEmail,
+          additionalHosts: calendar.additionalHosts,
         });
         if (gcalResult) {
           await db.execute(
@@ -561,6 +566,7 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
     slotEnd: newBooking.slotEnd,
     timezone: calendar.timezone,
     hostEmail: calendar.hostEmail,
+    additionalHosts: calendar.additionalHosts,
     bookingId: newBooking.id,
     oldSlotStart: booking.slotStart,
     cancelLink: newCancelLink,

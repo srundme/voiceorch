@@ -4499,6 +4499,11 @@ components:
           type: string
         hostEmail:
           type: ["string", "null"]
+        additionalHosts:
+          type: ["array", "null"]
+          items:
+            type: string
+          description: Additional host/organizer email addresses notified on every booking and added as calendar attendees
         isActive:
           type: boolean
         createdAt:
@@ -4520,6 +4525,10 @@ components:
           type: string
         hostEmail:
           type: ["string", "null"]
+        additionalHosts:
+          type: ["array", "null"]
+          items:
+            type: string
         isActive:
           type: boolean
           default: true
@@ -4533,6 +4542,10 @@ components:
           type: string
         hostEmail:
           type: ["string", "null"]
+        additionalHosts:
+          type: ["array", "null"]
+          items:
+            type: string
         isActive:
           type: boolean
 

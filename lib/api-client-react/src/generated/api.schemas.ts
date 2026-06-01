@@ -1478,6 +1478,11 @@ export interface SchedulingCalendar {
   timezone: string;
   /** @nullable */
   hostEmail?: string | null;
+  /**
+     * Additional host/organizer email addresses notified on every booking and added as calendar attendees
+     * @nullable
+     */
+  additionalHosts?: string[] | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -1489,6 +1494,8 @@ export interface SchedulingCalendarInput {
   timezone: string;
   /** @nullable */
   hostEmail?: string | null;
+  /** @nullable */
+  additionalHosts?: string[] | null;
   isActive?: boolean;
 }
 
@@ -1497,6 +1504,8 @@ export interface SchedulingCalendarUpdate {
   timezone?: string;
   /** @nullable */
   hostEmail?: string | null;
+  /** @nullable */
+  additionalHosts?: string[] | null;
   isActive?: boolean;
 }
 

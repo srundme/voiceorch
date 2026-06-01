@@ -185,6 +185,7 @@ router.post("/scheduling/bookings", requireAuth, async (req, res): Promise<void>
       attendeeName: booking.attendeeName,
       timezone: calendar.timezone,
       hostEmail: calendar.hostEmail,
+      additionalHosts: calendar.additionalHosts,
     }) : null;
     if (gcalResult) {
       meetLink = gcalResult.meetLink;
@@ -205,6 +206,7 @@ router.post("/scheduling/bookings", requireAuth, async (req, res): Promise<void>
     slotEnd: booking.slotEnd,
     timezone: calendar.timezone,
     hostEmail: calendar.hostEmail,
+    additionalHosts: calendar.additionalHosts,
     bookingId: booking.id,
     notes: booking.attendeeNotes,
     meetLink,
@@ -368,6 +370,7 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
             attendeeName: newBooking.attendeeName,
             timezone: calendar?.timezone ?? "UTC",
             hostEmail: calendar?.hostEmail,
+            additionalHosts: calendar?.additionalHosts,
           });
           if (gcalResult) {
             await db.execute(
@@ -386,6 +389,7 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
       slotEnd: newBooking.slotEnd,
       timezone: calendar?.timezone ?? "UTC",
       hostEmail: calendar?.hostEmail,
+      additionalHosts: calendar?.additionalHosts,
       bookingId: newBooking.id,
       oldSlotStart: existing.slotStart,
     });
@@ -437,6 +441,7 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
       slotEnd: row.slotEnd,
       timezone: calendar?.timezone ?? "UTC",
       hostEmail: calendar?.hostEmail,
+      additionalHosts: calendar?.additionalHosts,
       bookingId: row.id,
     });
   } else if (webhookEvent === "scheduling.booking.confirmed") {
@@ -448,6 +453,7 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
       slotEnd: row.slotEnd,
       timezone: calendar?.timezone ?? "UTC",
       hostEmail: calendar?.hostEmail,
+      additionalHosts: calendar?.additionalHosts,
       bookingId: row.id,
     });
   }

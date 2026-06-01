@@ -86,11 +86,12 @@ type FormState = {
   name: string;
   timezone: string;
   hostEmail: string;
+  additionalHosts: string[];
   isActive: boolean;
 };
 
 function defaultForm(): FormState {
-  return { agentId: "", name: "My Calendar", timezone: "UTC", hostEmail: "", isActive: true };
+  return { agentId: "", name: "My Calendar", timezone: "UTC", hostEmail: "", additionalHosts: [], isActive: true };
 }
 
 function CalendarFormDialog({
@@ -110,12 +111,28 @@ function CalendarFormDialog({
 
   const [form, setForm] = useState<FormState>(() =>
     editing
-      ? { agentId: String(editing.agentId), name: editing.name, timezone: editing.timezone, hostEmail: editing.hostEmail ?? "", isActive: editing.isActive }
+      ? { agentId: String(editing.agentId), name: editing.name, timezone: editing.timezone, hostEmail: editing.hostEmail ?? "", additionalHosts: editing.additionalHosts ?? [], isActive: editing.isActive }
       : defaultForm()
   );
 
   function set<K extends keyof FormState>(k: K, v: FormState[K]) {
     setForm(f => ({ ...f, [k]: v }));
+  }
+
+  function setAdditionalHost(index: number, value: string) {
+    setForm(f => {
+      const next = [...f.additionalHosts];
+      next[index] = value;
+      return { ...f, additionalHosts: next };
+    });
+  }
+
+  function addAdditionalHost() {
+    setForm(f => ({ ...f, additionalHosts: [...f.additionalHosts, ""] }));
+  }
+
+  function removeAdditionalHost(index: number) {
+    setForm(f => ({ ...f, additionalHosts: f.additionalHosts.filter((_, i) => i !== index) }));
   }
 
   async function submit() {
@@ -127,11 +144,12 @@ function CalendarFormDialog({
     }
     try {
       const hostEmail = form.hostEmail.trim() || null;
+      const additionalHosts = form.additionalHosts.map(h => h.trim()).filter(Boolean);
       if (editing) {
-        await update.mutateAsync({ id: editing.id, data: { name: form.name, timezone: form.timezone, hostEmail, isActive: form.isActive } });
+        await update.mutateAsync({ id: editing.id, data: { name: form.name, timezone: form.timezone, hostEmail, additionalHosts, isActive: form.isActive } });
         toast({ title: "Calendar updated" });
       } else {
-        await create.mutateAsync({ data: { agentId: parseInt(form.agentId), name: form.name, timezone: form.timezone, hostEmail, isActive: form.isActive } });
+        await create.mutateAsync({ data: { agentId: parseInt(form.agentId), name: form.name, timezone: form.timezone, hostEmail, additionalHosts, isActive: form.isActive } });
         toast({ title: "Calendar created" });
       }
       await qc.invalidateQueries({ queryKey: getListCalendarsQueryKey() });
@@ -212,6 +230,43 @@ function CalendarFormDialog({
             />
             <p className="text-xs text-muted-foreground">
               When set, a separate notification email is sent to this address on every booking, cancellation, and reschedule.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Additional hosts</Label>
+            <div className="space-y-2">
+              {form.additionalHosts.map((host, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <Input
+                    type="email"
+                    value={host}
+                    onChange={e => setAdditionalHost(i, e.target.value)}
+                    placeholder="cohost@example.com"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
+                    onClick={() => removeAdditionalHost(i)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={addAdditionalHost}
+              >
+                <Plus className="h-3.5 w-3.5" /> Add host
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Extra hosts are emailed and added as attendees (with the Google Meet link) on every booking, cancellation, and reschedule.
             </p>
           </div>
 
@@ -309,6 +364,11 @@ function CalendarCard({
                 <span className="text-xs text-muted-foreground flex items-center gap-1">
                   <Mail className="h-3 w-3" />
                   {calendar.hostEmail}
+                </span>
+              )}
+              {calendar.additionalHosts && calendar.additionalHosts.length > 0 && (
+                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  +{calendar.additionalHosts.length} host{calendar.additionalHosts.length === 1 ? "" : "s"}
                 </span>
               )}
               <span className="text-xs text-muted-foreground">
