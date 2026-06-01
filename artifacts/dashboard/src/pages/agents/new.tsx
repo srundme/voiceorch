@@ -399,7 +399,7 @@ export default function AgentNew() {
       onSuccess: (agent) => {
         queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
         toast({ title: "Agent Created", description: "Your new voice agent has been created." });
-        setLocation(`/agents/${agent.id}`);
+        setLocation(`/app/agents/${agent.id}`);
       },
       onError: (err: unknown) => {
         const fieldErrors = mapApiErrors(err);

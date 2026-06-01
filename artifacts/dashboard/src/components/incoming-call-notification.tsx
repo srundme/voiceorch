@@ -34,7 +34,7 @@ export function IncomingCallNotification() {
 
   const accept = useCallback((agentId: number) => {
     dismiss();
-    navigate(`/agents/${agentId}?tab=test`);
+    navigate(`/app/agents/${agentId}?tab=test`);
   }, [dismiss, navigate]);
 
   useEffect(() => {

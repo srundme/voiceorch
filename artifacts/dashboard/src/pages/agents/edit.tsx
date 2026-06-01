@@ -263,7 +263,7 @@ export default function AgentEdit() {
           queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
           queryClient.invalidateQueries({ queryKey: getGetAgentQueryKey(id) });
           toast({ title: "Agent updated", description: "Changes saved successfully." });
-          setLocation(`/agents/${id}`);
+          setLocation(`/app/agents/${id}`);
         },
         onError: (err: unknown) => {
           const fieldErrors = mapApiErrors(err);
@@ -298,7 +298,7 @@ export default function AgentEdit() {
   return (
     <div className="flex-1 space-y-6 p-6 md:p-8 pt-6 max-w-5xl mx-auto h-full flex flex-col">
       <div className="flex items-center gap-4">
-        <Link href={`/agents/${id}`}>
+        <Link href={`/app/agents/${id}`}>
           <Button variant="outline" size="icon" className="h-8 w-8">
             <ArrowLeft className="h-4 w-4" />
           </Button>
@@ -941,7 +941,7 @@ export default function AgentEdit() {
 
           <div className="fixed bottom-0 left-0 md:left-64 right-0 p-4 bg-background/80 backdrop-blur-sm border-t border-border flex justify-end z-10">
             <div className="max-w-5xl mx-auto w-full flex justify-end gap-4">
-              <Link href={`/agents/${id}`}><Button type="button" variant="outline">Cancel</Button></Link>
+              <Link href={`/app/agents/${id}`}><Button type="button" variant="outline">Cancel</Button></Link>
               <Button type="submit" disabled={updateAgent.isPending}>
                 <Save className="mr-2 h-4 w-4" />
                 {updateAgent.isPending ? "Saving…" : "Save Changes"}

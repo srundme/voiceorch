@@ -314,7 +314,7 @@ function GeneralTab() {
             {
               done: (agents?.length ?? 0) > 0,
               label: "At least one agent created",
-              action: { label: "Create agent", href: "/agents/new" },
+              action: { label: "Create agent", href: "/app/agents/new" },
             },
           ].map((item, i) => (
             <div key={i} className="flex items-center justify-between gap-3 py-2 border-b border-border/40 last:border-0">

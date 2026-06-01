@@ -210,13 +210,13 @@ export default function AgentsList() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-48">
                         <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <Link href={`/agents/${agent.id}`}>
+                        <Link href={`/app/agents/${agent.id}`}>
                           <DropdownMenuItem className="cursor-pointer">
                             <Settings2 className="mr-2 h-4 w-4" />
                             View Details
                           </DropdownMenuItem>
                         </Link>
-                        <Link href={`/agents/${agent.id}/edit`}>
+                        <Link href={`/app/agents/${agent.id}/edit`}>
                           <DropdownMenuItem className="cursor-pointer">
                             <Pencil className="mr-2 h-4 w-4" />
                             Edit Agent
@@ -316,7 +316,7 @@ export default function AgentsList() {
       <CreateAgentWizard
         open={wizardOpen}
         onClose={() => setWizardOpen(false)}
-        onCreated={(id) => { setWizardOpen(false); navigate(`/agents/${id}`); }}
+        onCreated={(id) => { setWizardOpen(false); navigate(`/app/agents/${id}`); }}
       />
 
       <DestinationOtpDialog
