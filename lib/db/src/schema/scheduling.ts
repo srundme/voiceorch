@@ -113,6 +113,8 @@ export const bookingsTable = pgTable("bookings", {
   slotEnd: timestamp("slot_end", { withTimezone: true }).notNull(),
   status: text("status").notNull().default("pending"),
   bookedVia: text("booked_via").notNull().default("web"),
+  locationType: text("location_type").notNull().default("google_meet"),
+  locationAddress: text("location_address"),
   meetLink: text("meet_link"),
   googleEventId: text("google_event_id"),
   cancelledAt: timestamp("cancelled_at", { withTimezone: true }),

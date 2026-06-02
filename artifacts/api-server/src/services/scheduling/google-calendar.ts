@@ -9,7 +9,7 @@
  *  - Scheduling calendars can be mapped to a specific connection via google_calendar_connection_id
  */
 
-import { google } from "googleapis";
+import { google, type calendar_v3 } from "googleapis";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import { logger } from "../../lib/logger.js";
@@ -291,6 +291,7 @@ export async function createCalendarEvent(params: {
   hostEmail?: string | null;
   additionalHosts?: string[] | null;
   addMeet?: boolean;
+  location?: { type: "google_meet" | "in_person"; address?: string | null } | null;
 }): Promise<{ meetLink: string | null; eventId: string } | null> {
   const tokens = await getValidAccessToken(params.connectionId);
   if (!tokens) return null;
@@ -307,30 +308,34 @@ export async function createCalendarEvent(params: {
     attendees.push({ email });
   }
 
-  const addMeet = params.addMeet ?? false;
+  const isInPerson = params.location?.type === "in_person";
+  // Generate a Meet link only for non-in-person events when the host has enabled Google Meet.
+  const addMeet = !isInPerson && (params.addMeet ?? false);
 
   try {
+    const requestBody: calendar_v3.Schema$Event = {
+      summary: params.summary,
+      description: params.description,
+      start: { dateTime: params.startTime.toISOString(), timeZone: params.timezone },
+      end:   { dateTime: params.endTime.toISOString(),   timeZone: params.timezone },
+      attendees,
+      reminders: { useDefault: true },
+    };
+    if (isInPerson) {
+      if (params.location?.address) requestBody.location = params.location.address;
+    } else if (addMeet) {
+      requestBody.conferenceData = {
+        createRequest: {
+          requestId: `voiceorch-${Date.now()}`,
+          conferenceSolutionKey: { type: "hangoutsMeet" },
+        },
+      };
+    }
+
     const event = await calendar.events.insert({
       calendarId: "primary",
       conferenceDataVersion: addMeet ? 1 : 0,
-      requestBody: {
-        summary: params.summary,
-        description: params.description,
-        start: { dateTime: params.startTime.toISOString(), timeZone: params.timezone },
-        end:   { dateTime: params.endTime.toISOString(),   timeZone: params.timezone },
-        attendees,
-        ...(addMeet
-          ? {
-              conferenceData: {
-                createRequest: {
-                  requestId: `voiceorch-${Date.now()}`,
-                  conferenceSolutionKey: { type: "hangoutsMeet" },
-                },
-              },
-            }
-          : {}),
-        reminders: { useDefault: true },
-      },
+      requestBody,
     });
 
     const meetLink = event.data.conferenceData?.entryPoints?.find(e => e.entryPointType === "video")?.uri ?? null;

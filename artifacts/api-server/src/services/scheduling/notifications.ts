@@ -14,8 +14,18 @@ interface BookingEmailData {
   bookingId: number;
   notes?: string | null;
   meetLink?: string | null;
+  locationType?: string | null;
+  locationAddress?: string | null;
   cancelLink?: string | null;
   rescheduleLink?: string | null;
+}
+
+/** Build the location line shown in confirmation emails: address for in-person, else the Meet link. */
+function locationLine(data: { locationType?: string | null; locationAddress?: string | null; meetLink?: string | null }): string {
+  if (data.locationType === "in_person") {
+    return data.locationAddress ? `\nLocation: ${data.locationAddress}` : "";
+  }
+  return data.meetLink ? `\nGoogle Meet: ${data.meetLink}` : "";
 }
 
 function getTransporter() {
@@ -106,7 +116,7 @@ export async function sendBookingCreatedEmail(data: BookingEmailData): Promise<v
 
   const from = formatDateTime(data.slotStart, data.timezone);
   const to = formatDateTime(data.slotEnd, data.timezone);
-  const meetLine = data.meetLink ? `\nGoogle Meet: ${data.meetLink}` : "";
+  const meetLine = locationLine(data);
 
   const selfServiceLines = (data.cancelLink || data.rescheduleLink)
     ? `\n\n── Manage your appointment ──${data.rescheduleLink ? `\nReschedule: ${data.rescheduleLink}` : ""}${data.cancelLink ? `\nCancel: ${data.cancelLink}` : ""}`
@@ -146,7 +156,7 @@ export async function sendBookingConfirmedEmail(data: BookingEmailData): Promise
 
   const from = formatDateTime(data.slotStart, data.timezone);
   const to = formatDateTime(data.slotEnd, data.timezone);
-  const meetLine = data.meetLink ? `\nGoogle Meet: ${data.meetLink}` : "";
+  const meetLine = locationLine(data);
 
   const body = `Hi ${data.attendeeName},
 

@@ -62,6 +62,17 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
                 description:
                   "Optional preferred date or time of day for the appointment, e.g. 'next Tuesday', '2025-06-10', 'morning', or 'afternoon'. The system will find the first available slot on or after this date/time.",
               },
+              meeting_type: {
+                type: "string",
+                enum: ["google_meet", "in_person"],
+                description:
+                  "Where the meeting takes place. Use 'google_meet' for a video call with an auto-generated Google Meet link, or 'in_person' for an in-person meeting at a physical address. Ask the caller which they prefer. Defaults to 'google_meet' if not specified.",
+              },
+              meeting_address: {
+                type: "string",
+                description:
+                  "The physical address for the meeting. Required only when meeting_type is 'in_person'. Ask the caller for the address before booking.",
+              },
             },
             required: ["attendee_name", "attendee_email"],
           },
@@ -142,10 +153,18 @@ export async function executeNativeBooking(
   const attendeeName = String(args["attendee_name"] ?? args["name"] ?? "Guest");
   const attendeeEmail = String(args["attendee_email"] ?? args["email"] ?? "");
   const preferredRaw = args["preferred_date"] != null ? String(args["preferred_date"]) : null;
+  const meetingTypeRaw = args["meeting_type"] != null ? String(args["meeting_type"]).toLowerCase().trim() : null;
+  const locationType: "google_meet" | "in_person" = meetingTypeRaw === "in_person" ? "in_person" : "google_meet";
+  const meetingAddress = args["meeting_address"] != null ? String(args["meeting_address"]).trim() : "";
 
   if (!attendeeEmail) {
     logger.warn({ callId }, "Native booking: no attendee email — cannot book");
     return "error: attendee_email is required to complete the booking";
+  }
+
+  if (locationType === "in_person" && !meetingAddress) {
+    logger.warn({ callId }, "Native booking: in-person selected but no address provided");
+    return "error: meeting_address is required when meeting_type is in_person — ask the caller for the meeting address";
   }
 
   try {
@@ -265,6 +284,8 @@ export async function executeNativeBooking(
           slotEnd,
           status: eventType.confirmationMode === "instant" ? "confirmed" : "pending",
           bookedVia: "agent",
+          locationType,
+          locationAddress: locationType === "in_person" ? meetingAddress : null,
         })
         .returning();
       booking = inserted;
@@ -302,6 +323,7 @@ export async function executeNativeBooking(
             hostEmail: calendar.hostEmail,
             additionalHosts: calendar.additionalHosts,
             addMeet: eventType.enableGoogleMeet,
+            location: { type: locationType, address: locationType === "in_person" ? meetingAddress : null },
           })
         : null;
       if (gcalResult) {
@@ -329,6 +351,8 @@ export async function executeNativeBooking(
       bookingId: booking.id,
       notes: booking.attendeeNotes,
       meetLink,
+      locationType: booking.locationType,
+      locationAddress: booking.locationAddress,
     });
     void dispatchSchedulingWebhooks(calendar.userId, "scheduling.booking.created", {
       booking: {
@@ -340,6 +364,8 @@ export async function executeNativeBooking(
         updatedAt: booking.updatedAt.toISOString(),
         meetLink,
         googleEventId,
+        locationType: booking.locationType,
+        locationAddress: booking.locationAddress,
       },
     });
 
@@ -553,6 +579,8 @@ export async function executeNativeReschedule(
           status: eventType.confirmationMode === "instant" ? "confirmed" : "pending",
           bookedVia: "agent",
           rescheduledFromId: bookingId,
+          locationType: existing.locationType,
+          locationAddress: existing.locationAddress,
         })
         .returning();
       newBooking = inserted;
@@ -596,6 +624,7 @@ export async function executeNativeReschedule(
           hostEmail: calendar.hostEmail,
           additionalHosts: calendar.additionalHosts,
           addMeet: eventType.enableGoogleMeet,
+          location: { type: newBooking.locationType === "in_person" ? "in_person" : "google_meet", address: newBooking.locationAddress },
         });
         if (gcalResult) {
           meetLink = gcalResult.meetLink;
@@ -620,6 +649,8 @@ export async function executeNativeReschedule(
       bookingId: newBooking.id,
       notes: newBooking.attendeeNotes,
       meetLink,
+      locationType: newBooking.locationType,
+      locationAddress: newBooking.locationAddress,
       oldSlotStart: existing.slotStart,
     });
     void dispatchSchedulingWebhooks(calendar.userId, "scheduling.booking.rescheduled", {

@@ -335,6 +335,8 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
         status: eventType?.confirmationMode === "instant" ? "confirmed" : "pending",
         bookedVia: existing.bookedVia,
         rescheduledFromId: existing.id,
+        locationType: existing.locationType,
+        locationAddress: existing.locationAddress,
       }).returning();
       newBooking = inserted;
     });
@@ -373,6 +375,7 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
             hostEmail: calendar?.hostEmail,
             additionalHosts: calendar?.additionalHosts,
             addMeet: eventType?.enableGoogleMeet ?? false,
+            location: { type: newBooking.locationType === "in_person" ? "in_person" : "google_meet", address: newBooking.locationAddress },
           });
           if (gcalResult) {
             await db.execute(
@@ -393,6 +396,8 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
       hostEmail: calendar?.hostEmail,
       additionalHosts: calendar?.additionalHosts,
       bookingId: newBooking.id,
+      locationType: newBooking.locationType,
+      locationAddress: newBooking.locationAddress,
       oldSlotStart: existing.slotStart,
     });
     void dispatchSchedulingWebhooks(clerkId, "scheduling.booking.rescheduled", { booking: formatBooking(newBooking) });

@@ -48,6 +48,7 @@ export class GoogleLLM implements LLMAdapter {
                   {
                     type: (SchemaType as Record<string, SchemaType>)[val.type.toUpperCase()] ?? SchemaType.STRING,
                     description: val.description,
+                    ...(val.enum ? { enum: val.enum, format: "enum" } : {}),
                   } as FunctionDeclarationSchemaProperty,
                 ])
               ) as FunctionDeclarationSchema["properties"],
