@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, and, sql } from "drizzle-orm";
 import { db, knowledgeBasesTable, kbDocumentsTable, kbChunksTable, platformSettingsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const router: IRouter = Router();
 
@@ -100,26 +101,29 @@ async function getGeminiKey(): Promise<string | null> {
   return envVal || null;
 }
 
-/** Generate embeddings for a batch of texts using Gemini embedding-001 (768 dims) */
+/** Gemini embedding models to try in preference order (both produce 768-dim vectors) */
+const GEMINI_EMBED_MODELS = ["text-embedding-004", "embedding-001"] as const;
+
+/** Generate embeddings for a batch of texts via the official Gemini SDK.
+ *  Tries text-embedding-004 first; falls back to embedding-001 if unavailable. */
 async function embedTexts(texts: string[], geminiKey: string): Promise<number[][]> {
-  const requests = texts.map(text => ({
-    model: "models/embedding-001",
-    content: { parts: [{ text }] },
-  }));
-  const resp = await fetch(
-    "https://generativelanguage.googleapis.com/v1beta/models/embedding-001:batchEmbedContents",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
-      body: JSON.stringify({ requests }),
+  const genAI = new GoogleGenerativeAI(geminiKey);
+  let lastErr: unknown;
+  for (const modelName of GEMINI_EMBED_MODELS) {
+    try {
+      const model = genAI.getGenerativeModel({ model: modelName });
+      const results = await Promise.all(texts.map(text => model.embedContent(text)));
+      return results.map(r => r.embedding.values);
+    } catch (err: unknown) {
+      lastErr = err;
+      const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+      if (msg.includes("404") || msg.includes("not found") || msg.includes("not supported")) {
+        continue;
+      }
+      throw err;
     }
-  );
-  if (!resp.ok) {
-    const body = await resp.text();
-    throw new Error(`Gemini embeddings failed (${resp.status}): ${body.slice(0, 200)}`);
   }
-  const data = await resp.json() as { embeddings: Array<{ values: number[] }> };
-  return data.embeddings.map(e => e.values);
+  throw lastErr ?? new Error("No Gemini embedding model is available for this API key");
 }
 
 /** Cosine similarity between two unit-ish vectors */

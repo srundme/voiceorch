@@ -1,6 +1,7 @@
 import { db, kbChunksTable, platformSettingsTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 /** Fetch the managed Gemini API key (platform_settings → env fallback) */
 async function getGeminiKey(): Promise<string | null> {
@@ -13,22 +14,28 @@ async function getGeminiKey(): Promise<string | null> {
   return envVal || null;
 }
 
-/** Embed a single text string using Gemini embedding-001 (768 dims) */
+const GEMINI_EMBED_MODELS = ["text-embedding-004", "embedding-001"] as const;
+
+/** Embed a single query text via the official Gemini SDK.
+ *  Tries text-embedding-004 first; falls back to embedding-001 if unavailable. */
 async function embedQuery(text: string, geminiKey: string): Promise<number[] | null> {
-  const resp = await fetch(
-    "https://generativelanguage.googleapis.com/v1beta/models/embedding-001:embedContent",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
-      body: JSON.stringify({ content: { parts: [{ text }] } }),
+  const genAI = new GoogleGenerativeAI(geminiKey);
+  for (const modelName of GEMINI_EMBED_MODELS) {
+    try {
+      const model = genAI.getGenerativeModel({ model: modelName });
+      const result = await model.embedContent(text);
+      return result.embedding.values;
+    } catch (err: unknown) {
+      const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+      if (msg.includes("404") || msg.includes("not found") || msg.includes("not supported")) {
+        continue;
+      }
+      logger.warn({ err }, "Gemini KB query embedding failed");
+      return null;
     }
-  );
-  if (!resp.ok) {
-    logger.warn({ status: resp.status }, "Gemini KB query embedding failed");
-    return null;
   }
-  const data = await resp.json() as { embedding?: { values: number[] } };
-  return data.embedding?.values ?? null;
+  logger.warn("No Gemini embedding model available for this API key");
+  return null;
 }
 
 /**
