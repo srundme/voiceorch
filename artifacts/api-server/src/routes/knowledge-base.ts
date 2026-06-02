@@ -283,6 +283,76 @@ router.delete("/knowledge-sources/:id/entries/:entryId", requireAuth, async (req
   res.status(204).end();
 });
 
+/* ── Search helpers ──────────────────────────────────────────────────────── */
+
+const STOP_WORDS = new Set([
+  'what','when','where','which','who','whom','whose','how','why',
+  'is','are','was','were','be','been','being','have','has','had',
+  'do','does','did','will','would','could','should','may','might',
+  'shall','can','the','a','an','and','or','but','in','on','at',
+  'to','for','of','with','by','from','about','into','its','your',
+  'our','their','this','that','these','those','tell','me','my',
+  'you','he','she','it','we','they','them','please','give','find',
+]);
+
+function significantWords(query: string): string[] {
+  return query.trim().toLowerCase()
+    .split(/\s+/)
+    .map(w => w.replace(/[^a-z0-9₹]/g, ''))
+    .filter(w => w.length > 2 && !STOP_WORDS.has(w));
+}
+
+type KbSearchRow = {
+  id: number; source_id: number; user_id: string;
+  title: string | null; content: string; keywords: string | null;
+  created_at: string; rank: number; snippet: string | null;
+};
+
+async function ftsSearch(sourceId: number, userId: string, q: string, lim: number): Promise<KbSearchRow[]> {
+  const r = await db.execute<KbSearchRow>(sql`
+    SELECT
+      ke.id, ke.source_id, ke.user_id, ke.title, ke.content, ke.keywords, ke.created_at,
+      ts_rank(
+        to_tsvector('english', coalesce(ke.title,'') || ' ' || ke.content || ' ' || coalesce(ke.keywords,'')),
+        plainto_tsquery('english', ${q})
+      ) AS rank,
+      ts_headline(
+        'english', ke.content,
+        plainto_tsquery('english', ${q}),
+        'MaxWords=30, MinWords=15, StartSel=<mark>, StopSel=</mark>'
+      ) AS snippet
+    FROM knowledge_entries ke
+    WHERE ke.source_id = ${sourceId} AND ke.user_id = ${userId}
+      AND to_tsvector('english', coalesce(ke.title,'') || ' ' || ke.content || ' ' || coalesce(ke.keywords,''))
+          @@ plainto_tsquery('english', ${q})
+    ORDER BY rank DESC LIMIT ${lim}
+  `);
+  return r.rows;
+}
+
+async function broadSearch(sourceId: number, userId: string, words: string[], lim: number): Promise<KbSearchRow[]> {
+  if (!words.length) return [];
+  // Build: (lower(content) LIKE '%w1%' OR lower(content) LIKE '%w2%' ...)
+  const conditions = words.flatMap(w => [
+    sql`lower(ke.content) LIKE ${'%' + w + '%'}`,
+    sql`lower(coalesce(ke.title,'')) LIKE ${'%' + w + '%'}`,
+    sql`lower(coalesce(ke.keywords,'')) LIKE ${'%' + w + '%'}`,
+  ]);
+  // Reduce to OR chain
+  const orClause = conditions.reduce((acc, c) => sql`${acc} OR ${c}`);
+  const r = await db.execute<KbSearchRow>(sql`
+    SELECT
+      ke.id, ke.source_id, ke.user_id, ke.title, ke.content, ke.keywords, ke.created_at,
+      0.01::float AS rank,
+      NULL::text AS snippet
+    FROM knowledge_entries ke
+    WHERE ke.source_id = ${sourceId} AND ke.user_id = ${userId}
+      AND (${orClause})
+    LIMIT ${lim}
+  `);
+  return r.rows;
+}
+
 /* ── Search (test panel) ─────────────────────────────────────────────────── */
 
 router.post("/knowledge-sources/:id/search", requireAuth, async (req, res) => {
@@ -299,48 +369,18 @@ router.post("/knowledge-sources/:id/search", requireAuth, async (req, res) => {
   if (!source) { res.status(404).json({ error: "Not found" }); return; }
 
   const searchLimit = Math.min(Number(limit) || 5, 10);
+  const q = query.trim();
 
-  // PostgreSQL Full Text Search
-  const rows = await db.execute<{
-    id: number;
-    source_id: number;
-    user_id: string;
-    title: string | null;
-    content: string;
-    keywords: string | null;
-    created_at: string;
-    rank: number;
-    snippet: string | null;
-  }>(sql`
-    SELECT
-      ke.id,
-      ke.source_id,
-      ke.user_id,
-      ke.title,
-      ke.content,
-      ke.keywords,
-      ke.created_at,
-      ts_rank(
-        to_tsvector('english', coalesce(ke.title,'') || ' ' || ke.content || ' ' || coalesce(ke.keywords,'')),
-        plainto_tsquery('english', ${query.trim()})
-      ) AS rank,
-      ts_headline(
-        'english',
-        ke.content,
-        plainto_tsquery('english', ${query.trim()}),
-        'MaxWords=30, MinWords=15, StartSel=<mark>, StopSel=</mark>'
-      ) AS snippet
-    FROM knowledge_entries ke
-    WHERE
-      ke.source_id = ${sourceId}
-      AND ke.user_id = ${userId}
-      AND to_tsvector('english', coalesce(ke.title,'') || ' ' || ke.content || ' ' || coalesce(ke.keywords,''))
-          @@ plainto_tsquery('english', ${query.trim()})
-    ORDER BY rank DESC
-    LIMIT ${searchLimit}
-  `);
+  // Pass 1 — strict FTS (AND: every word must appear)
+  let rawRows = await ftsSearch(sourceId, userId, q, searchLimit);
 
-  const matchedEntries = rows.rows.map(r => ({
+  // Pass 2 — broad fallback: any significant word matches (OR) + ILIKE
+  if (!rawRows.length) {
+    const words = significantWords(q);
+    rawRows = await broadSearch(sourceId, userId, words, searchLimit);
+  }
+
+  const matchedEntries = rawRows.map(r => ({
     entry: {
       id: r.id,
       sourceId: r.source_id,
