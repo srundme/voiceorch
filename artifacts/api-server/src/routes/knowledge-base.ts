@@ -107,7 +107,7 @@ async function embedTexts(texts: string[], geminiKey: string): Promise<number[][
     content: { parts: [{ text }] },
   }));
   const resp = await fetch(
-    "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:batchEmbedContents",
+    "https://generativelanguage.googleapis.com/v1/models/text-embedding-004:batchEmbedContents",
     {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
@@ -224,7 +224,7 @@ router.post("/knowledge-bases", requireAuth, async (req, res): Promise<void> => 
     userId: clerkId,
     name: name.trim(),
     description: description ?? undefined,
-    embeddingModel: embeddingModel ?? "text-embedding-3-small",
+    embeddingModel: embeddingModel ?? "text-embedding-004",
     chunkSize: chunkSize ?? 512,
     chunkOverlap: chunkOverlap ?? 64,
   }).returning();
