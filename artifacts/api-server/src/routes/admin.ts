@@ -6,6 +6,9 @@ import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { getAllSessions } from "../orchestration/session.js";
 import { logger } from "../lib/logger.js";
 import { sendTestAlertNotification, getAlertCooldownStats, resetAlertSuppressedCount, getAlertCooldownStatus } from "../services/alert-notifications.js";
+import { getAllCampaignConcurrency } from "../services/batchScheduler.js";
+import { getRedis } from "../lib/redis.js";
+import { pool } from "@workspace/db";
 
 const router = Router();
 
@@ -1003,6 +1006,65 @@ router.put("/admin/minute-rates", async (req, res): Promise<void> => {
     req.log.error({ err }, "admin/minute-rates PUT failed");
     res.status(500).json({ error: "Internal server error" });
   }
+});
+
+async function checkDb(): Promise<{ status: string; detail?: string }> {
+  const client = await pool.connect();
+  try {
+    await client.query("SELECT 1");
+    return { status: "ok", detail: `pool: ${pool.totalCount} / ${pool.options.max}` };
+  } catch (err) {
+    return { status: "error", detail: err instanceof Error ? err.message : String(err) };
+  } finally {
+    client.release();
+  }
+}
+
+router.get("/admin/health", async (req, res): Promise<void> => {
+  const checks: Record<string, { status: string; detail?: string }> = {};
+  let overall = "ok";
+
+  // DB connectivity
+  checks["db"] = await checkDb();
+  if (checks["db"].status === "error") overall = "degraded";
+
+  // Redis
+  try {
+    const redis = getRedis();
+    if (redis) {
+      await redis.ping();
+      checks["redis"] = { status: "ok" };
+    } else {
+      checks["redis"] = { status: "warn", detail: "Redis not configured" };
+    }
+  } catch (err) {
+    checks["redis"] = { status: "error", detail: err instanceof Error ? err.message : String(err) };
+    overall = "degraded";
+  }
+
+  // Active calls
+  const activeSessions = getAllSessions();
+  const activeCalls = activeSessions.length;
+  checks["activeCalls"] = { status: "ok", detail: `${activeCalls} active calls` };
+  if (activeCalls > 50) {
+    checks["activeCalls"].status = "warn";
+    overall = "degraded";
+  }
+
+  // Campaign concurrency
+  const campaignConcurrency = getAllCampaignConcurrency();
+  const campaignDetails = Array.from(campaignConcurrency.entries()).map(([id, count]) => `campaign ${id}: ${count}`).join(", ");
+  checks["campaignConcurrency"] = { status: "ok", detail: campaignDetails || "none" };
+
+  // Rate limit violations (last 1h) — count via pino-http logs if available, else skip
+  // For now: report if active sessions > 0, which is the proxy indicator
+  checks["load"] = { status: "ok", detail: `${activeCalls} active / ${activeSessions.length} sessions` };
+  if (activeCalls > 80) {
+    checks["load"].status = "warn";
+    overall = "degraded";
+  }
+
+  res.json({ status: overall, checks, timestamp: new Date().toISOString() });
 });
 
 router.delete("/admin/minute-rates/:id", async (req, res): Promise<void> => {

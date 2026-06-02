@@ -63,6 +63,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/finance", label: "Finance", icon: Wallet },
     { href: "/usage", label: "Usage Monitoring", icon: BarChart2 },
     { href: "/platform", label: "Platform", icon: Cpu },
+    { href: "/health", label: "Health", icon: Activity },
     { href: "/growth", label: "Growth", icon: BarChart3 },
     { href: "/managed-keys", label: "Managed Keys", icon: KeyRound },
     { href: "/managed-numbers", label: "Managed Numbers", icon: Phone },

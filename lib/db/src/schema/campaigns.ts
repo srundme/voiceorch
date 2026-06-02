@@ -23,6 +23,7 @@ export const campaignsTable = pgTable("campaigns", {
   retryDelayMinutes:    integer("retry_delay_minutes").notNull().default(60),
   totalLeads:           integer("total_leads").notNull().default(0),
   calledLeads:          integer("called_leads").notNull().default(0),
+  concurrentCallLimit:  integer("concurrent_call_limit").notNull().default(20),
   isActive:             boolean("is_active").notNull().default(false),
   createdAt:            timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt:            timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

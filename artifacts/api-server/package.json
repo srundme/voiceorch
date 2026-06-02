@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "export NODE_ENV=development && pnpm run build && pnpm run start",
     "build": "node ./build.mjs",
-    "start": "fuser -k ${PORT}/tcp 2>/dev/null || true; node --enable-source-maps ./dist/index.mjs",
+    "start": "node -e \"const {execSync}=require('child_process');try{execSync('fuser -k '+process.env.PORT+'/tcp 2>/dev/null')}catch{};setTimeout(()=>{},500)\" && node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },
@@ -24,6 +24,7 @@
     "date-fns-tz": "^3.2.0",
     "drizzle-orm": "catalog:",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.5.2",
     "google-auth-library": "^10.6.2",
     "googleapis": "^172.0.0",
     "http-proxy-middleware": "^4.0.0",
@@ -41,6 +42,7 @@
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
+    "@types/express-rate-limit": "^6.0.2",
     "@types/multer": "^2.1.0",
     "@types/node": "catalog:",
     "@types/nodemailer": "^8.0.0",

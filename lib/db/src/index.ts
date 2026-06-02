@@ -12,7 +12,7 @@ if (!process.env.DATABASE_URL) {
 
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  max: 20,                    // allow up to 20 concurrent DB connections
+  max: 50,                    // allow up to 50 concurrent DB connections
   idleTimeoutMillis: 30_000,  // close idle connections after 30 s
   connectionTimeoutMillis: 5_000, // fail fast rather than queue indefinitely
 });
