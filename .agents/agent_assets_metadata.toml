@@ -18,3 +18,9 @@ id = "1xndBT8NpxXzvrjetvo9W"
 uri = "file://docs/vobiz-wallet-management.md"
 type = "text"
 title = "Vobiz Wallet Management Guide"
+
+[[outputs]]
+id = "roB7WTeephAt8Z40rqhIn"
+uri = "file://ORCHESTRATION_HEALTH.md"
+type = "text"
+title = "VoiceOrch — Orchestration Health & Capacity Report"
