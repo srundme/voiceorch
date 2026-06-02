@@ -100,14 +100,14 @@ async function getGeminiKey(): Promise<string | null> {
   return envVal || null;
 }
 
-/** Generate embeddings for a batch of texts using Gemini text-embedding-004 (768 dims) */
+/** Generate embeddings for a batch of texts using Gemini embedding-001 (768 dims) */
 async function embedTexts(texts: string[], geminiKey: string): Promise<number[][]> {
   const requests = texts.map(text => ({
-    model: "models/text-embedding-004",
+    model: "models/embedding-001",
     content: { parts: [{ text }] },
   }));
   const resp = await fetch(
-    "https://generativelanguage.googleapis.com/v1/models/text-embedding-004:batchEmbedContents",
+    "https://generativelanguage.googleapis.com/v1beta/models/embedding-001:batchEmbedContents",
     {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
@@ -224,7 +224,7 @@ router.post("/knowledge-bases", requireAuth, async (req, res): Promise<void> => 
     userId: clerkId,
     name: name.trim(),
     description: description ?? undefined,
-    embeddingModel: embeddingModel ?? "text-embedding-004",
+    embeddingModel: embeddingModel ?? "embedding-001",
     chunkSize: chunkSize ?? 512,
     chunkOverlap: chunkOverlap ?? 64,
   }).returning();

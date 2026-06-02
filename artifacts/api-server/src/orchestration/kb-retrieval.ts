@@ -13,10 +13,10 @@ async function getGeminiKey(): Promise<string | null> {
   return envVal || null;
 }
 
-/** Embed a single text string using Gemini text-embedding-004 (768 dims) */
+/** Embed a single text string using Gemini embedding-001 (768 dims) */
 async function embedQuery(text: string, geminiKey: string): Promise<number[] | null> {
   const resp = await fetch(
-    "https://generativelanguage.googleapis.com/v1/models/text-embedding-004:embedContent",
+    "https://generativelanguage.googleapis.com/v1beta/models/embedding-001:embedContent",
     {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },

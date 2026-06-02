@@ -31,7 +31,7 @@ export const knowledgeBasesTable = pgTable("knowledge_bases", {
   userId: text("user_id"),
   name: text("name").notNull(),
   description: text("description"),
-  embeddingModel: text("embedding_model").notNull().default("text-embedding-004"),
+  embeddingModel: text("embedding_model").notNull().default("embedding-001"),
   chunkSize: integer("chunk_size").notNull().default(512),
   chunkOverlap: integer("chunk_overlap").notNull().default(64),
   documentCount: integer("document_count").notNull().default(0),
