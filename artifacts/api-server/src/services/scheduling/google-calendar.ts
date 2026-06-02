@@ -290,6 +290,7 @@ export async function createCalendarEvent(params: {
   timezone: string;
   hostEmail?: string | null;
   additionalHosts?: string[] | null;
+  addMeet?: boolean;
 }): Promise<{ meetLink: string | null; eventId: string } | null> {
   const tokens = await getValidAccessToken(params.connectionId);
   if (!tokens) return null;
@@ -306,22 +307,28 @@ export async function createCalendarEvent(params: {
     attendees.push({ email });
   }
 
+  const addMeet = params.addMeet ?? false;
+
   try {
     const event = await calendar.events.insert({
       calendarId: "primary",
-      conferenceDataVersion: 1,
+      conferenceDataVersion: addMeet ? 1 : 0,
       requestBody: {
         summary: params.summary,
         description: params.description,
         start: { dateTime: params.startTime.toISOString(), timeZone: params.timezone },
         end:   { dateTime: params.endTime.toISOString(),   timeZone: params.timezone },
         attendees,
-        conferenceData: {
-          createRequest: {
-            requestId: `voiceorch-${Date.now()}`,
-            conferenceSolutionKey: { type: "hangoutsMeet" },
-          },
-        },
+        ...(addMeet
+          ? {
+              conferenceData: {
+                createRequest: {
+                  requestId: `voiceorch-${Date.now()}`,
+                  conferenceSolutionKey: { type: "hangoutsMeet" },
+                },
+              },
+            }
+          : {}),
         reminders: { useDefault: true },
       },
     });

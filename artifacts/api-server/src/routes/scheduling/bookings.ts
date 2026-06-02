@@ -186,6 +186,7 @@ router.post("/scheduling/bookings", requireAuth, async (req, res): Promise<void>
       timezone: calendar.timezone,
       hostEmail: calendar.hostEmail,
       additionalHosts: calendar.additionalHosts,
+      addMeet: eventType.enableGoogleMeet,
     }) : null;
     if (gcalResult) {
       meetLink = gcalResult.meetLink;
@@ -371,6 +372,7 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
             timezone: calendar?.timezone ?? "UTC",
             hostEmail: calendar?.hostEmail,
             additionalHosts: calendar?.additionalHosts,
+            addMeet: eventType?.enableGoogleMeet ?? false,
           });
           if (gcalResult) {
             await db.execute(

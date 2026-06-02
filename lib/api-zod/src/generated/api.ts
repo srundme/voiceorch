@@ -2017,6 +2017,7 @@ export const ListEventTypesResponseItem = zod.object({
   "bufferAfterMins": zod.number(),
   "confirmationMode": zod.enum(['instant', 'manual']),
   "maxBookingsPerSlot": zod.number(),
+  "enableGoogleMeet": zod.boolean(),
   "isActive": zod.boolean(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -2032,6 +2033,7 @@ export const createEventTypeBodyBufferBeforeMinsDefault = 0;
 export const createEventTypeBodyBufferAfterMinsDefault = 0;
 export const createEventTypeBodyConfirmationModeDefault = `instant`;
 export const createEventTypeBodyMaxBookingsPerSlotDefault = 1;
+export const createEventTypeBodyEnableGoogleMeetDefault = false;
 export const createEventTypeBodyIsActiveDefault = true;
 
 export const CreateEventTypeBody = zod.object({
@@ -2044,6 +2046,7 @@ export const CreateEventTypeBody = zod.object({
   "bufferAfterMins": zod.number().default(createEventTypeBodyBufferAfterMinsDefault),
   "confirmationMode": zod.enum(['instant', 'manual']).default(createEventTypeBodyConfirmationModeDefault),
   "maxBookingsPerSlot": zod.number().default(createEventTypeBodyMaxBookingsPerSlotDefault),
+  "enableGoogleMeet": zod.boolean().default(createEventTypeBodyEnableGoogleMeetDefault),
   "isActive": zod.boolean().default(createEventTypeBodyIsActiveDefault)
 })
 
@@ -2067,6 +2070,7 @@ export const GetEventTypeResponse = zod.object({
   "bufferAfterMins": zod.number(),
   "confirmationMode": zod.enum(['instant', 'manual']),
   "maxBookingsPerSlot": zod.number(),
+  "enableGoogleMeet": zod.boolean(),
   "isActive": zod.boolean(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -2088,6 +2092,7 @@ export const UpdateEventTypeBody = zod.object({
   "bufferAfterMins": zod.number().optional(),
   "confirmationMode": zod.enum(['instant', 'manual']).optional(),
   "maxBookingsPerSlot": zod.number().optional(),
+  "enableGoogleMeet": zod.boolean().optional(),
   "isActive": zod.boolean().optional()
 })
 
@@ -2103,6 +2108,7 @@ export const UpdateEventTypeResponse = zod.object({
   "bufferAfterMins": zod.number(),
   "confirmationMode": zod.enum(['instant', 'manual']),
   "maxBookingsPerSlot": zod.number(),
+  "enableGoogleMeet": zod.boolean(),
   "isActive": zod.boolean(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()

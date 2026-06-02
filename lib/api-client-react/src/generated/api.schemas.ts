@@ -1536,6 +1536,7 @@ export interface EventType {
   bufferAfterMins: number;
   confirmationMode: EventTypeConfirmationMode;
   maxBookingsPerSlot: number;
+  enableGoogleMeet: boolean;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -1559,6 +1560,7 @@ export interface EventTypeInput {
   bufferAfterMins?: number;
   confirmationMode?: EventTypeInputConfirmationMode;
   maxBookingsPerSlot?: number;
+  enableGoogleMeet?: boolean;
   isActive?: boolean;
 }
 
@@ -1578,6 +1580,7 @@ export interface EventTypeUpdate {
   bufferAfterMins?: number;
   confirmationMode?: EventTypeUpdateConfirmationMode;
   maxBookingsPerSlot?: number;
+  enableGoogleMeet?: boolean;
   isActive?: boolean;
 }
 

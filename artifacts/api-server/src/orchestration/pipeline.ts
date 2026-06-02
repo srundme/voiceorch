@@ -1154,12 +1154,21 @@ export class OrchestrationPipeline {
    * TTS chunk starts as soon as the LLM emits the first sentence boundary —
    * not after the full response is buffered.
    */
-  private async continueWithToolResult(toolName: string, result: string): Promise<void> {
+  private async continueWithToolResult(toolName: string, result: string, depth: number = 0): Promise<void> {
     this.conversationHistory.push({ role: "user", content: `[Tool result for ${toolName}]: ${result}` });
 
     let llmResponse = "";
     let pendingText = "";
     let allEnqueued = false;
+
+    // Keep tools attached on follow-up turns so the agent can chain calls in a
+    // single user turn (e.g. check_availability → book_appointment → end_call).
+    // A depth cap forces a final tools-detached narration to prevent runaway loops.
+    const MAX_TOOL_DEPTH = 5;
+    const toolDefs = buildToolDefs(this.agent.tools);
+    const attachTools = depth < MAX_TOOL_DEPTH && toolDefs.length > 0;
+    let triggeredToolName: string | null = null;
+    let triggeredToolArgs: Record<string, unknown> = {};
 
     const filterThinkToken = makeThinkFilter();
 
@@ -1207,13 +1216,26 @@ export class OrchestrationPipeline {
           pendingText = remainder;
         },
         (fullText) => { llmResponse = fullText; },
-        {
-          onUsage: (usage) => {
-            this.hasRealLlmUsage = true;
-            this.llmInputTokensTotal += usage.inputTokens;
-            this.llmOutputTokensTotal += usage.outputTokens;
-          },
-        },
+        attachTools
+          ? {
+              tools: toolDefs,
+              onToolCall: (name, args) => {
+                triggeredToolName = name;
+                triggeredToolArgs = args;
+              },
+              onUsage: (usage) => {
+                this.hasRealLlmUsage = true;
+                this.llmInputTokensTotal += usage.inputTokens;
+                this.llmOutputTokensTotal += usage.outputTokens;
+              },
+            }
+          : {
+              onUsage: (usage) => {
+                this.hasRealLlmUsage = true;
+                this.llmInputTokensTotal += usage.inputTokens;
+                this.llmOutputTokensTotal += usage.outputTokens;
+              },
+            },
       );
     } catch (err) {
       logger.error({ callId: this.config.callId, err }, "continueWithToolResult LLM call failed");
@@ -1228,6 +1250,19 @@ export class OrchestrationPipeline {
     allEnqueued = true;
     const wFinal = wakePlayer as (() => void) | null; wakePlayer = null; if (wFinal) wFinal();
     await playPromise;
+
+    // ── Chained tool call — the agent invoked another tool off the result ──
+    if (triggeredToolName) {
+      const chainedName: string = triggeredToolName;
+      const assistantToolContent = llmResponse.replace(/<think>[\s\S]*?<\/think>/g, "").trim()
+        || `[calling tool: ${chainedName}]`;
+      this.conversationHistory.push({ role: "assistant", content: assistantToolContent });
+      const chainedResult = await this.handleToolCall(chainedName, triggeredToolArgs);
+      if (chainedResult !== undefined) {
+        await this.continueWithToolResult(chainedName, chainedResult, depth + 1);
+      }
+      return;
+    }
 
     const cleanResponse = llmResponse.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
     if (cleanResponse) {

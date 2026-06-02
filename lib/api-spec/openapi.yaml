@@ -4540,7 +4540,7 @@ components:
 
     EventType:
       type: object
-      required: [id, calendarId, userId, name, slug, durationMinutes, bufferBeforeMins, bufferAfterMins, confirmationMode, maxBookingsPerSlot, isActive, createdAt, updatedAt]
+      required: [id, calendarId, userId, name, slug, durationMinutes, bufferBeforeMins, bufferAfterMins, confirmationMode, maxBookingsPerSlot, enableGoogleMeet, isActive, createdAt, updatedAt]
       properties:
         id:
           type: integer
@@ -4565,6 +4565,8 @@ components:
           enum: [instant, manual]
         maxBookingsPerSlot:
           type: integer
+        enableGoogleMeet:
+          type: boolean
         isActive:
           type: boolean
         createdAt:
@@ -4602,6 +4604,9 @@ components:
         maxBookingsPerSlot:
           type: integer
           default: 1
+        enableGoogleMeet:
+          type: boolean
+          default: false
         isActive:
           type: boolean
           default: true
@@ -4624,6 +4629,8 @@ components:
           enum: [instant, manual]
         maxBookingsPerSlot:
           type: integer
+        enableGoogleMeet:
+          type: boolean
         isActive:
           type: boolean
 

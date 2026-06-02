@@ -301,6 +301,7 @@ export async function executeNativeBooking(
             timezone: calendar.timezone,
             hostEmail: calendar.hostEmail,
             additionalHosts: calendar.additionalHosts,
+            addMeet: eventType.enableGoogleMeet,
           })
         : null;
       if (gcalResult) {
@@ -594,6 +595,7 @@ export async function executeNativeReschedule(
           timezone: calendar.timezone,
           hostEmail: calendar.hostEmail,
           additionalHosts: calendar.additionalHosts,
+          addMeet: eventType.enableGoogleMeet,
         });
         if (gcalResult) {
           meetLink = gcalResult.meetLink;

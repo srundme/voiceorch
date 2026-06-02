@@ -29,7 +29,7 @@ import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
 import {
   ArrowLeft, Copy, Check, Clock, Calendar, Settings, Zap, AlertTriangle,
-  Link2, Layers, ExternalLink, Trash2, Plus, Loader2, CheckCircle2,
+  Link2, Layers, ExternalLink, Trash2, Plus, Loader2, CheckCircle2, Video,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -195,6 +195,7 @@ export default function EventTypeDetailPage() {
     confirmationMode: "instant" | "manual";
     maxBookingsPerSlot: number;
     isActive: boolean;
+    enableGoogleMeet: boolean;
   } | null>(null);
 
   if (!form && et) {
@@ -207,6 +208,7 @@ export default function EventTypeDetailPage() {
       confirmationMode: et.confirmationMode,
       maxBookingsPerSlot: et.maxBookingsPerSlot,
       isActive: et.isActive,
+      enableGoogleMeet: et.enableGoogleMeet ?? false,
     });
   }
 
@@ -652,6 +654,41 @@ export default function EventTypeDetailPage() {
                     Manage all calendars →
                   </Link>
                 </p>
+              </div>
+
+              {/* Google Meet */}
+              <div className="space-y-3">
+                <Label>Video conferencing</Label>
+                <div className="rounded-xl border bg-card p-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-card flex items-center justify-center border shrink-0">
+                        <Video className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">Enable Google Meet</p>
+                        <p className="text-xs text-muted-foreground">
+                          Add a Google Meet link to every booking for this event type and include it in confirmation emails.
+                        </p>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={form.enableGoogleMeet}
+                      onCheckedChange={v => setField("enableGoogleMeet", v)}
+                      disabled={gcalLoading}
+                    />
+                  </div>
+                  {form.enableGoogleMeet && googleConnections.length === 0 && (
+                    <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                      <span>
+                        No Google account is connected. Meet links can't be generated until you connect a Google account
+                        above and link it to <strong>{calendar?.name ?? "this calendar"}</strong>. Bookings will still go through —
+                        just without a Meet link.
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Webhooks */}

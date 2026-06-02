@@ -357,7 +357,7 @@ export async function handleWebCallWebSocket(
       // Each job starts as soon as its sentence is extracted, so synthesis
       // overlaps with LLM streaming. By the time LLM finishes, sentence 1
       // audio is usually already fully collected — minimising first-audio delay.
-      const sentenceJobs: Promise<Buffer>[] = [];
+      let sentenceJobs: Promise<Buffer>[] = [];
       let tokenBuf  = "";   // filtered text waiting to be split into sentences
       let fullReply = "";   // raw LLM output (may include <think> blocks)
 
@@ -449,6 +449,25 @@ export async function handleWebCallWebSocket(
       let triggeredToolName: string | null = null;
       let triggeredToolArgs: Record<string, unknown> = {};
 
+      // ── Multi-step tool calling loop ───────────────────────────────────────
+      // Tool definitions stay attached on every turn so the agent can chain
+      // multiple tools in a single user turn — e.g. check_availability →
+      // book_appointment → end_call — instead of only executing the first one.
+      // A hard iteration cap prevents runaway loops; once reached we run one
+      // final turn with tools detached so the agent simply narrates and stops.
+      const MAX_TOOL_ITERATIONS = 5;
+      let toolIterations = 0;
+      let attachTools = true;
+
+      while (true) {
+      sentenceJobs = [];
+      tokenBuf = "";
+      fullReply = "";
+      inThinkBlock = false;
+      thinkBuf = "";
+      triggeredToolName = null;
+      triggeredToolArgs = {};
+
       try {
        await llm.chat(
         history,
@@ -463,7 +482,7 @@ export async function handleWebCallWebSocket(
           tokenBuf = rest;
         },
         (full) => { fullReply = full; },
-        toolDefs.length > 0
+        attachTools && toolDefs.length > 0
           ? {
               tools: toolDefs,
               onToolCall: (name, args) => {
@@ -504,12 +523,14 @@ export async function handleWebCallWebSocket(
           || `[calling tool: ${triggeredToolName}]`;
         history.push({ role: "assistant", content: assistantToolContent });
 
-        // Skip telephony-only tools
+        // Telephony-only tools are not available on web calls — record a
+        // result and keep looping so the agent can recover or finish naturally.
         if (triggeredToolName === "call_transfer" || triggeredToolName === "send_sms") {
           logger.warn({ callId, triggeredToolName }, "Webcall: skipping telephony-only tool (no-op)");
-          sendStatus("listening");
-          processing = false;
-          return;
+          history.push({ role: "user", content: `[Tool result for ${triggeredToolName}]: not available on web calls` });
+          toolIterations++;
+          if (toolIterations >= MAX_TOOL_ITERATIONS) attachTools = false;
+          continue;
         }
 
         // Handle built-in end_call
@@ -562,153 +583,20 @@ export async function handleWebCallWebSocket(
           toolResult = "error: tool execution failed";
         }
 
-        if (toolResult !== undefined) {
-          // Record tool result in history (same pattern as pipeline.ts continueWithToolResult)
-          history.push({ role: "user", content: `[Tool result for ${triggeredToolName}]: ${toolResult}` });
+        // Record the tool result so the next turn can speak or act on it.
+        // (Same marker pattern as pipeline.ts continueWithToolResult — also
+        // surfaces in the dashboard "Tool Calls" panel via the transcript.)
+        history.push({ role: "user", content: `[Tool result for ${triggeredToolName}]: ${toolResult ?? "unavailable"}` });
 
-          // Re-invoke LLM so the agent speaks a natural-language follow-up
-          const followUpJobs: Promise<Buffer>[] = [];
-          let followUpBuf = "";
-          let followUpFull = "";
-          let followUpInThink = false;
-          let followUpThinkBuf = "";
-
-          function filterFollowUp(token: string): string {
-            followUpThinkBuf += token;
-            let out = "";
-            while (followUpThinkBuf.length > 0) {
-              if (followUpInThink) {
-                const ci = followUpThinkBuf.indexOf("</think>");
-                if (ci !== -1) { followUpInThink = false; followUpThinkBuf = followUpThinkBuf.slice(ci + 8); }
-                else { followUpThinkBuf = followUpThinkBuf.slice(Math.max(0, followUpThinkBuf.length - 7)); break; }
-              } else {
-                const oi = followUpThinkBuf.indexOf("<think>");
-                if (oi !== -1) { out += followUpThinkBuf.slice(0, oi); followUpInThink = true; followUpThinkBuf = followUpThinkBuf.slice(oi + 7); }
-                else { const tail = Math.max(0, followUpThinkBuf.length - 6); out += followUpThinkBuf.slice(0, tail); followUpThinkBuf = followUpThinkBuf.slice(tail); break; }
-              }
-            }
-            return out;
-          }
-
-          function queueFollowUp(text: string) {
-            const t = text.trim();
-            if (!t) return;
-            let job: Promise<Buffer>;
-            if (tts.synthesizeStream) {
-              job = (async () => {
-                const chunks: Buffer[] = [];
-                await tts.synthesizeStream!(t, (c) => chunks.push(c), () => {});
-                const audio = Buffer.concat(chunks);
-                logger.info({ callId, sentenceText: t, audioBytes: audio.length }, "TTS follow-up synthesized");
-                return withTailSilence(audio);
-              })();
-            } else {
-              job = tts.synthesize(t).then(({ audio }) => {
-                logger.info({ callId, sentenceText: t, audioBytes: audio.length }, "TTS follow-up synthesized");
-                return withTailSilence(audio);
-              });
-            }
-            job.catch(() => {});
-            followUpJobs.push(job);
-          }
-
-          try {
-            await llm.chat(
-              history,
-              systemPromptForTurn,
-              (token) => {
-                followUpFull += token;
-                const filtered = filterFollowUp(token);
-                if (!filtered) return;
-                followUpBuf += filtered;
-                const [sentences, rest] = extractSentences(followUpBuf);
-                for (const s of sentences) queueFollowUp(s);
-                followUpBuf = rest;
-              },
-              (full) => { followUpFull = full; },
-            );
-          } catch (llmErr2) {
-            const reason = toReadableError(llmErr2, "LLM error (tool follow-up)");
-            logger.error({ callId, err: llmErr2 }, reason);
-            send({ type: "error", message: reason });
-            speaking = false;
-            speakingEndedAt = Date.now();
-            processing = false;
-            if (!closed) void hangup("error", reason);
-            return;
-          }
-
-          // Same streaming-gap reconciliation as the main LLM path.
-          {
-            const cleanForFlush = followUpFull.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
-            const [, trueRemainder] = extractSentences(cleanForFlush);
-            const flushText = trueRemainder.trim().length > followUpBuf.trim().length
-              ? trueRemainder
-              : followUpBuf;
-            if (flushText.trim()) queueFollowUp(flushText);
-          }
-
-          const cleanFollowUp = followUpFull.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
-
-          if (cleanFollowUp && followUpJobs.length > 0) {
-            history.push({ role: "assistant", content: cleanFollowUp });
-            sendStatus("speaking");
-            speaking = true;
-            speakingStartedAt = Date.now();
-            if (audioChunks.length > 0) audioChunks.splice(0);
-            bargeInFrames = 0;
-
-            let transcriptSent = false;
-            for (let i = 0; i < followUpJobs.length; i++) {
-              if (closed || interrupted) break;
-              let pcmOut: Buffer;
-              try { pcmOut = await followUpJobs[i]!; }
-              catch (ttsErr) {
-                const reason = toReadableError(ttsErr, "TTS error");
-                logger.error({ callId, err: ttsErr }, reason);
-                send({ type: "error", message: reason });
-                speaking = false;
-                speakingEndedAt = Date.now();
-                processing = false;
-                if (!closed) void hangup("error", reason);
-                return;
-              }
-              if (interrupted || closed) break;
-              if (!transcriptSent) {
-                send({ type: "transcript", speaker: "agent", text: cleanFollowUp });
-                transcriptSent = true;
-              }
-              for (let j = 0; j < pcmOut.length; j += AUDIO_CHUNK_BYTES) {
-                if (closed || interrupted) break;
-                const chunk = pcmOut.slice(j, j + AUDIO_CHUNK_BYTES);
-                recording.addAgentChunk(chunk);
-                sendAudio(amplifyPcm(chunk, TTS_VOLUME_GAIN));
-                await new Promise<void>((r) => setTimeout(r, 40));
-              }
-            }
-            if (!interrupted && !closed) {
-              const silenceChunk = Buffer.alloc(AUDIO_CHUNK_BYTES, 0);
-              const silenceFrames = Math.ceil(AUDIO_TAIL_SILENCE_MS / 40);
-              for (let s = 0; s < silenceFrames && !interrupted && !closed; s++) {
-                sendAudio(silenceChunk); await new Promise<void>(r => setTimeout(r, 40));
-              }
-            }
-            speaking = false;
-            speakingEndedAt = Date.now();
-            if (interrupted) {
-              if (audioChunks.length > 0) void process();
-            } else if (!closed) {
-              sendStatus("listening");
-            }
-          } else {
-            sendStatus("listening");
-          }
-        } else {
-          sendStatus("listening");
+        // Loop again with tools still attached so the agent can chain another
+        // tool (e.g. book_appointment after check_availability) or narrate the
+        // result. The cap forces a final tools-detached narration turn.
+        toolIterations++;
+        if (toolIterations >= MAX_TOOL_ITERATIONS) {
+          logger.warn({ callId, toolIterations }, "Webcall: max tool iterations reached — forcing final narration");
+          attachTools = false;
         }
-
-        processing = false;
-        return;
+        continue;
       }
 
       // ── Normal (non-tool) TTS playback path ───────────────────────────────
@@ -798,6 +686,11 @@ export async function handleWebCallWebSocket(
       } else if (!closed) {
         sendStatus("listening");
       }
+
+      // No tool was called this turn — the agent's spoken response is done.
+      processing = false;
+      return;
+      } // end multi-step tool calling loop
 
     } catch (err) {
       speaking = false;

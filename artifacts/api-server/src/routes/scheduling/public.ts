@@ -227,6 +227,7 @@ router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
       timezone: calendar.timezone,
       hostEmail: calendar.hostEmail,
       additionalHosts: calendar.additionalHosts,
+      addMeet: eventType.enableGoogleMeet,
     }) : null;
     if (gcalResult) {
       meetLink = gcalResult.meetLink;
@@ -541,6 +542,7 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
           timezone: calendar.timezone,
           hostEmail: calendar.hostEmail,
           additionalHosts: calendar.additionalHosts,
+          addMeet: eventType.enableGoogleMeet,
         });
         if (gcalResult) {
           await db.execute(
