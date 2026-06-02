@@ -1,0 +1,421 @@
+# Redesign the Knowledge Base Module into an "AI Knowledge" Experience
+
+Objective:
+Transform the current Knowledge Base feature from a technical RAG/vector database interface into a simple, business-friendly AI Knowledge experience that any non-technical user can understand within seconds.
+
+## Core Philosophy
+
+Users do not care about:
+
+* Knowledge Bases
+* Chunks
+* Embeddings
+* Vector Search
+* Similarity Scores
+* Retrieval
+
+Users care about:
+
+* Teaching their AI
+* Uploading company information
+* Training agents
+* Testing answers
+* Keeping information updated
+
+The UI should always feel like:
+
+"Teach Your AI → Test It → Connect It To An Agent"
+
+Never expose technical RAG terminology unless the user enters an Advanced Settings section.
+
+---
+
+# Navigation Changes
+
+Rename:
+
+Knowledge Base
+
+to
+
+AI Knowledge
+
+Sidebar Structure:
+
+* Dashboard
+* Agents
+* AI Knowledge
+* Phone Numbers
+* Calls
+* Analytics
+* Billing
+* Settings
+
+---
+
+# AI Knowledge Main Page
+
+Create a modern SaaS-style dashboard.
+
+Top Section:
+
+Title:
+AI Knowledge
+
+Subtitle:
+Teach your AI agents using documents, websites, FAQs, and company information.
+
+Primary CTA:
+Add Knowledge
+
+Display cards:
+
+* Total Knowledge Sources
+* Active Agents Using Knowledge
+* Documents Processed
+* Last Updated
+
+---
+
+# Empty State
+
+When no knowledge exists:
+
+Large illustration area.
+
+Headline:
+Teach Your AI Everything It Needs To Know
+
+Description:
+Upload documents, import websites, or create FAQs so your AI can answer customer questions accurately.
+
+Buttons:
+
+* Upload Documents
+* Import Website
+* Add FAQs
+* Paste Text
+
+---
+
+# Add Knowledge Wizard
+
+Create a step-by-step wizard.
+
+Step 1:
+What would you like your AI to learn?
+
+Options:
+
+1. Upload Documents
+2. Import Website
+3. Add FAQs
+4. Paste Text
+
+Display as large modern cards with icons.
+
+---
+
+# Document Upload Experience
+
+Drag-and-drop zone.
+
+Supported:
+PDF
+DOCX
+TXT
+CSV
+
+Display uploaded documents as cards instead of tables.
+
+Example:
+
+Product_Catalog.pdf
+
+Status: Ready
+
+Knowledge Sections: 42
+
+Last Updated: 2 Hours Ago
+
+Actions:
+View
+Edit
+Delete
+
+---
+
+# Website Import
+
+Allow users to enter a website URL.
+
+Fields:
+
+Website URL
+
+Options:
+
+* Crawl all pages
+* Automatically refresh weekly
+* Include blog articles
+
+Display crawl progress visually.
+
+Instead of:
+
+Processing
+
+Show:
+
+Teaching Your AI...
+
+✓ Reading Pages
+
+✓ Extracting Information
+
+✓ Organizing Knowledge
+
+⏳ Making Information Searchable
+
+---
+
+# FAQ Builder
+
+Create an FAQ management interface.
+
+Each FAQ should contain:
+
+Question
+
+Answer
+
+Add Another FAQ button
+
+Display FAQs as expandable cards.
+
+---
+
+# Paste Text Knowledge
+
+Allow users to paste company information directly.
+
+Example:
+Company Overview
+Pricing Details
+Support Policies
+Product Information
+
+Show estimated knowledge coverage after saving.
+
+---
+
+# Knowledge Sources View
+
+Replace tables with modern cards.
+
+Each source card should display:
+
+Source Name
+
+Source Type
+
+Status
+
+Knowledge Sections Count
+
+Last Updated
+
+Actions:
+View
+Edit
+Delete
+
+Visual statuses:
+
+Ready
+Processing
+Error
+
+Use clear colors and icons.
+
+---
+
+# Knowledge Testing Page
+
+Rename:
+
+Test Retrieval
+
+to
+
+Test AI Knowledge
+
+Interface:
+
+Input:
+Ask your AI a question
+
+Example:
+What is your refund policy?
+
+Button:
+Test Answer
+
+Output:
+
+AI Answer
+
+Knowledge Source Used
+
+Confidence Score
+
+Response Time
+
+Advanced Toggle:
+
+Show Technical Details
+
+Only under this section show:
+
+Retrieved Chunks
+
+Similarity Scores
+
+Raw Search Results
+
+---
+
+# Knowledge Analytics
+
+Create a dedicated analytics page.
+
+Metrics:
+
+Most Asked Topics
+
+Top Knowledge Sources
+
+Unanswered Questions
+
+Knowledge Coverage Score
+
+Examples:
+
+Customers Asked:
+Do you provide EMI options?
+
+Status:
+No Answer Found
+
+Action:
+Add Knowledge
+
+This helps users improve their AI continuously.
+
+---
+
+# Agent Integration
+
+Inside Agent Settings:
+
+Replace:
+
+Knowledge Base Dropdown
+
+With:
+
+Knowledge Sources
+
+Display all available knowledge sources with checkboxes.
+
+Example:
+
+☑ Company Website
+
+☑ Product Catalog
+
+☑ FAQs
+
+☑ Pricing Guide
+
+Show:
+
+Total Knowledge Sections Available
+
+Estimated AI Accuracy Score
+
+---
+
+# Advanced Settings Section
+
+Hide all technical RAG settings here.
+
+Include:
+
+Chunk Size
+
+Chunk Overlap
+
+Embedding Model
+
+Top K Results
+
+Similarity Threshold
+
+Default users should never see these settings.
+
+---
+
+# UI Style Requirements
+
+Use modern SaaS design.
+
+Reference products:
+
+* Notion
+* Intercom
+* Retell AI
+* ElevenLabs
+* Stripe Dashboard
+
+Requirements:
+
+* Large spacing
+* Clean cards
+* Rounded corners
+* Soft shadows
+* Minimal tables
+* Progress indicators
+* Friendly language
+* Mobile responsive
+* Dark mode support
+
+---
+
+# User Language Rules
+
+Replace technical language with business-friendly language.
+
+Use:
+
+AI Knowledge
+Knowledge Sources
+Teach Your AI
+Test AI Knowledge
+Knowledge Coverage
+Knowledge Health
+
+Avoid:
+
+Knowledge Base
+Chunk
+Embedding
+Vector
+Similarity Search
+Retrieval Pipeline
+
+---
+
+# Final Goal
+
+The entire feature should feel like a premium AI training platform where users simply upload information, test responses, and connect knowledge to agents without needing to understand any RAG or vector database concepts.

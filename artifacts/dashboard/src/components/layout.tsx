@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import { IncomingCallNotification } from "@/components/incoming-call-notification";
 import {
   Users, Phone, Key, Settings, Menu,
-  LayoutDashboard, BarChart3, BookOpen,
+  LayoutDashboard, BarChart3, Brain,
   Wallet, LogOut, ChevronDown, AlertCircle, Radio, Webhook,
   Zap, CalendarDays, TrendingUp, ShieldCheck,
   Facebook, ArrowRightLeft, Mic2,
@@ -19,7 +19,7 @@ const NAV_SECTIONS = [
     label: "Build",
     items: [
       { name: "Assistants",      href: "/app",                 icon: Users,          exact: true },
-      { name: "Knowledge Bases", href: "/app/knowledge-bases", icon: BookOpen },
+      { name: "AI Knowledge",    href: "/app/knowledge-bases", icon: Brain },
       { name: "Providers",       href: "/app/providers",       icon: Key },
       { name: "Voices",          href: "/app/voices",          icon: Mic2 },
     ],
