@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { ArrowLeft, Save, Bot, Plus, Trash2, PhoneForwarded, Sparkles, X, ChevronDown, ChevronUp, Database, ClipboardList } from "lucide-react";
-import { useCreateAgent, useListAgentTemplates, useListKnowledgeBases, getListAgentsQueryKey } from "@workspace/api-client-react";
+import { useCreateAgent, useListAgentTemplates, useListKnowledgeSources, getListAgentsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { useForm, useWatch, useFieldArray } from "react-hook-form";
@@ -272,7 +272,7 @@ export default function AgentNew() {
   const [showAdvancedSTT, setShowAdvancedSTT] = useState(false);
   const [agentMode, setAgentMode] = useState<"managed" | "byop">("byop");
   const { data: templates } = useListAgentTemplates();
-  const { data: knowledgeBases } = useListKnowledgeBases();
+  const { data: knowledgeBases } = useListKnowledgeSources();
 
   const form = useForm<AgentFormValues>({
     resolver: zodResolver(agentFormSchema),

@@ -87,14 +87,14 @@ import type {
   GetPublicBookingByTokenParams,
   GetPublicSlotsParams,
   HealthStatus,
-  KbChunkResult,
-  KbDocument,
-  KbDocumentInput,
-  KbQueryInput,
-  KnowledgeBase,
-  KnowledgeBaseDetail,
-  KnowledgeBaseInput,
-  KnowledgeBaseUpdate,
+  KnowledgeEntry,
+  KnowledgeEntryInput,
+  KnowledgeSearchInput,
+  KnowledgeSearchResponse,
+  KnowledgeSource,
+  KnowledgeSourceDetail,
+  KnowledgeSourceInput,
+  KnowledgeSourceUpdate,
   KycStartResponse,
   KycStatusResponse,
   ListActivityLogsParams,
@@ -1865,20 +1865,20 @@ export function useGetDailyCallVolume<TData = Awaited<ReturnType<typeof getDaily
 
 
 
-export const getListKnowledgeBasesUrl = () => {
+export const getListKnowledgeSourcesUrl = () => {
 
 
 
 
-  return `/api/knowledge-bases`
+  return `/api/knowledge-sources`
 }
 
 /**
- * @summary List all knowledge bases
+ * @summary List all knowledge sources for the current user
  */
-export const listKnowledgeBases = async ( options?: RequestInit): Promise<KnowledgeBase[]> => {
+export const listKnowledgeSources = async ( options?: RequestInit): Promise<KnowledgeSource[]> => {
 
-  return customFetch<KnowledgeBase[]>(getListKnowledgeBasesUrl(),
+  return customFetch<KnowledgeSource[]>(getListKnowledgeSourcesUrl(),
   {
     ...options,
     method: 'GET'
@@ -1891,45 +1891,45 @@ export const listKnowledgeBases = async ( options?: RequestInit): Promise<Knowle
 
 
 
-export const getListKnowledgeBasesQueryKey = () => {
+export const getListKnowledgeSourcesQueryKey = () => {
     return [
-    `/api/knowledge-bases`
+    `/api/knowledge-sources`
     ] as const;
     }
 
 
-export const getListKnowledgeBasesQueryOptions = <TData = Awaited<ReturnType<typeof listKnowledgeBases>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listKnowledgeBases>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getListKnowledgeSourcesQueryOptions = <TData = Awaited<ReturnType<typeof listKnowledgeSources>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listKnowledgeSources>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getListKnowledgeBasesQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getListKnowledgeSourcesQueryKey();
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listKnowledgeBases>>> = ({ signal }) => listKnowledgeBases({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listKnowledgeSources>>> = ({ signal }) => listKnowledgeSources({ signal, ...requestOptions });
 
 
 
 
 
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listKnowledgeBases>>, TError, TData> & { queryKey: QueryKey }
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listKnowledgeSources>>, TError, TData> & { queryKey: QueryKey }
 }
 
-export type ListKnowledgeBasesQueryResult = NonNullable<Awaited<ReturnType<typeof listKnowledgeBases>>>
-export type ListKnowledgeBasesQueryError = ErrorType<unknown>
+export type ListKnowledgeSourcesQueryResult = NonNullable<Awaited<ReturnType<typeof listKnowledgeSources>>>
+export type ListKnowledgeSourcesQueryError = ErrorType<unknown>
 
 
 /**
- * @summary List all knowledge bases
+ * @summary List all knowledge sources for the current user
  */
 
-export function useListKnowledgeBases<TData = Awaited<ReturnType<typeof listKnowledgeBases>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listKnowledgeBases>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export function useListKnowledgeSources<TData = Awaited<ReturnType<typeof listKnowledgeSources>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listKnowledgeSources>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getListKnowledgeBasesQueryOptions(options)
+  const queryOptions = getListKnowledgeSourcesQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -1942,37 +1942,37 @@ export function useListKnowledgeBases<TData = Awaited<ReturnType<typeof listKnow
 
 
 
-export const getCreateKnowledgeBaseUrl = () => {
+export const getCreateKnowledgeSourceUrl = () => {
 
 
 
 
-  return `/api/knowledge-bases`
+  return `/api/knowledge-sources`
 }
 
 /**
- * @summary Create a new knowledge base
+ * @summary Create a knowledge source with optional initial entries
  */
-export const createKnowledgeBase = async (knowledgeBaseInput: KnowledgeBaseInput, options?: RequestInit): Promise<KnowledgeBase> => {
+export const createKnowledgeSource = async (knowledgeSourceInput: KnowledgeSourceInput, options?: RequestInit): Promise<KnowledgeSourceDetail> => {
 
-  return customFetch<KnowledgeBase>(getCreateKnowledgeBaseUrl(),
+  return customFetch<KnowledgeSourceDetail>(getCreateKnowledgeSourceUrl(),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
-      knowledgeBaseInput,)
+      knowledgeSourceInput,)
   }
 );}
 
 
 
 
-export const getCreateKnowledgeBaseMutationOptions = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createKnowledgeBase>>, TError,{data: BodyType<KnowledgeBaseInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof createKnowledgeBase>>, TError,{data: BodyType<KnowledgeBaseInput>}, TContext> => {
+export const getCreateKnowledgeSourceMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createKnowledgeSource>>, TError,{data: BodyType<KnowledgeSourceInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createKnowledgeSource>>, TError,{data: BodyType<KnowledgeSourceInput>}, TContext> => {
 
-const mutationKey = ['createKnowledgeBase'];
+const mutationKey = ['createKnowledgeSource'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -1982,10 +1982,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createKnowledgeBase>>, {data: BodyType<KnowledgeBaseInput>}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createKnowledgeSource>>, {data: BodyType<KnowledgeSourceInput>}> = (props) => {
           const {data} = props ?? {};
 
-          return  createKnowledgeBase(data,requestOptions)
+          return  createKnowledgeSource(data,requestOptions)
         }
 
 
@@ -1995,38 +1995,38 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type CreateKnowledgeBaseMutationResult = NonNullable<Awaited<ReturnType<typeof createKnowledgeBase>>>
-    export type CreateKnowledgeBaseMutationBody = BodyType<KnowledgeBaseInput>
-    export type CreateKnowledgeBaseMutationError = ErrorType<void>
+    export type CreateKnowledgeSourceMutationResult = NonNullable<Awaited<ReturnType<typeof createKnowledgeSource>>>
+    export type CreateKnowledgeSourceMutationBody = BodyType<KnowledgeSourceInput>
+    export type CreateKnowledgeSourceMutationError = ErrorType<void>
 
     /**
- * @summary Create a new knowledge base
+ * @summary Create a knowledge source with optional initial entries
  */
-export const useCreateKnowledgeBase = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createKnowledgeBase>>, TError,{data: BodyType<KnowledgeBaseInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+export const useCreateKnowledgeSource = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createKnowledgeSource>>, TError,{data: BodyType<KnowledgeSourceInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
-        Awaited<ReturnType<typeof createKnowledgeBase>>,
+        Awaited<ReturnType<typeof createKnowledgeSource>>,
         TError,
-        {data: BodyType<KnowledgeBaseInput>},
+        {data: BodyType<KnowledgeSourceInput>},
         TContext
       > => {
-      return useMutation(getCreateKnowledgeBaseMutationOptions(options));
+      return useMutation(getCreateKnowledgeSourceMutationOptions(options));
     }
 
-export const getGetKnowledgeBaseUrl = (id: number,) => {
+export const getGetKnowledgeSourceUrl = (id: number,) => {
 
 
 
 
-  return `/api/knowledge-bases/${id}`
+  return `/api/knowledge-sources/${id}`
 }
 
 /**
- * @summary Get a knowledge base with its documents
+ * @summary Get a knowledge source with all its entries
  */
-export const getKnowledgeBase = async (id: number, options?: RequestInit): Promise<KnowledgeBaseDetail> => {
+export const getKnowledgeSource = async (id: number, options?: RequestInit): Promise<KnowledgeSourceDetail> => {
 
-  return customFetch<KnowledgeBaseDetail>(getGetKnowledgeBaseUrl(id),
+  return customFetch<KnowledgeSourceDetail>(getGetKnowledgeSourceUrl(id),
   {
     ...options,
     method: 'GET'
@@ -2039,45 +2039,45 @@ export const getKnowledgeBase = async (id: number, options?: RequestInit): Promi
 
 
 
-export const getGetKnowledgeBaseQueryKey = (id: number,) => {
+export const getGetKnowledgeSourceQueryKey = (id: number,) => {
     return [
-    `/api/knowledge-bases/${id}`
+    `/api/knowledge-sources/${id}`
     ] as const;
     }
 
 
-export const getGetKnowledgeBaseQueryOptions = <TData = Awaited<ReturnType<typeof getKnowledgeBase>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getKnowledgeBase>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetKnowledgeSourceQueryOptions = <TData = Awaited<ReturnType<typeof getKnowledgeSource>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getKnowledgeSource>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetKnowledgeBaseQueryKey(id);
+  const queryKey =  queryOptions?.queryKey ?? getGetKnowledgeSourceQueryKey(id);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getKnowledgeBase>>> = ({ signal }) => getKnowledgeBase(id, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getKnowledgeSource>>> = ({ signal }) => getKnowledgeSource(id, { signal, ...requestOptions });
 
 
 
 
 
-   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getKnowledgeBase>>, TError, TData> & { queryKey: QueryKey }
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getKnowledgeSource>>, TError, TData> & { queryKey: QueryKey }
 }
 
-export type GetKnowledgeBaseQueryResult = NonNullable<Awaited<ReturnType<typeof getKnowledgeBase>>>
-export type GetKnowledgeBaseQueryError = ErrorType<void>
+export type GetKnowledgeSourceQueryResult = NonNullable<Awaited<ReturnType<typeof getKnowledgeSource>>>
+export type GetKnowledgeSourceQueryError = ErrorType<void>
 
 
 /**
- * @summary Get a knowledge base with its documents
+ * @summary Get a knowledge source with all its entries
  */
 
-export function useGetKnowledgeBase<TData = Awaited<ReturnType<typeof getKnowledgeBase>>, TError = ErrorType<void>>(
- id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getKnowledgeBase>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export function useGetKnowledgeSource<TData = Awaited<ReturnType<typeof getKnowledgeSource>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getKnowledgeSource>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetKnowledgeBaseQueryOptions(id,options)
+  const queryOptions = getGetKnowledgeSourceQueryOptions(id,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -2090,38 +2090,38 @@ export function useGetKnowledgeBase<TData = Awaited<ReturnType<typeof getKnowled
 
 
 
-export const getUpdateKnowledgeBaseUrl = (id: number,) => {
+export const getUpdateKnowledgeSourceUrl = (id: number,) => {
 
 
 
 
-  return `/api/knowledge-bases/${id}`
+  return `/api/knowledge-sources/${id}`
 }
 
 /**
- * @summary Update a knowledge base
+ * @summary Update knowledge source name
  */
-export const updateKnowledgeBase = async (id: number,
-    knowledgeBaseUpdate: KnowledgeBaseUpdate, options?: RequestInit): Promise<KnowledgeBase> => {
+export const updateKnowledgeSource = async (id: number,
+    knowledgeSourceUpdate: KnowledgeSourceUpdate, options?: RequestInit): Promise<KnowledgeSource> => {
 
-  return customFetch<KnowledgeBase>(getUpdateKnowledgeBaseUrl(id),
+  return customFetch<KnowledgeSource>(getUpdateKnowledgeSourceUrl(id),
   {
     ...options,
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
-      knowledgeBaseUpdate,)
+      knowledgeSourceUpdate,)
   }
 );}
 
 
 
 
-export const getUpdateKnowledgeBaseMutationOptions = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateKnowledgeBase>>, TError,{id: number;data: BodyType<KnowledgeBaseUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof updateKnowledgeBase>>, TError,{id: number;data: BodyType<KnowledgeBaseUpdate>}, TContext> => {
+export const getUpdateKnowledgeSourceMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateKnowledgeSource>>, TError,{id: number;data: BodyType<KnowledgeSourceUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateKnowledgeSource>>, TError,{id: number;data: BodyType<KnowledgeSourceUpdate>}, TContext> => {
 
-const mutationKey = ['updateKnowledgeBase'];
+const mutationKey = ['updateKnowledgeSource'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -2131,10 +2131,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateKnowledgeBase>>, {id: number;data: BodyType<KnowledgeBaseUpdate>}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateKnowledgeSource>>, {id: number;data: BodyType<KnowledgeSourceUpdate>}> = (props) => {
           const {id,data} = props ?? {};
 
-          return  updateKnowledgeBase(id,data,requestOptions)
+          return  updateKnowledgeSource(id,data,requestOptions)
         }
 
 
@@ -2144,38 +2144,38 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type UpdateKnowledgeBaseMutationResult = NonNullable<Awaited<ReturnType<typeof updateKnowledgeBase>>>
-    export type UpdateKnowledgeBaseMutationBody = BodyType<KnowledgeBaseUpdate>
-    export type UpdateKnowledgeBaseMutationError = ErrorType<void>
+    export type UpdateKnowledgeSourceMutationResult = NonNullable<Awaited<ReturnType<typeof updateKnowledgeSource>>>
+    export type UpdateKnowledgeSourceMutationBody = BodyType<KnowledgeSourceUpdate>
+    export type UpdateKnowledgeSourceMutationError = ErrorType<void>
 
     /**
- * @summary Update a knowledge base
+ * @summary Update knowledge source name
  */
-export const useUpdateKnowledgeBase = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateKnowledgeBase>>, TError,{id: number;data: BodyType<KnowledgeBaseUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+export const useUpdateKnowledgeSource = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateKnowledgeSource>>, TError,{id: number;data: BodyType<KnowledgeSourceUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
-        Awaited<ReturnType<typeof updateKnowledgeBase>>,
+        Awaited<ReturnType<typeof updateKnowledgeSource>>,
         TError,
-        {id: number;data: BodyType<KnowledgeBaseUpdate>},
+        {id: number;data: BodyType<KnowledgeSourceUpdate>},
         TContext
       > => {
-      return useMutation(getUpdateKnowledgeBaseMutationOptions(options));
+      return useMutation(getUpdateKnowledgeSourceMutationOptions(options));
     }
 
-export const getDeleteKnowledgeBaseUrl = (id: number,) => {
+export const getDeleteKnowledgeSourceUrl = (id: number,) => {
 
 
 
 
-  return `/api/knowledge-bases/${id}`
+  return `/api/knowledge-sources/${id}`
 }
 
 /**
- * @summary Delete a knowledge base and all its data
+ * @summary Delete a knowledge source and all its entries
  */
-export const deleteKnowledgeBase = async (id: number, options?: RequestInit): Promise<void> => {
+export const deleteKnowledgeSource = async (id: number, options?: RequestInit): Promise<void> => {
 
-  return customFetch<void>(getDeleteKnowledgeBaseUrl(id),
+  return customFetch<void>(getDeleteKnowledgeSourceUrl(id),
   {
     ...options,
     method: 'DELETE'
@@ -2187,11 +2187,11 @@ export const deleteKnowledgeBase = async (id: number, options?: RequestInit): Pr
 
 
 
-export const getDeleteKnowledgeBaseMutationOptions = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteKnowledgeBase>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof deleteKnowledgeBase>>, TError,{id: number}, TContext> => {
+export const getDeleteKnowledgeSourceMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteKnowledgeSource>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteKnowledgeSource>>, TError,{id: number}, TContext> => {
 
-const mutationKey = ['deleteKnowledgeBase'];
+const mutationKey = ['deleteKnowledgeSource'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -2201,10 +2201,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteKnowledgeBase>>, {id: number}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteKnowledgeSource>>, {id: number}> = (props) => {
           const {id} = props ?? {};
 
-          return  deleteKnowledgeBase(id,requestOptions)
+          return  deleteKnowledgeSource(id,requestOptions)
         }
 
 
@@ -2214,133 +2214,56 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type DeleteKnowledgeBaseMutationResult = NonNullable<Awaited<ReturnType<typeof deleteKnowledgeBase>>>
+    export type DeleteKnowledgeSourceMutationResult = NonNullable<Awaited<ReturnType<typeof deleteKnowledgeSource>>>
 
-    export type DeleteKnowledgeBaseMutationError = ErrorType<void>
+    export type DeleteKnowledgeSourceMutationError = ErrorType<void>
 
     /**
- * @summary Delete a knowledge base and all its data
+ * @summary Delete a knowledge source and all its entries
  */
-export const useDeleteKnowledgeBase = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteKnowledgeBase>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+export const useDeleteKnowledgeSource = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteKnowledgeSource>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
-        Awaited<ReturnType<typeof deleteKnowledgeBase>>,
+        Awaited<ReturnType<typeof deleteKnowledgeSource>>,
         TError,
         {id: number},
         TContext
       > => {
-      return useMutation(getDeleteKnowledgeBaseMutationOptions(options));
+      return useMutation(getDeleteKnowledgeSourceMutationOptions(options));
     }
 
-export const getListKbDocumentsUrl = (id: number,) => {
+export const getAddKnowledgeEntryUrl = (id: number,) => {
 
 
 
 
-  return `/api/knowledge-bases/${id}/documents`
+  return `/api/knowledge-sources/${id}/entries`
 }
 
 /**
- * @summary List documents in a knowledge base
+ * @summary Add an entry to a knowledge source
  */
-export const listKbDocuments = async (id: number, options?: RequestInit): Promise<KbDocument[]> => {
+export const addKnowledgeEntry = async (id: number,
+    knowledgeEntryInput: KnowledgeEntryInput, options?: RequestInit): Promise<KnowledgeEntry> => {
 
-  return customFetch<KbDocument[]>(getListKbDocumentsUrl(id),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getListKbDocumentsQueryKey = (id: number,) => {
-    return [
-    `/api/knowledge-bases/${id}/documents`
-    ] as const;
-    }
-
-
-export const getListKbDocumentsQueryOptions = <TData = Awaited<ReturnType<typeof listKbDocuments>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listKbDocuments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getListKbDocumentsQueryKey(id);
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listKbDocuments>>> = ({ signal }) => listKbDocuments(id, { signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listKbDocuments>>, TError, TData> & { queryKey: QueryKey }
-}
-
-export type ListKbDocumentsQueryResult = NonNullable<Awaited<ReturnType<typeof listKbDocuments>>>
-export type ListKbDocumentsQueryError = ErrorType<unknown>
-
-
-/**
- * @summary List documents in a knowledge base
- */
-
-export function useListKbDocuments<TData = Awaited<ReturnType<typeof listKbDocuments>>, TError = ErrorType<unknown>>(
- id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listKbDocuments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-
- ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-
-  const queryOptions = getListKbDocumentsQueryOptions(id,options)
-
-  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
-
-  return { ...query, queryKey: queryOptions.queryKey };
-}
-
-
-
-
-
-
-
-export const getAddKbDocumentUrl = (id: number,) => {
-
-
-
-
-  return `/api/knowledge-bases/${id}/documents`
-}
-
-/**
- * @summary Add a document (text paste or URL) and start ingestion
- */
-export const addKbDocument = async (id: number,
-    kbDocumentInput: KbDocumentInput, options?: RequestInit): Promise<KbDocument> => {
-
-  return customFetch<KbDocument>(getAddKbDocumentUrl(id),
+  return customFetch<KnowledgeEntry>(getAddKnowledgeEntryUrl(id),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
-      kbDocumentInput,)
+      knowledgeEntryInput,)
   }
 );}
 
 
 
 
-export const getAddKbDocumentMutationOptions = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addKbDocument>>, TError,{id: number;data: BodyType<KbDocumentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof addKbDocument>>, TError,{id: number;data: BodyType<KbDocumentInput>}, TContext> => {
+export const getAddKnowledgeEntryMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addKnowledgeEntry>>, TError,{id: number;data: BodyType<KnowledgeEntryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof addKnowledgeEntry>>, TError,{id: number;data: BodyType<KnowledgeEntryInput>}, TContext> => {
 
-const mutationKey = ['addKbDocument'];
+const mutationKey = ['addKnowledgeEntry'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -2350,10 +2273,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addKbDocument>>, {id: number;data: BodyType<KbDocumentInput>}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addKnowledgeEntry>>, {id: number;data: BodyType<KnowledgeEntryInput>}> = (props) => {
           const {id,data} = props ?? {};
 
-          return  addKbDocument(id,data,requestOptions)
+          return  addKnowledgeEntry(id,data,requestOptions)
         }
 
 
@@ -2363,40 +2286,114 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type AddKbDocumentMutationResult = NonNullable<Awaited<ReturnType<typeof addKbDocument>>>
-    export type AddKbDocumentMutationBody = BodyType<KbDocumentInput>
-    export type AddKbDocumentMutationError = ErrorType<void>
+    export type AddKnowledgeEntryMutationResult = NonNullable<Awaited<ReturnType<typeof addKnowledgeEntry>>>
+    export type AddKnowledgeEntryMutationBody = BodyType<KnowledgeEntryInput>
+    export type AddKnowledgeEntryMutationError = ErrorType<void>
 
     /**
- * @summary Add a document (text paste or URL) and start ingestion
+ * @summary Add an entry to a knowledge source
  */
-export const useAddKbDocument = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addKbDocument>>, TError,{id: number;data: BodyType<KbDocumentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+export const useAddKnowledgeEntry = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addKnowledgeEntry>>, TError,{id: number;data: BodyType<KnowledgeEntryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
-        Awaited<ReturnType<typeof addKbDocument>>,
+        Awaited<ReturnType<typeof addKnowledgeEntry>>,
         TError,
-        {id: number;data: BodyType<KbDocumentInput>},
+        {id: number;data: BodyType<KnowledgeEntryInput>},
         TContext
       > => {
-      return useMutation(getAddKbDocumentMutationOptions(options));
+      return useMutation(getAddKnowledgeEntryMutationOptions(options));
     }
 
-export const getDeleteKbDocumentUrl = (id: number,
-    docId: number,) => {
+export const getUpdateKnowledgeEntryUrl = (id: number,
+    entryId: number,) => {
 
 
 
 
-  return `/api/knowledge-bases/${id}/documents/${docId}`
+  return `/api/knowledge-sources/${id}/entries/${entryId}`
 }
 
 /**
- * @summary Delete a document and its chunks
+ * @summary Update a knowledge entry
  */
-export const deleteKbDocument = async (id: number,
-    docId: number, options?: RequestInit): Promise<void> => {
+export const updateKnowledgeEntry = async (id: number,
+    entryId: number,
+    knowledgeEntryInput: KnowledgeEntryInput, options?: RequestInit): Promise<KnowledgeEntry> => {
 
-  return customFetch<void>(getDeleteKbDocumentUrl(id,docId),
+  return customFetch<KnowledgeEntry>(getUpdateKnowledgeEntryUrl(id,entryId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      knowledgeEntryInput,)
+  }
+);}
+
+
+
+
+export const getUpdateKnowledgeEntryMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateKnowledgeEntry>>, TError,{id: number;entryId: number;data: BodyType<KnowledgeEntryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateKnowledgeEntry>>, TError,{id: number;entryId: number;data: BodyType<KnowledgeEntryInput>}, TContext> => {
+
+const mutationKey = ['updateKnowledgeEntry'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateKnowledgeEntry>>, {id: number;entryId: number;data: BodyType<KnowledgeEntryInput>}> = (props) => {
+          const {id,entryId,data} = props ?? {};
+
+          return  updateKnowledgeEntry(id,entryId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateKnowledgeEntryMutationResult = NonNullable<Awaited<ReturnType<typeof updateKnowledgeEntry>>>
+    export type UpdateKnowledgeEntryMutationBody = BodyType<KnowledgeEntryInput>
+    export type UpdateKnowledgeEntryMutationError = ErrorType<void>
+
+    /**
+ * @summary Update a knowledge entry
+ */
+export const useUpdateKnowledgeEntry = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateKnowledgeEntry>>, TError,{id: number;entryId: number;data: BodyType<KnowledgeEntryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateKnowledgeEntry>>,
+        TError,
+        {id: number;entryId: number;data: BodyType<KnowledgeEntryInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateKnowledgeEntryMutationOptions(options));
+    }
+
+export const getDeleteKnowledgeEntryUrl = (id: number,
+    entryId: number,) => {
+
+
+
+
+  return `/api/knowledge-sources/${id}/entries/${entryId}`
+}
+
+/**
+ * @summary Delete a knowledge entry
+ */
+export const deleteKnowledgeEntry = async (id: number,
+    entryId: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteKnowledgeEntryUrl(id,entryId),
   {
     ...options,
     method: 'DELETE'
@@ -2408,11 +2405,11 @@ export const deleteKbDocument = async (id: number,
 
 
 
-export const getDeleteKbDocumentMutationOptions = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteKbDocument>>, TError,{id: number;docId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof deleteKbDocument>>, TError,{id: number;docId: number}, TContext> => {
+export const getDeleteKnowledgeEntryMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteKnowledgeEntry>>, TError,{id: number;entryId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteKnowledgeEntry>>, TError,{id: number;entryId: number}, TContext> => {
 
-const mutationKey = ['deleteKbDocument'];
+const mutationKey = ['deleteKnowledgeEntry'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -2422,10 +2419,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteKbDocument>>, {id: number;docId: number}> = (props) => {
-          const {id,docId} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteKnowledgeEntry>>, {id: number;entryId: number}> = (props) => {
+          const {id,entryId} = props ?? {};
 
-          return  deleteKbDocument(id,docId,requestOptions)
+          return  deleteKnowledgeEntry(id,entryId,requestOptions)
         }
 
 
@@ -2435,56 +2432,56 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type DeleteKbDocumentMutationResult = NonNullable<Awaited<ReturnType<typeof deleteKbDocument>>>
+    export type DeleteKnowledgeEntryMutationResult = NonNullable<Awaited<ReturnType<typeof deleteKnowledgeEntry>>>
 
-    export type DeleteKbDocumentMutationError = ErrorType<void>
+    export type DeleteKnowledgeEntryMutationError = ErrorType<void>
 
     /**
- * @summary Delete a document and its chunks
+ * @summary Delete a knowledge entry
  */
-export const useDeleteKbDocument = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteKbDocument>>, TError,{id: number;docId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+export const useDeleteKnowledgeEntry = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteKnowledgeEntry>>, TError,{id: number;entryId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
-        Awaited<ReturnType<typeof deleteKbDocument>>,
+        Awaited<ReturnType<typeof deleteKnowledgeEntry>>,
         TError,
-        {id: number;docId: number},
+        {id: number;entryId: number},
         TContext
       > => {
-      return useMutation(getDeleteKbDocumentMutationOptions(options));
+      return useMutation(getDeleteKnowledgeEntryMutationOptions(options));
     }
 
-export const getQueryKnowledgeBaseUrl = (id: number,) => {
+export const getSearchKnowledgeUrl = (id: number,) => {
 
 
 
 
-  return `/api/knowledge-bases/${id}/query`
+  return `/api/knowledge-sources/${id}/search`
 }
 
 /**
- * @summary Test retrieval — returns top-K chunks for a query
+ * @summary Full-text search within a knowledge source (test AI knowledge)
  */
-export const queryKnowledgeBase = async (id: number,
-    kbQueryInput: KbQueryInput, options?: RequestInit): Promise<KbChunkResult[]> => {
+export const searchKnowledge = async (id: number,
+    knowledgeSearchInput: KnowledgeSearchInput, options?: RequestInit): Promise<KnowledgeSearchResponse> => {
 
-  return customFetch<KbChunkResult[]>(getQueryKnowledgeBaseUrl(id),
+  return customFetch<KnowledgeSearchResponse>(getSearchKnowledgeUrl(id),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
-      kbQueryInput,)
+      knowledgeSearchInput,)
   }
 );}
 
 
 
 
-export const getQueryKnowledgeBaseMutationOptions = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof queryKnowledgeBase>>, TError,{id: number;data: BodyType<KbQueryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof queryKnowledgeBase>>, TError,{id: number;data: BodyType<KbQueryInput>}, TContext> => {
+export const getSearchKnowledgeMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof searchKnowledge>>, TError,{id: number;data: BodyType<KnowledgeSearchInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof searchKnowledge>>, TError,{id: number;data: BodyType<KnowledgeSearchInput>}, TContext> => {
 
-const mutationKey = ['queryKnowledgeBase'];
+const mutationKey = ['searchKnowledge'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -2494,10 +2491,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof queryKnowledgeBase>>, {id: number;data: BodyType<KbQueryInput>}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof searchKnowledge>>, {id: number;data: BodyType<KnowledgeSearchInput>}> = (props) => {
           const {id,data} = props ?? {};
 
-          return  queryKnowledgeBase(id,data,requestOptions)
+          return  searchKnowledge(id,data,requestOptions)
         }
 
 
@@ -2507,22 +2504,22 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type QueryKnowledgeBaseMutationResult = NonNullable<Awaited<ReturnType<typeof queryKnowledgeBase>>>
-    export type QueryKnowledgeBaseMutationBody = BodyType<KbQueryInput>
-    export type QueryKnowledgeBaseMutationError = ErrorType<void>
+    export type SearchKnowledgeMutationResult = NonNullable<Awaited<ReturnType<typeof searchKnowledge>>>
+    export type SearchKnowledgeMutationBody = BodyType<KnowledgeSearchInput>
+    export type SearchKnowledgeMutationError = ErrorType<void>
 
     /**
- * @summary Test retrieval — returns top-K chunks for a query
+ * @summary Full-text search within a knowledge source (test AI knowledge)
  */
-export const useQueryKnowledgeBase = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof queryKnowledgeBase>>, TError,{id: number;data: BodyType<KbQueryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+export const useSearchKnowledge = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof searchKnowledge>>, TError,{id: number;data: BodyType<KnowledgeSearchInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
-        Awaited<ReturnType<typeof queryKnowledgeBase>>,
+        Awaited<ReturnType<typeof searchKnowledge>>,
         TError,
-        {id: number;data: BodyType<KbQueryInput>},
+        {id: number;data: BodyType<KnowledgeSearchInput>},
         TContext
       > => {
-      return useMutation(getQueryKnowledgeBaseMutationOptions(options));
+      return useMutation(getSearchKnowledgeMutationOptions(options));
     }
 
 export const getGetWalletUrl = () => {

@@ -1,0 +1,244 @@
+I want to simplify the entire AI Knowledge system and remove the dependency on embeddings, vector databases, and semantic search for now.
+
+Our goal is to launch a reliable MVP quickly.
+
+## New AI Knowledge Architecture
+
+Remove:
+
+* Embeddings generation
+* Vector storage
+* pgvector dependency
+* Similarity search
+* Embedding models
+* Chunk overlap settings
+* Embedding API calls
+
+We no longer want Retrieval-Augmented Generation based on vector embeddings.
+
+---
+
+## New Knowledge Storage Design
+
+Create a simple PostgreSQL-based knowledge system.
+
+### knowledge_sources
+
+Store:
+
+* id
+* user_id
+* name
+* type (faq, document, website, text)
+* status
+* created_at
+* updated_at
+
+### knowledge_entries
+
+Store:
+
+* id
+* source_id
+* title
+* content
+* keywords
+* created_at
+
+All uploaded information should be converted into readable text entries and stored in this table.
+
+---
+
+## Supported Knowledge Types
+
+### FAQs
+
+Store:
+
+Question
+
+Answer
+
+Example:
+
+Q: What are your business hours?
+
+A: We operate from 9 AM to 6 PM IST.
+
+---
+
+### Website Import
+
+Import website content.
+
+Extract:
+
+* Page title
+* Main content
+* URL
+
+Store as knowledge entries.
+
+---
+
+### Document Upload
+
+Support:
+
+* PDF
+* DOCX
+* TXT
+
+Extract text and save as knowledge entries.
+
+No embeddings required.
+
+---
+
+### Paste Text
+
+Allow users to directly paste information.
+
+Store as a knowledge entry.
+
+---
+
+## Knowledge Search System
+
+Replace vector search with PostgreSQL Full Text Search.
+
+Use:
+
+tsvector
+
+tsquery
+
+GIN indexes
+
+Search process:
+
+1. User asks a question.
+2. Search knowledge_entries using PostgreSQL Full Text Search.
+3. Return the top 3–5 matching entries.
+4. Pass those entries to the LLM.
+5. Generate the final answer.
+
+---
+
+## AI Agent Retrieval Flow
+
+Caller Question
+
+↓
+
+Knowledge Search
+
+↓
+
+Top Matching Entries
+
+↓
+
+Injected into Prompt
+
+↓
+
+LLM Generates Answer
+
+No embeddings.
+
+No vector search.
+
+No similarity calculations.
+
+---
+
+## Prompt Structure
+
+When knowledge is found:
+
+Relevant Knowledge:
+
+[Knowledge Entry 1]
+
+[Knowledge Entry 2]
+
+[Knowledge Entry 3]
+
+Instructions:
+
+Answer using the provided knowledge.
+If the answer is not present, say you do not know instead of making up information.
+
+---
+
+## Knowledge Testing Page
+
+Rename:
+
+Test Retrieval
+
+to
+
+Test AI Knowledge
+
+Input:
+
+Ask a Question
+
+Output:
+
+Generated Answer
+
+Knowledge Sources Used
+
+Matched Entries
+
+Search Score
+
+Do not show embeddings or similarity scores.
+
+---
+
+## UI Changes
+
+Remove all references to:
+
+* Embeddings
+* Vector Search
+* Similarity Search
+* Chunk Size
+* Chunk Overlap
+* Embedding Models
+
+Replace with:
+
+* AI Knowledge
+* Knowledge Sources
+* Knowledge Search
+* Knowledge Coverage
+
+---
+
+## Performance Goals
+
+* Fast response times
+* Simple architecture
+* Easy debugging
+* Minimal external dependencies
+* Lower operational costs
+* Reliable production behavior
+
+---
+
+## Deliverables
+
+1. Remove existing embedding-based retrieval implementation.
+2. Create PostgreSQL Full Text Search implementation.
+3. Migrate existing knowledge content into searchable entries.
+4. Update API endpoints.
+5. Update AI retrieval pipeline.
+6. Update dashboard UI.
+7. Keep the system production-ready and easy to extend later with embeddings if needed.
+
+Build the complete implementation with clean code, proper database migrations, and a modern SaaS user experience.

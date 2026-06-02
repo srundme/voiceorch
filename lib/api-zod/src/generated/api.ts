@@ -884,181 +884,181 @@ export const GetDailyCallVolumeResponse = zod.array(GetDailyCallVolumeResponseIt
 
 
 /**
- * @summary List all knowledge bases
+ * @summary List all knowledge sources for the current user
  */
-export const ListKnowledgeBasesResponseItem = zod.object({
+export const ListKnowledgeSourcesResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
-  "description": zod.string().nullish(),
-  "embeddingModel": zod.string(),
-  "chunkSize": zod.number(),
-  "chunkOverlap": zod.number(),
-  "documentCount": zod.number(),
-  "chunkCount": zod.number(),
+  "type": zod.enum(['faq', 'text', 'website']),
+  "status": zod.enum(['active', 'processing', 'error']),
+  "entryCount": zod.number(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
-export const ListKnowledgeBasesResponse = zod.array(ListKnowledgeBasesResponseItem)
+export const ListKnowledgeSourcesResponse = zod.array(ListKnowledgeSourcesResponseItem)
 
 
 /**
- * @summary Create a new knowledge base
+ * @summary Create a knowledge source with optional initial entries
  */
 
-export const createKnowledgeBaseBodyEmbeddingModelDefault = `text-embedding-3-small`;
-export const createKnowledgeBaseBodyChunkSizeDefault = 512;
-export const createKnowledgeBaseBodyChunkOverlapDefault = 64;
 
-export const CreateKnowledgeBaseBody = zod.object({
+
+
+export const CreateKnowledgeSourceBody = zod.object({
   "name": zod.string().min(1),
-  "description": zod.string().optional(),
-  "embeddingModel": zod.string().default(createKnowledgeBaseBodyEmbeddingModelDefault),
-  "chunkSize": zod.number().default(createKnowledgeBaseBodyChunkSizeDefault),
-  "chunkOverlap": zod.number().default(createKnowledgeBaseBodyChunkOverlapDefault)
+  "type": zod.enum(['faq', 'text', 'website']),
+  "url": zod.string().optional().describe('URL to crawl (required when type=website)'),
+  "entries": zod.array(zod.object({
+  "title": zod.string().optional(),
+  "content": zod.string().min(1),
+  "keywords": zod.string().optional()
+})).optional().describe('Initial entries to create')
 })
 
 
 /**
- * @summary Get a knowledge base with its documents
+ * @summary Get a knowledge source with all its entries
  */
-export const GetKnowledgeBaseParams = zod.object({
+export const GetKnowledgeSourceParams = zod.object({
   "id": zod.coerce.number()
 })
 
-export const GetKnowledgeBaseResponse = zod.object({
+export const GetKnowledgeSourceResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
-  "description": zod.string().nullish(),
-  "embeddingModel": zod.string(),
-  "chunkSize": zod.number(),
-  "chunkOverlap": zod.number(),
-  "documentCount": zod.number(),
-  "chunkCount": zod.number(),
+  "type": zod.enum(['faq', 'text', 'website']),
+  "status": zod.enum(['active', 'processing', 'error']),
+  "entryCount": zod.number(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
-  "documents": zod.array(zod.object({
+  "entries": zod.array(zod.object({
   "id": zod.number(),
-  "knowledgeBaseId": zod.number(),
-  "name": zod.string(),
-  "sourceType": zod.enum(['text', 'url']),
-  "sourceUrl": zod.string().nullish(),
-  "charCount": zod.number().nullish(),
-  "status": zod.enum(['pending', 'processing', 'ready', 'error']),
-  "processingError": zod.string().nullish(),
-  "chunkCount": zod.number().nullish(),
-  "createdAt": zod.coerce.date(),
-  "updatedAt": zod.coerce.date()
+  "sourceId": zod.number(),
+  "title": zod.string().nullish(),
+  "content": zod.string(),
+  "keywords": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
 }))
 })
 
 
 /**
- * @summary Update a knowledge base
+ * @summary Update knowledge source name
  */
-export const UpdateKnowledgeBaseParams = zod.object({
+export const UpdateKnowledgeSourceParams = zod.object({
   "id": zod.coerce.number()
 })
 
-export const UpdateKnowledgeBaseBody = zod.object({
-  "name": zod.string().optional(),
-  "description": zod.string().optional()
+
+
+
+export const UpdateKnowledgeSourceBody = zod.object({
+  "name": zod.string().min(1).optional()
 })
 
-export const UpdateKnowledgeBaseResponse = zod.object({
+export const UpdateKnowledgeSourceResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
-  "description": zod.string().nullish(),
-  "embeddingModel": zod.string(),
-  "chunkSize": zod.number(),
-  "chunkOverlap": zod.number(),
-  "documentCount": zod.number(),
-  "chunkCount": zod.number(),
+  "type": zod.enum(['faq', 'text', 'website']),
+  "status": zod.enum(['active', 'processing', 'error']),
+  "entryCount": zod.number(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
 
 
 /**
- * @summary Delete a knowledge base and all its data
+ * @summary Delete a knowledge source and all its entries
  */
-export const DeleteKnowledgeBaseParams = zod.object({
+export const DeleteKnowledgeSourceParams = zod.object({
   "id": zod.coerce.number()
 })
 
 
 /**
- * @summary List documents in a knowledge base
+ * @summary Add an entry to a knowledge source
  */
-export const ListKbDocumentsParams = zod.object({
-  "id": zod.coerce.number()
-})
-
-export const ListKbDocumentsResponseItem = zod.object({
-  "id": zod.number(),
-  "knowledgeBaseId": zod.number(),
-  "name": zod.string(),
-  "sourceType": zod.enum(['text', 'url']),
-  "sourceUrl": zod.string().nullish(),
-  "charCount": zod.number().nullish(),
-  "status": zod.enum(['pending', 'processing', 'ready', 'error']),
-  "processingError": zod.string().nullish(),
-  "chunkCount": zod.number().nullish(),
-  "createdAt": zod.coerce.date(),
-  "updatedAt": zod.coerce.date()
-})
-export const ListKbDocumentsResponse = zod.array(ListKbDocumentsResponseItem)
-
-
-/**
- * @summary Add a document (text paste or URL) and start ingestion
- */
-export const AddKbDocumentParams = zod.object({
+export const AddKnowledgeEntryParams = zod.object({
   "id": zod.coerce.number()
 })
 
 
 
 
-export const AddKbDocumentBody = zod.object({
-  "name": zod.string().min(1),
-  "sourceType": zod.enum(['text', 'url']),
-  "content": zod.string().optional().describe('Raw text content (required when sourceType=text)'),
-  "sourceUrl": zod.string().optional().describe('URL to fetch and ingest (required when sourceType=url)')
+export const AddKnowledgeEntryBody = zod.object({
+  "title": zod.string().optional(),
+  "content": zod.string().min(1),
+  "keywords": zod.string().optional()
 })
 
 
 /**
- * @summary Delete a document and its chunks
+ * @summary Update a knowledge entry
  */
-export const DeleteKbDocumentParams = zod.object({
+export const UpdateKnowledgeEntryParams = zod.object({
   "id": zod.coerce.number(),
-  "docId": zod.coerce.number()
+  "entryId": zod.coerce.number()
+})
+
+
+
+
+export const UpdateKnowledgeEntryBody = zod.object({
+  "title": zod.string().optional(),
+  "content": zod.string().min(1),
+  "keywords": zod.string().optional()
+})
+
+export const UpdateKnowledgeEntryResponse = zod.object({
+  "id": zod.number(),
+  "sourceId": zod.number(),
+  "title": zod.string().nullish(),
+  "content": zod.string(),
+  "keywords": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
 })
 
 
 /**
- * @summary Test retrieval — returns top-K chunks for a query
+ * @summary Delete a knowledge entry
  */
-export const QueryKnowledgeBaseParams = zod.object({
+export const DeleteKnowledgeEntryParams = zod.object({
+  "id": zod.coerce.number(),
+  "entryId": zod.coerce.number()
+})
+
+
+/**
+ * @summary Full-text search within a knowledge source (test AI knowledge)
+ */
+export const SearchKnowledgeParams = zod.object({
   "id": zod.coerce.number()
 })
 
 
-export const queryKnowledgeBaseBodyTopKDefault = 5;
+export const searchKnowledgeBodyLimitDefault = 5;
 
-export const QueryKnowledgeBaseBody = zod.object({
+export const SearchKnowledgeBody = zod.object({
   "query": zod.string().min(1),
-  "topK": zod.number().default(queryKnowledgeBaseBodyTopKDefault).describe('Number of chunks to return')
+  "limit": zod.number().default(searchKnowledgeBodyLimitDefault)
 })
 
-export const QueryKnowledgeBaseResponseItem = zod.object({
+export const SearchKnowledgeResponse = zod.object({
+  "answer": zod.string().describe('LLM-generated answer based on matched entries'),
+  "matchedEntries": zod.array(zod.object({
+  "entry": zod.object({
+  "id": zod.number(),
+  "sourceId": zod.number(),
+  "title": zod.string().nullish(),
   "content": zod.string(),
-  "score": zod.number().describe('Relevance score (higher = more relevant)'),
-  "documentId": zod.number(),
-  "documentName": zod.string(),
-  "chunkIndex": zod.number()
+  "keywords": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+}),
+  "rank": zod.number().describe('FTS relevance rank (higher = more relevant)'),
+  "snippet": zod.string().nullish()
+}))
 })
-export const QueryKnowledgeBaseResponse = zod.array(QueryKnowledgeBaseResponseItem)
 
 
 /**

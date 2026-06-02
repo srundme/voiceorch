@@ -833,117 +833,123 @@ export interface DailyCallVolume {
   failed: number;
 }
 
-export interface KnowledgeBase {
-  id: number;
-  name: string;
-  /** @nullable */
-  description?: string | null;
-  embeddingModel: string;
-  chunkSize: number;
-  chunkOverlap: number;
-  documentCount: number;
-  chunkCount: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export type KbDocumentSourceType = typeof KbDocumentSourceType[keyof typeof KbDocumentSourceType];
+export type KnowledgeSourceType = typeof KnowledgeSourceType[keyof typeof KnowledgeSourceType];
 
 
-export const KbDocumentSourceType = {
+export const KnowledgeSourceType = {
+  faq: 'faq',
   text: 'text',
-  url: 'url',
+  website: 'website',
 } as const;
 
-export type KbDocumentStatus = typeof KbDocumentStatus[keyof typeof KbDocumentStatus];
+export type KnowledgeSourceStatus = typeof KnowledgeSourceStatus[keyof typeof KnowledgeSourceStatus];
 
 
-export const KbDocumentStatus = {
-  pending: 'pending',
+export const KnowledgeSourceStatus = {
+  active: 'active',
   processing: 'processing',
-  ready: 'ready',
   error: 'error',
 } as const;
 
-export interface KbDocument {
+export interface KnowledgeSource {
   id: number;
-  knowledgeBaseId: number;
   name: string;
-  sourceType: KbDocumentSourceType;
-  /** @nullable */
-  sourceUrl?: string | null;
-  /** @nullable */
-  charCount?: number | null;
-  status: KbDocumentStatus;
-  /** @nullable */
-  processingError?: string | null;
-  /** @nullable */
-  chunkCount?: number | null;
+  type: KnowledgeSourceType;
+  status: KnowledgeSourceStatus;
+  entryCount: number;
   createdAt: string;
   updatedAt: string;
 }
 
-export interface KnowledgeBaseDetail {
-  id: number;
-  name: string;
-  /** @nullable */
-  description?: string | null;
-  embeddingModel: string;
-  chunkSize: number;
-  chunkOverlap: number;
-  documentCount: number;
-  chunkCount: number;
-  createdAt: string;
-  updatedAt: string;
-  documents: KbDocument[];
-}
-
-export interface KnowledgeBaseInput {
-  /** @minLength 1 */
-  name: string;
-  description?: string;
-  embeddingModel?: string;
-  chunkSize?: number;
-  chunkOverlap?: number;
-}
-
-export interface KnowledgeBaseUpdate {
-  name?: string;
-  description?: string;
-}
-
-export type KbDocumentInputSourceType = typeof KbDocumentInputSourceType[keyof typeof KbDocumentInputSourceType];
+export type KnowledgeSourceDetailType = typeof KnowledgeSourceDetailType[keyof typeof KnowledgeSourceDetailType];
 
 
-export const KbDocumentInputSourceType = {
+export const KnowledgeSourceDetailType = {
+  faq: 'faq',
   text: 'text',
-  url: 'url',
+  website: 'website',
 } as const;
 
-export interface KbDocumentInput {
+export type KnowledgeSourceDetailStatus = typeof KnowledgeSourceDetailStatus[keyof typeof KnowledgeSourceDetailStatus];
+
+
+export const KnowledgeSourceDetailStatus = {
+  active: 'active',
+  processing: 'processing',
+  error: 'error',
+} as const;
+
+export interface KnowledgeEntry {
+  id: number;
+  sourceId: number;
+  /** @nullable */
+  title?: string | null;
+  content: string;
+  /** @nullable */
+  keywords?: string | null;
+  createdAt: string;
+}
+
+export interface KnowledgeSourceDetail {
+  id: number;
+  name: string;
+  type: KnowledgeSourceDetailType;
+  status: KnowledgeSourceDetailStatus;
+  entryCount: number;
+  createdAt: string;
+  updatedAt: string;
+  entries: KnowledgeEntry[];
+}
+
+export type KnowledgeSourceInputType = typeof KnowledgeSourceInputType[keyof typeof KnowledgeSourceInputType];
+
+
+export const KnowledgeSourceInputType = {
+  faq: 'faq',
+  text: 'text',
+  website: 'website',
+} as const;
+
+export interface KnowledgeEntryInput {
+  title?: string;
+  /** @minLength 1 */
+  content: string;
+  keywords?: string;
+}
+
+export interface KnowledgeSourceInput {
   /** @minLength 1 */
   name: string;
-  sourceType: KbDocumentInputSourceType;
-  /** Raw text content (required when sourceType=text) */
-  content?: string;
-  /** URL to fetch and ingest (required when sourceType=url) */
-  sourceUrl?: string;
+  type: KnowledgeSourceInputType;
+  /** URL to crawl (required when type=website) */
+  url?: string;
+  /** Initial entries to create */
+  entries?: KnowledgeEntryInput[];
 }
 
-export interface KbQueryInput {
+export interface KnowledgeSourceUpdate {
+  /** @minLength 1 */
+  name?: string;
+}
+
+export interface KnowledgeSearchInput {
   /** @minLength 1 */
   query: string;
-  /** Number of chunks to return */
-  topK?: number;
+  limit?: number;
 }
 
-export interface KbChunkResult {
-  content: string;
-  /** Relevance score (higher = more relevant) */
-  score: number;
-  documentId: number;
-  documentName: string;
-  chunkIndex: number;
+export interface KnowledgeSearchResult {
+  entry: KnowledgeEntry;
+  /** FTS relevance rank (higher = more relevant) */
+  rank: number;
+  /** @nullable */
+  snippet?: string | null;
+}
+
+export interface KnowledgeSearchResponse {
+  /** LLM-generated answer based on matched entries */
+  answer: string;
+  matchedEntries: KnowledgeSearchResult[];
 }
 
 export interface WalletInfo {

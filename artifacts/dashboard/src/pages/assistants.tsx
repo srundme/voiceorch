@@ -19,7 +19,7 @@ import {
   useToggleAgent,
   useListCalls,
   useCreateAgent,
-  useListKnowledgeBases,
+  useListKnowledgeSources,
   useInitiateOutboundCall,
   useListEventTypes,
   useListCalendars,
@@ -882,7 +882,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
   const toggleAgent     = useToggleAgent();
   const deleteAgent     = useDeleteAgent();
   const initiateOutbound = useInitiateOutboundCall();
-  const { data: kbs } = useListKnowledgeBases();
+  const { data: kbs } = useListKnowledgeSources();
   const { data: eventTypes } = useListEventTypes();
   const { data: calendars } = useListCalendars();
 

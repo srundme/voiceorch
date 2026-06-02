@@ -519,46 +519,46 @@ paths:
                 items:
                   $ref: "#/components/schemas/DailyCallVolume"
 
-  # ── Knowledge Bases ─────────────────────────────────────────────────────────
-  /knowledge-bases:
+  # ── Knowledge Sources (FTS-based) ────────────────────────────────────────────
+  /knowledge-sources:
     get:
-      operationId: listKnowledgeBases
-      tags: [knowledge-base]
-      summary: List all knowledge bases
+      operationId: listKnowledgeSources
+      tags: [knowledge]
+      summary: List all knowledge sources for the current user
       responses:
         "200":
-          description: List of knowledge bases
+          description: List of knowledge sources
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/KnowledgeBase"
+                  $ref: "#/components/schemas/KnowledgeSource"
     post:
-      operationId: createKnowledgeBase
-      tags: [knowledge-base]
-      summary: Create a new knowledge base
+      operationId: createKnowledgeSource
+      tags: [knowledge]
+      summary: Create a knowledge source with optional initial entries
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/KnowledgeBaseInput"
+              $ref: "#/components/schemas/KnowledgeSourceInput"
       responses:
         "201":
-          description: Created knowledge base
+          description: Created knowledge source with entries
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/KnowledgeBase"
+                $ref: "#/components/schemas/KnowledgeSourceDetail"
         "400":
           description: Validation error
 
-  /knowledge-bases/{id}:
+  /knowledge-sources/{id}:
     get:
-      operationId: getKnowledgeBase
-      tags: [knowledge-base]
-      summary: Get a knowledge base with its documents
+      operationId: getKnowledgeSource
+      tags: [knowledge]
+      summary: Get a knowledge source with all its entries
       parameters:
         - name: id
           in: path
@@ -567,17 +567,17 @@ paths:
             type: integer
       responses:
         "200":
-          description: Knowledge base with documents
+          description: Knowledge source with entries
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/KnowledgeBaseDetail"
+                $ref: "#/components/schemas/KnowledgeSourceDetail"
         "404":
           description: Not found
     patch:
-      operationId: updateKnowledgeBase
-      tags: [knowledge-base]
-      summary: Update a knowledge base
+      operationId: updateKnowledgeSource
+      tags: [knowledge]
+      summary: Update knowledge source name
       parameters:
         - name: id
           in: path
@@ -589,20 +589,20 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/KnowledgeBaseUpdate"
+              $ref: "#/components/schemas/KnowledgeSourceUpdate"
       responses:
         "200":
-          description: Updated knowledge base
+          description: Updated knowledge source
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/KnowledgeBase"
+                $ref: "#/components/schemas/KnowledgeSource"
         "404":
           description: Not found
     delete:
-      operationId: deleteKnowledgeBase
-      tags: [knowledge-base]
-      summary: Delete a knowledge base and all its data
+      operationId: deleteKnowledgeSource
+      tags: [knowledge]
+      summary: Delete a knowledge source and all its entries
       parameters:
         - name: id
           in: path
@@ -615,30 +615,11 @@ paths:
         "404":
           description: Not found
 
-  /knowledge-bases/{id}/documents:
-    get:
-      operationId: listKbDocuments
-      tags: [knowledge-base]
-      summary: List documents in a knowledge base
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        "200":
-          description: List of documents
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/KbDocument"
+  /knowledge-sources/{id}/entries:
     post:
-      operationId: addKbDocument
-      tags: [knowledge-base]
-      summary: Add a document (text paste or URL) and start ingestion
+      operationId: addKnowledgeEntry
+      tags: [knowledge]
+      summary: Add an entry to a knowledge source
       parameters:
         - name: id
           in: path
@@ -650,31 +631,61 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/KbDocumentInput"
+              $ref: "#/components/schemas/KnowledgeEntryInput"
       responses:
-        "202":
-          description: Document accepted for processing
+        "201":
+          description: Entry added
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/KbDocument"
+                $ref: "#/components/schemas/KnowledgeEntry"
         "400":
           description: Validation error
         "404":
-          description: Knowledge base not found
+          description: Source not found
 
-  /knowledge-bases/{id}/documents/{docId}:
-    delete:
-      operationId: deleteKbDocument
-      tags: [knowledge-base]
-      summary: Delete a document and its chunks
+  /knowledge-sources/{id}/entries/{entryId}:
+    patch:
+      operationId: updateKnowledgeEntry
+      tags: [knowledge]
+      summary: Update a knowledge entry
       parameters:
         - name: id
           in: path
           required: true
           schema:
             type: integer
-        - name: docId
+        - name: entryId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KnowledgeEntryInput"
+      responses:
+        "200":
+          description: Updated entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeEntry"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteKnowledgeEntry
+      tags: [knowledge]
+      summary: Delete a knowledge entry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: entryId
           in: path
           required: true
           schema:
@@ -685,11 +696,11 @@ paths:
         "404":
           description: Not found
 
-  /knowledge-bases/{id}/query:
+  /knowledge-sources/{id}/search:
     post:
-      operationId: queryKnowledgeBase
-      tags: [knowledge-base]
-      summary: Test retrieval — returns top-K chunks for a query
+      operationId: searchKnowledge
+      tags: [knowledge]
+      summary: Full-text search within a knowledge source (test AI knowledge)
       parameters:
         - name: id
           in: path
@@ -701,16 +712,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/KbQueryInput"
+              $ref: "#/components/schemas/KnowledgeSearchInput"
       responses:
         "200":
-          description: Ranked chunks
+          description: Search results with matched entries and scores
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/KbChunkResult"
+                $ref: "#/components/schemas/KnowledgeSearchResponse"
         "400":
           description: Validation error
         "404":
@@ -3665,115 +3674,22 @@ components:
           type: integer
 
     # ── Knowledge Base ──────────────────────────────────────────────────────────
-    KnowledgeBase:
+    KnowledgeSource:
       type: object
-      required: [id, name, embeddingModel, chunkSize, chunkOverlap, documentCount, chunkCount, createdAt, updatedAt]
+      required: [id, name, type, status, entryCount, createdAt, updatedAt]
       properties:
         id:
           type: integer
         name:
           type: string
-        description:
-          type: ["string", "null"]
-        embeddingModel:
+        type:
           type: string
-        chunkSize:
-          type: integer
-        chunkOverlap:
-          type: integer
-        documentCount:
-          type: integer
-        chunkCount:
-          type: integer
-        createdAt:
-          type: string
-          format: date-time
-        updatedAt:
-          type: string
-          format: date-time
-
-    KnowledgeBaseDetail:
-      type: object
-      required: [id, name, embeddingModel, chunkSize, chunkOverlap, documentCount, chunkCount, createdAt, updatedAt, documents]
-      properties:
-        id:
-          type: integer
-        name:
-          type: string
-        description:
-          type: ["string", "null"]
-        embeddingModel:
-          type: string
-        chunkSize:
-          type: integer
-        chunkOverlap:
-          type: integer
-        documentCount:
-          type: integer
-        chunkCount:
-          type: integer
-        createdAt:
-          type: string
-          format: date-time
-        updatedAt:
-          type: string
-          format: date-time
-        documents:
-          type: array
-          items:
-            $ref: "#/components/schemas/KbDocument"
-
-    KnowledgeBaseInput:
-      type: object
-      required: [name]
-      properties:
-        name:
-          type: string
-          minLength: 1
-        description:
-          type: string
-        embeddingModel:
-          type: string
-          default: text-embedding-3-small
-        chunkSize:
-          type: integer
-          default: 512
-        chunkOverlap:
-          type: integer
-          default: 64
-
-    KnowledgeBaseUpdate:
-      type: object
-      properties:
-        name:
-          type: string
-        description:
-          type: string
-
-    KbDocument:
-      type: object
-      required: [id, knowledgeBaseId, name, sourceType, status, createdAt, updatedAt]
-      properties:
-        id:
-          type: integer
-        knowledgeBaseId:
-          type: integer
-        name:
-          type: string
-        sourceType:
-          type: string
-          enum: [text, url]
-        sourceUrl:
-          type: ["string", "null"]
-        charCount:
-          type: ["integer", "null"]
+          enum: [faq, text, website]
         status:
           type: string
-          enum: [pending, processing, ready, error]
-        processingError:
-          type: ["string", "null"]
-        chunkCount:
-          type: ["integer", "null"]
+          enum: [active, processing, error]
+        entryCount:
+          type: integer
         createdAt:
           type: string
           format: date-time
@@ -3781,50 +3697,123 @@ components:
           type: string
           format: date-time
 
-    KbDocumentInput:
+    KnowledgeSourceDetail:
       type: object
-      required: [name, sourceType]
+      required: [id, name, type, status, entryCount, createdAt, updatedAt, entries]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        type:
+          type: string
+          enum: [faq, text, website]
+        status:
+          type: string
+          enum: [active, processing, error]
+        entryCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/KnowledgeEntry"
+
+    KnowledgeSourceInput:
+      type: object
+      required: [name, type]
       properties:
         name:
           type: string
           minLength: 1
-        sourceType:
+        type:
           type: string
-          enum: [text, url]
+          enum: [faq, text, website]
+        url:
+          type: string
+          description: URL to crawl (required when type=website)
+        entries:
+          type: array
+          description: Initial entries to create
+          items:
+            $ref: "#/components/schemas/KnowledgeEntryInput"
+
+    KnowledgeSourceUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+
+    KnowledgeEntry:
+      type: object
+      required: [id, sourceId, content, createdAt]
+      properties:
+        id:
+          type: integer
+        sourceId:
+          type: integer
+        title:
+          type: ["string", "null"]
         content:
           type: string
-          description: Raw text content (required when sourceType=text)
-        sourceUrl:
+        keywords:
+          type: ["string", "null"]
+        createdAt:
           type: string
-          description: URL to fetch and ingest (required when sourceType=url)
+          format: date-time
 
-    KbQueryInput:
+    KnowledgeEntryInput:
+      type: object
+      required: [content]
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+          minLength: 1
+        keywords:
+          type: string
+
+    KnowledgeSearchInput:
       type: object
       required: [query]
       properties:
         query:
           type: string
           minLength: 1
-        topK:
+        limit:
           type: integer
           default: 5
-          description: Number of chunks to return
 
-    KbChunkResult:
+    KnowledgeSearchResponse:
       type: object
-      required: [content, score, documentId, documentName, chunkIndex]
+      required: [answer, matchedEntries]
       properties:
-        content:
+        answer:
           type: string
-        score:
+          description: LLM-generated answer based on matched entries
+        matchedEntries:
+          type: array
+          items:
+            $ref: "#/components/schemas/KnowledgeSearchResult"
+
+    KnowledgeSearchResult:
+      type: object
+      required: [entry, rank]
+      properties:
+        entry:
+          $ref: "#/components/schemas/KnowledgeEntry"
+        rank:
           type: number
-          description: Relevance score (higher = more relevant)
-        documentId:
-          type: integer
-        documentName:
-          type: string
-        chunkIndex:
-          type: integer
+          description: FTS relevance rank (higher = more relevant)
+        snippet:
+          type: ["string", "null"]
 
     # ── Wallet ─────────────────────────────────────────────────────────────────
     WalletInfo:
