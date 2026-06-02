@@ -1,8 +1,46 @@
-import { pgTable, text, serial, timestamp, integer, boolean, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, boolean, unique, uuid, index, uniqueIndex, foreignKey } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { agentsTable } from "./agents";
 import { callsTable } from "./calls";
+
+// ── Legacy Google OAuth tables ───────────────────────────────────────────────
+// Superseded by `googleCalendarConnectionsTable` (SaaS-style, platform-owned
+// OAuth app). No application code references these anymore, but they still exist
+// in the live database with data. They are described here so the Drizzle model
+// matches the database and `drizzle-kit push` does not propose a destructive drop.
+export const googleCalendarTokensTable = pgTable("google_calendar_tokens", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().unique("google_calendar_tokens_user_id_key"),
+  accessToken: text("access_token").notNull(),
+  refreshToken: text("refresh_token").notNull(),
+  tokenExpiry: timestamp("token_expiry", { withTimezone: true }),
+  email: text("email").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
+export const userGoogleOauthConfigTable = pgTable("user_google_oauth_config", {
+  userId: text("user_id").primaryKey(),
+  clientId: text("client_id").notNull(),
+  clientSecret: text("client_secret").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
+export const googleCalendarConnectionsTable = pgTable("google_calendar_connections", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: text("user_id").notNull(),
+  email: text("email").notNull(),
+  accessToken: text("access_token").notNull(),
+  refreshToken: text("refresh_token").notNull(),
+  tokenExpiry: timestamp("token_expiry", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+}, (t) => [
+  uniqueIndex("google_calendar_connections_user_email_idx").on(t.userId, t.email),
+  index("google_calendar_connections_user_idx").on(t.userId),
+]);
 
 export const schedulingCalendarsTable = pgTable("scheduling_calendars", {
   id: serial("id").primaryKey(),
@@ -12,10 +50,18 @@ export const schedulingCalendarsTable = pgTable("scheduling_calendars", {
   timezone: text("timezone").notNull().default("UTC"),
   hostEmail: text("host_email"),
   additionalHosts: text("additional_hosts").array(),
+  googleCalendarConnectionId: uuid("google_calendar_connection_id"),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-}, (t) => [unique("scheduling_calendars_agent_id_unique").on(t.agentId)]);
+}, (t) => [
+  unique("scheduling_calendars_agent_id_unique").on(t.agentId),
+  foreignKey({
+    columns: [t.googleCalendarConnectionId],
+    foreignColumns: [googleCalendarConnectionsTable.id],
+    name: "scheduling_calendars_google_calendar_connection_id_fkey",
+  }).onDelete("set null"),
+]);
 
 export const eventTypesTable = pgTable("event_types", {
   id: serial("id").primaryKey(),
@@ -66,18 +112,23 @@ export const bookingsTable = pgTable("bookings", {
   slotEnd: timestamp("slot_end", { withTimezone: true }).notNull(),
   status: text("status").notNull().default("pending"),
   bookedVia: text("booked_via").notNull().default("web"),
+  meetLink: text("meet_link"),
+  googleEventId: text("google_event_id"),
   cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
   rescheduledFromId: integer("rescheduled_from_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
 
+export const insertGoogleCalendarConnectionSchema = createInsertSchema(googleCalendarConnectionsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertSchedulingCalendarSchema = createInsertSchema(schedulingCalendarsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertEventTypeSchema = createInsertSchema(eventTypesTable).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertAvailabilityScheduleSchema = createInsertSchema(availabilitySchedulesTable).omit({ id: true });
 export const insertAvailabilityOverrideSchema = createInsertSchema(availabilityOverridesTable).omit({ id: true });
 export const insertBookingSchema = createInsertSchema(bookingsTable).omit({ id: true, createdAt: true, updatedAt: true });
 
+export type InsertGoogleCalendarConnection = z.infer<typeof insertGoogleCalendarConnectionSchema>;
+export type GoogleCalendarConnection = typeof googleCalendarConnectionsTable.$inferSelect;
 export type InsertSchedulingCalendar = z.infer<typeof insertSchedulingCalendarSchema>;
 export type SchedulingCalendar = typeof schedulingCalendarsTable.$inferSelect;
 export type InsertEventType = z.infer<typeof insertEventTypeSchema>;

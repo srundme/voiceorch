@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, real, boolean, json } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, real, boolean, json, jsonb } from "drizzle-orm/pg-core";
 import { knowledgeBasesTable } from "./knowledge-base";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -160,6 +160,8 @@ export const agentsTable = pgTable("agents", {
 
   // ── Mode ──────────────────────────────────────────────────────────────────────
   agentMode: text("agent_mode").default("byop"), // "managed" | "byop"
+  managedStack: jsonb("managed_stack").$type<Record<string, unknown>>(),
+  useCase: text("use_case"),
 
   // ── Lead Source ───────────────────────────────────────────────────────────────
   leadSourceType: text("lead_source_type"),
