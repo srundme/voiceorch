@@ -208,7 +208,7 @@ function AddKnowledgeWizard({ open, onClose, existingKbs, onDone }: WizardProps)
                       </Select>
                     </div>
                   </div>
-                  <p className="text-[10px] text-muted-foreground/40">Embedding model: text-embedding-3-small · Uses your OpenAI provider key</p>
+                  <p className="text-[10px] text-muted-foreground/40">Embedding model: text-embedding-004 · Powered by Gemini</p>
                 </div>
               )}
             </div>

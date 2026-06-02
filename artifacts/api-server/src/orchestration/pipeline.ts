@@ -912,9 +912,8 @@ export class OrchestrationPipeline {
     systemPromptForTurn = `${dtInjection}\n\n${systemPromptForTurn}`;
     let kbContextPromise: Promise<string | null> = Promise.resolve(null);
     if (this.agent.knowledgeBaseId) {
-      const openaiKey = this.config.providerKeys.get("openai");
-      if (openaiKey) {
-        kbContextPromise = retrieveKbContext(this.agent.knowledgeBaseId, transcript, openaiKey)
+      {
+        kbContextPromise = retrieveKbContext(this.agent.knowledgeBaseId, transcript)
           .catch((err) => {
             logger.warn({ callId: this.config.callId, err }, "KB retrieval failed — continuing without context");
             return null;

@@ -31,7 +31,7 @@ export const knowledgeBasesTable = pgTable("knowledge_bases", {
   userId: text("user_id"),
   name: text("name").notNull(),
   description: text("description"),
-  embeddingModel: text("embedding_model").notNull().default("text-embedding-3-small"),
+  embeddingModel: text("embedding_model").notNull().default("text-embedding-004"),
   chunkSize: integer("chunk_size").notNull().default(512),
   chunkOverlap: integer("chunk_overlap").notNull().default(64),
   documentCount: integer("document_count").notNull().default(0),
@@ -71,7 +71,7 @@ export const kbChunksTable = pgTable("kb_chunks", {
   chunkIndex: integer("chunk_index").notNull(),
   content: text("content").notNull(),
   tokenCount: integer("token_count"),
-  chunkEmbedding: embedding("embedding", { dimensions: 1536 }),
+  chunkEmbedding: embedding("embedding", { dimensions: 768 }),
   metadata: json("metadata").$type<Record<string, unknown>>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

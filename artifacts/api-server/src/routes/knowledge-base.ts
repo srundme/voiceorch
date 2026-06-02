@@ -1,8 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, sql } from "drizzle-orm";
-import OpenAI from "openai";
-import { db, knowledgeBasesTable, kbDocumentsTable, kbChunksTable, providersTable } from "@workspace/db";
-import { decryptKey } from "../lib/crypto.js";
+import { db, knowledgeBasesTable, kbDocumentsTable, kbChunksTable, platformSettingsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 
 const router: IRouter = Router();
@@ -93,23 +91,35 @@ async function fetchUrl(url: string): Promise<string> {
   return text;
 }
 
-/** Get OpenAI API key from providers table (first active openai LLM key) */
-async function getOpenAiKey(): Promise<string | null> {
-  const rows = await db.select()
-    .from(providersTable)
-    .where(and(eq(providersTable.providerName, "openai"), eq(providersTable.isActive, true)))
-    .limit(1);
-  return rows[0]?.apiKey ? decryptKey(rows[0].apiKey) : null;
+/** Fetch the managed Gemini API key (platform_settings → env fallback) */
+async function getGeminiKey(): Promise<string | null> {
+  const [row] = await db.select().from(platformSettingsTable).where(eq(platformSettingsTable.key, "managed_gemini_key"));
+  const dbVal = (row?.value ?? "").trim();
+  if (dbVal) return dbVal;
+  const envVal = (process.env["GEMINI_API_KEY"] ?? "").trim();
+  return envVal || null;
 }
 
-/** Generate embeddings for a batch of texts */
-async function embedTexts(texts: string[], apiKey: string): Promise<number[][]> {
-  const openai = new OpenAI({ apiKey });
-  const res = await openai.embeddings.create({
-    model: "text-embedding-3-small",
-    input: texts,
-  });
-  return res.data.map(d => d.embedding);
+/** Generate embeddings for a batch of texts using Gemini text-embedding-004 (768 dims) */
+async function embedTexts(texts: string[], geminiKey: string): Promise<number[][]> {
+  const requests = texts.map(text => ({
+    model: "models/text-embedding-004",
+    content: { parts: [{ text }] },
+  }));
+  const resp = await fetch(
+    "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:batchEmbedContents",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
+      body: JSON.stringify({ requests }),
+    }
+  );
+  if (!resp.ok) {
+    const body = await resp.text();
+    throw new Error(`Gemini embeddings failed (${resp.status}): ${body.slice(0, 200)}`);
+  }
+  const data = await resp.json() as { embeddings: Array<{ values: number[] }> };
+  return data.embeddings.map(e => e.values);
 }
 
 /** Cosine similarity between two unit-ish vectors */
@@ -131,8 +141,8 @@ async function ingestDocument(docId: number, kbId: number, content: string, chun
       .set({ status: "processing" })
       .where(eq(kbDocumentsTable.id, docId));
 
-    const apiKey = await getOpenAiKey();
-    if (!apiKey) throw new Error("No active OpenAI provider key found. Add one in Providers.");
+    const apiKey = await getGeminiKey();
+    if (!apiKey) throw new Error("Gemini API key not configured. Contact your platform admin.");
 
     const chunks = chunkText(content, chunkSize, chunkOverlap);
     if (chunks.length === 0) throw new Error("No text content found after chunking");
@@ -369,9 +379,9 @@ router.post("/knowledge-bases/:id/query", requireAuth, async (req, res): Promise
     .where(and(eq(knowledgeBasesTable.id, kbId), eq(knowledgeBasesTable.userId, clerkId)));
   if (!kb) { res.status(404).json({ error: "Not found" }); return; }
 
-  const apiKey = await getOpenAiKey();
+  const apiKey = await getGeminiKey();
   if (!apiKey) {
-    res.status(400).json({ error: "No active OpenAI provider key found. Add one in Providers." });
+    res.status(400).json({ error: "Gemini API key not configured. Contact your platform admin." });
     return;
   }
 
