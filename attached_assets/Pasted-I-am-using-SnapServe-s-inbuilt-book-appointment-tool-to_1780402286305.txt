@@ -1,0 +1,73 @@
+I am using SnapServe's inbuilt book_appointment tool to book 
+appointments. I am NOT using the Cal.com API directly.
+
+I noticed Cal.com has a Location feature in event settings 
+with these options:
+- Google Meet (auto generates a meet link)
+- In Person (with address field)
+
+I want the same feature in my SnapServe voice agent.
+
+---
+
+WHAT I NEED
+
+FEATURE 1 — AGENT ASKS FOR MEETING PREFERENCE
+After collecting the appointment date and time, the agent 
+should ask:
+"Would you prefer a Google Meet video call or an 
+in-person meeting?"
+
+Wait for response before proceeding.
+
+FEATURE 2 — GOOGLE MEET
+- If caller says Google Meet → the booking confirmation 
+  email and calendar invite should include an auto-generated 
+  Google Meet link
+- The meet link should be visible to both the attendee 
+  and the host
+
+FEATURE 3 — IN PERSON
+- If caller says in person → agent asks:
+  "Could you please share the address for the meeting?"
+- Wait for response
+- The address should be included in the booking confirmation 
+  email and calendar invite
+
+---
+
+TECHNICAL QUESTIONS
+
+1. Does SnapServe's inbuilt book_appointment tool support 
+   a location parameter?
+   - If yes → what is the exact parameter name and accepted 
+     values for Google Meet and in-person?
+   - If no → what is the best way to add this? Custom 
+     Function? Webhook?
+
+2. For Google Meet → does SnapServe or Cal.com handle the 
+   link generation automatically when location is set, or 
+   do I need to configure anything extra?
+
+3. For in-person → what is the exact field name and format 
+   to pass the address through the tool?
+
+---
+
+MY SETUP
+- Voice agent platform: SnapServe
+- Booking tool: inbuilt book_appointment tool
+- Calendar: Cal.com connected to Google Calendar
+- Event type: Test001 (15 mins)
+- Timezone: Asia/Kolkata (IST)
+
+---
+
+WHAT I WANT DELIVERED
+1. Confirmation of whether book_appointment supports 
+   location parameter natively
+2. If not supported natively → exact steps to add it
+3. Updated system prompt snippet to ask the caller for 
+   meeting preference and pass it to the tool correctly
+4. Any Cal.com side configuration needed to enable 
+   Google Meet link auto generation

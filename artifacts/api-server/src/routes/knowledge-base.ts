@@ -313,96 +313,12 @@ router.delete("/knowledge-sources/:id/entries/:entryId", requireAuth, async (req
   res.status(204).end();
 });
 
-/* ── Search helpers ──────────────────────────────────────────────────────── */
-
-const STOP_WORDS = new Set([
-  'what','when','where','which','who','whom','whose','how','why',
-  'is','are','was','were','be','been','being','have','has','had',
-  'do','does','did','will','would','could','should','may','might',
-  'shall','can','the','a','an','and','or','but','in','on','at',
-  'to','for','of','with','by','from','about','into','its','your',
-  'our','their','this','that','these','those','tell','me','my',
-  'you','he','she','it','we','they','them','please','give','find',
-]);
-
-function significantWords(query: string): string[] {
-  return query.trim().toLowerCase()
-    .split(/\s+/)
-    .map(w => w.replace(/[^a-z0-9₹]/g, ''))
-    .filter(w => w.length > 2 && !STOP_WORDS.has(w));
-}
-
-type KbSearchRow = {
-  id: number; source_id: number; user_id: string;
-  title: string | null; content: string; keywords: string | null;
-  created_at: string; rank: number; snippet: string | null;
-};
-
-async function ftsSearch(sourceId: number, userId: string, q: string, lim: number): Promise<KbSearchRow[]> {
-  const r = await db.execute<KbSearchRow>(sql`
-    SELECT
-      ke.id, ke.source_id, ke.user_id, ke.title, ke.content, ke.keywords, ke.created_at,
-      ts_rank(
-        to_tsvector('english', coalesce(ke.title,'') || ' ' || ke.content || ' ' || coalesce(ke.keywords,'')),
-        plainto_tsquery('english', ${q})
-      ) AS rank,
-      ts_headline(
-        'english', ke.content,
-        plainto_tsquery('english', ${q}),
-        'MaxWords=30, MinWords=15, StartSel=<mark>, StopSel=</mark>'
-      ) AS snippet
-    FROM knowledge_entries ke
-    WHERE ke.source_id = ${sourceId} AND ke.user_id = ${userId}
-      AND to_tsvector('english', coalesce(ke.title,'') || ' ' || ke.content || ' ' || coalesce(ke.keywords,''))
-          @@ plainto_tsquery('english', ${q})
-    ORDER BY rank DESC LIMIT ${lim}
-  `);
-  return r.rows;
-}
-
-/** Expand a word into search variants by stripping common suffixes */
-function wordVariants(word: string): string[] {
-  const vs = new Set([word]);
-  if (word.endsWith('s') && word.length > 3) vs.add(word.slice(0, -1));   // calls → call
-  if (word.endsWith('es') && word.length > 4) vs.add(word.slice(0, -2));  // searches → search
-  if (word.endsWith('ing') && word.length > 5) vs.add(word.slice(0, -3)); // calling → call
-  if (word.endsWith('ed') && word.length > 4) vs.add(word.slice(0, -2)); // called → call
-  return Array.from(vs);
-}
-
-async function broadSearch(sourceId: number, userId: string, words: string[], lim: number): Promise<KbSearchRow[]> {
-  if (!words.length) return [];
-
-  // Expand each word to variants (e.g. "calls" → ["calls","call"])
-  const allVariants = [...new Set(words.flatMap(wordVariants))];
-
-  // Build: ILIKE conditions for each variant across title + content + keywords
-  const conditions = allVariants.flatMap(w => [
-    sql`lower(ke.content) LIKE ${'%' + w + '%'}`,
-    sql`lower(coalesce(ke.title,'')) LIKE ${'%' + w + '%'}`,
-    sql`lower(coalesce(ke.keywords,'')) LIKE ${'%' + w + '%'}`,
-  ]);
-  const orClause = conditions.reduce((acc, c) => sql`${acc} OR ${c}`);
-
-  const r = await db.execute<KbSearchRow>(sql`
-    SELECT
-      ke.id, ke.source_id, ke.user_id, ke.title, ke.content, ke.keywords, ke.created_at,
-      0.01::float AS rank,
-      NULL::text AS snippet
-    FROM knowledge_entries ke
-    WHERE ke.source_id = ${sourceId} AND ke.user_id = ${userId}
-      AND (${orClause})
-    LIMIT ${lim}
-  `);
-  return r.rows;
-}
-
 /* ── Search (test panel) ─────────────────────────────────────────────────── */
 
 router.post("/knowledge-sources/:id/search", requireAuth, async (req, res) => {
   const userId = (req as any).clerkUserId as string;
   const sourceId = Number(req.params["id"]);
-  const { query, limit = 5 } = req.body as { query: string; limit?: number };
+  const { query } = req.body as { query: string };
 
   if (!query?.trim()) { res.status(400).json({ error: "query is required" }); return; }
 
@@ -412,68 +328,91 @@ router.post("/knowledge-sources/:id/search", requireAuth, async (req, res) => {
     .where(and(eq(knowledgeSourcesTable.id, sourceId), eq(knowledgeSourcesTable.userId, userId)));
   if (!source) { res.status(404).json({ error: "Not found" }); return; }
 
-  const searchLimit = Math.min(Number(limit) || 5, 10);
   const q = query.trim();
 
-  // Pass 1 — strict FTS (AND: every word must appear)
-  let rawRows = await ftsSearch(sourceId, userId, q, searchLimit);
+  // Load ALL entries (up to 200) — Gemini reads everything directly, no keyword guessing
+  const allEntries = await db
+    .select()
+    .from(knowledgeEntriesTable)
+    .where(and(
+      eq(knowledgeEntriesTable.sourceId, sourceId),
+      eq(knowledgeEntriesTable.userId, userId),
+    ))
+    .limit(200);
 
-  // Pass 2 — broad fallback: any significant word matches (OR) + ILIKE
-  if (!rawRows.length) {
-    const words = significantWords(q);
-    rawRows = await broadSearch(sourceId, userId, words, searchLimit);
+  if (!allEntries.length) {
+    res.json({ answer: "This knowledge source has no entries yet.", matchedEntries: [] });
+    return;
   }
 
-  const matchedEntries = rawRows.map(r => ({
-    entry: {
-      id: r.id,
-      sourceId: r.source_id,
-      title: r.title,
-      content: r.content,
-      keywords: r.keywords,
-      createdAt: r.created_at,
-    },
-    rank: Number(r.rank),
-    snippet: r.snippet ?? null,
-  }));
+  const geminiKey = await getGeminiKey();
+  if (!geminiKey) {
+    // No LLM key — return raw entries so the caller can display them
+    res.json({
+      answer: allEntries.map(e => e.title ? `${e.title}: ${e.content}` : e.content).join("\n\n"),
+      matchedEntries: allEntries.map(e => ({ entry: e, rank: 0.5, snippet: null })),
+    });
+    return;
+  }
 
-  // Generate LLM answer using Gemini if available
-  let answer = "No matching knowledge found for your question.";
-  if (matchedEntries.length > 0) {
-    const geminiKey = await getGeminiKey();
-    if (geminiKey) {
-      try {
-        const knowledgeContext = matchedEntries
-          .map((m, i) => `[${i + 1}] ${m.entry.title ? `${m.entry.title}\n` : ""}${m.entry.content}`)
-          .join("\n\n---\n\n");
-        const prompt = `You are a helpful assistant. Answer the user's question using ONLY the provided knowledge. If the answer is not in the knowledge, say you don't know.
+  // Build full knowledge context — Gemini reads all entries and decides what's relevant
+  const context = allEntries
+    .map((e, i) => [
+      `[${i}]`,
+      e.title ? `Title: ${e.title}` : null,
+      `Content: ${e.content}`,
+      e.keywords ? `Keywords: ${e.keywords}` : null,
+    ].filter(Boolean).join("\n"))
+    .join("\n\n---\n\n");
 
-Relevant Knowledge:
-${knowledgeContext}
+  const prompt = `You are a helpful knowledge base assistant. Read all the knowledge entries below and answer the user's question accurately.
 
-Question: ${query.trim()}
+Knowledge Entries:
+${context}
 
-Answer:`;
+User Question: ${q}
 
-        const genAI = new GoogleGenerativeAI(geminiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-        const result = await model.generateContent(prompt);
-        answer = result.response.text().trim();
-      } catch (err) {
-        logger.warn({ err }, "KB search LLM answer failed");
-        answer = matchedEntries
-          .map(m => m.entry.title ? `${m.entry.title}: ${m.entry.content}` : m.entry.content)
-          .join("\n\n");
+Instructions:
+- Answer using ONLY information from the knowledge entries above.
+- Also return which entry indices (0-based numbers from [0], [1], etc.) are relevant.
+- If the answer is not covered, set answer to "I don't have information about this in my knowledge base."
+- Respond with ONLY valid JSON, no markdown, no explanation outside the JSON:
+{"answer":"...","relevantIndices":[0,1]}`;
+
+  try {
+    const genAI = new GoogleGenerativeAI(geminiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const result = await model.generateContent(prompt);
+    const text = result.response.text().trim();
+
+    let answer = "Unable to process the question.";
+    let relevantIndices: number[] = [];
+
+    try {
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]) as { answer?: string; relevantIndices?: number[] };
+        answer = parsed.answer?.trim() || answer;
+        relevantIndices = Array.isArray(parsed.relevantIndices) ? parsed.relevantIndices : [];
+      } else {
+        answer = text;
       }
-    } else {
-      // No LLM — return the matched content directly
-      answer = matchedEntries
-        .map(m => m.entry.title ? `${m.entry.title}: ${m.entry.content}` : m.entry.content)
-        .join("\n\n");
+    } catch {
+      answer = text;
     }
-  }
 
-  res.json({ answer, matchedEntries });
+    const matchedEntries = relevantIndices
+      .filter(i => Number.isInteger(i) && i >= 0 && i < allEntries.length)
+      .map(i => ({ entry: allEntries[i]!, rank: 1.0, snippet: null }));
+
+    res.json({ answer, matchedEntries });
+  } catch (err) {
+    logger.warn({ err }, "KB search LLM failed");
+    res.json({
+      answer: allEntries.map(e => e.title ? `${e.title}: ${e.content}` : e.content).join("\n\n"),
+      matchedEntries: allEntries.map(e => ({ entry: e, rank: 0.5, snippet: null })),
+    });
+  }
 });
 
 export default router;
