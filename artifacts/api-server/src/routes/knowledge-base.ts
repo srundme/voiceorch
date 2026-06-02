@@ -41,15 +41,45 @@ function extractTitle(html: string): string {
   return m ? m[1]!.trim() : "Imported Page";
 }
 
+/** Extract meta description / og:description from HTML */
+function extractMetaDescription(html: string): string {
+  const patterns = [
+    /<meta\s[^>]*name=["']description["'][^>]*content=["']([^"']{10,})["']/i,
+    /<meta\s[^>]*content=["']([^"']{10,})["'][^>]*name=["']description["']/i,
+    /<meta\s[^>]*property=["']og:description["'][^>]*content=["']([^"']{10,})["']/i,
+    /<meta\s[^>]*content=["']([^"']{10,})["'][^>]*property=["']og:description["']/i,
+    /<meta\s[^>]*name=["']twitter:description["'][^>]*content=["']([^"']{10,})["']/i,
+    /<meta\s[^>]*content=["']([^"']{10,})["'][^>]*name=["']twitter:description["']/i,
+  ];
+  for (const p of patterns) {
+    const m = html.match(p);
+    if (m?.[1]) return m[1].trim();
+  }
+  return "";
+}
+
 /** Crawl a URL and return { title, content } */
 async function crawlUrl(url: string): Promise<{ title: string; content: string }> {
   const res = await fetch(url, {
-    headers: { "User-Agent": "VoiceOrch-KB-Crawler/1.0" },
+    headers: { "User-Agent": "Mozilla/5.0 (compatible; VoiceOrch-KB-Crawler/1.0)" },
     signal: AbortSignal.timeout(15_000),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${url}`);
   const html = await res.text();
-  return { title: extractTitle(html), content: stripHtml(html).slice(0, 20_000) };
+
+  const title = extractTitle(html);
+  const meta = extractMetaDescription(html);
+  const body = stripHtml(html);
+
+  // Build content: always start with title, add meta description if it differs,
+  // then body text (first 15 000 chars) de-duplicated against title/meta
+  const unique: string[] = [title];
+  if (meta && meta !== title) unique.push(meta);
+  // Body often repeats title — only add distinct body text
+  const bodyClean = body.length > title.length + 20 ? body : "";
+  if (bodyClean) unique.push(bodyClean.slice(0, 15_000));
+
+  return { title, content: unique.join("\n\n").slice(0, 20_000) };
 }
 
 /** Increment/decrement entry_count on a knowledge source */
@@ -330,16 +360,30 @@ async function ftsSearch(sourceId: number, userId: string, q: string, lim: numbe
   return r.rows;
 }
 
+/** Expand a word into search variants by stripping common suffixes */
+function wordVariants(word: string): string[] {
+  const vs = new Set([word]);
+  if (word.endsWith('s') && word.length > 3) vs.add(word.slice(0, -1));   // calls → call
+  if (word.endsWith('es') && word.length > 4) vs.add(word.slice(0, -2));  // searches → search
+  if (word.endsWith('ing') && word.length > 5) vs.add(word.slice(0, -3)); // calling → call
+  if (word.endsWith('ed') && word.length > 4) vs.add(word.slice(0, -2)); // called → call
+  return Array.from(vs);
+}
+
 async function broadSearch(sourceId: number, userId: string, words: string[], lim: number): Promise<KbSearchRow[]> {
   if (!words.length) return [];
-  // Build: (lower(content) LIKE '%w1%' OR lower(content) LIKE '%w2%' ...)
-  const conditions = words.flatMap(w => [
+
+  // Expand each word to variants (e.g. "calls" → ["calls","call"])
+  const allVariants = [...new Set(words.flatMap(wordVariants))];
+
+  // Build: ILIKE conditions for each variant across title + content + keywords
+  const conditions = allVariants.flatMap(w => [
     sql`lower(ke.content) LIKE ${'%' + w + '%'}`,
     sql`lower(coalesce(ke.title,'')) LIKE ${'%' + w + '%'}`,
     sql`lower(coalesce(ke.keywords,'')) LIKE ${'%' + w + '%'}`,
   ]);
-  // Reduce to OR chain
   const orClause = conditions.reduce((acc, c) => sql`${acc} OR ${c}`);
+
   const r = await db.execute<KbSearchRow>(sql`
     SELECT
       ke.id, ke.source_id, ke.user_id, ke.title, ke.content, ke.keywords, ke.created_at,
