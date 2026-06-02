@@ -517,41 +517,46 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
     res.status(409).json({ error: "This slot is no longer available — please choose another" }); return;
   }
 
-  // Google Calendar sync (best-effort)
-  void (async () => {
-    try {
-      const calRow = await db.execute(
-        sql`SELECT google_calendar_connection_id FROM scheduling_calendars WHERE id = ${booking.calendarId}`
-      );
-      const calendarConnectionId = (calRow.rows[0] as any)?.google_calendar_connection_id as string | null;
-      const connectionId = calendarConnectionId ?? (await getFirstConnectionForUser(booking.userId))?.id ?? null;
+  // Google Calendar sync (best-effort, awaited so the new Meet link can be
+  // returned on the reschedule confirmation response)
+  let meetLink: string | null = null;
+  let newGoogleEventId: string | null = null;
+  try {
+    const calRow = await db.execute(
+      sql`SELECT google_calendar_connection_id FROM scheduling_calendars WHERE id = ${booking.calendarId}`
+    );
+    const calendarConnectionId = (calRow.rows[0] as any)?.google_calendar_connection_id as string | null;
+    const connectionId = calendarConnectionId ?? (await getFirstConnectionForUser(booking.userId))?.id ?? null;
 
-      if (existingGoogleEventId && connectionId) {
-        await deleteCalendarEvent(connectionId, existingGoogleEventId);
-      }
+    if (existingGoogleEventId && connectionId) {
+      await deleteCalendarEvent(connectionId, existingGoogleEventId);
+    }
 
-      if (connectionId && newBooking) {
-        const gcalResult = await createCalendarEvent({
-          connectionId,
-          summary: `${eventType.name} — ${newBooking.attendeeName}`,
-          description: newBooking.attendeeNotes ?? undefined,
-          startTime: newBooking.slotStart,
-          endTime: newBooking.slotEnd,
-          attendeeEmail: newBooking.attendeeEmail,
-          attendeeName: newBooking.attendeeName,
-          timezone: calendar.timezone,
-          hostEmail: calendar.hostEmail,
-          additionalHosts: calendar.additionalHosts,
-          addMeet: eventType.enableGoogleMeet,
-        });
-        if (gcalResult) {
+    if (connectionId) {
+      const gcalResult = await createCalendarEvent({
+        connectionId,
+        summary: `${eventType.name} — ${newBooking.attendeeName}`,
+        description: newBooking.attendeeNotes ?? undefined,
+        startTime: newBooking.slotStart,
+        endTime: newBooking.slotEnd,
+        attendeeEmail: newBooking.attendeeEmail,
+        attendeeName: newBooking.attendeeName,
+        timezone: calendar.timezone,
+        hostEmail: calendar.hostEmail,
+        additionalHosts: calendar.additionalHosts,
+        addMeet: eventType.enableGoogleMeet,
+      });
+      if (gcalResult) {
+        meetLink = gcalResult.meetLink;
+        newGoogleEventId = gcalResult.eventId;
+        if (meetLink || newGoogleEventId) {
           await db.execute(
-            sql`UPDATE bookings SET meet_link = ${gcalResult.meetLink}, google_event_id = ${gcalResult.eventId} WHERE id = ${newBooking.id}`
+            sql`UPDATE bookings SET meet_link = ${meetLink}, google_event_id = ${newGoogleEventId} WHERE id = ${newBooking.id}`
           );
         }
       }
-    } catch { /* non-fatal */ }
-  })();
+    }
+  } catch { /* non-fatal */ }
 
   // Issue new reschedule token for the new booking
   const baseUrl = getBaseUrl();
@@ -573,13 +578,20 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
     oldSlotStart: booking.slotStart,
     cancelLink: newCancelLink,
     rescheduleLink: newRescheduleLink,
+    meetLink,
   });
+
+  const rescheduledBookingPayload = {
+    ...formatBooking(newBooking),
+    meetLink,
+    googleEventId: newGoogleEventId,
+  };
 
   void dispatchSchedulingWebhooks(booking.userId, "scheduling.booking.rescheduled", {
-    booking: formatBooking(newBooking),
+    booking: rescheduledBookingPayload,
   });
 
-  res.json(ReschedulePublicBookingByTokenResponse.parse(formatBooking(newBooking)));
+  res.json(ReschedulePublicBookingByTokenResponse.parse(rescheduledBookingPayload));
 });
 
 export default router;
