@@ -687,6 +687,16 @@ export default function KnowledgeBasePage() {
   const [deleting, setDeleting] = useState<number | null>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  // Auto-poll every 3 s while any source is still crawling
+  React.useEffect(() => {
+    const hasProcessing = sources?.some((s) => s.status === "processing");
+    if (!hasProcessing) return;
+    const timer = setInterval(() => {
+      queryClient.invalidateQueries({ queryKey: getListKnowledgeSourcesQueryKey() });
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [sources, queryClient]);
   const del = useDeleteKnowledgeSource();
 
   if (selectedId !== null) {
