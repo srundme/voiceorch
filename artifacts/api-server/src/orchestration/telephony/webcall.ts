@@ -1024,42 +1024,43 @@ export async function handleWebCallWebSocket(
   send({ type: "ready", agentId, agentName: agent.name, callId });
   logger.info({ callId, agentId, agentName: agent.name }, "WebCall session started");
 
-  // ── Callback opening greeting ─────────────────────────────────────────────
-  // For callback calls the agent speaks FIRST. We ask the LLM to generate the
-  // opening so it is (a) in the agent's configured language and (b) contextually
-  // dynamic based on the prior-call summary injected into systemPrompt above.
-  if (callbackId && !closed) {
+  // ── Opening greeting — agent always speaks first in webcalls ─────────────
+  // 1. If the agent has a greetingMessage configured, play it directly (no LLM).
+  // 2. Otherwise, ask the LLM to generate a contextual opening (same path as
+  //    callbacks, but with a generic trigger so it works for all webcalls).
+  if (!closed) {
     try {
-      sendStatus("thinking");
-
-      // Build the same per-turn system prompt that process() uses
       const agentTimezone = (agentCfg["timezone"] as string | undefined) || "Asia/Kolkata";
-      const greetSystemPrompt = `${buildDatetimeInjection(agentTimezone)}\n\n${systemPrompt}`;
-
-      // Synthetic trigger: tells the LLM to open the conversation now.
-      // We do NOT add this to history so the real dialogue starts clean
-      // with just the assistant's greeting turn.
-      const triggerHistory: import("../types.js").ConversationTurn[] = [
-        { role: "user", content: "[callback connected — please open the conversation with your greeting now]" },
-      ];
 
       let greetingText = "";
-      await llm.chat(
-        triggerHistory,
-        greetSystemPrompt,
-        (token) => { greetingText += token; },
-        (full) => { greetingText = full; },
-      );
 
-      // Strip any <think>…</think> blocks
-      greetingText = greetingText.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+      if (agent.greetingMessage) {
+        // Fast path — use configured greeting directly
+        greetingText = agent.greetingMessage;
+      } else {
+        // LLM-generated opening
+        sendStatus("thinking");
+        const greetSystemPrompt = `${buildDatetimeInjection(agentTimezone)}\n\n${systemPrompt}`;
+        const triggerContent = callbackId
+          ? "[callback connected — please open the conversation with your greeting now]"
+          : "[call connected — please greet the user and open the conversation now]";
+        const triggerHistory: import("../types.js").ConversationTurn[] = [
+          { role: "user", content: triggerContent },
+        ];
+        await llm.chat(
+          triggerHistory,
+          greetSystemPrompt,
+          (token) => { greetingText += token; },
+          (full)  => { greetingText = full; },
+        );
+        greetingText = greetingText.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+      }
 
       if (greetingText && !closed) {
         sendStatus("speaking");
         speaking = true;
         speakingStartedAt = Date.now();
 
-        // Use streaming TTS if available, otherwise one-shot
         let greetAudio: Buffer;
         if (tts.synthesizeStream) {
           const chunks: Buffer[] = [];
@@ -1078,7 +1079,6 @@ export async function handleWebCallWebSocket(
 
         speaking = false;
         speakingEndedAt = Date.now();
-        // Only push the assistant turn — the synthetic trigger stays out of history
         history.push({ role: "assistant", content: greetingText });
         send({ type: "transcript", speaker: "agent", text: greetingText });
 
@@ -1094,13 +1094,11 @@ export async function handleWebCallWebSocket(
         sendStatus("listening");
       }
     } catch (greetErr) {
-      logger.warn({ callId, greetErr }, "Callback opening greeting failed — continuing normally");
+      logger.warn({ callId, greetErr }, "Opening greeting failed — continuing normally");
       speaking = false;
       speakingEndedAt = Date.now();
       if (!closed) sendStatus("listening");
     }
-  } else {
-    sendStatus("listening");
   }
 
   const maxTimer = setTimeout(() => { void hangup("timeout"); }, (agent.maxDuration ?? 600) * 1000);
