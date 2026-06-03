@@ -494,6 +494,27 @@ export async function handleWebCallWebSocket(
 
       // ── Build tool definitions for this agent ─────────────────────────────
       const agentTools = (agent.tools ?? []) as unknown as import("../types.js").AgentTool[];
+
+      // Inject scheduling tool usage guide when the agent has cancel/reschedule/list-bookings tools
+      const hasSchedulingNav = agentTools.some(
+        (t) => t.type === "native_cancel" || t.type === "native_reschedule" || t.type === "native_list_bookings",
+      );
+      if (hasSchedulingNav) {
+        const listTool = agentTools.find((t) => t.type === "native_list_bookings");
+        const checkTool = agentTools.find((t) => t.type === "native_check_availability");
+        const listName = listTool?.name ?? "get_bookings";
+        const checkName = checkTool?.name ?? "check_availability";
+        systemPromptForTurn += [
+          "",
+          "",
+          "[SCHEDULING TOOL GUIDE]",
+          "When the caller wants to cancel or reschedule an appointment:",
+          `1. ALWAYS call "${listName}" (not "${checkName}") to look up their existing appointment by name. Never call "${checkName}" for this purpose.`,
+          `2. Always pass the caller's stated timezone into every scheduling tool call (e.g. timezone="Asia/Kolkata"). Default to "Asia/Kolkata" if not stated.`,
+          `3. If "${listName}" returns an empty result, say: "There are no upcoming bookings under your name."`,
+          `4. If all returned bookings are in the past, say: "Your previous appointment has already passed — I can only reschedule upcoming ones. Would you like to book a new one?"`,
+        ].join("\n");
+      }
       const toolDefs = buildToolDefs(agentTools);
       let triggeredToolName: string | null = null;
       let triggeredToolArgs: Record<string, unknown> = {};

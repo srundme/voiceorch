@@ -18,6 +18,7 @@ import {
 import {
   createCalendarEvent,
   deleteCalendarEvent,
+  updateCalendarEvent,
   getFirstConnectionForUser,
 } from "./scheduling/google-calendar.js";
 import { dispatchSchedulingWebhooks } from "../routes/scheduling/webhooks.js";
@@ -90,6 +91,10 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
                 type: "string",
                 description: "Optional preferred date/time for the new slot, e.g. 'next Tuesday' or '2025-06-10T14:00'",
               },
+              timezone: {
+                type: "string",
+                description: "IANA timezone, e.g. 'America/New_York' or 'Asia/Kolkata'. Defaults to Asia/Kolkata if not provided.",
+              },
             },
             required: ["booking_id"],
           },
@@ -120,6 +125,10 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
                 description:
                   "Optional preferred date or time of day to check availability for, e.g. 'next Tuesday', '2025-06-10', 'tomorrow morning'. Defaults to the next 7 days.",
               },
+              timezone: {
+                type: "string",
+                description: "IANA timezone, e.g. 'America/New_York' or 'Asia/Kolkata'. Defaults to Asia/Kolkata if not provided.",
+              },
             },
             required: [],
           },
@@ -135,6 +144,10 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
               attendee_name: {
                 type: "string",
                 description: "Full name of the caller whose bookings you want to look up",
+              },
+              timezone: {
+                type: "string",
+                description: "IANA timezone, e.g. 'America/New_York' or 'Asia/Kolkata'. Defaults to Asia/Kolkata if not provided.",
               },
             },
             required: ["attendee_name"],
@@ -338,7 +351,7 @@ export async function executeNativeBooking(
             timezone: calendar.timezone,
             hostEmail: calendar.hostEmail,
             additionalHosts: calendar.additionalHosts,
-            addMeet: eventType.enableGoogleMeet,
+            addMeet: locationType === "google_meet" || eventType.enableGoogleMeet,
             location: { type: locationType, address: locationType === "in_person" ? meetingAddress : null },
           })
         : null;
@@ -446,7 +459,7 @@ export async function executeNativeCheckAvailability(
       return `no_availability: no available slots ${rangeDesc}`;
     }
 
-    const tz = tool.timezone || calendar.timezone || "UTC";
+    const tz = (args["timezone"] != null ? String(args["timezone"]) : null) ?? tool.timezone ?? calendar.timezone ?? "Asia/Kolkata";
     const preview = slots
       .slice(0, 5)
       .map((s) => formatInTimeZone(s.slotStart, tz, "EEE MMM d 'at' h:mm a"))
@@ -521,15 +534,16 @@ export async function executeNativeListBookings(
       return `no_bookings_found: no upcoming bookings found for "${attendeeName}". Ask the caller to double-check the name on their booking.`;
     }
 
-    // Resolve timezone: tool config → first booking's calendar → UTC
-    let tz = tool.timezone ?? "UTC";
-    if (tz === "UTC" && owned[0]?.calendarId) {
+    // Resolve timezone: args → tool config → first booking's calendar → Asia/Kolkata
+    let tz = (args["timezone"] != null ? String(args["timezone"]) : null) ?? tool.timezone ?? null;
+    if (!tz && owned[0]?.calendarId) {
       const [cal] = await db
         .select({ timezone: schedulingCalendarsTable.timezone })
         .from(schedulingCalendarsTable)
         .where(eq(schedulingCalendarsTable.id, owned[0].calendarId));
-      if (cal?.timezone) tz = cal.timezone;
+      tz = cal?.timezone ?? null;
     }
+    tz = tz ?? "Asia/Kolkata";
 
     // Resolve event type names in bulk
     const etIds = [...new Set(owned.map((b) => b.eventTypeId))];
@@ -640,7 +654,7 @@ export async function executeNativeReschedule(
       return "error: calendar is unavailable";
     }
 
-    const resolvedTimezone = tool.timezone || calendar.timezone;
+    const resolvedTimezone = (args["timezone"] != null ? String(args["timezone"]) : null) ?? tool.timezone ?? calendar.timezone ?? "Asia/Kolkata";
     const { searchStart, minSlotStart, timeFilter } = preferredRaw
       ? parsePreferredDate(preferredRaw, resolvedTimezone)
       : { searchStart: new Date(), minSlotStart: undefined, timeFilter: undefined };
@@ -661,7 +675,7 @@ export async function executeNativeReschedule(
     const newStart = newSlot.slotStart;
     const newEnd = newSlot.slotEnd;
     const lockKey = buildSlotLockKey(calendar.id, newStart);
-    let newBooking: typeof bookingsTable.$inferSelect | undefined;
+    let updatedBooking: typeof bookingsTable.$inferSelect | undefined;
     let lockConflict = false;
 
     await db.transaction(async (tx) => {
@@ -675,6 +689,7 @@ export async function executeNativeReschedule(
       const bufBefore = addMinutes(newStart, -eventType.bufferBeforeMins);
       const bufAfter = addMinutes(newEnd, eventType.bufferAfterMins);
 
+      // Overlap checks exclude the booking being rescheduled (it will move to the new slot)
       const overlapCount = await tx
         .select({ count: sql<number>`count(*)::int` })
         .from(bookingsTable)
@@ -682,6 +697,7 @@ export async function executeNativeReschedule(
           and(
             eq(bookingsTable.calendarId, calendar.id),
             or(eq(bookingsTable.status, "pending"), eq(bookingsTable.status, "confirmed")),
+            sql`${bookingsTable.id} != ${bookingId}`,
             sql`${bookingsTable.slotStart} < ${bufAfter}`,
             sql`${bookingsTable.slotEnd} > ${bufBefore}`,
           ),
@@ -695,6 +711,7 @@ export async function executeNativeReschedule(
           and(
             eq(bookingsTable.calendarId, calendar.id),
             or(eq(bookingsTable.status, "pending"), eq(bookingsTable.status, "confirmed")),
+            sql`${bookingsTable.id} != ${bookingId}`,
             sql`${bookingsTable.slotStart} < ${newEnd}`,
             sql`${bookingsTable.slotEnd} > ${newStart}`,
           ),
@@ -706,44 +723,34 @@ export async function executeNativeReschedule(
         return;
       }
 
-      await tx.update(bookingsTable).set({ status: "cancelled", cancelledAt: new Date() }).where(eq(bookingsTable.id, bookingId));
-
-      const [inserted] = await tx
-        .insert(bookingsTable)
-        .values({
-          eventTypeId: eventType.id,
-          calendarId: calendar.id,
-          callId,
-          userId: calendar.userId,
-          attendeeName: existing.attendeeName,
-          attendeeEmail: existing.attendeeEmail,
-          attendeeNotes: existing.attendeeNotes,
+      // Update existing booking in-place — same booking ID, same attendee details
+      const [updated] = await tx
+        .update(bookingsTable)
+        .set({
           slotStart: newStart,
           slotEnd: newEnd,
           status: eventType.confirmationMode === "instant" ? "confirmed" : "pending",
-          bookedVia: "agent",
-          rescheduledFromId: bookingId,
-          locationType: existing.locationType,
-          locationAddress: existing.locationAddress,
+          updatedAt: new Date(),
         })
+        .where(eq(bookingsTable.id, bookingId))
         .returning();
-      newBooking = inserted;
+      updatedBooking = updated;
     });
 
-    if (lockConflict || !newBooking) {
+    if (lockConflict || !updatedBooking) {
       return "error: slot was just taken — reschedule failed";
     }
 
-    const dateStr = format(newStart, "EEEE, MMMM do 'at' h:mm a");
-    logger.info({ callId, oldBookingId: bookingId, newBookingId: newBooking.id }, "Native reschedule complete");
+    const dateStr = formatInTimeZone(newStart, resolvedTimezone, "EEEE, MMMM do 'at' h:mm a zzz");
+    logger.info({ callId, bookingId, newStart }, "Native reschedule complete (in-place)");
 
-    // Google Calendar sync: delete the old event, create a new one with a Meet link (best-effort)
+    // Google Calendar sync: update the existing event in-place (best-effort)
     let meetLink: string | null = null;
     try {
-      const oldGcalRow = await db.execute(
+      const gcalRow = await db.execute(
         sql`SELECT google_event_id FROM bookings WHERE id = ${bookingId}`,
       );
-      const existingGoogleEventId = (oldGcalRow.rows[0] as { google_event_id?: string | null })
+      const existingGoogleEventId = (gcalRow.rows[0] as { google_event_id?: string | null })
         ?.google_event_id ?? null;
       const calRow = await db.execute(
         sql`SELECT google_calendar_connection_id FROM scheduling_calendars WHERE id = ${calendar.id}`,
@@ -753,62 +760,84 @@ export async function executeNativeReschedule(
       const connectionId = calendarConnectionId ?? (await getFirstConnectionForUser(calendar.userId))?.id ?? null;
 
       if (existingGoogleEventId && connectionId) {
-        await deleteCalendarEvent(connectionId, existingGoogleEventId);
-      }
-      if (connectionId) {
-        const gcalResult = await createCalendarEvent({
+        // Update the existing calendar event in-place
+        const gcalResult = await updateCalendarEvent({
           connectionId,
-          summary: `${eventType.name} — ${newBooking.attendeeName}`,
-          description: newBooking.attendeeNotes ?? undefined,
-          startTime: newBooking.slotStart,
-          endTime: newBooking.slotEnd,
-          attendeeEmail: newBooking.attendeeEmail,
-          attendeeName: newBooking.attendeeName,
+          eventId: existingGoogleEventId,
+          summary: `${eventType.name} — ${updatedBooking.attendeeName}`,
+          description: updatedBooking.attendeeNotes ?? undefined,
+          startTime: updatedBooking.slotStart,
+          endTime: updatedBooking.slotEnd,
+          attendeeEmail: updatedBooking.attendeeEmail,
+          attendeeName: updatedBooking.attendeeName,
           timezone: calendar.timezone,
           hostEmail: calendar.hostEmail,
           additionalHosts: calendar.additionalHosts,
-          addMeet: eventType.enableGoogleMeet,
-          location: { type: newBooking.locationType === "in_person" ? "in_person" : "google_meet", address: newBooking.locationAddress },
+        });
+        if (gcalResult) {
+          meetLink = gcalResult.meetLink;
+          if (meetLink) {
+            await db.execute(
+              sql`UPDATE bookings SET meet_link = ${meetLink} WHERE id = ${bookingId}`,
+            );
+          }
+        }
+      } else if (connectionId) {
+        // No existing event — create a new one
+        const locationType = updatedBooking.locationType === "in_person" ? "in_person" as const : "google_meet" as const;
+        const gcalResult = await createCalendarEvent({
+          connectionId,
+          summary: `${eventType.name} — ${updatedBooking.attendeeName}`,
+          description: updatedBooking.attendeeNotes ?? undefined,
+          startTime: updatedBooking.slotStart,
+          endTime: updatedBooking.slotEnd,
+          attendeeEmail: updatedBooking.attendeeEmail,
+          attendeeName: updatedBooking.attendeeName,
+          timezone: calendar.timezone,
+          hostEmail: calendar.hostEmail,
+          additionalHosts: calendar.additionalHosts,
+          addMeet: locationType === "google_meet" || eventType.enableGoogleMeet,
+          location: { type: locationType, address: updatedBooking.locationAddress },
         });
         if (gcalResult) {
           meetLink = gcalResult.meetLink;
           await db.execute(
-            sql`UPDATE bookings SET meet_link = ${gcalResult.meetLink}, google_event_id = ${gcalResult.eventId} WHERE id = ${newBooking.id}`,
+            sql`UPDATE bookings SET meet_link = ${gcalResult.meetLink}, google_event_id = ${gcalResult.eventId} WHERE id = ${bookingId}`,
           );
         }
       }
     } catch (err) {
-      logger.warn({ callId, bookingId: newBooking.id, err }, "Native reschedule: Google Calendar sync failed");
+      logger.warn({ callId, bookingId, err }, "Native reschedule: Google Calendar sync failed");
     }
 
     void sendBookingRescheduledEmail({
-      attendeeName: newBooking.attendeeName,
-      attendeeEmail: newBooking.attendeeEmail,
+      attendeeName: updatedBooking.attendeeName,
+      attendeeEmail: updatedBooking.attendeeEmail,
       eventTypeName: eventType.name,
-      slotStart: newBooking.slotStart,
-      slotEnd: newBooking.slotEnd,
+      slotStart: updatedBooking.slotStart,
+      slotEnd: updatedBooking.slotEnd,
       timezone: calendar.timezone,
       hostEmail: calendar.hostEmail,
       additionalHosts: calendar.additionalHosts,
-      bookingId: newBooking.id,
-      notes: newBooking.attendeeNotes,
+      bookingId: updatedBooking.id,
+      notes: updatedBooking.attendeeNotes,
       meetLink,
-      locationType: newBooking.locationType,
-      locationAddress: newBooking.locationAddress,
+      locationType: updatedBooking.locationType,
+      locationAddress: updatedBooking.locationAddress,
       oldSlotStart: existing.slotStart,
     });
     void dispatchSchedulingWebhooks(calendar.userId, "scheduling.booking.rescheduled", {
       booking: {
-        ...newBooking,
-        slotStart: newBooking.slotStart.toISOString(),
-        slotEnd: newBooking.slotEnd.toISOString(),
-        cancelledAt: newBooking.cancelledAt?.toISOString() ?? null,
-        createdAt: newBooking.createdAt.toISOString(),
-        updatedAt: newBooking.updatedAt.toISOString(),
+        ...updatedBooking,
+        slotStart: updatedBooking.slotStart.toISOString(),
+        slotEnd: updatedBooking.slotEnd.toISOString(),
+        cancelledAt: updatedBooking.cancelledAt?.toISOString() ?? null,
+        createdAt: updatedBooking.createdAt.toISOString(),
+        updatedAt: updatedBooking.updatedAt.toISOString(),
       },
     });
 
-    return `reschedule_confirmed: old_booking_id=${bookingId}, new_booking_id=${newBooking.id}, new_slot="${dateStr}", status="${newBooking.status}"`;
+    return `reschedule_confirmed: booking_id=${bookingId}, new_slot="${dateStr}", status="${updatedBooking.status}"`;
   } catch (err) {
     logger.error({ callId, err }, "Native reschedule tool execution failed");
     return "error: reschedule failed due to a technical issue";
