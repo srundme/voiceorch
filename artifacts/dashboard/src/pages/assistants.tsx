@@ -1314,15 +1314,17 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
 
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* ── Secondary nav ── */}
-        <nav className="w-[148px] shrink-0 border-r border-border bg-sidebar flex flex-col py-2 px-2 gap-px overflow-y-auto">
+        <nav className="w-14 hover:w-[148px] transition-all duration-300 ease-in-out group shrink-0 border-r border-border bg-sidebar flex flex-col py-2 px-2 gap-px overflow-y-auto overflow-x-hidden">
           {NAV_ITEMS.map(item => (
             <button key={item.value} onClick={() => setActiveTab(item.value)}
               className={
-                "flex items-center gap-2.5 px-2.5 py-[7px] rounded-lg text-[12px] font-medium transition-colors w-full text-left " +
+                "flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-2.5 px-2 py-[7px] rounded-lg text-[12px] font-medium transition-all w-full text-left overflow-hidden whitespace-nowrap " +
                 (activeTab === item.value ? "bg-accent text-foreground" : "text-muted-foreground/60 hover:text-foreground hover:bg-accent/40")
               }>
               <item.icon className="h-3.5 w-3.5 shrink-0" />
-              {item.label}
+              <span className="opacity-0 w-0 group-hover:w-auto group-hover:opacity-100 transition-all duration-300 whitespace-nowrap">
+                {item.label}
+              </span>
             </button>
           ))}
         </nav>

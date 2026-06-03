@@ -63,7 +63,7 @@ function NavItems({ onClick }: { onClick?: () => void }) {
     <div className="flex flex-col gap-5">
       {NAV_SECTIONS.map((section) => (
         <div key={section.label}>
-          <p className="px-2.5 mb-1 text-[9px] font-semibold tracking-[0.12em] uppercase select-none text-muted-foreground/50">
+          <p className="px-2.5 mb-1 text-[9px] font-semibold tracking-[0.12em] uppercase select-none text-muted-foreground/50 opacity-0 w-0 group-hover:w-auto group-hover:opacity-100 transition-all duration-300 whitespace-nowrap overflow-hidden">
             {section.label}
           </p>
           <div className="flex flex-col gap-px">
@@ -76,7 +76,7 @@ function NavItems({ onClick }: { onClick?: () => void }) {
                 <Link key={item.name} href={item.href} onClick={onClick}>
                   <div
                     className={
-                      "group flex items-center gap-2.5 px-2.5 py-[6.5px] rounded-lg text-[13px] transition-colors duration-100 cursor-pointer select-none " +
+                      "flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-2.5 px-2.5 py-[6.5px] rounded-lg text-[13px] transition-all duration-100 cursor-pointer select-none overflow-hidden " +
                       (isActive
                         ? "bg-accent text-foreground font-medium"
                         : "text-muted-foreground hover:bg-accent/50 hover:text-foreground font-normal")
@@ -88,7 +88,7 @@ function NavItems({ onClick }: { onClick?: () => void }) {
                         (isActive ? "text-foreground/70" : "text-muted-foreground/50 group-hover:text-muted-foreground")
                       }
                     />
-                    <span className="truncate">{item.name}</span>
+                    <span className="truncate opacity-0 w-0 group-hover:w-auto group-hover:opacity-100 transition-all duration-300 whitespace-nowrap">{item.name}</span>
                   </div>
                 </Link>
               );
@@ -111,14 +111,14 @@ function WalletBadge() {
     <Link href="/app/wallet">
       <div
         className={
-          "flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer transition-colors " +
+          "flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer transition-colors overflow-hidden " +
           (isActive ? "bg-accent" : "hover:bg-accent/50")
         }
       >
         <div className="h-6 w-6 rounded-md flex items-center justify-center shrink-0 bg-elevated border border-border">
           <Zap className="w-3 h-3 text-muted-foreground/60" />
         </div>
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 opacity-0 w-0 group-hover:w-auto group-hover:opacity-100 transition-all duration-300 whitespace-nowrap overflow-hidden">
           <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50">
             Balance
           </p>
@@ -130,7 +130,9 @@ function WalletBadge() {
             <div className="h-3.5 w-12 rounded animate-pulse mt-0.5 bg-elevated" />
           )}
         </div>
-        {isLow && <AlertCircle className="w-3 h-3 text-muted-foreground/40 shrink-0" />}
+        <div className="opacity-0 w-0 group-hover:w-auto group-hover:opacity-100 transition-all duration-300 whitespace-nowrap overflow-hidden">
+          {isLow && <AlertCircle className="w-3 h-3 text-muted-foreground/40 shrink-0" />}
+        </div>
       </div>
     </Link>
   );
@@ -151,7 +153,7 @@ function UserMenu() {
       <button
         onClick={() => setOpen((o) => !o)}
         className={
-          "flex items-center gap-2.5 px-2.5 py-2 rounded-lg w-full text-left transition-colors " +
+          "flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-2.5 px-2.5 py-2 rounded-lg w-full text-left transition-colors overflow-hidden " +
           (open ? "bg-accent" : "hover:bg-accent/50")
         }
       >
@@ -159,7 +161,7 @@ function UserMenu() {
           <span className="text-[10px] font-semibold text-foreground/70">{initials}</span>
         </div>
 
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 opacity-0 w-0 group-hover:w-auto group-hover:opacity-100 transition-all duration-300 whitespace-nowrap overflow-hidden">
           <p className="text-[12.5px] font-medium truncate leading-none text-foreground">
             {name}
           </p>
@@ -171,7 +173,7 @@ function UserMenu() {
         </div>
 
         <ChevronDown
-          className="w-3 h-3 shrink-0 text-muted-foreground/40 transition-transform"
+          className="w-3 h-3 shrink-0 text-muted-foreground/40 transition-transform opacity-0 w-0 group-hover:w-auto group-hover:opacity-100 transition-all duration-300"
           style={{ transform: open ? "rotate(180deg)" : undefined }}
         />
       </button>
@@ -202,11 +204,11 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
       <div className="flex items-center gap-2 px-4 h-13 shrink-0 border-b border-sidebar-border">
         <Link href="/app" onClick={onNavClick} className="flex items-center gap-2">
           <SnapServeIcon size={26} className="text-foreground shrink-0" />
-          <span className="leading-none select-none text-[15px] text-foreground" style={{ fontFamily: "'Tex Gyre Heros', Helvetica, Arial, sans-serif", letterSpacing: "-0.01em" }}>
+          <span className="leading-none select-none text-[15px] text-foreground opacity-0 w-0 group-hover:w-auto group-hover:opacity-100 transition-all duration-300 whitespace-nowrap overflow-hidden" style={{ fontFamily: "'Tex Gyre Heros', Helvetica, Arial, sans-serif", letterSpacing: "-0.01em" }}>
             <span style={{ fontWeight: 700 }}>Snap</span><span style={{ fontWeight: 400 }}>Serve</span>
           </span>
         </Link>
-        <span className="text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded border border-border bg-elevated text-muted-foreground/50 ml-1">
+        <span className="text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded border border-border bg-elevated text-muted-foreground/50 ml-1 opacity-0 w-0 group-hover:w-auto group-hover:opacity-100 transition-all duration-300 whitespace-nowrap overflow-hidden">
           Beta
         </span>
       </div>
@@ -221,9 +223,9 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
         <WalletBadge />
         <UserMenu />
         {/* System status */}
-        <div className="flex items-center gap-2 px-2.5 py-1.5">
-          <div className="h-1.5 w-1.5 rounded-full bg-foreground/20" />
-          <span className="text-[10.5px] text-muted-foreground/50 flex-1 truncate">All systems operational</span>
+        <div className="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-2 px-2.5 py-1.5 overflow-hidden">
+          <div className="h-1.5 w-1.5 rounded-full bg-foreground/20 shrink-0" />
+          <span className="text-[10.5px] text-muted-foreground/50 flex-1 truncate opacity-0 w-0 group-hover:w-auto group-hover:opacity-100 transition-all duration-300 whitespace-nowrap">All systems operational</span>
         </div>
       </div>
     </div>
@@ -237,7 +239,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background">
       {/* Desktop sidebar */}
-      <aside className="hidden md:block w-[228px] shrink-0">
+      <aside className="hidden md:block w-16 hover:w-[228px] group shrink-0 transition-all duration-300 ease-in-out overflow-hidden">
         <SidebarContent />
       </aside>
 

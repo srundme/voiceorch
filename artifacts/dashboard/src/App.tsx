@@ -271,8 +271,6 @@ function Router() {
       appearance={clerkAppearance}
       signInUrl={`${basePath}/sign-in`}
       signUpUrl={`${basePath}/sign-up`}
-      afterSignInUrl={`${basePath}/app`}
-      afterSignUpUrl={`${basePath}/app`}
       localization={{
         signIn: { start: { title: "Welcome back to SnapServe", subtitle: "Sign in to manage your voice agents" } },
         signUp: { start: { title: "Create your SnapServe account", subtitle: "Get $5 free credit to start building" } },
