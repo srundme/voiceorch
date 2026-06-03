@@ -189,6 +189,10 @@ export interface AgentConfig {
   genderDetectionMaleSalutation: string;
   genderDetectionFemaleSalutation: string;
   genderDetectionNeutralSalutation: string;
+
+  // P1-G: Engine — interruption & pacing
+  wordsForInterruption: number;
+  incrementalDelay: number;
 }
 
 export interface ProviderKey {

@@ -347,11 +347,17 @@ export class OrchestrationPipeline {
           // (4× the normal VAD level) — intentional caller speech will clear this bar,
           // but ambient noise, echo bleed, or background conversation won't.
           this.bargeInSpeechFrames++;
-          if (this.bargeInSpeechFrames >= this.bargeInMinFrames) {
+          // wordsForInterruption: each word ≈ 20 frames at 20ms/frame (150 wpm).
+          // Effective min frames = max(bargeInMinFrames, wordsForInterruption * 20).
+          const effectiveMinFrames = Math.max(
+            this.bargeInMinFrames,
+            (this.agent.wordsForInterruption ?? 2) * 20,
+          );
+          if (this.bargeInSpeechFrames >= effectiveMinFrames) {
             this.bargeInRequested = true;
             this.bargeInCallback?.();
             this.audioBuffer = [];
-            logger.info({ callId: this.config.callId, frames: this.bargeInSpeechFrames }, "Barge-in detected (batch STT)");
+            logger.info({ callId: this.config.callId, frames: this.bargeInSpeechFrames, effectiveMinFrames }, "Barge-in detected (batch STT)");
           }
         } else {
           this.bargeInSpeechFrames = 0; // dropped below barge-in threshold — reset
@@ -876,7 +882,12 @@ export class OrchestrationPipeline {
       if (wakePlayer) {
         const wake = wakePlayer;
         wakePlayer = null;
-        wake();
+        const delayMs = this.agent.incrementalDelay ?? 0;
+        if (delayMs > 0) {
+          setTimeout(wake, delayMs);
+        } else {
+          wake();
+        }
       }
     };
 

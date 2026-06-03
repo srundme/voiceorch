@@ -168,6 +168,9 @@ export async function createSession(params: {
     genderDetectionMaleSalutation: (agentCfg["genderDetectionMaleSalutation"] as string  | undefined) ?? "Sir",
     genderDetectionFemaleSalutation: (agentCfg["genderDetectionFemaleSalutation"] as string | undefined) ?? "Ma'am",
     genderDetectionNeutralSalutation: (agentCfg["genderDetectionNeutralSalutation"] as string | undefined) ?? "",
+    // P1-G: Engine — interruption & pacing
+    wordsForInterruption: (agentCfg["wordsForInterruption"] as number | undefined) ?? 2,
+    incrementalDelay:     (agentCfg["incrementalDelay"]     as number | undefined) ?? 0,
   };
 
   // ── Cross-call caller memory ────────────────────────────────────────────────

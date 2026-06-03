@@ -4,7 +4,8 @@ import { eq } from "drizzle-orm";
 import { createSTTAdapter } from "../adapters/stt/index.js";
 import { createLLMAdapter } from "../adapters/llm/index.js";
 import { createTTSAdapter } from "../adapters/tts/index.js";
-import { downsample16to8 } from "../audio.js";
+import { downsample16to8, upsample8to16, decodeMulaw } from "../audio.js";
+import { AmbientNoiseStream } from "../ambient.js";
 import { toReadableError } from "../utils.js";
 import { logger } from "../../lib/logger.js";
 import { RecordingBuffer } from "../recorder.js";
@@ -45,6 +46,10 @@ const MIN_PCM_BYTES            = 3200; // ~100ms at 16kHz Int16 — minimum spee
 const AUDIO_CHUNK_BYTES        = 1280; // 40ms per WS frame
 const HANDOFF_SILENCE_MS       = 3000; // sustained silence that may indicate a phone handoff
 const TTS_VOLUME_GAIN          = 1.5;  // PCM amplitude multiplier — reduced from 2.5 to prevent hard-clipping distortion
+
+const BACKCHANNEL_PHRASES = [
+  "I see.", "Got it.", "Okay.", "Mm-hmm.", "Sure.", "I understand.", "Go on.",
+];
 
 /** Transcript phrases that strongly suggest the caller is handing the phone to someone else. */
 const HANDOFF_PHRASES = [
@@ -303,13 +308,31 @@ export async function handleWebCallWebSocket(
     }
   }
 
-  // ── Gender detection ──────────────────────────────────────────────────────
+  // ── Agent config (agentConfig JSONB) ─────────────────────────────────────
   const agentCfg = (agent.agentConfig ?? {}) as Record<string, unknown>;
+
+  // ── Gender detection ──────────────────────────────────────────────────────
   const genderEnabled = (agentCfg["genderDetectionEnabled"] as boolean | undefined) ?? true;
   const maleSal     = (agentCfg["genderDetectionMaleSalutation"]    as string | undefined) ?? "Sir";
   const femaleSal   = (agentCfg["genderDetectionFemaleSalutation"]  as string | undefined) ?? "Ma'am";
   const neutralSal  = (agentCfg["genderDetectionNeutralSalutation"] as string | undefined) ?? "";
   const genderDetector = genderEnabled ? new GenderDetector(callId, logger) : null;
+
+  // ── Engine settings ────────────────────────────────────────────────────────
+  const wordsForInterruption = (agentCfg["wordsForInterruption"] as number | undefined) ?? 2;
+  // webcall frames = 40ms each; 1 word ≈ 400ms at 150 wpm ≈ 10 frames
+  const effectiveBargeInMinFrames = Math.max(BARGE_IN_MIN_FRAMES, wordsForInterruption * 10);
+  const incrementalDelayMs = (agentCfg["incrementalDelay"] as number | undefined) ?? 0;
+
+  // ── Ambient noise ─────────────────────────────────────────────────────────
+  const ambientEnabled = (agentCfg["ambientNoiseEnabled"] as boolean | undefined) ?? false;
+  const ambientTrack   = (agentCfg["ambientNoiseTrack"]   as string | undefined) ?? null;
+  let ambientStream: AmbientNoiseStream | null = null;
+  let ambientInterval: ReturnType<typeof setInterval> | null = null;
+  if (ambientEnabled && ambientTrack) {
+    ambientStream = new AmbientNoiseStream(ambientTrack);
+    logger.info({ callId, track: ambientTrack }, "Webcall: ambient noise enabled");
+  }
 
   // ── State ─────────────────────────────────────────────────────────────────
   const audioChunks: Buffer[] = [];
@@ -531,6 +554,15 @@ export async function handleWebCallWebSocket(
 
       while (true) {
       sentenceJobs = [];
+      // ── Backchanneling: queue a filler phrase before LLM warms up ─────────
+      // Only on the first tool iteration so we don't repeat after tool calls.
+      if (toolIterations === 0 && agent.backchannelingEnabled && !interrupted) {
+        const freq = (agent.backchannelingFrequency ?? 0.3) as number;
+        if (Math.random() < freq) {
+          const phrase = BACKCHANNEL_PHRASES[Math.floor(Math.random() * BACKCHANNEL_PHRASES.length)]!;
+          queueSentence(phrase);
+        }
+      }
       tokenBuf = "";
       fullReply = "";
       inThinkBlock = false;
@@ -792,6 +824,11 @@ export async function handleWebCallWebSocket(
 
       for (let i = 0; i < sentenceJobs.length; i++) {
         if (closed || interrupted) break;
+        // Incremental delay: pause before each sentence (after the first) to give
+        // the agent a more deliberate, natural pacing between sentences.
+        if (i > 0 && incrementalDelayMs > 0 && !interrupted && !closed) {
+          await new Promise<void>(r => setTimeout(r, incrementalDelayMs));
+        }
 
         let pcmOut: Buffer;
         try {
@@ -1034,9 +1071,22 @@ export async function handleWebCallWebSocket(
   const maxTimer = setTimeout(() => { void hangup("timeout"); }, (agent.maxDuration ?? 600) * 1000);
 
   // ── Hangup ────────────────────────────────────────────────────────────────
+  // ── Ambient noise interval (webcall) ──────────────────────────────────────
+  // Send one 20ms upsampled ambient chunk every 20ms while the agent is silent.
+  if (ambientStream) {
+    ambientInterval = setInterval(() => {
+      if (closed || speaking) return;
+      // ambient.ts produces 8kHz mulaw — decode to PCM8k then upsample to PCM16k
+      const mulawChunk = ambientStream!.nextMulawChunk();
+      const pcm16k = upsample8to16(decodeMulaw(mulawChunk));
+      if (ws.readyState === ws.OPEN) ws.send(pcm16k);
+    }, 20);
+  }
+
   async function hangup(reason = "normal", errorDetail?: unknown) {
     if (closed) return;
     closed = true;
+    if (ambientInterval) { clearInterval(ambientInterval); ambientInterval = null; }
     clearTimeout(maxTimer);
     clearSilenceTimer();
 
@@ -1215,11 +1265,11 @@ export async function handleWebCallWebSocket(
       if (!inStartGrace && !inEndGrace && rms > BARGE_IN_RMS) {
         bargeInFrames++;
         audioChunks.push(Buffer.from(data)); // accumulate speech for next turn
-        if (!interrupted && bargeInFrames >= BARGE_IN_MIN_FRAMES) {
+        if (!interrupted && bargeInFrames >= effectiveBargeInMinFrames) {
           interrupted = true;
           send({ type: "interrupted" }); // tell client to stop playing
           sendStatus("thinking");
-          logger.info({ callId, rms, bargeInFrames }, "Barge-in triggered");
+          logger.info({ callId, rms, bargeInFrames, effectiveBargeInMinFrames }, "Barge-in triggered");
         }
       } else {
         bargeInFrames = 0; // frame dropped below threshold (or in grace period) — reset the run
