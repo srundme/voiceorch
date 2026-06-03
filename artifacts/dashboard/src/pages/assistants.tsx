@@ -1535,12 +1535,12 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                       <SelectContent className="bg-card border-border">{ASR_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
+                  {asrModelOptions.length > 0 && (
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">Model</p>
-                    {asrModelOptions.length > 0
-                      ? <Select value={asrModel} onValueChange={mark(setAsrModel)}><SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger><SelectContent className="bg-card border-border">{asrModelOptions.map(m => <SelectItem key={m.value} value={m.value} className="text-foreground text-xs">{m.label}</SelectItem>)}</SelectContent></Select>
-                      : <Input value={asrModel} onChange={e => { setAsrModel(e.target.value); setDirty(true); }} placeholder="Model name" className="h-7 text-xs bg-card border-border text-foreground" />}
+                    <Select value={asrModel} onValueChange={mark(setAsrModel)}><SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger><SelectContent className="bg-card border-border">{asrModelOptions.map(m => <SelectItem key={m.value} value={m.value} className="text-foreground text-xs">{m.label}</SelectItem>)}</SelectContent></Select>
                   </div>
+                  )}
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground mb-1">Language</p>
@@ -1931,11 +1931,9 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                           <SelectContent className="bg-card border-border">{ASR_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}</SelectContent>
                         </Select>
                       </div>
-                      <div><p className="text-xs text-muted-foreground mb-1">Model</p>
-                        {asrModelOptions.length > 0
-                          ? <Select value={asrModel} onValueChange={mark(setAsrModel)}><SelectTrigger className="h-7 text-xs bg-muted border-border text-foreground"><SelectValue /></SelectTrigger><SelectContent className="bg-card border-border">{asrModelOptions.map(m => <SelectItem key={m.value} value={m.value} className="text-foreground text-xs">{m.label}</SelectItem>)}</SelectContent></Select>
-                          : <Input value={asrModel} onChange={e => { setAsrModel(e.target.value); setDirty(true); }} placeholder="Model name" className="h-7 text-xs" />}
-                      </div>
+                      {asrModelOptions.length > 0 && <div><p className="text-xs text-muted-foreground mb-1">Model</p>
+                        <Select value={asrModel} onValueChange={mark(setAsrModel)}><SelectTrigger className="h-7 text-xs bg-muted border-border text-foreground"><SelectValue /></SelectTrigger><SelectContent className="bg-card border-border">{asrModelOptions.map(m => <SelectItem key={m.value} value={m.value} className="text-foreground text-xs">{m.label}</SelectItem>)}</SelectContent></Select>
+                      </div>}
                     </div>
                     <SliderRow label="Confidence Threshold" desc="Discard transcripts below this score" value={asrConfidenceThreshold} onChange={v => { setAsrConfidenceThreshold(v); setDirty(true); }} min={0} max={1} step={0.01} />
                     <SliderRow label="End-of-Turn Timeout" desc="Max wait after speech ends" value={asrEndOfTurnTimeout} onChange={v => { setAsrEndOfTurnTimeout(v); setDirty(true); }} min={500} max={10000} step={100} unit="ms" />
@@ -1950,11 +1948,9 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                           <SelectContent className="bg-card border-border">{LLM_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}</SelectContent>
                         </Select>
                       </div>
-                      <div><p className="text-xs text-muted-foreground mb-1">Model</p>
-                        {llmModelOptions.length > 0
-                          ? <Select value={llmModel} onValueChange={mark(setLlmModel)}><SelectTrigger className="h-7 text-xs bg-muted border-border text-foreground"><SelectValue /></SelectTrigger><SelectContent className="bg-card border-border">{llmModelOptions.map(m => <SelectItem key={m.value} value={m.value} className="text-foreground text-xs">{m.label}</SelectItem>)}</SelectContent></Select>
-                          : <Input value={llmModel} onChange={e => { setLlmModel(e.target.value); setDirty(true); }} placeholder="Model name" className="h-7 text-xs" />}
-                      </div>
+                      {llmModelOptions.length > 0 && <div><p className="text-xs text-muted-foreground mb-1">Model</p>
+                        <Select value={llmModel} onValueChange={mark(setLlmModel)}><SelectTrigger className="h-7 text-xs bg-muted border-border text-foreground"><SelectValue /></SelectTrigger><SelectContent className="bg-card border-border">{llmModelOptions.map(m => <SelectItem key={m.value} value={m.value} className="text-foreground text-xs">{m.label}</SelectItem>)}</SelectContent></Select>
+                      </div>}
                     </div>
                     <SliderRow label="Temperature" desc="Randomness — higher = more creative" value={temperature} onChange={v => { setTemperature(v); setDirty(true); }} min={0} max={2} step={0.01} />
                     <SliderRow label="Max Tokens" desc="Max tokens per LLM response" value={cfg.maxTokens ?? 200} onChange={v => setCfg({ maxTokens: v })} min={50} max={2000} step={10} />
