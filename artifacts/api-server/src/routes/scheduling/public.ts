@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { format, addMinutes } from "date-fns";
 import { eq, and, or, sql } from "drizzle-orm";
 import { db, eventTypesTable, schedulingCalendarsTable, bookingsTable } from "@workspace/db";
+import { logger } from "../../lib/logger.js";
 import { getAvailableSlots } from "../../services/scheduling/slot-engine.js";
 import {
   sendBookingCreatedEmail,
@@ -227,7 +228,8 @@ router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
       timezone: calendar.timezone,
       hostEmail: calendar.hostEmail,
       additionalHosts: calendar.additionalHosts,
-      addMeet: eventType.enableGoogleMeet,
+      addMeet: booking.locationType === "google_meet" || eventType.enableGoogleMeet,
+      location: { type: booking.locationType === "in_person" ? "in_person" : "google_meet", address: booking.locationAddress ?? null },
     }) : null;
     if (gcalResult) {
       meetLink = gcalResult.meetLink;
@@ -238,7 +240,7 @@ router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
         );
       }
     }
-  } catch { /* non-fatal */ }
+  } catch (err) { logger.warn({ err, bookingId: booking.id }, "GCal event creation failed for new public booking"); }
 
   // Issue self-service tokens for this booking
   const baseUrl = getBaseUrl();
@@ -372,7 +374,7 @@ router.post("/scheduling/public/bookings/cancel", async (req, res): Promise<void
         if (connectionId) {
           await deleteCalendarEvent(connectionId, existingGoogleEventId);
         }
-      } catch { /* non-fatal */ }
+      } catch (err) { logger.warn({ err, bookingId: booking.id, googleEventId: existingGoogleEventId }, "GCal event deletion failed for cancelled public booking"); }
     })();
   }
 
@@ -544,7 +546,8 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
         timezone: calendar.timezone,
         hostEmail: calendar.hostEmail,
         additionalHosts: calendar.additionalHosts,
-        addMeet: eventType.enableGoogleMeet,
+        addMeet: newBooking.locationType === "google_meet" || eventType.enableGoogleMeet,
+      location: { type: newBooking.locationType === "in_person" ? "in_person" : "google_meet", address: newBooking.locationAddress ?? null },
       });
       if (gcalResult) {
         meetLink = gcalResult.meetLink;
@@ -556,7 +559,7 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
         }
       }
     }
-  } catch { /* non-fatal */ }
+  } catch (err) { logger.warn({ err, bookingId: newBooking.id }, "GCal sync failed for rescheduled public booking"); }
 
   // Issue new reschedule token for the new booking
   const baseUrl = getBaseUrl();
