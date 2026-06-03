@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { db, agentsTable, callsTable, scheduledCallbacksTable, providersTable, usersTable, walletTransactionsTable, platformSettingsTable } from "@workspace/db";
+import { db, agentsTable, callsTable, scheduledCallbacksTable, providersTable, usersTable, walletTransactionsTable, platformSettingsTable, knowledgeEntriesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { createSTTAdapter } from "../adapters/stt/index.js";
 import { createLLMAdapter } from "../adapters/llm/index.js";
@@ -328,6 +328,30 @@ export async function handleWebCallWebSocket(
     systemPrompt = systemPrompt
       .replace(/\{\{(\w+)\}\}/g, (m, k: string) => resolveVar(k, m))
       .replace(/\{(\w+)\}/g,     (m, k: string) => resolveVar(k, m));
+  }
+
+  // ── Knowledge base injection ─────────────────────────────────────────────
+  if (agent.knowledgeBaseId) {
+    try {
+      const entries = await db
+        .select()
+        .from(knowledgeEntriesTable)
+        .where(eq(knowledgeEntriesTable.sourceId, agent.knowledgeBaseId))
+        .limit(100);
+      if (entries.length > 0) {
+        const kbBlock = [
+          "=== KNOWLEDGE BASE ===",
+          "Use the following information to answer questions accurately. Always prefer this over your general training data.",
+          "",
+          ...entries.map(e => e.title ? `[${e.title}]\n${e.content}` : e.content),
+          "=== END KNOWLEDGE BASE ===",
+        ].join("\n\n");
+        systemPrompt = `${kbBlock}\n\n${systemPrompt}`;
+        logger.info({ callId, knowledgeBaseId: agent.knowledgeBaseId, entryCount: entries.length }, "Webcall: knowledge base injected into system prompt");
+      }
+    } catch (kbErr) {
+      logger.warn({ callId, knowledgeBaseId: agent.knowledgeBaseId, kbErr }, "Webcall: failed to load knowledge base — continuing without it");
+    }
   }
 
   // ── Agent config (agentConfig JSONB) ─────────────────────────────────────

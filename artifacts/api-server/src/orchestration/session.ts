@@ -1,5 +1,5 @@
 import { createHmac } from "crypto";
-import { db, agentsTable, callsTable, providersTable, platformSettingsTable, campaignLeadsTable } from "@workspace/db";
+import { db, agentsTable, callsTable, providersTable, platformSettingsTable, campaignLeadsTable, knowledgeEntriesTable } from "@workspace/db";
 import { decryptKey } from "../lib/crypto.js";
 import { eq, and } from "drizzle-orm";
 import { OrchestrationPipeline } from "./pipeline.js";
@@ -240,6 +240,33 @@ export async function createSession(params: {
   agentConfig.systemPrompt = agentConfig.systemPrompt
     .replace(/\{\{(\w+)\}\}/g, (m, k: string) => resolveVar(k, m))
     .replace(/\{(\w+)\}/g,     (m, k: string) => resolveVar(k, m));
+
+  // ── Knowledge base injection ─────────────────────────────────────────────
+  if (agent.knowledgeBaseId) {
+    try {
+      const entries = await db
+        .select()
+        .from(knowledgeEntriesTable)
+        .where(eq(knowledgeEntriesTable.sourceId, agent.knowledgeBaseId))
+        .limit(100);
+      if (entries.length > 0) {
+        const kbBlock = [
+          "=== KNOWLEDGE BASE ===",
+          "Use the following information to answer questions accurately. Always prefer this over your general training data.",
+          "",
+          ...entries.map((e: { title: string | null; content: string }) => e.title ? `[${e.title}]\n${e.content}` : e.content),
+          "=== END KNOWLEDGE BASE ===",
+        ].join("\n\n");
+        agentConfig.systemPrompt = `${kbBlock}\n\n${agentConfig.systemPrompt}`;
+        logger.info(
+          { agentId: params.agentId, knowledgeBaseId: agent.knowledgeBaseId, entryCount: entries.length },
+          "Knowledge base injected into system prompt"
+        );
+      }
+    } catch (kbErr) {
+      logger.warn({ agentId: params.agentId, knowledgeBaseId: agent.knowledgeBaseId, kbErr }, "Failed to load knowledge base — continuing without it");
+    }
+  }
 
   // Scope provider keys to this agent's owner; fall back to all active if agent has no userId
   const providerRows = agent.userId
