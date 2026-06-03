@@ -1148,11 +1148,14 @@ export async function handleWebCallWebSocket(
     }
 
     try {
-      // Finalize recording — upload to GCS then save the serving URL
-      const recordingUrl = await recording.finalize(callId).catch((err) => {
-        logger.warn({ callId, err }, "WebCall recording upload failed");
-        return null;
-      });
+      // Finalize recording — only when the "Record Calls" toggle is on
+      const recordingEnabled = (agentCfg["recordingEnabled"] as boolean | undefined) ?? false;
+      const recordingUrl = recordingEnabled
+        ? await recording.finalize(callId).catch((err) => {
+            logger.warn({ callId, err }, "WebCall recording upload failed");
+            return null;
+          })
+        : null;
 
       await db.update(callsTable).set({
         status: isFailed ? "failed" : "completed",
@@ -1222,6 +1225,35 @@ export async function handleWebCallWebSocket(
           }
         } catch (summaryErr) {
           logger.warn({ callId, summaryErr }, "Post-call webcall summary generation failed");
+        }
+      })();
+    }
+
+    // ── Post-call disposition extraction (fire-and-forget) ───────────────────
+    const dispositionSchema = Array.isArray(agent.dispositionSchema)
+      ? (agent.dispositionSchema as Array<{ key: string; label: string; type: string; required?: boolean; options?: string[] }>)
+      : [];
+    if (dispositionSchema.length > 0 && transcript && transcript.length > 50) {
+      void (async () => {
+        try {
+          const fieldList = dispositionSchema
+            .map(f => `- "${f.key}" (${f.label}, type: ${f.type}${f.options?.length ? `, options: [${f.options.join(", ")}]` : ""})`)
+            .join("\n");
+          let raw = "";
+          await llm.chat(
+            [{ role: "user", content: `Transcript:\n${transcript.slice(0, 6000)}` }],
+            `Extract the following disposition fields from this call transcript. Return ONLY a valid JSON object with the field keys as keys.\n\nFields:\n${fieldList}`,
+            () => {},
+            (full) => { raw = full; }
+          );
+          const jsonStr = raw.replace(/```(?:json)?\s*/gi, "").replace(/```\s*/g, "").trim();
+          const result = JSON.parse(jsonStr) as Record<string, unknown>;
+          if (result && typeof result === "object" && !Array.isArray(result)) {
+            await db.update(callsTable).set({ dispositionResult: result as Record<string, string | number | boolean> }).where(eq(callsTable.id, callId));
+            logger.info({ callId, fields: Object.keys(result) }, "Webcall: disposition extracted");
+          }
+        } catch (dispErr) {
+          logger.warn({ callId, dispErr }, "Webcall: disposition extraction failed");
         }
       })();
     }
