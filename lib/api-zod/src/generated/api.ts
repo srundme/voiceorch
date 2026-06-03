@@ -2351,7 +2351,8 @@ export const GetPublicEventTypeResponse = zod.object({
   "slug": zod.string(),
   "description": zod.string().nullish(),
   "durationMinutes": zod.number(),
-  "confirmationMode": zod.enum(['instant', 'manual'])
+  "confirmationMode": zod.enum(['instant', 'manual']),
+  "enableGoogleMeet": zod.boolean()
 })
 
 
@@ -2395,7 +2396,8 @@ export const CreatePublicBookingBody = zod.object({
   "slotStart": zod.coerce.date(),
   "attendeeName": zod.string().min(1).regex(createPublicBookingBodyAttendeeNameRegExp),
   "attendeeEmail": zod.string().email(),
-  "attendeeNotes": zod.string().optional()
+  "attendeeNotes": zod.string().optional(),
+  "locationType": zod.enum(['google_meet', 'in_person']).optional()
 })
 
 

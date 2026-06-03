@@ -205,9 +205,17 @@ export default function PublicBookingPage() {
           {eventType.description && (
             <p className="text-slate-600 mt-2">{eventType.description}</p>
           )}
-          {eventType.confirmationMode === "manual" && (
-            <Badge variant="outline" className="mt-2">Requires host approval</Badge>
-          )}
+          <div className="flex flex-wrap justify-center gap-2 mt-2">
+            {eventType.enableGoogleMeet && (
+              <Badge variant="secondary" className="gap-1.5">
+                <Video className="h-3 w-3" />
+                Virtual · Google Meet
+              </Badge>
+            )}
+            {eventType.confirmationMode === "manual" && (
+              <Badge variant="outline">Requires host approval</Badge>
+            )}
+          </div>
         </div>
 
         <div className="grid md:grid-cols-2 gap-6">

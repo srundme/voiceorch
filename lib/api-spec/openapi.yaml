@@ -4592,7 +4592,7 @@ components:
 
     PublicEventType:
       type: object
-      required: [id, calendarId, name, slug, durationMinutes, confirmationMode]
+      required: [id, calendarId, name, slug, durationMinutes, confirmationMode, enableGoogleMeet]
       properties:
         id:
           type: integer
@@ -4609,6 +4609,8 @@ components:
         confirmationMode:
           type: string
           enum: [instant, manual]
+        enableGoogleMeet:
+          type: boolean
 
     AvailabilitySchedule:
       type: object
@@ -4814,6 +4816,9 @@ components:
           format: email
         attendeeNotes:
           type: string
+        locationType:
+          type: string
+          enum: [google_meet, in_person]
 
     PublicBookingByTokenResponse:
       type: object

@@ -77,6 +77,7 @@ router.get("/scheduling/public/event-types/:slug", async (req, res): Promise<voi
     description: eventType.description ?? null,
     durationMinutes: eventType.durationMinutes,
     confirmationMode: eventType.confirmationMode,
+    enableGoogleMeet: eventType.enableGoogleMeet,
   }));
 });
 
@@ -198,6 +199,7 @@ router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
       slotEnd,
       status: eventType.confirmationMode === "instant" ? "confirmed" : "pending",
       bookedVia: "web",
+      locationType: parsed.data.locationType ?? "google_meet",
     }).returning();
     booking = inserted;
   });
@@ -216,6 +218,11 @@ router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
     );
     const calendarConnectionId = (calRow.rows[0] as any)?.google_calendar_connection_id as string | null;
     const connectionId = calendarConnectionId ?? (await getFirstConnectionForUser(calendar.userId))?.id ?? null;
+
+    const addMeet = booking.locationType === "google_meet" || eventType.enableGoogleMeet;
+    if (addMeet && !connectionId) {
+      logger.warn({ calendarId: calendar.id, userId: calendar.userId }, "Google Meet requested but no Google Calendar connection found for calendar");
+    }
 
     const gcalResult = connectionId ? await createCalendarEvent({
       connectionId,
@@ -261,6 +268,8 @@ router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
     bookingId: booking.id,
     notes: booking.attendeeNotes,
     meetLink,
+    locationType: booking.locationType,
+    locationAddress: booking.locationAddress,
     cancelLink,
     rescheduleLink,
   });

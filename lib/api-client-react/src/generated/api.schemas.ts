@@ -1588,6 +1588,7 @@ export interface PublicEventType {
   description?: string | null;
   durationMinutes: number;
   confirmationMode: PublicEventTypeConfirmationMode;
+  enableGoogleMeet: boolean;
 }
 
 export interface AvailabilitySchedule {
@@ -1719,6 +1720,14 @@ export interface BookingInput {
   bookedVia?: BookingInputBookedVia;
 }
 
+export type PublicBookingInputLocationType = typeof PublicBookingInputLocationType[keyof typeof PublicBookingInputLocationType];
+
+
+export const PublicBookingInputLocationType = {
+  google_meet: 'google_meet',
+  in_person: 'in_person',
+} as const;
+
 export interface PublicBookingInput {
   /**
      * @minLength 1
@@ -1733,6 +1742,7 @@ export interface PublicBookingInput {
   attendeeName: string;
   attendeeEmail: string;
   attendeeNotes?: string;
+  locationType?: PublicBookingInputLocationType;
 }
 
 export type PublicBookingByTokenResponseStatus = typeof PublicBookingByTokenResponseStatus[keyof typeof PublicBookingByTokenResponseStatus];
