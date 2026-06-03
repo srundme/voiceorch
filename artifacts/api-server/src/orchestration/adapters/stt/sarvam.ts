@@ -18,7 +18,7 @@ const VALID_SARVAM_STT_MODELS = new Set([
   "saarika:v2.5", "saarika:v2", "saarika:v1", "saarika:flash",
   "saaras:v3", "saaras:v3-realtime",
 ]);
-const DEFAULT_SARVAM_STT_MODEL = "saarika:v2.5";
+const DEFAULT_SARVAM_STT_MODEL = "saaras:v3";
 
 /** Only these models support Sarvam's real-time WebSocket API. */
 const STREAMING_MODELS = new Set(["saaras:v3", "saaras:v3-realtime"]);

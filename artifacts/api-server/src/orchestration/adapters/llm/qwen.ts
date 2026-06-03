@@ -52,12 +52,18 @@ export class QwenLLM implements LLMAdapter {
         }))
       : undefined;
 
+    // Prepend /no_think to disable Qwen3 extended reasoning for voice calls.
+    // Think-block generation adds 200–600 ms to TTFT before the first spoken
+    // word; voice agents need low latency, not deep reasoning chains.
+    // This is Groq's documented per-request way to turn off thinking mode.
+    const voiceSystemPrompt = `/no_think\n${systemPrompt}`;
+
     const stream = await this.client.chat.completions.create({
       model: this.model,
       stream: true,
       stream_options: { include_usage: true },
       messages: [
-        { role: "system", content: systemPrompt },
+        { role: "system", content: voiceSystemPrompt },
         ...messages.map((m) => ({ role: m.role, content: m.content })),
       ],
       ...(qwenTools ? { tools: qwenTools, tool_choice: "auto" } : {}),
