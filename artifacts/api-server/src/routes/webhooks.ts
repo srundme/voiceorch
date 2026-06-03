@@ -311,7 +311,11 @@ import {
   buildTransferXml,
   buildTwilioTransferTwiML,
   buildPlivoTransferXml,
+  buildTwilioWarmTransferTwiML,
+  buildPlivoWarmTransferXml,
+  buildVobizWarmTransferXml,
 } from "../orchestration/telephony/transfer.js";
+import { callTransfersTable } from "@workspace/db";
 
 router.get("/webhooks/vobiz/transfer-xml", (req, res): void => {
   const target = String(req.query["target"] ?? "").trim();
@@ -341,6 +345,106 @@ router.get("/webhooks/plivo/transfer-xml", (req, res): void => {
     return;
   }
   res.set("Content-Type", "text/xml").send(buildPlivoTransferXml(target));
+});
+
+// ── P2-B: Warm transfer XML — redirects caller leg + sets whisper URL on operator leg ──
+// Provider fetches this after onCallTransfer fires with a summary.
+// The <Number url="..."> whisper is fetched by the provider when the OPERATOR answers,
+// and the summary is played to the operator only before bridging both parties.
+
+router.get("/webhooks/twilio/warm-transfer-xml", (req, res): void => {
+  const target     = String(req.query["target"] ?? "").trim();
+  const transferId = String(req.query["transferId"] ?? "").trim();
+  if (!target || !transferId) {
+    res.status(400).set("Content-Type", "text/xml")
+      .send("<Response><Say>Warm transfer parameters missing.</Say><Hangup/></Response>");
+    return;
+  }
+  const domains = process.env["REPLIT_DOMAINS"];
+  const baseUrl = domains
+    ? `https://${domains.split(",")[0]!.trim()}`
+    : `http://localhost:${process.env["PORT"] ?? "8080"}`;
+  const whisperUrl = `${baseUrl}/api/webhooks/twilio/warm-briefing-xml?transferId=${transferId}`;
+  res.set("Content-Type", "text/xml").send(buildTwilioWarmTransferTwiML(target, whisperUrl));
+});
+
+router.get("/webhooks/plivo/warm-transfer-xml", (req, res): void => {
+  const target     = String(req.query["target"] ?? "").trim();
+  const transferId = String(req.query["transferId"] ?? "").trim();
+  if (!target || !transferId) {
+    res.status(400).set("Content-Type", "text/xml")
+      .send("<Response><Speak>Warm transfer parameters missing.</Speak><Hangup/></Response>");
+    return;
+  }
+  const domains = process.env["REPLIT_DOMAINS"];
+  const baseUrl = domains
+    ? `https://${domains.split(",")[0]!.trim()}`
+    : `http://localhost:${process.env["PORT"] ?? "8080"}`;
+  const whisperUrl = `${baseUrl}/api/webhooks/plivo/warm-briefing-xml?transferId=${transferId}`;
+  res.set("Content-Type", "text/xml").send(buildPlivoWarmTransferXml(target, whisperUrl));
+});
+
+router.get("/webhooks/vobiz/warm-transfer-xml", (req, res): void => {
+  const target     = String(req.query["target"] ?? "").trim();
+  const transferId = String(req.query["transferId"] ?? "").trim();
+  if (!target || !transferId) {
+    res.status(400).set("Content-Type", "text/xml")
+      .send("<Response><Speak>Warm transfer parameters missing.</Speak><Hangup/></Response>");
+    return;
+  }
+  const domains = process.env["REPLIT_DOMAINS"];
+  const baseUrl = domains
+    ? `https://${domains.split(",")[0]!.trim()}`
+    : `http://localhost:${process.env["PORT"] ?? "8080"}`;
+  const whisperUrl = `${baseUrl}/api/webhooks/vobiz/warm-briefing-xml?transferId=${transferId}`;
+  res.set("Content-Type", "text/xml").send(buildVobizWarmTransferXml(target, whisperUrl));
+});
+
+// ── P2-C: Warm briefing XML — spoken to the OPERATOR only when they answer ────
+// Provider fetches this when the <Number url="..."> destination picks up.
+// Returns <Say> with the AI-generated summary so the operator is fully briefed
+// before the customer is bridged in.
+
+async function warmBriefingXml(transferId: number, res: import("express").Response): Promise<void> {
+  try {
+    const [row] = await db
+      .select({ summary: callTransfersTable.summary })
+      .from(callTransfersTable)
+      .where(eq(callTransfersTable.id, transferId));
+    const summary = row?.summary?.trim()
+      || "A customer is being transferred to you. Please assist them.";
+    const escaped = summary
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    res.set("Content-Type", "text/xml").send(
+      `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Say voice="Polly.Joanna">${escaped}</Say>\n</Response>`
+    );
+    // Mark transfer as connected now that operator answered
+    void db.update(callTransfersTable)
+      .set({ status: "connected", connectedAt: new Date() })
+      .where(eq(callTransfersTable.id, transferId))
+      .catch(() => {/* non-fatal */});
+  } catch (err) {
+    res.set("Content-Type", "text/xml")
+      .send(`<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Say>A customer is being transferred to you.</Say>\n</Response>`);
+  }
+}
+
+router.get("/webhooks/twilio/warm-briefing-xml", async (req, res): Promise<void> => {
+  const id = parseInt(String(req.query["transferId"] ?? ""), 10);
+  if (!id) { res.status(400).send("Missing transferId"); return; }
+  await warmBriefingXml(id, res);
+});
+
+router.get("/webhooks/plivo/warm-briefing-xml", async (req, res): Promise<void> => {
+  const id = parseInt(String(req.query["transferId"] ?? ""), 10);
+  if (!id) { res.status(400).send("Missing transferId"); return; }
+  await warmBriefingXml(id, res);
+});
+
+router.get("/webhooks/vobiz/warm-briefing-xml", async (req, res): Promise<void> => {
+  const id = parseInt(String(req.query["transferId"] ?? ""), 10);
+  if (!id) { res.status(400).send("Missing transferId"); return; }
+  await warmBriefingXml(id, res);
 });
 
 // ── Recording callbacks ────────────────────────────────────────────────────────

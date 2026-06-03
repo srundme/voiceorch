@@ -6,6 +6,13 @@ export interface CallTransferTool {
   description: string;
   transferTo: string;
   warmHandoffMessage?: string;
+  /**
+   * "cold"         — immediate blind transfer (default, existing behaviour)
+   * "warm_summary" — dials operator, speaks AI-generated summary when they answer, then bridges customer
+   */
+  transferMode?: "cold" | "warm_summary";
+  /** LLM prompt used to generate the operator briefing in warm_summary mode. Falls back to a sensible default. */
+  summaryPrompt?: string;
 }
 
 export interface WebhookTool {
@@ -275,7 +282,12 @@ export interface SessionConfig {
   onAudioOut: (audio: Buffer) => void;
   onTranscript: (speaker: "user" | "agent", text: string) => void;
   onCallEnd: () => void;
-  onCallTransfer?: (transferTo: string) => void;
+  /**
+   * Called when the pipeline triggers a call transfer.
+   * @param transferTo  E.164 number or SIP URI to transfer to.
+   * @param summary     Operator briefing text (warm_summary mode only).
+   */
+  onCallTransfer?: (transferTo: string, summary?: string) => void;
   onBargeIn?: () => void;
   onMetrics?: (metrics: PipelineMetrics) => void;
   /** Called after every completed turn with the full conversation history — used to persist to Redis */

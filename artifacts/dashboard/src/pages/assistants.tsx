@@ -774,6 +774,8 @@ type AgentToolLocal =
       description: string;
       transferTo: string;
       warmHandoffMessage?: string;
+      transferMode?: "cold" | "warm_summary";
+      summaryPrompt?: string;
     }
   | {
       type: "webhook";
@@ -1829,7 +1831,45 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                   </div>
                   {tool.type === "call_transfer" && <>
                     <div className="space-y-1"><p className="text-xs text-muted-foreground">Transfer To (E.164)</p><Input value={tool.transferTo} onChange={e => { const n = [...agentTools]; n[idx] = { ...tool, transferTo: e.target.value }; setAgentTools(n); setDirty(true); }} placeholder="+12125551234" className="bg-card border-border text-foreground text-xs h-8" /></div>
-                    <div className="space-y-1"><p className="text-xs text-muted-foreground">Warm Handoff Message</p><Textarea value={tool.warmHandoffMessage ?? ""} onChange={e => { const n = [...agentTools]; n[idx] = { ...tool, warmHandoffMessage: e.target.value }; setAgentTools(n); setDirty(true); }} rows={2} placeholder="Please hold while I connect you…" className="bg-card border-border text-foreground text-xs resize-none placeholder:text-muted-foreground" /></div>
+                    {/* Transfer mode selector */}
+                    <div className="space-y-1.5">
+                      <p className="text-xs text-muted-foreground">Transfer Mode</p>
+                      <div className="flex gap-2">
+                        {([["cold", "Cold Transfer"], ["warm_summary", "Warm — Brief Operator"]] as const).map(([val, label]) => (
+                          <button
+                            key={val}
+                            type="button"
+                            onClick={() => { const n = [...agentTools]; n[idx] = { ...tool, transferMode: val }; setAgentTools(n); setDirty(true); }}
+                            className={
+                              "flex-1 text-[11px] font-medium py-1.5 rounded-lg border transition-colors " +
+                              ((tool.transferMode ?? "cold") === val
+                                ? "bg-foreground text-background border-foreground"
+                                : "bg-card text-muted-foreground border-border hover:border-foreground/40")
+                            }
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      {(tool.transferMode ?? "cold") === "warm_summary" && (
+                        <p className="text-[10px] text-muted-foreground/70 leading-relaxed">
+                          AI dials the operator, waits for them to answer, reads a summary (customer name, issue, priority), then bridges the customer in.
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-1"><p className="text-xs text-muted-foreground">Hold Message <span className="text-muted-foreground/50">(spoken to caller)</span></p><Textarea value={tool.warmHandoffMessage ?? ""} onChange={e => { const n = [...agentTools]; n[idx] = { ...tool, warmHandoffMessage: e.target.value }; setAgentTools(n); setDirty(true); }} rows={2} placeholder="Please hold while I connect you to a specialist…" className="bg-card border-border text-foreground text-xs resize-none placeholder:text-muted-foreground" /></div>
+                    {(tool.transferMode ?? "cold") === "warm_summary" && (
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">Operator Briefing Prompt <span className="text-muted-foreground/50">(optional)</span></p>
+                        <Textarea
+                          value={tool.summaryPrompt ?? ""}
+                          onChange={e => { const n = [...agentTools]; n[idx] = { ...tool, summaryPrompt: e.target.value }; setAgentTools(n); setDirty(true); }}
+                          rows={3}
+                          placeholder={"Default: summarise customer name, issue, priority, and key context for the operator."}
+                          className="bg-card border-border text-foreground text-xs resize-none placeholder:text-muted-foreground"
+                        />
+                      </div>
+                    )}
                   </>}
                   {tool.type === "send_sms" && <div className="space-y-1"><p className="text-xs text-muted-foreground">Message Template</p><Textarea value={tool.messageTemplate} onChange={e => { const n = [...agentTools]; n[idx] = { ...tool, messageTemplate: e.target.value }; setAgentTools(n); setDirty(true); }} rows={3} placeholder="Hi! Here's your booking confirmation…" className="bg-card border-border text-foreground text-xs resize-none placeholder:text-muted-foreground" /></div>}
                   {tool.type === "end_call" && <div className="space-y-1"><p className="text-xs text-muted-foreground">Goodbye Message</p><Textarea value={tool.goodbyeMessage ?? ""} onChange={e => { const n = [...agentTools]; n[idx] = { ...tool, goodbyeMessage: e.target.value }; setAgentTools(n); setDirty(true); }} rows={2} placeholder="Thank you for calling! Have a great day." className="bg-card border-border text-foreground text-xs resize-none placeholder:text-muted-foreground" /></div>}

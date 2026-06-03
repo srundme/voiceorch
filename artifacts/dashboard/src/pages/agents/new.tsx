@@ -218,6 +218,8 @@ const agentFormSchema = z.object({
     description: z.string().min(1, "Description required"),
     transferTo: z.string().min(1, "Phone number required"),
     warmHandoffMessage: z.string().optional(),
+    transferMode: z.enum(["cold", "warm_summary"]).optional(),
+    summaryPrompt: z.string().optional(),
   })).optional(),
   dispositionSchema: z.array(z.object({
     key: z.string().min(1, "Key required"),
@@ -1252,12 +1254,44 @@ export default function AgentNew() {
                     )} />
                     <FormField control={form.control} name={`tools.${index}.warmHandoffMessage`} render={({ field: f }) => (
                       <FormItem>
-                        <FormLabel className="text-xs">Warm Handoff Message (optional)</FormLabel>
+                        <FormLabel className="text-xs">Hold Message (optional) <span className="text-muted-foreground font-normal">— spoken to caller</span></FormLabel>
                         <FormControl><Input placeholder="e.g. I'm connecting you with a specialist now. Please hold for a moment." {...f} /></FormControl>
                         <FormDescription className="text-[10px]">Spoken to the caller before the transfer happens</FormDescription>
                         <FormMessage />
                       </FormItem>
                     )} />
+                    <FormField control={form.control} name={`tools.${index}.transferMode`} render={({ field: f }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Transfer Mode</FormLabel>
+                        <div className="flex gap-2 mt-1">
+                          {([["cold", "Cold Transfer"], ["warm_summary", "Warm — Brief Operator"]] as const).map(([val, label]) => (
+                            <button key={val} type="button"
+                              onClick={() => f.onChange(val)}
+                              className={
+                                "flex-1 text-xs font-medium py-2 rounded-lg border transition-colors " +
+                                ((f.value ?? "cold") === val
+                                  ? "bg-foreground text-background border-foreground"
+                                  : "bg-card text-muted-foreground border-border hover:border-foreground/40")
+                              }>{label}</button>
+                          ))}
+                        </div>
+                        {(f.value ?? "cold") === "warm_summary" && (
+                          <FormDescription className="text-[10px]">
+                            AI dials the operator, waits for them to answer, reads a summary to them, then bridges the customer in.
+                          </FormDescription>
+                        )}
+                      </FormItem>
+                    )} />
+                    {(form.watch(`tools.${index}.transferMode`) ?? "cold") === "warm_summary" && (
+                      <FormField control={form.control} name={`tools.${index}.summaryPrompt`} render={({ field: f }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs">Operator Briefing Prompt (optional)</FormLabel>
+                          <FormControl><Textarea className="min-h-[60px] text-sm" placeholder="Default: summarise customer name, issue, priority, and key context for the operator." {...f} /></FormControl>
+                          <FormDescription className="text-[10px]">Overrides the default prompt used to generate the operator briefing</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    )}
                   </div>
                 ))}
               </CardContent>

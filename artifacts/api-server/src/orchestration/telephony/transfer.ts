@@ -42,6 +42,16 @@ export function buildTransferXml(target: string): string {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial>${e}</Dial>\n</Response>`;
 }
 
+/**
+ * Warm transfer XML for VoBiz/Plivo — dials the operator and plays a briefing
+ * (fetched from whisperUrl) to the operator only before bridging both legs.
+ */
+export function buildVobizWarmTransferXml(target: string, whisperUrl: string): string {
+  const e = xmlEscape(target);
+  const w = xmlEscape(whisperUrl);
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial>\n    <Number url="${w}" method="GET">${e}</Number>\n  </Dial>\n</Response>`;
+}
+
 // ── Twilio ───────────────────────────────────────────────────────────────────
 
 /**
@@ -73,6 +83,17 @@ export function buildTwilioTransferTwiML(target: string): string {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial>${e}</Dial>\n</Response>`;
 }
 
+/**
+ * Warm transfer TwiML for Twilio — dials the operator and plays a briefing
+ * (fetched from whisperUrl) to the operator only before bridging both legs.
+ * Twilio fetches whisperUrl when the <Number> destination answers.
+ */
+export function buildTwilioWarmTransferTwiML(target: string, whisperUrl: string): string {
+  const e = xmlEscape(target);
+  const w = xmlEscape(whisperUrl);
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial>\n    <Number url="${w}" method="GET">${e}</Number>\n  </Dial>\n</Response>`;
+}
+
 // ── Plivo ────────────────────────────────────────────────────────────────────
 
 /**
@@ -101,6 +122,16 @@ export async function transferPlivoCall(opts: {
 export function buildPlivoTransferXml(target: string): string {
   const e = xmlEscape(target);
   return `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial>${e}</Dial>\n</Response>`;
+}
+
+/**
+ * Warm transfer XML for Plivo — dials the operator and plays a briefing
+ * (fetched from whisperUrl) to the operator only before bridging both legs.
+ */
+export function buildPlivoWarmTransferXml(target: string, whisperUrl: string): string {
+  const e = xmlEscape(target);
+  const w = xmlEscape(whisperUrl);
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial>\n    <Number url="${w}" method="GET">${e}</Number>\n  </Dial>\n</Response>`;
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────

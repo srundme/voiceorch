@@ -2958,6 +2958,13 @@ components:
         warmHandoffMessage:
           type: string
           description: (call_transfer) Optional message the agent speaks to the caller before transferring
+        transferMode:
+          type: string
+          enum: [cold, warm_summary]
+          description: "(call_transfer) cold = immediate blind transfer (default); warm_summary = dials operator, speaks AI-generated summary when they answer, then bridges customer"
+        summaryPrompt:
+          type: string
+          description: (call_transfer) LLM prompt used to generate the operator briefing in warm_summary mode; a sensible default is used if omitted
         url:
           type: string
           description: (webhook) HTTP endpoint URL to POST/GET when this tool is invoked

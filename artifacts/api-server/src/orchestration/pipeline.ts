@@ -800,9 +800,9 @@ export class OrchestrationPipeline {
   }
 
   private async executeCallTransfer(tool: AgentTool & { type: "call_transfer" }, _args: Record<string, unknown>): Promise<void> {
-    logger.info({ callId: this.config.callId, transferTo: tool.transferTo }, "Executing call transfer");
+    logger.info({ callId: this.config.callId, transferTo: tool.transferTo, mode: tool.transferMode ?? "cold" }, "Executing call transfer");
 
-    // Speak the warm handoff message (if configured) before transferring
+    // Speak the warm handoff message to the CALLER (if configured) before transferring
     if (tool.warmHandoffMessage?.trim()) {
       this.config.onTranscript("agent", tool.warmHandoffMessage);
       this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
@@ -816,8 +816,39 @@ export class OrchestrationPipeline {
       }
     }
 
+    // ── Warm summary: generate operator briefing from conversation history ──
+    let operatorSummary: string | undefined;
+    if (tool.transferMode === "warm_summary") {
+      const defaultPrompt = [
+        "You are summarising this call for the human agent who will now take over.",
+        "Write a concise briefing (3–5 sentences) covering:",
+        "  • Customer name (if mentioned)",
+        "  • The core issue or request",
+        "  • Priority / urgency (High / Medium / Low)",
+        "  • Any key context the agent needs to resolve it quickly",
+        "Use plain prose — no bullet points, no markdown. Speak directly to the operator.",
+      ].join("\n");
+
+      const prompt = tool.summaryPrompt?.trim() || defaultPrompt;
+      logger.info({ callId: this.config.callId }, "Warm transfer: generating operator summary");
+
+      try {
+        let summaryText = "";
+        await this.llm.chat(
+          this.conversationHistory,
+          prompt,
+          (token) => { summaryText += token; },
+          (full)  => { summaryText = full; },
+        );
+        operatorSummary = summaryText.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+        logger.info({ callId: this.config.callId, summaryLength: operatorSummary.length }, "Warm transfer: operator summary ready");
+      } catch (err) {
+        logger.error({ callId: this.config.callId, err }, "Warm transfer: summary generation failed — proceeding with cold transfer");
+      }
+    }
+
     // Notify session layer (triggers telephony transfer + marks call as transferred)
-    this.config.onCallTransfer?.(tool.transferTo);
+    this.config.onCallTransfer?.(tool.transferTo, operatorSummary);
     this.config.onCallEnd();
   }
 
