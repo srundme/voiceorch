@@ -171,6 +171,8 @@ export async function createSession(params: {
     // P1-G: Engine — interruption & pacing
     wordsForInterruption: (agentCfg["wordsForInterruption"] as number | undefined) ?? 2,
     incrementalDelay:     (agentCfg["incrementalDelay"]     as number | undefined) ?? 0,
+    // P1-H: Call lifecycle
+    hangupAfterLlmCall: (agentCfg["hangupAfterLlmCall"] as boolean | undefined) ?? false,
   };
 
   // ── Cross-call caller memory ────────────────────────────────────────────────

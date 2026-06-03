@@ -1113,6 +1113,12 @@ export class OrchestrationPipeline {
       "Turn metrics"
     );
     this.config.onMetrics?.({ sttLatencyMs, llmLatencyMs, ttsFirstChunkMs });
+
+    // ── Hangup after LLM call ───────────────────────────────────────────────
+    if (this.agent.hangupAfterLlmCall && !this.closed) {
+      logger.info({ callId: this.config.callId }, "hangupAfterLlmCall — ending call");
+      this.config.onCallEnd();
+    }
   }
 
   private async flushAndProcess(): Promise<void> {

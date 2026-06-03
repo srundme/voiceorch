@@ -323,6 +323,7 @@ export async function handleWebCallWebSocket(
   // webcall frames = 40ms each; 1 word ≈ 400ms at 150 wpm ≈ 10 frames
   const effectiveBargeInMinFrames = Math.max(BARGE_IN_MIN_FRAMES, wordsForInterruption * 10);
   const incrementalDelayMs = (agentCfg["incrementalDelay"] as number | undefined) ?? 0;
+  const hangupAfterLlmCall = (agentCfg["hangupAfterLlmCall"] as boolean | undefined) ?? false;
 
   // ── Ambient noise ─────────────────────────────────────────────────────────
   const ambientEnabled = (agentCfg["ambientNoiseEnabled"] as boolean | undefined) ?? false;
@@ -337,6 +338,7 @@ export async function handleWebCallWebSocket(
   // ── State ─────────────────────────────────────────────────────────────────
   const audioChunks: Buffer[] = [];
   let silenceTimer: ReturnType<typeof setTimeout> | null = null;
+  let hangupSilenceTimer: ReturnType<typeof setTimeout> | null = null;
   let processing  = false;
   let speaking        = false; // true while audio frames are being sent to client
   let speakingStartedAt = 0;  // timestamp (ms) when speaking last transitioned to true
@@ -962,6 +964,13 @@ export async function handleWebCallWebSocket(
       }
 
       // No tool was called this turn — the agent's spoken response is done.
+      // Start the silence-hangup countdown (webcall equivalent of pipeline's resetHangupTimer).
+      resetHangupSilenceTimer();
+      // If configured, hang up immediately after the LLM finishes responding (one-shot agents).
+      if (hangupAfterLlmCall && !closed) {
+        logger.info({ callId }, "Webcall: hangupAfterLlmCall — ending call");
+        void hangup("normal");
+      }
       processing = false;
       return;
       } // end multi-step tool calling loop
@@ -983,6 +992,32 @@ export async function handleWebCallWebSocket(
 
   function clearSilenceTimer() {
     if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
+  }
+
+  // ── Silence-hangup timer (separate from VAD flush timer) ─────────────────
+  // Fires when the caller has been silent for silenceTimeoutSeconds. Plays the
+  // inactivity message (if configured) and ends the call.
+  function resetHangupSilenceTimer() {
+    if (!agent.silenceTimeoutSeconds) return;
+    if (hangupSilenceTimer) { clearTimeout(hangupSilenceTimer); hangupSilenceTimer = null; }
+    hangupSilenceTimer = setTimeout(() => {
+      hangupSilenceTimer = null;
+      if (closed) return;
+      logger.info({ callId }, "Webcall: silence timeout — ending call");
+      void (async () => {
+        if (agent.inactivityMessage && !closed) {
+          try {
+            const { audio } = await tts.synthesize(agent.inactivityMessage);
+            for (let j = 0; j < audio.length; j += AUDIO_CHUNK_BYTES) {
+              if (closed) break;
+              sendAudio(amplifyPcm(audio.slice(j, j + AUDIO_CHUNK_BYTES), TTS_VOLUME_GAIN));
+              await new Promise<void>((r) => setTimeout(r, 40));
+            }
+          } catch { /* ignore — still hang up */ }
+        }
+        if (!closed) void hangup("normal");
+      })();
+    }, agent.silenceTimeoutSeconds * 1000);
   }
 
   // ── Ready ─────────────────────────────────────────────────────────────────
@@ -1089,6 +1124,7 @@ export async function handleWebCallWebSocket(
     if (ambientInterval) { clearInterval(ambientInterval); ambientInterval = null; }
     clearTimeout(maxTimer);
     clearSilenceTimer();
+    if (hangupSilenceTimer) { clearTimeout(hangupSilenceTimer); hangupSilenceTimer = null; }
 
 
     const endedAt         = new Date();
@@ -1283,6 +1319,8 @@ export async function handleWebCallWebSocket(
       const chunk = Buffer.from(data);
       audioChunks.push(chunk);
       clearSilenceTimer();
+      // Caller is speaking — reset the silence-hangup countdown
+      if (hangupSilenceTimer) { clearTimeout(hangupSilenceTimer); hangupSilenceTimer = null; }
       if (!processing) sendStatus("listening");
     } else if (audioChunks.length > 0) {
       audioChunks.push(Buffer.from(data));

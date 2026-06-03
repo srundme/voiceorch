@@ -193,6 +193,9 @@ export interface AgentConfig {
   // P1-G: Engine — interruption & pacing
   wordsForInterruption: number;
   incrementalDelay: number;
+
+  // P1-H: Call lifecycle
+  hangupAfterLlmCall: boolean;
 }
 
 export interface ProviderKey {
