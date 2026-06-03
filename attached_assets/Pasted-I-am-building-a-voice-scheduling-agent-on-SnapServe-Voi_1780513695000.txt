@@ -1,0 +1,141 @@
+I am building a voice scheduling agent on SnapServe / VoiceOrch 
+that connects to a Cal.com-style scheduling API. I have four 
+tool functions that need to be implemented and debugged:
+
+  - check_availability(attendee_name?, date?, time?, timezone?)
+  - book_appointment(attendee_name, attendee_email, date, time, timezone, add_conferencing?)
+  - cancel_appointment(booking_reference, attendee_name)
+  - reschedule_appointment(booking_reference, attendee_name, new_date, new_time, timezone)
+
+---
+
+ISSUE 1 — check_availability used for two different purposes but 
+only works for one:
+
+The tool currently only returns OPEN available slots. But the 
+agent also needs to use it to look up a caller's EXISTING 
+bookings (for cancel and reschedule flows). These are two 
+completely different API calls:
+
+  a) Slot availability check → GET /availability?date=&time=&timezone=
+  b) Existing booking lookup → GET /bookings?attendee_name=&upcoming_only=true
+
+Right now when the agent calls check_availability with an 
+attendee_name to find their booking, it gets back open slots 
+instead of their booked appointments — which causes the agent 
+to say "I'm having trouble retrieving your bookings."
+
+FIX NEEDED:
+- Split check_availability into TWO separate tool functions:
+    1. check_availability(date, time, timezone) 
+       → checks if a slot is open
+    2. get_bookings(attendee_name, timezone) 
+       → fetches the caller's existing upcoming bookings, 
+          filtered server-side OR client-side to only return 
+          appointments whose datetime > now() in the given timezone
+- Update the tool definitions and handlers accordingly.
+- get_bookings must return: booking_reference, date, time, 
+  event_name for each result.
+
+---
+
+ISSUE 2 — Timezone is always UTC instead of caller's local time:
+
+The tool responses always include timezone="UTC" because the 
+API defaults to UTC when no timezone is passed in.
+
+FIX NEEDED:
+- Every tool call that involves a date or time MUST accept a 
+  `timezone` parameter (e.g. "America/New_York", "Asia/Kolkata").
+- When calling the API, always pass the timezone explicitly.
+- In get_bookings, convert the returned datetime from UTC to 
+  the caller's local timezone before returning it to the agent.
+- The agent's system prompt already asks for local timezone — 
+  the tool layer must honour it.
+- Default timezone fallback (if none provided): "Asia/Kolkata" 
+  (IST) since the primary user base is in India.
+
+---
+
+ISSUE 3 — Google Meet / conferencing link is not being added 
+to bookings:
+
+The calendar event is created but Google Meet is not attached, 
+and the confirmation email shows no meeting link even though 
+conferencing is enabled in the SnapServe scheduling settings.
+
+FIX NEEDED:
+- The book_appointment API call must include the conferencing 
+  flag in the request body. Add this to the POST payload:
+    { "conferencing": { "type": "google_meet", "enabled": true } }
+  OR depending on the API schema:
+    { "add_conferencing": true }
+  OR:
+    { "location": "integrations:google:meet" }
+  
+  Check which field name the Cal.com / VoiceOrch Scheduling 
+  API actually accepts for Google Meet and use that exact key.
+
+- Also check: is the Google OAuth token for gopinwrk@gmail.com 
+  (the calendar account) still valid and has the correct scopes?
+  The required scope is: https://www.googleapis.com/auth/calendar
+  If the token is expired, the Meet link generation will silently 
+  fail even though the booking succeeds.
+
+- Verify the book_appointment tool is passing the correct 
+  organizer / calendar account identifier so events land on 
+  the right Google Calendar (gopinwrk@gmail.com, not a default).
+
+---
+
+ISSUE 4 — reschedule_appointment tool may be missing or broken:
+
+Confirm that reschedule_appointment is implemented as a PATCH 
+or PUT to the bookings endpoint, not as a cancel + rebook. It 
+should:
+  - Accept: booking_reference, new_date, new_time, timezone
+  - Call: PATCH /bookings/{booking_reference} with the new slot
+  - Return: updated booking confirmation with new date, time, 
+    and meeting link
+
+If it is currently doing cancel + rebook, the Google Meet link 
+will be a new one each time and the original calendar event 
+won't be updated — fix it to use a single PATCH call.
+
+---
+
+FULL CORRECTED TOOL LIST after fixes:
+
+  1. check_availability(date, time, timezone)
+     → Is this slot open? Returns: available: true/false, 
+       next_available_slot if false
+
+  2. get_bookings(attendee_name, timezone)
+     → What appointments does this person have? Returns: 
+       array of { booking_reference, event_name, date, time } 
+       filtered to UPCOMING only (after current time in timezone)
+
+  3. book_appointment(attendee_name, attendee_email, date, time, 
+     timezone, add_conferencing: true)
+     → Books the slot. Returns: booking_reference, confirmed 
+       date/time, meet_link
+
+  4. cancel_appointment(booking_reference, attendee_name)
+     → Cancels the booking. Returns: success confirmation.
+
+  5. reschedule_appointment(booking_reference, attendee_name, 
+     new_date, new_time, timezone)
+     → Moves the booking. Returns: updated date/time, meet_link.
+
+---
+
+Also update the agent system prompt to:
+- Reference get_bookings (not check_availability) when looking 
+  up existing bookings in the Cancel and Reschedule flows.
+- Always pass the caller's timezone into every tool call.
+- In the Reschedule and Cancel flows, if get_bookings returns 
+  an empty array, say: "There are no upcoming bookings under 
+  your name."
+- If get_bookings returns bookings that are all in the past, say: 
+  "Your previous appointment has already passed. I can only 
+  reschedule upcoming ones. Would you like to book a new one?"
