@@ -48,7 +48,6 @@ const LLM_PRICING: Record<string, number> = {
   "mistral/mistral-small-latest": 0.0030,
   "cohere/command-r-plus": 0.0120,
   "cohere/command-r":      0.0030,
-  "sarvam/sarvam-m":    0.0010,
   "sarvam/sarvam-30b":  0.0020,
   "sarvam/sarvam-105b": 0.0040,
 };

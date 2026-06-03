@@ -261,7 +261,7 @@ function getManagedStack(languages: string[]) {
     asrProvider:       (hasTamil || hasIndic) ? "sarvam" : "deepgram",
     asrModel:          (hasTamil || hasIndic) ? "saarika:v2.5" : "nova-2-general",
     llmProvider:       (hasTamil || hasIndic) ? "qwen" : "sarvam",
-    llmModel:          (hasTamil || hasIndic) ? "qwen/qwen3-32b" : "sarvam-m",
+    llmModel:          (hasTamil || hasIndic) ? "qwen/qwen3-32b" : "sarvam-30b",
     ttsProvider:       "cartesia",
     ttsModel:          "sonic-3.5",
     telephonyProvider: "vobiz",

@@ -136,7 +136,7 @@ describe("getModelError — provider/model validation utility", () => {
     expect(getModelError("openai", "gpt-4o", LLM_MODELS)).toBeNull();
     expect(getModelError("qwen", "qwen/qwen3-32b", LLM_MODELS)).toBeNull();
     expect(getModelError("groq", "llama-3.3-70b-versatile", LLM_MODELS)).toBeNull();
-    expect(getModelError("sarvam", "sarvam-m", LLM_MODELS)).toBeNull();
+    expect(getModelError("sarvam", "sarvam-30b", LLM_MODELS)).toBeNull();
   });
 
   it("returns an error string for a mismatched LLM provider+model", () => {

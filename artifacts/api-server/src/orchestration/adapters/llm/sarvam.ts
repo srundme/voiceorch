@@ -2,15 +2,16 @@ import type { ConversationTurn, LLMAdapter, LLMUsage, ToolDefinition } from "../
 
 /**
  * Sarvam AI — Chat completions (OpenAI-compatible endpoint)
- * Models: sarvam-m (default), sarvam-30b, sarvam-105b
+ * Models: sarvam-30b (default), sarvam-105b
  * Docs: https://docs.sarvam.ai/api-reference/text/chat-completions
  *
- * Tool calling: supported on sarvam-m and above.
+ * Tool calling: supported on sarvam-30b and above.
  * The wire format is identical to OpenAI (OpenAI-compatible endpoint).
+ * Note: sarvam-m was deprecated by Sarvam; sarvam-30b is now the smallest tool-capable model.
  */
 
 /** Models that support Sarvam's function-calling interface */
-const TOOL_CAPABLE_MODELS = new Set(["sarvam-m", "sarvam-30b", "sarvam-105b"]);
+const TOOL_CAPABLE_MODELS = new Set(["sarvam-30b", "sarvam-105b"]);
 
 /**
  * Sarvam requires strictly-alternating user/assistant turns starting with a user message.
@@ -45,13 +46,14 @@ export class SarvamLLM implements LLMAdapter {
 
   constructor(apiKey: string, model: string | null) {
     this.key = apiKey;
-    // Map legacy model names to current equivalents
+    // Map legacy/deprecated model names to current equivalents
     const ALIASES: Record<string, string> = {
-      "sarvam-2b":       "sarvam-m",
-      "sarvam-2b-v0.5":  "sarvam-m",
-      "sarvam-m1":       "sarvam-m",
+      "sarvam-m":        "sarvam-30b",
+      "sarvam-2b":       "sarvam-30b",
+      "sarvam-2b-v0.5":  "sarvam-30b",
+      "sarvam-m1":       "sarvam-30b",
     };
-    const raw = model ?? "sarvam-m";
+    const raw = model ?? "sarvam-30b";
     this.model = ALIASES[raw] ?? raw;
   }
 
@@ -65,7 +67,7 @@ export class SarvamLLM implements LLMAdapter {
       onToolCall?: (name: string, args: Record<string, unknown>) => void;
     }
   ): Promise<void> {
-    // Only sarvam-m supports tool use
+    // Only sarvam-30b and sarvam-105b support tool use
     const supportsTools = TOOL_CAPABLE_MODELS.has(this.model);
     const sarvamTools = supportsTools && options?.tools?.length
       ? options.tools.map((t) => ({

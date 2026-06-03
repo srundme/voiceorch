@@ -288,7 +288,7 @@ describe("agentFormSchema — provider/model cross-field validation", () => {
     const result = agentFormSchema.safeParse({
       ...VALID_BASE,
       llmProvider: "sarvam",
-      llmModel: "sarvam-m",
+      llmModel: "sarvam-30b",
     });
     expect(result.success, JSON.stringify(result)).toBe(true);
   });
