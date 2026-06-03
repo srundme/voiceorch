@@ -13,6 +13,7 @@ const GROQ_MODEL_REPLACEMENTS: Record<string, string> = {
   "mixtral-8x7b-32768":        "llama-3.3-70b-versatile",
   "llama2-70b-4096":           "llama-3.3-70b-versatile",
   "llama-3.1-70b-versatile":   "llama-3.3-70b-versatile",
+  "qwen3-32b":                  "qwen/qwen3-32b",
 };
 const GROQ_DEFAULT = "llama-3.3-70b-versatile";
 
@@ -22,6 +23,7 @@ const TOOL_CAPABLE_MODELS = new Set([
   "llama-3.1-8b-instant",
   "llama3-groq-70b-8192-tool-use-preview",
   "llama3-groq-8b-8192-tool-use-preview",
+  "qwen/qwen3-32b",
 ]);
 
 function resolveGroqModel(model: string | null): string {

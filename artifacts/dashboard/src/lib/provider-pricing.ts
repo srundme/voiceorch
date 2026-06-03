@@ -42,6 +42,7 @@ const LLM_PRICING: Record<string, number> = {
   "groq/llama-3.3-70b-versatile": 0.0018,
   "groq/llama-3.1-8b-instant":    0.0003,
   "groq/gemma2-9b-it":            0.0008,
+  "groq/qwen/qwen3-32b":         0.0010,
   // Others
   "deepseek/deepseek-chat":     0.0015,
   "deepseek/deepseek-reasoner": 0.0070,

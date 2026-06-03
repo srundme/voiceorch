@@ -1,0 +1,115 @@
+I have two separate issues happening in my SnapServe voice 
+agent when the caller tries to reschedule an appointment.
+
+---
+
+ISSUE 1 — check_availability TOOL FAILING FOR RESCHEDULE
+
+When the caller says they want to reschedule, the agent 
+calls check_availability to look up existing bookings 
+but the tool returns:
+"error: tool execution failed"
+
+It retries once and fails again, then ends the call.
+
+From the call log transcript:
+
+Caller: "I wanna check what are the upcoming events."
+Agent: [calls check_availability] 
+Result: SUCCESS — returns available slots correctly
+
+Caller: "Reschedule one."
+Agent: "Let me look up your existing bookings."
+Agent: [calls check_availability]
+Result: ERROR — tool execution failed
+Agent: [retries check_availability]
+Result: ERROR — tool execution failed again
+Agent: ends the call
+
+The FIRST check_availability call works fine and returns 
+available slots. But the SECOND call for looking up 
+existing bookings fails every time.
+
+Root cause question:
+- Is check_availability only designed to check open slots 
+  and NOT to look up existing bookings by attendee name?
+- If yes, is there a separate tool needed to fetch existing 
+  bookings? For example: get_bookings or list_bookings?
+- If that tool does not exist in SnapServe yet, I need 
+  it to be created.
+
+What I need:
+1. A tool that fetches existing bookings by attendee name
+2. The tool should return: booking reference, event name, 
+   date, time for each upcoming booking
+3. The agent should use this tool for cancel and reschedule 
+   flows instead of check_availability
+4. If no bookings are found → agent says:
+   "I couldn't find any upcoming bookings under your name. 
+   Could you double check the name on the booking?"
+
+---
+
+ISSUE 2 — CARTESIA TTS ERROR 400 INVALID INPUT
+
+After the tool failure, the agent response triggers this 
+TTS error:
+
+TTS error: Cartesia TTS stream error 400:
+{
+  "error_code": null,
+  "message": "The request could not be processed due 
+               to invalid input.",
+  "title": "Invalid request",
+  "request_id": "7156470d-041e-497f-a404-d0c1649b6dfc"
+}
+
+The agent response that triggered it contained:
+"I'm having trouble looking up your bookings right now, 
+Fresh. Please call back shortly and we'll get it sorted.
+<function=end_call></function>"
+
+The raw function tag <function=end_call></function> is 
+being passed directly to the Cartesia TTS engine instead 
+of being intercepted and executed as a function call.
+
+Root cause:
+- The end_call function tag is leaking into the TTS 
+  text stream instead of being stripped before TTS 
+  processes it
+- Cartesia is receiving the raw XML/function tag as 
+  text and rejecting it as invalid input
+
+What I need:
+1. Function tags like <function=end_call></function> 
+   must be stripped from the text before it is sent 
+   to the TTS engine
+2. The function should still execute correctly after 
+   being stripped from the TTS stream
+3. This should apply to ALL function tags not just 
+   end_call — any tag in the format 
+   <function=X></function> should be intercepted 
+   before reaching TTS
+
+---
+
+MY SETUP
+- Platform: SnapServe
+- TTS provider: Cartesia
+- Tools: check_availability, book_appointment, 
+  cancel_appointment, reschedule_appointment
+- Calendar: Test Agent Calendar
+- Event type: One to one 15 mins (15 min)
+- Timezone: Asia/Kolkata (IST)
+
+---
+
+WHAT I WANT DELIVERED
+1. Fix for the TTS function tag leak — immediate priority
+2. A get_bookings or list_bookings tool that fetches 
+   existing bookings by attendee name
+3. Updated reschedule and cancel flow using the new 
+   lookup tool instead of check_availability
+4. Confirmation that check_availability is only for 
+   open slot checking and should never be used for 
+   existing booking lookup
