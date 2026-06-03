@@ -1857,10 +1857,10 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                   {tool.type === "native_list_bookings" && (
                     <div className="space-y-2">
                       <div className="space-y-1"><p className="text-xs text-muted-foreground">Calendar (optional — limit search to one calendar)</p>
-                        <Select value={tool.calendarId ? String(tool.calendarId) : ""} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, calendarId: parseInt(v) || undefined }; setAgentTools(n); setDirty(true); }}>
+                        <Select value={tool.calendarId ? String(tool.calendarId) : "__all"} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, calendarId: v === "__all" ? undefined : (parseInt(v) || undefined) }; setAgentTools(n); setDirty(true); }}>
                           <SelectTrigger className="bg-card border-border text-foreground text-xs h-8"><SelectValue placeholder="All calendars" /></SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">All calendars</SelectItem>
+                            <SelectItem value="__all">All calendars</SelectItem>
                             {(calendars ?? []).map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
                             {(calendars ?? []).length === 0 && <SelectItem value="__none" disabled>No calendars — create one in Scheduling</SelectItem>}
                           </SelectContent>
