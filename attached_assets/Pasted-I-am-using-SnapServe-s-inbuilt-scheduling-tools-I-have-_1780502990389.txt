@@ -1,0 +1,106 @@
+I am using SnapServe's inbuilt scheduling tools. I have 
+three issues to fix. Here are the details with screenshots 
+context:
+
+---
+
+ISSUE 1 — RESCHEDULE TOOL MISSING CALENDAR & EVENT TYPE
+
+The reschedule_appointment tool currently has no option 
+to select a Calendar or Event Type in the UI.
+
+The book_appointment tool has:
+- Event Type: One to one 15 mins (15 min)
+- Timezone: Asia/Kolkata
+
+The cancel_appointment tool has:
+- Calendar: Test Agent Calendar
+- Event Type (optional): Test 30 min meet (30 min)
+
+But reschedule_appointment has NONE of these fields.
+
+What I need:
+- Add Calendar selector to reschedule_appointment tool
+- Add Event Type selector to reschedule_appointment tool
+- Add Timezone selector to reschedule_appointment tool
+- Make reschedule fully functional end to end — when the 
+  agent reschedules, it should update the existing booking 
+  in the correct calendar with the correct event type
+- The reschedule confirmation should be sent to the 
+  attendee and all hosts via email
+
+---
+
+ISSUE 2 — GOOGLE MEET MUST FOLLOW THE SELECTED CALENDAR ACCOUNT
+
+In the Scheduling → Advanced → Video Conferencing section 
+there is an "Enable Google Meet" toggle.
+
+Currently I have 2 Google accounts connected:
+- gopinwrk@gmail.com
+- hpgopikrish@gmail.com
+
+The problem:
+- When Google Meet is enabled, it is not clear which 
+  Google account is generating the Meet link
+- If the user selects gopinwrk@gmail.com as the calendar 
+  account, the Google Meet link should be generated from 
+  gopinwrk@gmail.com
+- If the user switches the calendar account to 
+  hpgopikrish@gmail.com, the Google Meet link should 
+  automatically switch to hpgopikrish@gmail.com as well
+- Right now the Meet account and Calendar account are 
+  not linked — they are independent
+
+What I need:
+- Google Meet account must always match the selected 
+  Google Calendar account automatically
+- When the calendar account dropdown changes, the Meet 
+  link generation account must update instantly without 
+  any manual change
+- This should work for all existing and future connected 
+  Google accounts
+- No manual re-configuration should be needed when 
+  switching calendar accounts
+
+---
+
+ISSUE 3 — MULTIPLE GOOGLE ACCOUNTS CONFLICT
+
+With multiple Google accounts connected, there needs to 
+be a clear and reliable way to know:
+- Which Google account is currently active for calendar 
+  event creation
+- Which Google account is generating the Meet link
+- These two must always be the same account
+
+What I need:
+- A clear indicator in the UI showing which account is 
+  active for both calendar and Meet
+- If they are mismatched, show a warning
+- Auto-sync them when the calendar account is changed
+
+---
+
+MY SETUP
+- Platform: SnapServe
+- Tools configured: book_appointment, cancel_appointment, 
+  reschedule_appointment, check_availability
+- Calendar: SnapServe Scheduling (connected to Cal.com)
+- Connected Google accounts: 
+  gopinwrk@gmail.com, hpgopikrish@gmail.com
+- Event types: 
+  One to one 15 mins (15 min)
+  Test 30 min meet (30 min)
+- Timezone: Asia/Kolkata (IST)
+- Google Meet: Enabled via Advanced settings toggle
+
+---
+
+WHAT I WANT DELIVERED
+
+For each issue:
+1. Root cause explanation
+2. Exact fix with code or configuration changes
+3. UI changes needed if any
+4. How to test that it is working correctly
