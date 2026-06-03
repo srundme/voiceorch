@@ -61,7 +61,7 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
               preferred_date: {
                 type: "string",
                 description:
-                  "Optional preferred date or time of day for the appointment, e.g. 'next Tuesday', '2025-06-10', 'morning', or 'afternoon'. The system will find the first available slot on or after this date/time.",
+                  "Optional preferred date or time of day for the appointment, e.g. 'next Tuesday', '2025-06-10', 'morning', or 'afternoon'. The system will find the first available slot on or after this date/time. If you ran check_availability first, pass the ISO 8601 string returned there (e.g. '2026-06-06T20:30:00+05:30') verbatim — do NOT convert or reformat it.",
               },
               meeting_type: {
                 type: "string",
@@ -116,7 +116,9 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
       if (t.type === "native_check_availability") {
         return {
           name: t.name,
-          description: t.description,
+          description:
+            t.description +
+            " The 'next' field in the response lists slots as ISO 8601 strings with timezone offsets (e.g. '2026-06-06T20:30:00+05:30') followed by a human-readable label in parentheses. When calling book_appointment after checking availability, pass the ISO string (e.g. '2026-06-06T20:30:00+05:30') verbatim as preferred_date — do NOT convert or reformat it.",
           parameters: {
             type: "object",
             properties: {
@@ -325,7 +327,9 @@ export async function executeNativeBooking(
       return "error: slot was just taken — no booking created";
     }
 
-    const dateStr = format(slotStart, "EEEE, MMMM do 'at' h:mm a");
+    const calendarTz = calendar.timezone || "Asia/Kolkata";
+    const tzLabel = calendarTz === "Asia/Kolkata" ? "IST" : calendarTz;
+    const dateStr = `${formatInTimeZone(slotStart, calendarTz, "EEEE, MMMM do 'at' h:mm a")} (${tzLabel})`;
     logger.info({ callId, bookingId: booking.id, slotStart, attendeeEmail }, "Native booking created");
 
     // Create Google Calendar event with Meet link (best-effort, non-blocking)
@@ -339,6 +343,11 @@ export async function executeNativeBooking(
         ?.google_calendar_connection_id ?? null;
       const connectionId = calendarConnectionId ?? (await getFirstConnectionForUser(calendar.userId))?.id ?? null;
 
+      logger.info(
+        { callId, bookingId: booking.id, connectionId, locationType, addMeet: locationType === "google_meet" || eventType.enableGoogleMeet },
+        "Native booking: attempting Google Calendar event creation",
+      );
+
       const gcalResult = connectionId
         ? await createCalendarEvent({
             connectionId,
@@ -348,7 +357,7 @@ export async function executeNativeBooking(
             endTime: booking.slotEnd,
             attendeeEmail: booking.attendeeEmail,
             attendeeName: booking.attendeeName,
-            timezone: calendar.timezone,
+            timezone: calendarTz,
             hostEmail: calendar.hostEmail,
             additionalHosts: calendar.additionalHosts,
             addMeet: locationType === "google_meet" || eventType.enableGoogleMeet,
@@ -358,14 +367,20 @@ export async function executeNativeBooking(
       if (gcalResult) {
         meetLink = gcalResult.meetLink;
         googleEventId = gcalResult.eventId;
+        logger.info(
+          { callId, bookingId: booking.id, connectionId, eventId: gcalResult.eventId, meetLink: gcalResult.meetLink, hasGoogleEventId: !!gcalResult.eventId },
+          "Native booking: Google Calendar event created — NOTE: existing connections authorized without the 'calendar' scope must reconnect via Settings > Google Calendar",
+        );
         if (meetLink || googleEventId) {
           await db.execute(
             sql`UPDATE bookings SET meet_link = ${meetLink}, google_event_id = ${googleEventId} WHERE id = ${booking.id}`,
           );
         }
+      } else if (!connectionId) {
+        logger.info({ callId, bookingId: booking.id }, "Native booking: no Google connection found — skipping gcal event");
       }
     } catch (err) {
-      logger.warn({ callId, bookingId: booking.id, err }, "Native booking: Google Calendar event creation failed");
+      logger.error({ callId, bookingId: booking.id, err }, "Native booking: Google Calendar event creation failed — if scope error, user must reconnect via Settings > Google Calendar");
     }
 
     void sendBookingCreatedEmail({
@@ -374,7 +389,7 @@ export async function executeNativeBooking(
       eventTypeName: eventType.name,
       slotStart: booking.slotStart,
       slotEnd: booking.slotEnd,
-      timezone: calendar.timezone,
+      timezone: calendarTz,
       hostEmail: calendar.hostEmail,
       additionalHosts: calendar.additionalHosts,
       bookingId: booking.id,
@@ -459,10 +474,14 @@ export async function executeNativeCheckAvailability(
       return `no_availability: no available slots ${rangeDesc}`;
     }
 
-    const tz = (args["timezone"] != null ? String(args["timezone"]) : null) ?? tool.timezone ?? calendar.timezone ?? "Asia/Kolkata";
+    const tz = (args["timezone"] != null ? String(args["timezone"]) : null) ?? tool.timezone ?? (calendar.timezone || "Asia/Kolkata");
     const preview = slots
       .slice(0, 5)
-      .map((s) => formatInTimeZone(s.slotStart, tz, "EEE MMM d 'at' h:mm a"))
+      .map((s) => {
+        const iso = formatInTimeZone(s.slotStart, tz, "yyyy-MM-dd'T'HH:mm:ssxxx");
+        const label = formatInTimeZone(s.slotStart, tz, "EEE MMM d 'at' h:mm a") + " " + tz.replace("Asia/Kolkata", "IST");
+        return `${iso} (${label})`;
+      })
       .join("; ");
     return `available_slots: count=${slots.length}, event="${eventType.name}", duration_mins=${eventType.durationMinutes}, timezone="${tz}", next="${preview}"`;
   } catch (err) {
