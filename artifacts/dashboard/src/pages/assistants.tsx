@@ -1055,7 +1055,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
     setLlmModel(agent.llmModel ?? "");
     setTemperature((agent.temperature ?? 0.10) as number);
     setAsrProvider(agent.asrProvider ?? "");
-    setAsrModel(agent.asrModel ?? "");
+    setAsrModel(agent.asrModel || ASR_MODELS[agent.asrProvider ?? ""]?.[0]?.value || "");
     const LANG_NORM: Record<string, string> = {
       ta: "ta-IN", te: "te-IN", kn: "kn-IN", mr: "mr-IN",
       gu: "gu-IN", bn: "bn-IN", ml: "ml-IN",
