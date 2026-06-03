@@ -12,7 +12,6 @@ import {
   EndCallParams,
   ListCallsQueryParams,
   ListCallsResponse,
-  ListActiveCallsResponse,
   GetCallResponse,
   UpdateCallResponse,
   EndCallResponse,
@@ -361,37 +360,6 @@ router.get("/calls/verified-destinations", requireAuth, async (req, res): Promis
     verifiedAt:  r.verifiedAt.toISOString(),
     expiresAt:   r.expiresAt.toISOString(),
   })));
-});
-
-/* ── GET /calls/active ────────────────────────────────────────────────────── */
-
-router.get("/calls/active", requireAuth, async (req, res): Promise<void> => {
-  const clerkId = (req as any).clerkUserId as string;
-  const activeCalls = await db
-    .select({
-      id: callsTable.id,
-      agentId: callsTable.agentId,
-      agentName: agentsTable.name,
-      toNumber: callsTable.toNumber,
-      fromNumber: callsTable.fromNumber,
-      status: callsTable.status,
-      createdAt: callsTable.createdAt,
-      executionId: callsTable.executionId,
-      metadata: callsTable.metadata,
-    })
-    .from(callsTable)
-    .leftJoin(agentsTable, eq(callsTable.agentId, agentsTable.id))
-    .where(and(eq(callsTable.userId, clerkId), eq(callsTable.status, "in_progress")))
-    .orderBy(desc(callsTable.createdAt));
-
-  const now = Date.now();
-  const result = activeCalls.map((c) => ({
-    ...c,
-    agentName: c.agentName ?? "Unknown Agent",
-    createdAt: c.createdAt.toISOString(),
-    runningSeconds: Math.floor((now - c.createdAt.getTime()) / 1000),
-  }));
-  res.json(ListActiveCallsResponse.parse(result));
 });
 
 router.get("/calls", requireAuth, async (req, res): Promise<void> => {

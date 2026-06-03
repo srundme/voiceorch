@@ -29,7 +29,6 @@ import KnowledgeBasePage from "@/pages/knowledge-base";
 import WalletPage from "@/pages/wallet";
 import ActivityPage from "@/pages/activity";
 import PhoneNumbersPage from "@/pages/phone-numbers";
-import MonitorPage from "@/pages/monitor";
 import WebhooksPage from "@/pages/webhooks";
 import AgentAnalyticsPage from "@/pages/agent-analytics";
 import NotFound from "@/pages/not-found";
@@ -219,7 +218,6 @@ function AppRoutes() {
         <Route path="/app/wallet" component={WalletPage} />
         <Route path="/app/activity" component={ActivityPage} />
         <Route path="/app/phone-numbers" component={PhoneNumbersPage} />
-        <Route path="/app/monitor" component={MonitorPage} />
         <Route path="/app/webhooks" component={WebhooksPage} />
         <Route path="/app/analytics/agents/:id" component={AgentAnalyticsPage} />
         <Route path="/app/campaigns/:id/batches/:batchId" component={BatchDetailPage} />

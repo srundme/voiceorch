@@ -1099,24 +1099,6 @@ paths:
         "503":
           description: Vobiz not configured
 
-  # ── Active Call Monitor ───────────────────────────────────────────────────
-  /calls/active:
-    get:
-      operationId: listActiveCalls
-      tags: [monitor]
-      summary: List currently active (in-progress) calls for the authenticated user
-      responses:
-        "200":
-          description: Active calls
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/ActiveCall"
-        "401":
-          description: Unauthorized
-
   # ── Per-Agent Analytics ───────────────────────────────────────────────────
   /analytics/agents/{id}:
     get:
@@ -3993,34 +3975,6 @@ components:
         agentId:
           type: ["integer", "null"]
           description: Agent to route inbound calls to. Null to clear assignment.
-
-    # ── Active Call Monitor ──────────────────────────────────────────────────
-    ActiveCall:
-      type: object
-      required: [id, agentId, agentName, toNumber, fromNumber, status, createdAt, runningSeconds]
-      properties:
-        id:
-          type: integer
-        agentId:
-          type: integer
-        agentName:
-          type: string
-        toNumber:
-          type: string
-        fromNumber:
-          type: string
-        status:
-          type: string
-        createdAt:
-          type: string
-          format: date-time
-        runningSeconds:
-          type: integer
-          description: Elapsed seconds since call started
-        executionId:
-          type: ["string", "null"]
-        metadata:
-          type: ["string", "null"]
 
     # ── Agent Stats ──────────────────────────────────────────────────────────
     AgentStats:

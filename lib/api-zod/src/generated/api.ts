@@ -1341,24 +1341,6 @@ export const GetKycStatusResponse = zod.object({
 
 
 /**
- * @summary List currently active (in-progress) calls for the authenticated user
- */
-export const ListActiveCallsResponseItem = zod.object({
-  "id": zod.number(),
-  "agentId": zod.number(),
-  "agentName": zod.string(),
-  "toNumber": zod.string(),
-  "fromNumber": zod.string(),
-  "status": zod.string(),
-  "createdAt": zod.coerce.date(),
-  "runningSeconds": zod.number().describe('Elapsed seconds since call started'),
-  "executionId": zod.string().nullish(),
-  "metadata": zod.string().nullish()
-})
-export const ListActiveCallsResponse = zod.array(ListActiveCallsResponseItem)
-
-
-/**
  * @summary Get detailed analytics for a single agent
  */
 export const GetAgentStatsParams = zod.object({

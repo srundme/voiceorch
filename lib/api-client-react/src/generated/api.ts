@@ -21,7 +21,6 @@ import type {
 
 import type {
   AccountInfo,
-  ActiveCall,
   ActivityLog,
   AdminAgentPrompt,
   AdminAlert,
@@ -3865,83 +3864,6 @@ export const useStartKyc = <TError = ErrorType<void>,
       > => {
       return useMutation(getStartKycMutationOptions(options));
     }
-
-export const getListActiveCallsUrl = () => {
-
-
-
-
-  return `/api/calls/active`
-}
-
-/**
- * @summary List currently active (in-progress) calls for the authenticated user
- */
-export const listActiveCalls = async ( options?: RequestInit): Promise<ActiveCall[]> => {
-
-  return customFetch<ActiveCall[]>(getListActiveCallsUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getListActiveCallsQueryKey = () => {
-    return [
-    `/api/calls/active`
-    ] as const;
-    }
-
-
-export const getListActiveCallsQueryOptions = <TData = Awaited<ReturnType<typeof listActiveCalls>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listActiveCalls>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getListActiveCallsQueryKey();
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listActiveCalls>>> = ({ signal }) => listActiveCalls({ signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listActiveCalls>>, TError, TData> & { queryKey: QueryKey }
-}
-
-export type ListActiveCallsQueryResult = NonNullable<Awaited<ReturnType<typeof listActiveCalls>>>
-export type ListActiveCallsQueryError = ErrorType<void>
-
-
-/**
- * @summary List currently active (in-progress) calls for the authenticated user
- */
-
-export function useListActiveCalls<TData = Awaited<ReturnType<typeof listActiveCalls>>, TError = ErrorType<void>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listActiveCalls>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-
- ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-
-  const queryOptions = getListActiveCallsQueryOptions(options)
-
-  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
-
-  return { ...query, queryKey: queryOptions.queryKey };
-}
-
-
-
-
-
-
 
 export const getGetAgentStatsUrl = (id: number,) => {
 

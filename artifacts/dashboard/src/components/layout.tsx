@@ -4,7 +4,7 @@ import { IncomingCallNotification } from "@/components/incoming-call-notificatio
 import {
   Users, Phone, Key, Settings, Menu,
   LayoutDashboard, BarChart3, Brain,
-  Wallet, LogOut, ChevronDown, AlertCircle, Radio, Webhook,
+  Wallet, LogOut, ChevronDown, AlertCircle, Webhook,
   Zap, CalendarDays, TrendingUp, ShieldCheck,
   Facebook, ArrowRightLeft, Mic2,
 } from "lucide-react";
@@ -29,7 +29,6 @@ const NAV_SECTIONS = [
     items: [
       { name: "Analytics",    href: "/app/analytics", icon: BarChart3 },
       { name: "Usage",        href: "/app/usage",     icon: TrendingUp },
-      { name: "Live Monitor", href: "/app/monitor",   icon: Radio },
       { name: "Call Log",     href: "/app/calls",     icon: Phone },
       { name: "Activity",     href: "/app/activity",  icon: LayoutDashboard },
     ],

@@ -1120,22 +1120,6 @@ export interface AssignPhoneNumberInput {
   agentId?: number | null;
 }
 
-export interface ActiveCall {
-  id: number;
-  agentId: number;
-  agentName: string;
-  toNumber: string;
-  fromNumber: string;
-  status: string;
-  createdAt: string;
-  /** Elapsed seconds since call started */
-  runningSeconds: number;
-  /** @nullable */
-  executionId?: string | null;
-  /** @nullable */
-  metadata?: string | null;
-}
-
 export interface AgentStats {
   agentId: number;
   name: string;
