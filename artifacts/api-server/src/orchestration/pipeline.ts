@@ -28,6 +28,7 @@ import {
   executeNativeCheckAvailability as sharedExecuteNativeCheckAvailability,
   executeNativeReschedule as sharedExecuteNativeReschedule,
   executeNativeCancel as sharedExecuteNativeCancel,
+  executeNativeListBookings as sharedExecuteNativeListBookings,
   executeWebhookTool as sharedExecuteWebhookTool,
   parsePreferredDate,
 } from "../services/tool-executor.js";
@@ -653,6 +654,8 @@ export class OrchestrationPipeline {
       return await this.executeNativeCancel(tool, args);
     } else if (tool.type === "native_check_availability") {
       return await this.executeNativeCheckAvailability(tool, args);
+    } else if (tool.type === "native_list_bookings") {
+      return await this.executeNativeListBookings(tool, args);
     }
     return undefined;
   }
@@ -859,11 +862,11 @@ export class OrchestrationPipeline {
     let triggeredToolName: string | null = null;
     let triggeredToolArgs: Record<string, unknown> = {};
 
-    // ── Think-block filter (streaming) ───────────────────────────────────────
-    // Strips <think>…</think> reasoning blocks from models like DeepSeek-R1.
-    // makeThinkFilter() returns a stateful per-turn closure (shared with
-    // continueWithToolResult via the same factory).
+    // ── Think-block + function-tag filters (streaming) ──────────────────────
+    // Strips <think>…</think> blocks (DeepSeek-R1) and <function=…>…</function>
+    // inline tags that some LLMs emit as text instead of using the tool API.
     const filterThinkToken = makeThinkFilter();
+    const filterFnTag = makeFunctionTagFilter();
 
     const sentenceQueue: string[] = [];
     let wakePlayer: (() => void) | null = null;
@@ -959,8 +962,10 @@ export class OrchestrationPipeline {
         (token) => {
           if (!llmFirstTokenAt) llmFirstTokenAt = Date.now();
           llmResponse += token;                  // keep raw response (incl. think blocks)
-          const filtered = filterThinkToken(token);
-          if (!filtered) return;                 // token was entirely inside a think block
+          const afterThink = filterThinkToken(token);
+          if (!afterThink) return;               // token was entirely inside a think block
+          const filtered = filterFnTag(afterThink); // strip <function=…> inline tags from TTS
+          if (!filtered) return;
           pendingText += filtered;
           const { sentences, remainder } = extractSentences(pendingText);
           for (const s of sentences) enqueue(s);
@@ -1005,7 +1010,7 @@ export class OrchestrationPipeline {
       // Without this, continueWithToolResult would see two consecutive "user" messages
       // (the caller's speech + the tool result), which breaks Sarvam's strict turn
       // alternation and confuses all LLMs lacking a tool-result role.
-      const assistantToolContent = llmResponse.trim() || `[calling tool: ${triggeredToolName}]`;
+      const assistantToolContent = stripFunctionTags(llmResponse.replace(/<think>[\s\S]*?<\/think>/g, "")).trim() || `[calling tool: ${triggeredToolName}]`;
       this.conversationHistory.push({ role: "assistant", content: assistantToolContent });
 
       // Enqueue a brief filler (language-aware) so the caller hears something while
@@ -1045,14 +1050,29 @@ export class OrchestrationPipeline {
       "LLM complete"
     );
 
-    // Strip any think blocks from the stored response so they don't appear in
-    // the transcript UI or pollute the conversation history for future turns.
-    const cleanResponse = llmResponse.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+    // Strip think blocks and inline function tags from the stored response so
+    // they don't appear in the transcript UI or pollute conversation history.
+    const cleanResponse = stripFunctionTags(llmResponse.replace(/<think>[\s\S]*?<\/think>/g, "")).trim();
     this.conversationHistory.push({ role: "assistant", content: cleanResponse });
     this.config.onTranscript("agent", cleanResponse);
     this.config.onConversationUpdate?.(this.conversationHistory);
 
     await playPromise;
+
+    // ── Inline function-tag execution (safety net for LLMs that emit <function=X> as text) ──
+    // The streaming filter already prevented these tags from reaching TTS.
+    // Now execute the first tag found so end_call / scheduling tools still fire.
+    {
+      const inlineFn = extractInlineFunctionTag(llmResponse);
+      if (inlineFn) {
+        logger.info({ callId: this.config.callId, fnName: inlineFn.name }, "Inline function tag detected — executing after response");
+        const toolResult = await this.handleToolCall(inlineFn.name, inlineFn.args);
+        if (toolResult !== undefined) {
+          await this.continueWithToolResult(inlineFn.name, toolResult);
+        }
+        return;
+      }
+    }
 
     const llmLatencyMs = llmFirstTokenAt ? llmFirstTokenAt - llmStart : Date.now() - llmStart;
     const ttsFirstChunkMs = this.firstAudioSentAt ? this.firstAudioSentAt - llmStart : 0;
@@ -1145,6 +1165,10 @@ export class OrchestrationPipeline {
     return sharedExecuteNativeCheckAvailability(this.config.callId, this.agent.id, tool, args);
   }
 
+  private async executeNativeListBookings(tool: AgentTool & { type: "native_list_bookings" }, args: Record<string, unknown>): Promise<string> {
+    return sharedExecuteNativeListBookings(this.config.callId, this.agent.id, tool, args);
+  }
+
   /**
    * After a native scheduling tool executes, push its structured result to
    * conversation history and run a follow-up LLM turn so the agent responds
@@ -1171,6 +1195,7 @@ export class OrchestrationPipeline {
     let triggeredToolArgs: Record<string, unknown> = {};
 
     const filterThinkToken = makeThinkFilter();
+    const filterFnTag = makeFunctionTagFilter();
 
     const sentenceQueue: string[] = [];
     let wakePlayer: (() => void) | null = null;
@@ -1208,7 +1233,9 @@ export class OrchestrationPipeline {
         this.agent.systemPrompt,
         (token) => {
           llmResponse += token;
-          const filtered = filterThinkToken(token);
+          const afterThink = filterThinkToken(token);
+          if (!afterThink) return;
+          const filtered = filterFnTag(afterThink);
           if (!filtered) return;
           pendingText += filtered;
           const { sentences, remainder } = extractSentences(pendingText);
@@ -1254,7 +1281,7 @@ export class OrchestrationPipeline {
     // ── Chained tool call — the agent invoked another tool off the result ──
     if (triggeredToolName) {
       const chainedName: string = triggeredToolName;
-      const assistantToolContent = llmResponse.replace(/<think>[\s\S]*?<\/think>/g, "").trim()
+      const assistantToolContent = stripFunctionTags(llmResponse.replace(/<think>[\s\S]*?<\/think>/g, "")).trim()
         || `[calling tool: ${chainedName}]`;
       this.conversationHistory.push({ role: "assistant", content: assistantToolContent });
       const chainedResult = await this.handleToolCall(chainedName, triggeredToolArgs);
@@ -1264,11 +1291,23 @@ export class OrchestrationPipeline {
       return;
     }
 
-    const cleanResponse = llmResponse.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+    const cleanResponse = stripFunctionTags(llmResponse.replace(/<think>[\s\S]*?<\/think>/g, "")).trim();
     if (cleanResponse) {
       this.conversationHistory.push({ role: "assistant", content: cleanResponse });
       this.config.onTranscript("agent", cleanResponse);
       this.config.onConversationUpdate?.(this.conversationHistory);
+    }
+
+    // ── Inline function-tag execution (safety net for LLMs that emit <function=X> as text) ──
+    // If no native tool was triggered but the LLM included an inline function tag,
+    // execute it now (the tag was already stripped from the spoken text above).
+    const inlineFn = extractInlineFunctionTag(llmResponse);
+    if (inlineFn) {
+      logger.info({ callId: this.config.callId, fnName: inlineFn.name }, "Inline function tag detected in continueWithToolResult — executing");
+      const toolResult = await this.handleToolCall(inlineFn.name, inlineFn.args);
+      if (toolResult !== undefined) {
+        await this.continueWithToolResult(inlineFn.name, toolResult, depth + 1);
+      }
     }
   }
 
@@ -1451,6 +1490,93 @@ function guardrailTokenize(text: string): Set<string> {
  * from the token stream before text reaches TTS.  Returns a per-turn closure so
  * each turn (and continueWithToolResult) has independent state.
  */
+/**
+ * Strips `<function=NAME ...>...</function>` (and self-closing/dangling variants) from text.
+ * Used for post-processing the full LLM response before storing in history / transcript.
+ */
+function stripFunctionTags(text: string): string {
+  return text
+    .replace(/<function=\w+[^>]*>[\s\S]*?<\/function>/g, "")
+    .replace(/<function=\w+[^>]*\/>/g, "")
+    .replace(/<function=\w+[^>]*>/g, "")
+    .trim();
+}
+
+/**
+ * Extracts the first inline `<function=NAME>BODY</function>` tag from a response string.
+ * Returns the function name and parsed args (body treated as JSON), or null if none found.
+ */
+function extractInlineFunctionTag(text: string): { name: string; args: Record<string, unknown> } | null {
+  const m =
+    /<function=(\w+)[^>]*>([\s\S]*?)<\/function>/.exec(text) ??
+    /<function=(\w+)[^>]*\s*\/>/.exec(text) ??
+    /<function=(\w+)[^>]*>/.exec(text);
+  if (!m) return null;
+  const name = (m[1] ?? "").trim();
+  if (!name) return null;
+  const body = (m[2] ?? "").trim();
+  let args: Record<string, unknown> = {};
+  if (body && body !== "{}") {
+    try { args = JSON.parse(body) as Record<string, unknown>; } catch { /* ignore malformed args */ }
+  }
+  return { name, args };
+}
+
+/**
+ * Stateful per-turn filter that strips `<function=NAME>…</function>` tags from
+ * the LLM token stream before text reaches TTS. Analogous to makeThinkFilter.
+ * Call once per turn; the returned closure is statefull across tokens.
+ */
+function makeFunctionTagFilter(): (token: string) => string {
+  let inFnTag = false;
+  let buf = "";
+
+  return function filterFnToken(token: string): string {
+    buf += token;
+    let out = "";
+
+    while (buf.length > 0) {
+      if (inFnTag) {
+        const closeIdx = buf.indexOf("</function>");
+        if (closeIdx !== -1) {
+          inFnTag = false;
+          buf = buf.slice(closeIdx + "</function>".length);
+        } else {
+          // Keep buffering — might be mid close-tag
+          const tail = Math.max(0, buf.length - "</function>".length + 1);
+          buf = buf.slice(tail);
+          break;
+        }
+      } else {
+        const openIdx = buf.indexOf("<function=");
+        if (openIdx !== -1) {
+          out += buf.slice(0, openIdx);
+          const relGt = buf.indexOf(">", openIdx);
+          if (relGt !== -1) {
+            if (buf[relGt - 1] === "/") {
+              // Self-closing: <function=NAME /> — consume and stay outside tag
+              buf = buf.slice(relGt + 1);
+            } else {
+              inFnTag = true;
+              buf = buf.slice(relGt + 1);
+            }
+          } else {
+            // Haven't seen ">" yet — buffer to avoid emitting partial tag
+            buf = buf.slice(openIdx);
+            break;
+          }
+        } else {
+          const tail = Math.max(0, buf.length - "<function=".length + 1);
+          out += buf.slice(0, tail);
+          buf = buf.slice(tail);
+          break;
+        }
+      }
+    }
+    return out;
+  };
+}
+
 function makeThinkFilter(): (token: string) => string {
   let inThinkBlock = false;
   let thinkBuf = "";

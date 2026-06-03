@@ -782,6 +782,13 @@ type AgentToolLocal =
       eventTypeId: number;
       calendarId?: number;
       timezone?: string;
+    }
+  | {
+      type: "native_list_bookings";
+      name: string;
+      description: string;
+      calendarId?: number;
+      timezone?: string;
     };
 
 function SliderRow({ label, desc, value, onChange, min, max, step, unit = "" }: {
@@ -1714,6 +1721,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                   { label: "Availability",     icon: CalendarCheck,  onClick: () => { setAgentTools(prev => [...prev, { type: "native_check_availability" as const, name: "check_availability", description: "Check available slots when the caller asks what times are open.", eventTypeId: 0 }]); setDirty(true); } },
                   { label: "Reschedule",       icon: CalendarClock,  onClick: () => { setAgentTools(prev => [...prev, { type: "native_reschedule" as const, name: "reschedule_appointment", description: "Reschedule an existing booking when the caller provides their booking reference.", timezone: "UTC" }]); setDirty(true); } },
                   { label: "Cancel Booking",   icon: CalendarX,      onClick: () => { setAgentTools(prev => [...prev, { type: "native_cancel" as const, name: "cancel_appointment", description: "Cancel an existing booking when the caller provides their booking reference." }]); setDirty(true); } },
+                  { label: "Look Up Booking",  icon: ClipboardList,  onClick: () => { setAgentTools(prev => [...prev, { type: "native_list_bookings" as const, name: "list_bookings", description: "Look up a caller's existing bookings by name before rescheduling or cancelling." }]); setDirty(true); } },
                   { label: "Custom Function",  icon: Wrench,         onClick: () => { setAgentTools(prev => [...prev, { type: "webhook" as const, name: "custom_action", description: "Invoke this when the caller requests a specific action.", url: "", method: "POST" as const }]); setDirty(true); } },
                 ] as { label: string; icon: React.ComponentType<{ className?: string }>; onClick: () => void }[]).map(btn => (
                   <button key={btn.label} type="button" onClick={btn.onClick}
@@ -1742,11 +1750,13 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                       {tool.type === "native_reschedule"        && <CalendarClock  className="h-4 w-4 text-zinc-500" />}
                       {tool.type === "native_cancel"            && <CalendarX      className="h-4 w-4 text-zinc-500" />}
                       {tool.type === "native_check_availability" && <CalendarCheck className="h-4 w-4 text-zinc-500" />}
+                      {tool.type === "native_list_bookings"     && <ClipboardList className="h-4 w-4 text-zinc-500" />}
                       <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                         {tool.type === "call_transfer" ? "Call Transfer" : tool.type === "end_call" ? "End Call"
                           : tool.type === "cal_com" ? "Cal.com" : tool.type === "native_booking" ? "Book Appointment"
                           : tool.type === "native_reschedule" ? "Reschedule" : tool.type === "native_cancel" ? "Cancel Booking"
-                          : tool.type === "native_check_availability" ? "Availability" : "Custom Function"}
+                          : tool.type === "native_check_availability" ? "Availability"
+                          : tool.type === "native_list_bookings" ? "Look Up Booking" : "Custom Function"}
                       </span>
                     </div>
                     <button type="button" onClick={() => { setAgentTools(prev => prev.filter((_, i) => i !== idx)); setDirty(true); }} className="text-muted-foreground hover:text-foreground transition-colors">
@@ -1842,6 +1852,21 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                           <SelectContent>{(eventTypes ?? []).filter(et => !tool.calendarId || et.calendarId === tool.calendarId).map(et => <SelectItem key={et.id} value={String(et.id)}>{et.name} ({et.durationMinutes} min)</SelectItem>)}</SelectContent>
                         </Select>
                       </div>
+                    </div>
+                  )}
+                  {tool.type === "native_list_bookings" && (
+                    <div className="space-y-2">
+                      <div className="space-y-1"><p className="text-xs text-muted-foreground">Calendar (optional — limit search to one calendar)</p>
+                        <Select value={tool.calendarId ? String(tool.calendarId) : ""} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, calendarId: parseInt(v) || undefined }; setAgentTools(n); setDirty(true); }}>
+                          <SelectTrigger className="bg-card border-border text-foreground text-xs h-8"><SelectValue placeholder="All calendars" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="">All calendars</SelectItem>
+                            {(calendars ?? []).map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
+                            {(calendars ?? []).length === 0 && <SelectItem value="__none" disabled>No calendars — create one in Scheduling</SelectItem>}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">The agent will ask the caller for their name and return any upcoming bookings matching that name.</p>
                     </div>
                   )}
                   {tool.type === "webhook" && <>

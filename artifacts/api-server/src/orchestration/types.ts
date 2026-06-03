@@ -89,7 +89,17 @@ export interface NativeCheckAvailabilityTool {
   timezone?: string;
 }
 
-export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | EndCallTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool | NativeCheckAvailabilityTool;
+export interface NativeListBookingsTool {
+  type: "native_list_bookings";
+  name: string;
+  description: string;
+  /** Optional: calendar id to scope the lookup (UI hint; runtime scopes by authorized userId) */
+  calendarId?: number;
+  /** Optional timezone used when formatting booking date/times back to the caller */
+  timezone?: string;
+}
+
+export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | EndCallTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool | NativeCheckAvailabilityTool | NativeListBookingsTool;
 
 /** JSON Schema-compatible tool definition passed to LLM providers */
 export interface ToolDefinition {

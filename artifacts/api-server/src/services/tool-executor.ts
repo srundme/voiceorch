@@ -125,6 +125,22 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
           },
         };
       }
+      if (t.type === "native_list_bookings") {
+        return {
+          name: t.name,
+          description: t.description,
+          parameters: {
+            type: "object",
+            properties: {
+              attendee_name: {
+                type: "string",
+                description: "Full name of the caller whose bookings you want to look up",
+              },
+            },
+            required: ["attendee_name"],
+          },
+        };
+      }
       // Generic fallback for call_transfer, webhook, send_sms, end_call, cal_com
       return {
         name: t.name,
@@ -439,6 +455,99 @@ export async function executeNativeCheckAvailability(
   } catch (err) {
     logger.error({ callId, err }, "Native check-availability tool execution failed");
     return "error: availability check failed due to a technical issue";
+  }
+}
+
+export async function executeNativeListBookings(
+  callId: number,
+  agentId: number,
+  tool: AgentTool & { type: "native_list_bookings" },
+  args: Record<string, unknown>,
+): Promise<string> {
+  logger.info({ callId }, "Native list-bookings tool invoked");
+  const attendeeName = String(args["attendee_name"] ?? "").trim();
+  if (!attendeeName) {
+    return "error: attendee_name is required to look up bookings";
+  }
+
+  try {
+    // Determine authorized user for ownership scoping (same pattern as other native executors)
+    const [agentCalendar] = await db
+      .select({ userId: schedulingCalendarsTable.userId })
+      .from(schedulingCalendarsTable)
+      .where(eq(schedulingCalendarsTable.agentId, agentId));
+    let authorizedUserId: string | null = null;
+    if (agentCalendar) {
+      authorizedUserId = agentCalendar.userId;
+    } else {
+      const [agentRow] = await db
+        .select({ userId: agentsTable.userId })
+        .from(agentsTable)
+        .where(eq(agentsTable.id, agentId));
+      authorizedUserId = agentRow?.userId ?? null;
+    }
+
+    // Fetch upcoming, non-cancelled bookings with a case-insensitive name match.
+    // Ownership + optional calendar scoping are applied in SQL (before LIMIT) so the
+    // limit never inadvertently excludes rows that belong to the authorized user.
+    const nameLike = `%${attendeeName.toLowerCase()}%`;
+    const now = new Date();
+    const owned = await db
+      .select({
+        id: bookingsTable.id,
+        attendeeName: bookingsTable.attendeeName,
+        slotStart: bookingsTable.slotStart,
+        status: bookingsTable.status,
+        calendarId: bookingsTable.calendarId,
+        eventTypeId: bookingsTable.eventTypeId,
+      })
+      .from(bookingsTable)
+      .where(
+        and(
+          sql`lower(${bookingsTable.attendeeName}) like ${nameLike}`,
+          sql`${bookingsTable.slotStart} >= ${now.toISOString()}`,
+          sql`${bookingsTable.status} != 'cancelled'`,
+          // Scope to the booking owner — enforced in SQL so LIMIT operates on the
+          // correct tenant's rows only, preventing false-negative lookups.
+          authorizedUserId ? eq(bookingsTable.userId, authorizedUserId) : sql`true`,
+          // Optional: further restrict to a specific calendar if tool config specifies one
+          tool.calendarId ? eq(bookingsTable.calendarId, tool.calendarId) : sql`true`,
+        ),
+      )
+      .orderBy(bookingsTable.slotStart)
+      .limit(5);
+
+    if (owned.length === 0) {
+      return `no_bookings_found: no upcoming bookings found for "${attendeeName}". Ask the caller to double-check the name on their booking.`;
+    }
+
+    // Resolve timezone: tool config → first booking's calendar → UTC
+    let tz = tool.timezone ?? "UTC";
+    if (tz === "UTC" && owned[0]?.calendarId) {
+      const [cal] = await db
+        .select({ timezone: schedulingCalendarsTable.timezone })
+        .from(schedulingCalendarsTable)
+        .where(eq(schedulingCalendarsTable.id, owned[0].calendarId));
+      if (cal?.timezone) tz = cal.timezone;
+    }
+
+    // Resolve event type names in bulk
+    const etIds = [...new Set(owned.map((b) => b.eventTypeId))];
+    const etRows = etIds.length
+      ? await db.select({ id: eventTypesTable.id, name: eventTypesTable.name }).from(eventTypesTable).where(sql`${eventTypesTable.id} in (${sql.join(etIds.map((id) => sql`${id}`), sql`, `)})`)
+      : [];
+    const etMap = new Map(etRows.map((e) => [e.id, e.name]));
+
+    const list = owned.map((b) => {
+      const eventName = etMap.get(b.eventTypeId) ?? "Appointment";
+      const dateStr = formatInTimeZone(b.slotStart, tz, "EEE MMM d 'at' h:mm a zzz");
+      return `booking_id=${b.id}, event="${eventName}", date="${dateStr}", status="${b.status}"`;
+    });
+
+    return `bookings_found: count=${owned.length}, ${list.join(" | ")}`;
+  } catch (err) {
+    logger.error({ callId, err }, "Native list-bookings tool execution failed");
+    return "error: booking lookup failed due to a technical issue";
   }
 }
 

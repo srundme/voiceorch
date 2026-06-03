@@ -19,6 +19,7 @@ import {
   executeNativeCheckAvailability,
   executeNativeReschedule,
   executeNativeCancel,
+  executeNativeListBookings,
   executeWebhookTool,
 } from "../../services/tool-executor.js";
 
@@ -397,6 +398,52 @@ export async function handleWebCallWebSocket(
         }
         return out;
       }
+
+      // ── Function-tag filter: strips <function=NAME>…</function> from TTS ──
+      // Mirrors makeFunctionTagFilter() in pipeline.ts but inlined for webcall.
+      let inFnTag = false;
+      let fnBuf = "";
+
+      function filterFnToken(token: string): string {
+        fnBuf += token;
+        let out = "";
+        while (fnBuf.length > 0) {
+          if (inFnTag) {
+            const closeIdx = fnBuf.indexOf("</function>");
+            if (closeIdx !== -1) {
+              inFnTag = false;
+              fnBuf = fnBuf.slice(closeIdx + "</function>".length);
+            } else {
+              const tail = Math.max(0, fnBuf.length - "</function>".length + 1);
+              fnBuf = fnBuf.slice(tail);
+              break;
+            }
+          } else {
+            const openIdx = fnBuf.indexOf("<function=");
+            if (openIdx !== -1) {
+              out += fnBuf.slice(0, openIdx);
+              const relGt = fnBuf.indexOf(">", openIdx);
+              if (relGt !== -1) {
+                if (fnBuf[relGt - 1] === "/") {
+                  fnBuf = fnBuf.slice(relGt + 1);
+                } else {
+                  inFnTag = true;
+                  fnBuf = fnBuf.slice(relGt + 1);
+                }
+              } else {
+                fnBuf = fnBuf.slice(openIdx);
+                break;
+              }
+            } else {
+              const tail = Math.max(0, fnBuf.length - "<function=".length + 1);
+              out += fnBuf.slice(0, tail);
+              fnBuf = fnBuf.slice(tail);
+              break;
+            }
+          }
+        }
+        return out;
+      }
       // ──────────────────────────────────────────────────────────────────────
 
       function queueSentence(text: string) {
@@ -467,6 +514,8 @@ export async function handleWebCallWebSocket(
       fullReply = "";
       inThinkBlock = false;
       thinkBuf = "";
+      inFnTag = false;
+      fnBuf = "";
       triggeredToolName = null;
       triggeredToolArgs = {};
 
@@ -475,9 +524,11 @@ export async function handleWebCallWebSocket(
         history,
         systemPromptForTurn,
         (token) => {
-          fullReply += token;                        // keep raw (for cleaning later)
-          const filtered = filterThinkToken(token);  // strip <think>…</think>
-          if (!filtered) return;                     // token was entirely inside a think block
+          fullReply += token;                         // keep raw (for cleaning later)
+          const afterThink = filterThinkToken(token); // strip <think>…</think>
+          if (!afterThink) return;                    // token was entirely inside a think block
+          const filtered = filterFnToken(afterThink); // strip <function=…> inline tags from TTS
+          if (!filtered) return;
           tokenBuf += filtered;
           const [sentences, rest] = extractSentences(tokenBuf);
           for (const s of sentences) queueSentence(s);
@@ -510,7 +561,12 @@ export async function handleWebCallWebSocket(
       // extractSentences on the full clean reply to get the definitive last
       // segment, and use it instead of the potentially-truncated tokenBuf.
       {
-        const cleanForFlush = fullReply.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+        const cleanForFlush = fullReply
+          .replace(/<think>[\s\S]*?<\/think>/g, "")
+          .replace(/<function=\w+[^>]*>[\s\S]*?<\/function>/g, "")
+          .replace(/<function=\w+[^>]*\/>/g, "")
+          .replace(/<function=\w+[^>]*>/g, "")
+          .trim();
         const [, trueRemainder] = extractSentences(cleanForFlush);
         const flushText = trueRemainder.trim().length > tokenBuf.trim().length
           ? trueRemainder
@@ -521,7 +577,12 @@ export async function handleWebCallWebSocket(
       // ── Tool call handling ─────────────────────────────────────────────────
       if (triggeredToolName) {
         // Push the assistant's tool-invocation turn to history
-        const assistantToolContent = fullReply.replace(/<think>[\s\S]*?<\/think>/g, "").trim()
+        const assistantToolContent = fullReply
+          .replace(/<think>[\s\S]*?<\/think>/g, "")
+          .replace(/<function=\w+[^>]*>[\s\S]*?<\/function>/g, "")
+          .replace(/<function=\w+[^>]*\/>/g, "")
+          .replace(/<function=\w+[^>]*>/g, "")
+          .trim()
           || `[calling tool: ${triggeredToolName}]`;
         history.push({ role: "assistant", content: assistantToolContent });
 
@@ -575,6 +636,8 @@ export async function handleWebCallWebSocket(
             toolResult = await executeNativeReschedule(callId, agentId, tool, triggeredToolArgs);
           } else if (tool.type === "native_cancel") {
             toolResult = await executeNativeCancel(callId, agentId, tool, triggeredToolArgs);
+          } else if (tool.type === "native_list_bookings") {
+            toolResult = await executeNativeListBookings(callId, agentId, tool, triggeredToolArgs);
           } else if (tool.type === "webhook") {
             toolResult = await executeWebhookTool(callId, tool, triggeredToolArgs);
           } else {
@@ -603,10 +666,85 @@ export async function handleWebCallWebSocket(
 
       // ── Normal (non-tool) TTS playback path ───────────────────────────────
 
-      // Clean the stored reply — strip think blocks from transcript + history
-      const cleanReply = fullReply.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+      // Clean the stored reply — strip think blocks and inline function tags
+      const cleanReply = fullReply
+        .replace(/<think>[\s\S]*?<\/think>/g, "")
+        .replace(/<function=\w+[^>]*>[\s\S]*?<\/function>/g, "")
+        .replace(/<function=\w+[^>]*\/>/g, "")
+        .replace(/<function=\w+[^>]*>/g, "")
+        .trim();
 
       if (!cleanReply || sentenceJobs.length === 0) {
+        // ── Tag-only response: LLM emitted a function tag with no spoken text ──
+        // cleanReply is empty, so we can't play TTS. But the tag still needs to
+        // execute — handle it here before returning, otherwise it's silently dropped.
+        const inlineFnMatch =
+          /<function=(\w+)[^>]*>([\s\S]*?)<\/function>/.exec(fullReply) ??
+          /<function=(\w+)[^>]*\s*\/>/.exec(fullReply) ??
+          /<function=(\w+)[^>]*>/.exec(fullReply);
+        if (inlineFnMatch) {
+          const fnName = (inlineFnMatch[1] ?? "").trim();
+          if (fnName) {
+            logger.info({ callId, fnName }, "Webcall: tag-only inline function detected — executing before early return");
+            const fnBody = (inlineFnMatch[2] ?? "").trim();
+            let fnArgs: Record<string, unknown> = {};
+            if (fnBody && fnBody !== "{}") {
+              try { fnArgs = JSON.parse(fnBody) as Record<string, unknown>; } catch { /* ignore */ }
+            }
+
+            history.push({ role: "assistant", content: `[calling tool: ${fnName}]` });
+
+            if (fnName === "end_call") {
+              const endTool = agentTools.find((t) => t.type === "end_call" && t.name === fnName);
+              const goodbye = endTool && endTool.type === "end_call" ? (endTool.goodbyeMessage ?? "") : "";
+              if (goodbye.trim()) {
+                try {
+                  const { audio } = await tts.synthesize(goodbye);
+                  if (!closed) {
+                    for (let j = 0; j < audio.length; j += AUDIO_CHUNK_BYTES) {
+                      if (closed || interrupted) break;
+                      sendAudio(amplifyPcm(audio.slice(j, j + AUDIO_CHUNK_BYTES), TTS_VOLUME_GAIN));
+                      await new Promise<void>((r) => setTimeout(r, 40));
+                    }
+                  }
+                } catch { /* ignore */ }
+              }
+              if (!closed) void hangup("normal");
+              processing = false;
+              return;
+            }
+
+            let inlineFnResult: string | undefined;
+            try {
+              const tool = agentTools.find((t) => t.name === fnName);
+              if (tool) {
+                if (tool.type === "native_booking") {
+                  inlineFnResult = await executeNativeBooking(callId, agentId, tool, fnArgs);
+                } else if (tool.type === "native_check_availability") {
+                  inlineFnResult = await executeNativeCheckAvailability(callId, agentId, tool, fnArgs);
+                } else if (tool.type === "native_reschedule") {
+                  inlineFnResult = await executeNativeReschedule(callId, agentId, tool, fnArgs);
+                } else if (tool.type === "native_cancel") {
+                  inlineFnResult = await executeNativeCancel(callId, agentId, tool, fnArgs);
+                } else if (tool.type === "native_list_bookings") {
+                  inlineFnResult = await executeNativeListBookings(callId, agentId, tool, fnArgs);
+                } else if (tool.type === "webhook") {
+                  inlineFnResult = await executeWebhookTool(callId, tool, fnArgs);
+                }
+              }
+            } catch (toolErr) {
+              logger.error({ callId, err: toolErr, fnName }, "Webcall: tag-only inline function execution error");
+              inlineFnResult = "error: tool execution failed";
+            }
+
+            if (inlineFnResult !== undefined) {
+              history.push({ role: "user", content: `[Tool result for ${fnName}]: ${inlineFnResult}` });
+              toolIterations++;
+              if (toolIterations >= MAX_TOOL_ITERATIONS) attachTools = false;
+              continue;
+            }
+          }
+        }
         sendStatus("listening");
         processing = false;
         return;
@@ -687,6 +825,82 @@ export async function handleWebCallWebSocket(
         if (audioChunks.length > 0) void process();
       } else if (!closed) {
         sendStatus("listening");
+      }
+
+      // ── Inline function-tag execution (safety net for LLMs that emit <function=X> as text) ──
+      // If the LLM embedded a function tag in text instead of using the tool API, the
+      // streaming filter already stripped it from TTS. Execute it now so the action fires.
+      {
+        const inlineFnMatch =
+          /<function=(\w+)[^>]*>([\s\S]*?)<\/function>/.exec(fullReply) ??
+          /<function=(\w+)[^>]*\s*\/>/.exec(fullReply) ??
+          /<function=(\w+)[^>]*>/.exec(fullReply);
+        if (inlineFnMatch) {
+          const fnName = (inlineFnMatch[1] ?? "").trim();
+          if (fnName) {
+            logger.info({ callId, fnName }, "Webcall: inline function tag detected — executing after response");
+            const fnBody = (inlineFnMatch[2] ?? "").trim();
+            let fnArgs: Record<string, unknown> = {};
+            if (fnBody && fnBody !== "{}") {
+              try { fnArgs = JSON.parse(fnBody) as Record<string, unknown>; } catch { /* ignore */ }
+            }
+
+            // Mirror the native tool-call path: push assistant turn, run tool, loop
+            history.push({ role: "assistant", content: cleanReply || `[calling tool: ${fnName}]` });
+
+            // Built-in end_call
+            if (fnName === "end_call") {
+              const endTool = agentTools.find((t) => t.type === "end_call" && t.name === fnName);
+              const goodbye = endTool && endTool.type === "end_call" ? (endTool.goodbyeMessage ?? "") : "";
+              if (goodbye.trim()) {
+                try {
+                  const { audio } = await tts.synthesize(goodbye);
+                  if (!closed) {
+                    for (let j = 0; j < audio.length; j += AUDIO_CHUNK_BYTES) {
+                      if (closed || interrupted) break;
+                      sendAudio(amplifyPcm(audio.slice(j, j + AUDIO_CHUNK_BYTES), TTS_VOLUME_GAIN));
+                      await new Promise<void>((r) => setTimeout(r, 40));
+                    }
+                  }
+                } catch { /* ignore */ }
+              }
+              if (!closed) void hangup("normal");
+              processing = false;
+              return;
+            }
+
+            // Route through the shared executor
+            let inlineFnResult: string | undefined;
+            try {
+              const tool = agentTools.find((t) => t.name === fnName);
+              if (tool) {
+                if (tool.type === "native_booking") {
+                  inlineFnResult = await executeNativeBooking(callId, agentId, tool, fnArgs);
+                } else if (tool.type === "native_check_availability") {
+                  inlineFnResult = await executeNativeCheckAvailability(callId, agentId, tool, fnArgs);
+                } else if (tool.type === "native_reschedule") {
+                  inlineFnResult = await executeNativeReschedule(callId, agentId, tool, fnArgs);
+                } else if (tool.type === "native_cancel") {
+                  inlineFnResult = await executeNativeCancel(callId, agentId, tool, fnArgs);
+                } else if (tool.type === "native_list_bookings") {
+                  inlineFnResult = await executeNativeListBookings(callId, agentId, tool, fnArgs);
+                } else if (tool.type === "webhook") {
+                  inlineFnResult = await executeWebhookTool(callId, tool, fnArgs);
+                }
+              }
+            } catch (toolErr) {
+              logger.error({ callId, err: toolErr, fnName }, "Webcall: inline function tag execution error");
+              inlineFnResult = "error: tool execution failed";
+            }
+
+            if (inlineFnResult !== undefined) {
+              history.push({ role: "user", content: `[Tool result for ${fnName}]: ${inlineFnResult}` });
+              toolIterations++;
+              if (toolIterations >= MAX_TOOL_ITERATIONS) attachTools = false;
+              continue;
+            }
+          }
+        }
       }
 
       // No tool was called this turn — the agent's spoken response is done.

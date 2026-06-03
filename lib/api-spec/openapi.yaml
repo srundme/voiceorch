@@ -2962,8 +2962,8 @@ components:
       properties:
         type:
           type: string
-          enum: [call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability]
-          description: "Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, or native_check_availability"
+          enum: [call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, native_list_bookings]
+          description: "Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, or native_list_bookings"
         name:
           type: string
           description: LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)

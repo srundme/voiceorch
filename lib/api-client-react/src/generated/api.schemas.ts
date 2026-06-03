@@ -82,7 +82,7 @@ export interface DispositionField {
 }
 
 /**
- * Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, or native_check_availability
+ * Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, or native_list_bookings
  */
 export type AgentToolType = typeof AgentToolType[keyof typeof AgentToolType];
 
@@ -97,6 +97,7 @@ export const AgentToolType = {
   native_reschedule: 'native_reschedule',
   native_cancel: 'native_cancel',
   native_check_availability: 'native_check_availability',
+  native_list_bookings: 'native_list_bookings',
 } as const;
 
 /**
@@ -116,7 +117,7 @@ export const AgentToolMethod = {
 export type AgentToolHeaders = {[key: string]: string};
 
 export interface AgentTool {
-  /** Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, or native_check_availability */
+  /** Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, or native_list_bookings */
   type: AgentToolType;
   /** LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human) */
   name: string;

@@ -56,7 +56,7 @@ export const ListAgentsResponseItem = zod.object({
   "inactivityMessage": zod.string().nullish().describe('Message spoken to the caller before hanging up due to silence timeout'),
   "knowledgeBaseId": zod.number().nullish().describe('ID of an attached knowledge base for RAG context injection'),
   "tools": zod.array(zod.object({
-  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, or native_check_availability'),
+  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability', 'native_list_bookings']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, or native_list_bookings'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
   "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
   "transferTo": zod.string().optional().describe('(call_transfer) E.164 phone number to transfer the call to (e.g. +12125551234)'),
@@ -142,7 +142,7 @@ export const CreateAgentBody = zod.object({
   "noiseCancellationEnabled": zod.boolean().optional(),
   "inactivityMessage": zod.string().optional(),
   "tools": zod.array(zod.object({
-  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, or native_check_availability'),
+  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability', 'native_list_bookings']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, or native_list_bookings'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
   "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
   "transferTo": zod.string().optional().describe('(call_transfer) E.164 phone number to transfer the call to (e.g. +12125551234)'),
@@ -213,7 +213,7 @@ export const GetAgentResponse = zod.object({
   "inactivityMessage": zod.string().nullish().describe('Message spoken to the caller before hanging up due to silence timeout'),
   "knowledgeBaseId": zod.number().nullish().describe('ID of an attached knowledge base for RAG context injection'),
   "tools": zod.array(zod.object({
-  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, or native_check_availability'),
+  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability', 'native_list_bookings']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, or native_list_bookings'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
   "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
   "transferTo": zod.string().optional().describe('(call_transfer) E.164 phone number to transfer the call to (e.g. +12125551234)'),
@@ -303,7 +303,7 @@ export const UpdateAgentBody = zod.object({
   "inactivityMessage": zod.string().optional(),
   "knowledgeBaseId": zod.number().optional().describe('ID of an attached knowledge base for RAG context injection'),
   "tools": zod.array(zod.object({
-  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, or native_check_availability'),
+  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability', 'native_list_bookings']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, or native_list_bookings'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
   "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
   "transferTo": zod.string().optional().describe('(call_transfer) E.164 phone number to transfer the call to (e.g. +12125551234)'),
@@ -375,7 +375,7 @@ export const UpdateAgentResponse = zod.object({
   "inactivityMessage": zod.string().nullish().describe('Message spoken to the caller before hanging up due to silence timeout'),
   "knowledgeBaseId": zod.number().nullish().describe('ID of an attached knowledge base for RAG context injection'),
   "tools": zod.array(zod.object({
-  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, or native_check_availability'),
+  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability', 'native_list_bookings']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, or native_list_bookings'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
   "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
   "transferTo": zod.string().optional().describe('(call_transfer) E.164 phone number to transfer the call to (e.g. +12125551234)'),
@@ -470,7 +470,7 @@ export const ToggleAgentResponse = zod.object({
   "inactivityMessage": zod.string().nullish().describe('Message spoken to the caller before hanging up due to silence timeout'),
   "knowledgeBaseId": zod.number().nullish().describe('ID of an attached knowledge base for RAG context injection'),
   "tools": zod.array(zod.object({
-  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, or native_check_availability'),
+  "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability', 'native_list_bookings']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, or native_list_bookings'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
   "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
   "transferTo": zod.string().optional().describe('(call_transfer) E.164 phone number to transfer the call to (e.g. +12125551234)'),
