@@ -279,7 +279,11 @@ export async function handleWebCallWebSocket(
           void process();
         },
         () => {
-          logger.info({ callId }, "Webcall: streaming STT WebSocket closed");
+          // WebSocket closed — null out so the message handler falls back to
+          // batch STT (local VAD + REST).  Without this, all subsequent audio
+          // frames are sent to the dead socket and silently discarded.
+          logger.warn({ callId }, "Webcall: streaming STT closed — falling back to batch STT");
+          streamSTT = null;
         },
       );
       logger.info({ callId, provider: agent.asrProvider }, "Webcall: streaming STT initialised");
