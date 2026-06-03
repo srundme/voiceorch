@@ -254,6 +254,11 @@ export async function handleWebCallWebSocket(
   const history: ConversationTurn[] = [];
   let closed      = false;
 
+  // ── Per-call usage accumulators (written to usage_events on hangup) ──────
+  let llmInputTokensTotal  = 0;
+  let llmOutputTokensTotal = 0;
+  let ttsCharactersTotal   = 0;
+
   // ── Initialise streaming STT if the adapter supports it ──────────────────
   // Streaming STT (Deepgram, Sarvam saaras:v3) eliminates the local VAD
   // silence wait — transcripts fire as soon as the utterance ends, reducing
@@ -574,6 +579,7 @@ export async function handleWebCallWebSocket(
       function queueSentence(text: string) {
         const t = text.trim();
         if (!t) return;
+        ttsCharactersTotal += t.length;
         // Kick off synthesis immediately so it runs in parallel with LLM streaming.
         // If synthesizeStream is available, use it to collect the full audio via
         // HTTP streaming (potentially faster than waiting for the full response).
@@ -705,8 +711,9 @@ export async function handleWebCallWebSocket(
                 triggeredToolName = name;
                 triggeredToolArgs = args;
               },
+              onUsage: (u) => { llmInputTokensTotal += u.inputTokens; llmOutputTokensTotal += u.outputTokens; },
             }
-          : undefined,
+          : { onUsage: (u: import("../types.js").LLMUsage) => { llmInputTokensTotal += u.inputTokens; llmOutputTokensTotal += u.outputTokens; } },
       );
       } catch (llmErr) {
         clearInterval(llmKeepalive);
@@ -1283,6 +1290,44 @@ export async function handleWebCallWebSocket(
           : durationSeconds;
         await db.update(agentsTable).set({ successfulCalls: newSuccessful, avgDurationSeconds: newAvg })
           .where(eq(agentsTable.id, agentId));
+
+        // ── Record per-service usage events (STT / LLM / TTS) ────────────────
+        const { recordUsage } = await import("../../services/usage/record-usage.js");
+        const turnCount = history.filter(t => t.role === "assistant").length;
+        const usageSuccess = turnCount > 0;
+        const usageError   = usageSuccess ? null : "no_turns_completed";
+        const safeDuration = Math.max(durationSeconds, 0);
+        void recordUsage({
+          service: "stt",
+          provider: ag.asrProvider,
+          model: ag.asrModel,
+          userId: ag.userId ?? null,
+          callId,
+          audioSeconds: safeDuration,
+          success: usageSuccess,
+          errorMessage: usageError,
+        });
+        void recordUsage({
+          service: "llm",
+          provider: ag.llmProvider,
+          model: ag.llmModel,
+          userId: ag.userId ?? null,
+          callId,
+          inputTokens:  llmInputTokensTotal  > 0 ? llmInputTokensTotal  : Math.max(turnCount, 1) * 200,
+          outputTokens: llmOutputTokensTotal > 0 ? llmOutputTokensTotal : Math.max(turnCount, 1) * 60,
+          success: usageSuccess,
+          errorMessage: usageError,
+        });
+        void recordUsage({
+          service: "tts",
+          provider: ag.ttsProvider,
+          model: ag.ttsModel,
+          userId: ag.userId ?? null,
+          callId,
+          characters: ttsCharactersTotal > 0 ? ttsCharactersTotal : Math.max(turnCount, 1) * 220,
+          success: usageSuccess,
+          errorMessage: usageError,
+        });
       }
 
       // Deduct platform fee from wallet.
