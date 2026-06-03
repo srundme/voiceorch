@@ -9,7 +9,7 @@ import { AmbientNoiseStream } from "../ambient.js";
 import { toReadableError } from "../utils.js";
 import { logger } from "../../lib/logger.js";
 import { RecordingBuffer } from "../recorder.js";
-import type { ConversationTurn, STTConfig } from "../types.js";
+import type { ConversationTurn, STTConfig, StreamSTT } from "../types.js";
 import { decryptKey } from "../../lib/crypto.js";
 import { loadCallerProfile, injectCallerMemory, updateCallerProfile, detectCallbackRequest } from "../callerMemory.js";
 import { GenderDetector } from "../genderDetector.js";
@@ -225,6 +225,12 @@ export async function handleWebCallWebSocket(
 
   const stt = createSTTAdapter(agent.asrProvider, sttKey, agent.asrModel, null, sttConfig);
   const llm = createLLMAdapter(agent.llmProvider, llmKey, agent.llmModel);
+
+  // ── Streaming STT (saaras:v3, Deepgram) ─────────────────────────────────
+  // Initialised below, after the call record exists and callId is known.
+  let streamSTT: StreamSTT | null = null;
+  // Transcript received from streaming STT WebSocket — consumed by process()
+  let streamingTranscriptPending: string | null = null;
   const agentLanguage = agent.language ?? null;
   const ttsExtraConfig = agent.ttsProvider === "sarvam"
     ? JSON.stringify({ language: agentLanguage ?? "en-IN" })
@@ -247,6 +253,41 @@ export async function handleWebCallWebSocket(
   const startedAt = new Date();
   const history: ConversationTurn[] = [];
   let closed      = false;
+
+  // ── Initialise streaming STT if the adapter supports it ──────────────────
+  // Streaming STT (Deepgram, Sarvam saaras:v3) eliminates the local VAD
+  // silence wait — transcripts fire as soon as the utterance ends, reducing
+  // STT latency from ~450ms+ to ~100–200ms.
+  if (stt.transcribeStream) {
+    try {
+      streamSTT = stt.transcribeStream(
+        (text, isFinal) => {
+          if (!isFinal || !text.trim() || closed) return;
+          // Barge-in: if agent is speaking, interrupt immediately
+          if (speaking) {
+            interrupted = true;
+            send({ type: "interrupted" });
+            sendStatus("thinking");
+            logger.info({ callId }, "Webcall: barge-in via streaming STT");
+          }
+          if (processing) {
+            // A turn is already running — queue the transcript for after it finishes
+            streamingTranscriptPending = text;
+            return;
+          }
+          streamingTranscriptPending = text;
+          void process();
+        },
+        () => {
+          logger.info({ callId }, "Webcall: streaming STT WebSocket closed");
+        },
+      );
+      logger.info({ callId, provider: agent.asrProvider }, "Webcall: streaming STT initialised");
+    } catch (streamInitErr) {
+      logger.warn({ callId, err: streamInitErr }, "Webcall: streaming STT init failed — falling back to batch");
+      streamSTT = null;
+    }
+  }
 
   // ── Webcall caller memory ─────────────────────────────────────────────────
   // Use "webcall:<userId>" as a stable identifier since there's no phone number.
@@ -399,29 +440,38 @@ export async function handleWebCallWebSocket(
 
   // ── Pipeline ─────────────────────────────────────────────────────────────
   async function process() {
-    if (processing || audioChunks.length === 0) return;
-    const pcm = Buffer.concat(audioChunks.splice(0));
-    if (pcm.length < MIN_PCM_BYTES) return;
+    // Streaming STT path: a transcript is waiting — no audio accumulation needed
+    const streamTranscript = streamingTranscriptPending;
+    streamingTranscriptPending = null;
+
+    if (processing || (!streamTranscript && audioChunks.length === 0)) return;
 
     processing  = true;
     interrupted = false;
     sendStatus("thinking");
 
     try {
-      // 1. STT
+      // 1. STT — use streaming transcript if available, otherwise batch-transcribe
       let userText: string | null | undefined;
-      try {
-        userText = await stt.transcribe(pcm, 16000);
-      } catch (sttErr) {
-        const reason = toReadableError(sttErr, "STT error");
-        logger.error({ callId, err: sttErr }, reason);
-        send({ type: "error", message: reason });
-        speaking = false;
-        speakingEndedAt = Date.now();
-        processing = false;
-        if (!closed) void hangup("error", reason);
-        return;
+      if (streamTranscript) {
+        userText = streamTranscript;
+      } else {
+        const pcm = Buffer.concat(audioChunks.splice(0));
+        if (pcm.length < MIN_PCM_BYTES) { processing = false; return; }
+        try {
+          userText = await stt.transcribe(pcm, 16000);
+        } catch (sttErr) {
+          const reason = toReadableError(sttErr, "STT error");
+          logger.error({ callId, err: sttErr }, reason);
+          send({ type: "error", message: reason });
+          speaking = false;
+          speakingEndedAt = Date.now();
+          processing = false;
+          if (!closed) void hangup("error", reason);
+          return;
+        }
       }
+
       if (!userText?.trim()) { processing = false; return; }
 
       send({ type: "transcript", speaker: "user", text: userText });
@@ -1165,6 +1215,7 @@ export async function handleWebCallWebSocket(
   async function hangup(reason = "normal", errorDetail?: unknown) {
     if (closed) return;
     closed = true;
+    if (streamSTT) { try { streamSTT.close(); } catch { /* best-effort */ } streamSTT = null; }
     if (ambientInterval) { clearInterval(ambientInterval); ambientInterval = null; }
     clearTimeout(maxTimer);
     clearSilenceTimer();
@@ -1390,7 +1441,14 @@ export async function handleWebCallWebSocket(
     }
     bargeInFrames = 0; // agent not speaking — reset
 
-    // Normal VAD (agent silent)
+    // Streaming STT path: send all audio directly to the provider WebSocket —
+    // no local VAD accumulation needed (provider handles endpointing server-side).
+    if (streamSTT) {
+      streamSTT.sendAudio(Buffer.from(data));
+      return;
+    }
+
+    // Batch STT path: local VAD accumulates speech, flushes after silence
     if (rms > SPEECH_RMS_THRESHOLD) {
       const chunk = Buffer.from(data);
       audioChunks.push(chunk);

@@ -1,0 +1,112 @@
+Fix two critical issues in my voice scheduling agent 
+built on VoiceOrch/SnapServe with Cal.com API:
+
+=== ISSUE 1: GOOGLE MEET LINK NOT GENERATING ===
+
+Bookings are confirmed but no Google Meet link is created.
+
+STEP 1 — Check the book_appointment API payload.
+Add these fields to every booking POST request:
+
+Option A (Cal.com v1):
+{
+  "location": "integrations:google:meet"
+}
+
+Option B (Cal.com v2):
+{
+  "attendee": { ... },
+  "meetingUrl": "integrations:google:meet",
+  "conferencing": {
+    "type": "google_meet",
+    "enabled": true
+  }
+}
+
+Try Option A first. Log the raw API response and check 
+if the response includes a "videoCallData" or 
+"meetingUrl" field. If it does not appear, try Option B.
+
+STEP 2 — Check OAuth scopes for gopinwrk@gmail.com.
+The Google account connected in SnapServe must have 
+these scopes authorized:
+  https://www.googleapis.com/auth/calendar
+  https://www.googleapis.com/auth/calendar.events
+
+If the token is missing these scopes, Meet link 
+generation silently fails even though the booking 
+succeeds. Re-authorize the Google connection in 
+SnapServe → Scheduling → Advanced → Add to calendar.
+
+STEP 3 — Log and print the full raw API response 
+from book_appointment (not just the parsed fields).
+Check specifically for:
+  - "videoCallData.url" → this is the Meet link
+  - "references[].type === google_calendar" → confirms 
+    calendar event was created
+  - "calendarEventExternalId" → calendar event ID
+
+If "videoCallData" is missing from the response, the 
+issue is in the API payload (Step 1).
+If "videoCallData" exists but no link appears in email, 
+the issue is in how the confirmation email is built.
+
+STEP 4 — Pass the Meet link into the confirmation.
+After booking, extract:
+  const meetLink = response.videoCallData?.url 
+                ?? response.meetingUrl 
+                ?? null;
+Include meetLink in the booking confirmation returned 
+to the agent so it can tell the caller the link.
+
+=== ISSUE 2: APPOINTMENT NOT APPEARING IN GOOGLE CALENDAR ===
+
+Booking is confirmed via email but Google Calendar 
+shows no event.
+
+STEP 1 — Verify the correct calendar account is used.
+In SnapServe → Scheduling → Advanced → Add to calendar,
+confirm the selected account is gopinwrk@gmail.com 
+and NOT hpgopikrish@gmail.com. The event may be 
+created on the wrong account.
+
+STEP 2 — Check the API response for calendar reference.
+In the raw book_appointment response, look for:
+  "references": [{ "type": "google_calendar", 
+                   "externalId": "..." }]
+If this field is missing, the calendar event was 
+never created — the OAuth token needs re-authorization 
+(see Issue 1 Step 2).
+If externalId exists, the event was created — log in 
+to gopinwrk@gmail.com Google Calendar and search by 
+the externalId to find which calendar it landed on.
+
+STEP 3 — Check timezone on the calendar event.
+If the event is created in UTC, it may appear on the 
+wrong date in the calendar. Confirm the API payload 
+always sends:
+  "timeZone": "Asia/Kolkata"
+so the event appears at the correct local time in 
+Google Calendar.
+
+STEP 4 — Re-authorize Google OAuth with full scopes.
+Go to SnapServe → Settings → Connected accounts → 
+Google → Disconnect → Reconnect.
+During reconnect, make sure BOTH of these are granted:
+  https://www.googleapis.com/auth/calendar
+  https://www.googleapis.com/auth/calendar.events
+Without calendar.events scope, the API cannot write 
+events to Google Calendar.
+
+=== AFTER FIXING, VERIFY WITH THIS CHECKLIST ===
+
+[ ] Raw API response from book_appointment contains 
+    "videoCallData.url" with a meet.google.com link
+[ ] Confirmation email includes the Google Meet link
+[ ] Agent reads the Meet link to the caller after booking
+[ ] Google Calendar on gopinwrk@gmail.com shows the 
+    new appointment at the correct IST time
+[ ] Calendar event has a Google Meet link attached
+[ ] Cancelling a booking also removes the calendar event
+[ ] Rescheduling updates the same calendar event, not 
+    creates a new one
