@@ -484,7 +484,41 @@ export async function executeNativeReschedule(
       return `error: no active booking found with reference ${bookingId}`;
     }
 
-    const [eventType] = await db.select().from(eventTypesTable).where(eq(eventTypesTable.id, existing.eventTypeId));
+    // Determine target event type and calendar.
+    // When the tool config specifies calendarId/eventTypeId, use them (with ownership validation);
+    // otherwise fall back to the original booking's calendar/event type.
+    // Rules:
+    //   - eventTypeId only → derive targetCalendarId from that event type's calendar
+    //   - calendarId only  → override targetCalendarId; keep original eventTypeId
+    //   - both             → eventType must belong to the given calendar (reject if mismatched)
+    let targetEventTypeId = existing.eventTypeId;
+    let targetCalendarId = existing.calendarId;
+
+    if (tool.eventTypeId) {
+      const [configEt] = await db
+        .select({ id: eventTypesTable.id, calendarId: eventTypesTable.calendarId, userId: eventTypesTable.userId })
+        .from(eventTypesTable)
+        .where(eq(eventTypesTable.id, tool.eventTypeId));
+      if (!configEt || (authorizedUserId && configEt.userId !== authorizedUserId)) {
+        return "error: configured event type not found or not authorized";
+      }
+      if (tool.calendarId && tool.calendarId !== configEt.calendarId) {
+        return "error: configured calendar and event type do not belong to the same calendar";
+      }
+      targetEventTypeId = configEt.id;
+      targetCalendarId = configEt.calendarId;
+    } else if (tool.calendarId) {
+      const [configCal] = await db
+        .select({ id: schedulingCalendarsTable.id, userId: schedulingCalendarsTable.userId })
+        .from(schedulingCalendarsTable)
+        .where(eq(schedulingCalendarsTable.id, tool.calendarId));
+      if (!configCal || (authorizedUserId && configCal.userId !== authorizedUserId)) {
+        return "error: configured calendar not found or not authorized";
+      }
+      targetCalendarId = configCal.id;
+    }
+
+    const [eventType] = await db.select().from(eventTypesTable).where(eq(eventTypesTable.id, targetEventTypeId));
     if (!eventType) {
       return "error: appointment type not found for this booking";
     }
@@ -492,13 +526,14 @@ export async function executeNativeReschedule(
     const [calendar] = await db
       .select()
       .from(schedulingCalendarsTable)
-      .where(eq(schedulingCalendarsTable.id, existing.calendarId));
+      .where(eq(schedulingCalendarsTable.id, targetCalendarId));
     if (!calendar || !calendar.isActive) {
       return "error: calendar is unavailable";
     }
 
+    const resolvedTimezone = tool.timezone || calendar.timezone;
     const { searchStart, minSlotStart, timeFilter } = preferredRaw
-      ? parsePreferredDate(preferredRaw, calendar.timezone)
+      ? parsePreferredDate(preferredRaw, resolvedTimezone)
       : { searchStart: new Date(), minSlotStart: undefined, timeFilter: undefined };
     if (preferredRaw) {
       logger.info({ callId, preferredRaw, searchStart, minSlotStart }, "Native reschedule: preferred date resolved");

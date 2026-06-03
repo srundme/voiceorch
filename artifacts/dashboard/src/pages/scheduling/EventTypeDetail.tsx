@@ -678,16 +678,47 @@ export default function EventTypeDetailPage() {
                       disabled={gcalLoading}
                     />
                   </div>
-                  {form.enableGoogleMeet && googleConnections.length === 0 && (
-                    <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
-                      <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                      <span>
-                        No Google account is connected. Meet links can't be generated until you connect a Google account
-                        above and link it to <strong>{calendar?.name ?? "this calendar"}</strong>. Bookings will still go through —
-                        just without a Meet link.
-                      </span>
-                    </div>
-                  )}
+                  {form.enableGoogleMeet && (() => {
+                    const activeConnectionId = calendar ? (calendarLinks[calendar.id] ?? null) : null;
+                    const activeConnection = googleConnections.find(c => c.id === activeConnectionId);
+                    const fallbackConnection = googleConnections[0];
+                    const effectiveConnection = activeConnection ?? fallbackConnection ?? null;
+                    if (googleConnections.length === 0) {
+                      return (
+                        <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+                          <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                          <span>
+                            No Google account is connected. Meet links can't be generated until you connect a Google account
+                            above and link it to <strong>{calendar?.name ?? "this calendar"}</strong>. Bookings will still go through —
+                            just without a Meet link.
+                          </span>
+                        </div>
+                      );
+                    }
+                    if (!activeConnectionId && fallbackConnection) {
+                      return (
+                        <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+                          <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                          <span>
+                            No Google account is explicitly assigned to <strong>{calendar?.name ?? "this calendar"}</strong>.
+                            Meet links will be generated using the default account (<strong>{fallbackConnection.email}</strong>).
+                            Assign a specific account above to ensure the Meet link always comes from the correct Google account.
+                          </span>
+                        </div>
+                      );
+                    }
+                    if (effectiveConnection) {
+                      return (
+                        <div className="mt-3 flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-foreground" />
+                          <span>
+                            Calendar events and Meet links will both be created using <strong className="text-foreground">{effectiveConnection.email}</strong> — the Google account assigned to <strong className="text-foreground">{calendar?.name ?? "this calendar"}</strong>.
+                          </span>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
                 </div>
               </div>
 

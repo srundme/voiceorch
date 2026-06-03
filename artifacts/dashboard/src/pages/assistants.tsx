@@ -764,6 +764,9 @@ type AgentToolLocal =
       type: "native_reschedule";
       name: string;
       description: string;
+      calendarId?: number;
+      eventTypeId?: number;
+      timezone?: string;
     }
   | {
       type: "native_cancel";
@@ -1709,7 +1712,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                   { label: "Cal.com",          icon: Clock,          onClick: () => { setAgentTools(prev => [...prev, { type: "cal_com" as const, name: "book_appointment", description: "Book an appointment on Cal.com when the caller wants to schedule.", apiKey: "", eventTypeId: 0, timezone: "UTC" }]); setDirty(true); } },
                   { label: "Book Appointment", icon: CalendarPlus,   onClick: () => setBookingModal({ editIdx: null, calendarId: null, eventTypeId: null, timezone: "UTC", taskName: "book_appointment", description: "Book an appointment when the caller wants to schedule a meeting.", preToolMessage: "" }) },
                   { label: "Availability",     icon: CalendarCheck,  onClick: () => { setAgentTools(prev => [...prev, { type: "native_check_availability" as const, name: "check_availability", description: "Check available slots when the caller asks what times are open.", eventTypeId: 0 }]); setDirty(true); } },
-                  { label: "Reschedule",       icon: CalendarClock,  onClick: () => { setAgentTools(prev => [...prev, { type: "native_reschedule" as const, name: "reschedule_appointment", description: "Reschedule an existing booking when the caller provides their booking reference." }]); setDirty(true); } },
+                  { label: "Reschedule",       icon: CalendarClock,  onClick: () => { setAgentTools(prev => [...prev, { type: "native_reschedule" as const, name: "reschedule_appointment", description: "Reschedule an existing booking when the caller provides their booking reference.", timezone: "UTC" }]); setDirty(true); } },
                   { label: "Cancel Booking",   icon: CalendarX,      onClick: () => { setAgentTools(prev => [...prev, { type: "native_cancel" as const, name: "cancel_appointment", description: "Cancel an existing booking when the caller provides their booking reference." }]); setDirty(true); } },
                   { label: "Custom Function",  icon: Wrench,         onClick: () => { setAgentTools(prev => [...prev, { type: "webhook" as const, name: "custom_action", description: "Invoke this when the caller requests a specific action.", url: "", method: "POST" as const }]); setDirty(true); } },
                 ] as { label: string; icon: React.ComponentType<{ className?: string }>; onClick: () => void }[]).map(btn => (
@@ -1798,6 +1801,31 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                           <SelectContent>{(eventTypes ?? []).filter(et => !tool.calendarId || et.calendarId === tool.calendarId).map(et => <SelectItem key={et.id} value={String(et.id)}>{et.name} ({et.durationMinutes} min)</SelectItem>)}</SelectContent>
                         </Select>
                       </div>
+                    </div>
+                  )}
+                  {tool.type === "native_reschedule" && (
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1"><p className="text-xs text-muted-foreground">Calendar</p>
+                          <Select value={tool.calendarId ? String(tool.calendarId) : ""} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, calendarId: parseInt(v) || undefined, eventTypeId: undefined }; setAgentTools(n); setDirty(true); }}>
+                            <SelectTrigger className="bg-card border-border text-foreground text-xs h-8"><SelectValue placeholder="Original booking's calendar" /></SelectTrigger>
+                            <SelectContent>{(calendars ?? []).map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}{(calendars ?? []).length === 0 && <SelectItem value="__none" disabled>No calendars — create one in Scheduling</SelectItem>}</SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1"><p className="text-xs text-muted-foreground">Event Type</p>
+                          <Select value={tool.eventTypeId ? String(tool.eventTypeId) : ""} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, eventTypeId: parseInt(v) || undefined }; setAgentTools(n); setDirty(true); }} disabled={!tool.calendarId}>
+                            <SelectTrigger className="bg-card border-border text-foreground text-xs h-8"><SelectValue placeholder={tool.calendarId ? "Select event type…" : "Pick a calendar first"} /></SelectTrigger>
+                            <SelectContent>{(eventTypes ?? []).filter(et => !tool.calendarId || et.calendarId === tool.calendarId).map(et => <SelectItem key={et.id} value={String(et.id)}>{et.name} ({et.durationMinutes} min)</SelectItem>)}</SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="space-y-1"><p className="text-xs text-muted-foreground">Timezone</p>
+                        <Select value={tool.timezone ?? "UTC"} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, timezone: v }; setAgentTools(n); setDirty(true); }}>
+                          <SelectTrigger className="bg-card border-border text-foreground text-xs h-8"><SelectValue /></SelectTrigger>
+                          <SelectContent>{["UTC","America/New_York","America/Chicago","America/Denver","America/Los_Angeles","Europe/London","Europe/Paris","Asia/Kolkata","Asia/Singapore","Asia/Tokyo","Australia/Sydney"].map(tz => <SelectItem key={tz} value={tz}>{tz}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">Leave calendar/event type blank to reschedule within the original booking's calendar and event type.</p>
                     </div>
                   )}
                   {tool.type === "native_cancel" && (

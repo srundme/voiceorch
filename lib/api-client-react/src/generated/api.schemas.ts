@@ -140,11 +140,11 @@ export interface AgentTool {
   goodbyeMessage?: string;
   /** (cal_com) Cal.com API key */
   apiKey?: string;
-  /** (cal_com / native_booking / native_check_availability) Event type ID */
+  /** (cal_com / native_booking / native_reschedule / native_check_availability) Event type ID; for native_reschedule this is the target event type the rescheduled booking will be placed into */
   eventTypeId?: number;
-  /** (native_booking / native_check_availability / native_cancel) Calendar the event type belongs to — UI hint for cascading selects */
+  /** (native_booking / native_reschedule / native_check_availability / native_cancel) Calendar the event type belongs to — UI hint for cascading selects; for native_reschedule this is the target calendar */
   calendarId?: number;
-  /** (cal_com / send_sms / native_booking / native_check_availability) Default timezone for bookings (e.g. America/New_York) */
+  /** (cal_com / send_sms / native_booking / native_reschedule / native_check_availability) Default timezone for bookings (e.g. America/New_York) */
   timezone?: string;
   /** (native_booking) Friendly task name shown in the agent UI; mirrors `name` by default */
   taskName?: string;

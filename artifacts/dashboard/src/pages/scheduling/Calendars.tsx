@@ -377,30 +377,43 @@ function CalendarCard({
             </div>
 
             {/* Google account assignment */}
-            {googleConnections.length > 0 && (
-              <div className="flex items-center gap-2 mt-2">
-                <Video className="h-3 w-3 text-muted-foreground shrink-0" />
-                <Select
-                  value={linkedConnectionId ?? "__none__"}
-                  onValueChange={handleGcalChange}
-                  disabled={linkingGcal}
-                >
-                  <SelectTrigger className="h-6 text-xs border-dashed w-auto min-w-[200px] gap-1 px-2">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__" className="text-xs text-muted-foreground">
-                      — Use default Google account
-                    </SelectItem>
-                    {googleConnections.map(c => (
-                      <SelectItem key={c.id} value={c.id} className="text-xs">
-                        {c.email}
+            <div className="flex items-start gap-2 mt-2">
+              <Video className="h-3 w-3 text-muted-foreground shrink-0 mt-1" />
+              {googleConnections.length === 0 ? (
+                <p className="text-[10px] text-muted-foreground leading-tight">
+                  No Google account connected — calendar events won't sync and Meet links won't be generated.{" "}
+                  <span className="text-foreground">Connect one in the panel above.</span>
+                </p>
+              ) : (
+                <div className="space-y-0.5 flex-1 min-w-0">
+                  <Select
+                    value={linkedConnectionId ?? "__none__"}
+                    onValueChange={handleGcalChange}
+                    disabled={linkingGcal}
+                  >
+                    <SelectTrigger className="h-6 text-xs border-dashed w-auto min-w-[220px] gap-1 px-2">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__" className="text-xs text-muted-foreground">
+                        — Use first connected account (default)
                       </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+                      {googleConnections.map(c => (
+                        <SelectItem key={c.id} value={c.id} className="text-xs">
+                          {c.email}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[10px] text-muted-foreground leading-tight">
+                    {linkedConnectionId
+                      ? <>Calendar events and Meet links both use <strong className="text-foreground">{googleConnections.find(c => c.id === linkedConnectionId)?.email ?? "this account"}</strong></>
+                      : <>No account assigned — using default: <strong className="text-foreground">{googleConnections[0]?.email ?? "first connected account"}</strong></>
+                    }
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
 
           <DropdownMenu>

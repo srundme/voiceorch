@@ -60,6 +60,12 @@ export interface NativeRescheduleTool {
   type: "native_reschedule";
   name: string;
   description: string;
+  /** Optional: target calendar id for the rescheduled booking (falls back to original booking's calendar when absent) */
+  calendarId?: number;
+  /** Optional: target event type id for the rescheduled booking (falls back to original booking's event type when absent) */
+  eventTypeId?: number;
+  /** Optional: timezone used when resolving preferred slot times */
+  timezone?: string;
 }
 
 export interface NativeCancelTool {
