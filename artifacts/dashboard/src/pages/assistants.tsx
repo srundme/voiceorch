@@ -1390,7 +1390,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                     <Select value={llmProvider} onValueChange={v => { mark(setLlmProvider)(v); setLlmModel(LLM_MODELS[v]?.[0]?.value ?? ""); }}>
                       <SelectTrigger className="h-8 text-xs border"><SelectValue /></SelectTrigger>
                       <SelectContent className="bg-card border-border">
-                        {LLM_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}
+                        {LLM_PROVIDERS.map(p => <SelectItem key={`llm-${p.value}`} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
@@ -1415,7 +1415,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                     <Select value={ttsProvider} onValueChange={v => { mark(setTtsProvider)(v); setTtsModel(v === "cartesia" ? "sonic-2" : (TTS_MODELS[v]?.[0]?.value ?? "")); setTtsVoice(""); }}>
                       <SelectTrigger className="h-8 text-xs border"><SelectValue /></SelectTrigger>
                       <SelectContent className="bg-card border-border">
-                        {TTS_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}
+                        {TTS_PROVIDERS.map(p => <SelectItem key={`tts-${p.value}`} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
@@ -1588,7 +1588,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                     <p className="text-xs text-muted-foreground mb-1">Provider</p>
                     <Select value={asrProvider} onValueChange={v => { mark(setAsrProvider)(v); setAsrModel(ASR_MODELS[v]?.[0]?.value ?? ""); }}>
                       <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
-                      <SelectContent className="bg-card border-border">{ASR_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}</SelectContent>
+                      <SelectContent className="bg-card border-border">{ASR_PROVIDERS.map(p => <SelectItem key={`asr-${p.value}`} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   {asrModelOptions.length > 0 && (
@@ -1632,7 +1632,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                     <p className="text-xs text-muted-foreground mb-1">Provider</p>
                     <Select value={ttsProvider} onValueChange={v => { mark(setTtsProvider)(v); setTtsModel(v === "cartesia" ? "sonic-2" : (TTS_MODELS[v]?.[0]?.value ?? "")); setTtsVoice(""); }}>
                       <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
-                      <SelectContent className="bg-card border-border">{TTS_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}</SelectContent>
+                      <SelectContent className="bg-card border-border">{TTS_PROVIDERS.map(p => <SelectItem key={`tts-${p.value}`} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div>
@@ -1984,7 +1984,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                       <div><p className="text-xs text-muted-foreground mb-1">Provider</p>
                         <Select value={asrProvider} onValueChange={v => { mark(setAsrProvider)(v); setAsrModel(ASR_MODELS[v]?.[0]?.value ?? ""); }}>
                           <SelectTrigger className="h-7 text-xs bg-muted border-border text-foreground"><SelectValue /></SelectTrigger>
-                          <SelectContent className="bg-card border-border">{ASR_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}</SelectContent>
+                          <SelectContent className="bg-card border-border">{ASR_PROVIDERS.map(p => <SelectItem key={`asr-${p.value}`} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}</SelectContent>
                         </Select>
                       </div>
                       {asrModelOptions.length > 0 && <div><p className="text-xs text-muted-foreground mb-1">Model</p>
@@ -2001,7 +2001,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                       <div><p className="text-xs text-muted-foreground mb-1">Provider</p>
                         <Select value={llmProvider} onValueChange={v => { mark(setLlmProvider)(v); setLlmModel(LLM_MODELS[v]?.[0]?.value ?? ""); }}>
                           <SelectTrigger className="h-7 text-xs bg-muted border-border text-foreground"><SelectValue /></SelectTrigger>
-                          <SelectContent className="bg-card border-border">{LLM_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}</SelectContent>
+                          <SelectContent className="bg-card border-border">{LLM_PROVIDERS.map(p => <SelectItem key={`llm-${p.value}`} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}</SelectContent>
                         </Select>
                       </div>
                       {llmModelOptions.length > 0 && <div><p className="text-xs text-muted-foreground mb-1">Model</p>
@@ -2018,7 +2018,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                       <div><p className="text-xs text-muted-foreground mb-1">Provider</p>
                         <Select value={ttsProvider} onValueChange={v => { mark(setTtsProvider)(v); setTtsModel(v === "cartesia" ? "sonic-2" : (TTS_MODELS[v]?.[0]?.value ?? "")); setTtsVoice(""); }}>
                           <SelectTrigger className="h-7 text-xs bg-muted border-border text-foreground"><SelectValue /></SelectTrigger>
-                          <SelectContent className="bg-card border-border">{TTS_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}</SelectContent>
+                          <SelectContent className="bg-card border-border">{TTS_PROVIDERS.map(p => <SelectItem key={`tts-${p.value}`} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}</SelectContent>
                         </Select>
                       </div>
                       <div><p className="text-xs text-muted-foreground mb-1">{ttsProvider === "cartesia" ? "Model" : "Voice / Model"}</p>
@@ -2648,8 +2648,8 @@ export default function AssistantsPage() {
                     </span>
                   </div>
                   <div className="flex flex-wrap gap-1 ml-3.5">
-                    {tags.map(t => (
-                      <span key={t} className="text-[10px] px-1.5 py-0.5 rounded-md bg-elevated border border-border/60 text-muted-foreground/60">
+                    {tags.map((t, i) => (
+                      <span key={i} className="text-[10px] px-1.5 py-0.5 rounded-md bg-elevated border border-border/60 text-muted-foreground/60">
                         {t}
                       </span>
                     ))}

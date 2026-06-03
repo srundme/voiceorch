@@ -674,6 +674,14 @@ export async function handleWebCallWebSocket(
       triggeredToolName = null;
       triggeredToolArgs = {};
 
+      // ── Keepalive ping — prevents Replit proxy from closing the WS while the
+      // LLM is "thinking" (some providers, e.g. sarvam-30b, have 15–20 s TTFT).
+      // Without this the proxy kills the connection before the first token arrives.
+      const llmKeepalive = setInterval(() => {
+        if (closed || ws.readyState !== ws.OPEN) return;
+        try { ws.ping(); } catch { /* ignore */ }
+      }, 8_000);
+
       try {
        await llm.chat(
         history,
@@ -701,6 +709,7 @@ export async function handleWebCallWebSocket(
           : undefined,
       );
       } catch (llmErr) {
+        clearInterval(llmKeepalive);
         const reason = toReadableError(llmErr, "LLM error");
         logger.error({ callId, err: llmErr }, reason);
         send({ type: "error", message: reason });
@@ -710,6 +719,7 @@ export async function handleWebCallWebSocket(
         if (!closed) void hangup("error", reason);
         return;
       }
+      clearInterval(llmKeepalive);
 
       // The LLM token stream occasionally ends a few words early while fullReply
       // (set by the onComplete callback) has the complete text.  Re-run
@@ -1390,7 +1400,7 @@ export async function handleWebCallWebSocket(
 
     send({ type: "ended", durationSeconds, reason });
     ws.close();
-    logger.info({ callId, durationSeconds }, "WebCall ended");
+    logger.info({ callId, durationSeconds, reason }, "WebCall ended");
   }
 
   // ── Message handler ───────────────────────────────────────────────────────

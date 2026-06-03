@@ -779,7 +779,7 @@ export default function AgentNew() {
                         <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl><SelectTrigger><SelectValue placeholder="Select ASR" /></SelectTrigger></FormControl>
                           <SelectContent>
-                            {ASR_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+                            {ASR_PROVIDERS.map(p => <SelectItem key={`asr-${p.value}`} value={p.value}>{p.label}</SelectItem>)}
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -812,7 +812,7 @@ export default function AgentNew() {
                         <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl><SelectTrigger><SelectValue placeholder="Select LLM" /></SelectTrigger></FormControl>
                           <SelectContent>
-                            {LLM_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+                            {LLM_PROVIDERS.map(p => <SelectItem key={`llm-${p.value}`} value={p.value}>{p.label}</SelectItem>)}
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -845,7 +845,7 @@ export default function AgentNew() {
                         <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl><SelectTrigger><SelectValue placeholder="Select TTS" /></SelectTrigger></FormControl>
                           <SelectContent>
-                            {TTS_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+                            {TTS_PROVIDERS.map(p => <SelectItem key={`tts-${p.value}`} value={p.value}>{p.label}</SelectItem>)}
                           </SelectContent>
                         </Select>
                         <FormMessage />
