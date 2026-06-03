@@ -12,7 +12,14 @@ async function getSetting(key: string): Promise<string | null> {
     .select()
     .from(platformSettingsTable)
     .where(eq(platformSettingsTable.key, key));
-  return row?.value ?? null;
+  const dbVal = row?.value ?? null;
+  if (dbVal) return dbVal;
+  // fallback to env var for managed qwen key
+  if (key === "managed_qwen_key") {
+    const envVal = (process.env["GROQ_API_KEY"] ?? "").trim();
+    return envVal || null;
+  }
+  return null;
 }
 
 const SYSTEM_PROMPT = `You are Orcha, a friendly AI voice assistant built into the VoiceOrch platform — an AI voice agent orchestration SaaS. You help users navigate and use the platform through natural voice conversation.
@@ -89,35 +96,37 @@ router.post("/assistant/chat", async (req: Request, res: Response): Promise<void
     }
   }
 
-  // ── Try Gemini ──────────────────────────────────────────────────────────────
-  const geminiKey = await getSetting("managed_gemini_key");
-  if (geminiKey) {
+  // ── Try Qwen via Groq ───────────────────────────────────────────────────────
+  const qwenKey = await getSetting("managed_qwen_key");
+  if (qwenKey) {
     try {
-      const contents = messages.map(m => ({
-        role: m.role === "user" ? "user" : "model",
-        parts: [{ text: m.content }],
-      }));
-
-      const geminiRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
+      const qwenRes = await fetch(
+        "https://api.groq.com/openai/v1/chat/completions",
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Authorization": `Bearer ${qwenKey}`,
+            "Content-Type": "application/json",
+          },
           body: JSON.stringify({
-            system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-            contents,
-            generationConfig: { temperature: 0.75, maxOutputTokens: 256 },
+            model: "qwen/qwen3-32b",
+            temperature: 0.75,
+            max_tokens: 256,
+            messages: [
+              { role: "system", content: SYSTEM_PROMPT },
+              ...messages.map(m => ({ role: m.role, content: m.content })),
+            ],
           }),
         },
       );
 
-      if (geminiRes.ok) {
-        const data = await geminiRes.json() as any;
-        const raw: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+      if (qwenRes.ok) {
+        const data = await qwenRes.json() as any;
+        const raw: string = data?.choices?.[0]?.message?.content ?? "";
         if (raw) { res.json(parseResponse(raw)); return; }
       }
     } catch (err) {
-      logger.warn({ err }, "assistant: Gemini failed, trying OpenAI");
+      logger.warn({ err }, "assistant: Qwen failed, trying OpenAI");
     }
   }
 

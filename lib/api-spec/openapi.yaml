@@ -3069,7 +3069,7 @@ components:
           description: Automatically pick a backup STT provider if the primary fails
         llmProvider:
           type: string
-          description: "LLM provider: openai, deepseek, anthropic, mistral, cohere"
+          description: "LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen"
         llmModel:
           type: ["string", "null"]
         ttsProvider:
@@ -3213,6 +3213,7 @@ components:
           type: boolean
         llmProvider:
           type: string
+          description: "LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen"
         llmModel:
           type: string
         ttsProvider:
@@ -3273,7 +3274,7 @@ components:
         wizardInputs:
           type: object
           additionalProperties: true
-          description: "Raw wizard answers passed from the dashboard. May include the ordered micro-question/answer pairs (microAnswers) and any uploaded job description content (jdFileContent, jdFileName). When present, the server generates the agent's system prompt server-side using the active admin master template (Gemini) and stores the result. Never returned in responses."
+          description: "Raw wizard answers passed from the dashboard. May include the ordered micro-question/answer pairs (microAnswers) and any uploaded job description content (jdFileContent, jdFileName). When present, the server generates the agent's system prompt server-side using the active admin master template (Qwen) and stores the result. Never returned in responses."
 
     AgentUpdate:
       type: object
@@ -3312,6 +3313,7 @@ components:
           type: boolean
         llmProvider:
           type: string
+          description: "LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen"
         llmModel:
           type: string
         ttsProvider:

@@ -55,7 +55,7 @@ const SUPPORTED_PROVIDERS: Record<string, ProviderDef[]> = {
   llm: [
     { label: "OpenAI", value: "openai", apiKeyLabel: "API Key", apiKeyPlaceholder: "sk-…", docsUrl: "https://platform.openai.com/api-keys", docsLabel: "platform.openai.com" },
     { label: "Anthropic", value: "anthropic", apiKeyLabel: "API Key", apiKeyPlaceholder: "sk-ant-…", docsUrl: "https://console.anthropic.com", docsLabel: "console.anthropic.com" },
-    { label: "Google Gemini", value: "google", apiKeyLabel: "API Key", apiKeyPlaceholder: "AIza…", docsUrl: "https://aistudio.google.com/app/apikey", docsLabel: "aistudio.google.com" },
+    { label: "Qwen (via Groq)", value: "qwen", apiKeyLabel: "API Key", apiKeyPlaceholder: "gsk_…", docsUrl: "https://console.groq.com/keys", docsLabel: "console.groq.com" },
     { label: "Groq", value: "groq", apiKeyLabel: "API Key", apiKeyPlaceholder: "gsk_…", docsUrl: "https://console.groq.com/keys", docsLabel: "console.groq.com" },
     { label: "DeepSeek", value: "deepseek", apiKeyLabel: "API Key", apiKeyPlaceholder: "sk-…", docsUrl: "https://platform.deepseek.com", docsLabel: "platform.deepseek.com" },
     { label: "Mistral", value: "mistral", apiKeyLabel: "API Key", apiKeyPlaceholder: "…", docsUrl: "https://console.mistral.ai", docsLabel: "console.mistral.ai" },

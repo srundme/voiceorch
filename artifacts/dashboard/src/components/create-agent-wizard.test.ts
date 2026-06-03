@@ -110,7 +110,7 @@ describe("buildCreateAgentPayload", () => {
     expect(getModelError(englishPayload.llmProvider, englishPayload.llmModel, LLM_MODELS)).toBeNull();
   });
 
-  it("managed stack for Indic — sarvam+gemini combination is valid", () => {
+  it("managed stack for Indic — sarvam+qwen combination is valid", () => {
     const state = { ...BASE_MANAGED, additionalLanguages: ["hindi"] };
     const payload = buildCreateAgentPayload(state) as any;
     expect(getModelError(payload.asrProvider, payload.asrModel, ASR_MODELS)).toBeNull();
@@ -134,14 +134,14 @@ describe("getModelError — provider/model validation utility", () => {
 
   it("returns null for a valid LLM provider+model pair", () => {
     expect(getModelError("openai", "gpt-4o", LLM_MODELS)).toBeNull();
-    expect(getModelError("google", "gemini-2.5-flash", LLM_MODELS)).toBeNull();
+    expect(getModelError("qwen", "qwen/qwen3-32b", LLM_MODELS)).toBeNull();
     expect(getModelError("groq", "llama-3.3-70b-versatile", LLM_MODELS)).toBeNull();
     expect(getModelError("sarvam", "sarvam-m", LLM_MODELS)).toBeNull();
   });
 
   it("returns an error string for a mismatched LLM provider+model", () => {
-    expect(getModelError("openai", "gemini-2.5-flash", LLM_MODELS)).not.toBeNull();
-    expect(getModelError("google", "gpt-4o", LLM_MODELS)).not.toBeNull();
+    expect(getModelError("openai", "qwen/qwen3-32b", LLM_MODELS)).not.toBeNull();
+    expect(getModelError("qwen", "gpt-4o", LLM_MODELS)).not.toBeNull();
     expect(getModelError("sarvam", "llama-3.3-70b-versatile", LLM_MODELS)).not.toBeNull();
   });
 

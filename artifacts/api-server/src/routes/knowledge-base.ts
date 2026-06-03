@@ -3,20 +3,18 @@ import { eq, and, sql } from "drizzle-orm";
 import { db, knowledgeSourcesTable, knowledgeEntriesTable, platformSettingsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logger } from "../lib/logger.js";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
 const router: IRouter = Router();
 
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
 
-/** Fetch the managed Gemini API key (platform_settings → env fallback) */
-async function getGeminiKey(): Promise<string | null> {
+/** Fetch the managed Qwen API key (platform_settings → env fallback) */
+async function getQwenKey(): Promise<string | null> {
   try {
-    const [row] = await db.select().from(platformSettingsTable).where(eq(platformSettingsTable.key, "managed_gemini_key"));
+    const [row] = await db.select().from(platformSettingsTable).where(eq(platformSettingsTable.key, "managed_qwen_key"));
     const dbVal = (row?.value ?? "").trim();
     if (dbVal) return dbVal;
   } catch { /* fall through */ }
-  const envVal = (process.env["GEMINI_API_KEY"] ?? "").trim();
+  const envVal = (process.env["GROQ_API_KEY"] ?? "").trim();
   return envVal || null;
 }
 
@@ -330,7 +328,7 @@ router.post("/knowledge-sources/:id/search", requireAuth, async (req, res) => {
 
   const q = query.trim();
 
-  // Load ALL entries (up to 200) — Gemini reads everything directly, no keyword guessing
+  // Load ALL entries (up to 200) — Qwen reads everything directly, no keyword guessing
   const allEntries = await db
     .select()
     .from(knowledgeEntriesTable)
@@ -345,8 +343,8 @@ router.post("/knowledge-sources/:id/search", requireAuth, async (req, res) => {
     return;
   }
 
-  const geminiKey = await getGeminiKey();
-  if (!geminiKey) {
+  const qwenKey = await getQwenKey();
+  if (!qwenKey) {
     // No LLM key — return raw entries so the caller can display them
     res.json({
       answer: allEntries.map(e => e.title ? `${e.title}: ${e.content}` : e.content).join("\n\n"),
@@ -355,7 +353,7 @@ router.post("/knowledge-sources/:id/search", requireAuth, async (req, res) => {
     return;
   }
 
-  // Build full knowledge context — Gemini reads all entries and decides what's relevant
+  // Build full knowledge context — Qwen reads all entries and decides what's relevant
   const context = allEntries
     .map((e, i) => [
       `[${i}]`,
@@ -380,23 +378,41 @@ Instructions:
 {"answer":"...","relevantIndices":[0,1]}`;
 
   try {
-    const genAI = new GoogleGenerativeAI(geminiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-    const result = await model.generateContent(prompt);
-    const text = result.response.text().trim();
+    const qwenRes = await fetch(
+      "https://api.groq.com/openai/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${qwenKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "qwen/qwen3-32b",
+          temperature: 0.3,
+          max_tokens: 1024,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: "You are a helpful knowledge base assistant. Always respond with valid JSON only." },
+            { role: "user", content: prompt },
+          ],
+        }),
+      },
+    );
+
+    if (!qwenRes.ok) {
+      throw new Error(`Qwen API error: ${qwenRes.status}`);
+    }
+
+    const data = (await qwenRes.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    const text = data?.choices?.[0]?.message?.content?.trim() ?? "";
 
     let answer = "Unable to process the question.";
     let relevantIndices: number[] = [];
 
     try {
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]) as { answer?: string; relevantIndices?: number[] };
-        answer = parsed.answer?.trim() || answer;
-        relevantIndices = Array.isArray(parsed.relevantIndices) ? parsed.relevantIndices : [];
-      } else {
-        answer = text;
-      }
+      const parsed = JSON.parse(text) as { answer?: string; relevantIndices?: number[] };
+      answer = parsed.answer?.trim() || answer;
+      relevantIndices = Array.isArray(parsed.relevantIndices) ? parsed.relevantIndices : [];
     } catch {
       answer = text;
     }

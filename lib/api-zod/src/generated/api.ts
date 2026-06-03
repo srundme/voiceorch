@@ -36,7 +36,7 @@ export const ListAgentsResponseItem = zod.object({
   "asrKeyterms": zod.string().nullish().describe('Comma-separated keywords to boost transcription accuracy'),
   "asrSmartEndpointing": zod.union([zod.literal('off'),zod.literal('vapi'),zod.literal('livekit'),zod.literal(null)]).nullish().describe('Smart endpointing mode for more accurate speech endpoint detection'),
   "asrAutoFallback": zod.boolean().nullish().describe('Automatically pick a backup STT provider if the primary fails'),
-  "llmProvider": zod.string().describe('LLM provider: openai, deepseek, anthropic, mistral, cohere'),
+  "llmProvider": zod.string().describe('LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen'),
   "llmModel": zod.string().nullish(),
   "ttsProvider": zod.string().describe('TTS provider: elevenlabs, openai, aws_polly, azure, cartesia, deepgram'),
   "ttsVoice": zod.string().nullish(),
@@ -123,7 +123,7 @@ export const CreateAgentBody = zod.object({
   "asrKeyterms": zod.string().optional(),
   "asrSmartEndpointing": zod.string().optional(),
   "asrAutoFallback": zod.boolean().optional(),
-  "llmProvider": zod.string(),
+  "llmProvider": zod.string().describe('LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen'),
   "llmModel": zod.string().optional(),
   "ttsProvider": zod.string(),
   "ttsVoice": zod.string().optional(),
@@ -165,7 +165,7 @@ export const CreateAgentBody = zod.object({
   "leadSourceToken": zod.string().optional().describe('Page Access Token for the lead source (encrypted at rest)'),
   "leadFields": zod.array(zod.string()).optional().describe('Lead fields to capture per incoming lead'),
   "productDetails": zod.string().optional().describe('Product or service details for the agent\'s context'),
-  "wizardInputs": zod.record(zod.string(), zod.unknown()).optional().describe('Raw wizard answers passed from the dashboard. May include the ordered micro-question\/answer pairs (microAnswers) and any uploaded job description content (jdFileContent, jdFileName). When present, the server generates the agent\'s system prompt server-side using the active admin master template (Gemini) and stores the result. Never returned in responses.')
+  "wizardInputs": zod.record(zod.string(), zod.unknown()).optional().describe('Raw wizard answers passed from the dashboard. May include the ordered micro-question\/answer pairs (microAnswers) and any uploaded job description content (jdFileContent, jdFileName). When present, the server generates the agent\'s system prompt server-side using the active admin master template (Qwen) and stores the result. Never returned in responses.')
 })
 
 
@@ -193,7 +193,7 @@ export const GetAgentResponse = zod.object({
   "asrKeyterms": zod.string().nullish().describe('Comma-separated keywords to boost transcription accuracy'),
   "asrSmartEndpointing": zod.union([zod.literal('off'),zod.literal('vapi'),zod.literal('livekit'),zod.literal(null)]).nullish().describe('Smart endpointing mode for more accurate speech endpoint detection'),
   "asrAutoFallback": zod.boolean().nullish().describe('Automatically pick a backup STT provider if the primary fails'),
-  "llmProvider": zod.string().describe('LLM provider: openai, deepseek, anthropic, mistral, cohere'),
+  "llmProvider": zod.string().describe('LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen'),
   "llmModel": zod.string().nullish(),
   "ttsProvider": zod.string().describe('TTS provider: elevenlabs, openai, aws_polly, azure, cartesia, deepgram'),
   "ttsVoice": zod.string().nullish(),
@@ -283,7 +283,7 @@ export const UpdateAgentBody = zod.object({
   "asrKeyterms": zod.string().optional(),
   "asrSmartEndpointing": zod.string().optional(),
   "asrAutoFallback": zod.boolean().optional(),
-  "llmProvider": zod.string().optional(),
+  "llmProvider": zod.string().optional().describe('LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen'),
   "llmModel": zod.string().optional(),
   "ttsProvider": zod.string().optional(),
   "ttsVoice": zod.string().optional(),
@@ -355,7 +355,7 @@ export const UpdateAgentResponse = zod.object({
   "asrKeyterms": zod.string().nullish().describe('Comma-separated keywords to boost transcription accuracy'),
   "asrSmartEndpointing": zod.union([zod.literal('off'),zod.literal('vapi'),zod.literal('livekit'),zod.literal(null)]).nullish().describe('Smart endpointing mode for more accurate speech endpoint detection'),
   "asrAutoFallback": zod.boolean().nullish().describe('Automatically pick a backup STT provider if the primary fails'),
-  "llmProvider": zod.string().describe('LLM provider: openai, deepseek, anthropic, mistral, cohere'),
+  "llmProvider": zod.string().describe('LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen'),
   "llmModel": zod.string().nullish(),
   "ttsProvider": zod.string().describe('TTS provider: elevenlabs, openai, aws_polly, azure, cartesia, deepgram'),
   "ttsVoice": zod.string().nullish(),
@@ -450,7 +450,7 @@ export const ToggleAgentResponse = zod.object({
   "asrKeyterms": zod.string().nullish().describe('Comma-separated keywords to boost transcription accuracy'),
   "asrSmartEndpointing": zod.union([zod.literal('off'),zod.literal('vapi'),zod.literal('livekit'),zod.literal(null)]).nullish().describe('Smart endpointing mode for more accurate speech endpoint detection'),
   "asrAutoFallback": zod.boolean().nullish().describe('Automatically pick a backup STT provider if the primary fails'),
-  "llmProvider": zod.string().describe('LLM provider: openai, deepseek, anthropic, mistral, cohere'),
+  "llmProvider": zod.string().describe('LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen'),
   "llmModel": zod.string().nullish(),
   "ttsProvider": zod.string().describe('TTS provider: elevenlabs, openai, aws_polly, azure, cartesia, deepgram'),
   "ttsVoice": zod.string().nullish(),

@@ -85,7 +85,7 @@ async function seedManagedKeyFromEnv(dbKey: string, envVar: string): Promise<voi
 
 server.listen(port, () => {
   logger.info({ port }, "Server listening");
-  void seedManagedKeyFromEnv("managed_gemini_key",   "GEMINI_API_KEY");
+  void seedManagedKeyFromEnv("managed_qwen_key",     "GROQ_API_KEY");
   void seedManagedKeyFromEnv("managed_sarvam_key",   "SARVAM_API_KEY");
   void seedManagedKeyFromEnv("managed_cartesia_key", "CARTESIA_API_KEY");
   startCallbackPoller();

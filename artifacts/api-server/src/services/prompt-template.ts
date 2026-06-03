@@ -106,31 +106,31 @@ export async function extractTextFromUpload(
   throw new Error(`Unsupported file type: ${mimeType || filename}. Only PDF and DOCX are supported.`);
 }
 
-async function getManagedGeminiKey(): Promise<string | null> {
+async function getManagedQwenKey(): Promise<string | null> {
   const [row] = await db
     .select()
     .from(platformSettingsTable)
-    .where(eq(platformSettingsTable.key, "managed_gemini_key"));
+    .where(eq(platformSettingsTable.key, "managed_qwen_key"));
   const dbValue = (row?.value ?? "").trim();
   if (dbValue) return dbValue;
-  const envValue = (process.env["GEMINI_API_KEY"] ?? "").trim();
+  const envValue = (process.env["GROQ_API_KEY"] ?? "").trim();
   return envValue || null;
 }
 
 /**
  * Single helper used by both wizard submit and admin regenerate.
  * Sends the active template (as system instruction) + the user's wizard inputs
- * (as a user-message context block) to Gemini, returns the generated prompt text.
- * Throws if Gemini key missing or call fails.
+ * (as a user-message context block) to Qwen via Groq, returns the generated prompt text.
+ * Throws if Qwen key missing or call fails.
  */
 export async function generateAgentPrompt(
   wizardInputs: WizardInputs,
   templateText: string,
 ): Promise<string> {
-  const geminiKey = await getManagedGeminiKey();
-  if (!geminiKey) {
+  const qwenKey = await getManagedQwenKey();
+  if (!qwenKey) {
     throw new Error(
-      "Managed Gemini key not configured — set managed_gemini_key in Admin → Managed Keys",
+      "Managed Qwen key not configured — set managed_qwen_key in Admin → Managed Keys",
     );
   }
 
@@ -147,28 +147,35 @@ ${templateText}
   )}`;
 
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(geminiKey)}`,
+    "https://api.groq.com/openai/v1/chat/completions",
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Authorization": `Bearer ${qwenKey}`,
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemInstruction }] },
-        contents: [{ role: "user", parts: [{ text: inputsBlock }] }],
-        generationConfig: { temperature: 0.4, maxOutputTokens: 4096 },
+        model: "qwen/qwen3-32b",
+        temperature: 0.4,
+        max_tokens: 4096,
+        messages: [
+          { role: "system", content: systemInstruction },
+          { role: "user", content: inputsBlock },
+        ],
       }),
     },
   );
 
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
-    logger.error({ status: res.status, errText }, "Gemini prompt generation failed");
-    throw new Error(`Gemini generation failed (HTTP ${res.status}): ${errText.slice(0, 300)}`);
+    logger.error({ status: res.status, errText }, "Qwen prompt generation failed");
+    throw new Error(`Qwen generation failed (HTTP ${res.status}): ${errText.slice(0, 300)}`);
   }
 
   const data = (await res.json()) as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    choices?: Array<{ message?: { content?: string } }>;
   };
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
-  if (!text) throw new Error("Gemini returned an empty prompt");
+  const text = data?.choices?.[0]?.message?.content?.trim() ?? "";
+  if (!text) throw new Error("Qwen returned an empty prompt");
   return text;
 }

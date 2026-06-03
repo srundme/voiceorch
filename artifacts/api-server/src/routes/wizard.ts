@@ -187,7 +187,7 @@ router.post("/wizard/preview-voice", requireDbUser, async (req, res): Promise<vo
 
 // ── POST /wizard/generate-master-prompt ──────────────────────────────────────
 //
-// Calls Gemini with the active Master Prompt Template to produce a complete,
+// Calls Qwen with the active Master Prompt Template to produce a complete,
 // production-ready system prompt from the user's call flow + agent details.
 // Returns { systemPrompt: string } on success.
 // Returns non-2xx + { error, reason } on failure — no silent fallbacks.
@@ -241,10 +241,10 @@ router.post("/wizard/generate-master-prompt", requireDbUser, async (req, res): P
   } catch (err: unknown) {
     req.log.error({ err }, "Master prompt generation failed");
     const msg = (err as Error)?.message ?? "Prompt generation failed";
-    if (msg.includes("Managed Gemini key not configured")) {
-      res.status(503).json({ error: msg, reason: "gemini_key_missing" });
+    if (msg.includes("Managed Qwen key not configured")) {
+      res.status(503).json({ error: msg, reason: "qwen_key_missing" });
     } else {
-      res.status(502).json({ error: msg, reason: "gemini_request_failed" });
+      res.status(502).json({ error: msg, reason: "qwen_request_failed" });
     }
   }
 });
@@ -274,10 +274,10 @@ router.post("/wizard/generate-prompt", requireDbUser, async (req, res): Promise<
     return;
   }
 
-  const geminiKey = (await getSetting("managed_gemini_key") ?? "").trim() || (process.env["GEMINI_API_KEY"] ?? "").trim();
+  const qwenKey = (await getSetting("managed_qwen_key") ?? "").trim() || (process.env["GROQ_API_KEY"] ?? "").trim();
   let callFlowSteps = "";
 
-  if (geminiKey) {
+  if (qwenKey) {
     try {
       const systemMsg = `You are a professional AI voice agent prompt engineer. Based on the user's rough requirements (which may have grammatical errors or be informal), write clear and natural call flow steps for a voice AI agent.
 
@@ -291,24 +291,29 @@ Requirements:
 
 Write ONLY numbered call flow steps (5-10 steps). Each step should be clear, natural, and conversational for a voice agent. No intro or explanation — just the numbered steps. Use <wait for response> where the agent should pause for the caller's reply.`;
 
-      const geminiRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
+      const qwenRes = await fetch(
+        "https://api.groq.com/openai/v1/chat/completions",
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Authorization": `Bearer ${qwenKey}`,
+            "Content-Type": "application/json",
+          },
           body: JSON.stringify({
-            contents: [{ parts: [{ text: systemMsg }] }],
-            generationConfig: { temperature: 0.7, maxOutputTokens: 1024 },
+            model: "qwen/qwen3-32b",
+            temperature: 0.7,
+            max_tokens: 1024,
+            messages: [{ role: "user", content: systemMsg }],
           }),
         },
       );
 
-      if (geminiRes.ok) {
-        const geminiData = await geminiRes.json() as any;
-        callFlowSteps = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+      if (qwenRes.ok) {
+        const qwenData = await qwenRes.json() as any;
+        callFlowSteps = qwenData?.choices?.[0]?.message?.content ?? "";
       }
     } catch (err) {
-      logger.warn({ err }, "Gemini call flow generation failed — using rule-based fallback");
+      logger.warn({ err }, "Qwen call flow generation failed — using rule-based fallback");
     }
   }
 
@@ -325,10 +330,10 @@ Write ONLY numbered call flow steps (5-10 steps). Each step should be clear, nat
 // ── POST /wizard/generate-call-flow ──────────────────────────────────────────
 //
 // Generates a contextual call flow from the wizard's 5 micro-answers + the
-// currently active admin master template (via Gemini). On success returns
+// currently active admin master template (via Qwen). On success returns
 // { nodes, flowText }. On failure returns a non-2xx status with a structured
-// { error, reason } payload distinguishing: gemini_key_missing,
-// no_active_template, gemini_request_failed, gemini_parse_failed.
+// { error, reason } payload distinguishing: qwen_key_missing,
+// no_active_template, qwen_request_failed, qwen_parse_failed.
 
 router.post("/wizard/generate-call-flow", requireDbUser, async (req, res): Promise<void> => {
   const {
@@ -360,12 +365,12 @@ router.post("/wizard/generate-call-flow", requireDbUser, async (req, res): Promi
 
   const nonEmpty = cleaned.filter((a) => a.answer.length > 0);
 
-  const geminiKey = (await getSetting("managed_gemini_key") ?? "").trim() || (process.env["GEMINI_API_KEY"] ?? "").trim();
-  if (!geminiKey) {
-    req.log.warn("managed_gemini_key not set in admin — call-flow preview unavailable");
+  const qwenKey = (await getSetting("managed_qwen_key") ?? "").trim() || (process.env["GROQ_API_KEY"] ?? "").trim();
+  if (!qwenKey) {
+    req.log.warn("managed_qwen_key not set in admin — call-flow preview unavailable");
     res.status(503).json({
-      error: "Gemini API key is not configured on the server.",
-      reason: "gemini_key_missing",
+      error: "Qwen API key is not configured on the server.",
+      reason: "qwen_key_missing",
     });
     return;
   }
@@ -392,8 +397,8 @@ router.post("/wizard/generate-call-flow", requireDbUser, async (req, res): Promi
       .join("\n");
   }
 
-  function parseGeminiNodes(text: string): FlowNode[] | null {
-    // Strip markdown code fences (Gemini sometimes wraps even with responseMimeType set)
+  function parseQwenNodes(text: string): FlowNode[] | null {
+    // Strip markdown code fences (Qwen sometimes wraps even with response_format set)
     const stripped = text
       .replace(/^```(?:json)?\s*/i, "")
       .replace(/\s*```\s*$/, "")
@@ -412,7 +417,7 @@ router.post("/wizard/generate-call-flow", requireDbUser, async (req, res): Promi
       }
     }
 
-    // Attempt 3: Gemini may wrap array in an object {"nodes":[...]} or {"steps":[...]} etc.
+    // Attempt 3: Qwen may wrap array in an object {"nodes":[...]} or {"steps":[...]} etc.
     if (parsed !== undefined && !Array.isArray(parsed) && typeof parsed === "object" && parsed !== null) {
       const obj = parsed as Record<string, unknown>;
       for (const key of ["nodes", "steps", "flow", "callFlow", "call_flow", "items"]) {
@@ -465,11 +470,11 @@ router.post("/wizard/generate-call-flow", requireDbUser, async (req, res): Promi
     return nodes;
   }
 
-  type GeminiResult =
+  type QwenResult =
     | { ok: true; nodes: FlowNode[] }
-    | { ok: false; reason: "gemini_request_failed" | "gemini_parse_failed"; detail: string };
+    | { ok: false; reason: "qwen_request_failed" | "qwen_parse_failed"; detail: string };
 
-  async function callGemini(extraEmphasis: string): Promise<GeminiResult> {
+  async function callQwen(extraEmphasis: string): Promise<QwenResult> {
     const systemInstruction = `You are a senior AI voice agent call-flow designer.
 Use the MASTER TEMPLATE below as the STRUCTURAL guide — the ordering and intent of sections (greeting → purpose / qualification → data collection → confirmation → close, or whatever the template prescribes) must be respected.
 Produce a concrete, contextual call flow as a JSON array of 5-10 step objects.
@@ -503,61 +508,65 @@ ${activeTemplate!.extractedText}
     let r: globalThis.Response;
     try {
       r = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(geminiKey)}`,
+        "https://api.groq.com/openai/v1/chat/completions",
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Authorization": `Bearer ${qwenKey}`,
+            "Content-Type": "application/json",
+          },
           body: JSON.stringify({
-            systemInstruction: { parts: [{ text: systemInstruction }] },
-            contents: [{ role: "user", parts: [{ text: userBlock }] }],
-            generationConfig: {
-              temperature: 0.6,
-              maxOutputTokens: 2048,
-              responseMimeType: "application/json",
-            },
+            model: "qwen/qwen3-32b",
+            temperature: 0.6,
+            max_tokens: 2048,
+            response_format: { type: "json_object" },
+            messages: [
+              { role: "system", content: systemInstruction },
+              { role: "user", content: userBlock },
+            ],
           }),
         },
       );
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
-      req.log.warn({ err }, "Gemini call-flow fetch threw");
-      return { ok: false, reason: "gemini_request_failed", detail };
+      req.log.warn({ err }, "Qwen call-flow fetch threw");
+      return { ok: false, reason: "qwen_request_failed", detail };
     }
     if (!r.ok) {
       const errText = await r.text().catch(() => "");
-      req.log.warn({ status: r.status, errText: errText.slice(0, 300) }, "Gemini call-flow request failed");
-      return { ok: false, reason: "gemini_request_failed", detail: `HTTP ${r.status}` };
+      req.log.warn({ status: r.status, errText: errText.slice(0, 300) }, "Qwen call-flow request failed");
+      return { ok: false, reason: "qwen_request_failed", detail: `HTTP ${r.status}` };
     }
-    let data: { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+    let data: { choices?: Array<{ message?: { content?: string } }> };
     try {
       data = (await r.json()) as typeof data;
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
-      req.log.warn({ err }, "Gemini call-flow JSON envelope parse failed");
-      return { ok: false, reason: "gemini_parse_failed", detail };
+      req.log.warn({ err }, "Qwen call-flow JSON envelope parse failed");
+      return { ok: false, reason: "qwen_parse_failed", detail };
     }
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
+    const text = data?.choices?.[0]?.message?.content?.trim() ?? "";
     if (!text) {
-      req.log.warn("Gemini call-flow returned empty text");
-      return { ok: false, reason: "gemini_parse_failed", detail: "empty response" };
+      req.log.warn("Qwen call-flow returned empty text");
+      return { ok: false, reason: "qwen_parse_failed", detail: "empty response" };
     }
-    const nodes = parseGeminiNodes(text);
+    const nodes = parseQwenNodes(text);
     if (!nodes) {
-      req.log.warn({ preview: text.slice(0, 300) }, "Gemini call-flow response failed to parse as nodes");
-      return { ok: false, reason: "gemini_parse_failed", detail: "could not parse nodes" };
+      req.log.warn({ preview: text.slice(0, 300) }, "Qwen call-flow response failed to parse as nodes");
+      return { ok: false, reason: "qwen_parse_failed", detail: "could not parse nodes" };
     }
     return { ok: true, nodes };
   }
 
-  const first = await callGemini("");
+  const first = await callQwen("");
 
-  // If Gemini request itself failed (network/HTTP), surface that as an error.
+  // If Qwen request itself failed (network/HTTP), surface that as an error.
   // But for parse failures, always fall back to rule-based nodes — never show the
-  // "Couldn't parse Gemini's response" screen to the user.
-  if (!first.ok && first.reason === "gemini_request_failed") {
+  // "Couldn't parse Qwen's response" screen to the user.
+  if (!first.ok && first.reason === "qwen_request_failed") {
     res.status(502).json({
-      error: "Gemini API request failed.",
-      reason: "gemini_request_failed",
+      error: "Qwen API request failed.",
+      reason: "qwen_request_failed",
     });
     return;
   }
@@ -574,7 +583,7 @@ ${activeTemplate!.extractedText}
       return token.length > 0 && !haystack.includes(token);
     });
     if (missing.length > 0) {
-      const retry = await callGemini(
+      const retry = await callQwen(
         `\nCRITICAL: a previous attempt dropped these answers — every one MUST appear (verbatim or recognisably paraphrased) in the next output: ${missing
           .map((m) => JSON.stringify(m.answer))
           .join(", ")}.`,
@@ -653,7 +662,7 @@ router.post("/admin/managed-phone-numbers", requireAdmin, async (req, res): Prom
 // ── Admin: GET /admin/managed-keys ────────────────────────────────────────────
 
 const MANAGED_KEY_NAMES = [
-  "managed_gemini_key",
+  "managed_qwen_key",
   "managed_deepgram_key",
   "managed_sarvam_key",
   "managed_cartesia_key",

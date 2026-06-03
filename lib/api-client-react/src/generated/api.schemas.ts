@@ -263,7 +263,7 @@ export interface Agent {
      * @nullable
      */
   asrAutoFallback?: boolean | null;
-  /** LLM provider: openai, deepseek, anthropic, mistral, cohere */
+  /** LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen */
   llmProvider: string;
   /** @nullable */
   llmModel?: string | null;
@@ -418,7 +418,7 @@ export const AgentInputAgentMode = {
 export type AgentInputAgentConfig = { [key: string]: unknown };
 
 /**
- * Raw wizard answers passed from the dashboard. May include the ordered micro-question/answer pairs (microAnswers) and any uploaded job description content (jdFileContent, jdFileName). When present, the server generates the agent's system prompt server-side using the active admin master template (Gemini) and stores the result. Never returned in responses.
+ * Raw wizard answers passed from the dashboard. May include the ordered micro-question/answer pairs (microAnswers) and any uploaded job description content (jdFileContent, jdFileName). When present, the server generates the agent's system prompt server-side using the active admin master template (Qwen) and stores the result. Never returned in responses.
  */
 export type AgentInputWizardInputs = { [key: string]: unknown };
 
@@ -442,6 +442,7 @@ export interface AgentInput {
   asrKeyterms?: string;
   asrSmartEndpointing?: string;
   asrAutoFallback?: boolean;
+  /** LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen */
   llmProvider: string;
   llmModel?: string;
   ttsProvider: string;
@@ -472,7 +473,7 @@ export interface AgentInput {
   leadFields?: string[];
   /** Product or service details for the agent's context */
   productDetails?: string;
-  /** Raw wizard answers passed from the dashboard. May include the ordered micro-question/answer pairs (microAnswers) and any uploaded job description content (jdFileContent, jdFileName). When present, the server generates the agent's system prompt server-side using the active admin master template (Gemini) and stores the result. Never returned in responses. */
+  /** Raw wizard answers passed from the dashboard. May include the ordered micro-question/answer pairs (microAnswers) and any uploaded job description content (jdFileContent, jdFileName). When present, the server generates the agent's system prompt server-side using the active admin master template (Qwen) and stores the result. Never returned in responses. */
   wizardInputs?: AgentInputWizardInputs;
 }
 
@@ -512,6 +513,7 @@ export interface AgentUpdate {
   asrKeyterms?: string;
   asrSmartEndpointing?: string;
   asrAutoFallback?: boolean;
+  /** LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen */
   llmProvider?: string;
   llmModel?: string;
   ttsProvider?: string;

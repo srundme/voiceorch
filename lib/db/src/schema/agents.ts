@@ -173,7 +173,7 @@ export const agentsTable = pgTable("agents", {
   maxConcurrentCalls: integer("max_concurrent_calls"),
   monthlySpendLimitCents: integer("monthly_spend_limit_cents"),
 
-  // ── Prompt Template System (admin-managed master template + Gemini-generated prompt) ─
+  // ── Prompt Template System (admin-managed master template + Qwen-generated prompt) ─
   generatedPrompt: text("generated_prompt"),
   promptTemplateVersion: integer("prompt_template_version"),
   wizardInputs: json("wizard_inputs").$type<Record<string, unknown>>(),

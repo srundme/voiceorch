@@ -78,7 +78,7 @@ const CATEGORIES = [
 ];
 
 const PROVIDERS_BY_CATEGORY: Record<string, string[]> = {
-  llm:       ["openai", "anthropic", "deepseek", "mistral", "cohere", "gemini", "custom"],
+  llm:       ["openai", "anthropic", "deepseek", "mistral", "cohere", "qwen", "custom"],
   asr:       ["deepgram", "azure", "whisper", "assemblyai", "custom"],
   tts:       ["elevenlabs", "openai", "aws_polly", "azure", "cartesia", "deepgram", "custom"],
   telephony: ["vobiz", "twilio", "plivo", "vonage", "custom"],

@@ -61,8 +61,8 @@ describe("buildUpdateAgentPayload", () => {
       ...BASE,
       asrProvider: "assemblyai",
       asrModel: "best",
-      llmProvider: "google",
-      llmModel: "gemini-2.5-flash",
+      llmProvider: "qwen",
+      llmModel: "qwen/qwen3-32b",
       ttsProvider: "cartesia",
       ttsModel: "sonic-3.5",
     };
@@ -224,7 +224,7 @@ describe("agentFormSchema — provider/model cross-field validation", () => {
     const result = agentFormSchema.safeParse({
       ...VALID_BASE,
       llmProvider: "openai",
-      llmModel: "gemini-2.5-flash",
+      llmModel: "qwen/qwen3-32b",
     });
     expect(result.success).toBe(false);
     if (result.success) return;
@@ -311,7 +311,7 @@ describe("agentFormSchema — provider/model cross-field validation", () => {
       asrProvider: "azure",
       asrModel: "nova-2-general",
       llmProvider: "openai",
-      llmModel: "gemini-2.5-flash",
+      llmModel: "qwen/qwen3-32b",
       ttsProvider: "cartesia",
       ttsModel: "unknown-model",
     });

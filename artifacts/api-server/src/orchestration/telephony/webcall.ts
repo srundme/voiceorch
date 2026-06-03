@@ -162,10 +162,12 @@ export async function handleWebCallWebSocket(
 
   // Managed platform key fallback — same map as session.ts
   const MANAGED: Record<string, string> = {
-    google:   "managed_gemini_key",
+    qwen:     "managed_qwen_key",
+    google:   "managed_qwen_key",
+    gemini:   "managed_qwen_key",
     deepgram: "managed_deepgram_key",
     sarvam:   "managed_sarvam_key",
-    cartesia:  "managed_cartesia_key",
+    cartesia: "managed_cartesia_key",
     openai:   "managed_openai_key",
   };
 

@@ -40,17 +40,17 @@ router.get("/billing/rates", requireAuth, async (req, res): Promise<void> => {
  * gate the "Start Test Call" button before attempting a WebSocket connection.
  */
 router.get("/billing/webcall-key-status", requireAuth, async (_req, res): Promise<void> => {
-  const [sarvam, cartesia, gemini, openai, deepgram] = await Promise.all([
+  const [sarvam, cartesia, qwen, openai, deepgram] = await Promise.all([
     getManagedKey("managed_sarvam_key"),
     getManagedKey("managed_cartesia_key"),
-    getManagedKey("managed_gemini_key"),
+    getManagedKey("managed_qwen_key"),
     getManagedKey("managed_openai_key"),
     getManagedKey("managed_deepgram_key"),
   ]);
   res.json({
     sarvam:   !!sarvam,
     cartesia: !!cartesia,
-    gemini:   !!gemini,
+    qwen:     !!qwen,
     openai:   !!openai,
     deepgram: !!deepgram,
   });

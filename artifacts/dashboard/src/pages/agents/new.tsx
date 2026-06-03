@@ -52,7 +52,7 @@ const LLM_PROVIDERS = [
   { value: "deepseek",  label: "DeepSeek" },
   { value: "mistral",   label: "Mistral AI" },
   { value: "cohere",    label: "Cohere" },
-  { value: "google",    label: "Google Gemini" },
+  { value: "qwen",      label: "Qwen (via Groq)" },
   { value: "groq",      label: "Groq" },
   { value: "sarvam",    label: "Sarvam" },
 ];
@@ -107,7 +107,7 @@ const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
   deepseek:  [{ value: "deepseek-chat", label: "DeepSeek V3 (chat)" }, { value: "deepseek-reasoner", label: "DeepSeek R1 (reasoner)" }],
   mistral:   [{ value: "mistral-large-latest", label: "Mistral Large (best)" }, { value: "mistral-small-latest", label: "Mistral Small (fast)" }, { value: "open-mixtral-8x7b", label: "Mixtral 8x7B" }],
   cohere:    [{ value: "command-r-plus-08-2024", label: "Command R+ (best)" }, { value: "command-r-08-2024", label: "Command R" }],
-  google:    [{ value: "gemini-2.5-flash", label: "Gemini 2.5 Flash (recommended)" }, { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash" }, { value: "gemini-1.5-pro", label: "Gemini 1.5 Pro" }, { value: "gemini-1.5-flash", label: "Gemini 1.5 Flash" }],
+  qwen:      [{ value: "qwen/qwen3-32b", label: "Qwen 3 32B (recommended)" }, { value: "qwen/qwen3-235b-a22b", label: "Qwen 3 235B" }],
   groq:      [{ value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B (recommended)" }, { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B (fast)" }, { value: "gemma2-9b-it", label: "Gemma 2 9B" }],
   sarvam: [
     { value: "sarvam-m",    label: "Sarvam M (recommended)" },
@@ -356,8 +356,8 @@ export default function AgentNew() {
     if (agentMode === "managed") {
       form.setValue("asrProvider", "deepgram");
       form.setValue("asrModel", "nova-3");
-      form.setValue("llmProvider", "google");
-      form.setValue("llmModel", "gemini-2.5-flash");
+      form.setValue("llmProvider", "qwen");
+      form.setValue("llmModel", "qwen/qwen3-32b");
       form.setValue("ttsProvider", "cartesia");
       form.setValue("ttsModel", "sonic-3");
     }
@@ -492,7 +492,7 @@ export default function AgentNew() {
           <p className="text-xs text-muted-foreground leading-relaxed">
             Platform handles ASR, LLM, and TTS using managed API keys. Just write your system prompt.
           </p>
-          <p className="text-[10px] text-muted-foreground/60 mt-2 font-mono">Deepgram · Gemini 2.5 Flash · Cartesia</p>
+          <p className="text-[10px] text-muted-foreground/60 mt-2 font-mono">Deepgram · Qwen 3 32B · Cartesia</p>
         </button>
         <button
           type="button"
@@ -763,7 +763,7 @@ export default function AgentNew() {
                       <div>
                         <p className="text-sm font-medium text-foreground">Platform-managed pipeline</p>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          Deepgram Nova-3 (ASR) · Gemini 2.5 Flash (LLM) · Cartesia Sonic-3 (TTS) — powered by managed API keys.
+                          Deepgram Nova-3 (ASR) · Qwen 3 32B (LLM) · Cartesia Sonic-3 (TTS) — powered by managed API keys.
                         </p>
                       </div>
                     </div>

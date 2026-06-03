@@ -68,7 +68,7 @@ router.post("/agents", requireAuth, async (req, res): Promise<void> => {
     insertData["leadSourceToken"] = encryptKey(insertData["leadSourceToken"] as string);
   }
 
-  // If wizard submit included inputs, run the admin master template through Gemini
+  // If wizard submit included inputs, run the admin master template through Qwen
   // and store the generated prompt + template version. Fail loudly if no active template.
   if (wizardInputs && typeof wizardInputs === "object") {
     let active: Awaited<ReturnType<typeof getActiveTemplate>>;
@@ -95,7 +95,7 @@ router.post("/agents", requireAuth, async (req, res): Promise<void> => {
       insertData["promptTemplateVersion"] = active.version;
       insertData["wizardInputs"] = wizardInputs;
     } catch (err) {
-      req.log.warn({ err }, "Gemini prompt generation failed — falling back to wizard-provided systemPrompt");
+      req.log.warn({ err }, "Qwen prompt generation failed — falling back to wizard-provided systemPrompt");
       insertData["wizardInputs"] = wizardInputs;
       // generatedPrompt and promptTemplateVersion left unset; systemPrompt from payload is used
     }

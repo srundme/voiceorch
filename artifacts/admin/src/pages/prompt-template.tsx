@@ -273,7 +273,7 @@ export default function PromptTemplatePage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Prompt Template</h1>
         <p className="text-muted-foreground mt-1">
-          Upload the master prompt template (PDF or Word). The active version is used to generate every new agent's system prompt via Gemini.
+          Upload the master prompt template (PDF or Word). The active version is used to generate every new agent's system prompt via Qwen.
         </p>
       </div>
 

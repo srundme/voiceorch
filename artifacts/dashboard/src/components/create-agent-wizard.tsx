@@ -260,8 +260,8 @@ function getManagedStack(languages: string[]) {
   return {
     asrProvider:       (hasTamil || hasIndic) ? "sarvam" : "deepgram",
     asrModel:          (hasTamil || hasIndic) ? "saarika:v2.5" : "nova-2-general",
-    llmProvider:       (hasTamil || hasIndic) ? "google" : "sarvam",
-    llmModel:          (hasTamil || hasIndic) ? "gemini-2.5-flash" : "sarvam-m",
+    llmProvider:       (hasTamil || hasIndic) ? "qwen" : "sarvam",
+    llmModel:          (hasTamil || hasIndic) ? "qwen/qwen3-32b" : "sarvam-m",
     ttsProvider:       "cartesia",
     ttsModel:          "sonic-3.5",
     telephonyProvider: "vobiz",
@@ -583,7 +583,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
     onClose();
   }
 
-  /* call Gemini-backed call flow endpoint */
+  /* call Qwen-backed call flow endpoint */
   async function generateCallFlowFromAnswers() {
     setFlowFetching(true);
     setFlowFallback(null);
@@ -620,7 +620,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
       if (Array.isArray(data.nodes) && data.nodes.length > 0) {
         setConfirmedFlowNodes(data.nodes);
       } else {
-        setFlowFallback("gemini_parse_failed");
+        setFlowFallback("qwen_parse_failed");
       }
     } catch {
       setFlowFallback("network");
@@ -632,7 +632,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
   /* micro-wizard: go to next/prev step */
   function microGo(delta: 1 | -1) {
     if (delta === -1 && flowEditMode) { setFlowEditMode(false); return; }
-    // Entering Step 5 (preview) from Q5 → kick off Gemini call flow generation.
+    // Entering Step 5 (preview) from Q5 → kick off Qwen call flow generation.
     if (delta === 1 && microStep === 4) {
       setMicroDir("forward");
       setMicroStep(5);
@@ -653,7 +653,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
 
   /* micro-wizard: confirmed call flow → pre-fill requirements textarea, advance */
   function handleMicroConfirm() {
-    // Guard: never advance without a Gemini-generated (or user-edited) flow.
+    // Guard: never advance without a Qwen-generated (or user-edited) flow.
     if (!confirmedFlowNodes || confirmedFlowNodes.length === 0) return;
     const nodes = confirmedFlowNodes;
     const flowText = nodesToText(nodes);
@@ -728,7 +728,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
     }
   }
 
-  /* AI prompt generation — calls Gemini master template, creates agent, PATCHes systemPrompt */
+  /* AI prompt generation — calls Qwen master template, creates agent, PATCHes systemPrompt */
   async function generatePrompt() {
     setGenerating(true);
     setGenError("");
@@ -755,7 +755,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
       }
       const genData = await genRes.json() as { systemPrompt: string };
       const systemPrompt = (genData.systemPrompt ?? "").trim();
-      if (!systemPrompt) throw new Error("Gemini returned an empty prompt — please retry.");
+      if (!systemPrompt) throw new Error("Qwen returned an empty prompt — please retry.");
 
       // Step 2: create the agent with the current wizard state
       const payload = buildCreateAgentPayload({ ...state, generatedPrompt: systemPrompt });
@@ -847,7 +847,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
     ? ((stepIdx + 1) / totalManagedSteps) * 100
     : state.mode === "byop" ? 100 : 0;
 
-  /* current call flow nodes for preview — only what Gemini returned (or the
+  /* current call flow nodes for preview — only what Qwen returned (or the
    * user-edited version). No silent rule-based fallback. */
   const currentFlowNodes: FlowNode[] = confirmedFlowNodes ?? [];
 
@@ -1102,21 +1102,21 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
 
                     {!flowFetching && flowFallback && (() => {
                       const COPY: Record<string, { title: string; body: string }> = {
-                        gemini_key_missing: {
+                        qwen_key_missing: {
                           title: "AI call-flow generation isn't configured",
-                          body: "The Gemini API key has not been set. Ask an administrator to add it in the Admin panel under Managed Stack Keys.",
+                          body: "The Qwen API key has not been set. Ask an administrator to add it in the Admin panel under Managed Stack Keys.",
                         },
                         no_active_template: {
                           title: "Master prompt template is missing",
                           body: "No active master prompt template is configured. An administrator needs to upload and activate a master template before the call flow can be generated.",
                         },
-                        gemini_request_failed: {
-                          title: "Gemini request failed",
-                          body: "We couldn't reach the Gemini API to build your call flow. This may be a transient network or upstream issue — please retry.",
+                        qwen_request_failed: {
+                          title: "Qwen request failed",
+                          body: "We couldn't reach the Qwen API to build your call flow. This may be a transient network or upstream issue — please retry.",
                         },
-                        gemini_parse_failed: {
-                          title: "Couldn't parse Gemini's response",
-                          body: "Gemini returned a response we couldn't read as a valid call flow. Please retry — most retries succeed.",
+                        qwen_parse_failed: {
+                          title: "Couldn't parse Qwen's response",
+                          body: "Qwen returned a response we couldn't read as a valid call flow. Please retry — most retries succeed.",
                         },
                         network: {
                           title: "Couldn't reach the server",
@@ -1615,7 +1615,7 @@ export function CreateAgentWizard({ open, onClose, onCreated }: Props) {
                       <div className="grid grid-cols-4 gap-2">
                         {[
                           { l: "STT",  v: stack.asrProvider,       note: hasTamil ? "Tamil optimised" : "" },
-                          { l: "LLM",  v: (hasTamil || hasIndic) ? "Gemini 2.5 Flash" : "Sarvam M1", note: (hasTamil || hasIndic) ? "Multilingual & fast" : "Indian language optimised" },
+                          { l: "LLM",  v: (hasTamil || hasIndic) ? "Qwen 3 32B" : "Sarvam M1", note: (hasTamil || hasIndic) ? "Multilingual & fast" : "Indian language optimised" },
                           { l: "TTS",  v: "Cartesia Sonic", note: "" },
                           { l: "TEL",  v: stack.telephonyProvider,  note: "" },
                         ].map(item => (

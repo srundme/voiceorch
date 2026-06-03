@@ -34,15 +34,13 @@ const LLM_PRICING: Record<string, number> = {
   "anthropic/claude-3-5-sonnet-20241022": 0.0180,
   "anthropic/claude-3-5-haiku-20241022":  0.0040,
   "anthropic/claude-3-opus-20240229":     0.0900,
-  // Google
-  "google/gemini-2.0-flash":  0.0030,
-  "google/gemini-1.5-pro":    0.0070,
-  "google/gemini-1.5-flash":  0.0015,
+  // Qwen (via Groq)
+  "qwen/qwen3-32b":       0.0010,
+  "qwen/qwen3-235b-a22b": 0.0030,
   // Groq (very fast, very cheap)
   "groq/llama-3.3-70b-versatile": 0.0018,
   "groq/llama-3.1-8b-instant":    0.0003,
   "groq/gemma2-9b-it":            0.0008,
-  "groq/qwen/qwen3-32b":         0.0010,
   // Others
   "deepseek/deepseek-chat":     0.0015,
   "deepseek/deepseek-reasoner": 0.0070,
@@ -59,7 +57,7 @@ const LLM_PRICING: Record<string, number> = {
 const LLM_PROVIDER_FALLBACK: Record<string, number> = {
   openai:    0.0100,
   anthropic: 0.0200,
-  google:    0.0050,
+  qwen:      0.0020,
   groq:      0.0010,
   deepseek:  0.0030,
   mistral:   0.0060,

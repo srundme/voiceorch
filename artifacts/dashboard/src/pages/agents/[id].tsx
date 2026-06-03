@@ -255,7 +255,7 @@ function WebCallPanel({ agentId, agentName, autostart, callbackId }: { agentId: 
     // These are the two platform-managed providers always required for webcall
     if (!keyStatus["sarvam"] && !keyStatus["deepgram"] && !keyStatus["openai"]) missingKeys.push("ASR (sarvam/deepgram)");
     if (!keyStatus["cartesia"] && !keyStatus["openai"]) missingKeys.push("TTS (cartesia)");
-    if (!keyStatus["gemini"] && !keyStatus["openai"]) missingKeys.push("LLM (gemini)");
+    if (!keyStatus["qwen"] && !keyStatus["openai"]) missingKeys.push("LLM (qwen)");
   }
   const keysReady = !keyLoading && keyStatus !== null && missingKeys.length === 0;
 

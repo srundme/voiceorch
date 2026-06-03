@@ -62,10 +62,10 @@ const CATEGORIES: Category[] = [
     itemLabel: "New LLM Key",
     fields: [
       {
-        key: "managed_gemini_key",
-        label: "Google Gemini API Key",
+        key: "managed_qwen_key",
+        label: "Qwen API Key (via Groq)",
         description: "Used for LLM (all managed agents) and AI prompt generation",
-        placeholder: "AIza...",
+        placeholder: "gsk_...",
       },
       {
         key: "managed_openai_key",
@@ -231,7 +231,7 @@ export default function ManagedKeys() {
       <div className="rounded-md border border-primary/20 bg-primary/5 p-4 flex items-start gap-3">
         <Info className="h-4 w-4 text-primary mt-0.5 shrink-0" />
         <div className="text-sm text-muted-foreground">
-          <strong className="text-foreground">Managed Stack:</strong> Tamil language agents use Sarvam STT + Gemini LLM + Cartesia TTS + VoBiz telephony. All other languages use Deepgram STT + Gemini LLM + Cartesia TTS + VoBiz telephony. To update a key, type the new value and click Save. Masked values (showing ••••) are already stored.
+          <strong className="text-foreground">Managed Stack:</strong> Tamil language agents use Sarvam STT + Qwen LLM + Cartesia TTS + VoBiz telephony. All other languages use Deepgram STT + Qwen LLM + Cartesia TTS + VoBiz telephony. To update a key, type the new value and click Save. Masked values (showing ••••) are already stored.
         </div>
       </div>
 
