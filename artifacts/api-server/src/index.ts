@@ -53,14 +53,17 @@ server.on("upgrade", (request, socket, head) => {
   // Passed as ?callerId=<clerkId> so the callback poller can ring the right browser tab.
   const callerId          = qs.get("callerId") ?? undefined;
   const callbackId        = qs.has("callbackId") ? parseInt(qs.get("callbackId")!, 10) : undefined;
+  const promptVariables: Record<string, string> | undefined = qs.has("variables")
+    ? (() => { try { return JSON.parse(qs.get("variables")!) as Record<string, string>; } catch { return undefined; } })()
+    : undefined;
 
   wss.handleUpgrade(request, socket, head, (ws: import("ws").WebSocket) => {
     logger.info({ provider, agentId, platformTelephony, campaignLeadId, url }, "WebSocket upgraded");
     switch (provider) {
-      case "twilio":   void handleTwilioWebSocket(ws, agentId, campaignLeadId);                                   break;
-      case "plivo":    void handlePlivoWebSocket(ws, agentId, campaignLeadId);                                    break;
-      case "vobiz":    void handleVobizWebSocket(ws, agentId, platformTelephony, campaignLeadId);                 break;
-      case "webcall":  void handleWebCallWebSocket(ws, agentId, callerId, callbackId);                            break;
+      case "twilio":   void handleTwilioWebSocket(ws, agentId, campaignLeadId);                                                      break;
+      case "plivo":    void handlePlivoWebSocket(ws, agentId, campaignLeadId);                                                       break;
+      case "vobiz":    void handleVobizWebSocket(ws, agentId, platformTelephony, campaignLeadId);                                    break;
+      case "webcall":  void handleWebCallWebSocket(ws, agentId, callerId, callbackId, promptVariables);                              break;
     }
   });
 });

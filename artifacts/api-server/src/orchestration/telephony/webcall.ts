@@ -125,6 +125,7 @@ export async function handleWebCallWebSocket(
   agentId: number,
   callerUserId?: string,
   callbackId?: number,
+  promptVariables?: Record<string, string>,
 ): Promise<void> {
   function send(data: Record<string, unknown>) {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(data));
@@ -306,6 +307,27 @@ export async function handleWebCallWebSocket(
     } catch (cbCtxErr) {
       logger.warn({ callId, callbackId, cbCtxErr }, "Failed to load callback context — proceeding without it");
     }
+  }
+
+  // ── Resolve prompt variables ──────────────────────────────────────────────
+  // Substitutes {var} / {{var}} placeholders in the system prompt.
+  // Built-in vars (agent_name, date) are always available; caller-supplied
+  // vars (from the webcall URL ?variables=...) take the highest priority.
+  {
+    const now = new Date();
+    const builtinVars: Record<string, string> = {
+      agent_name:    agent.name,
+      date: now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" }),
+      caller_number: "browser",
+      ...promptVariables,
+    };
+    const resolveVar = (key: string, fullMatch: string): string => {
+      if (key === "caller_salutation") return fullMatch;
+      return key in builtinVars ? builtinVars[key]! : fullMatch;
+    };
+    systemPrompt = systemPrompt
+      .replace(/\{\{(\w+)\}\}/g, (m, k: string) => resolveVar(k, m))
+      .replace(/\{(\w+)\}/g,     (m, k: string) => resolveVar(k, m));
   }
 
   // ── Agent config (agentConfig JSONB) ─────────────────────────────────────

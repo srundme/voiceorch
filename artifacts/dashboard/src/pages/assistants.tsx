@@ -356,14 +356,26 @@ function WaveCanvas({
   );
 }
 
-function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: string }) {
+const SYSTEM_VARS = new Set(["caller_salutation","caller_number","agent_name","date","to_number","from_number"]);
+
+function detectUserVars(prompt: string): string[] {
+  const found = new Set<string>();
+  for (const m of prompt.matchAll(/\{\{(\w+)\}\}/g)) if (!SYSTEM_VARS.has(m[1]!)) found.add(m[1]!);
+  for (const m of prompt.matchAll(/\{(\w+)\}/g))     if (!SYSTEM_VARS.has(m[1]!)) found.add(m[1]!);
+  return Array.from(found);
+}
+
+function WebCallPanel({ agentId, agentName, systemPrompt: savedPrompt }: { agentId: number; agentName: string; systemPrompt: string }) {
   const [status, setStatus]     = useState<CallStatus>("idle");
   const [msgs, setMsgs]         = useState<Msg[]>([]);
   const [error, setError]       = useState<string | null>(null);
   const [duration, setDuration] = useState<number | null>(null);
   const [copied, setCopied]     = useState(false);
   const [elapsed, setElapsed]   = useState(0);
+  const [showVarsDialog, setShowVarsDialog] = useState(false);
+  const [varValues, setVarValues]           = useState<Record<string, string>>({});
   const { userId: callerUserId } = useAuth();
+  const userVars = detectUserVars(savedPrompt);
 
   const wsRef          = useRef<WebSocket | null>(null);
   const audioCtxRef    = useRef<AudioContext | null>(null);
@@ -416,14 +428,18 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
     if (wsRef.current && wsRef.current.readyState < 2) wsRef.current.close(); wsRef.current = null;
   }
 
-  const startCall = useCallback(async () => {
+  const startCall = useCallback(async (vars: Record<string, string> = {}) => {
     setError(null); setMsgs([]); setDuration(null); setStatus("connecting");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, sampleRate: 16000 } });
       streamRef.current = stream;
       const proto = location.protocol === "https:" ? "wss" : "ws";
-      const callerParam = callerUserId ? `?callerId=${encodeURIComponent(callerUserId)}` : "";
-      const ws = new WebSocket(`${proto}://${location.host}/api/ws/webcall/${agentId}${callerParam}`);
+      const params = new URLSearchParams();
+      if (callerUserId) params.set("callerId", callerUserId);
+      const nonEmpty = Object.fromEntries(Object.entries(vars).filter(([, v]) => v.trim()));
+      if (Object.keys(nonEmpty).length > 0) params.set("variables", JSON.stringify(nonEmpty));
+      const qs = params.toString();
+      const ws = new WebSocket(`${proto}://${location.host}/api/ws/webcall/${agentId}${qs ? "?" + qs : ""}`);
       ws.binaryType = "arraybuffer"; wsRef.current = ws;
       ws.onopen = () => {
         const AudioCtx = (window as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).AudioContext || (window as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -587,7 +603,14 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
           {error && (
             <div className="text-sm text-foreground bg-muted border border-border rounded-xl px-3 py-2">{error}</div>
           )}
-          <Button className="w-full gap-2" onClick={() => void startCall()}>
+          <Button className="w-full gap-2" onClick={() => {
+            if (userVars.length > 0) {
+              setVarValues(Object.fromEntries(userVars.map(k => [k, varValues[k] ?? ""])));
+              setShowVarsDialog(true);
+            } else {
+              void startCall({});
+            }
+          }}>
             <Mic className="h-4 w-4" />
             {status === "ended" ? "Call again" : "Start Test Call"}
           </Button>
@@ -627,6 +650,38 @@ function WebCallPanel({ agentId, agentName }: { agentId: number; agentName: stri
           {copied ? <><Check className="h-3 w-3" /> Copied</> : <><Copy className="h-3 w-3" /> Copy snippet</>}
         </button>
       </div>
+
+      {/* ── Pre-call variables dialog ──────────────────────────────────── */}
+      <Dialog open={showVarsDialog} onOpenChange={setShowVarsDialog}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Fill in prompt variables</DialogTitle>
+            <DialogDescription>
+              These variables appear in your agent's prompt. Fill them in or leave blank to use them as-is.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            {userVars.map(key => (
+              <div key={key}>
+                <Label className="text-xs font-mono text-muted-foreground mb-1 block">{`{${key}}`}</Label>
+                <Input
+                  value={varValues[key] ?? ""}
+                  onChange={e => setVarValues(prev => ({ ...prev, [key]: e.target.value }))}
+                  placeholder={`Value for ${key} (optional)`}
+                  className="h-8 text-sm"
+                />
+              </div>
+            ))}
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="ghost" size="sm" onClick={() => setShowVarsDialog(false)}>Cancel</Button>
+            <Button size="sm" onClick={() => { setShowVarsDialog(false); void startCall(varValues); }}>
+              <Mic className="h-3.5 w-3.5 mr-1.5" />
+              Start Call
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -2271,7 +2326,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
           {/* ═══ TEST ═══════════════════════════════════════════════════ */}
           {activeTab === "test" && (
             <div className="p-5 max-w-lg">
-              <WebCallPanel agentId={agentId} agentName={agentName || agent.name} />
+              <WebCallPanel agentId={agentId} agentName={agentName || agent.name} systemPrompt={agent.systemPrompt ?? ""} />
             </div>
           )}
 
