@@ -5,6 +5,9 @@ import { requireAuth } from "../middlewares/requireAuth.js";
 
 const router: IRouter = Router();
 
+// Users created before this date are considered pre-existing and skip onboarding
+const ONBOARDING_CUTOFF_DATE = new Date("2026-06-04T00:00:00.000Z");
+
 const VALID_ROLES = ["student", "professional"] as const;
 const VALID_REFERRALS = ["instagram", "youtube", "reference", "google", "ai_search"] as const;
 const VALID_PLATFORMS = ["vapi", "retell", "bolna", "other"] as const;
@@ -55,6 +58,13 @@ router.get("/onboarding/status", requireAuth, async (req, res): Promise<void> =>
   const clerkId = (req as any).clerkUserId as string;
   const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
+
+  // Pre-existing users (created before the cutoff) bypass onboarding without touching the DB
+  if (user.createdAt && user.createdAt < ONBOARDING_CUTOFF_DATE) {
+    res.json({ completed: true, data: null });
+    return;
+  }
+
   res.json({
     completed: user.onboardingCompleted,
     data: user.onboardingData ?? null,
