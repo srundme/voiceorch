@@ -83,6 +83,8 @@ router.get("/scheduling/google/connections", requireAuth, async (req, res): Prom
     id: c.id,
     email: c.email,
     connectedAt: c.createdAt,
+    needsReconnect: c.needsReconnect,
+    reconnectReason: c.reconnectReason,
   })));
 });
 
@@ -278,7 +280,7 @@ router.get("/scheduling/google/status", requireAuth, async (req, res): Promise<v
   const connections = await listConnectionsForUser(clerkId);
   res.json({
     connected: connections.length > 0,
-    connections: connections.map(c => ({ id: c.id, email: c.email })),
+    connections: connections.map(c => ({ id: c.id, email: c.email, needsReconnect: c.needsReconnect, reconnectReason: c.reconnectReason })),
     // Legacy compat
     email: connections[0]?.email ?? null,
     credentialsConfigured: true, // platform-level — always true

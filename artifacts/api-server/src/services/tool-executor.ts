@@ -364,23 +364,30 @@ export async function executeNativeBooking(
             location: { type: locationType, address: locationType === "in_person" ? meetingAddress : null },
           })
         : null;
-      if (gcalResult) {
+      if (gcalResult?.ok) {
         meetLink = gcalResult.meetLink;
         googleEventId = gcalResult.eventId;
         logger.info(
-          { callId, bookingId: booking.id, connectionId, eventId: gcalResult.eventId, meetLink: gcalResult.meetLink, hasGoogleEventId: !!gcalResult.eventId },
-          "Native booking: Google Calendar event created — NOTE: existing connections authorized without the 'calendar' scope must reconnect via Settings > Google Calendar",
+          { callId, bookingId: booking.id, connectionId, eventId: gcalResult.eventId, meetLink: gcalResult.meetLink },
+          "Native booking: Google Calendar event created",
         );
         if (meetLink || googleEventId) {
           await db.execute(
             sql`UPDATE bookings SET meet_link = ${meetLink}, google_event_id = ${googleEventId} WHERE id = ${booking.id}`,
           );
         }
+      } else if (gcalResult && !gcalResult.ok) {
+        logger.error(
+          { callId, bookingId: booking.id, connectionId, gcalError: gcalResult.error },
+          gcalResult.error.needsReconnect
+            ? "Native booking: Google Calendar sync failed — connection needs reconnect (insufficient scope / revoked). User must reconnect via Settings > Conferencing."
+            : "Native booking: Google Calendar sync failed",
+        );
       } else if (!connectionId) {
         logger.info({ callId, bookingId: booking.id }, "Native booking: no Google connection found — skipping gcal event");
       }
     } catch (err) {
-      logger.error({ callId, bookingId: booking.id, err }, "Native booking: Google Calendar event creation failed — if scope error, user must reconnect via Settings > Google Calendar");
+      logger.error({ callId, bookingId: booking.id, err }, "Native booking: Google Calendar event creation threw unexpectedly");
     }
 
     void sendBookingCreatedEmail({
@@ -413,7 +420,8 @@ export async function executeNativeBooking(
       },
     });
 
-    return `booking_confirmed: event="${eventType.name}", slot="${dateStr}", booking_id=${booking.id}, attendee="${attendeeName}", email="${attendeeEmail}", status="${booking.status}"`;
+    const meetPart = meetLink ? `, meet_link="${meetLink}"` : "";
+    return `booking_confirmed: event="${eventType.name}", slot="${dateStr}", booking_id=${booking.id}, attendee="${attendeeName}", email="${attendeeEmail}", status="${booking.status}"${meetPart}`;
   } catch (err) {
     logger.error({ callId, err }, "Native booking tool execution failed");
     return "error: booking failed due to a technical issue";
@@ -779,7 +787,7 @@ export async function executeNativeReschedule(
       const connectionId = calendarConnectionId ?? (await getFirstConnectionForUser(calendar.userId))?.id ?? null;
 
       if (existingGoogleEventId && connectionId) {
-        // Update the existing calendar event in-place
+        // Move the existing calendar event in-place (preserves the Meet link)
         const gcalResult = await updateCalendarEvent({
           connectionId,
           eventId: existingGoogleEventId,
@@ -793,13 +801,15 @@ export async function executeNativeReschedule(
           hostEmail: calendar.hostEmail,
           additionalHosts: calendar.additionalHosts,
         });
-        if (gcalResult) {
+        if (gcalResult.ok) {
           meetLink = gcalResult.meetLink;
           if (meetLink) {
             await db.execute(
               sql`UPDATE bookings SET meet_link = ${meetLink} WHERE id = ${bookingId}`,
             );
           }
+        } else {
+          logger.error({ callId, bookingId, gcalError: gcalResult.error }, "Native reschedule: Google Calendar event move failed");
         }
       } else if (connectionId) {
         // No existing event — create a new one
@@ -818,15 +828,17 @@ export async function executeNativeReschedule(
           addMeet: locationType === "google_meet" || eventType.enableGoogleMeet,
           location: { type: locationType, address: updatedBooking.locationAddress },
         });
-        if (gcalResult) {
+        if (gcalResult.ok) {
           meetLink = gcalResult.meetLink;
           await db.execute(
             sql`UPDATE bookings SET meet_link = ${gcalResult.meetLink}, google_event_id = ${gcalResult.eventId} WHERE id = ${bookingId}`,
           );
+        } else {
+          logger.error({ callId, bookingId, gcalError: gcalResult.error }, "Native reschedule: Google Calendar event creation failed");
         }
       }
     } catch (err) {
-      logger.warn({ callId, bookingId, err }, "Native reschedule: Google Calendar sync failed");
+      logger.error({ callId, bookingId, err }, "Native reschedule: Google Calendar sync threw unexpectedly");
     }
 
     void sendBookingRescheduledEmail({

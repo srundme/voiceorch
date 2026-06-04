@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { Video, CheckCircle2, Loader2, Plus, Trash2, Link2, Unlink } from "lucide-react";
+import { Video, CheckCircle2, Loader2, Plus, Trash2, Link2, Unlink, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,8 @@ type GoogleConnection = {
   id: string;
   email: string;
   connectedAt: string;
+  needsReconnect?: boolean;
+  reconnectReason?: string | null;
 };
 
 export default function ConferencingPage({ embedded = false }: { embedded?: boolean }) {
@@ -201,32 +203,53 @@ export default function ConferencingPage({ embedded = false }: { embedded?: bool
                 {connections.map(conn => (
                   <div
                     key={conn.id}
-                    className="flex items-center justify-between p-3 bg-background border rounded-lg"
+                    className={`flex flex-col gap-2 p-3 bg-background border rounded-lg ${conn.needsReconnect ? "border-destructive/50" : ""}`}
                   >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center shrink-0">
-                        <span className="text-xs font-semibold text-foreground">
-                          {conn.email[0]?.toUpperCase()}
-                        </span>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center shrink-0">
+                          <span className="text-xs font-semibold text-foreground">
+                            {conn.email[0]?.toUpperCase()}
+                          </span>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{conn.email}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Connected {new Date(conn.connectedAt).toLocaleDateString()}
+                          </p>
+                        </div>
                       </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{conn.email}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Connected {new Date(conn.connectedAt).toLocaleDateString()}
-                        </p>
-                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={removingId === conn.id}
+                        onClick={() => handleRemove(conn.id)}
+                        className="h-7 px-2 text-muted-foreground hover:text-destructive shrink-0"
+                      >
+                        {removingId === conn.id
+                          ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          : <Trash2 className="h-3.5 w-3.5" />}
+                      </Button>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={removingId === conn.id}
-                      onClick={() => handleRemove(conn.id)}
-                      className="h-7 px-2 text-muted-foreground hover:text-destructive shrink-0"
-                    >
-                      {removingId === conn.id
-                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        : <Trash2 className="h-3.5 w-3.5" />}
-                    </Button>
+                    {conn.needsReconnect && (
+                      <div className="flex items-center justify-between gap-2 rounded-md bg-destructive/10 px-2.5 py-2">
+                        <div className="flex items-start gap-2 min-w-0">
+                          <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0 mt-0.5" />
+                          <p className="text-xs text-destructive">
+                            Reconnect needed — calendar events can’t be created until you re-authorize. Make sure to grant calendar access.
+                          </p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={connecting}
+                          onClick={handleConnect}
+                          className="h-7 px-2 text-xs shrink-0"
+                        >
+                          {connecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Reconnect"}
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

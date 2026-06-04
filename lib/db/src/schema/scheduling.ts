@@ -35,6 +35,12 @@ export const googleCalendarConnectionsTable = pgTable("google_calendar_connectio
   accessToken: text("access_token").notNull(),
   refreshToken: text("refresh_token").notNull(),
   tokenExpiry: timestamp("token_expiry", { withTimezone: true }),
+  // Set when a Calendar API call fails with an insufficient-scope (403) or
+  // revoked/expired (invalid_grant / 401) error. The dashboard surfaces this so
+  // the user knows to disconnect and reconnect the account granting full
+  // calendar access. Cleared automatically on the next successful API call.
+  needsReconnect: boolean("needs_reconnect").notNull().default(false),
+  reconnectReason: text("reconnect_reason"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (t) => [

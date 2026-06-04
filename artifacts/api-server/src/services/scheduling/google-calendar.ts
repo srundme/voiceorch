@@ -21,6 +21,93 @@ const SCOPES = [
   "https://www.googleapis.com/auth/userinfo.email",
 ];
 
+// ── Calendar sync result + error classification ──────────────────────────────
+
+/** Structured description of a Google Calendar API failure. */
+export type GcalErrorInfo = {
+  /** HTTP status code from Google (e.g. 401, 403), when available. */
+  code: number | null;
+  /** Google API reason / OAuth error string (e.g. "insufficientPermissions", "invalid_grant"). */
+  reason: string;
+  /** Human-readable message. */
+  message: string;
+  /** True when the failure means the user must disconnect & reconnect (scope/revoked). */
+  needsReconnect: boolean;
+};
+
+/** Discriminated result of a create/update calendar event call. */
+export type CalendarEventResult =
+  | { ok: true; meetLink: string | null; eventId: string }
+  | { ok: false; error: GcalErrorInfo };
+
+/**
+ * Classify an error thrown by googleapis (or token refresh) into a structured
+ * shape, deciding whether the underlying Google connection needs the user to
+ * reconnect (insufficient scope / revoked / expired refresh token).
+ */
+export function classifyGcalError(err: unknown): GcalErrorInfo {
+  const anyErr = err as {
+    code?: number | string;
+    message?: string;
+    errors?: Array<{ reason?: string; message?: string }>;
+    response?: { status?: number; data?: { error?: unknown; error_description?: string } };
+  };
+
+  const rawCode = anyErr?.code ?? anyErr?.response?.status ?? null;
+  const code = typeof rawCode === "number" ? rawCode : (typeof rawCode === "string" && /^\d+$/.test(rawCode) ? Number(rawCode) : null);
+
+  const dataError = anyErr?.response?.data?.error;
+  const reason =
+    anyErr?.errors?.[0]?.reason ??
+    (typeof dataError === "string" ? dataError : undefined) ??
+    (typeof rawCode === "string" && !/^\d+$/.test(rawCode) ? rawCode : undefined) ??
+    "unknown";
+
+  const message =
+    anyErr?.errors?.[0]?.message ??
+    anyErr?.response?.data?.error_description ??
+    anyErr?.message ??
+    String(err);
+
+  const reasonStr = String(reason).toLowerCase();
+  const messageStr = String(message).toLowerCase();
+
+  const needsReconnect =
+    code === 401 ||
+    reasonStr.includes("invalid_grant") ||
+    messageStr.includes("invalid_grant") ||
+    reasonStr.includes("insufficient") ||
+    messageStr.includes("insufficient") ||
+    messageStr.includes("scope") ||
+    (code === 403 && (reasonStr.includes("permission") || messageStr.includes("permission")));
+
+  return { code, reason: String(reason), message: String(message), needsReconnect };
+}
+
+/** Flag a connection as needing reconnection so the dashboard can prompt the user. */
+async function markConnectionReconnect(connectionId: string, reason: string): Promise<void> {
+  try {
+    await db.execute(sql`
+      UPDATE google_calendar_connections
+      SET needs_reconnect = true, reconnect_reason = ${reason.slice(0, 500)}, updated_at = NOW()
+      WHERE id = ${connectionId}
+    `);
+  } catch (err) {
+    logger.warn({ err, connectionId }, "Failed to mark Google connection needs_reconnect");
+  }
+}
+
+/** Clear the needs-reconnect flag after a successful API call. */
+async function clearConnectionReconnect(connectionId: string): Promise<void> {
+  try {
+    await db.execute(sql`
+      UPDATE google_calendar_connections
+      SET needs_reconnect = false, reconnect_reason = NULL, updated_at = NOW()
+      WHERE id = ${connectionId} AND needs_reconnect = true
+    `);
+  } catch { /* best effort */ }
+}
+
 // ── Platform-level OAuth client ──────────────────────────────────────────────
 
 function callbackUrl(): string {
@@ -118,11 +205,13 @@ export type GoogleConnection = {
   email: string;
   tokenExpiry: Date | null;
   createdAt: Date;
+  needsReconnect: boolean;
+  reconnectReason: string | null;
 };
 
 export async function listConnectionsForUser(userId: string): Promise<GoogleConnection[]> {
   const rows = await db.execute(
-    sql`SELECT id, user_id, email, token_expiry, created_at
+    sql`SELECT id, user_id, email, token_expiry, created_at, needs_reconnect, reconnect_reason
         FROM google_calendar_connections
         WHERE user_id = ${userId}
         ORDER BY created_at ASC`,
@@ -133,6 +222,8 @@ export async function listConnectionsForUser(userId: string): Promise<GoogleConn
     email: r.email,
     tokenExpiry: r.token_expiry ? new Date(r.token_expiry) : null,
     createdAt: new Date(r.created_at),
+    needsReconnect: r.needs_reconnect === true,
+    reconnectReason: r.reconnect_reason ?? null,
   }));
 }
 
@@ -152,6 +243,8 @@ export async function upsertConnection(
       SET access_token  = EXCLUDED.access_token,
           refresh_token = CASE WHEN EXCLUDED.refresh_token != '' THEN EXCLUDED.refresh_token ELSE google_calendar_connections.refresh_token END,
           token_expiry  = EXCLUDED.token_expiry,
+          needs_reconnect = false,
+          reconnect_reason = NULL,
           updated_at    = NOW()
     RETURNING id
   `);
@@ -194,7 +287,16 @@ export async function getValidAccessToken(connectionId: string): Promise<{
         return { accessToken: credentials.access_token, email: row.email };
       }
     } catch (err) {
-      logger.warn({ err, connectionId }, "Failed to refresh Google token");
+      const info = classifyGcalError(err);
+      logger.error(
+        { connectionId, code: info.code, reason: info.reason, message: info.message },
+        "Failed to refresh Google token",
+      );
+      if (info.needsReconnect) {
+        await markConnectionReconnect(connectionId, `token refresh failed: ${info.reason}`);
+        // Stale/expired access token is unusable — signal "no token" to callers.
+        return null;
+      }
     }
   }
 
@@ -293,9 +395,19 @@ export async function createCalendarEvent(params: {
   additionalHosts?: string[] | null;
   addMeet?: boolean;
   location?: { type: "google_meet" | "in_person"; address?: string | null } | null;
-}): Promise<{ meetLink: string | null; eventId: string } | null> {
+}): Promise<CalendarEventResult> {
   const tokens = await getValidAccessToken(params.connectionId);
-  if (!tokens) return null;
+  if (!tokens) {
+    return {
+      ok: false,
+      error: {
+        code: null,
+        reason: "no_valid_token",
+        message: "No valid Google access token for this connection (token missing, expired, or revoked).",
+        needsReconnect: true,
+      },
+    };
+  }
 
   const client = makePlatformOAuth2Client();
   client.setCredentials({ access_token: tokens.accessToken });
@@ -342,10 +454,18 @@ export async function createCalendarEvent(params: {
     const meetLink = event.data.conferenceData?.entryPoints?.find(e => e.entryPointType === "video")?.uri ?? null;
     const eventId  = event.data.id ?? "";
     logger.info({ connectionId: params.connectionId, eventId, meetLink }, "Google Calendar event created");
-    return { meetLink, eventId };
+    void clearConnectionReconnect(params.connectionId);
+    return { ok: true, meetLink, eventId };
   } catch (err) {
-    logger.warn({ err, connectionId: params.connectionId }, "Failed to create Google Calendar event");
-    return null;
+    const info = classifyGcalError(err);
+    logger.error(
+      { connectionId: params.connectionId, code: info.code, reason: info.reason, message: info.message, needsReconnect: info.needsReconnect },
+      "Failed to create Google Calendar event",
+    );
+    if (info.needsReconnect) {
+      await markConnectionReconnect(params.connectionId, `events.insert failed: ${info.reason}`);
+    }
+    return { ok: false, error: info };
   }
 }
 
@@ -358,8 +478,21 @@ export async function deleteCalendarEvent(connectionId: string, eventId: string)
   try {
     await calendar.events.delete({ calendarId: "primary", eventId });
     logger.info({ connectionId, eventId }, "Google Calendar event deleted");
+    void clearConnectionReconnect(connectionId);
   } catch (err) {
-    logger.warn({ err, connectionId, eventId }, "Failed to delete Google Calendar event");
+    const info = classifyGcalError(err);
+    // 410 Gone / 404 = event already deleted — not a real failure, don't alarm.
+    if (info.code === 404 || info.code === 410) {
+      logger.info({ connectionId, eventId, code: info.code }, "Google Calendar event already gone");
+      return;
+    }
+    logger.error(
+      { connectionId, eventId, code: info.code, reason: info.reason, message: info.message, needsReconnect: info.needsReconnect },
+      "Failed to delete Google Calendar event",
+    );
+    if (info.needsReconnect) {
+      await markConnectionReconnect(connectionId, `events.delete failed: ${info.reason}`);
+    }
   }
 }
 
@@ -379,9 +512,19 @@ export async function updateCalendarEvent(params: {
   timezone?: string;
   hostEmail?: string | null;
   additionalHosts?: string[] | null;
-}): Promise<{ meetLink: string | null; eventId: string } | null> {
+}): Promise<CalendarEventResult> {
   const tokens = await getValidAccessToken(params.connectionId);
-  if (!tokens) return null;
+  if (!tokens) {
+    return {
+      ok: false,
+      error: {
+        code: null,
+        reason: "no_valid_token",
+        message: "No valid Google access token for this connection (token missing, expired, or revoked).",
+        needsReconnect: true,
+      },
+    };
+  }
 
   const client = makePlatformOAuth2Client();
   client.setCredentials({ access_token: tokens.accessToken });
@@ -415,10 +558,18 @@ export async function updateCalendarEvent(params: {
     const meetLink = event.data.conferenceData?.entryPoints?.find(e => e.entryPointType === "video")?.uri ?? null;
     const eventId  = event.data.id ?? params.eventId;
     logger.info({ connectionId: params.connectionId, eventId, meetLink }, "Google Calendar event updated");
-    return { meetLink, eventId };
+    void clearConnectionReconnect(params.connectionId);
+    return { ok: true, meetLink, eventId };
   } catch (err) {
-    logger.warn({ err, connectionId: params.connectionId, eventId: params.eventId }, "Failed to update Google Calendar event");
-    return null;
+    const info = classifyGcalError(err);
+    logger.error(
+      { connectionId: params.connectionId, eventId: params.eventId, code: info.code, reason: info.reason, message: info.message, needsReconnect: info.needsReconnect },
+      "Failed to update Google Calendar event",
+    );
+    if (info.needsReconnect) {
+      await markConnectionReconnect(params.connectionId, `events.patch failed: ${info.reason}`);
+    }
+    return { ok: false, error: info };
   }
 }
 

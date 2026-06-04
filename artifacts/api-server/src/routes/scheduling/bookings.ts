@@ -23,6 +23,7 @@ import {
 } from "../../services/scheduling/notifications.js";
 import {
   createCalendarEvent,
+  updateCalendarEvent,
   deleteCalendarEvent,
   getFirstConnectionForUser,
 } from "../../services/scheduling/google-calendar.js";
@@ -190,7 +191,7 @@ router.post("/scheduling/bookings", requireAuth, async (req, res): Promise<void>
       addMeet: booking.locationType === "google_meet" || eventType.enableGoogleMeet,
       location: { type: booking.locationType === "in_person" ? "in_person" : "google_meet", address: booking.locationAddress ?? null },
     }) : null;
-    if (gcalResult) {
+    if (gcalResult?.ok) {
       meetLink = gcalResult.meetLink;
       googleEventId = gcalResult.eventId;
       if (meetLink || googleEventId) {
@@ -198,8 +199,10 @@ router.post("/scheduling/bookings", requireAuth, async (req, res): Promise<void>
           sql`UPDATE bookings SET meet_link = ${meetLink}, google_event_id = ${googleEventId} WHERE id = ${booking.id}`
         );
       }
+    } else if (gcalResult && !gcalResult.ok) {
+      logger.error({ bookingId: booking.id, gcalError: gcalResult.error }, "GCal event creation failed for new authenticated booking");
     }
-  } catch (err) { logger.warn({ err, bookingId: booking.id }, "GCal event creation failed for new authenticated booking"); }
+  } catch (err) { logger.error({ err, bookingId: booking.id }, "GCal event creation threw for new authenticated booking"); }
 
   void sendBookingCreatedEmail({
     attendeeName: booking.attendeeName,
@@ -359,13 +362,36 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
       const calendarConnectionId = (calRow.rows[0] as any)?.google_calendar_connection_id as string | null;
       const connectionId = calendarConnectionId ?? (await getFirstConnectionForUser(clerkId))?.id ?? null;
 
-      // (a) Delete old Calendar event
-      if (existingGoogleEventId && connectionId) {
-        await deleteCalendarEvent(connectionId, existingGoogleEventId);
-      }
-
-      // (b) Create new Calendar event for the rescheduled slot
-      if (connectionId && newBooking) {
+      if (existingGoogleEventId && connectionId && newBooking) {
+        // Move the existing Calendar event in-place (preserves the Meet link)
+        const gcalResult = await updateCalendarEvent({
+          connectionId,
+          eventId: existingGoogleEventId,
+          summary: `${eventType?.name ?? "Meeting"} — ${newBooking.attendeeName}`,
+          description: newBooking.attendeeNotes ?? undefined,
+          startTime: newBooking.slotStart,
+          endTime: newBooking.slotEnd,
+          attendeeEmail: newBooking.attendeeEmail,
+          attendeeName: newBooking.attendeeName,
+          timezone: calendar?.timezone ?? "UTC",
+          hostEmail: calendar?.hostEmail,
+          additionalHosts: calendar?.additionalHosts,
+        });
+        if (gcalResult.ok) {
+          rescheduleMeetLink = gcalResult.meetLink;
+          rescheduleGoogleEventId = gcalResult.eventId;
+          // Carry the event over to the new booking row; clear it from the old one.
+          await db.execute(
+            sql`UPDATE bookings SET meet_link = ${gcalResult.meetLink}, google_event_id = ${gcalResult.eventId} WHERE id = ${newBooking.id}`
+          );
+          await db.execute(
+            sql`UPDATE bookings SET meet_link = NULL, google_event_id = NULL WHERE id = ${existing.id}`
+          );
+        } else {
+          logger.error({ bookingId: newBooking.id, gcalError: gcalResult.error }, "GCal event move failed for rescheduled authenticated booking");
+        }
+      } else if (connectionId && newBooking) {
+        // No existing event — create a fresh one for the rescheduled slot
         const gcalResult = await createCalendarEvent({
           connectionId,
           summary: `${eventType?.name ?? "Meeting"} — ${newBooking.attendeeName}`,
@@ -380,15 +406,17 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
           addMeet: newBooking.locationType === "google_meet" || (eventType?.enableGoogleMeet ?? false),
           location: { type: newBooking.locationType === "in_person" ? "in_person" : "google_meet", address: newBooking.locationAddress },
         });
-        if (gcalResult) {
+        if (gcalResult.ok) {
           rescheduleMeetLink = gcalResult.meetLink;
           rescheduleGoogleEventId = gcalResult.eventId;
           await db.execute(
             sql`UPDATE bookings SET meet_link = ${gcalResult.meetLink}, google_event_id = ${gcalResult.eventId} WHERE id = ${newBooking.id}`
           );
+        } else {
+          logger.error({ bookingId: newBooking.id, gcalError: gcalResult.error }, "GCal event creation failed for rescheduled authenticated booking");
         }
       }
-    } catch (err) { logger.warn({ err, bookingId: newBooking.id }, "GCal sync failed for rescheduled authenticated booking"); }
+    } catch (err) { logger.error({ err, bookingId: newBooking.id }, "GCal sync threw for rescheduled authenticated booking"); }
 
     void sendBookingRescheduledEmail({
       attendeeName: newBooking.attendeeName,

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Link } from "wouter";
-import { Plus, Pencil, Trash2, MoreHorizontal, Calendar, ArrowLeft, Globe, Mail, Video, Loader2, CheckCircle2, Link2 } from "lucide-react";
+import { Plus, Pencil, Trash2, MoreHorizontal, Calendar, ArrowLeft, Globe, Mail, Video, Loader2, CheckCircle2, Link2, AlertTriangle } from "lucide-react";
 import {
   useListCalendars,
   useCreateCalendar,
@@ -38,7 +38,7 @@ import { formatDistanceToNow } from "date-fns";
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const API  = `${BASE}/api`;
 
-type GoogleConnection = { id: string; email: string };
+type GoogleConnection = { id: string; email: string; needsReconnect?: boolean; reconnectReason?: string | null };
 
 const TIMEZONES = [
   "UTC",
@@ -411,6 +411,21 @@ function CalendarCard({
                       : <>No account assigned — using default: <strong className="text-foreground">{googleConnections[0]?.email ?? "first connected account"}</strong></>
                     }
                   </p>
+                  {(() => {
+                    const effective = linkedConnectionId
+                      ? googleConnections.find(c => c.id === linkedConnectionId)
+                      : googleConnections[0];
+                    if (!effective?.needsReconnect) return null;
+                    return (
+                      <p className="text-[10px] text-destructive leading-tight flex items-start gap-1">
+                        <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
+                        <span>
+                          <strong>{effective.email}</strong> needs reconnect — events won’t sync. Re-authorize in{" "}
+                          <Link href={`${BASE}/app/settings/conferencing`} className="underline underline-offset-2">Conferencing</Link>.
+                        </span>
+                      </p>
+                    );
+                  })()}
                 </div>
               )}
             </div>

@@ -26,6 +26,7 @@ import {
 import { buildSlotLockKey } from "../../services/scheduling/lock.js";
 import {
   createCalendarEvent,
+  updateCalendarEvent,
   deleteCalendarEvent,
   getFirstConnectionForUser,
 } from "../../services/scheduling/google-calendar.js";
@@ -238,7 +239,7 @@ router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
       addMeet: booking.locationType === "google_meet" || eventType.enableGoogleMeet,
       location: { type: booking.locationType === "in_person" ? "in_person" : "google_meet", address: booking.locationAddress ?? null },
     }) : null;
-    if (gcalResult) {
+    if (gcalResult?.ok) {
       meetLink = gcalResult.meetLink;
       googleEventId = gcalResult.eventId;
       if (meetLink || googleEventId) {
@@ -246,8 +247,10 @@ router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
           sql`UPDATE bookings SET meet_link = ${meetLink}, google_event_id = ${googleEventId} WHERE id = ${booking.id}`
         );
       }
+    } else if (gcalResult && !gcalResult.ok) {
+      logger.error({ bookingId: booking.id, gcalError: gcalResult.error }, "GCal event creation failed for new public booking");
     }
-  } catch (err) { logger.warn({ err, bookingId: booking.id }, "GCal event creation failed for new public booking"); }
+  } catch (err) { logger.error({ err, bookingId: booking.id }, "GCal event creation threw for new public booking"); }
 
   // Issue self-service tokens for this booking
   const baseUrl = getBaseUrl();
@@ -540,10 +543,33 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
     const connectionId = calendarConnectionId ?? (await getFirstConnectionForUser(booking.userId))?.id ?? null;
 
     if (existingGoogleEventId && connectionId) {
-      await deleteCalendarEvent(connectionId, existingGoogleEventId);
-    }
-
-    if (connectionId) {
+      // Move the existing Calendar event in-place (preserves the Meet link)
+      const gcalResult = await updateCalendarEvent({
+        connectionId,
+        eventId: existingGoogleEventId,
+        summary: `${eventType.name} — ${newBooking.attendeeName}`,
+        description: newBooking.attendeeNotes ?? undefined,
+        startTime: newBooking.slotStart,
+        endTime: newBooking.slotEnd,
+        attendeeEmail: newBooking.attendeeEmail,
+        attendeeName: newBooking.attendeeName,
+        timezone: calendar.timezone,
+        hostEmail: calendar.hostEmail,
+        additionalHosts: calendar.additionalHosts,
+      });
+      if (gcalResult.ok) {
+        meetLink = gcalResult.meetLink;
+        newGoogleEventId = gcalResult.eventId;
+        await db.execute(
+          sql`UPDATE bookings SET meet_link = ${meetLink}, google_event_id = ${newGoogleEventId} WHERE id = ${newBooking.id}`
+        );
+        await db.execute(
+          sql`UPDATE bookings SET meet_link = NULL, google_event_id = NULL WHERE id = ${booking.id}`
+        );
+      } else {
+        logger.error({ bookingId: newBooking.id, gcalError: gcalResult.error }, "GCal event move failed for rescheduled public booking");
+      }
+    } else if (connectionId) {
       const gcalResult = await createCalendarEvent({
         connectionId,
         summary: `${eventType.name} — ${newBooking.attendeeName}`,
@@ -558,7 +584,7 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
         addMeet: newBooking.locationType === "google_meet" || eventType.enableGoogleMeet,
       location: { type: newBooking.locationType === "in_person" ? "in_person" : "google_meet", address: newBooking.locationAddress ?? null },
       });
-      if (gcalResult) {
+      if (gcalResult.ok) {
         meetLink = gcalResult.meetLink;
         newGoogleEventId = gcalResult.eventId;
         if (meetLink || newGoogleEventId) {
@@ -566,9 +592,11 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
             sql`UPDATE bookings SET meet_link = ${meetLink}, google_event_id = ${newGoogleEventId} WHERE id = ${newBooking.id}`
           );
         }
+      } else {
+        logger.error({ bookingId: newBooking.id, gcalError: gcalResult.error }, "GCal event creation failed for rescheduled public booking");
       }
     }
-  } catch (err) { logger.warn({ err, bookingId: newBooking.id }, "GCal sync failed for rescheduled public booking"); }
+  } catch (err) { logger.error({ err, bookingId: newBooking.id }, "GCal sync threw for rescheduled public booking"); }
 
   // Issue new reschedule token for the new booking
   const baseUrl = getBaseUrl();
