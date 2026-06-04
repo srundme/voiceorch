@@ -18,12 +18,8 @@ import { db } from "@workspace/db";
 import { platformSettingsTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 
-// Initialise the audio worker pool before any WebSocket connections arrive.
-// Both dev (build+start) and prod run from dist/, where esbuild emits the worker as
-// dist/orchestration/audioWorker.mjs.
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const workerFile = join(__dirname, "orchestration", "audioWorker.mjs");
-initAudioPool(new URL(`file://${workerFile}`));
 
 const rawPort = process.env["PORT"];
 if (!rawPort) throw new Error("PORT environment variable is required but was not provided.");
@@ -88,6 +84,9 @@ async function seedManagedKeyFromEnv(dbKey: string, envVar: string): Promise<voi
 
 server.listen(port, () => {
   logger.info({ port }, "Server listening");
+  // Initialise audio pool after the server is already listening so the port is
+  // immediately available for the deployment health-check probe.
+  initAudioPool(new URL(`file://${workerFile}`));
   void seedManagedKeyFromEnv("managed_qwen_key",     "GROQ_API_KEY");
   void seedManagedKeyFromEnv("managed_sarvam_key",   "SARVAM_API_KEY");
   void seedManagedKeyFromEnv("managed_cartesia_key", "CARTESIA_API_KEY");
