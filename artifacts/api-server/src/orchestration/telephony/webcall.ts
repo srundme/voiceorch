@@ -1646,14 +1646,17 @@ export async function handleWebCallWebSocket(
       // Require BARGE_IN_MIN_FRAMES consecutive loud frames before accepting a barge-in,
       // so a single word, cough, or background voice doesn't stop the agent mid-sentence.
       //
-      // Echo grace periods — suppress barge-in when:
-      //   a) speaking just started (browser AEC needs 500–800 ms to adapt), OR
-      //   b) within 600 ms of the last TTS chunk sent (trailing echo of the final word).
-      // Without (b), the mic picks up the echo of the last word and fires a false
-      // barge-in that cuts it off before the caller hears it.
+      // Only suppress barge-in during the START grace (browser AEC needs 500–800 ms to adapt
+      // after TTS begins before it can cancel the speaker echo).
+      //
+      // NOTE: inEndGrace (suppressing ~600 ms after the last chunk) is intentionally NOT
+      // applied here. Since chunks are sent every 40 ms, lastChunkSentAt would always be
+      // within 40 ms, making inEndGrace permanently true and blocking all energy-based
+      // barge-in for the entire utterance. The end grace is applied BELOW, in the
+      // !speaking branch, to suppress the trailing echo of the final word from starting
+      // a new user turn.
       const inStartGrace = Date.now() - speakingStartedAt < BARGE_IN_ECHO_GRACE_MS;
-      const inEndGrace   = lastChunkSentAt > 0 && Date.now() - lastChunkSentAt < BARGE_IN_END_GRACE_MS;
-      if (!inStartGrace && !inEndGrace && rms > BARGE_IN_RMS) {
+      if (!inStartGrace && rms > BARGE_IN_RMS) {
         bargeInFrames++;
         const bargeFrame = Buffer.from(data);
         audioChunks.push(bargeFrame); // accumulate speech for batch STT fallback
@@ -1665,11 +1668,18 @@ export async function handleWebCallWebSocket(
           logger.info({ callId, rms, bargeInFrames, effectiveBargeInMinFrames }, "Barge-in triggered");
         }
       } else {
-        bargeInFrames = 0; // frame dropped below threshold (or in grace period) — reset the run
+        bargeInFrames = 0; // frame dropped below threshold (or in start grace) — reset the run
       }
       return; // don't touch silence timer while speaking
     }
     bargeInFrames = 0; // agent not speaking — reset
+
+    // End grace: suppress new-turn detection for BARGE_IN_END_GRACE_MS after the last
+    // TTS chunk was sent. This prevents the trailing echo of the agent's final word
+    // (still playing in the browser speaker) from being picked up by the mic and
+    // immediately firing a new user turn before the caller has a chance to speak.
+    const inEndGrace = lastChunkSentAt > 0 && Date.now() - lastChunkSentAt < BARGE_IN_END_GRACE_MS;
+    if (inEndGrace) return;
 
     // Streaming STT path: send all audio directly to the provider WebSocket —
     // no local VAD accumulation needed (provider handles endpointing server-side).
