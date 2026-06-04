@@ -1651,16 +1651,24 @@ export const ListCampaignLeadsQueryParams = zod.object({
   "offset": zod.coerce.number().default(listCampaignLeadsQueryOffsetDefault)
 })
 
+export const listCampaignLeadsResponseLeadsItemLeadScoreMin = 0;
+export const listCampaignLeadsResponseLeadsItemLeadScoreMax = 100;
+
+
+
 export const ListCampaignLeadsResponse = zod.object({
   "leads": zod.array(zod.object({
   "id": zod.number(),
   "campaignId": zod.number(),
   "batchId": zod.number().nullish(),
+  "leadSourceId": zod.number().nullish(),
   "phone": zod.string(),
+  "normalizedPhone": zod.string().nullish(),
   "name": zod.string().nullish(),
   "email": zod.string().nullish(),
   "leadData": zod.record(zod.string(), zod.string()).optional(),
-  "callStatus": zod.enum(['pending', 'calling', 'completed', 'failed', 'skipped']),
+  "callStatus": zod.enum(['pending', 'queued', 'calling', 'connected', 'completed', 'no_pickup', 'busy', 'voicemail', 'failed', 'exhausted', 'transferred', 'booked', 'callback_pending', 'dnc_blocked']),
+  "operationalOutcome": zod.enum(['pending', 'booking_created', 'transfer_completed', 'callback_requested', 'interest_confirmed', 'no_contact', 'dnc_blocked', 'failed']).describe('System-generated canonical outcome. Never set by clients.'),
   "disposition": zod.string().nullish(),
   "callId": zod.number().nullish(),
   "callAttempts": zod.number(),
@@ -1668,6 +1676,11 @@ export const ListCampaignLeadsResponse = zod.object({
   "source": zod.string(),
   "externalLeadId": zod.string().nullish(),
   "notes": zod.string().nullish(),
+  "ownerID": zod.string().nullish(),
+  "ownerType": zod.enum(['user', 'team', 'unassigned']).nullish(),
+  "leadScore": zod.number().min(listCampaignLeadsResponseLeadsItemLeadScoreMin).max(listCampaignLeadsResponseLeadsItemLeadScoreMax).nullish(),
+  "duplicateOfLeadId": zod.number().nullish(),
+  "duplicateStatus": zod.enum(['original', 'duplicate', 'merged']).nullish(),
   "createdAt": zod.coerce.date()
 })),
   "total": zod.number()
@@ -1700,15 +1713,23 @@ export const RetryCampaignLeadParams = zod.object({
   "leadId": zod.coerce.number()
 })
 
+export const retryCampaignLeadResponseLeadScoreMin = 0;
+export const retryCampaignLeadResponseLeadScoreMax = 100;
+
+
+
 export const RetryCampaignLeadResponse = zod.object({
   "id": zod.number(),
   "campaignId": zod.number(),
   "batchId": zod.number().nullish(),
+  "leadSourceId": zod.number().nullish(),
   "phone": zod.string(),
+  "normalizedPhone": zod.string().nullish(),
   "name": zod.string().nullish(),
   "email": zod.string().nullish(),
   "leadData": zod.record(zod.string(), zod.string()).optional(),
-  "callStatus": zod.enum(['pending', 'calling', 'completed', 'failed', 'skipped']),
+  "callStatus": zod.enum(['pending', 'queued', 'calling', 'connected', 'completed', 'no_pickup', 'busy', 'voicemail', 'failed', 'exhausted', 'transferred', 'booked', 'callback_pending', 'dnc_blocked']),
+  "operationalOutcome": zod.enum(['pending', 'booking_created', 'transfer_completed', 'callback_requested', 'interest_confirmed', 'no_contact', 'dnc_blocked', 'failed']).describe('System-generated canonical outcome. Never set by clients.'),
   "disposition": zod.string().nullish(),
   "callId": zod.number().nullish(),
   "callAttempts": zod.number(),
@@ -1716,6 +1737,11 @@ export const RetryCampaignLeadResponse = zod.object({
   "source": zod.string(),
   "externalLeadId": zod.string().nullish(),
   "notes": zod.string().nullish(),
+  "ownerID": zod.string().nullish(),
+  "ownerType": zod.enum(['user', 'team', 'unassigned']).nullish(),
+  "leadScore": zod.number().min(retryCampaignLeadResponseLeadScoreMin).max(retryCampaignLeadResponseLeadScoreMax).nullish(),
+  "duplicateOfLeadId": zod.number().nullish(),
+  "duplicateStatus": zod.enum(['original', 'duplicate', 'merged']).nullish(),
   "createdAt": zod.coerce.date()
 })
 
@@ -1778,6 +1804,7 @@ export const ListCampaignBatchesParams = zod.object({
 export const listCampaignBatchesResponseCallDelaySecondsDefault = 5;
 export const listCampaignBatchesResponseMaxAttemptsDefault = 1;
 export const listCampaignBatchesResponseRetryDelayMinutesDefault = 60;
+export const listCampaignBatchesResponseDuplicatePolicyDefault = `skip`;
 
 export const ListCampaignBatchesResponseItem = zod.object({
   "id": zod.number(),
@@ -1798,6 +1825,7 @@ export const ListCampaignBatchesResponseItem = zod.object({
   "businessHoursStart": zod.number().nullish(),
   "businessHoursEnd": zod.number().nullish(),
   "maxDailyCalls": zod.number().nullish(),
+  "duplicatePolicy": zod.enum(['ignore', 'skip', 'reject_with_report']).default(listCampaignBatchesResponseDuplicatePolicyDefault),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -1815,6 +1843,7 @@ export const createCampaignBatchBodyLeadSourceDefault = `csv`;
 export const createCampaignBatchBodyCallDelaySecondsDefault = 5;
 export const createCampaignBatchBodyMaxAttemptsDefault = 1;
 export const createCampaignBatchBodyRetryDelayMinutesDefault = 60;
+export const createCampaignBatchBodyDuplicatePolicyDefault = `skip`;
 
 export const CreateCampaignBatchBody = zod.object({
   "name": zod.string(),
@@ -1830,7 +1859,8 @@ export const CreateCampaignBatchBody = zod.object({
   "timezone": zod.string().optional(),
   "businessHoursStart": zod.number().optional(),
   "businessHoursEnd": zod.number().optional(),
-  "maxDailyCalls": zod.number().optional()
+  "maxDailyCalls": zod.number().optional(),
+  "duplicatePolicy": zod.enum(['ignore', 'skip', 'reject_with_report']).default(createCampaignBatchBodyDuplicatePolicyDefault)
 })
 
 
@@ -1845,6 +1875,7 @@ export const GetCampaignBatchParams = zod.object({
 export const getCampaignBatchResponseCallDelaySecondsDefault = 5;
 export const getCampaignBatchResponseMaxAttemptsDefault = 1;
 export const getCampaignBatchResponseRetryDelayMinutesDefault = 60;
+export const getCampaignBatchResponseDuplicatePolicyDefault = `skip`;
 
 export const GetCampaignBatchResponse = zod.object({
   "id": zod.number(),
@@ -1865,6 +1896,7 @@ export const GetCampaignBatchResponse = zod.object({
   "businessHoursStart": zod.number().nullish(),
   "businessHoursEnd": zod.number().nullish(),
   "maxDailyCalls": zod.number().nullish(),
+  "duplicatePolicy": zod.enum(['ignore', 'skip', 'reject_with_report']).default(getCampaignBatchResponseDuplicatePolicyDefault),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -1886,6 +1918,7 @@ export const UpdateCampaignBatchBody = zod.object({
 export const updateCampaignBatchResponseCallDelaySecondsDefault = 5;
 export const updateCampaignBatchResponseMaxAttemptsDefault = 1;
 export const updateCampaignBatchResponseRetryDelayMinutesDefault = 60;
+export const updateCampaignBatchResponseDuplicatePolicyDefault = `skip`;
 
 export const UpdateCampaignBatchResponse = zod.object({
   "id": zod.number(),
@@ -1906,6 +1939,7 @@ export const UpdateCampaignBatchResponse = zod.object({
   "businessHoursStart": zod.number().nullish(),
   "businessHoursEnd": zod.number().nullish(),
   "maxDailyCalls": zod.number().nullish(),
+  "duplicatePolicy": zod.enum(['ignore', 'skip', 'reject_with_report']).default(updateCampaignBatchResponseDuplicatePolicyDefault),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -2044,6 +2078,59 @@ export const GetCampaignLeadProfileResponse = zod.object({
   "scheduledAt": zod.coerce.date().optional(),
   "reason": zod.string().nullish()
 })),
+  "transfers": zod.array(zod.object({
+  "id": zod.number(),
+  "leadId": zod.number(),
+  "campaignId": zod.number(),
+  "batchId": zod.number().nullish(),
+  "callExecutionId": zod.number().nullish(),
+  "transferredTo": zod.string(),
+  "outcome": zod.string().nullish(),
+  "durationSeconds": zod.number().nullish(),
+  "transferTime": zod.coerce.date(),
+  "createdAt": zod.coerce.date()
+})).optional(),
+  "notes": zod.array(zod.object({
+  "id": zod.number(),
+  "leadId": zod.number(),
+  "campaignId": zod.number(),
+  "body": zod.string(),
+  "createdBy": zod.string(),
+  "createdAt": zod.coerce.date()
+})).optional(),
+  "tasks": zod.array(zod.object({
+  "id": zod.number(),
+  "leadId": zod.number(),
+  "campaignId": zod.number(),
+  "title": zod.string(),
+  "dueAt": zod.coerce.date().nullish(),
+  "status": zod.enum(['open', 'done']),
+  "assignedToId": zod.string().nullish(),
+  "assignedToType": zod.string().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date()
+})).optional(),
+  "tags": zod.array(zod.object({
+  "id": zod.number(),
+  "leadId": zod.number(),
+  "campaignId": zod.number(),
+  "tag": zod.string(),
+  "createdAt": zod.coerce.date()
+})).optional(),
+  "bookings": zod.array(zod.object({
+  "id": zod.number().optional(),
+  "meetingTime": zod.coerce.date().nullish(),
+  "meetingLink": zod.string().nullish(),
+  "meetingStatus": zod.string().optional(),
+  "bookedBy": zod.string().nullish(),
+  "revenueValue": zod.string().nullish(),
+  "createdAt": zod.coerce.date().optional()
+})).optional(),
+  "incomingCalls": zod.array(zod.object({
+  "id": zod.number().optional(),
+  "callId": zod.number().nullish(),
+  "createdAt": zod.coerce.date().optional()
+})).optional(),
   "campaign": zod.object({
   "id": zod.number(),
   "name": zod.string()
@@ -2171,6 +2258,364 @@ export const AddToDncBody = zod.object({
  */
 export const RemoveFromDncParams = zod.object({
   "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary List all lead sources for a campaign
+ */
+export const ListLeadSourcesParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListLeadSourcesResponseItem = zod.object({
+  "id": zod.number(),
+  "campaignId": zod.number(),
+  "batchId": zod.number().nullish(),
+  "sourceType": zod.enum(['csv', 'meta_form', 'webhook', 'manual', 'api']),
+  "sourceName": zod.string(),
+  "metaFormId": zod.string().nullish(),
+  "webhookId": zod.number().nullish(),
+  "fieldMapping": zod.record(zod.string(), zod.string()).nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const ListLeadSourcesResponse = zod.array(ListLeadSourcesResponseItem)
+
+
+/**
+ * @summary Create a lead source for a campaign
+ */
+export const CreateLeadSourceParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const CreateLeadSourceBody = zod.object({
+  "batchId": zod.number().optional(),
+  "sourceType": zod.enum(['csv', 'meta_form', 'webhook', 'manual', 'api']),
+  "sourceName": zod.string(),
+  "metaFormId": zod.string().optional(),
+  "webhookId": zod.number().optional(),
+  "fieldMapping": zod.record(zod.string(), zod.string()).optional()
+})
+
+
+/**
+ * @summary List transfers for a lead
+ */
+export const ListLeadTransfersParams = zod.object({
+  "id": zod.coerce.number(),
+  "leadId": zod.coerce.number()
+})
+
+export const ListLeadTransfersResponseItem = zod.object({
+  "id": zod.number(),
+  "leadId": zod.number(),
+  "campaignId": zod.number(),
+  "batchId": zod.number().nullish(),
+  "callExecutionId": zod.number().nullish(),
+  "transferredTo": zod.string(),
+  "outcome": zod.string().nullish(),
+  "durationSeconds": zod.number().nullish(),
+  "transferTime": zod.coerce.date(),
+  "createdAt": zod.coerce.date()
+})
+export const ListLeadTransfersResponse = zod.array(ListLeadTransfersResponseItem)
+
+
+/**
+ * @summary Record a transfer for a lead
+ */
+export const CreateLeadTransferParams = zod.object({
+  "id": zod.coerce.number(),
+  "leadId": zod.coerce.number()
+})
+
+export const CreateLeadTransferBody = zod.object({
+  "transferredTo": zod.string(),
+  "callExecutionId": zod.number().optional(),
+  "outcome": zod.string().optional(),
+  "durationSeconds": zod.number().optional()
+})
+
+
+/**
+ * @summary Update a lead transfer (set outcome)
+ */
+export const UpdateLeadTransferParams = zod.object({
+  "id": zod.coerce.number(),
+  "leadId": zod.coerce.number(),
+  "transferId": zod.coerce.number()
+})
+
+export const UpdateLeadTransferBody = zod.object({
+  "outcome": zod.string().optional(),
+  "durationSeconds": zod.number().optional()
+})
+
+export const UpdateLeadTransferResponse = zod.object({
+  "id": zod.number(),
+  "leadId": zod.number(),
+  "campaignId": zod.number(),
+  "batchId": zod.number().nullish(),
+  "callExecutionId": zod.number().nullish(),
+  "transferredTo": zod.string(),
+  "outcome": zod.string().nullish(),
+  "durationSeconds": zod.number().nullish(),
+  "transferTime": zod.coerce.date(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary List notes for a lead
+ */
+export const ListLeadNotesParams = zod.object({
+  "id": zod.coerce.number(),
+  "leadId": zod.coerce.number()
+})
+
+export const ListLeadNotesResponseItem = zod.object({
+  "id": zod.number(),
+  "leadId": zod.number(),
+  "campaignId": zod.number(),
+  "body": zod.string(),
+  "createdBy": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+export const ListLeadNotesResponse = zod.array(ListLeadNotesResponseItem)
+
+
+/**
+ * @summary Add a note to a lead
+ */
+export const CreateLeadNoteParams = zod.object({
+  "id": zod.coerce.number(),
+  "leadId": zod.coerce.number()
+})
+
+export const CreateLeadNoteBody = zod.object({
+  "body": zod.string()
+})
+
+
+/**
+ * @summary Delete a lead note
+ */
+export const DeleteLeadNoteParams = zod.object({
+  "id": zod.coerce.number(),
+  "leadId": zod.coerce.number(),
+  "noteId": zod.coerce.number()
+})
+
+
+/**
+ * @summary List tasks for a lead
+ */
+export const ListLeadTasksParams = zod.object({
+  "id": zod.coerce.number(),
+  "leadId": zod.coerce.number()
+})
+
+export const ListLeadTasksResponseItem = zod.object({
+  "id": zod.number(),
+  "leadId": zod.number(),
+  "campaignId": zod.number(),
+  "title": zod.string(),
+  "dueAt": zod.coerce.date().nullish(),
+  "status": zod.enum(['open', 'done']),
+  "assignedToId": zod.string().nullish(),
+  "assignedToType": zod.string().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const ListLeadTasksResponse = zod.array(ListLeadTasksResponseItem)
+
+
+/**
+ * @summary Create a task for a lead
+ */
+export const CreateLeadTaskParams = zod.object({
+  "id": zod.coerce.number(),
+  "leadId": zod.coerce.number()
+})
+
+export const CreateLeadTaskBody = zod.object({
+  "title": zod.string(),
+  "dueAt": zod.coerce.date().optional(),
+  "assignedToId": zod.string().optional(),
+  "assignedToType": zod.string().optional()
+})
+
+
+/**
+ * @summary Update a lead task (title, status, due date)
+ */
+export const UpdateLeadTaskParams = zod.object({
+  "id": zod.coerce.number(),
+  "leadId": zod.coerce.number(),
+  "taskId": zod.coerce.number()
+})
+
+export const UpdateLeadTaskBody = zod.object({
+  "title": zod.string().optional(),
+  "dueAt": zod.coerce.date().nullish(),
+  "status": zod.enum(['open', 'done']).optional(),
+  "assignedToId": zod.string().nullish()
+})
+
+export const UpdateLeadTaskResponse = zod.object({
+  "id": zod.number(),
+  "leadId": zod.number(),
+  "campaignId": zod.number(),
+  "title": zod.string(),
+  "dueAt": zod.coerce.date().nullish(),
+  "status": zod.enum(['open', 'done']),
+  "assignedToId": zod.string().nullish(),
+  "assignedToType": zod.string().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a lead task
+ */
+export const DeleteLeadTaskParams = zod.object({
+  "id": zod.coerce.number(),
+  "leadId": zod.coerce.number(),
+  "taskId": zod.coerce.number()
+})
+
+
+/**
+ * @summary List tags for a lead
+ */
+export const ListLeadTagsParams = zod.object({
+  "id": zod.coerce.number(),
+  "leadId": zod.coerce.number()
+})
+
+export const ListLeadTagsResponseItem = zod.object({
+  "id": zod.number(),
+  "leadId": zod.number(),
+  "campaignId": zod.number(),
+  "tag": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+export const ListLeadTagsResponse = zod.array(ListLeadTagsResponseItem)
+
+
+/**
+ * @summary Add a tag to a lead
+ */
+export const AddLeadTagParams = zod.object({
+  "id": zod.coerce.number(),
+  "leadId": zod.coerce.number()
+})
+
+export const AddLeadTagBody = zod.object({
+  "tag": zod.string()
+})
+
+
+/**
+ * @summary Remove a tag from a lead
+ */
+export const DeleteLeadTagParams = zod.object({
+  "id": zod.coerce.number(),
+  "leadId": zod.coerce.number(),
+  "tagId": zod.coerce.number()
+})
+
+
+/**
+ * @summary List variable registry for an agent
+ */
+export const ListAgentVariablesParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListAgentVariablesResponseItem = zod.object({
+  "id": zod.number(),
+  "agentId": zod.number(),
+  "variableName": zod.string(),
+  "displayLabel": zod.string(),
+  "isRequired": zod.boolean(),
+  "defaultValue": zod.string().nullish(),
+  "dataType": zod.enum(['string', 'number', 'date', 'boolean']),
+  "createdAt": zod.coerce.date()
+})
+export const ListAgentVariablesResponse = zod.array(ListAgentVariablesResponseItem)
+
+
+/**
+ * @summary Add a variable to an agent's registry
+ */
+export const CreateAgentVariableParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const createAgentVariableBodyIsRequiredDefault = false;
+
+export const CreateAgentVariableBody = zod.object({
+  "variableName": zod.string(),
+  "displayLabel": zod.string(),
+  "isRequired": zod.boolean().default(createAgentVariableBodyIsRequiredDefault),
+  "defaultValue": zod.string().optional(),
+  "dataType": zod.enum(['string', 'number', 'date', 'boolean'])
+})
+
+
+/**
+ * @summary Update a variable in an agent's registry
+ */
+export const UpdateAgentVariableParams = zod.object({
+  "id": zod.coerce.number(),
+  "varId": zod.coerce.number()
+})
+
+export const UpdateAgentVariableBody = zod.object({
+  "displayLabel": zod.string().optional(),
+  "isRequired": zod.boolean().optional(),
+  "defaultValue": zod.string().nullish(),
+  "dataType": zod.enum(['string', 'number', 'date', 'boolean']).optional()
+})
+
+export const UpdateAgentVariableResponse = zod.object({
+  "id": zod.number(),
+  "agentId": zod.number(),
+  "variableName": zod.string(),
+  "displayLabel": zod.string(),
+  "isRequired": zod.boolean(),
+  "defaultValue": zod.string().nullish(),
+  "dataType": zod.enum(['string', 'number', 'date', 'boolean']),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Remove a variable from an agent's registry
+ */
+export const DeleteAgentVariableParams = zod.object({
+  "id": zod.coerce.number(),
+  "varId": zod.coerce.number()
+})
+
+
+/**
+ * @summary Normalize a phone number to E.164 format
+ */
+export const NormalizePhoneBody = zod.object({
+  "phone": zod.string(),
+  "countryCode": zod.string().optional().describe('e.g. 91, 1, 44'),
+  "nationalDigitLength": zod.number().optional()
+})
+
+export const NormalizePhoneResponse = zod.object({
+  "raw": zod.string(),
+  "normalized": zod.string().nullish(),
+  "valid": zod.boolean(),
+  "reason": zod.string().nullish()
 })
 
 

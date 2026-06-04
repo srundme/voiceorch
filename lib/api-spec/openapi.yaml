@@ -1976,6 +1976,543 @@ paths:
         "404":
           description: Not found
 
+  # ── Phase 1A: Campaign Ops Routes ────────────────────────────────────────────
+
+  /campaigns/{id}/lead-sources:
+    get:
+      operationId: listLeadSources
+      tags: [campaigns]
+      summary: List all lead sources for a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Lead source list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LeadSource"
+        "401":
+          description: Unauthorized
+    post:
+      operationId: createLeadSource
+      tags: [campaigns]
+      summary: Create a lead source for a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeadSourceCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeadSource"
+        "401":
+          description: Unauthorized
+
+  /campaigns/{id}/leads/{leadId}/transfers:
+    get:
+      operationId: listLeadTransfers
+      tags: [campaigns]
+      summary: List transfers for a lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: leadId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Transfer list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LeadTransfer"
+        "401":
+          description: Unauthorized
+    post:
+      operationId: createLeadTransfer
+      tags: [campaigns]
+      summary: Record a transfer for a lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: leadId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeadTransferCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeadTransfer"
+        "401":
+          description: Unauthorized
+
+  /campaigns/{id}/leads/{leadId}/transfers/{transferId}:
+    patch:
+      operationId: updateLeadTransfer
+      tags: [campaigns]
+      summary: Update a lead transfer (set outcome)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: leadId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: transferId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeadTransferUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeadTransfer"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+
+  /campaigns/{id}/leads/{leadId}/notes:
+    get:
+      operationId: listLeadNotes
+      tags: [campaigns]
+      summary: List notes for a lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: leadId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Notes list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LeadNote"
+        "401":
+          description: Unauthorized
+    post:
+      operationId: createLeadNote
+      tags: [campaigns]
+      summary: Add a note to a lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: leadId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeadNoteCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeadNote"
+        "401":
+          description: Unauthorized
+
+  /campaigns/{id}/leads/{leadId}/notes/{noteId}:
+    delete:
+      operationId: deleteLeadNote
+      tags: [campaigns]
+      summary: Delete a lead note
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: leadId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: noteId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+
+  /campaigns/{id}/leads/{leadId}/tasks:
+    get:
+      operationId: listLeadTasks
+      tags: [campaigns]
+      summary: List tasks for a lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: leadId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Task list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LeadTask"
+        "401":
+          description: Unauthorized
+    post:
+      operationId: createLeadTask
+      tags: [campaigns]
+      summary: Create a task for a lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: leadId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeadTaskCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeadTask"
+        "401":
+          description: Unauthorized
+
+  /campaigns/{id}/leads/{leadId}/tasks/{taskId}:
+    patch:
+      operationId: updateLeadTask
+      tags: [campaigns]
+      summary: Update a lead task (title, status, due date)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: leadId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: taskId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeadTaskUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeadTask"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteLeadTask
+      tags: [campaigns]
+      summary: Delete a lead task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: leadId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: taskId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+
+  /campaigns/{id}/leads/{leadId}/tags:
+    get:
+      operationId: listLeadTags
+      tags: [campaigns]
+      summary: List tags for a lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: leadId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Tag list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LeadTag"
+        "401":
+          description: Unauthorized
+    post:
+      operationId: addLeadTag
+      tags: [campaigns]
+      summary: Add a tag to a lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: leadId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tag]
+              properties:
+                tag: { type: string }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeadTag"
+        "401":
+          description: Unauthorized
+
+  /campaigns/{id}/leads/{leadId}/tags/{tagId}:
+    delete:
+      operationId: deleteLeadTag
+      tags: [campaigns]
+      summary: Remove a tag from a lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: leadId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: tagId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+
+  /agents/{id}/variables:
+    get:
+      operationId: listAgentVariables
+      tags: [agents]
+      summary: List variable registry for an agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Variable list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgentVariable"
+        "401":
+          description: Unauthorized
+    post:
+      operationId: createAgentVariable
+      tags: [agents]
+      summary: Add a variable to an agent's registry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentVariableCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentVariable"
+        "401":
+          description: Unauthorized
+
+  /agents/{id}/variables/{varId}:
+    patch:
+      operationId: updateAgentVariable
+      tags: [agents]
+      summary: Update a variable in an agent's registry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: varId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentVariableUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentVariable"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteAgentVariable
+      tags: [agents]
+      summary: Remove a variable from an agent's registry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: varId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+
+  /utils/normalize-phone:
+    post:
+      operationId: normalizePhone
+      tags: [utils]
+      summary: Normalize a phone number to E.164 format
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone]
+              properties:
+                phone: { type: string }
+                countryCode: { type: string, description: "e.g. 91, 1, 44" }
+                nationalDigitLength: { type: integer }
+      responses:
+        "200":
+          description: Normalization result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PhoneNormalizeResult"
+
   # ── Scheduling ───────────────────────────────────────────────────────────────
   /scheduling/calendars:
     get:
@@ -4645,7 +5182,7 @@ components:
 
     CampaignLead:
       type: object
-      required: [id, campaignId, phone, callStatus, callAttempts, source, createdAt]
+      required: [id, campaignId, phone, callStatus, operationalOutcome, callAttempts, source, createdAt]
       properties:
         id:
           type: integer
@@ -4654,8 +5191,14 @@ components:
         batchId:
           type: integer
           nullable: true
+        leadSourceId:
+          type: integer
+          nullable: true
         phone:
           type: string
+        normalizedPhone:
+          type: string
+          nullable: true
         name:
           type: string
           nullable: true
@@ -4668,7 +5211,11 @@ components:
             type: string
         callStatus:
           type: string
-          enum: [pending, calling, completed, failed, skipped]
+          enum: [pending, queued, calling, connected, completed, no_pickup, busy, voicemail, failed, exhausted, transferred, booked, callback_pending, dnc_blocked]
+        operationalOutcome:
+          type: string
+          enum: [pending, booking_created, transfer_completed, callback_requested, interest_confirmed, no_contact, dnc_blocked, failed]
+          description: "System-generated canonical outcome. Never set by clients."
         disposition:
           type: string
           nullable: true
@@ -4689,6 +5236,25 @@ components:
         notes:
           type: string
           nullable: true
+        ownerID:
+          type: string
+          nullable: true
+        ownerType:
+          type: string
+          nullable: true
+          enum: [user, team, unassigned]
+        leadScore:
+          type: integer
+          nullable: true
+          minimum: 0
+          maximum: 100
+        duplicateOfLeadId:
+          type: integer
+          nullable: true
+        duplicateStatus:
+          type: string
+          nullable: true
+          enum: [original, duplicate, merged]
         createdAt:
           type: string
           format: date-time
@@ -4750,6 +5316,10 @@ components:
         maxDailyCalls:
           type: integer
           nullable: true
+        duplicatePolicy:
+          type: string
+          enum: [ignore, skip, reject_with_report]
+          default: skip
         createdAt:
           type: string
           format: date-time
@@ -4805,6 +5375,10 @@ components:
           type: integer
         maxDailyCalls:
           type: integer
+        duplicatePolicy:
+          type: string
+          enum: [ignore, skip, reject_with_report]
+          default: skip
 
     CampaignBatchUpdate:
       type: object
@@ -4891,6 +5465,7 @@ components:
               rawExtract: { type: ["string", "null"] }
               status: { type: string }
               createdAt: { type: string, format: date-time }
+            responseDueBy: { type: ["string", "null"], format: date-time }
         pendingRetries:
           type: array
           items:
@@ -4900,6 +5475,42 @@ components:
               attemptNumber: { type: integer }
               scheduledAt: { type: string, format: date-time }
               reason: { type: ["string", "null"] }
+        transfers:
+          type: array
+          items:
+            $ref: "#/components/schemas/LeadTransfer"
+        notes:
+          type: array
+          items:
+            $ref: "#/components/schemas/LeadNote"
+        tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/LeadTask"
+        tags:
+          type: array
+          items:
+            $ref: "#/components/schemas/LeadTag"
+        bookings:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              meetingTime: { type: ["string", "null"], format: date-time }
+              meetingLink: { type: ["string", "null"] }
+              meetingStatus: { type: string }
+              bookedBy: { type: ["string", "null"] }
+              revenueValue: { type: ["string", "null"] }
+              createdAt: { type: string, format: date-time }
+        incomingCalls:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              callId: { type: ["integer", "null"] }
+              createdAt: { type: string, format: date-time }
         campaign:
           type: object
           required: [id, name]
@@ -5876,3 +6487,194 @@ components:
         status: { type: string }
         errorMessage: { type: ["string", "null"] }
         createdAt: { type: string, format: date-time }
+
+    # ── Phase 1A: Campaign Ops Entities ──────────────────────────────────────
+
+    LeadSource:
+      type: object
+      required: [id, campaignId, sourceType, sourceName, createdAt]
+      properties:
+        id: { type: integer }
+        campaignId: { type: integer }
+        batchId: { type: ["integer", "null"] }
+        sourceType:
+          type: string
+          enum: [csv, meta_form, webhook, manual, api]
+        sourceName: { type: string }
+        metaFormId: { type: ["string", "null"] }
+        webhookId: { type: ["integer", "null"] }
+        fieldMapping:
+          type: object
+          additionalProperties: { type: string }
+          nullable: true
+        createdAt: { type: string, format: date-time }
+
+    LeadSourceCreate:
+      type: object
+      required: [sourceType, sourceName]
+      properties:
+        batchId: { type: integer }
+        sourceType:
+          type: string
+          enum: [csv, meta_form, webhook, manual, api]
+        sourceName: { type: string }
+        metaFormId: { type: string }
+        webhookId: { type: integer }
+        fieldMapping:
+          type: object
+          additionalProperties: { type: string }
+
+    LeadTransfer:
+      type: object
+      required: [id, leadId, campaignId, transferredTo, transferTime, createdAt]
+      properties:
+        id: { type: integer }
+        leadId: { type: integer }
+        campaignId: { type: integer }
+        batchId: { type: ["integer", "null"] }
+        callExecutionId: { type: ["integer", "null"] }
+        transferredTo: { type: string }
+        outcome: { type: ["string", "null"] }
+        durationSeconds: { type: ["integer", "null"] }
+        transferTime: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+
+    LeadTransferCreate:
+      type: object
+      required: [transferredTo]
+      properties:
+        transferredTo: { type: string }
+        callExecutionId: { type: integer }
+        outcome: { type: string }
+        durationSeconds: { type: integer }
+
+    LeadTransferUpdate:
+      type: object
+      properties:
+        outcome: { type: string }
+        durationSeconds: { type: integer }
+
+    LeadNote:
+      type: object
+      required: [id, leadId, campaignId, body, createdBy, createdAt]
+      properties:
+        id: { type: integer }
+        leadId: { type: integer }
+        campaignId: { type: integer }
+        body: { type: string }
+        createdBy: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    LeadNoteCreate:
+      type: object
+      required: [body]
+      properties:
+        body: { type: string }
+
+    LeadTask:
+      type: object
+      required: [id, leadId, campaignId, title, status, createdAt]
+      properties:
+        id: { type: integer }
+        leadId: { type: integer }
+        campaignId: { type: integer }
+        title: { type: string }
+        dueAt: { type: ["string", "null"], format: date-time }
+        status:
+          type: string
+          enum: [open, done]
+        assignedToId: { type: ["string", "null"] }
+        assignedToType: { type: ["string", "null"] }
+        completedAt: { type: ["string", "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+
+    LeadTaskCreate:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string }
+        dueAt: { type: string, format: date-time }
+        assignedToId: { type: string }
+        assignedToType: { type: string }
+
+    LeadTaskUpdate:
+      type: object
+      properties:
+        title: { type: string }
+        dueAt: { type: string, format: date-time, nullable: true }
+        status: { type: string, enum: [open, done] }
+        assignedToId: { type: string, nullable: true }
+
+    LeadTag:
+      type: object
+      required: [id, leadId, campaignId, tag, createdAt]
+      properties:
+        id: { type: integer }
+        leadId: { type: integer }
+        campaignId: { type: integer }
+        tag: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    AgentVariable:
+      type: object
+      required: [id, agentId, variableName, displayLabel, isRequired, dataType, createdAt]
+      properties:
+        id: { type: integer }
+        agentId: { type: integer }
+        variableName: { type: string }
+        displayLabel: { type: string }
+        isRequired: { type: boolean }
+        defaultValue: { type: ["string", "null"] }
+        dataType:
+          type: string
+          enum: [string, number, date, boolean]
+        createdAt: { type: string, format: date-time }
+
+    AgentVariableCreate:
+      type: object
+      required: [variableName, displayLabel, dataType]
+      properties:
+        variableName: { type: string }
+        displayLabel: { type: string }
+        isRequired: { type: boolean, default: false }
+        defaultValue: { type: string }
+        dataType:
+          type: string
+          enum: [string, number, date, boolean]
+
+    AgentVariableUpdate:
+      type: object
+      properties:
+        displayLabel: { type: string }
+        isRequired: { type: boolean }
+        defaultValue: { type: string, nullable: true }
+        dataType: { type: string, enum: [string, number, date, boolean] }
+
+    ImportSummary:
+      type: object
+      required: [totalRows, leadsCreated, duplicatesFound, duplicatesAction, invalidPhones, errors]
+      properties:
+        totalRows: { type: integer }
+        leadsCreated: { type: integer }
+        duplicatesFound: { type: integer }
+        duplicatesAction: { type: string }
+        invalidPhones: { type: integer }
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              phone: { type: string }
+              normalizedPhone: { type: string }
+              reason: { type: string }
+              existingLeadId: { type: integer }
+              rowIndex: { type: integer }
+
+    PhoneNormalizeResult:
+      type: object
+      required: [raw, valid]
+      properties:
+        raw: { type: string }
+        normalized: { type: ["string", "null"] }
+        valid: { type: boolean }
+        reason: { type: ["string", "null"] }

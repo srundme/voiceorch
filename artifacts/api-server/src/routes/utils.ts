@@ -1,4 +1,6 @@
 import { Router, type IRouter } from "express";
+import { getAuth } from "@clerk/express";
+import { normalizePhone, type WorkspacePhoneConfig } from "../services/phone-normalization.js";
 
 const router: IRouter = Router();
 
@@ -144,6 +146,27 @@ router.get("/utils/datetime", (req, res): void => {
     utcOffset,
     context,
   });
+});
+
+// POST /utils/normalize-phone
+router.post("/utils/normalize-phone", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const { phone, countryCode, nationalDigitLength } = req.body as {
+    phone: string;
+    countryCode?: string;
+    nationalDigitLength?: number;
+  };
+
+  if (!phone) { res.status(400).json({ error: "phone is required" }); return; }
+
+  const config: WorkspacePhoneConfig = {
+    defaultCountryCode: countryCode ?? "91",
+    nationalDigitLength: nationalDigitLength ?? 10,
+  };
+
+  res.json(normalizePhone(phone, config));
 });
 
 export default router;

@@ -1403,21 +1403,69 @@ export type CampaignLeadCallStatus = typeof CampaignLeadCallStatus[keyof typeof 
 
 export const CampaignLeadCallStatus = {
   pending: 'pending',
+  queued: 'queued',
   calling: 'calling',
+  connected: 'connected',
   completed: 'completed',
+  no_pickup: 'no_pickup',
+  busy: 'busy',
+  voicemail: 'voicemail',
   failed: 'failed',
-  skipped: 'skipped',
+  exhausted: 'exhausted',
+  transferred: 'transferred',
+  booked: 'booked',
+  callback_pending: 'callback_pending',
+  dnc_blocked: 'dnc_blocked',
+} as const;
+
+/**
+ * System-generated canonical outcome. Never set by clients.
+ */
+export type CampaignLeadOperationalOutcome = typeof CampaignLeadOperationalOutcome[keyof typeof CampaignLeadOperationalOutcome];
+
+
+export const CampaignLeadOperationalOutcome = {
+  pending: 'pending',
+  booking_created: 'booking_created',
+  transfer_completed: 'transfer_completed',
+  callback_requested: 'callback_requested',
+  interest_confirmed: 'interest_confirmed',
+  no_contact: 'no_contact',
+  dnc_blocked: 'dnc_blocked',
+  failed: 'failed',
+} as const;
+
+export type CampaignLeadOwnerType = typeof CampaignLeadOwnerType[keyof typeof CampaignLeadOwnerType] | null;
+
+
+export const CampaignLeadOwnerType = {
+  user: 'user',
+  team: 'team',
+  unassigned: 'unassigned',
+} as const;
+
+export type CampaignLeadDuplicateStatus = typeof CampaignLeadDuplicateStatus[keyof typeof CampaignLeadDuplicateStatus] | null;
+
+
+export const CampaignLeadDuplicateStatus = {
+  original: 'original',
+  duplicate: 'duplicate',
+  merged: 'merged',
 } as const;
 
 export interface CampaignLead {
   id: number;
   campaignId: number;
   batchId?: number | null;
+  leadSourceId?: number | null;
   phone: string;
+  normalizedPhone?: string | null;
   name?: string | null;
   email?: string | null;
   leadData?: CampaignLeadLeadData;
   callStatus: CampaignLeadCallStatus;
+  /** System-generated canonical outcome. Never set by clients. */
+  operationalOutcome: CampaignLeadOperationalOutcome;
   disposition?: string | null;
   callId?: number | null;
   callAttempts: number;
@@ -1425,6 +1473,15 @@ export interface CampaignLead {
   source: string;
   externalLeadId?: string | null;
   notes?: string | null;
+  ownerID?: string | null;
+  ownerType?: CampaignLeadOwnerType;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  leadScore?: number | null;
+  duplicateOfLeadId?: number | null;
+  duplicateStatus?: CampaignLeadDuplicateStatus;
   createdAt: string;
 }
 
@@ -1449,6 +1506,15 @@ export const CampaignBatchLeadSource = {
 
 export type CampaignBatchFieldMappings = {[key: string]: string} | null;
 
+export type CampaignBatchDuplicatePolicy = typeof CampaignBatchDuplicatePolicy[keyof typeof CampaignBatchDuplicatePolicy];
+
+
+export const CampaignBatchDuplicatePolicy = {
+  ignore: 'ignore',
+  skip: 'skip',
+  reject_with_report: 'reject_with_report',
+} as const;
+
 export interface CampaignBatch {
   id: number;
   campaignId: number;
@@ -1468,6 +1534,7 @@ export interface CampaignBatch {
   businessHoursStart?: number | null;
   businessHoursEnd?: number | null;
   maxDailyCalls?: number | null;
+  duplicatePolicy?: CampaignBatchDuplicatePolicy;
   createdAt: string;
   updatedAt: string;
 }
@@ -1488,6 +1555,15 @@ export type CampaignBatchCreateLeadsItem = {[key: string]: string};
  */
 export type CampaignBatchCreateFieldMappings = {[key: string]: string};
 
+export type CampaignBatchCreateDuplicatePolicy = typeof CampaignBatchCreateDuplicatePolicy[keyof typeof CampaignBatchCreateDuplicatePolicy];
+
+
+export const CampaignBatchCreateDuplicatePolicy = {
+  ignore: 'ignore',
+  skip: 'skip',
+  reject_with_report: 'reject_with_report',
+} as const;
+
 export interface CampaignBatchCreate {
   name: string;
   description?: string;
@@ -1504,6 +1580,7 @@ export interface CampaignBatchCreate {
   businessHoursStart?: number;
   businessHoursEnd?: number;
   maxDailyCalls?: number;
+  duplicatePolicy?: CampaignBatchCreateDuplicatePolicy;
 }
 
 export type CampaignBatchUpdateStatus = typeof CampaignBatchUpdateStatus[keyof typeof CampaignBatchUpdateStatus];
@@ -1620,10 +1697,90 @@ export type CampaignLeadProfilePendingRetriesItem = {
   reason?: string | null;
 };
 
+export type CampaignLeadProfileBookingsItem = {
+  id?: number;
+  /** @nullable */
+  meetingTime?: string | null;
+  /** @nullable */
+  meetingLink?: string | null;
+  meetingStatus?: string;
+  /** @nullable */
+  bookedBy?: string | null;
+  /** @nullable */
+  revenueValue?: string | null;
+  createdAt?: string;
+};
+
+export type CampaignLeadProfileIncomingCallsItem = {
+  id?: number;
+  /** @nullable */
+  callId?: number | null;
+  createdAt?: string;
+};
+
 export type CampaignLeadProfileCampaign = {
   id: number;
   name: string;
 };
+
+export interface LeadTransfer {
+  id: number;
+  leadId: number;
+  campaignId: number;
+  /** @nullable */
+  batchId?: number | null;
+  /** @nullable */
+  callExecutionId?: number | null;
+  transferredTo: string;
+  /** @nullable */
+  outcome?: string | null;
+  /** @nullable */
+  durationSeconds?: number | null;
+  transferTime: string;
+  createdAt: string;
+}
+
+export interface LeadNote {
+  id: number;
+  leadId: number;
+  campaignId: number;
+  body: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+export type LeadTaskStatus = typeof LeadTaskStatus[keyof typeof LeadTaskStatus];
+
+
+export const LeadTaskStatus = {
+  open: 'open',
+  done: 'done',
+} as const;
+
+export interface LeadTask {
+  id: number;
+  leadId: number;
+  campaignId: number;
+  title: string;
+  /** @nullable */
+  dueAt?: string | null;
+  status: LeadTaskStatus;
+  /** @nullable */
+  assignedToId?: string | null;
+  /** @nullable */
+  assignedToType?: string | null;
+  /** @nullable */
+  completedAt?: string | null;
+  createdAt: string;
+}
+
+export interface LeadTag {
+  id: number;
+  leadId: number;
+  campaignId: number;
+  tag: string;
+  createdAt: string;
+}
 
 export interface CampaignLeadProfile {
   lead: CampaignLeadProfileLead;
@@ -1631,6 +1788,12 @@ export interface CampaignLeadProfile {
   executions: CampaignLeadProfileExecutionsItem[];
   callbacks: CampaignLeadProfileCallbacksItem[];
   pendingRetries: CampaignLeadProfilePendingRetriesItem[];
+  transfers?: LeadTransfer[];
+  notes?: LeadNote[];
+  tasks?: LeadTask[];
+  tags?: LeadTag[];
+  bookings?: CampaignLeadProfileBookingsItem[];
+  incomingCalls?: CampaignLeadProfileIncomingCallsItem[];
   campaign: CampaignLeadProfileCampaign;
 }
 
@@ -2401,6 +2564,177 @@ export interface AdminFailedCall {
   createdAt: string;
 }
 
+export type LeadSourceSourceType = typeof LeadSourceSourceType[keyof typeof LeadSourceSourceType];
+
+
+export const LeadSourceSourceType = {
+  csv: 'csv',
+  meta_form: 'meta_form',
+  webhook: 'webhook',
+  manual: 'manual',
+  api: 'api',
+} as const;
+
+export type LeadSourceFieldMapping = {[key: string]: string} | null;
+
+export interface LeadSource {
+  id: number;
+  campaignId: number;
+  /** @nullable */
+  batchId?: number | null;
+  sourceType: LeadSourceSourceType;
+  sourceName: string;
+  /** @nullable */
+  metaFormId?: string | null;
+  /** @nullable */
+  webhookId?: number | null;
+  fieldMapping?: LeadSourceFieldMapping;
+  createdAt: string;
+}
+
+export type LeadSourceCreateSourceType = typeof LeadSourceCreateSourceType[keyof typeof LeadSourceCreateSourceType];
+
+
+export const LeadSourceCreateSourceType = {
+  csv: 'csv',
+  meta_form: 'meta_form',
+  webhook: 'webhook',
+  manual: 'manual',
+  api: 'api',
+} as const;
+
+export type LeadSourceCreateFieldMapping = {[key: string]: string};
+
+export interface LeadSourceCreate {
+  batchId?: number;
+  sourceType: LeadSourceCreateSourceType;
+  sourceName: string;
+  metaFormId?: string;
+  webhookId?: number;
+  fieldMapping?: LeadSourceCreateFieldMapping;
+}
+
+export interface LeadTransferCreate {
+  transferredTo: string;
+  callExecutionId?: number;
+  outcome?: string;
+  durationSeconds?: number;
+}
+
+export interface LeadTransferUpdate {
+  outcome?: string;
+  durationSeconds?: number;
+}
+
+export interface LeadNoteCreate {
+  body: string;
+}
+
+export interface LeadTaskCreate {
+  title: string;
+  dueAt?: string;
+  assignedToId?: string;
+  assignedToType?: string;
+}
+
+export type LeadTaskUpdateStatus = typeof LeadTaskUpdateStatus[keyof typeof LeadTaskUpdateStatus];
+
+
+export const LeadTaskUpdateStatus = {
+  open: 'open',
+  done: 'done',
+} as const;
+
+export interface LeadTaskUpdate {
+  title?: string;
+  dueAt?: string | null;
+  status?: LeadTaskUpdateStatus;
+  assignedToId?: string | null;
+}
+
+export type AgentVariableDataType = typeof AgentVariableDataType[keyof typeof AgentVariableDataType];
+
+
+export const AgentVariableDataType = {
+  string: 'string',
+  number: 'number',
+  date: 'date',
+  boolean: 'boolean',
+} as const;
+
+export interface AgentVariable {
+  id: number;
+  agentId: number;
+  variableName: string;
+  displayLabel: string;
+  isRequired: boolean;
+  /** @nullable */
+  defaultValue?: string | null;
+  dataType: AgentVariableDataType;
+  createdAt: string;
+}
+
+export type AgentVariableCreateDataType = typeof AgentVariableCreateDataType[keyof typeof AgentVariableCreateDataType];
+
+
+export const AgentVariableCreateDataType = {
+  string: 'string',
+  number: 'number',
+  date: 'date',
+  boolean: 'boolean',
+} as const;
+
+export interface AgentVariableCreate {
+  variableName: string;
+  displayLabel: string;
+  isRequired?: boolean;
+  defaultValue?: string;
+  dataType: AgentVariableCreateDataType;
+}
+
+export type AgentVariableUpdateDataType = typeof AgentVariableUpdateDataType[keyof typeof AgentVariableUpdateDataType];
+
+
+export const AgentVariableUpdateDataType = {
+  string: 'string',
+  number: 'number',
+  date: 'date',
+  boolean: 'boolean',
+} as const;
+
+export interface AgentVariableUpdate {
+  displayLabel?: string;
+  isRequired?: boolean;
+  defaultValue?: string | null;
+  dataType?: AgentVariableUpdateDataType;
+}
+
+export type ImportSummaryErrorsItem = {
+  phone?: string;
+  normalizedPhone?: string;
+  reason?: string;
+  existingLeadId?: number;
+  rowIndex?: number;
+};
+
+export interface ImportSummary {
+  totalRows: number;
+  leadsCreated: number;
+  duplicatesFound: number;
+  duplicatesAction: string;
+  invalidPhones: number;
+  errors: ImportSummaryErrorsItem[];
+}
+
+export interface PhoneNormalizeResult {
+  raw: string;
+  /** @nullable */
+  normalized?: string | null;
+  valid: boolean;
+  /** @nullable */
+  reason?: string | null;
+}
+
 /**
  * Platform admin token (matches ADMIN_TOKEN env var).
  */
@@ -2511,6 +2845,17 @@ export type UpdateLeadCallbackBody = {
 export type AddToDncBody = {
   phone: string;
   reason?: string | null;
+};
+
+export type AddLeadTagBody = {
+  tag: string;
+};
+
+export type NormalizePhoneBody = {
+  phone: string;
+  /** e.g. 91, 1, 44 */
+  countryCode?: string;
+  nationalDigitLength?: number;
 };
 
 export type ListEventTypesParams = {
