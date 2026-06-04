@@ -4,7 +4,7 @@ export const ambientSoundsTable = pgTable("ambient_sounds", {
   id: uuid("id").primaryKey(),
   name: text("name").notNull(),
   storageKey: text("storage_key").notNull(),
-  pcmStorageKey: text("pcm_storage_key").notNull(),
+  pcmStorageKey: text("pcm_storage_key"),  // null while background transcoding is pending
   mimeType: text("mime_type").notNull(),
   fileSize: integer("file_size").notNull(),
   durationSeconds: real("duration_seconds"),

@@ -153,34 +153,22 @@ router.post("/admin/ambient-sounds", requireAdmin, upload.single("file"), async 
 
     const bucket = getBucket();
 
-    // Run ffprobe for duration and ffmpeg transcode in parallel with original upload
-    const [durationSeconds, pcmBuffer] = await Promise.all([
-      getDurationSeconds(file.buffer),
-      transcode(file.buffer).catch((err) => {
-        logger.error({ err, id }, "ambient-sounds: ffmpeg transcode failed");
-        throw new Error(`Audio transcode failed: ${(err as Error).message}`);
-      }),
-    ]);
+    // 1. Upload original to storage immediately — fast, unblocks the response
+    await bucket.file(storageKey).save(file.buffer, { contentType: mimeType });
 
-    // Upload original + PCM in parallel
-    await Promise.all([
-      bucket.file(storageKey).save(file.buffer, { contentType: mimeType }),
-      bucket.file(pcmStorageKey).save(pcmBuffer, { contentType: "audio/pcm" }),
-    ]);
-
+    // 2. Insert the DB record right away (pcmStorageKey is null until transcoding finishes)
     const [record] = await db
       .insert(ambientSoundsTable)
       .values({
         id,
         name,
         storageKey,
-        pcmStorageKey,
         mimeType,
         fileSize: file.size,
-        durationSeconds: durationSeconds ?? undefined,
       })
       .returning();
 
+    // 3. Respond immediately — proxy timeout will never be hit
     res.status(201).json({
       id: record!.id,
       name: record!.name,
@@ -188,7 +176,25 @@ router.post("/admin/ambient-sounds", requireAdmin, upload.single("file"), async 
       fileSize: record!.fileSize,
       durationSeconds: record!.durationSeconds,
       createdAt: record!.createdAt,
+      processing: true,
     });
+
+    // 4. Transcode + upload PCM in background; update the record when done
+    void (async () => {
+      try {
+        const [durationSeconds, pcmBuffer] = await Promise.all([
+          getDurationSeconds(file.buffer),
+          transcode(file.buffer),
+        ]);
+        await bucket.file(pcmStorageKey).save(pcmBuffer, { contentType: "audio/pcm" });
+        await db.update(ambientSoundsTable)
+          .set({ pcmStorageKey, durationSeconds: durationSeconds ?? undefined })
+          .where(eq(ambientSoundsTable.id, id));
+        logger.info({ id }, "ambient-sounds: background transcode complete");
+      } catch (bgErr) {
+        logger.error({ bgErr, id }, "ambient-sounds: background transcode failed");
+      }
+    })();
   } catch (err) {
     req.log.error({ err }, "ambient-sounds: upload failed");
     const message = err instanceof Error ? err.message : "Upload failed";
@@ -232,7 +238,7 @@ router.delete("/admin/ambient-sounds/:id", requireAdmin, async (req, res): Promi
     const bucket = getBucket();
     await Promise.allSettled([
       bucket.file(sound.storageKey).delete(),
-      bucket.file(sound.pcmStorageKey).delete(),
+      ...(sound.pcmStorageKey ? [bucket.file(sound.pcmStorageKey).delete()] : []),
     ]);
 
     await db.delete(ambientSoundsTable).where(eq(ambientSoundsTable.id, id));

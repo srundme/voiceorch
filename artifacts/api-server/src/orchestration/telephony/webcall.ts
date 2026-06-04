@@ -303,7 +303,9 @@ export async function handleWebCallWebSocket(
   // ── Webcall caller memory ─────────────────────────────────────────────────
   // Use "webcall:<userId>" as a stable identifier since there's no phone number.
   // This gives logged-in users the same cross-call memory that telephony callers get.
-  const webcallIdentifier = agent.userId ? `webcall:${agent.userId}` : null;
+  // Use the authenticated caller's userId as the memory key (not the agent owner's)
+  // so each distinct user gets their own cross-call memory profile.
+  const webcallIdentifier = callerUserId ? `webcall:${callerUserId}` : null;
   let webcallProfile: import("../callerMemory.js").CallerProfile | null = null;
   let systemPrompt = agent.generatedPrompt ?? agent.systemPrompt ?? "";
 

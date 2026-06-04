@@ -86,6 +86,9 @@ export class OrchestrationPipeline {
   // Require N consecutive speech frames before triggering barge-in to avoid
   // ambient noise / single-word false positives stopping the agent mid-sentence.
   private bargeInSpeechFrames = 0;
+  // Consecutive below-threshold frames counter — used to delay bargeInSpeechFrames
+  // reset so brief inter-syllable dips don't kill an accumulating barge-in run.
+  private bargeInLowEnergyFrames = 0;
   // Running word count accumulated across streaming STT callbacks for the
   // current user turn. Reset at the start of each new agent turn so it does
   // not bleed across turns.
@@ -274,7 +277,7 @@ export class OrchestrationPipeline {
    * Handles barge-in detection and queuing if a turn is already in progress.
    */
   private async handleStreamingTranscript(transcript: string): Promise<void> {
-    if (this.isPlaying && !this.bargeInRequested) {
+    if (this.bargeInEnabled && this.isPlaying && !this.bargeInRequested) {
       // Accumulate word count across streaming callbacks for this user turn and
       // only fire barge-in once the wordsForInterruption threshold is reached,
       // matching the behaviour of the energy-based path in batch STT mode.
@@ -404,12 +407,21 @@ export class OrchestrationPipeline {
             this.audioBuffer = [];
             logger.info({ callId: this.config.callId, frames: this.bargeInSpeechFrames, effectiveMinFrames }, "Barge-in detected (batch STT)");
           }
+          this.bargeInLowEnergyFrames = 0;
         } else {
-          this.bargeInSpeechFrames = 0; // dropped below barge-in threshold — reset
+          // Don't reset immediately on a single below-threshold frame — brief
+          // inter-syllable pauses would otherwise kill an accumulating run.
+          // Only reset after 5 consecutive low-energy frames (~100 ms).
+          this.bargeInLowEnergyFrames++;
+          if (this.bargeInLowEnergyFrames >= 5) {
+            this.bargeInSpeechFrames = 0;
+            this.bargeInLowEnergyFrames = 0;
+          }
         }
       }
     } else {
-      this.bargeInSpeechFrames = 0; // silence resets the run
+      this.bargeInSpeechFrames = 0; // genuine VAD silence — reset
+      this.bargeInLowEnergyFrames = 0;
     }
 
     if (this.isProcessing) return;
@@ -695,6 +707,11 @@ export class OrchestrationPipeline {
       // Built-in end_call: always available even if not explicitly in agent tools
       if (toolName === "end_call") {
         logger.info({ callId: this.config.callId }, "Built-in end_call invoked by LLM");
+        // Speak configured goodbye message (if any) before hanging up
+        const endCallTool = this.agent.tools.find(t => t.type === "end_call");
+        if (endCallTool?.type === "end_call" && endCallTool.goodbyeMessage?.trim()) {
+          await this.speakRaw(endCallTool.goodbyeMessage);
+        }
         this.config.onCallEnd();
         return undefined;
       }

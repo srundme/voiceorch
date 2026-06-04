@@ -444,6 +444,7 @@ export default function CallsList() {
 
         {/* Table */}
         <div className="flex-1 overflow-auto px-6">
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader className="sticky top-0 z-10">
               <TableRow className="hover:bg-transparent">
@@ -616,6 +617,7 @@ export default function CallsList() {
               )}
             </TableBody>
           </Table>
+          </div>
         </div>
       </div>
     </TooltipProvider>
