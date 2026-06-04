@@ -386,6 +386,11 @@ function WebCallPanel({ agentId, agentName, systemPrompt: savedPrompt }: { agent
   const activeSourcesRef = useRef<AudioBufferSourceNode[]>([]);
   const timerRef       = useRef<ReturnType<typeof setInterval> | null>(null);
   const transcriptRef  = useRef<HTMLDivElement>(null);
+  // Barge-in mute gate: set true on "interrupted", cleared when the agent
+  // starts its next turn ("thinking"/"speaking" status). Any binary PCM
+  // chunks that were already in-flight in the TCP buffer when the server
+  // sent "interrupted" are silently dropped instead of playing a blip.
+  const mutedRef       = useRef(false);
 
   useEffect(() => {
     if (transcriptRef.current) transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
@@ -456,12 +461,21 @@ function WebCallPanel({ agentId, agentName, systemPrompt: savedPrompt }: { agent
         };
       };
       ws.onmessage = (e) => {
-        if (e.data instanceof ArrayBuffer) { playPCM16(e.data); return; }
+        if (e.data instanceof ArrayBuffer) {
+          // Drop in-flight PCM chunks that arrived after a barge-in "interrupted"
+          // message but before the agent's next turn begins.
+          if (!mutedRef.current) playPCM16(e.data);
+          return;
+        }
         try {
           const msg = JSON.parse(e.data as string) as { type: string; status?: CallStatus; speaker?: "user" | "agent"; text?: string; durationSeconds?: number; message?: string };
           if (msg.type === "ready")       setStatus("listening");
-          else if (msg.type === "interrupted") { stopAllAudio(); setStatus("listening"); }
-          else if (msg.type === "status" && msg.status) setStatus(msg.status);
+          else if (msg.type === "interrupted") { stopAllAudio(); mutedRef.current = true; setStatus("listening"); }
+          else if (msg.type === "status" && msg.status) {
+            // Unmute when the agent starts its next turn so its audio plays normally.
+            if (msg.status === "thinking" || msg.status === "speaking") mutedRef.current = false;
+            setStatus(msg.status);
+          }
           else if (msg.type === "transcript" && msg.speaker && msg.text) setMsgs(prev => [...prev, { speaker: msg.speaker!, text: msg.text! }]);
           else if (msg.type === "ended") { setDuration(msg.durationSeconds ?? null); setStatus("ended"); cleanup(); }
           else if (msg.type === "error")  { setError(msg.message ?? "Error"); setStatus("idle"); cleanup(); }

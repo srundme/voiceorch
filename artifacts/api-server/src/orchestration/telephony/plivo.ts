@@ -50,6 +50,18 @@ export async function handlePlivoWebSocket(
     }));
   }
 
+  /**
+   * Barge-in: tell Plivo to discard any audio it has buffered for playback.
+   * Plivo's AudioSocket protocol accepts { event: "clear" } from the server
+   * to immediately stop ongoing playback and flush its buffer.
+   * Ref: https://www.plivo.com/docs/voice/xml/stream/#websocket-messages
+   */
+  function sendBargeIn(): void {
+    if (ws.readyState !== ws.OPEN) return;
+    ws.send(JSON.stringify({ event: "clear" }));
+    logger.info({ sessionId }, "Plivo clear sent (barge-in)");
+  }
+
   ws.on("message", async (raw: Buffer | string) => {
     // Plivo can send binary audio directly or JSON events
     if (Buffer.isBuffer(raw)) {
@@ -83,6 +95,7 @@ export async function handlePlivoWebSocket(
             campaignLeadId,
             onAudioOut: sendAudioToPlivo,
             onCallEnd: () => ws.close(),
+            onBargeIn: sendBargeIn,
           });
           sessionId = sid;
           logger.info({ sessionId, agentId }, "Plivo session started");

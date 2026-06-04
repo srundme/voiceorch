@@ -65,6 +65,11 @@ function WebCallPanel({ agentId, agentName, autostart, callbackId }: { agentId: 
   const nextPlayRef    = useRef(0);
   const activeSourcesRef = useRef<AudioBufferSourceNode[]>([]);
   const scrollRef      = useRef<HTMLDivElement>(null);
+  // Barge-in mute gate: set true on "interrupted", cleared when the agent
+  // starts its next turn ("thinking"/"speaking" status). Any binary PCM
+  // chunks that were already in-flight in the TCP buffer when the server
+  // sent "interrupted" are silently dropped instead of playing a blip.
+  const mutedRef       = useRef(false);
 
   const transcriptRef = useRef<HTMLDivElement>(null);
 
@@ -159,7 +164,9 @@ function WebCallPanel({ agentId, agentName, autostart, callbackId }: { agentId: 
 
       ws.onmessage = (e) => {
         if (e.data instanceof ArrayBuffer) {
-          playPCM16(e.data);
+          // Drop in-flight PCM chunks that arrived after a barge-in "interrupted"
+          // message but before the agent's next turn begins.
+          if (!mutedRef.current) playPCM16(e.data);
           return;
         }
         try {
@@ -171,9 +178,13 @@ function WebCallPanel({ agentId, agentName, autostart, callbackId }: { agentId: 
             setStatus("listening");
           } else if (msg.type === "interrupted") {
             // Barge-in: user spoke while agent was talking — stop audio immediately
+            // and mute any in-flight binary chunks still in the TCP buffer.
             stopAllAudio();
+            mutedRef.current = true;
             setStatus("listening");
           } else if (msg.type === "status" && msg.status) {
+            // Unmute when the agent starts its next turn so its audio plays normally.
+            if (msg.status === "thinking" || msg.status === "speaking") mutedRef.current = false;
             setStatus(msg.status);
           } else if (msg.type === "transcript" && msg.speaker && msg.text) {
             setMsgs(prev => [...prev, { speaker: msg.speaker!, text: msg.text! }]);
