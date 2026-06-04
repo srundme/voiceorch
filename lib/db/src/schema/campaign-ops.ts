@@ -13,12 +13,16 @@ export type LeadSourceType = "csv" | "meta_form" | "webhook" | "manual" | "api";
 
 export const leadSourcesTable = pgTable("lead_sources", {
   id:           serial("id").primaryKey(),
-  campaignId:   integer("campaign_id").references(() => campaignsTable.id, { onDelete: "cascade" }).notNull(),
-  batchId:      integer("batch_id").references(() => campaignBatchesTable.id, { onDelete: "cascade" }),
+  // Workspace owner — sources are user-scoped, not campaign-scoped, so they can be reused.
+  userId:       text("user_id").notNull(),
+  // Optional: records which campaign first created this source (informational only, not exclusive ownership).
+  campaignId:   integer("campaign_id").references(() => campaignsTable.id, { onDelete: "set null" }),
   sourceType:   text("source_type").notNull(),
   sourceName:   text("source_name").notNull(),
   metaFormId:   text("meta_form_id"),
   webhookId:    integer("webhook_id"),
+  // Default field mapping for this source: { sourceField → agentVariableName }.
+  // Each batch can store its own override in campaign_batches.batch_field_mapping.
   fieldMapping: jsonb("field_mapping").$type<Record<string, string>>().default({}),
   createdAt:    timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

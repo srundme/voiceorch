@@ -39,34 +39,26 @@ async function requireLead(leadId: number, campaignId: number) {
   return row ?? null;
 }
 
-function parseCampaignId(req: Parameters<typeof router.get>[1] extends (req: infer R, ...args: unknown[]) => unknown ? R : never) {
-  return parseInt((req as { params: Record<string, string> }).params["id"]!, 10);
-}
+// ── Lead Sources (workspace-level, reusable across campaigns) ─────────────────
 
-// ── Lead Sources ──────────────────────────────────────────────────────────────
-
-// GET /campaigns/:id/lead-sources
-router.get("/campaigns/:id/lead-sources", async (req, res): Promise<void> => {
+// GET /lead-sources — list all sources owned by this user
+router.get("/lead-sources", async (req, res): Promise<void> => {
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
-  const campaignId = parseInt(req.params["id"]!, 10);
-  if (!await requireCampaign(campaignId, userId)) { res.status(404).json({ error: "Campaign not found" }); return; }
 
   const sources = await db.select().from(leadSourcesTable)
-    .where(eq(leadSourcesTable.campaignId, campaignId))
+    .where(eq(leadSourcesTable.userId, userId))
     .orderBy(desc(leadSourcesTable.createdAt));
   res.json(sources);
 });
 
-// POST /campaigns/:id/lead-sources
-router.post("/campaigns/:id/lead-sources", async (req, res): Promise<void> => {
+// POST /lead-sources — create a workspace-level source
+router.post("/lead-sources", async (req, res): Promise<void> => {
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
-  const campaignId = parseInt(req.params["id"]!, 10);
-  if (!await requireCampaign(campaignId, userId)) { res.status(404).json({ error: "Campaign not found" }); return; }
 
-  const { batchId, sourceType, sourceName, metaFormId, webhookId, fieldMapping } = req.body as {
-    batchId?: number;
+  const { campaignId, sourceType, sourceName, metaFormId, webhookId, fieldMapping } = req.body as {
+    campaignId?: number;
     sourceType: string;
     sourceName: string;
     metaFormId?: string;
@@ -79,9 +71,15 @@ router.post("/campaigns/:id/lead-sources", async (req, res): Promise<void> => {
     return;
   }
 
+  // If campaignId provided, verify ownership (informational context, not exclusive ownership)
+  if (campaignId) {
+    const campaign = await requireCampaign(campaignId, userId);
+    if (!campaign) { res.status(404).json({ error: "Campaign not found" }); return; }
+  }
+
   const [source] = await db.insert(leadSourcesTable).values({
-    campaignId,
-    batchId: batchId ?? null,
+    userId,
+    campaignId: campaignId ?? null,
     sourceType,
     sourceName,
     metaFormId: metaFormId ?? null,
@@ -90,6 +88,44 @@ router.post("/campaigns/:id/lead-sources", async (req, res): Promise<void> => {
   }).returning();
 
   res.status(201).json(source);
+});
+
+// PATCH /lead-sources/:sourceId — update name or field mapping
+router.patch("/lead-sources/:sourceId", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const sourceId = parseInt(req.params["sourceId"]!, 10);
+
+  const { sourceName, fieldMapping } = req.body as {
+    sourceName?: string;
+    fieldMapping?: Record<string, string> | null;
+  };
+
+  const updates: Partial<typeof leadSourcesTable.$inferInsert> = {};
+  if (sourceName !== undefined) updates.sourceName = sourceName.trim();
+  if (fieldMapping !== undefined) updates.fieldMapping = fieldMapping ?? {};
+
+  const [updated] = await db.update(leadSourcesTable)
+    .set(updates)
+    .where(and(eq(leadSourcesTable.id, sourceId), eq(leadSourcesTable.userId, userId)))
+    .returning();
+
+  if (!updated) { res.status(404).json({ error: "Lead source not found" }); return; }
+  res.json(updated);
+});
+
+// DELETE /lead-sources/:sourceId
+router.delete("/lead-sources/:sourceId", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const sourceId = parseInt(req.params["sourceId"]!, 10);
+
+  const [deleted] = await db.delete(leadSourcesTable)
+    .where(and(eq(leadSourcesTable.id, sourceId), eq(leadSourcesTable.userId, userId)))
+    .returning({ id: leadSourcesTable.id });
+
+  if (!deleted) { res.status(404).json({ error: "Lead source not found" }); return; }
+  res.status(204).end();
 });
 
 // ── Lead Transfers ────────────────────────────────────────────────────────────

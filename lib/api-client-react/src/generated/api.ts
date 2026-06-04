@@ -168,6 +168,7 @@ import type {
   TransferCallBody,
   UpdateCallDispositionBody,
   UpdateLeadCallbackBody,
+  UpdateLeadSourceBody,
   UserPreferences,
   UserPreferencesUpdate,
   VerifyPaymentInput,
@@ -6477,20 +6478,20 @@ export const useRemoveFromDnc = <TError = ErrorType<void>,
       return useMutation(getRemoveFromDncMutationOptions(options));
     }
 
-export const getListLeadSourcesUrl = (id: number,) => {
+export const getListLeadSourcesUrl = () => {
 
 
 
 
-  return `/api/campaigns/${id}/lead-sources`
+  return `/api/lead-sources`
 }
 
 /**
- * @summary List all lead sources for a campaign
+ * @summary List all workspace-level lead sources for the current user
  */
-export const listLeadSources = async (id: number, options?: RequestInit): Promise<LeadSource[]> => {
+export const listLeadSources = async ( options?: RequestInit): Promise<LeadSource[]> => {
 
-  return customFetch<LeadSource[]>(getListLeadSourcesUrl(id),
+  return customFetch<LeadSource[]>(getListLeadSourcesUrl(),
   {
     ...options,
     method: 'GET'
@@ -6503,29 +6504,29 @@ export const listLeadSources = async (id: number, options?: RequestInit): Promis
 
 
 
-export const getListLeadSourcesQueryKey = (id: number,) => {
+export const getListLeadSourcesQueryKey = () => {
     return [
-    `/api/campaigns/${id}/lead-sources`
+    `/api/lead-sources`
     ] as const;
     }
 
 
-export const getListLeadSourcesQueryOptions = <TData = Awaited<ReturnType<typeof listLeadSources>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listLeadSources>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getListLeadSourcesQueryOptions = <TData = Awaited<ReturnType<typeof listLeadSources>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listLeadSources>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getListLeadSourcesQueryKey(id);
+  const queryKey =  queryOptions?.queryKey ?? getListLeadSourcesQueryKey();
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listLeadSources>>> = ({ signal }) => listLeadSources(id, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listLeadSources>>> = ({ signal }) => listLeadSources({ signal, ...requestOptions });
 
 
 
 
 
-   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listLeadSources>>, TError, TData> & { queryKey: QueryKey }
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listLeadSources>>, TError, TData> & { queryKey: QueryKey }
 }
 
 export type ListLeadSourcesQueryResult = NonNullable<Awaited<ReturnType<typeof listLeadSources>>>
@@ -6533,15 +6534,15 @@ export type ListLeadSourcesQueryError = ErrorType<void>
 
 
 /**
- * @summary List all lead sources for a campaign
+ * @summary List all workspace-level lead sources for the current user
  */
 
 export function useListLeadSources<TData = Awaited<ReturnType<typeof listLeadSources>>, TError = ErrorType<void>>(
- id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listLeadSources>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listLeadSources>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getListLeadSourcesQueryOptions(id,options)
+  const queryOptions = getListLeadSourcesQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -6554,21 +6555,20 @@ export function useListLeadSources<TData = Awaited<ReturnType<typeof listLeadSou
 
 
 
-export const getCreateLeadSourceUrl = (id: number,) => {
+export const getCreateLeadSourceUrl = () => {
 
 
 
 
-  return `/api/campaigns/${id}/lead-sources`
+  return `/api/lead-sources`
 }
 
 /**
- * @summary Create a lead source for a campaign
+ * @summary Create a reusable workspace-level lead source
  */
-export const createLeadSource = async (id: number,
-    leadSourceCreate: LeadSourceCreate, options?: RequestInit): Promise<LeadSource> => {
+export const createLeadSource = async (leadSourceCreate: LeadSourceCreate, options?: RequestInit): Promise<LeadSource> => {
 
-  return customFetch<LeadSource>(getCreateLeadSourceUrl(id),
+  return customFetch<LeadSource>(getCreateLeadSourceUrl(),
   {
     ...options,
     method: 'POST',
@@ -6582,8 +6582,8 @@ export const createLeadSource = async (id: number,
 
 
 export const getCreateLeadSourceMutationOptions = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createLeadSource>>, TError,{id: number;data: BodyType<LeadSourceCreate>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof createLeadSource>>, TError,{id: number;data: BodyType<LeadSourceCreate>}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createLeadSource>>, TError,{data: BodyType<LeadSourceCreate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createLeadSource>>, TError,{data: BodyType<LeadSourceCreate>}, TContext> => {
 
 const mutationKey = ['createLeadSource'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -6595,10 +6595,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createLeadSource>>, {id: number;data: BodyType<LeadSourceCreate>}> = (props) => {
-          const {id,data} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createLeadSource>>, {data: BodyType<LeadSourceCreate>}> = (props) => {
+          const {data} = props ?? {};
 
-          return  createLeadSource(id,data,requestOptions)
+          return  createLeadSource(data,requestOptions)
         }
 
 
@@ -6613,17 +6613,159 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type CreateLeadSourceMutationError = ErrorType<void>
 
     /**
- * @summary Create a lead source for a campaign
+ * @summary Create a reusable workspace-level lead source
  */
 export const useCreateLeadSource = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createLeadSource>>, TError,{id: number;data: BodyType<LeadSourceCreate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createLeadSource>>, TError,{data: BodyType<LeadSourceCreate>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof createLeadSource>>,
         TError,
-        {id: number;data: BodyType<LeadSourceCreate>},
+        {data: BodyType<LeadSourceCreate>},
         TContext
       > => {
       return useMutation(getCreateLeadSourceMutationOptions(options));
+    }
+
+export const getUpdateLeadSourceUrl = (sourceId: number,) => {
+
+
+
+
+  return `/api/lead-sources/${sourceId}`
+}
+
+/**
+ * @summary Update a lead source (rename, update field mapping)
+ */
+export const updateLeadSource = async (sourceId: number,
+    updateLeadSourceBody: UpdateLeadSourceBody, options?: RequestInit): Promise<LeadSource> => {
+
+  return customFetch<LeadSource>(getUpdateLeadSourceUrl(sourceId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateLeadSourceBody,)
+  }
+);}
+
+
+
+
+export const getUpdateLeadSourceMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateLeadSource>>, TError,{sourceId: number;data: BodyType<UpdateLeadSourceBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateLeadSource>>, TError,{sourceId: number;data: BodyType<UpdateLeadSourceBody>}, TContext> => {
+
+const mutationKey = ['updateLeadSource'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateLeadSource>>, {sourceId: number;data: BodyType<UpdateLeadSourceBody>}> = (props) => {
+          const {sourceId,data} = props ?? {};
+
+          return  updateLeadSource(sourceId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateLeadSourceMutationResult = NonNullable<Awaited<ReturnType<typeof updateLeadSource>>>
+    export type UpdateLeadSourceMutationBody = BodyType<UpdateLeadSourceBody>
+    export type UpdateLeadSourceMutationError = ErrorType<void>
+
+    /**
+ * @summary Update a lead source (rename, update field mapping)
+ */
+export const useUpdateLeadSource = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateLeadSource>>, TError,{sourceId: number;data: BodyType<UpdateLeadSourceBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateLeadSource>>,
+        TError,
+        {sourceId: number;data: BodyType<UpdateLeadSourceBody>},
+        TContext
+      > => {
+      return useMutation(getUpdateLeadSourceMutationOptions(options));
+    }
+
+export const getDeleteLeadSourceUrl = (sourceId: number,) => {
+
+
+
+
+  return `/api/lead-sources/${sourceId}`
+}
+
+/**
+ * @summary Delete a lead source
+ */
+export const deleteLeadSource = async (sourceId: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteLeadSourceUrl(sourceId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteLeadSourceMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteLeadSource>>, TError,{sourceId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteLeadSource>>, TError,{sourceId: number}, TContext> => {
+
+const mutationKey = ['deleteLeadSource'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteLeadSource>>, {sourceId: number}> = (props) => {
+          const {sourceId} = props ?? {};
+
+          return  deleteLeadSource(sourceId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteLeadSourceMutationResult = NonNullable<Awaited<ReturnType<typeof deleteLeadSource>>>
+
+    export type DeleteLeadSourceMutationError = ErrorType<void>
+
+    /**
+ * @summary Delete a lead source
+ */
+export const useDeleteLeadSource = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteLeadSource>>, TError,{sourceId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteLeadSource>>,
+        TError,
+        {sourceId: number},
+        TContext
+      > => {
+      return useMutation(getDeleteLeadSourceMutationOptions(options));
     }
 
 export const getListLeadTransfersUrl = (id: number,

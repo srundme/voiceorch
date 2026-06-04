@@ -2262,16 +2262,12 @@ export const RemoveFromDncParams = zod.object({
 
 
 /**
- * @summary List all lead sources for a campaign
+ * @summary List all workspace-level lead sources for the current user
  */
-export const ListLeadSourcesParams = zod.object({
-  "id": zod.coerce.number()
-})
-
 export const ListLeadSourcesResponseItem = zod.object({
   "id": zod.number(),
-  "campaignId": zod.number(),
-  "batchId": zod.number().nullish(),
+  "userId": zod.string(),
+  "campaignId": zod.number().nullish().describe('Campaign that originally created this source (informational, not exclusive)'),
   "sourceType": zod.enum(['csv', 'meta_form', 'webhook', 'manual', 'api']),
   "sourceName": zod.string(),
   "metaFormId": zod.string().nullish(),
@@ -2283,19 +2279,48 @@ export const ListLeadSourcesResponse = zod.array(ListLeadSourcesResponseItem)
 
 
 /**
- * @summary Create a lead source for a campaign
+ * @summary Create a reusable workspace-level lead source
  */
-export const CreateLeadSourceParams = zod.object({
-  "id": zod.coerce.number()
-})
-
 export const CreateLeadSourceBody = zod.object({
-  "batchId": zod.number().optional(),
+  "campaignId": zod.number().optional().describe('Optional: campaign context in which this source was created'),
   "sourceType": zod.enum(['csv', 'meta_form', 'webhook', 'manual', 'api']),
   "sourceName": zod.string(),
   "metaFormId": zod.string().optional(),
   "webhookId": zod.number().optional(),
   "fieldMapping": zod.record(zod.string(), zod.string()).optional()
+})
+
+
+/**
+ * @summary Update a lead source (rename, update field mapping)
+ */
+export const UpdateLeadSourceParams = zod.object({
+  "sourceId": zod.coerce.number()
+})
+
+export const UpdateLeadSourceBody = zod.object({
+  "sourceName": zod.string().optional(),
+  "fieldMapping": zod.record(zod.string(), zod.string()).nullish()
+})
+
+export const UpdateLeadSourceResponse = zod.object({
+  "id": zod.number(),
+  "userId": zod.string(),
+  "campaignId": zod.number().nullish().describe('Campaign that originally created this source (informational, not exclusive)'),
+  "sourceType": zod.enum(['csv', 'meta_form', 'webhook', 'manual', 'api']),
+  "sourceName": zod.string(),
+  "metaFormId": zod.string().nullish(),
+  "webhookId": zod.number().nullish(),
+  "fieldMapping": zod.record(zod.string(), zod.string()).nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a lead source
+ */
+export const DeleteLeadSourceParams = zod.object({
+  "sourceId": zod.coerce.number()
 })
 
 

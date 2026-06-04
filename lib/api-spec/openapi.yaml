@@ -1978,16 +1978,11 @@ paths:
 
   # ── Phase 1A: Campaign Ops Routes ────────────────────────────────────────────
 
-  /campaigns/{id}/lead-sources:
+  /lead-sources:
     get:
       operationId: listLeadSources
       tags: [campaigns]
-      summary: List all lead sources for a campaign
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: integer }
+      summary: List all workspace-level lead sources for the current user
       responses:
         "200":
           description: Lead source list
@@ -2002,12 +1997,7 @@ paths:
     post:
       operationId: createLeadSource
       tags: [campaigns]
-      summary: Create a lead source for a campaign
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: integer }
+      summary: Create a reusable workspace-level lead source
       requestBody:
         required: true
         content:
@@ -2023,6 +2013,56 @@ paths:
                 $ref: "#/components/schemas/LeadSource"
         "401":
           description: Unauthorized
+
+  /lead-sources/{sourceId}:
+    patch:
+      operationId: updateLeadSource
+      tags: [campaigns]
+      summary: Update a lead source (rename, update field mapping)
+      parameters:
+        - name: sourceId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sourceName: { type: string }
+                fieldMapping:
+                  type: object
+                  additionalProperties: { type: string }
+                  nullable: true
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeadSource"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteLeadSource
+      tags: [campaigns]
+      summary: Delete a lead source
+      parameters:
+        - name: sourceId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
 
   /campaigns/{id}/leads/{leadId}/transfers:
     get:
@@ -6492,11 +6532,11 @@ components:
 
     LeadSource:
       type: object
-      required: [id, campaignId, sourceType, sourceName, createdAt]
+      required: [id, userId, sourceType, sourceName, createdAt]
       properties:
         id: { type: integer }
-        campaignId: { type: integer }
-        batchId: { type: ["integer", "null"] }
+        userId: { type: string }
+        campaignId: { type: ["integer", "null"], description: "Campaign that originally created this source (informational, not exclusive)" }
         sourceType:
           type: string
           enum: [csv, meta_form, webhook, manual, api]
@@ -6513,7 +6553,7 @@ components:
       type: object
       required: [sourceType, sourceName]
       properties:
-        batchId: { type: integer }
+        campaignId: { type: integer, description: "Optional: campaign context in which this source was created" }
         sourceType:
           type: string
           enum: [csv, meta_form, webhook, manual, api]

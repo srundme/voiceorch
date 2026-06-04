@@ -67,6 +67,11 @@ export const campaignBatchesTable = pgTable("campaign_batches", {
   maxDailyCalls:      integer("max_daily_calls"),
   // Duplicate detection policy — applied at import time for this batch
   duplicatePolicy:    text("duplicate_policy").notNull().default("skip"),
+  // Lead source used for this batch — references lead_sources.id (nullable, set by Batch Wizard)
+  leadSourceId:       integer("lead_source_id"),
+  // Per-batch field mapping override: { sourceField → agentVariableName }.
+  // If set, overrides the source-level default fieldMapping for this batch only.
+  batchFieldMapping:  json("batch_field_mapping").$type<Record<string, string>>(),
   createdAt:          timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt:          timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

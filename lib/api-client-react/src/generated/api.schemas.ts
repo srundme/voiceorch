@@ -2579,9 +2579,12 @@ export type LeadSourceFieldMapping = {[key: string]: string} | null;
 
 export interface LeadSource {
   id: number;
-  campaignId: number;
-  /** @nullable */
-  batchId?: number | null;
+  userId: string;
+  /**
+     * Campaign that originally created this source (informational, not exclusive)
+     * @nullable
+     */
+  campaignId?: number | null;
   sourceType: LeadSourceSourceType;
   sourceName: string;
   /** @nullable */
@@ -2606,7 +2609,8 @@ export const LeadSourceCreateSourceType = {
 export type LeadSourceCreateFieldMapping = {[key: string]: string};
 
 export interface LeadSourceCreate {
-  batchId?: number;
+  /** Optional: campaign context in which this source was created */
+  campaignId?: number;
   sourceType: LeadSourceCreateSourceType;
   sourceName: string;
   metaFormId?: string;
@@ -2845,6 +2849,13 @@ export type UpdateLeadCallbackBody = {
 export type AddToDncBody = {
   phone: string;
   reason?: string | null;
+};
+
+export type UpdateLeadSourceBodyFieldMapping = {[key: string]: string} | null;
+
+export type UpdateLeadSourceBody = {
+  sourceName?: string;
+  fieldMapping?: UpdateLeadSourceBodyFieldMapping;
 };
 
 export type AddLeadTagBody = {
