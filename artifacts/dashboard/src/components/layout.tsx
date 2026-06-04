@@ -8,7 +8,7 @@ import {
   Wallet, LogOut, ChevronDown, AlertCircle, Webhook,
   Zap, TrendingUp, ShieldCheck,
   Mic2, FlaskConical,
-  Monitor, Search,
+  Monitor, Search, CalendarDays,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useClerk, useUser } from "@clerk/react";
@@ -22,6 +22,7 @@ const NAV_SECTIONS = [
     items: [
       { name: "Command Center", href: "/app/command-center", icon: Monitor },
       { name: "Campaigns",      href: "/app/campaigns",      icon: Zap },
+      { name: "Scheduling",     href: "/app/scheduling",     icon: CalendarDays },
     ],
   },
   {
