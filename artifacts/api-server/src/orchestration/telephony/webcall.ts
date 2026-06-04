@@ -276,6 +276,13 @@ export async function handleWebCallWebSocket(
             send({ type: "interrupted" });
             sendStatus("thinking");
             logger.info({ callId }, "Webcall: barge-in via streaming STT");
+          } else if (speakingEndedAt > 0 && Date.now() - speakingEndedAt < BARGE_IN_END_GRACE_MS) {
+            // Transcript arrived after speaking ended but within the end-grace window.
+            // It was produced from frames fed to the STT provider *during* barge-in detection
+            // (agent was still speaking, threshold not reached). Replaying this as a new user
+            // turn would make the agent answer speech that overlapped with its own output.
+            logger.info({ callId, msSinceEnd: Date.now() - speakingEndedAt }, "Webcall: discarding post-speech transcript (leftover from barge-in detection)");
+            return;
           }
           if (processing) {
             // A turn is already running — queue the transcript for after it finishes
@@ -1133,6 +1140,14 @@ export async function handleWebCallWebSocket(
         logger.info({ callId }, "Barge-in detected — processing user interruption");
         if (audioChunks.length > 0) void process();
       } else if (!closed) {
+        // No barge-in — discard any frames that accumulated in audioChunks during
+        // barge-in detection (user spoke during the agent's turn but didn't interrupt).
+        // Without this, those frames would be replayed as a new user turn immediately
+        // after the agent finishes, making the agent answer speech it already "heard".
+        if (audioChunks.length > 0) {
+          logger.info({ callId, dropped: audioChunks.length }, "Discarding during-speech audio (no barge-in triggered)");
+          audioChunks.splice(0);
+        }
         sendStatus("listening");
       }
 
