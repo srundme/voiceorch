@@ -36,7 +36,8 @@ async function getPricing(service: string, provider: string, model: string) {
   const cached = pricingCache.get(key);
   if (cached && Date.now() - cached.cachedAt < PRICING_TTL_MS) return cached;
 
-  const [row] = await db
+  // Try exact match first, then fall back to provider "default" model.
+  const [exactRow] = await db
     .select()
     .from(providerPricingTable)
     .where(
@@ -46,6 +47,21 @@ async function getPricing(service: string, provider: string, model: string) {
         eq(providerPricingTable.model, model),
       ),
     );
+
+  let row = exactRow;
+  if (!row && model !== "default") {
+    const [defaultRow] = await db
+      .select()
+      .from(providerPricingTable)
+      .where(
+        and(
+          eq(providerPricingTable.service, service),
+          eq(providerPricingTable.provider, provider),
+          eq(providerPricingTable.model, "default"),
+        ),
+      );
+    row = defaultRow;
+  }
 
   const entry = {
     inputTokenPricePerMillionMicros: Number(row?.inputTokenPricePerMillionMicros ?? 0),

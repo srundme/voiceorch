@@ -39,6 +39,10 @@ const ROWS: Row[] = [
   { service: "stt", provider: "assemblyai", model: "default", audioSecondPriceMicros: audMin(0.0025) },
   // Sarvam ASR ~$0.006/min (public pricing)
   { service: "stt", provider: "sarvam", model: "default", audioSecondPriceMicros: audMin(0.006) },
+  { service: "stt", provider: "sarvam", model: "saaras:v2", audioSecondPriceMicros: audMin(0.006) },
+  { service: "stt", provider: "sarvam", model: "saaras:v3", audioSecondPriceMicros: audMin(0.006) },
+  { service: "stt", provider: "sarvam", model: "saarika:v2", audioSecondPriceMicros: audMin(0.006) },
+  { service: "stt", provider: "sarvam", model: "saarika:v2.5", audioSecondPriceMicros: audMin(0.006) },
   // Cartesia STT (Ink): ~$0.0035/min
   { service: "stt", provider: "cartesia", model: "default", audioSecondPriceMicros: audMin(0.0035) },
   // Whisper (OpenAI) batch: $0.006/min
@@ -77,12 +81,19 @@ const ROWS: Row[] = [
   { service: "llm", provider: "google", model: "gemini-1.5-pro", inputTokenPricePerMillionMicros: dpmt(1.25), outputTokenPricePerMillionMicros: dpmt(5) },
   { service: "llm", provider: "google", model: "gemini-2.0-flash", inputTokenPricePerMillionMicros: dpmt(0.1), outputTokenPricePerMillionMicros: dpmt(0.4) },
   { service: "llm", provider: "google", model: "gemini-2.5-flash", inputTokenPricePerMillionMicros: dpmt(0.3), outputTokenPricePerMillionMicros: dpmt(2.5) },
+  { service: "llm", provider: "google", model: "gemini-2.5-flash-preview-05-20", inputTokenPricePerMillionMicros: dpmt(0.3), outputTokenPricePerMillionMicros: dpmt(2.5) },
   // Groq (per-million tokens, fast inference)
   { service: "llm", provider: "groq", model: "default", inputTokenPricePerMillionMicros: dpmt(0.05), outputTokenPricePerMillionMicros: dpmt(0.1) },
   { service: "llm", provider: "groq", model: "llama-3.1-8b-instant", inputTokenPricePerMillionMicros: dpmt(0.05), outputTokenPricePerMillionMicros: dpmt(0.08) },
   { service: "llm", provider: "groq", model: "llama-3.3-70b-versatile", inputTokenPricePerMillionMicros: dpmt(0.59), outputTokenPricePerMillionMicros: dpmt(0.79) },
+  // Qwen (via Groq / OpenRouter): qwen3-32b ~$0.10/M in, $0.20/M out
+  { service: "llm", provider: "qwen", model: "default", inputTokenPricePerMillionMicros: dpmt(0.10), outputTokenPricePerMillionMicros: dpmt(0.20) },
+  { service: "llm", provider: "qwen", model: "qwen/qwen3-32b", inputTokenPricePerMillionMicros: dpmt(0.10), outputTokenPricePerMillionMicros: dpmt(0.20) },
+  { service: "llm", provider: "qwen", model: "qwen/qwen3-8b", inputTokenPricePerMillionMicros: dpmt(0.03), outputTokenPricePerMillionMicros: dpmt(0.06) },
   // Sarvam LLM (Indic)
   { service: "llm", provider: "sarvam", model: "default", inputTokenPricePerMillionMicros: dpmt(0.5), outputTokenPricePerMillionMicros: dpmt(1.5) },
+  { service: "llm", provider: "sarvam", model: "sarvam-30b", inputTokenPricePerMillionMicros: dpmt(0.5), outputTokenPricePerMillionMicros: dpmt(1.5) },
+  { service: "llm", provider: "sarvam", model: "sarvam-m", inputTokenPricePerMillionMicros: dpmt(0.2), outputTokenPricePerMillionMicros: dpmt(0.6) },
 
   // ── TTS (per character) ───────────────────────────────────────────────────
   // ElevenLabs Creator/Pro tier ~$0.18 / 1k chars; Flash v2.5 ~$0.10 / 1k
@@ -103,6 +114,8 @@ const ROWS: Row[] = [
   { service: "tts", provider: "cartesia", model: "default", characterPriceMicros: charM(50) },
   { service: "tts", provider: "cartesia", model: "sonic-2", characterPriceMicros: charM(50) },
   { service: "tts", provider: "cartesia", model: "sonic-turbo", characterPriceMicros: charM(25) },
+  { service: "tts", provider: "cartesia", model: "sonic-3", characterPriceMicros: charM(50) },
+  { service: "tts", provider: "cartesia", model: "sonic-3.5", characterPriceMicros: charM(50) },
   // Deepgram Aura TTS: ~$15 / 1M chars
   { service: "tts", provider: "deepgram", model: "default", characterPriceMicros: charM(15) },
   { service: "tts", provider: "deepgram", model: "aura-2", characterPriceMicros: charM(30) },
