@@ -37,6 +37,7 @@ function prepareAgentForResponse(agent: typeof agentsTable.$inferSelect) {
   return {
     ...rest,
     leadSourceToken: maskLeadToken(agent.leadSourceToken),
+    hasGeneratedPrompt: !!agent.generatedPrompt,
   };
 }
 
