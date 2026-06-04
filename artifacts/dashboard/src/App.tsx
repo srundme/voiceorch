@@ -31,6 +31,7 @@ import ActivityPage from "@/pages/activity";
 import PhoneNumbersPage from "@/pages/phone-numbers";
 import WebhooksPage from "@/pages/webhooks";
 import AgentAnalyticsPage from "@/pages/agent-analytics";
+import AnalyticsPage from "@/pages/analytics";
 import NotFound from "@/pages/not-found";
 import OnboardingPage from "@/pages/onboarding";
 import CampaignsPage from "@/pages/campaigns/index";
@@ -211,7 +212,7 @@ function AppRoutes() {
       <Switch>
         <Route path="/app" component={() => <Redirect to="/app/command-center" />} />
         <Route path="/app/command-center" component={CommandCenterPage} />
-        <Route path="/app/analytics" component={Dashboard} />
+        <Route path="/app/analytics" component={AnalyticsPage} />
         <Route path="/app/agents" component={AgentsList} />
         <Route path="/app/agents/new" component={AgentNew} />
         <Route path="/app/agents/:id/edit" component={AgentEdit} />

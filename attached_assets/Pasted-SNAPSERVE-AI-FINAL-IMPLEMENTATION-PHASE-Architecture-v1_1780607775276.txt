@@ -1,0 +1,455 @@
+SNAPSERVE AI — FINAL IMPLEMENTATION PHASE
+
+Architecture v1.2 is frozen.
+
+Completed:
+
+✅ Phase 1A Foundation Layer
+✅ Phase 1B Batch Wizard
+✅ Phase 2 Command Center
+✅ Phase 3A Live Queue
+✅ Phase 3B Callbacks
+✅ Phase 3C Incoming Calls
+✅ Phase 3D Bookings
+✅ Phase 3E Transfers
+✅ Phase 4 Batch Workspace
+✅ Phase 5 Lead CRM
+
+Do NOT redesign existing modules.
+
+Do NOT modify navigation.
+
+Do NOT rebuild existing screens.
+
+Build only the remaining platform layers.
+
+====================================================
+PHASE 6 — ANALYTICS PLATFORM
+============================
+
+Create a dedicated Analytics module.
+
+Route:
+
+/app/analytics
+
+Analytics should consume:
+
+batch_daily_metrics
+batch_health_snapshots
+call_executions
+call_callbacks
+call_bookings
+call_transfers
+campaign_leads
+lead_sources
+
+Use operational outcomes, never dispositions, as the primary analytics source.
+
+---
+
+## 6.1 EXECUTIVE DASHBOARD
+
+Top KPI Cards:
+
+Total Leads
+Connected Leads
+Connection Rate
+Interested Leads
+Booking Rate
+Transfer Rate
+Callback Success Rate
+Average Call Duration
+Revenue (future-ready)
+
+Date Filters:
+
+Today
+Yesterday
+7 Days
+30 Days
+Custom Range
+
+---
+
+## 6.2 FUNNEL ANALYTICS
+
+Interactive Funnel:
+
+Imported
+↓
+Called
+↓
+Connected
+↓
+Interested
+↓
+Booked
+↓
+Transferred
+
+Show:
+
+Count
+Conversion %
+Drop-off %
+
+Filterable by:
+
+Campaign
+Batch
+Agent
+Lead Source
+
+---
+
+## 6.3 SOURCE ANALYTICS
+
+Compare:
+
+Meta Forms
+Webhooks
+CSV Sources
+
+Metrics:
+
+Leads Imported
+Connection Rate
+Booking Rate
+Transfer Rate
+Cost Per Lead (future)
+
+Visualize:
+
+Leaderboard
+Trend Chart
+
+---
+
+## 6.4 CAMPAIGN ANALYTICS
+
+Campaign Performance Table
+
+Columns:
+
+Campaign
+Leads
+Connected
+Booked
+Transferred
+Success Rate
+
+Drill-down into Batch Analytics.
+
+---
+
+## 6.5 BATCH ANALYTICS
+
+Per Batch:
+
+Import Count
+Duplicates
+Connected
+Interested
+Booked
+Transferred
+Failed
+
+Daily trend charts using batch_daily_metrics.
+
+---
+
+## 6.6 AGENT ANALYTICS
+
+Metrics:
+
+Calls Handled
+Connection Rate
+Booking Rate
+Transfer Rate
+Average Duration
+Sentiment Distribution
+
+Leaderboard:
+
+Top Performing Agents
+
+---
+
+## 6.7 QUEUE ANALYTICS
+
+Queue Health:
+
+Callbacks
+Incoming Calls
+Transfers
+Bookings
+
+Metrics:
+
+Pending
+Completed
+Overdue
+Average Resolution Time
+
+---
+
+## 6.8 EXPORTS
+
+Export:
+
+CSV
+Excel
+
+For:
+
+Campaign Analytics
+Batch Analytics
+Source Analytics
+Agent Analytics
+
+====================================================
+PHASE 7 — ADVANCED PLATFORM FEATURES
+====================================
+
+---
+
+## 7.1 GLOBAL SEARCH
+
+Single search box.
+
+Search across:
+
+Lead
+Phone
+Campaign
+Batch
+Booking
+Transfer
+Callback
+
+Return grouped results.
+
+---
+
+## 7.2 DNC MANAGEMENT
+
+Route:
+
+/app/dnc
+
+Features:
+
+Add Number
+Import CSV
+Delete Number
+Reason
+Date Added
+
+Every outbound call must validate DNC.
+
+---
+
+## 7.3 LEAD SCORING ENGINE
+
+Add lead_score engine.
+
+Inputs:
+
+Sentiment
+Disposition
+Operational Outcome
+Call Duration
+Booking
+Transfer
+Interaction Count
+
+Output:
+
+0–100
+
+Categories:
+
+Hot
+Warm
+Cold
+
+Display score across:
+
+Lead CRM
+Analytics
+Queues
+
+---
+
+## 7.4 REVENUE ATTRIBUTION
+
+Future-ready revenue tracking.
+
+Entities:
+
+Revenue Event
+Revenue Amount
+Campaign
+Batch
+Lead
+
+Analytics should support:
+
+Pipeline Revenue
+Attributed Revenue
+Revenue by Campaign
+Revenue by Source
+
+---
+
+## 7.5 WORKSPACE SEARCH INDEX
+
+Create indexed search service.
+
+Support:
+
+Fuzzy Search
+Phone Search
+Tag Search
+
+---
+
+## 7.6 REAL-TIME EVENT LAYER
+
+Replace polling architecture.
+
+Implement:
+
+Server Sent Events (SSE)
+
+Targets:
+
+Command Center
+Live Queue
+Callbacks
+Incoming Calls
+Bookings
+Transfers
+
+Polling remains fallback.
+
+====================================================
+PHASE 8 — PRODUCTION HARDENING
+==============================
+
+---
+
+## 8.1 PERFORMANCE
+
+Audit:
+
+Queries
+Indexes
+Pagination
+N+1 Queries
+
+Add missing indexes.
+
+---
+
+## 8.2 OBSERVABILITY
+
+Track:
+
+API Errors
+Queue Failures
+Import Failures
+Transfer Failures
+Booking Failures
+
+---
+
+## 8.3 AUDIT LOGS
+
+Track:
+
+Campaign Changes
+Batch Changes
+Lead Updates
+Manual Actions
+
+---
+
+## 8.4 ROLE-BASED ACCESS
+
+Roles:
+
+Admin
+Manager
+Operator
+Viewer
+
+Permission Matrix.
+
+---
+
+## 8.5 TESTING
+
+Add:
+
+Unit Tests
+Integration Tests
+API Tests
+
+Critical paths:
+
+Lead Import
+Callback Flow
+Incoming Call Flow
+Booking Flow
+Transfer Flow
+
+---
+
+## 8.6 LAUNCH READINESS
+
+Verify:
+
+Zero Type Errors
+Zero Build Errors
+No Placeholder Screens
+No Dead Routes
+No Broken Navigation
+All Exports Working
+All Analytics Working
+
+====================================================
+FINAL OBJECTIVE
+===============
+
+SnapServe should feel like:
+
+An AI Voice Operations Platform
+
+not
+
+A Campaign Management Tool.
+
+The platform must support:
+
+Lead Intake
+Lead Validation
+AI Calling
+Callbacks
+Incoming Calls
+Bookings
+Transfers
+CRM
+Analytics
+Search
+DNC
+Revenue Attribution
+
+without requiring architecture changes.
+
+No redesigns.
+
+No new architecture.
+
+Implementation only.
