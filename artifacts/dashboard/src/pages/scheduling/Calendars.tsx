@@ -98,10 +98,12 @@ function CalendarFormDialog({
   open,
   onClose,
   editing,
+  takenAgentIds = new Set(),
 }: {
   open: boolean;
   onClose: () => void;
   editing: SchedulingCalendar | null;
+  takenAgentIds?: Set<number>;
 }) {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -114,8 +116,10 @@ function CalendarFormDialog({
       ? { agentId: String(editing.agentId), name: editing.name, timezone: editing.timezone, hostEmail: editing.hostEmail ?? "", additionalHosts: editing.additionalHosts ?? [], isActive: editing.isActive }
       : defaultForm()
   );
+  const [agentError, setAgentError] = useState<string | null>(null);
 
   function set<K extends keyof FormState>(k: K, v: FormState[K]) {
+    if (k === "agentId") setAgentError(null);
     setForm(f => ({ ...f, [k]: v }));
   }
 
@@ -154,15 +158,20 @@ function CalendarFormDialog({
       }
       await qc.invalidateQueries({ queryKey: getListCalendarsQueryKey() });
       onClose();
-    } catch (e) {
-      toast({ title: "Error", description: formatApiError(e), variant: "destructive" });
+    } catch (e: any) {
+      const msg = formatApiError(e);
+      if (!editing && (e?.status === 409 || msg?.includes("already has a calendar"))) {
+        setAgentError("This agent already has a calendar");
+      } else {
+        toast({ title: "Error", description: msg, variant: "destructive" });
+      }
     }
   }
 
   const busy = create.isPending || update.isPending;
 
   return (
-    <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
+    <Dialog open={open} onOpenChange={v => { if (!v) { setAgentError(null); onClose(); } }}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>{editing ? "Edit Calendar" : "New Calendar"}</DialogTitle>
@@ -182,14 +191,18 @@ function CalendarFormDialog({
                   <SelectValue placeholder="Select an agent…" />
                 </SelectTrigger>
                 <SelectContent>
-                  {agents?.map(a => (
+                  {agents?.filter(a => !takenAgentIds.has(a.id)).map(a => (
                     <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">
-                One calendar per agent. Choose the agent that will handle bookings.
-              </p>
+              {agentError ? (
+                <p className="text-xs text-destructive">{agentError}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  One calendar per agent. Choose the agent that will handle bookings.
+                </p>
+              )}
             </div>
           )}
 
@@ -730,7 +743,12 @@ export default function CalendarsPage({ embedded = false }: { embedded?: boolean
         ))}
       </div>
 
-      <CalendarFormDialog open={createOpen} onClose={() => setCreateOpen(false)} editing={null} />
+      <CalendarFormDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        editing={null}
+        takenAgentIds={new Set(calendars?.map(c => c.agentId) ?? [])}
+      />
     </div>
   );
 }

@@ -70,15 +70,23 @@ router.post("/scheduling/calendars", requireAuth, async (req, res): Promise<void
   const [agent] = await db.select({ id: agentsTable.id }).from(agentsTable)
     .where(and(eq(agentsTable.id, parsed.data.agentId), eq(agentsTable.userId, clerkId)));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
-  const [row] = await db.insert(schedulingCalendarsTable)
-    .values({
-      ...parsed.data,
-      hostEmail: normalizeHostEmail(parsed.data.hostEmail),
-      additionalHosts: normalizeAdditionalHosts(parsed.data.additionalHosts),
-      userId: clerkId,
-    })
-    .returning();
-  res.status(201).json(GetCalendarResponse.parse(row));
+  try {
+    const [row] = await db.insert(schedulingCalendarsTable)
+      .values({
+        ...parsed.data,
+        hostEmail: normalizeHostEmail(parsed.data.hostEmail),
+        additionalHosts: normalizeAdditionalHosts(parsed.data.additionalHosts),
+        userId: clerkId,
+      })
+      .returning();
+    res.status(201).json(GetCalendarResponse.parse(row));
+  } catch (err: any) {
+    if (err?.code === "23505" || err?.message?.includes("scheduling_calendars_agent_id_unique")) {
+      res.status(409).json({ error: "This agent already has a calendar" });
+      return;
+    }
+    throw err;
+  }
 });
 
 router.get("/scheduling/calendars/:id", requireAuth, async (req, res): Promise<void> => {
