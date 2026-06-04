@@ -134,6 +134,8 @@ import type {
   SchedulingCalendar,
   SchedulingCalendarInput,
   SchedulingCalendarUpdate,
+  TestToolBody,
+  TestToolResponse,
   TimeSlot,
   TopupInput,
   TopupOrder,
@@ -9924,5 +9926,76 @@ export const usePostAdminAgentsIdRegenerate = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getPostAdminAgentsIdRegenerateMutationOptions(options));
+    }
+
+export const getRunToolTestUrl = () => {
+
+
+
+
+  return `/api/test/tool`
+}
+
+/**
+ * @summary Fire a scheduling tool call manually for testing
+ */
+export const runToolTest = async (testToolBody: TestToolBody, options?: RequestInit): Promise<TestToolResponse> => {
+
+  return customFetch<TestToolResponse>(getRunToolTestUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      testToolBody,)
+  }
+);}
+
+
+
+
+export const getRunToolTestMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runToolTest>>, TError,{data: BodyType<TestToolBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof runToolTest>>, TError,{data: BodyType<TestToolBody>}, TContext> => {
+
+const mutationKey = ['runToolTest'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof runToolTest>>, {data: BodyType<TestToolBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  runToolTest(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RunToolTestMutationResult = NonNullable<Awaited<ReturnType<typeof runToolTest>>>
+    export type RunToolTestMutationBody = BodyType<TestToolBody>
+    export type RunToolTestMutationError = ErrorType<void>
+
+    /**
+ * @summary Fire a scheduling tool call manually for testing
+ */
+export const useRunToolTest = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runToolTest>>, TError,{data: BodyType<TestToolBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof runToolTest>>,
+        TError,
+        {data: BodyType<TestToolBody>},
+        TContext
+      > => {
+      return useMutation(getRunToolTestMutationOptions(options));
     }
 

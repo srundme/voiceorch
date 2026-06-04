@@ -51,6 +51,7 @@ import ApiKeysPage from "@/pages/api-keys";
 import MetaLeadsPage from "@/pages/meta-leads";
 import TransfersPage from "@/pages/transfers";
 import VoicesPage from "@/pages/voices";
+import TestSimulatorPage from "@/pages/test-simulator";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -238,6 +239,7 @@ function AppRoutes() {
         <Route path="/app/meta-leads" component={MetaLeadsPage} />
         <Route path="/app/transfers" component={TransfersPage} />
         <Route path="/app/voices" component={VoicesPage} />
+        <Route path="/app/test-simulator" component={TestSimulatorPage} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

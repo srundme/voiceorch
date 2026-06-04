@@ -6,7 +6,7 @@ import {
   LayoutDashboard, BarChart3, Brain,
   Wallet, LogOut, ChevronDown, AlertCircle, Webhook,
   Zap, CalendarDays, TrendingUp, ShieldCheck,
-  Facebook, ArrowRightLeft, Mic2,
+  Facebook, ArrowRightLeft, Mic2, FlaskConical,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useClerk, useUser } from "@clerk/react";
@@ -27,10 +27,11 @@ const NAV_SECTIONS = [
   {
     label: "Observe",
     items: [
-      { name: "Analytics",    href: "/app/analytics", icon: BarChart3 },
-      { name: "Usage",        href: "/app/usage",     icon: TrendingUp },
-      { name: "Call Log",     href: "/app/calls",     icon: Phone },
-      { name: "Activity",     href: "/app/activity",  icon: LayoutDashboard },
+      { name: "Analytics",       href: "/app/analytics",        icon: BarChart3 },
+      { name: "Usage",           href: "/app/usage",            icon: TrendingUp },
+      { name: "Call Log",        href: "/app/calls",            icon: Phone },
+      { name: "Activity",        href: "/app/activity",         icon: LayoutDashboard },
+      { name: "Test Simulator",  href: "/app/test-simulator",   icon: FlaskConical },
     ],
   },
   {

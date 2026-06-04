@@ -3117,3 +3117,17 @@ export const PostAdminAgentsIdRegenerateResponse = zod.object({
 })
 
 
+/**
+ * @summary Fire a scheduling tool call manually for testing
+ */
+export const RunToolTestBody = zod.object({
+  "agentId": zod.number(),
+  "toolName": zod.string(),
+  "args": zod.record(zod.string(), zod.unknown())
+})
+
+export const RunToolTestResponse = zod.object({
+  "result": zod.string()
+})
+
+

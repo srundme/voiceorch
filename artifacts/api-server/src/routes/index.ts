@@ -34,6 +34,7 @@ import billingRouter from "./billing.js";
 import utilsRouter from "./utils.js";
 import webcallNotifyRouter from "./webcall-notify.js";
 import voicesRouter from "./voices.js";
+import testToolRouter from "./test-tool.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
 const router: IRouter = Router();
@@ -80,5 +81,6 @@ router.use(metaRouter);
 router.use(callTransfersRouter);
 router.use(billingRouter);
 router.use(webcallNotifyRouter);
+router.use(testToolRouter);
 
 export default router;

@@ -168,6 +168,18 @@ export interface AgentTool {
   preToolMessage?: string;
 }
 
+export type TestToolBodyArgs = { [key: string]: unknown };
+
+export interface TestToolBody {
+  agentId: number;
+  toolName: string;
+  args: TestToolBodyArgs;
+}
+
+export interface TestToolResponse {
+  result: string;
+}
+
 /**
  * managed = platform master keys; byop = user-supplied keys
  * @nullable

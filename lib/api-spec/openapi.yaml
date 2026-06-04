@@ -2855,6 +2855,30 @@ paths:
         '502': { description: Generation failed }
         '503': { description: No active template }
 
+  # ── Test Simulator ───────────────────────────────────────────────────────────
+  /test/tool:
+    post:
+      operationId: runToolTest
+      tags: [agents]
+      summary: Fire a scheduling tool call manually for testing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TestToolBody"
+      responses:
+        "200":
+          description: Tool result string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TestToolResponse"
+        "400":
+          description: Validation error or unsupported tool type
+        "404":
+          description: Agent or tool not found
+
 components:
   parameters:
     AdminToken:
@@ -3006,6 +3030,25 @@ components:
           description: (native_booking) Optional sentence the agent should say just before invoking the booking tool
 
     # ── Agent ──────────────────────────────────────────────────────────────────
+    TestToolBody:
+      type: object
+      required: [agentId, toolName, args]
+      properties:
+        agentId:
+          type: integer
+        toolName:
+          type: string
+        args:
+          type: object
+          additionalProperties: true
+
+    TestToolResponse:
+      type: object
+      required: [result]
+      properties:
+        result:
+          type: string
+
     Agent:
       type: object
       required: [id, name, status, asrProvider, llmProvider, ttsProvider, telephonyProvider, systemPrompt, createdAt, updatedAt]
