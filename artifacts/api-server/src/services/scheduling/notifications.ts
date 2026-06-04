@@ -66,20 +66,28 @@ function buildEmailContent(subject: string, body: string): { subject: string; te
   };
 }
 
-/** Collect, dedupe and normalize the full host recipient list (primary + additional). */
+const _EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Collect, dedupe and normalize the full host recipient list (primary + additional).
+ * Splits each entry on commas/semicolons/whitespace so that legacy combined-string
+ * rows (e.g. "a@example.com, b@example.com") work correctly.
+ * Invalid addresses are silently dropped.
+ */
 function hostRecipients(data: { hostEmail?: string | null; additionalHosts?: string[] | null }): string[] {
-  const all: string[] = [];
-  if (data.hostEmail) all.push(data.hostEmail);
-  if (data.additionalHosts) all.push(...data.additionalHosts);
+  const rawEntries: string[] = [];
+  if (data.hostEmail) rawEntries.push(data.hostEmail);
+  if (data.additionalHosts) rawEntries.push(...data.additionalHosts);
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const raw of all) {
-    const e = raw.trim();
-    if (!e) continue;
-    const key = e.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(e);
+  for (const entry of rawEntries) {
+    for (const e of entry.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean)) {
+      if (!_EMAIL_RE.test(e)) continue;
+      const key = e.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(e);
+    }
   }
   return out;
 }

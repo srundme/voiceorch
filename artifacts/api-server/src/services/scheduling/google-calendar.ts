@@ -356,28 +356,40 @@ export async function listConnectionCalendars(connectionId: string): Promise<Arr
  * Create a Google Calendar event with a Meet link on the specified connection.
  * Returns null if the connection is missing or the API call fails.
  */
+const _EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Split a raw string on commas, semicolons, or whitespace and return trimmed non-empty parts. */
+function _splitRawEmails(raw: string): string[] {
+  return raw.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean);
+}
+
 /**
  * Collect, dedupe and normalize host attendee emails (primary + additional),
  * excluding the attendee's own email to avoid duplicate attendees.
+ * Each entry is split on commas/semicolons/whitespace so that legacy combined
+ * strings (e.g. "a@example.com, b@example.com") are handled correctly.
+ * Individual addresses that fail basic email validation are silently dropped so
+ * that one malformed address cannot prevent the whole event from being created.
  */
 function hostAttendeeEmails(
   hostEmail: string | null | undefined,
   additionalHosts: string[] | null | undefined,
   attendeeEmail?: string,
 ): string[] {
-  const all: string[] = [];
-  if (hostEmail) all.push(hostEmail);
-  if (additionalHosts) all.push(...additionalHosts);
+  const rawEntries: string[] = [];
+  if (hostEmail) rawEntries.push(hostEmail);
+  if (additionalHosts) rawEntries.push(...additionalHosts);
   const seen = new Set<string>();
   if (attendeeEmail) seen.add(attendeeEmail.trim().toLowerCase());
   const out: string[] = [];
-  for (const raw of all) {
-    const e = raw.trim();
-    if (!e) continue;
-    const key = e.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(e);
+  for (const entry of rawEntries) {
+    for (const e of _splitRawEmails(entry)) {
+      if (!_EMAIL_RE.test(e)) continue;
+      const key = e.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(e);
+    }
   }
   return out;
 }
