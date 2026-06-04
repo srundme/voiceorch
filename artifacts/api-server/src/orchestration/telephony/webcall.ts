@@ -263,7 +263,15 @@ export async function handleWebCallWebSocket(
   // Streaming STT (Deepgram, Sarvam saaras:v3) eliminates the local VAD
   // silence wait — transcripts fire as soon as the utterance ends, reducing
   // STT latency from ~450ms+ to ~100–200ms.
-  if (stt.transcribeStream) {
+  //
+  // ⚠️  When Sarvam is ALSO the LLM provider, skip streaming STT.
+  // Both use the same api-subscription-key. A persistent streaming WebSocket
+  // consumes concurrent-connection/quota that the LLM endpoint shares, so
+  // leaving it open causes the LLM to get throttled (15–20 s TTFT instead of
+  // the normal 3–5 s). Fall back to batch STT for Sarvam-LLM setups so the
+  // LLM gets the full API quota.
+  const sttStreamingDisabledForQuota = agent.llmProvider?.toLowerCase() === "sarvam";
+  if (stt.transcribeStream && !sttStreamingDisabledForQuota) {
     try {
       streamSTT = stt.transcribeStream(
         (text, isFinal) => {
@@ -620,8 +628,12 @@ export async function handleWebCallWebSocket(
         systemPromptForTurn += `\n\n[CALLER GENDER] Gender could not be determined. Use "${neutralSal}" as a neutral salutation when appropriate.`;
       }
 
-      // Callback scheduling capability hint — always injected for webcalls
-      systemPromptForTurn += `\n\n[CALLBACK SCHEDULING] If the user asks you to call them back after a delay (e.g. "call me back in 10 minutes", "remind me in an hour"), you MUST agree and confirm the request. Say something like "Sure, I'll call you back in X minutes." Do NOT say you are unable to schedule callbacks or make outbound calls — the platform will automatically schedule and deliver the callback. Simply confirm the time and end the conversation naturally.`;
+      // Callback scheduling hint — only inject when callback detection is enabled
+      // (avoids bloating every LLM request for agents that never use callbacks)
+      const callbackDetectionEnabled = (agentCfg["callbackDetectionEnabled"] as boolean | undefined) ?? true;
+      if (callbackDetectionEnabled) {
+        systemPromptForTurn += `\n\n[CALLBACK SCHEDULING] If the user asks you to call them back after a delay (e.g. "call me back in 10 minutes", "remind me in an hour"), you MUST agree and confirm the request. Say something like "Sure, I'll call you back in X minutes." Do NOT say you are unable to schedule callbacks or make outbound calls — the platform will automatically schedule and deliver the callback. Simply confirm the time and end the conversation naturally.`;
+      }
 
       // ── Build tool definitions for this agent ─────────────────────────────
       const agentTools = (agent.tools ?? []) as unknown as import("../types.js").AgentTool[];

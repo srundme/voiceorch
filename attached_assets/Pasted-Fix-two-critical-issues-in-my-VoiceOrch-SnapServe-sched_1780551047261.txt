@@ -1,0 +1,106 @@
+Fix two critical issues in my VoiceOrch/SnapServe scheduling 
+agent. This uses SnapServe's INTERNAL scheduling API — 
+NOT Cal.com. Do not use any Cal.com-specific fields.
+
+EVIDENCE:
+- Bookings confirm successfully via email ✅
+- Timezone (Asia/Kolkata) is correct in email ✅
+- Google Calendar shows NO event after booking ❌
+- No Google Meet link in confirmation email ❌
+- Multiple hosts need to see the event too ❌
+
+=== STEP 1 — FIND THE ACTUAL API BEING CALLED ===
+
+Before fixing anything, locate and print:
+  1. The exact SnapServe API endpoint URL being called 
+     for book_appointment
+  2. The full request payload being sent
+  3. The full raw API response received
+
+Add this logging to book_appointment right now:
+  console.log("ENDPOINT:", endpoint)
+  console.log("REQUEST PAYLOAD:", JSON.stringify(payload, null, 2))
+  console.log("RAW RESPONSE:", JSON.stringify(response, null, 2))
+
+Run a test booking and paste the console output.
+We need to see what fields SnapServe's API actually 
+accepts and returns before writing any fix.
+
+=== STEP 2 — CHECK THE RESPONSE FOR MEET LINK ===
+
+In the raw API response from book_appointment, look for 
+ANY field that contains:
+  - "meet.google.com" URL
+  - "meetingUrl", "meet_url", "video_url", "conference_url"
+  - "conferencing", "videoCall", "video_call"
+  - "calendar_event_id", "calendar_id", "google_event_id"
+
+If these fields ARE in the response but the email does 
+not show them → the email template needs updating to 
+include them.
+
+If these fields are NOT in the response → the booking 
+request payload is missing the conferencing flag.
+
+=== STEP 3 — ADD CONFERENCING TO THE REQUEST PAYLOAD ===
+
+Check SnapServe's internal API documentation or source 
+code for the correct field name to enable Google Meet.
+Common field names to try one at a time:
+
+Option A:  "conferencing": true
+Option B:  "add_conferencing": true
+Option C:  "video_conferencing": "google_meet"
+Option D:  "location": "google_meet"
+Option E:  "meeting_type": "google_meet"
+
+Add whichever field SnapServe's API accepts to the 
+book_appointment payload. Check the response after 
+each attempt to see if a Meet link appears.
+
+=== STEP 4 — FIX GOOGLE CALENDAR EVENT NOT APPEARING ===
+
+Check SnapServe's booking API response for a calendar 
+event reference field such as:
+  "calendar_event_id", "google_event_id", 
+  "calendar_reference", "event_created"
+
+If the field is MISSING from the response:
+  - The Google OAuth token may have expired or lacks 
+    calendar write permission
+  - Go to SnapServe → Scheduling → Advanced → 
+    Add to calendar → Disconnect gopinwrk@gmail.com 
+    → Reconnect and grant ALL permissions
+
+If the field is PRESENT but calendar is empty:
+  - The event may be on the wrong Google account
+  - Check SnapServe → Scheduling → Advanced → 
+    confirm gopinwrk@gmail.com is the selected calendar
+  - Log in to BOTH gopinwrk@gmail.com and 
+    hpgopikrish@gmail.com and check both calendars
+
+=== STEP 5 — MULTIPLE HOSTS CALENDAR INVITE ===
+
+Check SnapServe's book_appointment API for a field 
+that accepts additional host emails such as:
+  "hosts", "additional_hosts", "guests", "attendees"
+
+Add all host emails to the booking payload:
+  gopinwrk@gmail.com
+  hpgopikrish@gmail.com
+
+Also verify inside SnapServe → Scheduling → Event Type 
+→ "One to one 15 mins" → check if there is a Hosts 
+or Team Members setting and add all hosts there so 
+every booking automatically notifies all of them.
+
+=== VERIFICATION CHECKLIST AFTER FIXING ===
+
+[ ] console.log shows Meet link in raw API response
+[ ] Confirmation email includes Google Meet link
+[ ] Agent tells caller the Meet link after booking
+[ ] gopinwrk@gmail.com calendar shows the event at IST
+[ ] hpgopikrish@gmail.com calendar shows the event at IST
+[ ] Both hosts receive calendar invite with Meet link
+[ ] Cancel removes the event from all calendars
+[ ] Reschedule updates existing event, not creates new one
