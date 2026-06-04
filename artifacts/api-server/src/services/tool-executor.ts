@@ -52,7 +52,9 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
       if (t.type === "native_booking") {
         return {
           name: t.name,
-          description: t.description,
+          description:
+            t.description +
+            " Call this tool to create the actual booking. Do NOT confirm the appointment to the caller before calling this tool. Required fields: attendee_name (ask the caller if not yet provided) and attendee_email (ask the caller if not yet provided).",
           parameters: {
             type: "object",
             properties: {
@@ -118,7 +120,8 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
           name: t.name,
           description:
             t.description +
-            " The 'next' field in the response lists slots as ISO 8601 strings with timezone offsets (e.g. '2026-06-06T20:30:00+05:30') followed by a human-readable label in parentheses. When calling book_appointment after checking availability, pass the ISO string (e.g. '2026-06-06T20:30:00+05:30') verbatim as preferred_date — do NOT convert or reformat it.",
+            " The 'next' field in the response lists slots as ISO 8601 strings with timezone offsets (e.g. '2026-06-06T20:30:00+05:30') followed by a human-readable label in parentheses. When calling book_appointment after checking availability, pass the ISO string (e.g. '2026-06-06T20:30:00+05:30') verbatim as preferred_date — do NOT convert or reformat it." +
+            " This tool ONLY checks availability. It does NOT create a booking. After presenting slots, collect the caller's name and email, then call the booking tool to create the booking. Never confirm to the caller that an appointment is booked without first calling the booking tool and receiving a booking_confirmed result.",
           parameters: {
             type: "object",
             properties: {

@@ -1023,6 +1023,24 @@ export class OrchestrationPipeline {
       ].join("\n");
     }
 
+    // Inject booking tool guide when the agent has a native_booking tool
+    const hasBookingTool = this.agent.tools.some((t) => t.type === "native_booking");
+    if (hasBookingTool) {
+      const bookTool = this.agent.tools.find((t) => t.type === "native_booking");
+      const checkTool = this.agent.tools.find((t) => t.type === "native_check_availability");
+      const bookName = bookTool?.name ?? "book_appointment";
+      const checkName = checkTool?.name ?? "check_availability";
+      systemPromptForTurn += [
+        "",
+        "",
+        "[BOOKING TOOL GUIDE]",
+        `"${checkName}" ONLY checks available slots — it does NOT create a booking.`,
+        `Before calling "${bookName}", you MUST collect the caller's full name and email address. Ask for them if not yet provided.`,
+        `NEVER tell the caller their appointment is confirmed or scheduled unless you have received a booking_confirmed: result from "${bookName}".`,
+        `Do NOT say "Your appointment has been scheduled" or any equivalent phrase before "${bookName}" returns a booking_confirmed: result.`,
+      ].join("\n");
+    }
+
     try {
       await this.llm.chat(
         this.conversationHistory,
