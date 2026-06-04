@@ -91,6 +91,7 @@ import type {
   CampaignCreate,
   CampaignLead,
   CampaignLeadProfile,
+  CampaignTransfersPage,
   CampaignUpdate,
   CancelCampaignBooking200,
   CommandCenterKpis,
@@ -157,6 +158,7 @@ import type {
   ListCampaignLeads200,
   ListCampaignLeadsParams,
   ListCampaignLiveQueueLeadsParams,
+  ListCampaignTransfersParams,
   ListEventTypesParams,
   ListMetaCampaignLeads200,
   ListMetaCampaignLeadsParams,
@@ -192,6 +194,7 @@ import type {
   RescheduleCampaignBooking200,
   RescheduleCampaignBookingBody,
   RescheduleCampaignCallback200,
+  RetryCampaignTransfer200,
   SchedulingCalendar,
   SchedulingCalendarInput,
   SchedulingCalendarUpdate,
@@ -201,7 +204,10 @@ import type {
   TopupInput,
   TopupOrder,
   TransferCallBody,
+  TransferMetrics,
   UpdateCallDispositionBody,
+  UpdateCampaignTransferStatus200,
+  UpdateCampaignTransferStatusBody,
   UpdateIncomingCallStatus200,
   UpdateIncomingCallStatusBody,
   UpdateLeadCallbackBody,
@@ -8921,6 +8927,395 @@ export function useExportCampaignCallbacks<TData = Awaited<ReturnType<typeof exp
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getExportCampaignCallbacksQueryOptions(id,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetCampaignTransferMetricsUrl = (id: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/transfers/metrics`
+}
+
+/**
+ * @summary Transfer metric counts for a campaign
+ */
+export const getCampaignTransferMetrics = async (id: number, options?: RequestInit): Promise<TransferMetrics> => {
+
+  return customFetch<TransferMetrics>(getGetCampaignTransferMetricsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCampaignTransferMetricsQueryKey = (id: number,) => {
+    return [
+    `/api/campaigns/${id}/transfers/metrics`
+    ] as const;
+    }
+
+
+export const getGetCampaignTransferMetricsQueryOptions = <TData = Awaited<ReturnType<typeof getCampaignTransferMetrics>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCampaignTransferMetrics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCampaignTransferMetricsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCampaignTransferMetrics>>> = ({ signal }) => getCampaignTransferMetrics(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCampaignTransferMetrics>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCampaignTransferMetricsQueryResult = NonNullable<Awaited<ReturnType<typeof getCampaignTransferMetrics>>>
+export type GetCampaignTransferMetricsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Transfer metric counts for a campaign
+ */
+
+export function useGetCampaignTransferMetrics<TData = Awaited<ReturnType<typeof getCampaignTransferMetrics>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCampaignTransferMetrics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCampaignTransferMetricsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListCampaignTransfersUrl = (id: number,
+    params?: ListCampaignTransfersParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/campaigns/${id}/transfers?${stringifiedParams}` : `/api/campaigns/${id}/transfers`
+}
+
+/**
+ * @summary Paginated transfers for a campaign
+ */
+export const listCampaignTransfers = async (id: number,
+    params?: ListCampaignTransfersParams, options?: RequestInit): Promise<CampaignTransfersPage> => {
+
+  return customFetch<CampaignTransfersPage>(getListCampaignTransfersUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCampaignTransfersQueryKey = (id: number,
+    params?: ListCampaignTransfersParams,) => {
+    return [
+    `/api/campaigns/${id}/transfers`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListCampaignTransfersQueryOptions = <TData = Awaited<ReturnType<typeof listCampaignTransfers>>, TError = ErrorType<void>>(id: number,
+    params?: ListCampaignTransfersParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCampaignTransfers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCampaignTransfersQueryKey(id,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCampaignTransfers>>> = ({ signal }) => listCampaignTransfers(id,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCampaignTransfers>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListCampaignTransfersQueryResult = NonNullable<Awaited<ReturnType<typeof listCampaignTransfers>>>
+export type ListCampaignTransfersQueryError = ErrorType<void>
+
+
+/**
+ * @summary Paginated transfers for a campaign
+ */
+
+export function useListCampaignTransfers<TData = Awaited<ReturnType<typeof listCampaignTransfers>>, TError = ErrorType<void>>(
+ id: number,
+    params?: ListCampaignTransfersParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCampaignTransfers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListCampaignTransfersQueryOptions(id,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getUpdateCampaignTransferStatusUrl = (id: number,
+    transferId: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/transfers/${transferId}/status`
+}
+
+/**
+ * @summary Update a transfer status
+ */
+export const updateCampaignTransferStatus = async (id: number,
+    transferId: number,
+    updateCampaignTransferStatusBody: UpdateCampaignTransferStatusBody, options?: RequestInit): Promise<UpdateCampaignTransferStatus200> => {
+
+  return customFetch<UpdateCampaignTransferStatus200>(getUpdateCampaignTransferStatusUrl(id,transferId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateCampaignTransferStatusBody,)
+  }
+);}
+
+
+
+
+export const getUpdateCampaignTransferStatusMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCampaignTransferStatus>>, TError,{id: number;transferId: number;data: BodyType<UpdateCampaignTransferStatusBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateCampaignTransferStatus>>, TError,{id: number;transferId: number;data: BodyType<UpdateCampaignTransferStatusBody>}, TContext> => {
+
+const mutationKey = ['updateCampaignTransferStatus'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateCampaignTransferStatus>>, {id: number;transferId: number;data: BodyType<UpdateCampaignTransferStatusBody>}> = (props) => {
+          const {id,transferId,data} = props ?? {};
+
+          return  updateCampaignTransferStatus(id,transferId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateCampaignTransferStatusMutationResult = NonNullable<Awaited<ReturnType<typeof updateCampaignTransferStatus>>>
+    export type UpdateCampaignTransferStatusMutationBody = BodyType<UpdateCampaignTransferStatusBody>
+    export type UpdateCampaignTransferStatusMutationError = ErrorType<void>
+
+    /**
+ * @summary Update a transfer status
+ */
+export const useUpdateCampaignTransferStatus = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCampaignTransferStatus>>, TError,{id: number;transferId: number;data: BodyType<UpdateCampaignTransferStatusBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateCampaignTransferStatus>>,
+        TError,
+        {id: number;transferId: number;data: BodyType<UpdateCampaignTransferStatusBody>},
+        TContext
+      > => {
+      return useMutation(getUpdateCampaignTransferStatusMutationOptions(options));
+    }
+
+export const getRetryCampaignTransferUrl = (id: number,
+    transferId: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/transfers/${transferId}/retry`
+}
+
+/**
+ * @summary Re-queue a failed or cancelled transfer
+ */
+export const retryCampaignTransfer = async (id: number,
+    transferId: number, options?: RequestInit): Promise<RetryCampaignTransfer200> => {
+
+  return customFetch<RetryCampaignTransfer200>(getRetryCampaignTransferUrl(id,transferId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRetryCampaignTransferMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retryCampaignTransfer>>, TError,{id: number;transferId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof retryCampaignTransfer>>, TError,{id: number;transferId: number}, TContext> => {
+
+const mutationKey = ['retryCampaignTransfer'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof retryCampaignTransfer>>, {id: number;transferId: number}> = (props) => {
+          const {id,transferId} = props ?? {};
+
+          return  retryCampaignTransfer(id,transferId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RetryCampaignTransferMutationResult = NonNullable<Awaited<ReturnType<typeof retryCampaignTransfer>>>
+
+    export type RetryCampaignTransferMutationError = ErrorType<void>
+
+    /**
+ * @summary Re-queue a failed or cancelled transfer
+ */
+export const useRetryCampaignTransfer = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retryCampaignTransfer>>, TError,{id: number;transferId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof retryCampaignTransfer>>,
+        TError,
+        {id: number;transferId: number},
+        TContext
+      > => {
+      return useMutation(getRetryCampaignTransferMutationOptions(options));
+    }
+
+export const getExportCampaignTransfersUrl = (id: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/transfers/export`
+}
+
+/**
+ * @summary Export campaign transfers as CSV
+ */
+export const exportCampaignTransfers = async (id: number, options?: RequestInit): Promise<string> => {
+
+  return customFetch<string>(getExportCampaignTransfersUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportCampaignTransfersQueryKey = (id: number,) => {
+    return [
+    `/api/campaigns/${id}/transfers/export`
+    ] as const;
+    }
+
+
+export const getExportCampaignTransfersQueryOptions = <TData = Awaited<ReturnType<typeof exportCampaignTransfers>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportCampaignTransfers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportCampaignTransfersQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportCampaignTransfers>>> = ({ signal }) => exportCampaignTransfers(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportCampaignTransfers>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportCampaignTransfersQueryResult = NonNullable<Awaited<ReturnType<typeof exportCampaignTransfers>>>
+export type ExportCampaignTransfersQueryError = ErrorType<void>
+
+
+/**
+ * @summary Export campaign transfers as CSV
+ */
+
+export function useExportCampaignTransfers<TData = Awaited<ReturnType<typeof exportCampaignTransfers>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportCampaignTransfers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportCampaignTransfersQueryOptions(id,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

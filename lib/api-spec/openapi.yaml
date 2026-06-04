@@ -2830,6 +2830,135 @@ paths:
         "401": { description: Unauthorized }
         "404": { description: Not found }
 
+  /campaigns/{id}/transfers/metrics:
+    get:
+      operationId: getCampaignTransferMetrics
+      tags: [campaigns]
+      summary: Transfer metric counts for a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Transfer metrics
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TransferMetrics" }
+        "401": { description: Unauthorized }
+        "404": { description: Not found }
+
+  /campaigns/{id}/transfers:
+    get:
+      operationId: listCampaignTransfers
+      tags: [campaigns]
+      summary: Paginated transfers for a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer }
+        - name: limit
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Campaign transfers page
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CampaignTransfersPage" }
+        "401": { description: Unauthorized }
+        "404": { description: Not found }
+
+  /campaigns/{id}/transfers/{transferId}/status:
+    patch:
+      operationId: updateCampaignTransferStatus
+      tags: [campaigns]
+      summary: Update a transfer status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: transferId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [initiated, connected, completed, failed, cancelled] }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:     { type: integer }
+                  status: { type: string }
+        "401": { description: Unauthorized }
+        "404": { description: Not found }
+
+  /campaigns/{id}/transfers/{transferId}/retry:
+    post:
+      operationId: retryCampaignTransfer
+      tags: [campaigns]
+      summary: Re-queue a failed or cancelled transfer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: transferId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Retried
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:     { type: integer }
+                  status: { type: string }
+        "401": { description: Unauthorized }
+        "404": { description: Not found }
+
+  /campaigns/{id}/transfers/export:
+    get:
+      operationId: exportCampaignTransfers
+      tags: [campaigns]
+      summary: Export campaign transfers as CSV
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: CSV file
+          content:
+            text/csv:
+              schema: { type: string }
+        "401": { description: Unauthorized }
+        "404": { description: Not found }
+
   /campaigns/{id}/bookings/metrics:
     get:
       operationId: getCampaignBookingMetrics
@@ -7859,6 +7988,55 @@ components:
       required: [callbackAt]
       properties:
         callbackAt: { type: string, format: date-time }
+
+    TransferMetrics:
+      type: object
+      required: [pending, completed, failed, today, total]
+      properties:
+        pending:   { type: integer }
+        completed: { type: integer }
+        failed:    { type: integer }
+        today:     { type: integer }
+        total:     { type: integer }
+
+    TransferLeadInfo:
+      type: object
+      properties:
+        name:  { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+
+    CampaignTransferItem:
+      type: object
+      required: [id, callId, transferTo, status, outcome, initiatedAt, lead]
+      properties:
+        id:                 { type: integer }
+        callId:             { type: integer }
+        leadId:             { type: integer, nullable: true }
+        batchId:            { type: integer, nullable: true }
+        transferTo:         { type: string }
+        transferName:       { type: string, nullable: true }
+        summary:            { type: string, nullable: true }
+        status:             { type: string }
+        outcome:            { type: string }
+        durationSeconds:    { type: integer, nullable: true }
+        initiatedAt:        { type: string, format: date-time }
+        connectedAt:        { type: string, format: date-time, nullable: true }
+        completedAt:        { type: string, format: date-time, nullable: true }
+        batchName:          { type: string, nullable: true }
+        agentName:          { type: string, nullable: true }
+        lead:
+          $ref: "#/components/schemas/TransferLeadInfo"
+
+    CampaignTransfersPage:
+      type: object
+      required: [items, total, page, limit]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/CampaignTransferItem" }
+        total: { type: integer }
+        page:  { type: integer }
+        limit: { type: integer }
 
     BookingMetrics:
       type: object

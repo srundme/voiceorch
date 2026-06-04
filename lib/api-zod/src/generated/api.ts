@@ -2904,6 +2904,103 @@ export const ExportCampaignCallbacksQueryParams = zod.object({
 
 
 /**
+ * @summary Transfer metric counts for a campaign
+ */
+export const GetCampaignTransferMetricsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetCampaignTransferMetricsResponse = zod.object({
+  "pending": zod.number(),
+  "completed": zod.number(),
+  "failed": zod.number(),
+  "today": zod.number(),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Paginated transfers for a campaign
+ */
+export const ListCampaignTransfersParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListCampaignTransfersQueryParams = zod.object({
+  "status": zod.coerce.string().optional(),
+  "page": zod.coerce.number().optional(),
+  "limit": zod.coerce.number().optional()
+})
+
+export const ListCampaignTransfersResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "callId": zod.number(),
+  "leadId": zod.number().nullish(),
+  "batchId": zod.number().nullish(),
+  "transferTo": zod.string(),
+  "transferName": zod.string().nullish(),
+  "summary": zod.string().nullish(),
+  "status": zod.string(),
+  "outcome": zod.string(),
+  "durationSeconds": zod.number().nullish(),
+  "initiatedAt": zod.coerce.date(),
+  "connectedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "batchName": zod.string().nullish(),
+  "agentName": zod.string().nullish(),
+  "lead": zod.object({
+  "name": zod.string().nullish(),
+  "phone": zod.string().nullish()
+})
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "limit": zod.number()
+})
+
+
+/**
+ * @summary Update a transfer status
+ */
+export const UpdateCampaignTransferStatusParams = zod.object({
+  "id": zod.coerce.number(),
+  "transferId": zod.coerce.number()
+})
+
+export const UpdateCampaignTransferStatusBody = zod.object({
+  "status": zod.enum(['initiated', 'connected', 'completed', 'failed', 'cancelled'])
+})
+
+export const UpdateCampaignTransferStatusResponse = zod.object({
+  "id": zod.number().optional(),
+  "status": zod.string().optional()
+})
+
+
+/**
+ * @summary Re-queue a failed or cancelled transfer
+ */
+export const RetryCampaignTransferParams = zod.object({
+  "id": zod.coerce.number(),
+  "transferId": zod.coerce.number()
+})
+
+export const RetryCampaignTransferResponse = zod.object({
+  "id": zod.number().optional(),
+  "status": zod.string().optional()
+})
+
+
+/**
+ * @summary Export campaign transfers as CSV
+ */
+export const ExportCampaignTransfersParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
  * @summary Booking metric counts for a campaign
  */
 export const GetCampaignBookingMetricsParams = zod.object({

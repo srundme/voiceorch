@@ -157,6 +157,7 @@ export const callBookingsTable = pgTable("call_bookings", {
   meetingLink:         text("meeting_link"),
   meetingStatus:       text("meeting_status").notNull().default("scheduled"),
   calendarProvider:    text("calendar_provider"),
+  bookingSource:       text("booking_source"),
   bookedBy:            text("booked_by"),
   notes:               text("notes"),
   revenueValue:        decimal("revenue_value", { precision: 12, scale: 2 }),

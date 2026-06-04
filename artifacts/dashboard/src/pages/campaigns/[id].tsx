@@ -3,6 +3,7 @@ import LiveQueueTab from "./live-queue";
 import CallbacksTab from "./callbacks";
 import IncomingCallsTab from "./incoming";
 import BookingsTab from "./bookings";
+import TransfersTab from "./transfers";
 import { useRoute, useLocation, Link } from "wouter";
 import {
   useGetCampaign, useListCampaignBatches, useCreateCampaignBatch,
@@ -992,12 +993,7 @@ export default function CampaignDetailPage() {
           {/* ── Transfers ──────────────────────────────────────────────────────── */}
           <TabsContent value="transfers" className="mt-0 border-0 p-0">
             <div className="overflow-y-auto px-6 py-5" style={{ maxHeight: "calc(100vh - 160px)" }}>
-              <CampaignTabPlaceholder
-                icon={<ArrowRightLeft className="h-6 w-6" />}
-                title="Transfers"
-                description="Leads from this campaign who were transferred to a human agent. Track transfer outcomes, agents, and resolution status."
-                color="rose"
-              />
+              <TransfersTab campaignId={campaign.id} />
             </div>
           </TabsContent>
 

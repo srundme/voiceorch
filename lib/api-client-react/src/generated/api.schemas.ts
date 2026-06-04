@@ -3064,6 +3064,45 @@ export interface CallbackRescheduleRequest {
   callbackAt: string;
 }
 
+export interface TransferMetrics {
+  pending: number;
+  completed: number;
+  failed: number;
+  today: number;
+  total: number;
+}
+
+export interface TransferLeadInfo {
+  name?: string | null;
+  phone?: string | null;
+}
+
+export interface CampaignTransferItem {
+  id: number;
+  callId: number;
+  leadId?: number | null;
+  batchId?: number | null;
+  transferTo: string;
+  transferName?: string | null;
+  summary?: string | null;
+  status: string;
+  outcome: string;
+  durationSeconds?: number | null;
+  initiatedAt: string;
+  connectedAt?: string | null;
+  completedAt?: string | null;
+  batchName?: string | null;
+  agentName?: string | null;
+  lead: TransferLeadInfo;
+}
+
+export interface CampaignTransfersPage {
+  items: CampaignTransferItem[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 export interface BookingMetrics {
   today: number;
   upcoming: number;
@@ -3321,6 +3360,37 @@ export type RescheduleCampaignCallback200 = {
 
 export type ExportCampaignCallbacksParams = {
 status?: string;
+};
+
+export type ListCampaignTransfersParams = {
+status?: string;
+page?: number;
+limit?: number;
+};
+
+export type UpdateCampaignTransferStatusBodyStatus = typeof UpdateCampaignTransferStatusBodyStatus[keyof typeof UpdateCampaignTransferStatusBodyStatus];
+
+
+export const UpdateCampaignTransferStatusBodyStatus = {
+  initiated: 'initiated',
+  connected: 'connected',
+  completed: 'completed',
+  failed: 'failed',
+  cancelled: 'cancelled',
+} as const;
+
+export type UpdateCampaignTransferStatusBody = {
+  status: UpdateCampaignTransferStatusBodyStatus;
+};
+
+export type UpdateCampaignTransferStatus200 = {
+  id?: number;
+  status?: string;
+};
+
+export type RetryCampaignTransfer200 = {
+  id?: number;
+  status?: string;
 };
 
 export type ListCampaignBookingsParams = {
