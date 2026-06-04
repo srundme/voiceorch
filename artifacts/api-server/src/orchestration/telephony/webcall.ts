@@ -514,15 +514,36 @@ export async function handleWebCallWebSocket(
       if (genderDetector && !genderDetector.locked) genderDetector.runDetection();
 
       // ── End-call phrase detection ──────────────────────────────────────────
-      // Mirror pipeline.ts: if the user says a configured goodbye phrase, end
-      // the call immediately without routing through the LLM.
+      // Mirror pipeline.ts: if the user says a configured goodbye phrase, speak
+      // a goodbye aloud then end the call without routing through the LLM.
       if (agent.endCallPhrases) {
         const phrases = agent.endCallPhrases.split(",").map((s: string) => s.trim()).filter(Boolean);
         if (phrases.length > 0) {
           const lower = userText.toLowerCase();
-          if (phrases.some((p: string) => lower.includes(p.toLowerCase()))) {
-            logger.info({ callId, userText }, "Webcall: end-call phrase detected — hanging up");
+          const matchedPhrase = phrases.find((p: string) => lower.includes(p.toLowerCase()));
+          if (matchedPhrase) {
+            logger.info({ callId, userText }, "Webcall: end-call phrase detected — speaking goodbye then hanging up");
             processing = false;
+            const endCallTool = ((agent.tools ?? []) as unknown as import("../types.js").AgentTool[]).find((t) => t.type === "end_call");
+            const goodbyeText =
+              endCallTool?.type === "end_call" && endCallTool.goodbyeMessage?.trim()
+                ? endCallTool.goodbyeMessage
+                : matchedPhrase;
+            try {
+              const { audio } = await tts.synthesize(goodbyeText);
+              if (!closed) {
+                sendStatus("speaking");
+                speaking = true;
+                speakingStartedAt = Date.now();
+                for (let j = 0; j < audio.length; j += AUDIO_CHUNK_BYTES) {
+                  if (closed || interrupted) break;
+                  sendAudio(amplifyPcm(audio.slice(j, j + AUDIO_CHUNK_BYTES), TTS_VOLUME_GAIN));
+                  await new Promise<void>((r) => setTimeout(r, 40));
+                }
+                speaking = false;
+                speakingEndedAt = Date.now();
+              }
+            } catch { /* ignore TTS errors on goodbye */ }
             if (!closed) void hangup("normal");
             return;
           }
