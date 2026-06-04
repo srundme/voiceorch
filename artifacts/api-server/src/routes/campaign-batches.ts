@@ -2,10 +2,12 @@ import { Router, type IRouter } from "express";
 import { getAuth } from "@clerk/express";
 import {
   db, campaignsTable, campaignBatchesTable, campaignLeadsTable, callsTable,
-  type CampaignFieldMappings,
+  leadTimelineTable, type CampaignFieldMappings,
 } from "@workspace/db";
 import { eq, and, count, desc, inArray, sql } from "drizzle-orm";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
+import { normalizePhone } from "../lib/phone-normalize.js";
+import { isOnDnc } from "../lib/dnc-check.js";
 
 const router: IRouter = Router();
 
@@ -92,20 +94,31 @@ router.post("/campaigns/:id/batches", async (req, res): Promise<void> => {
   }).returning();
 
   const toInsert: (typeof campaignLeadsTable.$inferInsert)[] = [];
+  let dncSkipped = 0;
   for (const row of rawLeads) {
     const phone = (row[phoneField] ?? row["phone"] ?? "").trim();
     if (!phone) continue;
+    const normalized = normalizePhone(phone);
+    if (await isOnDnc(campaign.userId, normalized)) { dncSkipped++; continue; }
     const name  = (row[nameField]  ?? row["name"]  ?? "").trim() || null;
     const email = (row[emailField] ?? row["email"] ?? "").trim() || null;
     const leadData: Record<string, string> = {};
     for (const [k, v] of Object.entries(row)) { if (v?.trim()) leadData[k] = v.trim(); }
-    toInsert.push({ campaignId, batchId: batch!.id, phone, name, email, leadData, source: "csv" });
+    toInsert.push({ campaignId, batchId: batch!.id, phone, normalizedPhone: normalized, name, email, leadData, source: "csv" });
   }
 
   const imported = toInsert.length;
   if (imported > 0) {
+    const insertedLeads: (typeof campaignLeadsTable.$inferSelect)[] = [];
     for (let i = 0; i < toInsert.length; i += 100) {
-      await db.insert(campaignLeadsTable).values(toInsert.slice(i, i + 100));
+      const chunk = await db.insert(campaignLeadsTable).values(toInsert.slice(i, i + 100)).returning();
+      insertedLeads.push(...chunk);
+    }
+    // Add timeline events for imports
+    if (insertedLeads.length > 0) {
+      await db.insert(leadTimelineTable).values(
+        insertedLeads.map(l => ({ leadId: l.id, campaignId, eventType: "imported", data: { source: "csv", batchId: batch!.id } }))
+      );
     }
     await db.update(campaignBatchesTable).set({ totalLeads: imported }).where(eq(campaignBatchesTable.id, batch!.id));
     await db.update(campaignsTable)

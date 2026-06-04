@@ -11,6 +11,7 @@ export * from "./callerProfiles";
 export * from "./scheduledCallbacks";
 export * from "./platform-settings";
 export * from "./campaigns";
+export * from "./campaign-crm";
 export * from "./scheduling";
 export * from "./platform-listed-voices";
 export * from "./usage-spike-dismissals";

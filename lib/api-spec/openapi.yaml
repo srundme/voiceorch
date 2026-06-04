@@ -1756,6 +1756,226 @@ paths:
         "404":
           description: Not found
 
+  # ── Campaign CRM ──────────────────────────────────────────────────────────────
+  /campaigns/{id}/leads/{leadId}:
+    get:
+      operationId: getCampaignLeadProfile
+      tags: [campaigns]
+      summary: Get full CRM profile for a campaign lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: leadId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Lead profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignLeadProfile"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+
+  /campaigns/{id}/leads/{leadId}/timeline:
+    get:
+      operationId: getCampaignLeadTimeline
+      tags: [campaigns]
+      summary: Get timeline events for a campaign lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: leadId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Timeline events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LeadTimelineEvent"
+        "401":
+          description: Unauthorized
+
+  /campaigns/{id}/leads/{leadId}/callbacks/{callbackId}:
+    patch:
+      operationId: updateLeadCallback
+      tags: [campaigns]
+      summary: Update callback status or scheduled time
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: leadId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: callbackId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [pending, completed, cancelled]
+                callbackAt:
+                  type: string
+                  format: date-time
+                  nullable: true
+      responses:
+        "200":
+          description: Updated callback
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+
+  /campaigns/{id}/analytics:
+    get:
+      operationId: getCampaignAnalytics
+      tags: [campaigns]
+      summary: Get campaign-level analytics and disposition breakdown
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Campaign analytics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignAnalytics"
+        "401":
+          description: Unauthorized
+
+  /campaigns/{id}/batches/{batchId}/analytics:
+    get:
+      operationId: getBatchAnalytics
+      tags: [campaigns]
+      summary: Get analytics for a specific batch
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: batchId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Batch analytics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchAnalytics"
+        "401":
+          description: Unauthorized
+
+  /campaigns/{id}/csv-template:
+    get:
+      operationId: getCampaignCsvTemplate
+      tags: [campaigns]
+      summary: Download a CSV template with headers derived from campaign field mappings
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: CSV file
+          content:
+            text/csv:
+              schema:
+                type: string
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+
+  /dnc:
+    get:
+      operationId: listDnc
+      tags: [campaigns]
+      summary: List Do Not Call entries
+      responses:
+        "200":
+          description: DNC list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DncEntry"
+        "401":
+          description: Unauthorized
+    post:
+      operationId: addToDnc
+      tags: [campaigns]
+      summary: Add a phone number to the DNC list
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone]
+              properties:
+                phone:
+                  type: string
+                reason:
+                  type: string
+                  nullable: true
+      responses:
+        "201":
+          description: DNC entry created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DncEntry"
+        "401":
+          description: Unauthorized
+
+  /dnc/{id}:
+    delete:
+      operationId: removeFromDnc
+      tags: [campaigns]
+      summary: Remove a phone number from the DNC list
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: Removed
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+
   # ── Scheduling ───────────────────────────────────────────────────────────────
   /scheduling/calendars:
     get:
@@ -4519,6 +4739,172 @@ components:
           type: string
           format: date-time
           nullable: true
+
+    CampaignLeadProfile:
+      type: object
+      required: [lead, executions, callbacks, pendingRetries, campaign]
+      properties:
+        lead:
+          type: object
+          required: [id, campaignId, phone, callStatus, callAttempts, source, createdAt]
+          properties:
+            id: { type: integer }
+            campaignId: { type: integer }
+            batchId: { type: ["integer", "null"] }
+            phone: { type: string }
+            normalizedPhone: { type: ["string", "null"] }
+            name: { type: ["string", "null"] }
+            email: { type: ["string", "null"] }
+            leadData:
+              type: object
+              additionalProperties: { type: string }
+            callStatus: { type: string }
+            disposition: { type: ["string", "null"] }
+            callAttempts: { type: integer }
+            lastAttemptAt: { type: ["string", "null"], format: date-time }
+            source: { type: string }
+            notes: { type: ["string", "null"] }
+            createdAt: { type: string, format: date-time }
+        latestCall:
+          nullable: true
+          type: object
+          properties:
+            id: { type: integer }
+            status: { type: string }
+            toNumber: { type: string }
+            fromNumber: { type: string }
+            durationSeconds: { type: ["integer", "null"] }
+            transcript: { type: ["string", "null"] }
+            recordingUrl: { type: ["string", "null"] }
+            callSummary: { type: ["string", "null"] }
+            dispositionResult:
+              nullable: true
+              type: object
+              additionalProperties: true
+            successEvaluation: { type: ["string", "null"] }
+            transferType: { type: ["string", "null"] }
+            transferTarget: { type: ["string", "null"] }
+            amdResult: { type: ["string", "null"] }
+            sttLatencyMs: { type: ["integer", "null"] }
+            llmLatencyMs: { type: ["integer", "null"] }
+            ttsFirstChunkMs: { type: ["integer", "null"] }
+            costCents: { type: ["integer", "null"] }
+            createdAt: { type: string, format: date-time }
+            endedAt: { type: ["string", "null"], format: date-time }
+        executions:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              callId: { type: ["integer", "null"] }
+              attemptNumber: { type: integer }
+              outcome: { type: ["string", "null"] }
+              createdAt: { type: string, format: date-time }
+              call: { nullable: true, type: object, additionalProperties: true }
+        callbacks:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              callId: { type: ["integer", "null"] }
+              callbackAt: { type: ["string", "null"], format: date-time }
+              reason: { type: ["string", "null"] }
+              rawExtract: { type: ["string", "null"] }
+              status: { type: string }
+              createdAt: { type: string, format: date-time }
+        pendingRetries:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              attemptNumber: { type: integer }
+              scheduledAt: { type: string, format: date-time }
+              reason: { type: ["string", "null"] }
+        campaign:
+          type: object
+          required: [id, name]
+          properties:
+            id: { type: integer }
+            name: { type: string }
+
+    LeadTimelineEvent:
+      type: object
+      required: [id, eventType, createdAt]
+      properties:
+        id: { type: integer }
+        eventType: { type: string }
+        data:
+          type: object
+          nullable: true
+          additionalProperties: true
+        createdAt: { type: string, format: date-time }
+
+    BatchAnalytics:
+      type: object
+      required: [batchId, batchName, batchStatus, stats, statusBreakdown, dispositions]
+      properties:
+        batchId: { type: integer }
+        batchName: { type: string }
+        batchStatus: { type: string }
+        stats:
+          type: object
+          required: [total, called, pending, calling, failed, answered, notPicked, callbacks, pendingRetries, completionPct]
+          properties:
+            total: { type: integer }
+            called: { type: integer }
+            pending: { type: integer }
+            calling: { type: integer }
+            failed: { type: integer }
+            answered: { type: integer }
+            notPicked: { type: integer }
+            callbacks: { type: integer }
+            pendingRetries: { type: integer }
+            completionPct: { type: integer }
+        statusBreakdown:
+          type: object
+          additionalProperties: { type: integer }
+        dispositions:
+          type: array
+          items:
+            type: object
+            required: [label, count]
+            properties:
+              label: { type: string }
+              count: { type: integer }
+
+    CampaignAnalytics:
+      type: object
+      required: [campaignId, campaignName, dispositions, statusBreakdown, callbacks, totalLeads, calledLeads]
+      properties:
+        campaignId: { type: integer }
+        campaignName: { type: string }
+        dispositions:
+          type: array
+          items:
+            type: object
+            required: [label, count]
+            properties:
+              label: { type: string }
+              count: { type: integer }
+        statusBreakdown:
+          type: object
+          additionalProperties: { type: integer }
+        callbacks: { type: integer }
+        totalLeads: { type: integer }
+        calledLeads: { type: integer }
+
+    DncEntry:
+      type: object
+      required: [id, phone, normalizedPhone, createdAt]
+      properties:
+        id: { type: integer }
+        phone: { type: string }
+        normalizedPhone: { type: string }
+        reason: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
 
     MetaLeadItem:
       type: object

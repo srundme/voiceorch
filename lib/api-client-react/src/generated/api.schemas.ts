@@ -1469,6 +1469,183 @@ export interface CampaignBatchUpdate {
   scheduledStartAt?: string | null;
 }
 
+export type CampaignLeadProfileLeadLeadData = {[key: string]: string};
+
+export type CampaignLeadProfileLead = {
+  id: number;
+  campaignId: number;
+  /** @nullable */
+  batchId?: number | null;
+  phone: string;
+  /** @nullable */
+  normalizedPhone?: string | null;
+  /** @nullable */
+  name?: string | null;
+  /** @nullable */
+  email?: string | null;
+  leadData?: CampaignLeadProfileLeadLeadData;
+  callStatus: string;
+  /** @nullable */
+  disposition?: string | null;
+  callAttempts: number;
+  /** @nullable */
+  lastAttemptAt?: string | null;
+  source: string;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+};
+
+export type CampaignLeadProfileLatestCallDispositionResult = { [key: string]: unknown } | null;
+
+export type CampaignLeadProfileLatestCall = {
+  id?: number;
+  status?: string;
+  toNumber?: string;
+  fromNumber?: string;
+  /** @nullable */
+  durationSeconds?: number | null;
+  /** @nullable */
+  transcript?: string | null;
+  /** @nullable */
+  recordingUrl?: string | null;
+  /** @nullable */
+  callSummary?: string | null;
+  dispositionResult?: CampaignLeadProfileLatestCallDispositionResult;
+  /** @nullable */
+  successEvaluation?: string | null;
+  /** @nullable */
+  transferType?: string | null;
+  /** @nullable */
+  transferTarget?: string | null;
+  /** @nullable */
+  amdResult?: string | null;
+  /** @nullable */
+  sttLatencyMs?: number | null;
+  /** @nullable */
+  llmLatencyMs?: number | null;
+  /** @nullable */
+  ttsFirstChunkMs?: number | null;
+  /** @nullable */
+  costCents?: number | null;
+  createdAt?: string;
+  /** @nullable */
+  endedAt?: string | null;
+} | null;
+
+export type CampaignLeadProfileExecutionsItemCall = { [key: string]: unknown } | null;
+
+export type CampaignLeadProfileExecutionsItem = {
+  id?: number;
+  /** @nullable */
+  callId?: number | null;
+  attemptNumber?: number;
+  /** @nullable */
+  outcome?: string | null;
+  createdAt?: string;
+  call?: CampaignLeadProfileExecutionsItemCall;
+};
+
+export type CampaignLeadProfileCallbacksItem = {
+  id?: number;
+  /** @nullable */
+  callId?: number | null;
+  /** @nullable */
+  callbackAt?: string | null;
+  /** @nullable */
+  reason?: string | null;
+  /** @nullable */
+  rawExtract?: string | null;
+  status?: string;
+  createdAt?: string;
+};
+
+export type CampaignLeadProfilePendingRetriesItem = {
+  id?: number;
+  attemptNumber?: number;
+  scheduledAt?: string;
+  /** @nullable */
+  reason?: string | null;
+};
+
+export type CampaignLeadProfileCampaign = {
+  id: number;
+  name: string;
+};
+
+export interface CampaignLeadProfile {
+  lead: CampaignLeadProfileLead;
+  latestCall?: CampaignLeadProfileLatestCall;
+  executions: CampaignLeadProfileExecutionsItem[];
+  callbacks: CampaignLeadProfileCallbacksItem[];
+  pendingRetries: CampaignLeadProfilePendingRetriesItem[];
+  campaign: CampaignLeadProfileCampaign;
+}
+
+export type LeadTimelineEventData = { [key: string]: unknown } | null;
+
+export interface LeadTimelineEvent {
+  id: number;
+  eventType: string;
+  data?: LeadTimelineEventData;
+  createdAt: string;
+}
+
+export type BatchAnalyticsStats = {
+  total: number;
+  called: number;
+  pending: number;
+  calling: number;
+  failed: number;
+  answered: number;
+  notPicked: number;
+  callbacks: number;
+  pendingRetries: number;
+  completionPct: number;
+};
+
+export type BatchAnalyticsStatusBreakdown = {[key: string]: number};
+
+export type BatchAnalyticsDispositionsItem = {
+  label: string;
+  count: number;
+};
+
+export interface BatchAnalytics {
+  batchId: number;
+  batchName: string;
+  batchStatus: string;
+  stats: BatchAnalyticsStats;
+  statusBreakdown: BatchAnalyticsStatusBreakdown;
+  dispositions: BatchAnalyticsDispositionsItem[];
+}
+
+export type CampaignAnalyticsDispositionsItem = {
+  label: string;
+  count: number;
+};
+
+export type CampaignAnalyticsStatusBreakdown = {[key: string]: number};
+
+export interface CampaignAnalytics {
+  campaignId: number;
+  campaignName: string;
+  dispositions: CampaignAnalyticsDispositionsItem[];
+  statusBreakdown: CampaignAnalyticsStatusBreakdown;
+  callbacks: number;
+  totalLeads: number;
+  calledLeads: number;
+}
+
+export interface DncEntry {
+  id: number;
+  phone: string;
+  normalizedPhone: string;
+  /** @nullable */
+  reason?: string | null;
+  createdAt: string;
+}
+
 export interface MetaLeadItem {
   id: number;
   campaignId: number;
@@ -2263,6 +2440,25 @@ export type ListBatchLeads200 = {
 
 export type RedialBatchNoPickup200 = {
   queued: number;
+};
+
+export type UpdateLeadCallbackBodyStatus = typeof UpdateLeadCallbackBodyStatus[keyof typeof UpdateLeadCallbackBodyStatus];
+
+
+export const UpdateLeadCallbackBodyStatus = {
+  pending: 'pending',
+  completed: 'completed',
+  cancelled: 'cancelled',
+} as const;
+
+export type UpdateLeadCallbackBody = {
+  status?: UpdateLeadCallbackBodyStatus;
+  callbackAt?: string | null;
+};
+
+export type AddToDncBody = {
+  phone: string;
+  reason?: string | null;
 };
 
 export type ListEventTypesParams = {

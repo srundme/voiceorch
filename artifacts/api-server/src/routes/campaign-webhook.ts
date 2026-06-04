@@ -13,10 +13,12 @@
  */
 
 import { Router, type IRouter } from "express";
-import { db, campaignsTable, campaignLeadsTable } from "@workspace/db";
+import { db, campaignsTable, campaignLeadsTable, leadTimelineTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
+import { normalizePhone } from "../lib/phone-normalize.js";
+import { isOnDnc } from "../lib/dnc-check.js";
 
 const router: IRouter = Router();
 
@@ -78,6 +80,14 @@ async function insertLeadAndSchedule(opts: {
     return;
   }
 
+  const normalized = normalizePhone(opts.phone);
+
+  // DNC check
+  if (await isOnDnc(campaign.userId, normalized)) {
+    logger.info({ phone: normalized, campaignId: opts.campaignId }, "Webhook lead blocked by DNC");
+    return;
+  }
+
   // Deduplicate by externalLeadId if provided
   if (opts.externalLeadId) {
     const existing = await db.query.campaignLeadsTable.findFirst({
@@ -90,15 +100,23 @@ async function insertLeadAndSchedule(opts: {
   }
 
   const [lead] = await db.insert(campaignLeadsTable).values({
-    campaignId:     opts.campaignId,
-    phone:          opts.phone,
-    name:           opts.name,
-    email:          opts.email,
-    leadData:       opts.leadData,
-    source:         opts.source,
-    externalLeadId: opts.externalLeadId ?? null,
-    callStatus:     "pending",
+    campaignId:      opts.campaignId,
+    phone:           opts.phone,
+    normalizedPhone: normalized,
+    name:            opts.name,
+    email:           opts.email,
+    leadData:        opts.leadData,
+    source:          opts.source,
+    externalLeadId:  opts.externalLeadId ?? null,
+    callStatus:      "pending",
   }).returning();
+
+  await db.insert(leadTimelineTable).values({
+    leadId:    lead!.id,
+    campaignId: opts.campaignId,
+    eventType: "imported",
+    data:      { source: opts.source, externalLeadId: opts.externalLeadId ?? null },
+  });
 
   // Increment totalLeads counter
   await db.update(campaignsTable)

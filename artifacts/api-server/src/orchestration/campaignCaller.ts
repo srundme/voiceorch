@@ -6,11 +6,17 @@
  * prompt as {{variable}} template tokens before the call starts.
  */
 
-import { db, campaignsTable, campaignLeadsTable, agentsTable, providersTable } from "@workspace/db";
+import {
+  db, campaignsTable, campaignLeadsTable, agentsTable, providersTable,
+  callExecutionsTable, leadTimelineTable,
+} from "@workspace/db";
 import { eq, and, sql } from "drizzle-orm";
 import { dialTwilio, dialPlivo, dialVobiz } from "./telephony/dial.js";
 import { decryptKey } from "../lib/crypto.js";
 import { logger } from "../lib/logger.js";
+import { normalizePhone } from "../lib/phone-normalize.js";
+import { isOnDnc } from "../lib/dnc-check.js";
+import { scheduleRetry } from "../services/retryEngine.js";
 
 function resolveBaseUrl(): string {
   const domains = process.env["REPLIT_DOMAINS"];
@@ -37,6 +43,26 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
     await db.update(campaignLeadsTable)
       .set({ callStatus: "skipped", notes: "No agent assigned to campaign" })
       .where(eq(campaignLeadsTable.id, lead.id));
+    await addTimelineEvent(lead.id, campaign.id, "call_failed", { reason: "No agent assigned" });
+    return;
+  }
+
+  // Normalize phone if not already done
+  const normalized = lead.normalizedPhone ?? normalizePhone(lead.phone);
+  if (!lead.normalizedPhone) {
+    await db.update(campaignLeadsTable)
+      .set({ normalizedPhone: normalized })
+      .where(eq(campaignLeadsTable.id, lead.id));
+  }
+
+  // DNC check
+  const onDnc = await isOnDnc(campaign.userId, normalized);
+  if (onDnc) {
+    logger.info({ leadId: lead.id, phone: normalized }, "Lead is on DNC — skipping");
+    await db.update(campaignLeadsTable)
+      .set({ callStatus: "skipped", notes: "Number on Do Not Call list" })
+      .where(eq(campaignLeadsTable.id, lead.id));
+    await addTimelineEvent(lead.id, campaign.id, "dnc_blocked", { normalizedPhone: normalized });
     return;
   }
 
@@ -58,6 +84,7 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
   }
 
   // Mark as calling
+  const newAttempts = (lead.callAttempts ?? 0) + 1;
   await db.update(campaignLeadsTable)
     .set({
       callStatus: "calling",
@@ -65,6 +92,8 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
       lastAttemptAt: new Date(),
     })
     .where(eq(campaignLeadsTable.id, lead.id));
+
+  await addTimelineEvent(lead.id, campaign.id, "call_started", { attemptNumber: newAttempts });
 
   try {
     const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, campaign.agentId));
@@ -81,13 +110,10 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
       ? (JSON.parse(provRow.extraConfig) as Record<string, string>)
       : {} as Record<string, string>;
 
-    // Read AMD config from the agent's agentConfig JSON
     const agentCfg = (agent.agentConfig ?? {}) as Record<string, unknown>;
     const machineDetectionMode = agentCfg["machineDetectionMode"] as string | undefined;
     const amdEnabled = machineDetectionMode === "enable" || machineDetectionMode === "detect_message_end";
 
-    // campaignLeadId is passed through the webhook URL so the session handler
-    // can look up the lead and apply {{variable}} substitution at call-start time.
     if (provider === "twilio") {
       if (!cfg["accountSid"] || !cfg["fromNumber"]) throw new Error("Twilio config missing accountSid or fromNumber");
       const fromNumber = campaign.fromNumber ?? cfg["fromNumber"]!;
@@ -152,13 +178,53 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
     logger.info({ leadId: lead.id, campaignId: campaign.id, phone: lead.phone }, "Campaign call fired");
   } catch (err) {
     logger.error({ leadId: lead.id, campaignId: campaign.id, err }, "Campaign call failed");
+    const errMsg = err instanceof Error ? err.message : String(err);
     await db.update(campaignLeadsTable)
-      .set({
-        callStatus: "failed",
-        notes: err instanceof Error ? err.message : String(err),
-      })
+      .set({ callStatus: "failed", notes: errMsg })
       .where(eq(campaignLeadsTable.id, lead.id));
+
+    await addTimelineEvent(lead.id, campaign.id, "call_failed", { reason: errMsg, attempt: newAttempts });
+
+    // Schedule auto-retry if attempts remaining
+    await scheduleRetry({
+      leadId:            lead.id,
+      campaignId:        campaign.id,
+      currentAttempts:   newAttempts,
+      maxAttempts:       campaign.maxAttempts ?? 1,
+      retryDelayMinutes: campaign.retryDelayMinutes ?? 60,
+      reason:            "failed",
+    });
   }
+}
+
+/** Record an execution and update lead.callId after a call is created */
+export async function recordCallExecution(opts: {
+  leadId: number;
+  campaignId: number;
+  batchId: number | null;
+  callId: number;
+  attemptNumber: number;
+}): Promise<void> {
+  await db.insert(callExecutionsTable).values({
+    leadId:        opts.leadId,
+    campaignId:    opts.campaignId,
+    batchId:       opts.batchId,
+    callId:        opts.callId,
+    attemptNumber: opts.attemptNumber,
+  });
+
+  await db.update(campaignLeadsTable)
+    .set({ callId: opts.callId })
+    .where(eq(campaignLeadsTable.id, opts.leadId));
+}
+
+async function addTimelineEvent(
+  leadId: number,
+  campaignId: number,
+  eventType: string,
+  data?: Record<string, unknown>,
+): Promise<void> {
+  await db.insert(leadTimelineTable).values({ leadId, campaignId, eventType, data: data ?? {} });
 }
 
 /**

@@ -1902,6 +1902,206 @@ export const RedialBatchNoPickupResponse = zod.object({
 
 
 /**
+ * @summary Get full CRM profile for a campaign lead
+ */
+export const GetCampaignLeadProfileParams = zod.object({
+  "id": zod.coerce.number(),
+  "leadId": zod.coerce.number()
+})
+
+export const GetCampaignLeadProfileResponse = zod.object({
+  "lead": zod.object({
+  "id": zod.number(),
+  "campaignId": zod.number(),
+  "batchId": zod.number().nullish(),
+  "phone": zod.string(),
+  "normalizedPhone": zod.string().nullish(),
+  "name": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "leadData": zod.record(zod.string(), zod.string()).optional(),
+  "callStatus": zod.string(),
+  "disposition": zod.string().nullish(),
+  "callAttempts": zod.number(),
+  "lastAttemptAt": zod.coerce.date().nullish(),
+  "source": zod.string(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+}),
+  "latestCall": zod.object({
+  "id": zod.number().optional(),
+  "status": zod.string().optional(),
+  "toNumber": zod.string().optional(),
+  "fromNumber": zod.string().optional(),
+  "durationSeconds": zod.number().nullish(),
+  "transcript": zod.string().nullish(),
+  "recordingUrl": zod.string().nullish(),
+  "callSummary": zod.string().nullish(),
+  "dispositionResult": zod.record(zod.string(), zod.unknown()).nullish(),
+  "successEvaluation": zod.string().nullish(),
+  "transferType": zod.string().nullish(),
+  "transferTarget": zod.string().nullish(),
+  "amdResult": zod.string().nullish(),
+  "sttLatencyMs": zod.number().nullish(),
+  "llmLatencyMs": zod.number().nullish(),
+  "ttsFirstChunkMs": zod.number().nullish(),
+  "costCents": zod.number().nullish(),
+  "createdAt": zod.coerce.date().optional(),
+  "endedAt": zod.coerce.date().nullish()
+}).nullish(),
+  "executions": zod.array(zod.object({
+  "id": zod.number().optional(),
+  "callId": zod.number().nullish(),
+  "attemptNumber": zod.number().optional(),
+  "outcome": zod.string().nullish(),
+  "createdAt": zod.coerce.date().optional(),
+  "call": zod.record(zod.string(), zod.unknown()).nullish()
+})),
+  "callbacks": zod.array(zod.object({
+  "id": zod.number().optional(),
+  "callId": zod.number().nullish(),
+  "callbackAt": zod.coerce.date().nullish(),
+  "reason": zod.string().nullish(),
+  "rawExtract": zod.string().nullish(),
+  "status": zod.string().optional(),
+  "createdAt": zod.coerce.date().optional()
+})),
+  "pendingRetries": zod.array(zod.object({
+  "id": zod.number().optional(),
+  "attemptNumber": zod.number().optional(),
+  "scheduledAt": zod.coerce.date().optional(),
+  "reason": zod.string().nullish()
+})),
+  "campaign": zod.object({
+  "id": zod.number(),
+  "name": zod.string()
+})
+})
+
+
+/**
+ * @summary Get timeline events for a campaign lead
+ */
+export const GetCampaignLeadTimelineParams = zod.object({
+  "id": zod.coerce.number(),
+  "leadId": zod.coerce.number()
+})
+
+export const GetCampaignLeadTimelineResponseItem = zod.object({
+  "id": zod.number(),
+  "eventType": zod.string(),
+  "data": zod.record(zod.string(), zod.unknown()).nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const GetCampaignLeadTimelineResponse = zod.array(GetCampaignLeadTimelineResponseItem)
+
+
+/**
+ * @summary Update callback status or scheduled time
+ */
+export const UpdateLeadCallbackParams = zod.object({
+  "id": zod.coerce.number(),
+  "leadId": zod.coerce.number(),
+  "callbackId": zod.coerce.number()
+})
+
+export const UpdateLeadCallbackBody = zod.object({
+  "status": zod.enum(['pending', 'completed', 'cancelled']).optional(),
+  "callbackAt": zod.coerce.date().nullish()
+})
+
+
+/**
+ * @summary Get campaign-level analytics and disposition breakdown
+ */
+export const GetCampaignAnalyticsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetCampaignAnalyticsResponse = zod.object({
+  "campaignId": zod.number(),
+  "campaignName": zod.string(),
+  "dispositions": zod.array(zod.object({
+  "label": zod.string(),
+  "count": zod.number()
+})),
+  "statusBreakdown": zod.record(zod.string(), zod.number()),
+  "callbacks": zod.number(),
+  "totalLeads": zod.number(),
+  "calledLeads": zod.number()
+})
+
+
+/**
+ * @summary Get analytics for a specific batch
+ */
+export const GetBatchAnalyticsParams = zod.object({
+  "id": zod.coerce.number(),
+  "batchId": zod.coerce.number()
+})
+
+export const GetBatchAnalyticsResponse = zod.object({
+  "batchId": zod.number(),
+  "batchName": zod.string(),
+  "batchStatus": zod.string(),
+  "stats": zod.object({
+  "total": zod.number(),
+  "called": zod.number(),
+  "pending": zod.number(),
+  "calling": zod.number(),
+  "failed": zod.number(),
+  "answered": zod.number(),
+  "notPicked": zod.number(),
+  "callbacks": zod.number(),
+  "pendingRetries": zod.number(),
+  "completionPct": zod.number()
+}),
+  "statusBreakdown": zod.record(zod.string(), zod.number()),
+  "dispositions": zod.array(zod.object({
+  "label": zod.string(),
+  "count": zod.number()
+}))
+})
+
+
+/**
+ * @summary Download a CSV template with headers derived from campaign field mappings
+ */
+export const GetCampaignCsvTemplateParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary List Do Not Call entries
+ */
+export const ListDncResponseItem = zod.object({
+  "id": zod.number(),
+  "phone": zod.string(),
+  "normalizedPhone": zod.string(),
+  "reason": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const ListDncResponse = zod.array(ListDncResponseItem)
+
+
+/**
+ * @summary Add a phone number to the DNC list
+ */
+export const AddToDncBody = zod.object({
+  "phone": zod.string(),
+  "reason": zod.string().nullish()
+})
+
+
+/**
+ * @summary Remove a phone number from the DNC list
+ */
+export const RemoveFromDncParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
  * @summary List scheduling calendars for the current user
  */
 export const ListCalendarsResponseItem = zod.object({

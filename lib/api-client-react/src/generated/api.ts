@@ -22,6 +22,7 @@ import type {
 import type {
   AccountInfo,
   ActivityLog,
+  AddToDncBody,
   AdminAgentPrompt,
   AdminAlert,
   AdminAlertsResponse,
@@ -60,6 +61,7 @@ import type {
   AvailabilityScheduleInput,
   AvailabilityScheduleUpdate,
   AvailablePhoneNumber,
+  BatchAnalytics,
   Booking,
   BookingInput,
   BookingUpdate,
@@ -69,17 +71,20 @@ import type {
   CallStatusCount,
   CallUpdate,
   Campaign,
+  CampaignAnalytics,
   CampaignBatch,
   CampaignBatchCreate,
   CampaignBatchUpdate,
   CampaignCreate,
   CampaignLead,
+  CampaignLeadProfile,
   CampaignUpdate,
   CreateAmbientSoundBody,
   CsvImportBody,
   CsvImportResult,
   DailyCallVolume,
   DashboardStats,
+  DncEntry,
   EventType,
   EventTypeInput,
   EventTypeUpdate,
@@ -99,6 +104,7 @@ import type {
   KnowledgeSourceUpdate,
   KycStartResponse,
   KycStatusResponse,
+  LeadTimelineEvent,
   ListActivityLogsParams,
   ListAvailabilityOverridesParams,
   ListAvailabilityParams,
@@ -144,6 +150,7 @@ import type {
   TopupOrder,
   TransferCallBody,
   UpdateCallDispositionBody,
+  UpdateLeadCallbackBody,
   UserPreferences,
   UserPreferencesUpdate,
   VerifyPaymentInput,
@@ -5757,6 +5764,700 @@ export const useRedialBatchNoPickup = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getRedialBatchNoPickupMutationOptions(options));
+    }
+
+export const getGetCampaignLeadProfileUrl = (id: number,
+    leadId: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/leads/${leadId}`
+}
+
+/**
+ * @summary Get full CRM profile for a campaign lead
+ */
+export const getCampaignLeadProfile = async (id: number,
+    leadId: number, options?: RequestInit): Promise<CampaignLeadProfile> => {
+
+  return customFetch<CampaignLeadProfile>(getGetCampaignLeadProfileUrl(id,leadId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCampaignLeadProfileQueryKey = (id: number,
+    leadId: number,) => {
+    return [
+    `/api/campaigns/${id}/leads/${leadId}`
+    ] as const;
+    }
+
+
+export const getGetCampaignLeadProfileQueryOptions = <TData = Awaited<ReturnType<typeof getCampaignLeadProfile>>, TError = ErrorType<void>>(id: number,
+    leadId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCampaignLeadProfile>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCampaignLeadProfileQueryKey(id,leadId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCampaignLeadProfile>>> = ({ signal }) => getCampaignLeadProfile(id,leadId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id && leadId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCampaignLeadProfile>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCampaignLeadProfileQueryResult = NonNullable<Awaited<ReturnType<typeof getCampaignLeadProfile>>>
+export type GetCampaignLeadProfileQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get full CRM profile for a campaign lead
+ */
+
+export function useGetCampaignLeadProfile<TData = Awaited<ReturnType<typeof getCampaignLeadProfile>>, TError = ErrorType<void>>(
+ id: number,
+    leadId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCampaignLeadProfile>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCampaignLeadProfileQueryOptions(id,leadId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetCampaignLeadTimelineUrl = (id: number,
+    leadId: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/leads/${leadId}/timeline`
+}
+
+/**
+ * @summary Get timeline events for a campaign lead
+ */
+export const getCampaignLeadTimeline = async (id: number,
+    leadId: number, options?: RequestInit): Promise<LeadTimelineEvent[]> => {
+
+  return customFetch<LeadTimelineEvent[]>(getGetCampaignLeadTimelineUrl(id,leadId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCampaignLeadTimelineQueryKey = (id: number,
+    leadId: number,) => {
+    return [
+    `/api/campaigns/${id}/leads/${leadId}/timeline`
+    ] as const;
+    }
+
+
+export const getGetCampaignLeadTimelineQueryOptions = <TData = Awaited<ReturnType<typeof getCampaignLeadTimeline>>, TError = ErrorType<void>>(id: number,
+    leadId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCampaignLeadTimeline>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCampaignLeadTimelineQueryKey(id,leadId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCampaignLeadTimeline>>> = ({ signal }) => getCampaignLeadTimeline(id,leadId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id && leadId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCampaignLeadTimeline>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCampaignLeadTimelineQueryResult = NonNullable<Awaited<ReturnType<typeof getCampaignLeadTimeline>>>
+export type GetCampaignLeadTimelineQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get timeline events for a campaign lead
+ */
+
+export function useGetCampaignLeadTimeline<TData = Awaited<ReturnType<typeof getCampaignLeadTimeline>>, TError = ErrorType<void>>(
+ id: number,
+    leadId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCampaignLeadTimeline>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCampaignLeadTimelineQueryOptions(id,leadId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getUpdateLeadCallbackUrl = (id: number,
+    leadId: number,
+    callbackId: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/leads/${leadId}/callbacks/${callbackId}`
+}
+
+/**
+ * @summary Update callback status or scheduled time
+ */
+export const updateLeadCallback = async (id: number,
+    leadId: number,
+    callbackId: number,
+    updateLeadCallbackBody: UpdateLeadCallbackBody, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getUpdateLeadCallbackUrl(id,leadId,callbackId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateLeadCallbackBody,)
+  }
+);}
+
+
+
+
+export const getUpdateLeadCallbackMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateLeadCallback>>, TError,{id: number;leadId: number;callbackId: number;data: BodyType<UpdateLeadCallbackBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateLeadCallback>>, TError,{id: number;leadId: number;callbackId: number;data: BodyType<UpdateLeadCallbackBody>}, TContext> => {
+
+const mutationKey = ['updateLeadCallback'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateLeadCallback>>, {id: number;leadId: number;callbackId: number;data: BodyType<UpdateLeadCallbackBody>}> = (props) => {
+          const {id,leadId,callbackId,data} = props ?? {};
+
+          return  updateLeadCallback(id,leadId,callbackId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateLeadCallbackMutationResult = NonNullable<Awaited<ReturnType<typeof updateLeadCallback>>>
+    export type UpdateLeadCallbackMutationBody = BodyType<UpdateLeadCallbackBody>
+    export type UpdateLeadCallbackMutationError = ErrorType<void>
+
+    /**
+ * @summary Update callback status or scheduled time
+ */
+export const useUpdateLeadCallback = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateLeadCallback>>, TError,{id: number;leadId: number;callbackId: number;data: BodyType<UpdateLeadCallbackBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateLeadCallback>>,
+        TError,
+        {id: number;leadId: number;callbackId: number;data: BodyType<UpdateLeadCallbackBody>},
+        TContext
+      > => {
+      return useMutation(getUpdateLeadCallbackMutationOptions(options));
+    }
+
+export const getGetCampaignAnalyticsUrl = (id: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/analytics`
+}
+
+/**
+ * @summary Get campaign-level analytics and disposition breakdown
+ */
+export const getCampaignAnalytics = async (id: number, options?: RequestInit): Promise<CampaignAnalytics> => {
+
+  return customFetch<CampaignAnalytics>(getGetCampaignAnalyticsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCampaignAnalyticsQueryKey = (id: number,) => {
+    return [
+    `/api/campaigns/${id}/analytics`
+    ] as const;
+    }
+
+
+export const getGetCampaignAnalyticsQueryOptions = <TData = Awaited<ReturnType<typeof getCampaignAnalytics>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCampaignAnalytics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCampaignAnalyticsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCampaignAnalytics>>> = ({ signal }) => getCampaignAnalytics(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCampaignAnalytics>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCampaignAnalyticsQueryResult = NonNullable<Awaited<ReturnType<typeof getCampaignAnalytics>>>
+export type GetCampaignAnalyticsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get campaign-level analytics and disposition breakdown
+ */
+
+export function useGetCampaignAnalytics<TData = Awaited<ReturnType<typeof getCampaignAnalytics>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCampaignAnalytics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCampaignAnalyticsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetBatchAnalyticsUrl = (id: number,
+    batchId: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/batches/${batchId}/analytics`
+}
+
+/**
+ * @summary Get analytics for a specific batch
+ */
+export const getBatchAnalytics = async (id: number,
+    batchId: number, options?: RequestInit): Promise<BatchAnalytics> => {
+
+  return customFetch<BatchAnalytics>(getGetBatchAnalyticsUrl(id,batchId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBatchAnalyticsQueryKey = (id: number,
+    batchId: number,) => {
+    return [
+    `/api/campaigns/${id}/batches/${batchId}/analytics`
+    ] as const;
+    }
+
+
+export const getGetBatchAnalyticsQueryOptions = <TData = Awaited<ReturnType<typeof getBatchAnalytics>>, TError = ErrorType<void>>(id: number,
+    batchId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBatchAnalytics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBatchAnalyticsQueryKey(id,batchId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBatchAnalytics>>> = ({ signal }) => getBatchAnalytics(id,batchId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id && batchId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBatchAnalytics>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBatchAnalyticsQueryResult = NonNullable<Awaited<ReturnType<typeof getBatchAnalytics>>>
+export type GetBatchAnalyticsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get analytics for a specific batch
+ */
+
+export function useGetBatchAnalytics<TData = Awaited<ReturnType<typeof getBatchAnalytics>>, TError = ErrorType<void>>(
+ id: number,
+    batchId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBatchAnalytics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBatchAnalyticsQueryOptions(id,batchId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetCampaignCsvTemplateUrl = (id: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/csv-template`
+}
+
+/**
+ * @summary Download a CSV template with headers derived from campaign field mappings
+ */
+export const getCampaignCsvTemplate = async (id: number, options?: RequestInit): Promise<string> => {
+
+  return customFetch<string>(getGetCampaignCsvTemplateUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCampaignCsvTemplateQueryKey = (id: number,) => {
+    return [
+    `/api/campaigns/${id}/csv-template`
+    ] as const;
+    }
+
+
+export const getGetCampaignCsvTemplateQueryOptions = <TData = Awaited<ReturnType<typeof getCampaignCsvTemplate>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCampaignCsvTemplate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCampaignCsvTemplateQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCampaignCsvTemplate>>> = ({ signal }) => getCampaignCsvTemplate(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCampaignCsvTemplate>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCampaignCsvTemplateQueryResult = NonNullable<Awaited<ReturnType<typeof getCampaignCsvTemplate>>>
+export type GetCampaignCsvTemplateQueryError = ErrorType<void>
+
+
+/**
+ * @summary Download a CSV template with headers derived from campaign field mappings
+ */
+
+export function useGetCampaignCsvTemplate<TData = Awaited<ReturnType<typeof getCampaignCsvTemplate>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCampaignCsvTemplate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCampaignCsvTemplateQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListDncUrl = () => {
+
+
+
+
+  return `/api/dnc`
+}
+
+/**
+ * @summary List Do Not Call entries
+ */
+export const listDnc = async ( options?: RequestInit): Promise<DncEntry[]> => {
+
+  return customFetch<DncEntry[]>(getListDncUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListDncQueryKey = () => {
+    return [
+    `/api/dnc`
+    ] as const;
+    }
+
+
+export const getListDncQueryOptions = <TData = Awaited<ReturnType<typeof listDnc>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDnc>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListDncQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listDnc>>> = ({ signal }) => listDnc({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listDnc>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListDncQueryResult = NonNullable<Awaited<ReturnType<typeof listDnc>>>
+export type ListDncQueryError = ErrorType<void>
+
+
+/**
+ * @summary List Do Not Call entries
+ */
+
+export function useListDnc<TData = Awaited<ReturnType<typeof listDnc>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDnc>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListDncQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getAddToDncUrl = () => {
+
+
+
+
+  return `/api/dnc`
+}
+
+/**
+ * @summary Add a phone number to the DNC list
+ */
+export const addToDnc = async (addToDncBody: AddToDncBody, options?: RequestInit): Promise<DncEntry> => {
+
+  return customFetch<DncEntry>(getAddToDncUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      addToDncBody,)
+  }
+);}
+
+
+
+
+export const getAddToDncMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addToDnc>>, TError,{data: BodyType<AddToDncBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof addToDnc>>, TError,{data: BodyType<AddToDncBody>}, TContext> => {
+
+const mutationKey = ['addToDnc'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addToDnc>>, {data: BodyType<AddToDncBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  addToDnc(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AddToDncMutationResult = NonNullable<Awaited<ReturnType<typeof addToDnc>>>
+    export type AddToDncMutationBody = BodyType<AddToDncBody>
+    export type AddToDncMutationError = ErrorType<void>
+
+    /**
+ * @summary Add a phone number to the DNC list
+ */
+export const useAddToDnc = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addToDnc>>, TError,{data: BodyType<AddToDncBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof addToDnc>>,
+        TError,
+        {data: BodyType<AddToDncBody>},
+        TContext
+      > => {
+      return useMutation(getAddToDncMutationOptions(options));
+    }
+
+export const getRemoveFromDncUrl = (id: number,) => {
+
+
+
+
+  return `/api/dnc/${id}`
+}
+
+/**
+ * @summary Remove a phone number from the DNC list
+ */
+export const removeFromDnc = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getRemoveFromDncUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getRemoveFromDncMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeFromDnc>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof removeFromDnc>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['removeFromDnc'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof removeFromDnc>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  removeFromDnc(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RemoveFromDncMutationResult = NonNullable<Awaited<ReturnType<typeof removeFromDnc>>>
+
+    export type RemoveFromDncMutationError = ErrorType<void>
+
+    /**
+ * @summary Remove a phone number from the DNC list
+ */
+export const useRemoveFromDnc = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeFromDnc>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof removeFromDnc>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getRemoveFromDncMutationOptions(options));
     }
 
 export const getListCalendarsUrl = () => {

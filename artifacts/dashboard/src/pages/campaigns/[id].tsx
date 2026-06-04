@@ -5,6 +5,7 @@ import {
   useListCampaignBatches,
   useCreateCampaignBatch,
   useDeleteCampaignBatch,
+  useGetCampaignAnalytics,
   getListCampaignBatchesQueryKey,
   getGetCampaignQueryKey,
 } from "@workspace/api-client-react";
@@ -381,6 +382,7 @@ export default function CampaignDetailPage() {
 
   const { data: campaign, isLoading: campLoading } = useGetCampaign(campaignId);
   const { data: batches, isLoading: batchLoading } = useListCampaignBatches(campaignId);
+  const { data: analytics } = useGetCampaignAnalytics(campaignId);
 
   const webhookUrl = campaign
     ? `${window.location.origin}${BASE}/api/webhooks/lead/${campaign.webhookToken}`
@@ -452,9 +454,13 @@ export default function CampaignDetailPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
-              <BarChart3 className="h-3.5 w-3.5" /> Analytics
-            </Button>
+            <a
+              href={`${BASE}/api/campaigns/${campaignId}/csv-template`}
+              download
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-border bg-background text-xs text-foreground/70 hover:bg-muted transition-colors"
+            >
+              <FileText className="h-3.5 w-3.5" /> CSV Template
+            </a>
           </div>
         </div>
       </div>
@@ -488,6 +494,51 @@ export default function CampaignDetailPage() {
             <p className="text-lg font-semibold text-foreground mt-0.5">{batches?.length ?? 0}</p>
           </div>
         </div>
+
+        {/* Analytics / Disposition Section */}
+        {analytics && (analytics.dispositions.length > 0 || analytics.callbacks > 0) && (
+          <div className="bg-card border border-border rounded-xl p-5 space-y-4">
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-2">
+              <BarChart3 className="h-3.5 w-3.5" /> Campaign Analytics
+            </h3>
+            <div className="flex flex-wrap gap-3">
+              {/* Status breakdown */}
+              {Object.entries(analytics.statusBreakdown ?? {}).map(([status, count]) => (
+                <div key={status} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-background">
+                  <span className="text-[10px] text-muted-foreground capitalize">{status.replace(/_/g, " ")}</span>
+                  <span className="text-sm font-bold text-foreground">{count}</span>
+                </div>
+              ))}
+              {analytics.callbacks > 0 && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-purple-500/20 bg-purple-500/5">
+                  <span className="text-[10px] text-purple-600 dark:text-purple-400">Callbacks</span>
+                  <span className="text-sm font-bold text-purple-700 dark:text-purple-300">{analytics.callbacks}</span>
+                </div>
+              )}
+            </div>
+            {analytics.dispositions.length > 0 && (
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">Disposition Breakdown</p>
+                <div className="flex flex-wrap gap-2">
+                  {analytics.dispositions.map(d => {
+                    const pct = analytics.calledLeads > 0 ? Math.round((d.count / analytics.calledLeads) * 100) : 0;
+                    return (
+                      <div key={d.label} className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-background min-w-[120px]">
+                        <div className="flex-1">
+                          <p className="text-xs text-muted-foreground capitalize truncate">{d.label}</p>
+                          <div className="flex items-baseline gap-1.5 mt-0.5">
+                            <span className="text-sm font-bold text-foreground">{d.count}</span>
+                            <span className="text-[10px] text-muted-foreground/50">{pct}%</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Campaign Overview Card */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">

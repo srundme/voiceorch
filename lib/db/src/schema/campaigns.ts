@@ -46,6 +46,7 @@ export const campaignLeadsTable = pgTable("campaign_leads", {
   campaignId:       integer("campaign_id").references(() => campaignsTable.id, { onDelete: "cascade" }).notNull(),
   batchId:          integer("batch_id").references(() => campaignBatchesTable.id, { onDelete: "set null" }),
   phone:            text("phone").notNull(),
+  normalizedPhone:  text("normalized_phone"),
   name:             text("name"),
   email:            text("email"),
   leadData:         json("lead_data").$type<Record<string, string>>().notNull().default({}),

@@ -2,6 +2,7 @@ import { db, campaignsTable, campaignBatchesTable, campaignLeadsTable } from "@w
 import { eq, and, lte, sql } from "drizzle-orm";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
 import { logger } from "../lib/logger.js";
+import { processRetries } from "./retryEngine.js";
 
 let started = false;
 
@@ -35,6 +36,7 @@ export function startBatchScheduler(): void {
 
   setInterval(() => {
     void pollScheduledBatches();
+    void processRetries();
   }, 60_000);
 
   logger.info("Batch scheduler started");
