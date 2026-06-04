@@ -1356,10 +1356,27 @@ export class OrchestrationPipeline {
 
     const playPromise = playTask();
 
+    // Build a system prompt with {caller_salutation} substituted, same as processTurn.
+    const _ctDetectedGender = this.genderDetector?.gender ?? null;
+    const _ctRawSal = _ctDetectedGender === "male" ? this.agent.genderDetectionMaleSalutation
+      : _ctDetectedGender === "female" ? this.agent.genderDetectionFemaleSalutation
+      : (this.agent.genderDetectionNeutralSalutation ?? "");
+    const _ctResolvedSal = (_ctRawSal === "(skip)" || !_ctRawSal) ? "" : _ctRawSal;
+    let toolSystemPrompt = this.agent.systemPrompt;
+    if (_ctResolvedSal) {
+      toolSystemPrompt = toolSystemPrompt
+        .replace(/\{\{caller_salutation\}\}/g, _ctResolvedSal)
+        .replace(/\{caller_salutation\}/g, _ctResolvedSal);
+    } else {
+      toolSystemPrompt = toolSystemPrompt
+        .replace(/\s*\{\{caller_salutation\}\}\s*/g, " ")
+        .replace(/\s*\{caller_salutation\}\s*/g, " ");
+    }
+
     try {
       await this.llm.chat(
         this.conversationHistory,
-        this.agent.systemPrompt,
+        toolSystemPrompt,
         (token) => {
           llmResponse += token;
           const afterThink = filterThinkToken(token);

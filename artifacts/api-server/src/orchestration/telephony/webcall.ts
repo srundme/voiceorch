@@ -1259,7 +1259,21 @@ export async function handleWebCallWebSocket(
       } else {
         // LLM-generated opening
         sendStatus("thinking");
-        const greetSystemPrompt = `${buildDatetimeInjection(agentTimezone)}\n\n${systemPrompt}`;
+        let greetSystemPrompt = `${buildDatetimeInjection(agentTimezone)}\n\n${systemPrompt}`;
+        // Substitute {caller_salutation} — gender not yet known at greeting time, use neutral.
+        {
+          const _greetRawSal = neutralSal;
+          const _greetResolvedSal = (_greetRawSal === "(skip)" || !_greetRawSal) ? "" : _greetRawSal;
+          if (_greetResolvedSal) {
+            greetSystemPrompt = greetSystemPrompt
+              .replace(/\{\{caller_salutation\}\}/g, _greetResolvedSal)
+              .replace(/\{caller_salutation\}/g, _greetResolvedSal);
+          } else {
+            greetSystemPrompt = greetSystemPrompt
+              .replace(/\s*\{\{caller_salutation\}\}\s*/g, " ")
+              .replace(/\s*\{caller_salutation\}\s*/g, " ");
+          }
+        }
         const triggerContent = callbackId
           ? "[callback connected — please open the conversation with your greeting now]"
           : "[call connected — please greet the user and open the conversation now]";
