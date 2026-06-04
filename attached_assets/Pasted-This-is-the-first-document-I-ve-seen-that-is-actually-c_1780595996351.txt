@@ -1,0 +1,368 @@
+This is the first document I've seen that is actually close to enterprise-grade architecture.
+
+My assessment:
+
+Product Architecture: 9.2/10
+Data Model: 9.5/10
+Operational Model: 9/10
+CRM Design: 8.5/10
+Scalability: 9/10
+
+The biggest improvement is that it finally separates:
+
+Status ≠ Disposition
+Lead ≠ Interaction
+Campaign ≠ Operations
+
+which is exactly what most AI voice platforms get wrong.
+
+What Is Still Missing
+
+Not much, but the remaining gaps are important because they affect SnapServe's future positioning.
+
+Gap 1: Multi-Agent Campaign Support
+
+Current architecture assumes:
+
+Campaign
+ → One Agent
+
+But enterprise customers eventually want:
+
+Lead Imported
+      ↓
+Qualification Agent
+      ↓
+Interested?
+      ↓
+Yes
+      ↓
+Sales Agent
+      ↓
+Booked?
+      ↓
+Yes
+      ↓
+Retention Agent
+
+Current architecture treats an interaction as belonging to one agent.
+
+Add:
+
+agent_journey
+agent_handoff
+agent_sequence
+
+Not Phase 1.
+
+But architecture should reserve for it.
+
+Gap 2: Human Ownership Layer
+
+You have:
+
+owner TEXT
+
+Good start.
+
+But future CRM needs:
+
+Lead Owner
+
+Team
+
+Queue Owner
+
+Transfer Owner
+
+Booking Owner
+
+Recommend:
+
+owner_id
+owner_type
+
+instead of plain text.
+
+Gap 3: SLA Engine
+
+Current queues:
+
+Callback Queue
+Incoming Queue
+Transfer Queue
+
+Great.
+
+Missing:
+
+Response Due By
+
+Example:
+
+Incoming Call
+
+Received:
+10:00
+
+Must be handled:
+10:30
+
+Otherwise large teams lose leads.
+
+Gap 4: Lead Scoring
+
+Currently:
+
+Interested
+Booked
+Transferred
+
+Need:
+
+Lead Score
+
+Example:
+
+92 = Hot
+
+65 = Warm
+
+15 = Cold
+
+Score can be generated from:
+
+Disposition
+Sentiment
+Call Duration
+Number of Interactions
+Booking Intent
+
+This becomes very powerful later.
+
+Gap 5: Revenue Attribution
+
+Currently:
+
+Booked
+Transferred
+
+Need future support:
+
+Revenue Generated
+
+Example:
+
+Campaign A
+
+₹25 Lakhs
+
+Pipeline
+
+Especially for insurance, real estate, education.
+
+Gap 6: Workspace-Level Search
+
+This is actually huge.
+
+Need:
+
+Global Search
+
+Search:
+
+Lead
+Phone
+Campaign
+Batch
+Booking
+Transfer
+
+from one search box.
+
+Gap 7: Real-Time Event Architecture
+
+Current:
+
+Polling
+
+mentioned several times.
+
+For MVP okay.
+
+But architecture should mention:
+
+Event Bus
+
+WebSocket
+
+SSE
+
+Future command center depends on this.
+
+Biggest UX Change I Would Make
+
+This document still keeps:
+
+Campaigns
+
+too visible.
+
+Look at your future user:
+
+Insurance Team
+
+10000 Leads
+
+500 Calls
+
+They won't open campaigns.
+
+They'll open:
+
+Callbacks
+
+Interested Leads
+
+Bookings
+
+Transfers
+
+daily.
+
+So I would eventually make:
+
+Command Center
+
+the home page.
+
+And campaigns become:
+
+Settings / Configuration
+
+rather than the main operational area.
+
+The document moves in that direction already.
+
+Questions Replit Asked (My Answers)
+Transfers table
+
+Does transfer end the call?
+
+Answer:
+
+Transfer should create a new interaction.
+
+Keep:
+
+Call Execution
+
+completed.
+
+Then:
+
+Transfer Interaction
+
+starts.
+
+Cleaner analytics.
+
+Sentiment & Intelligence
+
+Answer:
+
+Run after call completion.
+
+Don't block call flow.
+
+Use async processing.
+
+Call Ends
+ ↓
+Transcript Saved
+ ↓
+AI Analysis Job
+ ↓
+Sentiment
+Intent
+Topics
+Summary
+Cross Campaign Leads
+
+Answer:
+
+Yes.
+
+Same phone can exist in multiple campaigns.
+
+Never merge automatically.
+
+Use:
+
+Master Contact
+
+later.
+
+Campaign Lead should remain independent.
+
+Ownership
+
+Answer:
+
+Per Campaign Lead.
+
+Not global.
+
+Same person can be owned by different teams in different campaigns.
+
+DNC Scope
+
+Answer:
+
+Workspace Level.
+
+Not platform-wide.
+
+Booking Integration
+
+Answer:
+
+Integrate with existing Scheduling Module.
+
+Do not create separate booking ecosystem.
+
+Reuse scheduling infrastructure.
+
+Command Center Refresh
+
+Answer:
+
+Phase 1
+
+Polling
+10s
+
+Phase 2
+
+SSE
+
+Phase 3
+
+WebSocket
+Final Verdict
+
+If this architecture is approved, stop discussing UI for now.
+
+The next thing Replit should build is:
+
+Phase 1
+Data Foundation
+Lead Lifecycle Engine
+Phase 2
+Queue Engine
+Phase 3
+Command Center
+
+Not the other way around.
+
+Because once lifecycle + queues are correct, every screen becomes easy to build. Right now this document is about 90–95% of a production-ready architecture and is the strongest version of the Campaign module design so far.
