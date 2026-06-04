@@ -658,6 +658,26 @@ export async function handleWebCallWebSocket(
         systemPromptForTurn += `\n\n[CALLER GENDER] Gender could not be determined. Use "${neutralSal}" as a neutral salutation when appropriate.`;
       }
 
+      // ── Substitute {caller_salutation} placeholder ────────────────────────
+      // The initial variable-resolution pass deliberately skips this placeholder
+      // so it can be filled in here, after gender detection has resolved.
+      {
+        const rawSal = detectedGender === "male" ? maleSal
+          : detectedGender === "female" ? femaleSal
+          : neutralSal;
+        const resolvedSal = (rawSal === "(skip)" || !rawSal) ? "" : rawSal;
+        if (resolvedSal) {
+          systemPromptForTurn = systemPromptForTurn
+            .replace(/\{\{caller_salutation\}\}/g, resolvedSal)
+            .replace(/\{caller_salutation\}/g, resolvedSal);
+        } else {
+          systemPromptForTurn = systemPromptForTurn
+            .replace(/\s*\{\{caller_salutation\}\}\s*/g, " ")
+            .replace(/\s*\{caller_salutation\}\s*/g, " ");
+        }
+        logger.info({ callId, resolvedSalutation: resolvedSal || "(empty)", detectedGender }, "Webcall: caller_salutation resolved");
+      }
+
       // Callback scheduling hint — only inject when callback detection is enabled
       // (avoids bloating every LLM request for agents that never use callbacks)
       const callbackDetectionEnabled = (agentCfg["callbackDetectionEnabled"] as boolean | undefined) ?? true;
@@ -1218,8 +1238,24 @@ export async function handleWebCallWebSocket(
       let greetingText = "";
 
       if (agent.greetingMessage) {
-        // Fast path — use configured greeting directly
-        greetingText = agent.greetingMessage;
+        // Fast path — use configured greeting directly.
+        // Substitute {caller_salutation} with neutral salutation — gender is
+        // not yet known at greeting time; per-turn substitution will use the
+        // real detected value for all subsequent LLM calls.
+        {
+          const rawSal = neutralSal;
+          const resolvedSal = (rawSal === "(skip)" || !rawSal) ? "" : rawSal;
+          if (resolvedSal) {
+            greetingText = agent.greetingMessage
+              .replace(/\{\{caller_salutation\}\}/g, resolvedSal)
+              .replace(/\{caller_salutation\}/g, resolvedSal);
+          } else {
+            greetingText = agent.greetingMessage
+              .replace(/\s*\{\{caller_salutation\}\}\s*/g, " ")
+              .replace(/\s*\{caller_salutation\}\s*/g, " ");
+          }
+          logger.info({ callId, resolvedSalutation: resolvedSal || "(empty)" }, "Webcall: caller_salutation in greeting resolved to neutral (pre-detection)");
+        }
       } else {
         // LLM-generated opening
         sendStatus("thinking");

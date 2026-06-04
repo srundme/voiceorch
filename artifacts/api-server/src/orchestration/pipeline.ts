@@ -397,6 +397,23 @@ export class OrchestrationPipeline {
 
       let greeting = this.agent.greetingMessage ?? "";
 
+      // Substitute {caller_salutation} in the greeting with the neutral salutation —
+      // gender detection has not fired yet at greeting time.
+      if (greeting) {
+        const rawSal = this.agent.genderDetectionNeutralSalutation ?? "";
+        const resolvedSal = (rawSal === "(skip)" || !rawSal) ? "" : rawSal;
+        if (resolvedSal) {
+          greeting = greeting
+            .replace(/\{\{caller_salutation\}\}/g, resolvedSal)
+            .replace(/\{caller_salutation\}/g, resolvedSal);
+        } else {
+          greeting = greeting
+            .replace(/\s*\{\{caller_salutation\}\}\s*/g, " ")
+            .replace(/\s*\{caller_salutation\}\s*/g, " ");
+        }
+        logger.info({ callId: this.config.callId, resolvedSalutation: resolvedSal || "(empty)" }, "Pipeline: caller_salutation in greeting resolved to neutral (pre-detection)");
+      }
+
       if (!greeting.trim()) {
         // Fallback: ask the LLM to generate an opener
         try {
@@ -1000,6 +1017,26 @@ export class OrchestrationPipeline {
     } else if (detectedGender === null && this.agent.genderDetectionNeutralSalutation) {
       const sal = this.agent.genderDetectionNeutralSalutation;
       systemPromptForTurn += `\n\n[CALLER GENDER] Gender could not be determined. Use "${sal}" as a neutral salutation when appropriate.`;
+    }
+
+    // ── Substitute {caller_salutation} placeholder ────────────────────────
+    // The initial variable-resolution pass (session.ts) deliberately skips
+    // this placeholder so it can be filled in here, after gender detection.
+    {
+      const rawSal = detectedGender === "male" ? this.agent.genderDetectionMaleSalutation
+        : detectedGender === "female" ? this.agent.genderDetectionFemaleSalutation
+        : (this.agent.genderDetectionNeutralSalutation ?? "");
+      const resolvedSal = (rawSal === "(skip)" || !rawSal) ? "" : rawSal;
+      if (resolvedSal) {
+        systemPromptForTurn = systemPromptForTurn
+          .replace(/\{\{caller_salutation\}\}/g, resolvedSal)
+          .replace(/\{caller_salutation\}/g, resolvedSal);
+      } else {
+        systemPromptForTurn = systemPromptForTurn
+          .replace(/\s*\{\{caller_salutation\}\}\s*/g, " ")
+          .replace(/\s*\{caller_salutation\}\s*/g, " ");
+      }
+      logger.info({ callId: this.config.callId, resolvedSalutation: resolvedSal || "(empty)", detectedGender }, "Pipeline: caller_salutation resolved");
     }
 
     // Inject scheduling tool usage guide when the agent has cancel/reschedule/list-bookings tools
