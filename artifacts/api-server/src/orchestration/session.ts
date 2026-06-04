@@ -292,8 +292,8 @@ export async function createSession(params: {
   // Provider name → platform_settings key
   const MANAGED: Record<string, string> = {
     qwen:     "managed_qwen_key",
-    google:   "managed_google_key",
-    gemini:   "managed_google_key",
+    google:   "managed_gemini_key",
+    gemini:   "managed_gemini_key",
     deepgram: "managed_deepgram_key",
     sarvam:   "managed_sarvam_key",
     cartesia: "managed_cartesia_key",

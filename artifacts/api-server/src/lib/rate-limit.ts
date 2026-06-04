@@ -1,4 +1,4 @@
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { logger } from "./logger.js";
 
 /**
@@ -27,9 +27,9 @@ export const authRateLimit = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => {
-    // Use Clerk userId as the rate-limit key
-    const userId = (req as any).clerkUserId ?? req.ip;
-    return userId;
+    // Use Clerk userId as the rate-limit key; fall back to IP (IPv6-safe)
+    const userId = (req as any).clerkUserId;
+    return userId ?? ipKeyGenerator(req);
   },
   message: { error: "Too many requests. Please slow down." },
   handler: (req, res, _next, options) => {

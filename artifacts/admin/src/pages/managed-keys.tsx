@@ -74,9 +74,9 @@ const CATEGORIES: Category[] = [
         placeholder: "gsk_...",
       },
       {
-        key: "managed_google_key",
+        key: "managed_gemini_key",
         label: "Google / Gemini API Key",
-        description: "Gemini 2.0 Flash, Gemini 1.5 Pro, Gemini 1.5 Flash.",
+        description: "Gemini 2.5 Flash, Gemini 2.0 Flash, Gemini 1.5 Pro. Get from Google AI Studio (AIza... format).",
         placeholder: "AIza...",
       },
       {
