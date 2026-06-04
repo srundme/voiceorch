@@ -662,13 +662,27 @@ router.post("/admin/managed-phone-numbers", requireAdmin, async (req, res): Prom
 // ── Admin: GET /admin/managed-keys ────────────────────────────────────────────
 
 const MANAGED_KEY_NAMES = [
+  // LLM
   "managed_qwen_key",
+  "managed_groq_key",
+  "managed_google_key",
+  "managed_openai_key",
+  "managed_anthropic_key",
+  "managed_mistral_key",
+  "managed_cohere_key",
+  "managed_deepseek_key",
+  // STT
   "managed_deepgram_key",
   "managed_sarvam_key",
+  "managed_assemblyai_key",
+  "managed_azure_speech_key",
+  "managed_azure_speech_region",
+  // TTS
   "managed_cartesia_key",
+  "managed_elevenlabs_key",
+  // Telephony
   "managed_vobiz_auth_id",
   "managed_vobiz_auth_token",
-  "managed_openai_key",
 ];
 
 router.get("/admin/managed-keys", requireAdmin, async (_req, res): Promise<void> => {

@@ -63,14 +63,50 @@ const CATEGORIES: Category[] = [
     fields: [
       {
         key: "managed_qwen_key",
-        label: "Qwen API Key (via Groq)",
-        description: "Used for LLM (all managed agents) and AI prompt generation",
+        label: "Qwen / Groq API Key",
+        description: "Primary managed LLM key — Qwen models served via Groq. Also used for AI prompt generation.",
         placeholder: "gsk_...",
       },
       {
+        key: "managed_groq_key",
+        label: "Groq API Key",
+        description: "Groq-hosted models: Llama 3.3 70B, Llama 3.1 8B, Mixtral 8x7B, Gemma 2 9B.",
+        placeholder: "gsk_...",
+      },
+      {
+        key: "managed_google_key",
+        label: "Google / Gemini API Key",
+        description: "Gemini 2.0 Flash, Gemini 1.5 Pro, Gemini 1.5 Flash.",
+        placeholder: "AIza...",
+      },
+      {
         key: "managed_openai_key",
-        label: "OpenAI API Key (optional)",
-        description: "Fallback LLM key if needed",
+        label: "OpenAI API Key",
+        description: "GPT-4o, GPT-4o Mini, GPT-4 Turbo. Also used for OpenAI TTS.",
+        placeholder: "sk-...",
+      },
+      {
+        key: "managed_anthropic_key",
+        label: "Anthropic API Key",
+        description: "Claude Opus 4, Claude Sonnet 4, Claude 3.5 Haiku.",
+        placeholder: "sk-ant-...",
+      },
+      {
+        key: "managed_mistral_key",
+        label: "Mistral API Key",
+        description: "Mistral Large, Mistral Small, Codestral.",
+        placeholder: "...",
+      },
+      {
+        key: "managed_cohere_key",
+        label: "Cohere API Key",
+        description: "Command R+, Command R.",
+        placeholder: "...",
+      },
+      {
+        key: "managed_deepseek_key",
+        label: "DeepSeek API Key",
+        description: "DeepSeek Chat, DeepSeek Reasoner.",
         placeholder: "sk-...",
       },
     ],
@@ -87,14 +123,32 @@ const CATEGORIES: Category[] = [
       {
         key: "managed_deepgram_key",
         label: "Deepgram API Key",
-        description: "Used for STT (Speech-to-Text) for English and non-Tamil languages",
+        description: "Nova-3, Nova-2 streaming + batch STT. Also used for Deepgram Aura TTS.",
         placeholder: "Token ...",
       },
       {
         key: "managed_sarvam_key",
         label: "Sarvam API Key",
-        description: "Used for STT when Tamil language is selected",
-        placeholder: "sk-...",
+        description: "Saaras:v3 streaming STT and Saarika batch STT for Indian languages. Also used for Sarvam LLM and TTS.",
+        placeholder: "...",
+      },
+      {
+        key: "managed_assemblyai_key",
+        label: "AssemblyAI API Key",
+        description: "AssemblyAI Nano and Best batch STT models.",
+        placeholder: "...",
+      },
+      {
+        key: "managed_azure_speech_key",
+        label: "Azure Speech Key",
+        description: "Azure Cognitive Services key for Azure STT and Azure TTS.",
+        placeholder: "...",
+      },
+      {
+        key: "managed_azure_speech_region",
+        label: "Azure Speech Region",
+        description: "Azure region for Speech Services (e.g. eastus, westeurope). Required with Azure Speech Key.",
+        placeholder: "eastus",
       },
     ],
   },
@@ -110,8 +164,14 @@ const CATEGORIES: Category[] = [
       {
         key: "managed_cartesia_key",
         label: "Cartesia API Key",
-        description: "Used for TTS (Text-to-Speech) for all managed agents and voice preview",
+        description: "Primary managed TTS. Also used for Cartesia STT.",
         placeholder: "sk-...",
+      },
+      {
+        key: "managed_elevenlabs_key",
+        label: "ElevenLabs API Key",
+        description: "ElevenLabs TTS — high-quality multilingual voices.",
+        placeholder: "sk_...",
       },
     ],
   },
@@ -127,13 +187,13 @@ const CATEGORIES: Category[] = [
       {
         key: "managed_vobiz_auth_id",
         label: "VoBiz Auth ID",
-        description: "Used for telephony — the platform VoBiz account ID",
+        description: "Platform VoBiz account ID used for managed telephony.",
         placeholder: "vobiz-auth-id",
       },
       {
         key: "managed_vobiz_auth_token",
         label: "VoBiz Auth Token",
-        description: "Used for telephony — the platform VoBiz auth token",
+        description: "Platform VoBiz auth token used for managed telephony.",
         placeholder: "vobiz-auth-token",
       },
     ],
@@ -231,7 +291,7 @@ export default function ManagedKeys() {
       <div className="rounded-md border border-primary/20 bg-primary/5 p-4 flex items-start gap-3">
         <Info className="h-4 w-4 text-primary mt-0.5 shrink-0" />
         <div className="text-sm text-muted-foreground">
-          <strong className="text-foreground">Managed Stack:</strong> Tamil language agents use Sarvam STT + Qwen LLM + Cartesia TTS + VoBiz telephony. All other languages use Deepgram STT + Qwen LLM + Cartesia TTS + VoBiz telephony. To update a key, type the new value and click Save. Masked values (showing ••••) are already stored.
+          <strong className="text-foreground">Managed Stack Keys:</strong> Store master API keys for every provider the platform supports — LLM, STT, TTS, and Telephony. Keys shared across categories (e.g. Sarvam covers STT + LLM + TTS; OpenAI covers LLM + TTS) only need to be entered once. To update a key, type the new value and click Save. Masked values (showing ••••) are already stored.
         </div>
       </div>
 
