@@ -263,15 +263,7 @@ export async function handleWebCallWebSocket(
   // Streaming STT (Deepgram, Sarvam saaras:v3) eliminates the local VAD
   // silence wait — transcripts fire as soon as the utterance ends, reducing
   // STT latency from ~450ms+ to ~100–200ms.
-  //
-  // ⚠️  When Sarvam is ALSO the LLM provider, skip streaming STT.
-  // Both use the same api-subscription-key. A persistent streaming WebSocket
-  // consumes concurrent-connection/quota that the LLM endpoint shares, so
-  // leaving it open causes the LLM to get throttled (15–20 s TTFT instead of
-  // the normal 3–5 s). Fall back to batch STT for Sarvam-LLM setups so the
-  // LLM gets the full API quota.
-  const sttStreamingDisabledForQuota = agent.llmProvider?.toLowerCase() === "sarvam";
-  if (stt.transcribeStream && !sttStreamingDisabledForQuota) {
+  if (stt.transcribeStream) {
     try {
       streamSTT = stt.transcribeStream(
         (text, isFinal) => {
@@ -472,6 +464,7 @@ export async function handleWebCallWebSocket(
       let userText: string | null | undefined;
       if (streamTranscript) {
         userText = streamTranscript;
+        audioChunks.splice(0); // discard any stale barge-in frames — streaming STT already covered them
       } else {
         const pcm = Buffer.concat(audioChunks.splice(0));
         if (pcm.length < MIN_PCM_BYTES) { processing = false; return; }
@@ -1111,6 +1104,11 @@ export async function handleWebCallWebSocket(
       send({ type: "error", message: String(err) });
     } finally {
       processing = false;
+      // Streaming STT may have queued a transcript while we were processing this turn
+      // (it fires isFinal=true but returns early because processing=true).
+      // Pick it up now so the next turn starts immediately without waiting for a
+      // new audio frame to arrive.
+      if (!closed && streamingTranscriptPending) void process();
     }
   }
 
@@ -1498,7 +1496,9 @@ export async function handleWebCallWebSocket(
       const inEndGrace   = lastChunkSentAt > 0 && Date.now() - lastChunkSentAt < BARGE_IN_END_GRACE_MS;
       if (!inStartGrace && !inEndGrace && rms > BARGE_IN_RMS) {
         bargeInFrames++;
-        audioChunks.push(Buffer.from(data)); // accumulate speech for next turn
+        const bargeFrame = Buffer.from(data);
+        audioChunks.push(bargeFrame); // accumulate speech for batch STT fallback
+        streamSTT?.sendAudio(bargeFrame); // also feed streaming STT so it has the full utterance
         if (!interrupted && bargeInFrames >= effectiveBargeInMinFrames) {
           interrupted = true;
           send({ type: "interrupted" }); // tell client to stop playing
