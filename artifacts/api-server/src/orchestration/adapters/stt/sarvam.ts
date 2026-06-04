@@ -51,7 +51,7 @@ function normaliseSarvamLang(code: string | null): string {
 
 interface SarvamStreamMsg {
   type?: string;
-  data?: { transcript?: string; message?: string };
+  data?: { transcript?: string; message?: string; event?: string };
 }
 
 export class SarvamSTT implements STTAdapter {
@@ -123,6 +123,23 @@ export class SarvamSTT implements STTAdapter {
     let closing = false;
     const audioQueue: Buffer[] = [];
 
+    // Buffer the latest partial transcript — only emit once per utterance on
+    // speech_end so the caller doesn't receive dozens of near-identical partials
+    // for a single sentence (each would trigger a separate LLM turn and pollute
+    // the conversation history).
+    let latestTranscript = "";
+    let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
+    const FALLBACK_MS = 2000; // fire if speech_end never arrives
+
+    function emitFinal() {
+      if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
+      if (!latestTranscript) return;
+      const text = latestTranscript;
+      latestTranscript = "";
+      logger.info({ text: text.slice(0, 80) }, "Sarvam streaming STT → final");
+      onTranscript(text, true);
+    }
+
     const ws = new WebSocket(wsUrl, {
       headers: { "api-subscription-key": this.key },
     });
@@ -149,13 +166,26 @@ export class SarvamSTT implements STTAdapter {
         return;
       }
 
-      // type === "events" carries VAD signals (speech_start / speech_end) — no transcript
-      if (msg.type !== "data") return;
+      if (msg.type === "data") {
+        // Partial transcript — keep the latest one and arm the fallback timer.
+        // We do NOT emit yet; we wait for the speech_end VAD event below.
+        const transcript = msg.data?.transcript?.trim();
+        if (transcript) {
+          latestTranscript = transcript;
+          logger.info({ text: transcript.slice(0, 80) }, "Sarvam streaming STT → partial");
+          // Reset fallback timer so it only fires after 2 s of silence
+          if (fallbackTimer) clearTimeout(fallbackTimer);
+          fallbackTimer = setTimeout(emitFinal, FALLBACK_MS);
+        }
+        return;
+      }
 
-      const transcript = msg.data?.transcript?.trim();
-      if (transcript) {
-        logger.info({ text: transcript.slice(0, 80) }, "Sarvam streaming STT → transcript");
-        onTranscript(transcript, true);
+      if (msg.type === "events") {
+        // VAD signals: speech_start | speech_end
+        // speech_end is the definitive "utterance done" signal — emit now.
+        if (msg.data?.event === "speech_end") {
+          emitFinal();
+        }
       }
     });
 
