@@ -654,14 +654,14 @@ function WebCallPanel({ agentId, agentName, systemPrompt: savedPrompt }: { agent
 
       {/* ── Pre-call variables dialog ──────────────────────────────────── */}
       <Dialog open={showVarsDialog} onOpenChange={setShowVarsDialog}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent className="sm:max-w-sm flex flex-col">
           <DialogHeader>
             <DialogTitle>Fill in prompt variables</DialogTitle>
             <DialogDescription>
               These variables appear in your agent's prompt. Fill them in or leave blank to use them as-is.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3 py-1">
+          <div className="space-y-3 py-1 overflow-y-auto max-h-[50vh]">
             {userVars.map(key => (
               <div key={key}>
                 <Label className="text-xs font-mono text-muted-foreground mb-1 block">{`{${key}}`}</Label>
