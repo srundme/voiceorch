@@ -132,9 +132,11 @@ function bandpassFilter(samples: Int16Array, states: BiquadState[]): Int16Array 
 }
 
 // --- Adaptive noise gate ---
-const GATE_RATIO        = 3.0;   // suppress frames below 3× estimated noise floor
-const NOISE_ALPHA       = 0.98;  // slow-tracking IIR for noise floor estimate
-const NOISE_FRAME_BYTES = 320;   // 20 ms @ 8 kHz → 160 samples → 320 bytes
+const GATE_RATIO          = 4.0;   // suppress frames below 4× estimated noise floor
+const NOISE_ALPHA         = 0.98;  // slow-tracking IIR for noise-frame noise floor updates
+const CALIB_ALPHA         = 0.7;   // fast-tracking IIR used during calibration phase
+const CALIB_FRAMES        = 25;    // ~500 ms @ 20 ms/frame before gating begins
+const NOISE_FRAME_BYTES   = 320;   // 20 ms @ 8 kHz → 160 samples → 320 bytes
 
 function rms(samples: Int16Array): number {
   let sum = 0;
@@ -145,10 +147,23 @@ function rms(samples: Int16Array): number {
 /**
  * NoiseCanceller is stateful — create one instance per call session.
  * Call process(pcm8k) on every incoming 8 kHz LINEAR16 PCM chunk.
+ *
+ * Calibration phase (first CALIB_FRAMES frames ≈ 500 ms):
+ *   Audio passes through unmodified while a fast IIR (CALIB_ALPHA) builds an
+ *   initial noise floor estimate from the ambient environment.  Gating only
+ *   begins after calibration completes.
+ *
+ * Active phase:
+ *   - Noise frames (energy < noiseFloor × GATE_RATIO): zeroed out; noise floor
+ *     updated downward/upward with slow IIR (NOISE_ALPHA).
+ *   - Speech frames (energy ≥ noiseFloor × GATE_RATIO): passed through; noise
+ *     floor is NOT updated downward so the calibrated background estimate is
+ *     preserved across speech bursts.
  */
 export class NoiseCanceller {
   private readonly bqStates: BiquadState[] = makeBiquadStates();
-  private noiseFloor = 0.02;   // initial estimate (~-34 dBFS)
+  private noiseFloor      = 0.0;
+  private calibFrameCount = 0;
 
   process(pcm8k: Buffer): Buffer {
     const samples = new Int16Array(pcm8k.buffer, pcm8k.byteOffset, pcm8k.length / 2);
@@ -161,17 +176,27 @@ export class NoiseCanceller {
     const out = new Int16Array(filtered.length);
 
     for (let offset = 0; offset < filtered.length; offset += frameSize) {
-      const end   = Math.min(offset + frameSize, filtered.length);
-      const frame = filtered.subarray(offset, end);
+      const end    = Math.min(offset + frameSize, filtered.length);
+      const frame  = filtered.subarray(offset, end);
       const energy = rms(frame);
 
+      if (this.calibFrameCount < CALIB_FRAMES) {
+        // Calibration phase: build ambient noise estimate, pass audio through.
+        this.noiseFloor = this.calibFrameCount === 0
+          ? energy
+          : CALIB_ALPHA * this.noiseFloor + (1 - CALIB_ALPHA) * energy;
+        this.calibFrameCount++;
+        out.set(frame, offset);
+        continue;
+      }
+
       if (energy < this.noiseFloor * GATE_RATIO) {
-        // Low-energy frame: update noise estimate and zero-out
+        // Noise frame: update noise floor estimate and zero out.
         this.noiseFloor = NOISE_ALPHA * this.noiseFloor + (1 - NOISE_ALPHA) * energy;
         out.fill(0, offset, end);
       } else {
-        // Speech frame: pass through, update noise estimate slowly
-        this.noiseFloor = NOISE_ALPHA * this.noiseFloor + (1 - NOISE_ALPHA) * energy * 0.05;
+        // Speech frame: pass through; do NOT pull noise floor down — preserve
+        // the calibrated background estimate across speech bursts.
         out.set(frame, offset);
       }
     }
