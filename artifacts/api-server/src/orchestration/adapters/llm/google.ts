@@ -62,6 +62,11 @@ export class GoogleLLM implements LLMAdapter {
       model: this.model,
       systemInstruction: systemPrompt,
       ...(geminiTools ? { tools: geminiTools } : {}),
+      // Disable thinking for voice — adds 2–5 s TTFT with no benefit for
+      // short conversational turns. thinkingBudget:0 = thinking off.
+      generationConfig: {
+        thinkingConfig: { thinkingBudget: 0 },
+      } as any,
     });
 
     // Build chat history (all turns except the last user message)
