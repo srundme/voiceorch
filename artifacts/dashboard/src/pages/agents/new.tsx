@@ -84,6 +84,7 @@ const LANGUAGES = [
   { value: "it",    label: "Italian" },
   { value: "pt-BR", label: "Portuguese (Brazil)" },
   { value: "hi",    label: "Hindi" },
+  { value: "ml-IN", label: "Malayalam" },
   { value: "ja",    label: "Japanese" },
   { value: "ko",    label: "Korean" },
   { value: "zh",    label: "Chinese (Mandarin)" },
@@ -1108,7 +1109,7 @@ export default function AgentNew() {
               </div>
             </CardHeader>
             {promptVarFields.length > 0 && (
-              <CardContent className="space-y-3">
+              <CardContent className="space-y-3 max-h-96 overflow-y-auto">
                 {promptVarFields.map((field, index) => (
                   <div key={field.id} className="relative grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 border rounded-md bg-muted/20">
                     <Button type="button" variant="ghost" size="icon"

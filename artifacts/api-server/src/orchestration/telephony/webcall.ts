@@ -5,6 +5,7 @@ import { createSTTAdapter } from "../adapters/stt/index.js";
 import { createLLMAdapter } from "../adapters/llm/index.js";
 import { createTTSAdapter } from "../adapters/tts/index.js";
 import { downsample16to8, upsample8to16, decodeMulaw } from "../audio.js";
+import { processRawPcm8kIn } from "../audioPool.js";
 import { AmbientNoiseStream } from "../ambient.js";
 import { toReadableError } from "../utils.js";
 import { logger } from "../../lib/logger.js";
@@ -31,10 +32,10 @@ const MAX_CONCURRENT_CALLS = 5;
 // ── Tuning constants ─────────────────────────────────────────────────────────
 const VAD_SILENCE_MS           = 450;   // silence window before sending audio to STT (ms)
 const SPEECH_RMS_THRESHOLD     = 400;   // normal VAD — user speaking (agent silent)
-const BARGE_IN_RMS             = 2000;  // much higher bar while agent is speaking to avoid false barge-ins from
-                                        // ambient noise, TV, nearby conversation, or mic echo bleed
-const BARGE_IN_MIN_FRAMES      = 4;     // require ~160ms of sustained speech before interrupting
-                                        // (4 × 40ms chunks) — prevents a single word/noise from cutting the agent
+const BARGE_IN_RMS             = 1400;  // energy threshold while agent is speaking — high enough to avoid false
+                                        // barge-ins from echo/ambient, low enough for normal browser mic levels
+const BARGE_IN_MIN_FRAMES      = 3;     // require ~120ms of sustained speech before interrupting
+                                        // (3 × 40ms chunks) — prevents a single word/noise from cutting the agent
 const BARGE_IN_ECHO_GRACE_MS   = 700;  // suppress barge-in after TTS starts — allows browser echo cancellation to adapt
 const BARGE_IN_END_GRACE_MS    = 600;  // suppress barge-in for 600ms after the last TTS chunk — prevents mic echo
                                         // of the final word triggering a false barge-in and cutting it off
@@ -416,8 +417,8 @@ export async function handleWebCallWebSocket(
 
   // ── Engine settings ────────────────────────────────────────────────────────
   const wordsForInterruption = (agentCfg["wordsForInterruption"] as number | undefined) ?? 2;
-  // webcall frames = 40ms each; 1 word ≈ 400ms at 150 wpm ≈ 10 frames
-  const effectiveBargeInMinFrames = Math.max(BARGE_IN_MIN_FRAMES, wordsForInterruption * 10);
+  // webcall frames = 40ms each; use 6 frames per word (~240ms) for responsive barge-in
+  const effectiveBargeInMinFrames = Math.max(BARGE_IN_MIN_FRAMES, wordsForInterruption * 6);
   const incrementalDelayMs = (agentCfg["incrementalDelay"] as number | undefined) ?? 0;
   const hangupAfterLlmCall = (agentCfg["hangupAfterLlmCall"] as boolean | undefined) ?? false;
 
@@ -466,8 +467,24 @@ export async function handleWebCallWebSocket(
         userText = streamTranscript;
         audioChunks.splice(0); // discard any stale barge-in frames — streaming STT already covered them
       } else {
-        const pcm = Buffer.concat(audioChunks.splice(0));
-        if (pcm.length < MIN_PCM_BYTES) { processing = false; return; }
+        const rawPcm = Buffer.concat(audioChunks.splice(0));
+        if (rawPcm.length < MIN_PCM_BYTES) { processing = false; return; }
+        // Optional noise cancellation: downsample to 8 kHz → RNNoise → upsample back to 16 kHz
+        // Buffer.concat returns Buffer<ArrayBufferLike>; cast needed to satisfy typed pool API.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let pcm: Buffer = rawPcm as any as Buffer;
+        if (agent.noiseCancellationEnabled) {
+          try {
+            const pcm8k = Buffer.from(rawPcm.buffer as ArrayBuffer, rawPcm.byteOffset, rawPcm.byteLength);
+            const downsampledPcm8k = Buffer.concat([downsample16to8(pcm8k)]);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const nc8k = downsampledPcm8k as any as Buffer;
+            const ncResult = await processRawPcm8kIn(String(callId), nc8k, true);
+            pcm = ncResult.pcm16k;
+          } catch (ncErr) {
+            logger.warn({ callId, ncErr }, "Webcall: noise cancellation failed — using raw audio");
+          }
+        }
         try {
           userText = await stt.transcribe(pcm, 16000);
         } catch (sttErr) {
@@ -486,6 +503,22 @@ export async function handleWebCallWebSocket(
 
       send({ type: "transcript", speaker: "user", text: userText });
       history.push({ role: "user", content: userText });
+
+      // ── End-call phrase detection ──────────────────────────────────────────
+      // Mirror pipeline.ts: if the user says a configured goodbye phrase, end
+      // the call immediately without routing through the LLM.
+      if (agent.endCallPhrases) {
+        const phrases = agent.endCallPhrases.split(",").map((s: string) => s.trim()).filter(Boolean);
+        if (phrases.length > 0) {
+          const lower = userText.toLowerCase();
+          if (phrases.some((p: string) => lower.includes(p.toLowerCase()))) {
+            logger.info({ callId, userText }, "Webcall: end-call phrase detected — hanging up");
+            processing = false;
+            if (!closed) void hangup("normal");
+            return;
+          }
+        }
+      }
 
       // 2. LLM — stream tokens, kick off TTS synthesis per sentence in parallel
       // Each job starts as soon as its sentence is extracted, so synthesis

@@ -712,6 +712,7 @@ const LANGUAGES = [
   { value: "te-IN", label: "Telugu" },
   { value: "mr-IN", label: "Marathi" },
   { value: "kn-IN", label: "Kannada" },
+  { value: "ml-IN", label: "Malayalam" },
   { value: "gu-IN", label: "Gujarati" },
   { value: "pa-IN", label: "Punjabi" },
   { value: "uk",    label: "Ukrainian" },
