@@ -99,6 +99,39 @@ export const leadTagsTable = pgTable("lead_tags", {
 export type LeadTag = typeof leadTagsTable.$inferSelect;
 export type InsertLeadTag = typeof leadTagsTable.$inferInsert;
 
+// ── Batch Import Runs ─────────────────────────────────────────────────────────
+// Every CSV / Meta / Webhook import into a batch is logged here.
+// Enables import history, validation reports, and rollback audit.
+
+export type ImportRunStatus = "processing" | "completed" | "failed";
+
+export const batchImportRunsTable = pgTable("batch_import_runs", {
+  id:               serial("id").primaryKey(),
+  batchId:          integer("batch_id").references(() => campaignBatchesTable.id, { onDelete: "cascade" }).notNull(),
+  sourceId:         integer("source_id").references(() => leadSourcesTable.id, { onDelete: "set null" }),
+  // For CSV: original filename. For webhook/meta: descriptive label.
+  fileName:         text("file_name"),
+  status:           text("status").notNull().default("processing"),
+  totalRows:        integer("total_rows").notNull().default(0),
+  validRows:        integer("valid_rows").notNull().default(0),
+  invalidRows:      integer("invalid_rows").notNull().default(0),
+  duplicateRows:    integer("duplicate_rows").notNull().default(0),
+  createdRows:      integer("created_rows").notNull().default(0),
+  processingTimeMs: integer("processing_time_ms"),
+  // JSON array of { phone, reason, rowIndex } for invalid/duplicate rows
+  errorReport:      jsonb("error_report").$type<Array<{
+    phone?: string;
+    normalizedPhone?: string;
+    reason: string;
+    existingLeadId?: number;
+    rowIndex?: number;
+  }>>(),
+  createdAt:        timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type BatchImportRun = typeof batchImportRunsTable.$inferSelect;
+export type InsertBatchImportRun = typeof batchImportRunsTable.$inferInsert;
+
 // ── Agent Variable Registry ───────────────────────────────────────────────────
 // Declares variables an agent expects from lead data.
 // Drives CSV column mapping, Meta form mapping, and pre-call variable injection.

@@ -2224,6 +2224,70 @@ export const GetBatchAnalyticsResponse = zod.object({
 
 
 /**
+ * @summary List all import runs for a batch (audit trail)
+ */
+export const ListBatchImportRunsParams = zod.object({
+  "id": zod.coerce.number(),
+  "batchId": zod.coerce.number()
+})
+
+export const ListBatchImportRunsResponseItem = zod.object({
+  "id": zod.number(),
+  "batchId": zod.number(),
+  "sourceId": zod.number().nullish(),
+  "fileName": zod.string().nullish(),
+  "status": zod.enum(['processing', 'completed', 'failed']),
+  "totalRows": zod.number(),
+  "validRows": zod.number(),
+  "invalidRows": zod.number(),
+  "duplicateRows": zod.number(),
+  "createdRows": zod.number(),
+  "processingTimeMs": zod.number().nullish(),
+  "errorReport": zod.array(zod.object({
+  "phone": zod.string().optional(),
+  "normalizedPhone": zod.string().optional(),
+  "reason": zod.string().optional(),
+  "existingLeadId": zod.number().optional(),
+  "rowIndex": zod.number().optional()
+})).nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const ListBatchImportRunsResponse = zod.array(ListBatchImportRunsResponseItem)
+
+
+/**
+ * @summary Get a single import run with full error report
+ */
+export const GetBatchImportRunParams = zod.object({
+  "id": zod.coerce.number(),
+  "batchId": zod.coerce.number(),
+  "runId": zod.coerce.number()
+})
+
+export const GetBatchImportRunResponse = zod.object({
+  "id": zod.number(),
+  "batchId": zod.number(),
+  "sourceId": zod.number().nullish(),
+  "fileName": zod.string().nullish(),
+  "status": zod.enum(['processing', 'completed', 'failed']),
+  "totalRows": zod.number(),
+  "validRows": zod.number(),
+  "invalidRows": zod.number(),
+  "duplicateRows": zod.number(),
+  "createdRows": zod.number(),
+  "processingTimeMs": zod.number().nullish(),
+  "errorReport": zod.array(zod.object({
+  "phone": zod.string().optional(),
+  "normalizedPhone": zod.string().optional(),
+  "reason": zod.string().optional(),
+  "existingLeadId": zod.number().optional(),
+  "rowIndex": zod.number().optional()
+})).nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
  * @summary Download a CSV template with headers derived from campaign field mappings
  */
 export const GetCampaignCsvTemplateParams = zod.object({

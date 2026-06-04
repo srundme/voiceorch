@@ -66,6 +66,7 @@ import type {
   AvailabilityScheduleUpdate,
   AvailablePhoneNumber,
   BatchAnalytics,
+  BatchImportRun,
   Booking,
   BookingInput,
   BookingUpdate,
@@ -6171,6 +6172,175 @@ export function useGetBatchAnalytics<TData = Awaited<ReturnType<typeof getBatchA
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetBatchAnalyticsQueryOptions(id,batchId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListBatchImportRunsUrl = (id: number,
+    batchId: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/batches/${batchId}/import-runs`
+}
+
+/**
+ * @summary List all import runs for a batch (audit trail)
+ */
+export const listBatchImportRuns = async (id: number,
+    batchId: number, options?: RequestInit): Promise<BatchImportRun[]> => {
+
+  return customFetch<BatchImportRun[]>(getListBatchImportRunsUrl(id,batchId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListBatchImportRunsQueryKey = (id: number,
+    batchId: number,) => {
+    return [
+    `/api/campaigns/${id}/batches/${batchId}/import-runs`
+    ] as const;
+    }
+
+
+export const getListBatchImportRunsQueryOptions = <TData = Awaited<ReturnType<typeof listBatchImportRuns>>, TError = ErrorType<void>>(id: number,
+    batchId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBatchImportRuns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListBatchImportRunsQueryKey(id,batchId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listBatchImportRuns>>> = ({ signal }) => listBatchImportRuns(id,batchId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id && batchId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listBatchImportRuns>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListBatchImportRunsQueryResult = NonNullable<Awaited<ReturnType<typeof listBatchImportRuns>>>
+export type ListBatchImportRunsQueryError = ErrorType<void>
+
+
+/**
+ * @summary List all import runs for a batch (audit trail)
+ */
+
+export function useListBatchImportRuns<TData = Awaited<ReturnType<typeof listBatchImportRuns>>, TError = ErrorType<void>>(
+ id: number,
+    batchId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBatchImportRuns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListBatchImportRunsQueryOptions(id,batchId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetBatchImportRunUrl = (id: number,
+    batchId: number,
+    runId: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/batches/${batchId}/import-runs/${runId}`
+}
+
+/**
+ * @summary Get a single import run with full error report
+ */
+export const getBatchImportRun = async (id: number,
+    batchId: number,
+    runId: number, options?: RequestInit): Promise<BatchImportRun> => {
+
+  return customFetch<BatchImportRun>(getGetBatchImportRunUrl(id,batchId,runId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBatchImportRunQueryKey = (id: number,
+    batchId: number,
+    runId: number,) => {
+    return [
+    `/api/campaigns/${id}/batches/${batchId}/import-runs/${runId}`
+    ] as const;
+    }
+
+
+export const getGetBatchImportRunQueryOptions = <TData = Awaited<ReturnType<typeof getBatchImportRun>>, TError = ErrorType<void>>(id: number,
+    batchId: number,
+    runId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBatchImportRun>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBatchImportRunQueryKey(id,batchId,runId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBatchImportRun>>> = ({ signal }) => getBatchImportRun(id,batchId,runId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id && batchId && runId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBatchImportRun>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBatchImportRunQueryResult = NonNullable<Awaited<ReturnType<typeof getBatchImportRun>>>
+export type GetBatchImportRunQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get a single import run with full error report
+ */
+
+export function useGetBatchImportRun<TData = Awaited<ReturnType<typeof getBatchImportRun>>, TError = ErrorType<void>>(
+ id: number,
+    batchId: number,
+    runId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBatchImportRun>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBatchImportRunQueryOptions(id,batchId,runId,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

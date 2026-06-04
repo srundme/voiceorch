@@ -1893,6 +1893,62 @@ paths:
         "401":
           description: Unauthorized
 
+  /campaigns/{id}/batches/{batchId}/import-runs:
+    get:
+      operationId: listBatchImportRuns
+      tags: [campaigns]
+      summary: List all import runs for a batch (audit trail)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: batchId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Import run list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BatchImportRun"
+        "401":
+          description: Unauthorized
+
+  /campaigns/{id}/batches/{batchId}/import-runs/{runId}:
+    get:
+      operationId: getBatchImportRun
+      tags: [campaigns]
+      summary: Get a single import run with full error report
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: batchId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: runId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Import run detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchImportRun"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+
   /campaigns/{id}/csv-template:
     get:
       operationId: getCampaignCsvTemplate
@@ -6709,6 +6765,36 @@ components:
               reason: { type: string }
               existingLeadId: { type: integer }
               rowIndex: { type: integer }
+
+    BatchImportRun:
+      type: object
+      required: [id, batchId, status, totalRows, validRows, invalidRows, duplicateRows, createdRows, createdAt]
+      properties:
+        id: { type: integer }
+        batchId: { type: integer }
+        sourceId: { type: ["integer", "null"] }
+        fileName: { type: ["string", "null"] }
+        status:
+          type: string
+          enum: [processing, completed, failed]
+        totalRows: { type: integer }
+        validRows: { type: integer }
+        invalidRows: { type: integer }
+        duplicateRows: { type: integer }
+        createdRows: { type: integer }
+        processingTimeMs: { type: ["integer", "null"] }
+        errorReport:
+          type: array
+          nullable: true
+          items:
+            type: object
+            properties:
+              phone: { type: string }
+              normalizedPhone: { type: string }
+              reason: { type: string }
+              existingLeadId: { type: integer }
+              rowIndex: { type: integer }
+        createdAt: { type: string, format: date-time }
 
     PhoneNormalizeResult:
       type: object

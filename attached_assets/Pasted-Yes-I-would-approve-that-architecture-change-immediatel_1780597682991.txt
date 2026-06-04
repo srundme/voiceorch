@@ -1,0 +1,263 @@
+Yes. I would approve that architecture change immediately.
+
+Moving lead_sources from campaign-scoped to workspace-scoped is the correct enterprise decision.
+
+Benefits:
+
+Configure a Meta Form once and reuse forever.
+Configure a Webhook once and reuse forever.
+Source analytics become cleaner.
+Future integrations (HubSpot, Salesforce, Zoho, Google Forms, APIs) become reusable assets.
+Campaigns become consumers of sources instead of owners of sources.
+
+The critical addition:
+
+Workspace
+   └── Lead Sources
+          ├── Meta Form A
+          ├── Meta Form B
+          ├── Website Form
+          ├── Webhook XYZ
+          └── CSV Source
+
+Then:
+
+Campaign A
+   └── Batch 1
+          └── Source: Meta Form A
+
+Campaign B
+   └── Batch 2
+          └── Source: Meta Form A
+
+Exactly right.
+
+The addition of:
+
+batchFieldMapping
+
+is also a major win because it solves:
+
+Source Field:
+full_name
+
+Campaign A Agent:
+{{name}}
+
+Campaign B Agent:
+{{customer_name}}
+
+without duplicating the source.
+
+One Final Addition Before Phase 1B
+
+I would add one more entity:
+
+batch_import_runs
+
+Reason:
+
+Every CSV upload should be traceable.
+
+Example:
+
+Batch A
+
+Import Run #1
+500 leads
+
+Import Run #2
+200 leads
+
+Import Run #3
+150 leads
+
+Store:
+
+id
+
+batch_id
+
+source_id
+
+file_name
+
+total_rows
+
+valid_rows
+
+invalid_rows
+
+duplicate_rows
+
+created_rows
+
+processing_time
+
+created_at
+
+Later this becomes:
+
+Import History
+Validation Reports
+Rollback
+Audit
+
+Without it, CSV operations become difficult to audit.
+
+Phase 1B Approval
+
+I would officially lock the wizard as:
+
+Step 1
+
+Batch Information
+
+Name
+Description
+Step 2
+
+Lead Source
+
+Select Existing Source
+
+OR
+
+Create New Source
+
+Source Types:
+
+Meta Form
+CSV Upload
+Webhook
+Step 3
+
+Source Configuration
+
+Meta:
+
+Business
+Ad Account
+Form
+
+Webhook:
+
+URL
+Token
+
+CSV:
+
+Upload File
+Preview
+Step 4
+
+Variable Mapping
+
+Powered entirely by:
+
+agent_variables
+batchFieldMapping
+
+Required fields:
+
+🔴 red
+
+Optional:
+
+🟢 green
+
+Auto-map first.
+
+Manual override second.
+
+Step 5
+
+Validation
+
+Display:
+
+Total Rows
+
+Valid Rows
+
+Invalid Rows
+
+Duplicates
+
+Missing Variables
+
+Phone Issues
+
+Include downloadable report.
+
+Step 6
+
+Duplicate Handling
+
+Ignore
+Skip
+Reject With Report
+
+Show projected results before import.
+
+Step 7
+
+Execution Rules
+
+Retry Attempts
+
+Retry Delay
+
+Business Hours
+
+Timezone
+
+Max Daily Calls
+
+Start Date
+
+End Date
+Step 8
+
+Review & Launch
+
+Display:
+
+Campaign
+
+Batch
+
+Agent
+
+Phone Number
+
+Source
+
+Lead Count
+
+Variables
+
+Duplicate Policy
+
+Execution Rules
+
+Launch.
+
+Acceptance Criteria
+
+I would not move to Phase 2 until these work:
+
+✅ Existing Source Reuse
+✅ New Source Creation
+✅ Meta Form Discovery
+✅ CSV Auto Mapping
+✅ Variable Validation
+✅ Phone Normalization Preview
+✅ Duplicate Preview
+✅ Import Summary
+✅ Webhook Source Creation
+✅ Batch Import Audit Trail (batch_import_runs)
+
+If those are completed, then the next milestone becomes the Command Center.
+
+At this point, the architecture is stable enough that I would stop all design discussions and focus entirely on implementation quality. The foundation is now strong enough to support everything from insurance lead calling to education admissions, real estate sales, healthcare follow-ups, and logistics operations without redesigning the platform.

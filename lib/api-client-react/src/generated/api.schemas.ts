@@ -2730,6 +2730,42 @@ export interface ImportSummary {
   errors: ImportSummaryErrorsItem[];
 }
 
+export type BatchImportRunStatus = typeof BatchImportRunStatus[keyof typeof BatchImportRunStatus];
+
+
+export const BatchImportRunStatus = {
+  processing: 'processing',
+  completed: 'completed',
+  failed: 'failed',
+} as const;
+
+export type BatchImportRunErrorReportItem = {
+  phone?: string;
+  normalizedPhone?: string;
+  reason?: string;
+  existingLeadId?: number;
+  rowIndex?: number;
+};
+
+export interface BatchImportRun {
+  id: number;
+  batchId: number;
+  /** @nullable */
+  sourceId?: number | null;
+  /** @nullable */
+  fileName?: string | null;
+  status: BatchImportRunStatus;
+  totalRows: number;
+  validRows: number;
+  invalidRows: number;
+  duplicateRows: number;
+  createdRows: number;
+  /** @nullable */
+  processingTimeMs?: number | null;
+  errorReport?: BatchImportRunErrorReportItem[] | null;
+  createdAt: string;
+}
+
 export interface PhoneNormalizeResult {
   raw: string;
   /** @nullable */
