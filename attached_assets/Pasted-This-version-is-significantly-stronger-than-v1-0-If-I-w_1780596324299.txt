@@ -1,0 +1,301 @@
+This version is significantly stronger than v1.0.
+
+If I were reviewing this as a product architect for an enterprise AI voice platform, I would say:
+
+Architecture Maturity: 9.7/10
+Data Model: 9.8/10
+CRM Design: 9.5/10
+Operational Model: 9.8/10
+Scalability: 9.7/10
+
+This is now very close to what platforms like enterprise outbound AI, contact center, and conversational CRM systems eventually evolve into.
+
+What I Like Most
+1. Campaign Lead vs Lead
+
+This is a very important correction.
+
+Instead of:
+
+Lead
+
+You now have:
+
+Campaign Lead
+
+which allows:
+
+Same Phone
+     ↓
+Campaign A
+     ↓
+Owner A
+
+Same Phone
+     ↓
+Campaign B
+     ↓
+Owner B
+
+without breaking attribution.
+
+This is the correct enterprise model.
+
+2. Interaction-Based Architecture
+
+This is now properly designed.
+
+Campaign Lead
+   ↓
+Interactions
+   ↓
+Call
+Incoming
+Transfer
+Booking
+Callback
+
+Exactly how a modern conversational CRM should work.
+
+3. Async Intelligence Pipeline
+
+Excellent decision.
+
+Call Ends
+ ↓
+Transcript Saved
+ ↓
+AI Job
+ ↓
+Summary
+Sentiment
+Intent
+Topics
+
+No latency introduced into live calls.
+
+4. Queue-Based Operations
+
+This is the biggest architectural win.
+
+Most products build:
+
+Campaign
+ ↓
+Lead
+
+You are building:
+
+Queue
+ ↓
+Action
+
+which is how operations teams actually work.
+
+Final Gaps Before Building
+
+These are not blockers but I would add them now because later migrations become painful.
+
+Gap 1 — Lead Source Entity
+
+Currently:
+
+Meta
+CSV
+Webhook
+
+are mentioned.
+
+I would formally create:
+
+lead_sources
+
+Example:
+
+id
+
+campaign_id
+
+source_type
+
+source_name
+
+meta_form_id
+
+webhook_id
+
+created_at
+
+Then:
+
+Campaign
+ └── Lead Source
+       └── Leads
+
+This will make analytics dramatically easier later.
+
+Gap 2 — Conversation Outcomes
+
+Right now:
+
+Disposition
+
+is agent-defined.
+
+I would add:
+
+Operational Outcome
+
+System-generated.
+
+Examples:
+
+BOOKING_CREATED
+
+TRANSFER_COMPLETED
+
+CALLBACK_REQUESTED
+
+INTEREST_CONFIRMED
+
+This prevents analytics from depending on custom dispositions.
+
+Gap 3 — Duplicate Detection Engine
+
+Still not formally defined.
+
+You originally requested this.
+
+Need:
+
+Duplicate Policy
+
+Ignore
+Merge
+Reject
+
+Per batch.
+
+Add this into Phase 5 Batch Wizard.
+
+Gap 4 — Number Normalization Rules
+
+You talked about:
+
++91
+10 digit
+Meta forms
+CSV uploads
+
+earlier.
+
+Need a dedicated architecture section.
+
+Example:
+
+Workspace Default Country
+
+India
+
+Rule:
+
+9876543210
+→ +919876543210
+
+Without this, imports become messy.
+
+Gap 5 — Agent Variable Registry
+
+Very important.
+
+Currently:
+
+{{name}}
+{{city}}
+{{policy_type}}
+
+are implied.
+
+I would create:
+
+Agent Variable Registry
+
+For every agent:
+
+Required Variables
+
+Optional Variables
+
+Default Values
+
+Then CSV validation and Meta mapping become automatic.
+
+This is one of the most valuable things for SnapServe.
+
+What Should Replit Build Next
+
+Do not build Analytics.
+
+Do not build Bookings.
+
+Do not build Transfers.
+
+Do not build DNC.
+
+Do not build CRM screens yet.
+
+The next build should be:
+
+Phase 1A
+
+Data Foundation + Lifecycle Engine + Variable Registry
+
+Add:
+
+Agent Variable Registry
+
+Lead Source Entity
+
+Duplicate Engine
+
+Phone Normalization Engine
+
+before frontend work starts.
+
+Phase 1B
+
+Batch Wizard
+
+because Batch Wizard becomes the entry point to:
+
+Meta
+
+CSV
+
+Webhook
+
+and most future architecture depends on it.
+
+Phase 2
+
+Command Center
+
+because once leads start entering queues, Command Center becomes meaningful.
+
+Final Verdict
+
+If I were the product owner, I would officially approve this architecture document and freeze it as:
+
+SnapServe Campaign Operations Architecture v1.1.
+
+Then I would issue one final architecture addendum covering:
+
+Lead Source Entity
+Agent Variable Registry
+Duplicate Detection Engine
+Phone Normalization Engine
+Operational Outcome Framework
+
+After those five additions, I would stop architecture work entirely and move into implementation.
+
+At that point, you're no longer designing a "campaign module"; you're designing the operational core of the entire SnapServe AI voice platform.
