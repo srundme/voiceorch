@@ -47,10 +47,6 @@ packages = ["ffmpeg-full", "libsndfile"]
 [userenv]
 
 [userenv.shared]
-ADMIN_TOKEN = "theaitel2025"
-GOOGLE_CLIENT_ID = "1096607196585-5h3i54j6fiisvp3gaigvrdvg9tnk4h1r.apps.googleusercontent.com"
-GOOGLE_CLIENT_SECRET = "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"
-GOOGLE_REDIRECT_URI = "https://bolna-orchestrator.replit.app/api/scheduling/google/callback"
 
 [userenv.production]
 
