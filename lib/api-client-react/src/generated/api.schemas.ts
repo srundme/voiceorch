@@ -3064,6 +3064,40 @@ export interface CallbackRescheduleRequest {
   callbackAt: string;
 }
 
+export interface IncomingMetrics {
+  unreviewed: number;
+  today: number;
+  thisWeek: number;
+  completed: number;
+  total: number;
+}
+
+export interface IncomingLeadInfo {
+  name?: string | null;
+  callAttempts: number;
+  disposition?: string | null;
+}
+
+export interface IncomingCallItem {
+  id: number;
+  phone: string;
+  leadId?: number | null;
+  callId?: number | null;
+  incomingCallStatus: string;
+  receivedAt: string;
+  matchedAt?: string | null;
+  durationSeconds?: number | null;
+  detectedIntent?: string | null;
+  lead?: IncomingLeadInfo | null;
+}
+
+export interface IncomingCallsPage {
+  items: IncomingCallItem[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 /**
  * Platform admin token (matches ADMIN_TOKEN env var).
  */
@@ -3243,6 +3277,46 @@ export type RescheduleCampaignCallback200 = {
 };
 
 export type ExportCampaignCallbacksParams = {
+status?: string;
+};
+
+export type ListCampaignIncomingCallsParams = {
+status?: string;
+search?: string;
+page?: number;
+limit?: number;
+};
+
+export type UpdateIncomingCallStatusBodyStatus = typeof UpdateIncomingCallStatusBodyStatus[keyof typeof UpdateIncomingCallStatusBodyStatus];
+
+
+export const UpdateIncomingCallStatusBodyStatus = {
+  unreviewed: 'unreviewed',
+  reviewed: 'reviewed',
+  actioned: 'actioned',
+} as const;
+
+export type UpdateIncomingCallStatusBody = {
+  status: UpdateIncomingCallStatusBodyStatus;
+};
+
+export type UpdateIncomingCallStatus200 = {
+  id?: number;
+  incomingCallStatus?: string;
+};
+
+export type CreateCallbackFromIncomingBody = {
+  callbackAt?: string;
+  reason?: string;
+};
+
+export type CreateCallbackFromIncoming200 = {
+  callbackId?: number;
+  callbackAt?: string;
+  leadId?: number;
+};
+
+export type ExportCampaignIncomingCallsParams = {
 status?: string;
 };
 

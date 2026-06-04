@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import LiveQueueTab from "./live-queue";
 import CallbacksTab from "./callbacks";
+import IncomingCallsTab from "./incoming";
 import { useRoute, useLocation, Link } from "wouter";
 import {
   useGetCampaign, useListCampaignBatches, useCreateCampaignBatch,
@@ -976,12 +977,7 @@ export default function CampaignDetailPage() {
           {/* ── Incoming ───────────────────────────────────────────────────────── */}
           <TabsContent value="incoming" className="mt-0 border-0 p-0">
             <div className="overflow-y-auto px-6 py-5" style={{ maxHeight: "calc(100vh - 160px)" }}>
-              <CampaignTabPlaceholder
-                icon={<PhoneIncoming className="h-6 w-6" />}
-                title="Incoming Calls"
-                description="Inbound calls received on this campaign's number. Review call details, transcripts, and outcomes for calls that came in."
-                color="amber"
-              />
+              <IncomingCallsTab campaignId={campaign.id} />
             </div>
           </TabsContent>
 

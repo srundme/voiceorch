@@ -2904,6 +2904,109 @@ export const ExportCampaignCallbacksQueryParams = zod.object({
 
 
 /**
+ * @summary Incoming call metric counts
+ */
+export const GetCampaignIncomingMetricsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetCampaignIncomingMetricsResponse = zod.object({
+  "unreviewed": zod.number(),
+  "today": zod.number(),
+  "thisWeek": zod.number(),
+  "completed": zod.number(),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Paginated incoming calls with review status
+ */
+export const ListCampaignIncomingCallsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListCampaignIncomingCallsQueryParams = zod.object({
+  "status": zod.coerce.string().optional(),
+  "search": zod.coerce.string().optional(),
+  "page": zod.coerce.number().optional(),
+  "limit": zod.coerce.number().optional()
+})
+
+export const ListCampaignIncomingCallsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "phone": zod.string(),
+  "leadId": zod.number().nullish(),
+  "callId": zod.number().nullish(),
+  "incomingCallStatus": zod.string(),
+  "receivedAt": zod.coerce.date(),
+  "matchedAt": zod.coerce.date().nullish(),
+  "durationSeconds": zod.number().nullish(),
+  "detectedIntent": zod.string().nullish(),
+  "lead": zod.object({
+  "name": zod.string().nullish(),
+  "callAttempts": zod.number(),
+  "disposition": zod.string().nullish()
+}).nullish()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "limit": zod.number()
+})
+
+
+/**
+ * @summary Update review status of an incoming call
+ */
+export const UpdateIncomingCallStatusParams = zod.object({
+  "id": zod.coerce.number(),
+  "incomingId": zod.coerce.number()
+})
+
+export const UpdateIncomingCallStatusBody = zod.object({
+  "status": zod.enum(['unreviewed', 'reviewed', 'actioned'])
+})
+
+export const UpdateIncomingCallStatusResponse = zod.object({
+  "id": zod.number().optional(),
+  "incomingCallStatus": zod.string().optional()
+})
+
+
+/**
+ * @summary Create a callback from an incoming call record
+ */
+export const CreateCallbackFromIncomingParams = zod.object({
+  "id": zod.coerce.number(),
+  "incomingId": zod.coerce.number()
+})
+
+export const CreateCallbackFromIncomingBody = zod.object({
+  "callbackAt": zod.coerce.date().optional(),
+  "reason": zod.string().optional()
+})
+
+export const CreateCallbackFromIncomingResponse = zod.object({
+  "callbackId": zod.number().optional(),
+  "callbackAt": zod.coerce.date().optional(),
+  "leadId": zod.number().optional()
+})
+
+
+/**
+ * @summary Export incoming calls as CSV
+ */
+export const ExportCampaignIncomingCallsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ExportCampaignIncomingCallsQueryParams = zod.object({
+  "status": zod.coerce.string().optional()
+})
+
+
+/**
  * @summary Enriched lead data for the queue lead drawer
  */
 export const GetCampaignLeadDrawerParams = zod.object({

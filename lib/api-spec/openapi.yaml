@@ -2830,6 +2830,151 @@ paths:
         "401": { description: Unauthorized }
         "404": { description: Not found }
 
+  /campaigns/{id}/incoming/metrics:
+    get:
+      operationId: getCampaignIncomingMetrics
+      tags: [campaigns]
+      summary: Incoming call metric counts
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Incoming metrics
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IncomingMetrics" }
+        "401": { description: Unauthorized }
+        "404": { description: Not found }
+
+  /campaigns/{id}/incoming:
+    get:
+      operationId: listCampaignIncomingCalls
+      tags: [campaigns]
+      summary: Paginated incoming calls with review status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer }
+        - name: limit
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Incoming calls page
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IncomingCallsPage" }
+        "401": { description: Unauthorized }
+        "404": { description: Not found }
+
+  /campaigns/{id}/incoming/{incomingId}/status:
+    patch:
+      operationId: updateIncomingCallStatus
+      tags: [campaigns]
+      summary: Update review status of an incoming call
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: incomingId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [unreviewed, reviewed, actioned] }
+      responses:
+        "200":
+          description: Updated status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:                 { type: integer }
+                  incomingCallStatus: { type: string }
+        "401": { description: Unauthorized }
+        "404": { description: Not found }
+
+  /campaigns/{id}/incoming/{incomingId}/create-callback:
+    post:
+      operationId: createCallbackFromIncoming
+      tags: [campaigns]
+      summary: Create a callback from an incoming call record
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: incomingId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                callbackAt: { type: string, format: date-time }
+                reason:     { type: string }
+      responses:
+        "200":
+          description: Created callback reference
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  callbackId: { type: integer }
+                  callbackAt: { type: string, format: date-time }
+                  leadId:     { type: integer }
+        "401": { description: Unauthorized }
+        "404": { description: Not found }
+
+  /campaigns/{id}/incoming/export:
+    get:
+      operationId: exportCampaignIncomingCalls
+      tags: [campaigns]
+      summary: Export incoming calls as CSV
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: status
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: CSV file
+          content:
+            text/csv:
+              schema: { type: string }
+        "401": { description: Unauthorized }
+        "404": { description: Not found }
+
   /campaigns/{id}/leads/{leadId}/drawer:
     get:
       operationId: getCampaignLeadDrawer
@@ -7582,3 +7727,49 @@ components:
       required: [callbackAt]
       properties:
         callbackAt: { type: string, format: date-time }
+
+    IncomingMetrics:
+      type: object
+      required: [unreviewed, today, thisWeek, completed, total]
+      properties:
+        unreviewed: { type: integer }
+        today:      { type: integer }
+        thisWeek:   { type: integer }
+        completed:  { type: integer }
+        total:      { type: integer }
+
+    IncomingLeadInfo:
+      type: object
+      required: [callAttempts]
+      properties:
+        name:         { type: string, nullable: true }
+        callAttempts: { type: integer }
+        disposition:  { type: string, nullable: true }
+
+    IncomingCallItem:
+      type: object
+      required: [id, phone, incomingCallStatus, receivedAt]
+      properties:
+        id:                 { type: integer }
+        phone:              { type: string }
+        leadId:             { type: integer, nullable: true }
+        callId:             { type: integer, nullable: true }
+        incomingCallStatus: { type: string }
+        receivedAt:         { type: string, format: date-time }
+        matchedAt:          { type: string, format: date-time, nullable: true }
+        durationSeconds:    { type: integer, nullable: true }
+        detectedIntent:     { type: string, nullable: true }
+        lead:
+          nullable: true
+          $ref: "#/components/schemas/IncomingLeadInfo"
+
+    IncomingCallsPage:
+      type: object
+      required: [items, total, page, limit]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/IncomingCallItem" }
+        total: { type: integer }
+        page:  { type: integer }
+        limit: { type: integer }

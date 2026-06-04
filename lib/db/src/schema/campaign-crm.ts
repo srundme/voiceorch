@@ -124,16 +124,17 @@ export type InsertCallCallback = typeof callCallbacksTable.$inferInsert;
 // logged as a separate Interaction.
 
 export const incomingCallsTable = pgTable("incoming_calls", {
-  id:              serial("id").primaryKey(),
-  userId:          text("user_id").notNull(),
-  phone:           text("phone").notNull(),
-  normalizedPhone: text("normalized_phone"),
-  campaignId:      integer("campaign_id").references(() => campaignsTable.id, { onDelete: "set null" }),
-  batchId:         integer("batch_id").references(() => campaignBatchesTable.id, { onDelete: "set null" }),
-  leadId:          integer("lead_id").references(() => campaignLeadsTable.id, { onDelete: "set null" }),
-  callId:          integer("call_id").references(() => callsTable.id, { onDelete: "set null" }),
-  matchedAt:       timestamp("matched_at", { withTimezone: true }),
-  createdAt:       timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  id:                 serial("id").primaryKey(),
+  userId:             text("user_id").notNull(),
+  phone:              text("phone").notNull(),
+  normalizedPhone:    text("normalized_phone"),
+  campaignId:         integer("campaign_id").references(() => campaignsTable.id, { onDelete: "set null" }),
+  batchId:            integer("batch_id").references(() => campaignBatchesTable.id, { onDelete: "set null" }),
+  leadId:             integer("lead_id").references(() => campaignLeadsTable.id, { onDelete: "set null" }),
+  callId:             integer("call_id").references(() => callsTable.id, { onDelete: "set null" }),
+  incomingCallStatus: text("incoming_call_status").notNull().default("unreviewed"),
+  matchedAt:          timestamp("matched_at", { withTimezone: true }),
+  createdAt:          timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export type IncomingCall = typeof incomingCallsTable.$inferSelect;

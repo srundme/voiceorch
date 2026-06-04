@@ -93,6 +93,8 @@ import type {
   CommandCenterKpis,
   CompleteCampaignCallback200,
   CreateAmbientSoundBody,
+  CreateCallbackFromIncoming200,
+  CreateCallbackFromIncomingBody,
   CsvImportBody,
   CsvImportResult,
   DailyCallVolume,
@@ -102,6 +104,7 @@ import type {
   EventTypeInput,
   EventTypeUpdate,
   ExportCampaignCallbacksParams,
+  ExportCampaignIncomingCallsParams,
   ExportCampaignLiveQueueParams,
   GetAdminAgents200,
   GetAdminPromptTemplates200,
@@ -113,6 +116,8 @@ import type {
   GetPublicBookingByTokenParams,
   GetPublicSlotsParams,
   HealthStatus,
+  IncomingCallsPage,
+  IncomingMetrics,
   KnowledgeEntry,
   KnowledgeEntryInput,
   KnowledgeSearchInput,
@@ -144,6 +149,7 @@ import type {
   ListBookingsParams,
   ListCallsParams,
   ListCampaignCallbacksParams,
+  ListCampaignIncomingCallsParams,
   ListCampaignLeads200,
   ListCampaignLeadsParams,
   ListCampaignLiveQueueLeadsParams,
@@ -190,6 +196,8 @@ import type {
   TopupOrder,
   TransferCallBody,
   UpdateCallDispositionBody,
+  UpdateIncomingCallStatus200,
+  UpdateIncomingCallStatusBody,
   UpdateLeadCallbackBody,
   UpdateLeadSourceBody,
   UserPreferences,
@@ -8907,6 +8915,409 @@ export function useExportCampaignCallbacks<TData = Awaited<ReturnType<typeof exp
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getExportCampaignCallbacksQueryOptions(id,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetCampaignIncomingMetricsUrl = (id: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/incoming/metrics`
+}
+
+/**
+ * @summary Incoming call metric counts
+ */
+export const getCampaignIncomingMetrics = async (id: number, options?: RequestInit): Promise<IncomingMetrics> => {
+
+  return customFetch<IncomingMetrics>(getGetCampaignIncomingMetricsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCampaignIncomingMetricsQueryKey = (id: number,) => {
+    return [
+    `/api/campaigns/${id}/incoming/metrics`
+    ] as const;
+    }
+
+
+export const getGetCampaignIncomingMetricsQueryOptions = <TData = Awaited<ReturnType<typeof getCampaignIncomingMetrics>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCampaignIncomingMetrics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCampaignIncomingMetricsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCampaignIncomingMetrics>>> = ({ signal }) => getCampaignIncomingMetrics(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCampaignIncomingMetrics>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCampaignIncomingMetricsQueryResult = NonNullable<Awaited<ReturnType<typeof getCampaignIncomingMetrics>>>
+export type GetCampaignIncomingMetricsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Incoming call metric counts
+ */
+
+export function useGetCampaignIncomingMetrics<TData = Awaited<ReturnType<typeof getCampaignIncomingMetrics>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCampaignIncomingMetrics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCampaignIncomingMetricsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListCampaignIncomingCallsUrl = (id: number,
+    params?: ListCampaignIncomingCallsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/campaigns/${id}/incoming?${stringifiedParams}` : `/api/campaigns/${id}/incoming`
+}
+
+/**
+ * @summary Paginated incoming calls with review status
+ */
+export const listCampaignIncomingCalls = async (id: number,
+    params?: ListCampaignIncomingCallsParams, options?: RequestInit): Promise<IncomingCallsPage> => {
+
+  return customFetch<IncomingCallsPage>(getListCampaignIncomingCallsUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCampaignIncomingCallsQueryKey = (id: number,
+    params?: ListCampaignIncomingCallsParams,) => {
+    return [
+    `/api/campaigns/${id}/incoming`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListCampaignIncomingCallsQueryOptions = <TData = Awaited<ReturnType<typeof listCampaignIncomingCalls>>, TError = ErrorType<void>>(id: number,
+    params?: ListCampaignIncomingCallsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCampaignIncomingCalls>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCampaignIncomingCallsQueryKey(id,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCampaignIncomingCalls>>> = ({ signal }) => listCampaignIncomingCalls(id,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCampaignIncomingCalls>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListCampaignIncomingCallsQueryResult = NonNullable<Awaited<ReturnType<typeof listCampaignIncomingCalls>>>
+export type ListCampaignIncomingCallsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Paginated incoming calls with review status
+ */
+
+export function useListCampaignIncomingCalls<TData = Awaited<ReturnType<typeof listCampaignIncomingCalls>>, TError = ErrorType<void>>(
+ id: number,
+    params?: ListCampaignIncomingCallsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCampaignIncomingCalls>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListCampaignIncomingCallsQueryOptions(id,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getUpdateIncomingCallStatusUrl = (id: number,
+    incomingId: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/incoming/${incomingId}/status`
+}
+
+/**
+ * @summary Update review status of an incoming call
+ */
+export const updateIncomingCallStatus = async (id: number,
+    incomingId: number,
+    updateIncomingCallStatusBody: UpdateIncomingCallStatusBody, options?: RequestInit): Promise<UpdateIncomingCallStatus200> => {
+
+  return customFetch<UpdateIncomingCallStatus200>(getUpdateIncomingCallStatusUrl(id,incomingId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateIncomingCallStatusBody,)
+  }
+);}
+
+
+
+
+export const getUpdateIncomingCallStatusMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateIncomingCallStatus>>, TError,{id: number;incomingId: number;data: BodyType<UpdateIncomingCallStatusBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateIncomingCallStatus>>, TError,{id: number;incomingId: number;data: BodyType<UpdateIncomingCallStatusBody>}, TContext> => {
+
+const mutationKey = ['updateIncomingCallStatus'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateIncomingCallStatus>>, {id: number;incomingId: number;data: BodyType<UpdateIncomingCallStatusBody>}> = (props) => {
+          const {id,incomingId,data} = props ?? {};
+
+          return  updateIncomingCallStatus(id,incomingId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateIncomingCallStatusMutationResult = NonNullable<Awaited<ReturnType<typeof updateIncomingCallStatus>>>
+    export type UpdateIncomingCallStatusMutationBody = BodyType<UpdateIncomingCallStatusBody>
+    export type UpdateIncomingCallStatusMutationError = ErrorType<void>
+
+    /**
+ * @summary Update review status of an incoming call
+ */
+export const useUpdateIncomingCallStatus = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateIncomingCallStatus>>, TError,{id: number;incomingId: number;data: BodyType<UpdateIncomingCallStatusBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateIncomingCallStatus>>,
+        TError,
+        {id: number;incomingId: number;data: BodyType<UpdateIncomingCallStatusBody>},
+        TContext
+      > => {
+      return useMutation(getUpdateIncomingCallStatusMutationOptions(options));
+    }
+
+export const getCreateCallbackFromIncomingUrl = (id: number,
+    incomingId: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/incoming/${incomingId}/create-callback`
+}
+
+/**
+ * @summary Create a callback from an incoming call record
+ */
+export const createCallbackFromIncoming = async (id: number,
+    incomingId: number,
+    createCallbackFromIncomingBody?: CreateCallbackFromIncomingBody, options?: RequestInit): Promise<CreateCallbackFromIncoming200> => {
+
+  return customFetch<CreateCallbackFromIncoming200>(getCreateCallbackFromIncomingUrl(id,incomingId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createCallbackFromIncomingBody,)
+  }
+);}
+
+
+
+
+export const getCreateCallbackFromIncomingMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCallbackFromIncoming>>, TError,{id: number;incomingId: number;data?: BodyType<CreateCallbackFromIncomingBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createCallbackFromIncoming>>, TError,{id: number;incomingId: number;data?: BodyType<CreateCallbackFromIncomingBody>}, TContext> => {
+
+const mutationKey = ['createCallbackFromIncoming'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createCallbackFromIncoming>>, {id: number;incomingId: number;data?: BodyType<CreateCallbackFromIncomingBody>}> = (props) => {
+          const {id,incomingId,data} = props ?? {};
+
+          return  createCallbackFromIncoming(id,incomingId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateCallbackFromIncomingMutationResult = NonNullable<Awaited<ReturnType<typeof createCallbackFromIncoming>>>
+    export type CreateCallbackFromIncomingMutationBody = BodyType<CreateCallbackFromIncomingBody> | undefined
+    export type CreateCallbackFromIncomingMutationError = ErrorType<void>
+
+    /**
+ * @summary Create a callback from an incoming call record
+ */
+export const useCreateCallbackFromIncoming = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCallbackFromIncoming>>, TError,{id: number;incomingId: number;data?: BodyType<CreateCallbackFromIncomingBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createCallbackFromIncoming>>,
+        TError,
+        {id: number;incomingId: number;data?: BodyType<CreateCallbackFromIncomingBody>},
+        TContext
+      > => {
+      return useMutation(getCreateCallbackFromIncomingMutationOptions(options));
+    }
+
+export const getExportCampaignIncomingCallsUrl = (id: number,
+    params?: ExportCampaignIncomingCallsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/campaigns/${id}/incoming/export?${stringifiedParams}` : `/api/campaigns/${id}/incoming/export`
+}
+
+/**
+ * @summary Export incoming calls as CSV
+ */
+export const exportCampaignIncomingCalls = async (id: number,
+    params?: ExportCampaignIncomingCallsParams, options?: RequestInit): Promise<string> => {
+
+  return customFetch<string>(getExportCampaignIncomingCallsUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportCampaignIncomingCallsQueryKey = (id: number,
+    params?: ExportCampaignIncomingCallsParams,) => {
+    return [
+    `/api/campaigns/${id}/incoming/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getExportCampaignIncomingCallsQueryOptions = <TData = Awaited<ReturnType<typeof exportCampaignIncomingCalls>>, TError = ErrorType<void>>(id: number,
+    params?: ExportCampaignIncomingCallsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportCampaignIncomingCalls>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportCampaignIncomingCallsQueryKey(id,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportCampaignIncomingCalls>>> = ({ signal }) => exportCampaignIncomingCalls(id,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportCampaignIncomingCalls>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportCampaignIncomingCallsQueryResult = NonNullable<Awaited<ReturnType<typeof exportCampaignIncomingCalls>>>
+export type ExportCampaignIncomingCallsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Export incoming calls as CSV
+ */
+
+export function useExportCampaignIncomingCalls<TData = Awaited<ReturnType<typeof exportCampaignIncomingCalls>>, TError = ErrorType<void>>(
+ id: number,
+    params?: ExportCampaignIncomingCallsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportCampaignIncomingCalls>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportCampaignIncomingCallsQueryOptions(id,params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
