@@ -86,6 +86,10 @@ export class OrchestrationPipeline {
   // Require N consecutive speech frames before triggering barge-in to avoid
   // ambient noise / single-word false positives stopping the agent mid-sentence.
   private bargeInSpeechFrames = 0;
+  // Running word count accumulated across streaming STT callbacks for the
+  // current user turn. Reset at the start of each new agent turn so it does
+  // not bleed across turns.
+  private streamingBargeInWordCount = 0;
   // Echo grace period: timestamp (ms) until which barge-in is suppressed after
   // playback starts.  Vobiz / Twilio route a small amount of our own TTS audio
   // back to us as "caller audio" (sidetone / echo).  Without this hold, the
@@ -252,10 +256,28 @@ export class OrchestrationPipeline {
    * Handles barge-in detection and queuing if a turn is already in progress.
    */
   private async handleStreamingTranscript(transcript: string): Promise<void> {
-    if (this.isPlaying) {
-      this.bargeInRequested = true;
-      this.bargeInCallback?.();
-      logger.info({ callId: this.config.callId }, "Barge-in detected (streaming STT)");
+    if (this.isPlaying && !this.bargeInRequested) {
+      // Accumulate word count across streaming callbacks for this user turn and
+      // only fire barge-in once the wordsForInterruption threshold is reached,
+      // matching the behaviour of the energy-based path in batch STT mode.
+      const wordCount = transcript.trim().split(/\s+/).filter(Boolean).length;
+      this.streamingBargeInWordCount += wordCount;
+      const threshold = this.agent.wordsForInterruption ?? 2;
+      if (this.streamingBargeInWordCount >= threshold) {
+        this.bargeInRequested = true;
+        this.bargeInCallback?.();
+        logger.info(
+          { callId: this.config.callId, words: this.streamingBargeInWordCount, threshold },
+          "Barge-in detected (streaming STT)",
+        );
+      }
+    } else if (!this.isPlaying) {
+      // Agent is not currently playing — keep the accumulator at zero so the
+      // next agent speaking turn always begins with a clean slate.  This is the
+      // true agent-turn boundary: barge-in detection only makes sense while the
+      // agent is speaking, and the very first callback that arrives while
+      // isPlaying=true will therefore always start from 0.
+      this.streamingBargeInWordCount = 0;
     }
 
     if (this.isProcessing) {
@@ -879,6 +901,11 @@ export class OrchestrationPipeline {
   private async processTurn(transcript: string, sttLatencyMs: number): Promise<void> {
     this.bargeInRequested = false;
     this.bargeInSpeechFrames = 0;
+    // Reset the streaming word counter at this deterministic agent-turn
+    // boundary so the accumulator never carries stale state into the new turn.
+    // A second reset also happens in handleStreamingTranscript whenever a
+    // transcript arrives while the agent is not playing (belt-and-suspenders).
+    this.streamingBargeInWordCount = 0;
     this.firstAudioSentAt = null;
 
     logger.info({ callId: this.config.callId, transcript, sttLatencyMs }, "Processing turn");
