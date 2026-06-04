@@ -1,7 +1,7 @@
 /**
  * Caller gender detector — "Gender Detection ML Model" provider.
  *
- * Buffers the first 4 seconds of caller audio (64 000 bytes @ 8 kHz PCM16),
+ * Buffers the first 2 seconds of caller audio (32 000 bytes @ 8 kHz PCM16),
  * then POSTs a WAV to the voice-analysis microservice's autocorrelation
  * endpoint (/voice-analysis/gender-ml) and resolves with the detected gender.
  *
@@ -18,9 +18,9 @@ const CHANNELS     = 1;
 const SAMPLE_BYTES = BITS / 8;
 
 /**
- * 4 seconds of 8 kHz 16-bit mono PCM = 64 000 bytes.
+ * 2 seconds of 8 kHz 16-bit mono PCM = 32 000 bytes.
  */
-const TARGET_BYTES = 4 * SAMPLE_RATE * SAMPLE_BYTES;
+const TARGET_BYTES = 2 * SAMPLE_RATE * SAMPLE_BYTES;
 
 const GENDER_ML_SERVICE_URL = "http://localhost:5000/voice-analysis/gender-ml";
 
@@ -69,7 +69,7 @@ export class GenderDetectorML {
 
   /**
    * Feed a chunk of caller audio (PCM 8 kHz 16-bit LE mono).
-   * Once 4 seconds (TARGET_BYTES) have accumulated, fires async detection.
+   * Once 2 seconds (TARGET_BYTES) have accumulated, fires async detection.
    * Subsequent calls are no-ops.
    */
   addSpeechChunk(pcm8k: Buffer): void {
