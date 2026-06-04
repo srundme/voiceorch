@@ -9,6 +9,8 @@ import {
   bookingsTable,
 } from "@workspace/db";
 import { eq, and, lt, gt, or, sql } from "drizzle-orm";
+import { fetchGcalBusyPeriods, type BusyPeriod } from "./google-calendar.js";
+import { logger } from "../../lib/logger.js";
 
 export interface TimeSlot {
   slotStart: Date;
@@ -72,6 +74,21 @@ export async function getAvailableSlots(
 
   const overrideMap = new Map<string, (typeof overrides)[0]>();
   for (const ov of overrides) overrideMap.set(ov.date, ov);
+
+  // Fetch Google Calendar busy periods for the full range (one API call total).
+  // If no Google connection is linked, gcalBusy will be an empty array.
+  let gcalBusy: BusyPeriod[] = [];
+  if (calendar.googleCalendarConnectionId) {
+    gcalBusy = await fetchGcalBusyPeriods(
+      calendar.googleCalendarConnectionId,
+      rangeStartUTC,
+      rangeEndUTC,
+    );
+    logger.info(
+      { calendarId: calendar.id, connectionId: calendar.googleCalendarConnectionId, busyCount: gcalBusy.length },
+      "slot-engine: fetched GCal busy periods",
+    );
+  }
 
   // Fetch all active bookings that OVERLAP with the range (open-interval check).
   // This catches bookings whose slotStart is before rangeEnd AND slotEnd is after rangeStart,
@@ -168,7 +185,11 @@ export async function getAvailableSlots(
         // - All buffer-window conflicts are exact-slot overlaps within capacity
         const withinCapacity = exactConflicts < eventType.maxBookingsPerSlot;
         const noBufferViolation = bufferConflicts === exactConflicts; // all conflicts are within the exact slot (same slot, multi-capacity)
-        if (withinCapacity && noBufferViolation) {
+
+        // Reject the slot if it overlaps any Google Calendar busy window.
+        const gcalConflict = gcalBusy.some((b) => isOverlapping(slotStart, slotEnd, b.start, b.end));
+
+        if (withinCapacity && noBufferViolation && !gcalConflict) {
           slots.push({ slotStart, slotEnd });
         }
 

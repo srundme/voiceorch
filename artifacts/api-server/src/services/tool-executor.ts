@@ -484,7 +484,7 @@ export async function executeNativeCheckAvailability(
 
     const tz = (args["timezone"] != null ? String(args["timezone"]) : null) ?? tool.timezone ?? (calendar.timezone || "Asia/Kolkata");
     const preview = slots
-      .slice(0, 5)
+      .slice(0, 15)
       .map((s) => {
         const iso = formatInTimeZone(s.slotStart, tz, "yyyy-MM-dd'T'HH:mm:ssxxx");
         const label = formatInTimeZone(s.slotStart, tz, "EEE MMM d 'at' h:mm a") + " " + tz.replace("Asia/Kolkata", "IST");

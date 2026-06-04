@@ -585,6 +585,63 @@ export async function updateCalendarEvent(params: {
   }
 }
 
+// ── Free/Busy query ──────────────────────────────────────────────────────────
+
+export interface BusyPeriod {
+  start: Date;
+  end: Date;
+}
+
+/**
+ * Fetch busy time periods from the Google Calendar free/busy API for a given
+ * connection. Returns an array of `{ start, end }` windows during which the
+ * calendar is occupied. Gracefully returns an empty array on any API failure
+ * so availability degrades to schedule-only rather than crashing.
+ *
+ * @param connectionId  - The `google_calendar_connections.id` to use.
+ * @param startTime     - Range start (UTC).
+ * @param endTime       - Range end (UTC).
+ * @param googleCalendarId - Specific sub-calendar ID to query (defaults to "primary").
+ */
+export async function fetchGcalBusyPeriods(
+  connectionId: string,
+  startTime: Date,
+  endTime: Date,
+  googleCalendarId = "primary",
+): Promise<BusyPeriod[]> {
+  const tokens = await getValidAccessToken(connectionId);
+  if (!tokens) {
+    logger.warn({ connectionId }, "fetchGcalBusyPeriods: no valid token, returning empty");
+    return [];
+  }
+
+  const client = makePlatformOAuth2Client();
+  client.setCredentials({ access_token: tokens.accessToken });
+  const calendar = google.calendar({ version: "v3", auth: client });
+
+  try {
+    const res = await calendar.freebusy.query({
+      requestBody: {
+        timeMin: startTime.toISOString(),
+        timeMax: endTime.toISOString(),
+        items: [{ id: googleCalendarId }],
+      },
+    });
+
+    const busy = res.data.calendars?.[googleCalendarId]?.busy ?? [];
+    return busy
+      .filter((p) => p.start && p.end)
+      .map((p) => ({ start: new Date(p.start!), end: new Date(p.end!) }));
+  } catch (err) {
+    const info = classifyGcalError(err);
+    logger.warn(
+      { connectionId, calendarId: googleCalendarId, code: info.code, reason: info.reason, message: info.message },
+      "fetchGcalBusyPeriods: freebusy query failed, returning empty",
+    );
+    return [];
+  }
+}
+
 // ── Legacy helpers (keep for backward compat during migration) ──────────────
 
 /** Returns the first connection for a user, or null. Used as fallback. */
