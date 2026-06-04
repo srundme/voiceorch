@@ -213,10 +213,11 @@ export async function updateCallerProfile(opts: {
 
   let extracted: { name?: string | null; summary?: string | null } = {};
   try {
-    // Strip markdown code fences that some LLMs wrap JSON in
+    // Strip think blocks and markdown code fences that some LLMs wrap JSON in
     const jsonStr = raw
-      .replace(/^```(?:json)?\s*/im, "")
-      .replace(/\s*```\s*$/im, "")
+      .replace(/<think>[\s\S]*?<\/think>/g, "")
+      .replace(/```(?:json)?\s*/g, "")
+      .replace(/\s*```\s*/g, "")
       .trim();
     extracted = JSON.parse(jsonStr) as typeof extracted;
   } catch {
