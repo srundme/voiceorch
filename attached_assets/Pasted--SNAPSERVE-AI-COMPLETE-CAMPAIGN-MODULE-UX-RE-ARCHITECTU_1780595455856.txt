@@ -1,0 +1,974 @@
+# SNAPSERVE AI - COMPLETE CAMPAIGN MODULE UX RE-ARCHITECTURE
+
+The current implementation is feature-rich but fundamentally organized around database entities instead of user workflows.
+
+The current experience feels like:
+
+* Campaign Management Software
+* Admin Dashboard
+* CRM Configuration Tool
+
+But SnapServe should feel like:
+
+* AI Outbound Operations Platform
+* AI Call Center Command Center
+* AI Lead Processing System
+* AI Revenue Operations Workspace
+
+Users should not feel like they are managing campaigns.
+
+Users should feel like they are managing conversations, leads, callbacks, bookings, transfers, and outcomes.
+
+The entire Campaign module must be redesigned around operational workflows.
+
+---
+
+# CORE PRODUCT PHILOSOPHY
+
+Current Mental Model:
+
+Campaign
+→ Batch
+→ Lead
+
+Wrong.
+
+Actual User Mental Model:
+
+Lead Arrives
+→ AI Calls
+→ Outcome Generated
+→ Action Required
+
+The entire interface should revolve around this flow.
+
+Campaigns are configuration containers.
+
+Batches are execution containers.
+
+Leads and interactions are the actual product.
+
+---
+
+# SIDEBAR RESTRUCTURE
+
+Current:
+
+Campaigns
+
+Proposed:
+
+Campaign Operations
+├── Command Center
+├── Campaigns
+├── Queues
+├── Callbacks
+├── Incoming Calls
+├── Bookings
+├── Transfers
+├── Lead CRM
+├── Analytics
+├── DNC Management
+
+Users should be able to access operational areas directly without navigating through Campaigns first.
+
+---
+
+# COMMAND CENTER (NEW PRIMARY PAGE)
+
+Route:
+
+/campaigns/command-center
+
+This becomes the landing page.
+
+Not the campaign list.
+
+The command center should behave like a modern AI call center dashboard.
+
+Purpose:
+
+Allow operations teams to monitor everything happening in real time.
+
+---
+
+# TOP KPI BAR
+
+Show:
+
+Live Calls
+Queued Leads
+Pending Callbacks
+Incoming Calls
+Bookings Today
+Transfers Today
+No Pickup Leads
+Failed Calls
+Connected Leads
+Interested Leads
+
+Each KPI card clickable.
+
+Clicking opens filtered queue view.
+
+Example:
+
+Bookings Today = 18
+
+Click
+
+Automatically opens Booking Queue.
+
+---
+
+# LIVE OPERATIONS FEED
+
+This should occupy most of the screen.
+
+Display:
+
+Lead Name
+
+Phone
+
+Campaign
+
+Batch
+
+Agent
+
+Status
+
+Disposition
+
+Duration
+
+Last Activity
+
+Action
+
+Statuses:
+
+Calling
+
+Connected
+
+Completed
+
+Booked
+
+Transferred
+
+Callback Requested
+
+Incoming Call
+
+Retry Scheduled
+
+No Pickup
+
+Failed
+
+This feed updates in real time.
+
+This is the heart of the platform.
+
+---
+
+# QUEUE MANAGEMENT MODULE
+
+New module.
+
+Purpose:
+
+Manage operational queues.
+
+Tabs:
+
+All
+
+Calling
+
+Callbacks
+
+Incoming
+
+Transfers
+
+Bookings
+
+No Pickup
+
+Failed
+
+DNC Blocked
+
+Every queue should support:
+
+Search
+
+Filters
+
+Bulk Actions
+
+Exports
+
+Assignment
+
+---
+
+# CAMPAIGNS MODULE
+
+Campaigns should become lightweight containers.
+
+Campaign creation should only ask:
+
+Campaign Name
+
+Description
+
+Agent
+
+Phone Number
+
+Concurrency
+
+Nothing else.
+
+No CSV.
+
+No Field Mapping.
+
+No Retry Logic.
+
+No Schedule.
+
+No Delay Settings.
+
+No Batch Settings.
+
+Campaign creation should take less than 30 seconds.
+
+---
+
+# CAMPAIGN DETAIL PAGE
+
+Tabs:
+
+Overview
+
+Live Queue
+
+Batches
+
+Leads
+
+Analytics
+
+Settings
+
+---
+
+# OVERVIEW TAB
+
+Show:
+
+Campaign Name
+
+Agent
+
+Outbound Number
+
+Status
+
+Total Leads
+
+Connected
+
+Interested
+
+Booked
+
+Transferred
+
+Callbacks
+
+Incoming Calls
+
+No Pickup
+
+Failed
+
+Recent Activity
+
+Recent Bookings
+
+Recent Transfers
+
+Recent Incoming Calls
+
+---
+
+# LIVE QUEUE TAB
+
+This should display active operational activity.
+
+Columns:
+
+Lead
+
+Phone
+
+Status
+
+Disposition
+
+Attempts
+
+Duration
+
+Callback Time
+
+Next Retry
+
+Assigned Agent
+
+Campaign
+
+Batch
+
+Action
+
+Filters:
+
+All
+
+Calling
+
+Connected
+
+Callbacks
+
+Transfers
+
+Bookings
+
+No Pickup
+
+Failed
+
+---
+
+# BATCH MANAGEMENT
+
+Batches are execution units.
+
+Campaigns can have unlimited batches.
+
+Examples:
+
+Insurance Renewal Campaign
+
+Batch 1 → Meta Form A
+
+Batch 2 → Meta Form B
+
+Batch 3 → CSV Upload
+
+Batch 4 → Website Leads
+
+Each batch should be independent.
+
+---
+
+# BATCH CREATION WIZARD
+
+Step 1
+
+Batch Information
+
+Batch Name
+
+Description
+
+---
+
+Step 2
+
+Select Source
+
+Meta Lead Form
+
+CSV Upload
+
+Webhook Source
+
+Future Sources Placeholder
+
+Google Forms
+
+HubSpot
+
+Salesforce
+
+Zoho
+
+API
+
+---
+
+# META FLOW
+
+Select:
+
+Business Account
+
+Ad Account
+
+Campaign
+
+Ad Set
+
+Lead Form
+
+System automatically reads form structure.
+
+Automatically creates variables.
+
+Display:
+
+Detected Variables
+
+{{name}}
+
+{{phone}}
+
+{{email}}
+
+{{company}}
+
+{{city}}
+
+No manual mapping.
+
+---
+
+# CSV FLOW
+
+Upload CSV.
+
+System reads headers.
+
+Shows:
+
+Detected Columns
+
+Auto Mapping
+
+Validation Results
+
+Duplicate Detection
+
+Template Generator
+
+Errors
+
+Preview Rows
+
+Only ask user for manual mapping if confidence is low.
+
+---
+
+# BATCH SETTINGS
+
+All execution settings belong here.
+
+Retry Attempts
+
+Retry Interval
+
+Call Delay
+
+Business Hours
+
+Timezone
+
+Max Daily Calls
+
+Scheduling Window
+
+Start Date
+
+Start Time
+
+End Date
+
+End Time
+
+Auto Start
+
+Auto Pause
+
+Auto Stop
+
+---
+
+# BATCH DETAIL PAGE
+
+This page currently does not exist properly.
+
+This page should become a complete operational workspace.
+
+Header:
+
+Batch Name
+
+Status
+
+Source
+
+Created Date
+
+Leads
+
+Connected
+
+Success Rate
+
+---
+
+# BATCH DASHBOARD
+
+Cards:
+
+Queued
+
+Calling
+
+Connected
+
+No Pickup
+
+Callbacks
+
+Incoming Calls
+
+Booked
+
+Transferred
+
+Failed
+
+---
+
+# BATCH LEAD TABLE
+
+Columns:
+
+Lead Name
+
+Phone
+
+Status
+
+Disposition
+
+Attempts
+
+Duration
+
+Next Retry
+
+Callback Time
+
+Last Activity
+
+Action
+
+---
+
+# LEAD CRM EXPERIENCE
+
+The lead profile should feel like Salesforce meets Gong meets a Call Center CRM.
+
+Header:
+
+Lead Name
+
+Phone
+
+Email
+
+Campaign
+
+Batch
+
+Current Status
+
+Current Disposition
+
+Lead Source
+
+Assigned Owner
+
+Tags
+
+---
+
+# CENTER PANEL
+
+AI Summary
+
+Transcript
+
+Recording
+
+Conversation Intelligence
+
+Sentiment
+
+Detected Intent
+
+Key Topics
+
+Custom Agent Fields
+
+---
+
+# RIGHT SIDEBAR
+
+Callbacks
+
+Bookings
+
+Transfers
+
+Notes
+
+Tasks
+
+Timeline
+
+---
+
+# LEAD TIMELINE
+
+Every event should appear.
+
+Examples:
+
+Lead Imported
+
+Call Started
+
+Call Connected
+
+Call Ended
+
+Disposition Set
+
+Retry Scheduled
+
+Retry Executed
+
+Incoming Call
+
+Transfer Triggered
+
+Transfer Completed
+
+Booking Created
+
+Booking Completed
+
+Manual Update
+
+Note Added
+
+DNC Added
+
+---
+
+# DISPOSITION WORKSPACE
+
+Current analytics only shows counts.
+
+Need dedicated workspace.
+
+Sidebar:
+
+Interested
+
+Not Interested
+
+Follow Up
+
+Booked
+
+Transferred
+
+Custom Dispositions
+
+Clicking disposition opens filtered lead list.
+
+Users should be able to work directly from dispositions.
+
+---
+
+# CALLBACK MANAGEMENT MODULE
+
+Dedicated module.
+
+Not hidden inside lead profile.
+
+Columns:
+
+Lead
+
+Phone
+
+Callback Time
+
+Campaign
+
+Batch
+
+Reason
+
+Status
+
+Action
+
+Bulk actions supported.
+
+---
+
+# INCOMING CALL MODULE
+
+Dedicated module.
+
+Purpose:
+
+Track leads calling back.
+
+Columns:
+
+Lead
+
+Phone
+
+Campaign
+
+Batch
+
+Duration
+
+Disposition
+
+Recording
+
+Summary
+
+Action
+
+---
+
+# BOOKINGS MODULE
+
+Dedicated module.
+
+Columns:
+
+Lead
+
+Meeting Time
+
+Meeting Link
+
+Campaign
+
+Batch
+
+Status
+
+Booked By
+
+Action
+
+---
+
+# TRANSFER MODULE
+
+Dedicated module.
+
+Columns:
+
+Lead
+
+Transferred To
+
+Transfer Time
+
+Outcome
+
+Duration
+
+Action
+
+---
+
+# ANALYTICS REBUILD
+
+Current analytics are insufficient.
+
+Need:
+
+Campaign Analytics
+
+Batch Analytics
+
+Lead Analytics
+
+Disposition Analytics
+
+Agent Analytics
+
+Source Analytics
+
+---
+
+# FUNNEL ANALYTICS
+
+Lead Imported
+
+↓
+
+Called
+
+↓
+
+Connected
+
+↓
+
+Interested
+
+↓
+
+Booked
+
+↓
+
+Transferred
+
+↓
+
+Closed
+
+Interactive funnel.
+
+---
+
+# DISPOSITION ANALYTICS
+
+Interested
+
+Not Interested
+
+Booked
+
+Transferred
+
+Follow Up
+
+Custom Outcomes
+
+All dynamically generated.
+
+---
+
+# SOURCE ANALYTICS
+
+Meta Form A
+
+Meta Form B
+
+CSV
+
+Website
+
+Webhook
+
+Compare performance.
+
+---
+
+# AGENT ANALYTICS
+
+Agent Performance
+
+Connection Rate
+
+Booking Rate
+
+Transfer Rate
+
+Average Duration
+
+Callback Success
+
+Disposition Distribution
+
+---
+
+# DNC MANAGEMENT
+
+Dedicated module.
+
+Add Number
+
+Import Numbers
+
+Remove Numbers
+
+Reason
+
+Date Added
+
+Source
+
+Every outbound call must validate against DNC before dialing.
+
+---
+
+# FINAL DESIGN PRINCIPLE
+
+The product should feel like:
+
+A modern AI-powered outbound call center operating system.
+
+It should NOT feel like:
+
+A campaign CRUD dashboard.
+
+Users should spend most of their time in:
+
+Command Center
+
+Queues
+
+Callbacks
+
+Incoming Calls
+
+Bookings
+
+Transfers
+
+Lead CRM
+
+Analytics
+
+Campaigns should simply be background containers that organize activity.
+
+This is the product architecture direction the entire Campaign module should follow.
