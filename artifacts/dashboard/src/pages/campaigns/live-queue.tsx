@@ -49,6 +49,7 @@ type LiveQueueLead = {
   callbackAt: string | null;
   responseDueBy: string | null;
   slaStatus: string | null;
+  queueReason: string | null;
   createdAt: string;
 };
 
@@ -665,6 +666,9 @@ export default function LiveQueueTab({ campaignId }: { campaignId: number }) {
                         )}>
                           {sc?.label ?? lead.callStatus}
                         </span>
+                        {lead.queueReason && (
+                          <p className="text-[9px] text-muted-foreground/50 mt-0.5 max-w-[110px] truncate">{lead.queueReason}</p>
+                        )}
                       </td>
                       <td className="px-3 py-2.5 hidden md:table-cell">
                         <span className={cn(

@@ -2929,6 +2929,7 @@ export interface LiveQueueLead {
   callbackAt?: string | null;
   responseDueBy?: string | null;
   slaStatus?: string | null;
+  queueReason?: string | null;
   createdAt: string;
 }
 
@@ -3008,6 +3009,59 @@ export interface LiveQueueLeadDrawer {
   pendingRetry?: LiveQueueLeadDrawerPendingRetry;
   pendingCallback?: LiveQueueLeadDrawerPendingCallback;
   timelinePreview: LiveQueueLeadDrawerTimelinePreviewItem[];
+}
+
+export interface CallbackMetrics {
+  pending: number;
+  overdue: number;
+  dueNow: number;
+  dueToday: number;
+  completed: number;
+}
+
+export interface CallbackLeadInfo {
+  name?: string | null;
+  phone: string;
+  callAttempts: number;
+  disposition?: string | null;
+  callStatus: string;
+}
+
+export interface CallbackItem {
+  id: number;
+  leadId: number;
+  callbackAt?: string | null;
+  responseDueBy?: string | null;
+  slaStatus?: string | null;
+  reason?: string | null;
+  status: string;
+  createdAt: string;
+  lead: CallbackLeadInfo;
+}
+
+export interface CallbacksPage {
+  items: CallbackItem[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export type CallbackBulkActionRequestAction = typeof CallbackBulkActionRequestAction[keyof typeof CallbackBulkActionRequestAction];
+
+
+export const CallbackBulkActionRequestAction = {
+  complete: 'complete',
+  reschedule: 'reschedule',
+} as const;
+
+export interface CallbackBulkActionRequest {
+  action: CallbackBulkActionRequestAction;
+  callbackIds: number[];
+  callbackAt?: string;
+}
+
+export interface CallbackRescheduleRequest {
+  callbackAt: string;
 }
 
 /**
@@ -3164,6 +3218,32 @@ limit?: number;
 export type ExportCampaignLiveQueueParams = {
 tab?: string;
 search?: string;
+};
+
+export type ListCampaignCallbacksParams = {
+status?: string;
+search?: string;
+page?: number;
+limit?: number;
+};
+
+export type BulkActionCampaignCallbacks200 = {
+  action?: string;
+  affected?: number;
+};
+
+export type CompleteCampaignCallback200 = {
+  id?: number;
+  status?: string;
+};
+
+export type RescheduleCampaignCallback200 = {
+  id?: number;
+  callbackAt?: string;
+};
+
+export type ExportCampaignCallbacksParams = {
+status?: string;
 };
 
 export type NormalizePhoneBody = {

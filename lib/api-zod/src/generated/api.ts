@@ -2746,6 +2746,7 @@ export const ListCampaignLiveQueueLeadsResponse = zod.object({
   "callbackAt": zod.coerce.date().nullish(),
   "responseDueBy": zod.coerce.date().nullish(),
   "slaStatus": zod.string().nullish(),
+  "queueReason": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })),
   "total": zod.number(),
@@ -2782,6 +2783,123 @@ export const ExportCampaignLiveQueueParams = zod.object({
 export const ExportCampaignLiveQueueQueryParams = zod.object({
   "tab": zod.coerce.string().optional(),
   "search": zod.coerce.string().optional()
+})
+
+
+/**
+ * @summary Callback queue metric counts
+ */
+export const GetCampaignCallbackMetricsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetCampaignCallbackMetricsResponse = zod.object({
+  "pending": zod.number(),
+  "overdue": zod.number(),
+  "dueNow": zod.number(),
+  "dueToday": zod.number(),
+  "completed": zod.number()
+})
+
+
+/**
+ * @summary Paginated callback list with SLA information
+ */
+export const ListCampaignCallbacksParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListCampaignCallbacksQueryParams = zod.object({
+  "status": zod.coerce.string().optional(),
+  "search": zod.coerce.string().optional(),
+  "page": zod.coerce.number().optional(),
+  "limit": zod.coerce.number().optional()
+})
+
+export const ListCampaignCallbacksResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "leadId": zod.number(),
+  "callbackAt": zod.coerce.date().nullish(),
+  "responseDueBy": zod.coerce.date().nullish(),
+  "slaStatus": zod.string().nullish(),
+  "reason": zod.string().nullish(),
+  "status": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "lead": zod.object({
+  "name": zod.string().nullish(),
+  "phone": zod.string(),
+  "callAttempts": zod.number(),
+  "disposition": zod.string().nullish(),
+  "callStatus": zod.string()
+})
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "limit": zod.number()
+})
+
+
+/**
+ * @summary Bulk complete or reschedule callbacks
+ */
+export const BulkActionCampaignCallbacksParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const BulkActionCampaignCallbacksBody = zod.object({
+  "action": zod.enum(['complete', 'reschedule']),
+  "callbackIds": zod.array(zod.number()),
+  "callbackAt": zod.coerce.date().optional()
+})
+
+export const BulkActionCampaignCallbacksResponse = zod.object({
+  "action": zod.string().optional(),
+  "affected": zod.number().optional()
+})
+
+
+/**
+ * @summary Mark a single callback as completed
+ */
+export const CompleteCampaignCallbackParams = zod.object({
+  "id": zod.coerce.number(),
+  "callbackId": zod.coerce.number()
+})
+
+export const CompleteCampaignCallbackResponse = zod.object({
+  "id": zod.number().optional(),
+  "status": zod.string().optional()
+})
+
+
+/**
+ * @summary Reschedule a callback to a new time
+ */
+export const RescheduleCampaignCallbackParams = zod.object({
+  "id": zod.coerce.number(),
+  "callbackId": zod.coerce.number()
+})
+
+export const RescheduleCampaignCallbackBody = zod.object({
+  "callbackAt": zod.coerce.date()
+})
+
+export const RescheduleCampaignCallbackResponse = zod.object({
+  "id": zod.number().optional(),
+  "callbackAt": zod.coerce.date().optional()
+})
+
+
+/**
+ * @summary Export callbacks as CSV
+ */
+export const ExportCampaignCallbacksParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ExportCampaignCallbacksQueryParams = zod.object({
+  "status": zod.coerce.string().optional()
 })
 
 

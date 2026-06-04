@@ -71,11 +71,16 @@ import type {
   Booking,
   BookingInput,
   BookingUpdate,
+  BulkActionCampaignCallbacks200,
   Call,
   CallEndPayload,
   CallInput,
   CallStatusCount,
   CallUpdate,
+  CallbackBulkActionRequest,
+  CallbackMetrics,
+  CallbackRescheduleRequest,
+  CallbacksPage,
   Campaign,
   CampaignAnalytics,
   CampaignBatch,
@@ -86,6 +91,7 @@ import type {
   CampaignLeadProfile,
   CampaignUpdate,
   CommandCenterKpis,
+  CompleteCampaignCallback200,
   CreateAmbientSoundBody,
   CsvImportBody,
   CsvImportResult,
@@ -95,6 +101,7 @@ import type {
   EventType,
   EventTypeInput,
   EventTypeUpdate,
+  ExportCampaignCallbacksParams,
   ExportCampaignLiveQueueParams,
   GetAdminAgents200,
   GetAdminPromptTemplates200,
@@ -136,6 +143,7 @@ import type {
   ListBatchLeadsParams,
   ListBookingsParams,
   ListCallsParams,
+  ListCampaignCallbacksParams,
   ListCampaignLeads200,
   ListCampaignLeadsParams,
   ListCampaignLiveQueueLeadsParams,
@@ -171,6 +179,7 @@ import type {
   PurchasePhoneNumberInput,
   RedialBatchNoPickup200,
   RedialCampaignNoPickup200,
+  RescheduleCampaignCallback200,
   SchedulingCalendar,
   SchedulingCalendarInput,
   SchedulingCalendarUpdate,
@@ -8425,6 +8434,479 @@ export function useExportCampaignLiveQueue<TData = Awaited<ReturnType<typeof exp
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getExportCampaignLiveQueueQueryOptions(id,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetCampaignCallbackMetricsUrl = (id: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/callbacks/metrics`
+}
+
+/**
+ * @summary Callback queue metric counts
+ */
+export const getCampaignCallbackMetrics = async (id: number, options?: RequestInit): Promise<CallbackMetrics> => {
+
+  return customFetch<CallbackMetrics>(getGetCampaignCallbackMetricsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCampaignCallbackMetricsQueryKey = (id: number,) => {
+    return [
+    `/api/campaigns/${id}/callbacks/metrics`
+    ] as const;
+    }
+
+
+export const getGetCampaignCallbackMetricsQueryOptions = <TData = Awaited<ReturnType<typeof getCampaignCallbackMetrics>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCampaignCallbackMetrics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCampaignCallbackMetricsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCampaignCallbackMetrics>>> = ({ signal }) => getCampaignCallbackMetrics(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCampaignCallbackMetrics>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCampaignCallbackMetricsQueryResult = NonNullable<Awaited<ReturnType<typeof getCampaignCallbackMetrics>>>
+export type GetCampaignCallbackMetricsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Callback queue metric counts
+ */
+
+export function useGetCampaignCallbackMetrics<TData = Awaited<ReturnType<typeof getCampaignCallbackMetrics>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCampaignCallbackMetrics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCampaignCallbackMetricsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListCampaignCallbacksUrl = (id: number,
+    params?: ListCampaignCallbacksParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/campaigns/${id}/callbacks?${stringifiedParams}` : `/api/campaigns/${id}/callbacks`
+}
+
+/**
+ * @summary Paginated callback list with SLA information
+ */
+export const listCampaignCallbacks = async (id: number,
+    params?: ListCampaignCallbacksParams, options?: RequestInit): Promise<CallbacksPage> => {
+
+  return customFetch<CallbacksPage>(getListCampaignCallbacksUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCampaignCallbacksQueryKey = (id: number,
+    params?: ListCampaignCallbacksParams,) => {
+    return [
+    `/api/campaigns/${id}/callbacks`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListCampaignCallbacksQueryOptions = <TData = Awaited<ReturnType<typeof listCampaignCallbacks>>, TError = ErrorType<void>>(id: number,
+    params?: ListCampaignCallbacksParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCampaignCallbacks>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCampaignCallbacksQueryKey(id,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCampaignCallbacks>>> = ({ signal }) => listCampaignCallbacks(id,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCampaignCallbacks>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListCampaignCallbacksQueryResult = NonNullable<Awaited<ReturnType<typeof listCampaignCallbacks>>>
+export type ListCampaignCallbacksQueryError = ErrorType<void>
+
+
+/**
+ * @summary Paginated callback list with SLA information
+ */
+
+export function useListCampaignCallbacks<TData = Awaited<ReturnType<typeof listCampaignCallbacks>>, TError = ErrorType<void>>(
+ id: number,
+    params?: ListCampaignCallbacksParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCampaignCallbacks>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListCampaignCallbacksQueryOptions(id,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getBulkActionCampaignCallbacksUrl = (id: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/callbacks/bulk-action`
+}
+
+/**
+ * @summary Bulk complete or reschedule callbacks
+ */
+export const bulkActionCampaignCallbacks = async (id: number,
+    callbackBulkActionRequest: CallbackBulkActionRequest, options?: RequestInit): Promise<BulkActionCampaignCallbacks200> => {
+
+  return customFetch<BulkActionCampaignCallbacks200>(getBulkActionCampaignCallbacksUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      callbackBulkActionRequest,)
+  }
+);}
+
+
+
+
+export const getBulkActionCampaignCallbacksMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkActionCampaignCallbacks>>, TError,{id: number;data: BodyType<CallbackBulkActionRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof bulkActionCampaignCallbacks>>, TError,{id: number;data: BodyType<CallbackBulkActionRequest>}, TContext> => {
+
+const mutationKey = ['bulkActionCampaignCallbacks'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof bulkActionCampaignCallbacks>>, {id: number;data: BodyType<CallbackBulkActionRequest>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  bulkActionCampaignCallbacks(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type BulkActionCampaignCallbacksMutationResult = NonNullable<Awaited<ReturnType<typeof bulkActionCampaignCallbacks>>>
+    export type BulkActionCampaignCallbacksMutationBody = BodyType<CallbackBulkActionRequest>
+    export type BulkActionCampaignCallbacksMutationError = ErrorType<void>
+
+    /**
+ * @summary Bulk complete or reschedule callbacks
+ */
+export const useBulkActionCampaignCallbacks = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkActionCampaignCallbacks>>, TError,{id: number;data: BodyType<CallbackBulkActionRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof bulkActionCampaignCallbacks>>,
+        TError,
+        {id: number;data: BodyType<CallbackBulkActionRequest>},
+        TContext
+      > => {
+      return useMutation(getBulkActionCampaignCallbacksMutationOptions(options));
+    }
+
+export const getCompleteCampaignCallbackUrl = (id: number,
+    callbackId: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/callbacks/${callbackId}/complete`
+}
+
+/**
+ * @summary Mark a single callback as completed
+ */
+export const completeCampaignCallback = async (id: number,
+    callbackId: number, options?: RequestInit): Promise<CompleteCampaignCallback200> => {
+
+  return customFetch<CompleteCampaignCallback200>(getCompleteCampaignCallbackUrl(id,callbackId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getCompleteCampaignCallbackMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeCampaignCallback>>, TError,{id: number;callbackId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof completeCampaignCallback>>, TError,{id: number;callbackId: number}, TContext> => {
+
+const mutationKey = ['completeCampaignCallback'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof completeCampaignCallback>>, {id: number;callbackId: number}> = (props) => {
+          const {id,callbackId} = props ?? {};
+
+          return  completeCampaignCallback(id,callbackId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CompleteCampaignCallbackMutationResult = NonNullable<Awaited<ReturnType<typeof completeCampaignCallback>>>
+
+    export type CompleteCampaignCallbackMutationError = ErrorType<void>
+
+    /**
+ * @summary Mark a single callback as completed
+ */
+export const useCompleteCampaignCallback = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeCampaignCallback>>, TError,{id: number;callbackId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof completeCampaignCallback>>,
+        TError,
+        {id: number;callbackId: number},
+        TContext
+      > => {
+      return useMutation(getCompleteCampaignCallbackMutationOptions(options));
+    }
+
+export const getRescheduleCampaignCallbackUrl = (id: number,
+    callbackId: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/callbacks/${callbackId}/reschedule`
+}
+
+/**
+ * @summary Reschedule a callback to a new time
+ */
+export const rescheduleCampaignCallback = async (id: number,
+    callbackId: number,
+    callbackRescheduleRequest: CallbackRescheduleRequest, options?: RequestInit): Promise<RescheduleCampaignCallback200> => {
+
+  return customFetch<RescheduleCampaignCallback200>(getRescheduleCampaignCallbackUrl(id,callbackId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      callbackRescheduleRequest,)
+  }
+);}
+
+
+
+
+export const getRescheduleCampaignCallbackMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rescheduleCampaignCallback>>, TError,{id: number;callbackId: number;data: BodyType<CallbackRescheduleRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof rescheduleCampaignCallback>>, TError,{id: number;callbackId: number;data: BodyType<CallbackRescheduleRequest>}, TContext> => {
+
+const mutationKey = ['rescheduleCampaignCallback'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof rescheduleCampaignCallback>>, {id: number;callbackId: number;data: BodyType<CallbackRescheduleRequest>}> = (props) => {
+          const {id,callbackId,data} = props ?? {};
+
+          return  rescheduleCampaignCallback(id,callbackId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RescheduleCampaignCallbackMutationResult = NonNullable<Awaited<ReturnType<typeof rescheduleCampaignCallback>>>
+    export type RescheduleCampaignCallbackMutationBody = BodyType<CallbackRescheduleRequest>
+    export type RescheduleCampaignCallbackMutationError = ErrorType<void>
+
+    /**
+ * @summary Reschedule a callback to a new time
+ */
+export const useRescheduleCampaignCallback = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rescheduleCampaignCallback>>, TError,{id: number;callbackId: number;data: BodyType<CallbackRescheduleRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof rescheduleCampaignCallback>>,
+        TError,
+        {id: number;callbackId: number;data: BodyType<CallbackRescheduleRequest>},
+        TContext
+      > => {
+      return useMutation(getRescheduleCampaignCallbackMutationOptions(options));
+    }
+
+export const getExportCampaignCallbacksUrl = (id: number,
+    params?: ExportCampaignCallbacksParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/campaigns/${id}/callbacks/export?${stringifiedParams}` : `/api/campaigns/${id}/callbacks/export`
+}
+
+/**
+ * @summary Export callbacks as CSV
+ */
+export const exportCampaignCallbacks = async (id: number,
+    params?: ExportCampaignCallbacksParams, options?: RequestInit): Promise<string> => {
+
+  return customFetch<string>(getExportCampaignCallbacksUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportCampaignCallbacksQueryKey = (id: number,
+    params?: ExportCampaignCallbacksParams,) => {
+    return [
+    `/api/campaigns/${id}/callbacks/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getExportCampaignCallbacksQueryOptions = <TData = Awaited<ReturnType<typeof exportCampaignCallbacks>>, TError = ErrorType<void>>(id: number,
+    params?: ExportCampaignCallbacksParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportCampaignCallbacks>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportCampaignCallbacksQueryKey(id,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportCampaignCallbacks>>> = ({ signal }) => exportCampaignCallbacks(id,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportCampaignCallbacks>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportCampaignCallbacksQueryResult = NonNullable<Awaited<ReturnType<typeof exportCampaignCallbacks>>>
+export type ExportCampaignCallbacksQueryError = ErrorType<void>
+
+
+/**
+ * @summary Export callbacks as CSV
+ */
+
+export function useExportCampaignCallbacks<TData = Awaited<ReturnType<typeof exportCampaignCallbacks>>, TError = ErrorType<void>>(
+ id: number,
+    params?: ExportCampaignCallbacksParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportCampaignCallbacks>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportCampaignCallbacksQueryOptions(id,params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

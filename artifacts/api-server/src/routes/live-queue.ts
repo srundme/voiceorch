@@ -22,6 +22,37 @@ async function requireCampaign(campaignId: number, userId: string) {
   return row ?? null;
 }
 
+const RETRY_REASON_LABELS: Record<string, string> = {
+  no_answer: "No answer",
+  busy:      "Busy",
+  failed:    "Call failed",
+  voicemail: "Voicemail",
+  manual:    "Manual retry",
+};
+
+function computeQueueReason(
+  callStatus: string,
+  operationalOutcome: string,
+  retryReason: string | null | undefined,
+  cbReason: string | null | undefined,
+  cbRawExtract: string | null | undefined,
+  execOutcome: string | null | undefined,
+): string | null {
+  if (callStatus === "pending" && retryReason) {
+    return RETRY_REASON_LABELS[retryReason] ?? retryReason;
+  }
+  if (callStatus === "failed") {
+    return execOutcome ? execOutcome.replace(/_/g, " ") : "No answer";
+  }
+  if (callStatus === "exhausted") return "Max attempts reached";
+  if (callStatus === "skipped") return "Manually paused";
+  if (operationalOutcome === "callback_requested") {
+    const raw = cbRawExtract && cbRawExtract.length <= 80 ? cbRawExtract : null;
+    return raw ?? cbReason ?? "Callback requested";
+  }
+  return null;
+}
+
 function slaStatus(responseDueBy: Date | null | undefined): string | null {
   if (!responseDueBy) return null;
   const diff = responseDueBy.getTime() - Date.now();
@@ -152,26 +183,42 @@ router.get("/campaigns/:id/live-queue/leads", async (req, res): Promise<void> =>
   }
 
   // Next pending retry
-  const retries = await db.select({ leadId: callRetriesTable.leadId, scheduledAt: callRetriesTable.scheduledAt })
+  const retries = await db.select({ leadId: callRetriesTable.leadId, scheduledAt: callRetriesTable.scheduledAt, reason: callRetriesTable.reason })
     .from(callRetriesTable)
     .where(and(inArray(callRetriesTable.leadId, leadIds), eq(callRetriesTable.status, "pending")))
     .orderBy(callRetriesTable.scheduledAt);
-  const nextRetryMap = new Map<number, Date>();
-  for (const r of retries) { if (!nextRetryMap.has(r.leadId)) nextRetryMap.set(r.leadId, r.scheduledAt); }
+  const nextRetryMap = new Map<number, { scheduledAt: Date; reason: string | null }>();
+  for (const r of retries) { if (!nextRetryMap.has(r.leadId)) nextRetryMap.set(r.leadId, { scheduledAt: r.scheduledAt, reason: r.reason ?? null }); }
 
   // Pending callbacks
   const cbs = await db.select({
     leadId:        callCallbacksTable.leadId,
     callbackAt:    callCallbacksTable.callbackAt,
     responseDueBy: callCallbacksTable.responseDueBy,
+    reason:        callCallbacksTable.reason,
+    rawExtract:    callCallbacksTable.rawExtract,
   }).from(callCallbacksTable)
     .where(and(inArray(callCallbacksTable.leadId, leadIds), eq(callCallbacksTable.status, "pending")))
     .orderBy(callCallbacksTable.createdAt);
-  const cbMap = new Map<number, { callbackAt: Date | null; responseDueBy: Date | null }>();
-  for (const cb of cbs) { if (!cbMap.has(cb.leadId)) cbMap.set(cb.leadId, { callbackAt: cb.callbackAt, responseDueBy: cb.responseDueBy }); }
+  const cbMap = new Map<number, { callbackAt: Date | null; responseDueBy: Date | null; reason: string | null; rawExtract: string | null }>();
+  for (const cb of cbs) { if (!cbMap.has(cb.leadId)) cbMap.set(cb.leadId, { callbackAt: cb.callbackAt, responseDueBy: cb.responseDueBy, reason: cb.reason ?? null, rawExtract: cb.rawExtract ?? null }); }
+
+  // Execution outcome for failed/exhausted leads → feeds queue_reason
+  const failedIds = rows.filter(r => r.callStatus === "failed" || r.callStatus === "exhausted").map(r => r.id);
+  const execOutcomeMap = new Map<number, string | null>();
+  if (failedIds.length > 0) {
+    const execs = await db.select({ leadId: callExecutionsTable.leadId, outcome: callExecutionsTable.outcome })
+      .from(callExecutionsTable)
+      .where(inArray(callExecutionsTable.leadId, failedIds))
+      .orderBy(desc(callExecutionsTable.createdAt));
+    for (const e of execs) {
+      if (!execOutcomeMap.has(e.leadId)) execOutcomeMap.set(e.leadId, e.outcome ?? null);
+    }
+  }
 
   const leads = rows.map(r => {
     const cb = cbMap.get(r.id);
+    const retry = nextRetryMap.get(r.id);
     return {
       id:               r.id,
       campaignId:       r.campaignId,
@@ -184,10 +231,11 @@ router.get("/campaigns/:id/live-queue/leads", async (req, res): Promise<void> =>
       callAttempts:     r.callAttempts,
       durationSeconds:  r.callId ? (durationMap.get(r.callId) ?? null) : null,
       lastAttemptAt:    r.lastAttemptAt?.toISOString() ?? null,
-      nextRetryAt:      nextRetryMap.get(r.id)?.toISOString() ?? null,
+      nextRetryAt:      retry?.scheduledAt.toISOString() ?? null,
       callbackAt:       cb?.callbackAt?.toISOString() ?? null,
       responseDueBy:    cb?.responseDueBy?.toISOString() ?? null,
       slaStatus:        slaStatus(cb?.responseDueBy),
+      queueReason:      computeQueueReason(r.callStatus, r.operationalOutcome, retry?.reason, cb?.reason, cb?.rawExtract, execOutcomeMap.get(r.id)),
       createdAt:        r.createdAt.toISOString(),
     };
   });
