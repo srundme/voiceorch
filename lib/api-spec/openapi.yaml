@@ -48,6 +48,10 @@ tags:
     description: Admin-managed ambient sound library and user-facing ambient track listing
   - name: command-center
     description: Real-time operational dashboard — KPIs, live ops feed, activity stream, batch health snapshots
+  - name: platform-analytics
+    description: Cross-campaign platform analytics — outcomes, funnel, sources, agents, queue
+  - name: search
+    description: Global search across leads, campaigns, batches, bookings, callbacks
 
 paths:
   /healthz:
@@ -4835,6 +4839,185 @@ paths:
               schema:
                 $ref: '#/components/schemas/BatchHealthSnapshot'
 
+  # ── Platform Analytics ───────────────────────────────────────────────────────
+  /platform/analytics/overview:
+    get:
+      operationId: getPlatformAnalyticsOverview
+      tags: [platform-analytics]
+      summary: Cross-campaign overview KPIs and daily trend
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: Overview analytics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformAnalyticsOverview'
+
+  /platform/analytics/funnel:
+    get:
+      operationId: getPlatformAnalyticsFunnel
+      tags: [platform-analytics]
+      summary: Conversion funnel with optional campaign/source filters
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: campaignId
+          in: query
+          schema: { type: integer }
+        - name: sourceId
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Funnel data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformAnalyticsFunnel'
+
+  /platform/analytics/sources:
+    get:
+      operationId: getPlatformAnalyticsSources
+      tags: [platform-analytics]
+      summary: Per-source performance breakdown
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: Sources analytics rows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PlatformAnalyticsSourceRow'
+
+  /platform/analytics/campaigns:
+    get:
+      operationId: getPlatformAnalyticsCampaigns
+      tags: [platform-analytics]
+      summary: Per-campaign performance breakdown
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: Campaigns analytics rows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PlatformAnalyticsCampaignRow'
+
+  /platform/analytics/agents:
+    get:
+      operationId: getPlatformAnalyticsAgents
+      tags: [platform-analytics]
+      summary: Per-agent performance breakdown
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: Agents analytics rows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PlatformAnalyticsAgentRow'
+
+  /platform/analytics/queue:
+    get:
+      operationId: getPlatformAnalyticsQueue
+      tags: [platform-analytics]
+      summary: Queue health — callbacks, bookings, transfers
+      responses:
+        "200":
+          description: Queue data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformAnalyticsQueue'
+
+  /platform/analytics/batches/{batchId}:
+    get:
+      operationId: getPlatformAnalyticsBatch
+      tags: [platform-analytics]
+      summary: Single-batch analytics detail
+      parameters:
+        - name: batchId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: from
+          in: query
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: Batch analytics detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformAnalyticsBatch'
+
+  # ── Global Search ────────────────────────────────────────────────────────────
+  /search:
+    get:
+      operationId: globalSearch
+      tags: [search]
+      summary: Search across campaigns, leads, batches, bookings, callbacks
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 2 }
+      responses:
+        "200":
+          description: Search results grouped by type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GlobalSearchResponse'
+
 components:
   parameters:
     AdminToken:
@@ -8562,3 +8745,234 @@ components:
         total: { type: integer }
         page:  { type: integer }
         limit: { type: integer }
+
+    # ── Platform Analytics ─────────────────────────────────────────────────────
+
+    PlatformAnalyticsDailyPoint:
+      type: object
+      required: [date, connected, booked, transferred, failed, callbacks]
+      properties:
+        date:        { type: string }
+        connected:   { type: integer }
+        booked:      { type: integer }
+        transferred: { type: integer }
+        failed:      { type: integer }
+        callbacks:   { type: integer }
+
+    PlatformAnalyticsOverview:
+      type: object
+      required: [totalLeads, called, connected, interested, booked, transferred,
+                 connectionRate, bookingRate, transferRate, callbackSuccessRate,
+                 avgDurationSeconds, dailyTrend]
+      properties:
+        totalLeads:           { type: integer }
+        called:               { type: integer }
+        connected:            { type: integer }
+        interested:           { type: integer }
+        booked:               { type: integer }
+        transferred:          { type: integer }
+        connectionRate:       { type: number }
+        bookingRate:          { type: number }
+        transferRate:         { type: number }
+        callbackSuccessRate:  { type: number }
+        avgDurationSeconds:   { type: number, nullable: true }
+        dailyTrend:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlatformAnalyticsDailyPoint'
+
+    PlatformAnalyticsFunnelStage:
+      type: object
+      required: [stage, count, pct, dropoff]
+      properties:
+        stage:   { type: string }
+        count:   { type: integer }
+        pct:     { type: number }
+        dropoff: { type: number }
+
+    PlatformAnalyticsFunnelFilter:
+      type: object
+      required: [id, name]
+      properties:
+        id:   { type: integer }
+        name: { type: string }
+
+    PlatformAnalyticsFunnelSourceFilter:
+      type: object
+      required: [id, name, type]
+      properties:
+        id:   { type: integer }
+        name: { type: string }
+        type: { type: string }
+
+    PlatformAnalyticsFunnelFilters:
+      type: object
+      required: [campaigns, sources]
+      properties:
+        campaigns:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlatformAnalyticsFunnelFilter'
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlatformAnalyticsFunnelSourceFilter'
+
+    PlatformAnalyticsFunnel:
+      type: object
+      required: [funnel, filters]
+      properties:
+        funnel:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlatformAnalyticsFunnelStage'
+        filters:
+          $ref: '#/components/schemas/PlatformAnalyticsFunnelFilters'
+
+    PlatformAnalyticsSourceRow:
+      type: object
+      required: [sourceName, sourceType, total, called, connected, booked,
+                 transferred, connectionRate, bookingRate, transferRate]
+      properties:
+        sourceId:       { type: integer, nullable: true }
+        sourceName:     { type: string }
+        sourceType:     { type: string }
+        total:          { type: integer }
+        called:         { type: integer }
+        connected:      { type: integer }
+        booked:         { type: integer }
+        transferred:    { type: integer }
+        connectionRate: { type: number }
+        bookingRate:    { type: number }
+        transferRate:   { type: number }
+
+    PlatformAnalyticsCampaignRow:
+      type: object
+      required: [campaignId, campaignName, total, called, connected, booked,
+                 transferred, successRate, connectionRate]
+      properties:
+        campaignId:     { type: integer }
+        campaignName:   { type: string }
+        agentName:      { type: string, nullable: true }
+        total:          { type: integer }
+        called:         { type: integer }
+        connected:      { type: integer }
+        booked:         { type: integer }
+        transferred:    { type: integer }
+        successRate:    { type: number }
+        connectionRate: { type: number }
+
+    PlatformAnalyticsAgentRow:
+      type: object
+      required: [agentName, total, called, connected, booked, transferred,
+                 connectionRate, bookingRate, transferRate, sentimentBreakdown]
+      properties:
+        agentId:            { type: integer, nullable: true }
+        agentName:          { type: string }
+        total:              { type: integer }
+        called:             { type: integer }
+        connected:          { type: integer }
+        booked:             { type: integer }
+        transferred:        { type: integer }
+        connectionRate:     { type: number }
+        bookingRate:        { type: number }
+        transferRate:       { type: number }
+        avgDurationSeconds: { type: number, nullable: true }
+        sentimentBreakdown:
+          type: object
+          additionalProperties: { type: integer }
+
+    PlatformAnalyticsCallbackQueue:
+      type: object
+      required: [total, pending, completed, cancelled, missed, overdue]
+      properties:
+        total:     { type: integer }
+        pending:   { type: integer }
+        completed: { type: integer }
+        cancelled: { type: integer }
+        missed:    { type: integer }
+        overdue:   { type: integer }
+
+    PlatformAnalyticsBookingQueue:
+      type: object
+      required: [total, scheduled, completed, cancelled]
+      properties:
+        total:     { type: integer }
+        scheduled: { type: integer }
+        completed: { type: integer }
+        cancelled: { type: integer }
+
+    PlatformAnalyticsTransferQueue:
+      type: object
+      required: [total, initiated, connected, completed, failed]
+      properties:
+        total:     { type: integer }
+        initiated: { type: integer }
+        connected: { type: integer }
+        completed: { type: integer }
+        failed:    { type: integer }
+
+    PlatformAnalyticsQueue:
+      type: object
+      required: [callbacks, bookings, transfers]
+      properties:
+        callbacks:
+          $ref: '#/components/schemas/PlatformAnalyticsCallbackQueue'
+        bookings:
+          $ref: '#/components/schemas/PlatformAnalyticsBookingQueue'
+        transfers:
+          $ref: '#/components/schemas/PlatformAnalyticsTransferQueue'
+
+    PlatformAnalyticsBatch:
+      type: object
+      required: [batchId, batchName, campaignName, totalLeads, called, connected,
+                 booked, transferred, failed, connectionRate, bookingRate]
+      properties:
+        batchId:        { type: integer }
+        batchName:      { type: string }
+        campaignName:   { type: string }
+        totalLeads:     { type: integer }
+        called:         { type: integer }
+        connected:      { type: integer }
+        booked:         { type: integer }
+        transferred:    { type: integer }
+        failed:         { type: integer }
+        connectionRate: { type: number }
+        bookingRate:    { type: number }
+        dailyTrend:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlatformAnalyticsDailyPoint'
+
+    # ── Global Search ──────────────────────────────────────────────────────────
+
+    GlobalSearchResult:
+      type: object
+      required: [id, title, subtitle, url, type]
+      properties:
+        id:       { type: string }
+        title:    { type: string }
+        subtitle: { type: string }
+        badge:    { type: string, nullable: true }
+        url:      { type: string }
+        type:     { type: string }
+
+    GlobalSearchResponse:
+      type: object
+      required: [campaigns, leads, batches, bookings, callbacks]
+      properties:
+        campaigns:
+          type: array
+          items: { $ref: '#/components/schemas/GlobalSearchResult' }
+        leads:
+          type: array
+          items: { $ref: '#/components/schemas/GlobalSearchResult' }
+        batches:
+          type: array
+          items: { $ref: '#/components/schemas/GlobalSearchResult' }
+        bookings:
+          type: array
+          items: { $ref: '#/components/schemas/GlobalSearchResult' }
+        callbacks:
+          type: array
+          items: { $ref: '#/components/schemas/GlobalSearchResult' }

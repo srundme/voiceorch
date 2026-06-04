@@ -18,6 +18,7 @@ import {
   Users, Zap, Layers, CalendarCheck, PhoneCall, Search,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { globalSearch } from "@workspace/api-client-react";
 
 /* ── Types ──────────────────────────────────────────────────────────────── */
 type ResultType = "campaign" | "lead" | "batch" | "booking" | "callback";
@@ -55,14 +56,6 @@ const LABELS: Record<ResultType, string> = {
   booking:  "Bookings",
   callback: "Callbacks",
 };
-
-const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
-
-async function apiFetch<T>(url: string): Promise<T> {
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(await r.text());
-  return r.json() as Promise<T>;
-}
 
 const BADGE_COLORS: Record<string, string> = {
   pending:         "bg-muted text-muted-foreground",
@@ -116,12 +109,12 @@ interface GlobalSearchProps {
 
 export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
   const [, navigate] = useLocation();
-  const [query,     setQuery]   = useState("");
-  const [results,   setResults] = useState<SearchResponse | null>(null);
-  const [loading,   setLoading] = useState(false);
+  const [query,   setQuery]   = useState("");
+  const [results, setResults] = useState<SearchResponse | null>(null);
+  const [loading, setLoading] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Debounced search
+  // Debounced search using generated fetch function
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (query.length < 2) { setResults(null); setLoading(false); return; }
@@ -129,10 +122,8 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
     setLoading(true);
     debounceRef.current = setTimeout(async () => {
       try {
-        const data = await apiFetch<SearchResponse>(
-          `${BASE}/api/search?q=${encodeURIComponent(query)}`
-        );
-        setResults(data);
+        const data = await globalSearch({ q: query });
+        setResults(data as SearchResponse);
       } catch {
         setResults(null);
       } finally {
@@ -229,4 +220,3 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
     </CommandDialog>
   );
 }
-

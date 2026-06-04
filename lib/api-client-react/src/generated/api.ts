@@ -124,8 +124,16 @@ import type {
   GetCommandCenterActivityStreamParams,
   GetCommandCenterLiveOps200,
   GetCommandCenterLiveOpsParams,
+  GetPlatformAnalyticsAgentsParams,
+  GetPlatformAnalyticsBatchParams,
+  GetPlatformAnalyticsCampaignsParams,
+  GetPlatformAnalyticsFunnelParams,
+  GetPlatformAnalyticsOverviewParams,
+  GetPlatformAnalyticsSourcesParams,
   GetPublicBookingByTokenParams,
   GetPublicSlotsParams,
+  GlobalSearchParams,
+  GlobalSearchResponse,
   HealthStatus,
   IncomingCallsPage,
   IncomingMetrics,
@@ -184,6 +192,13 @@ import type {
   OutboundCallBody,
   PhoneNormalizeResult,
   PhoneNumber,
+  PlatformAnalyticsAgentRow,
+  PlatformAnalyticsBatch,
+  PlatformAnalyticsCampaignRow,
+  PlatformAnalyticsFunnel,
+  PlatformAnalyticsOverview,
+  PlatformAnalyticsQueue,
+  PlatformAnalyticsSourceRow,
   PostAdminPromptTemplatesBody,
   PostAdminPromptTemplatesPreview200,
   PostAdminPromptTemplatesPreviewBody,
@@ -16182,4 +16197,674 @@ export const useCreateBatchSnapshot = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getCreateBatchSnapshotMutationOptions(options));
     }
+
+export const getGetPlatformAnalyticsOverviewUrl = (params: GetPlatformAnalyticsOverviewParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/platform/analytics/overview?${stringifiedParams}` : `/api/platform/analytics/overview`
+}
+
+/**
+ * @summary Cross-campaign overview KPIs and daily trend
+ */
+export const getPlatformAnalyticsOverview = async (params: GetPlatformAnalyticsOverviewParams, options?: RequestInit): Promise<PlatformAnalyticsOverview> => {
+
+  return customFetch<PlatformAnalyticsOverview>(getGetPlatformAnalyticsOverviewUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPlatformAnalyticsOverviewQueryKey = (params?: GetPlatformAnalyticsOverviewParams,) => {
+    return [
+    `/api/platform/analytics/overview`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetPlatformAnalyticsOverviewQueryOptions = <TData = Awaited<ReturnType<typeof getPlatformAnalyticsOverview>>, TError = ErrorType<unknown>>(params: GetPlatformAnalyticsOverviewParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPlatformAnalyticsOverview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPlatformAnalyticsOverviewQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPlatformAnalyticsOverview>>> = ({ signal }) => getPlatformAnalyticsOverview(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPlatformAnalyticsOverview>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPlatformAnalyticsOverviewQueryResult = NonNullable<Awaited<ReturnType<typeof getPlatformAnalyticsOverview>>>
+export type GetPlatformAnalyticsOverviewQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Cross-campaign overview KPIs and daily trend
+ */
+
+export function useGetPlatformAnalyticsOverview<TData = Awaited<ReturnType<typeof getPlatformAnalyticsOverview>>, TError = ErrorType<unknown>>(
+ params: GetPlatformAnalyticsOverviewParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPlatformAnalyticsOverview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPlatformAnalyticsOverviewQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetPlatformAnalyticsFunnelUrl = (params: GetPlatformAnalyticsFunnelParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/platform/analytics/funnel?${stringifiedParams}` : `/api/platform/analytics/funnel`
+}
+
+/**
+ * @summary Conversion funnel with optional campaign/source filters
+ */
+export const getPlatformAnalyticsFunnel = async (params: GetPlatformAnalyticsFunnelParams, options?: RequestInit): Promise<PlatformAnalyticsFunnel> => {
+
+  return customFetch<PlatformAnalyticsFunnel>(getGetPlatformAnalyticsFunnelUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPlatformAnalyticsFunnelQueryKey = (params?: GetPlatformAnalyticsFunnelParams,) => {
+    return [
+    `/api/platform/analytics/funnel`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetPlatformAnalyticsFunnelQueryOptions = <TData = Awaited<ReturnType<typeof getPlatformAnalyticsFunnel>>, TError = ErrorType<unknown>>(params: GetPlatformAnalyticsFunnelParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPlatformAnalyticsFunnel>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPlatformAnalyticsFunnelQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPlatformAnalyticsFunnel>>> = ({ signal }) => getPlatformAnalyticsFunnel(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPlatformAnalyticsFunnel>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPlatformAnalyticsFunnelQueryResult = NonNullable<Awaited<ReturnType<typeof getPlatformAnalyticsFunnel>>>
+export type GetPlatformAnalyticsFunnelQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Conversion funnel with optional campaign/source filters
+ */
+
+export function useGetPlatformAnalyticsFunnel<TData = Awaited<ReturnType<typeof getPlatformAnalyticsFunnel>>, TError = ErrorType<unknown>>(
+ params: GetPlatformAnalyticsFunnelParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPlatformAnalyticsFunnel>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPlatformAnalyticsFunnelQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetPlatformAnalyticsSourcesUrl = (params: GetPlatformAnalyticsSourcesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/platform/analytics/sources?${stringifiedParams}` : `/api/platform/analytics/sources`
+}
+
+/**
+ * @summary Per-source performance breakdown
+ */
+export const getPlatformAnalyticsSources = async (params: GetPlatformAnalyticsSourcesParams, options?: RequestInit): Promise<PlatformAnalyticsSourceRow[]> => {
+
+  return customFetch<PlatformAnalyticsSourceRow[]>(getGetPlatformAnalyticsSourcesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPlatformAnalyticsSourcesQueryKey = (params?: GetPlatformAnalyticsSourcesParams,) => {
+    return [
+    `/api/platform/analytics/sources`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetPlatformAnalyticsSourcesQueryOptions = <TData = Awaited<ReturnType<typeof getPlatformAnalyticsSources>>, TError = ErrorType<unknown>>(params: GetPlatformAnalyticsSourcesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPlatformAnalyticsSources>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPlatformAnalyticsSourcesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPlatformAnalyticsSources>>> = ({ signal }) => getPlatformAnalyticsSources(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPlatformAnalyticsSources>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPlatformAnalyticsSourcesQueryResult = NonNullable<Awaited<ReturnType<typeof getPlatformAnalyticsSources>>>
+export type GetPlatformAnalyticsSourcesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Per-source performance breakdown
+ */
+
+export function useGetPlatformAnalyticsSources<TData = Awaited<ReturnType<typeof getPlatformAnalyticsSources>>, TError = ErrorType<unknown>>(
+ params: GetPlatformAnalyticsSourcesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPlatformAnalyticsSources>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPlatformAnalyticsSourcesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetPlatformAnalyticsCampaignsUrl = (params: GetPlatformAnalyticsCampaignsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/platform/analytics/campaigns?${stringifiedParams}` : `/api/platform/analytics/campaigns`
+}
+
+/**
+ * @summary Per-campaign performance breakdown
+ */
+export const getPlatformAnalyticsCampaigns = async (params: GetPlatformAnalyticsCampaignsParams, options?: RequestInit): Promise<PlatformAnalyticsCampaignRow[]> => {
+
+  return customFetch<PlatformAnalyticsCampaignRow[]>(getGetPlatformAnalyticsCampaignsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPlatformAnalyticsCampaignsQueryKey = (params?: GetPlatformAnalyticsCampaignsParams,) => {
+    return [
+    `/api/platform/analytics/campaigns`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetPlatformAnalyticsCampaignsQueryOptions = <TData = Awaited<ReturnType<typeof getPlatformAnalyticsCampaigns>>, TError = ErrorType<unknown>>(params: GetPlatformAnalyticsCampaignsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPlatformAnalyticsCampaigns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPlatformAnalyticsCampaignsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPlatformAnalyticsCampaigns>>> = ({ signal }) => getPlatformAnalyticsCampaigns(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPlatformAnalyticsCampaigns>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPlatformAnalyticsCampaignsQueryResult = NonNullable<Awaited<ReturnType<typeof getPlatformAnalyticsCampaigns>>>
+export type GetPlatformAnalyticsCampaignsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Per-campaign performance breakdown
+ */
+
+export function useGetPlatformAnalyticsCampaigns<TData = Awaited<ReturnType<typeof getPlatformAnalyticsCampaigns>>, TError = ErrorType<unknown>>(
+ params: GetPlatformAnalyticsCampaignsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPlatformAnalyticsCampaigns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPlatformAnalyticsCampaignsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetPlatformAnalyticsAgentsUrl = (params: GetPlatformAnalyticsAgentsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/platform/analytics/agents?${stringifiedParams}` : `/api/platform/analytics/agents`
+}
+
+/**
+ * @summary Per-agent performance breakdown
+ */
+export const getPlatformAnalyticsAgents = async (params: GetPlatformAnalyticsAgentsParams, options?: RequestInit): Promise<PlatformAnalyticsAgentRow[]> => {
+
+  return customFetch<PlatformAnalyticsAgentRow[]>(getGetPlatformAnalyticsAgentsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPlatformAnalyticsAgentsQueryKey = (params?: GetPlatformAnalyticsAgentsParams,) => {
+    return [
+    `/api/platform/analytics/agents`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetPlatformAnalyticsAgentsQueryOptions = <TData = Awaited<ReturnType<typeof getPlatformAnalyticsAgents>>, TError = ErrorType<unknown>>(params: GetPlatformAnalyticsAgentsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPlatformAnalyticsAgents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPlatformAnalyticsAgentsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPlatformAnalyticsAgents>>> = ({ signal }) => getPlatformAnalyticsAgents(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPlatformAnalyticsAgents>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPlatformAnalyticsAgentsQueryResult = NonNullable<Awaited<ReturnType<typeof getPlatformAnalyticsAgents>>>
+export type GetPlatformAnalyticsAgentsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Per-agent performance breakdown
+ */
+
+export function useGetPlatformAnalyticsAgents<TData = Awaited<ReturnType<typeof getPlatformAnalyticsAgents>>, TError = ErrorType<unknown>>(
+ params: GetPlatformAnalyticsAgentsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPlatformAnalyticsAgents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPlatformAnalyticsAgentsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetPlatformAnalyticsQueueUrl = () => {
+
+
+
+
+  return `/api/platform/analytics/queue`
+}
+
+/**
+ * @summary Queue health — callbacks, bookings, transfers
+ */
+export const getPlatformAnalyticsQueue = async ( options?: RequestInit): Promise<PlatformAnalyticsQueue> => {
+
+  return customFetch<PlatformAnalyticsQueue>(getGetPlatformAnalyticsQueueUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPlatformAnalyticsQueueQueryKey = () => {
+    return [
+    `/api/platform/analytics/queue`
+    ] as const;
+    }
+
+
+export const getGetPlatformAnalyticsQueueQueryOptions = <TData = Awaited<ReturnType<typeof getPlatformAnalyticsQueue>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPlatformAnalyticsQueue>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPlatformAnalyticsQueueQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPlatformAnalyticsQueue>>> = ({ signal }) => getPlatformAnalyticsQueue({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPlatformAnalyticsQueue>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPlatformAnalyticsQueueQueryResult = NonNullable<Awaited<ReturnType<typeof getPlatformAnalyticsQueue>>>
+export type GetPlatformAnalyticsQueueQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Queue health — callbacks, bookings, transfers
+ */
+
+export function useGetPlatformAnalyticsQueue<TData = Awaited<ReturnType<typeof getPlatformAnalyticsQueue>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPlatformAnalyticsQueue>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPlatformAnalyticsQueueQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetPlatformAnalyticsBatchUrl = (batchId: number,
+    params?: GetPlatformAnalyticsBatchParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/platform/analytics/batches/${batchId}?${stringifiedParams}` : `/api/platform/analytics/batches/${batchId}`
+}
+
+/**
+ * @summary Single-batch analytics detail
+ */
+export const getPlatformAnalyticsBatch = async (batchId: number,
+    params?: GetPlatformAnalyticsBatchParams, options?: RequestInit): Promise<PlatformAnalyticsBatch> => {
+
+  return customFetch<PlatformAnalyticsBatch>(getGetPlatformAnalyticsBatchUrl(batchId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPlatformAnalyticsBatchQueryKey = (batchId: number,
+    params?: GetPlatformAnalyticsBatchParams,) => {
+    return [
+    `/api/platform/analytics/batches/${batchId}`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetPlatformAnalyticsBatchQueryOptions = <TData = Awaited<ReturnType<typeof getPlatformAnalyticsBatch>>, TError = ErrorType<unknown>>(batchId: number,
+    params?: GetPlatformAnalyticsBatchParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPlatformAnalyticsBatch>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPlatformAnalyticsBatchQueryKey(batchId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPlatformAnalyticsBatch>>> = ({ signal }) => getPlatformAnalyticsBatch(batchId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(batchId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPlatformAnalyticsBatch>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPlatformAnalyticsBatchQueryResult = NonNullable<Awaited<ReturnType<typeof getPlatformAnalyticsBatch>>>
+export type GetPlatformAnalyticsBatchQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Single-batch analytics detail
+ */
+
+export function useGetPlatformAnalyticsBatch<TData = Awaited<ReturnType<typeof getPlatformAnalyticsBatch>>, TError = ErrorType<unknown>>(
+ batchId: number,
+    params?: GetPlatformAnalyticsBatchParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPlatformAnalyticsBatch>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPlatformAnalyticsBatchQueryOptions(batchId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGlobalSearchUrl = (params: GlobalSearchParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/search?${stringifiedParams}` : `/api/search`
+}
+
+/**
+ * @summary Search across campaigns, leads, batches, bookings, callbacks
+ */
+export const globalSearch = async (params: GlobalSearchParams, options?: RequestInit): Promise<GlobalSearchResponse> => {
+
+  return customFetch<GlobalSearchResponse>(getGlobalSearchUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGlobalSearchQueryKey = (params?: GlobalSearchParams,) => {
+    return [
+    `/api/search`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGlobalSearchQueryOptions = <TData = Awaited<ReturnType<typeof globalSearch>>, TError = ErrorType<unknown>>(params: GlobalSearchParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof globalSearch>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGlobalSearchQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof globalSearch>>> = ({ signal }) => globalSearch(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof globalSearch>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GlobalSearchQueryResult = NonNullable<Awaited<ReturnType<typeof globalSearch>>>
+export type GlobalSearchQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Search across campaigns, leads, batches, bookings, callbacks
+ */
+
+export function useGlobalSearch<TData = Awaited<ReturnType<typeof globalSearch>>, TError = ErrorType<unknown>>(
+ params: GlobalSearchParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof globalSearch>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGlobalSearchQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 

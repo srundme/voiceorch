@@ -3410,6 +3410,164 @@ export interface IncomingCallsPage {
   limit: number;
 }
 
+export interface PlatformAnalyticsDailyPoint {
+  date: string;
+  connected: number;
+  booked: number;
+  transferred: number;
+  failed: number;
+  callbacks: number;
+}
+
+export interface PlatformAnalyticsOverview {
+  totalLeads: number;
+  called: number;
+  connected: number;
+  interested: number;
+  booked: number;
+  transferred: number;
+  connectionRate: number;
+  bookingRate: number;
+  transferRate: number;
+  callbackSuccessRate: number;
+  avgDurationSeconds: number | null;
+  dailyTrend: PlatformAnalyticsDailyPoint[];
+}
+
+export interface PlatformAnalyticsFunnelStage {
+  stage: string;
+  count: number;
+  pct: number;
+  dropoff: number;
+}
+
+export interface PlatformAnalyticsFunnelFilter {
+  id: number;
+  name: string;
+}
+
+export interface PlatformAnalyticsFunnelSourceFilter {
+  id: number;
+  name: string;
+  type: string;
+}
+
+export interface PlatformAnalyticsFunnelFilters {
+  campaigns: PlatformAnalyticsFunnelFilter[];
+  sources: PlatformAnalyticsFunnelSourceFilter[];
+}
+
+export interface PlatformAnalyticsFunnel {
+  funnel: PlatformAnalyticsFunnelStage[];
+  filters: PlatformAnalyticsFunnelFilters;
+}
+
+export interface PlatformAnalyticsSourceRow {
+  sourceId?: number | null;
+  sourceName: string;
+  sourceType: string;
+  total: number;
+  called: number;
+  connected: number;
+  booked: number;
+  transferred: number;
+  connectionRate: number;
+  bookingRate: number;
+  transferRate: number;
+}
+
+export interface PlatformAnalyticsCampaignRow {
+  campaignId: number;
+  campaignName: string;
+  agentName?: string | null;
+  total: number;
+  called: number;
+  connected: number;
+  booked: number;
+  transferred: number;
+  successRate: number;
+  connectionRate: number;
+}
+
+export type PlatformAnalyticsAgentRowSentimentBreakdown = {[key: string]: number};
+
+export interface PlatformAnalyticsAgentRow {
+  agentId?: number | null;
+  agentName: string;
+  total: number;
+  called: number;
+  connected: number;
+  booked: number;
+  transferred: number;
+  connectionRate: number;
+  bookingRate: number;
+  transferRate: number;
+  avgDurationSeconds?: number | null;
+  sentimentBreakdown: PlatformAnalyticsAgentRowSentimentBreakdown;
+}
+
+export interface PlatformAnalyticsCallbackQueue {
+  total: number;
+  pending: number;
+  completed: number;
+  cancelled: number;
+  missed: number;
+  overdue: number;
+}
+
+export interface PlatformAnalyticsBookingQueue {
+  total: number;
+  scheduled: number;
+  completed: number;
+  cancelled: number;
+}
+
+export interface PlatformAnalyticsTransferQueue {
+  total: number;
+  initiated: number;
+  connected: number;
+  completed: number;
+  failed: number;
+}
+
+export interface PlatformAnalyticsQueue {
+  callbacks: PlatformAnalyticsCallbackQueue;
+  bookings: PlatformAnalyticsBookingQueue;
+  transfers: PlatformAnalyticsTransferQueue;
+}
+
+export interface PlatformAnalyticsBatch {
+  batchId: number;
+  batchName: string;
+  campaignName: string;
+  totalLeads: number;
+  called: number;
+  connected: number;
+  booked: number;
+  transferred: number;
+  failed: number;
+  connectionRate: number;
+  bookingRate: number;
+  dailyTrend?: PlatformAnalyticsDailyPoint[];
+}
+
+export interface GlobalSearchResult {
+  id: string;
+  title: string;
+  subtitle: string;
+  badge?: string | null;
+  url: string;
+  type: string;
+}
+
+export interface GlobalSearchResponse {
+  campaigns: GlobalSearchResult[];
+  leads: GlobalSearchResult[];
+  batches: GlobalSearchResult[];
+  bookings: GlobalSearchResult[];
+  callbacks: GlobalSearchResult[];
+}
+
 /**
  * Platform admin token (matches ADMIN_TOKEN env var).
  */
@@ -3922,5 +4080,44 @@ limit?: number;
 
 export type GetCommandCenterActivityStream200 = {
   events: ActivityStreamEvent[];
+};
+
+export type GetPlatformAnalyticsOverviewParams = {
+from: string;
+to: string;
+};
+
+export type GetPlatformAnalyticsFunnelParams = {
+from: string;
+to: string;
+campaignId?: number;
+sourceId?: number;
+};
+
+export type GetPlatformAnalyticsSourcesParams = {
+from: string;
+to: string;
+};
+
+export type GetPlatformAnalyticsCampaignsParams = {
+from: string;
+to: string;
+};
+
+export type GetPlatformAnalyticsAgentsParams = {
+from: string;
+to: string;
+};
+
+export type GetPlatformAnalyticsBatchParams = {
+from?: string;
+to?: string;
+};
+
+export type GlobalSearchParams = {
+/**
+ * @minLength 2
+ */
+q: string;
 };
 

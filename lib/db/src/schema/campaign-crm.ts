@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, text, timestamp, json, boolean, jsonb, decimal } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, timestamp, json, boolean, jsonb, decimal, index } from "drizzle-orm/pg-core";
 import { campaignsTable, campaignBatchesTable, campaignLeadsTable } from "./campaigns";
 import { callsTable } from "./calls";
 
@@ -79,7 +79,12 @@ export const callExecutionsTable = pgTable("call_executions", {
   detectedIntent:  text("detected_intent"),
   keyTopics:       jsonb("key_topics").$type<string[]>().default([]),
   createdAt:       timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, t => [
+  index("call_executions_lead_id_idx").on(t.leadId),
+  index("call_executions_campaign_id_idx").on(t.campaignId),
+  index("call_executions_call_id_idx").on(t.callId),
+  index("call_executions_batch_id_idx").on(t.batchId),
+]);
 
 export type CallExecution = typeof callExecutionsTable.$inferSelect;
 export type InsertCallExecution = typeof callExecutionsTable.$inferInsert;
@@ -94,7 +99,11 @@ export const leadTimelineTable = pgTable("lead_timeline", {
   eventType:  text("event_type").notNull(),
   data:       json("data").$type<Record<string, unknown>>(),
   createdAt:  timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, t => [
+  index("lead_timeline_lead_id_idx").on(t.leadId),
+  index("lead_timeline_campaign_id_idx").on(t.campaignId),
+  index("lead_timeline_lead_created_idx").on(t.leadId, t.createdAt),
+]);
 
 export type LeadTimeline = typeof leadTimelineTable.$inferSelect;
 export type InsertLeadTimeline = typeof leadTimelineTable.$inferInsert;
@@ -113,7 +122,10 @@ export const callRetriesTable = pgTable("call_retries", {
   status:        text("status").notNull().default("pending"),
   reason:        text("reason"),
   createdAt:     timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, t => [
+  index("call_retries_lead_id_idx").on(t.leadId),
+  index("call_retries_status_scheduled_idx").on(t.status, t.scheduledAt),
+]);
 
 export type CallRetry = typeof callRetriesTable.$inferSelect;
 export type InsertCallRetry = typeof callRetriesTable.$inferInsert;
@@ -135,7 +147,12 @@ export const callCallbacksTable = pgTable("call_callbacks", {
   rawExtract:     text("raw_extract"),
   status:         text("status").notNull().default("pending"),
   createdAt:      timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, t => [
+  index("call_callbacks_lead_id_idx").on(t.leadId),
+  index("call_callbacks_campaign_id_idx").on(t.campaignId),
+  index("call_callbacks_status_idx").on(t.status),
+  index("call_callbacks_callback_at_idx").on(t.callbackAt),
+]);
 
 export type CallCallback = typeof callCallbacksTable.$inferSelect;
 export type InsertCallCallback = typeof callCallbacksTable.$inferInsert;
@@ -157,7 +174,12 @@ export const incomingCallsTable = pgTable("incoming_calls", {
   incomingCallReason: text("incoming_call_reason"),
   matchedAt:          timestamp("matched_at", { withTimezone: true }),
   createdAt:          timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, t => [
+  index("incoming_calls_user_id_idx").on(t.userId),
+  index("incoming_calls_campaign_id_idx").on(t.campaignId),
+  index("incoming_calls_lead_id_idx").on(t.leadId),
+  index("incoming_calls_status_idx").on(t.incomingCallStatus),
+]);
 
 export type IncomingCall = typeof incomingCallsTable.$inferSelect;
 export type InsertIncomingCall = typeof incomingCallsTable.$inferInsert;
@@ -184,7 +206,12 @@ export const callBookingsTable = pgTable("call_bookings", {
   revenueValue:        decimal("revenue_value", { precision: 12, scale: 2 }),
   createdAt:           timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt:           timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-});
+}, t => [
+  index("call_bookings_lead_id_idx").on(t.leadId),
+  index("call_bookings_campaign_id_idx").on(t.campaignId),
+  index("call_bookings_batch_id_idx").on(t.batchId),
+  index("call_bookings_status_idx").on(t.meetingStatus),
+]);
 
 export type CallBooking = typeof callBookingsTable.$inferSelect;
 export type InsertCallBooking = typeof callBookingsTable.$inferInsert;
@@ -201,7 +228,11 @@ export const workspaceDncTable = pgTable("workspace_dnc", {
   source:          text("source"),
   isActive:        boolean("is_active").notNull().default(true),
   createdAt:       timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, t => [
+  index("workspace_dnc_user_id_idx").on(t.userId),
+  index("workspace_dnc_normalized_phone_idx").on(t.normalizedPhone),
+  index("workspace_dnc_user_phone_idx").on(t.userId, t.normalizedPhone),
+]);
 
 export type WorkspaceDnc = typeof workspaceDncTable.$inferSelect;
 export type InsertWorkspaceDnc = typeof workspaceDncTable.$inferInsert;

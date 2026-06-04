@@ -5034,3 +5034,255 @@ export const CreateBatchSnapshotResponse = zod.object({
 })
 
 
+/**
+ * @summary Cross-campaign overview KPIs and daily trend
+ */
+export const GetPlatformAnalyticsOverviewQueryParams = zod.object({
+  "from": zod.date(),
+  "to": zod.date()
+})
+
+export const GetPlatformAnalyticsOverviewResponse = zod.object({
+  "totalLeads": zod.number(),
+  "called": zod.number(),
+  "connected": zod.number(),
+  "interested": zod.number(),
+  "booked": zod.number(),
+  "transferred": zod.number(),
+  "connectionRate": zod.number(),
+  "bookingRate": zod.number(),
+  "transferRate": zod.number(),
+  "callbackSuccessRate": zod.number(),
+  "avgDurationSeconds": zod.number().nullable(),
+  "dailyTrend": zod.array(zod.object({
+  "date": zod.string(),
+  "connected": zod.number(),
+  "booked": zod.number(),
+  "transferred": zod.number(),
+  "failed": zod.number(),
+  "callbacks": zod.number()
+}))
+})
+
+
+/**
+ * @summary Conversion funnel with optional campaign/source filters
+ */
+export const GetPlatformAnalyticsFunnelQueryParams = zod.object({
+  "from": zod.date(),
+  "to": zod.date(),
+  "campaignId": zod.coerce.number().optional(),
+  "sourceId": zod.coerce.number().optional()
+})
+
+export const GetPlatformAnalyticsFunnelResponse = zod.object({
+  "funnel": zod.array(zod.object({
+  "stage": zod.string(),
+  "count": zod.number(),
+  "pct": zod.number(),
+  "dropoff": zod.number()
+})),
+  "filters": zod.object({
+  "campaigns": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string()
+})),
+  "sources": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "type": zod.string()
+}))
+})
+})
+
+
+/**
+ * @summary Per-source performance breakdown
+ */
+export const GetPlatformAnalyticsSourcesQueryParams = zod.object({
+  "from": zod.date(),
+  "to": zod.date()
+})
+
+export const GetPlatformAnalyticsSourcesResponseItem = zod.object({
+  "sourceId": zod.number().nullish(),
+  "sourceName": zod.string(),
+  "sourceType": zod.string(),
+  "total": zod.number(),
+  "called": zod.number(),
+  "connected": zod.number(),
+  "booked": zod.number(),
+  "transferred": zod.number(),
+  "connectionRate": zod.number(),
+  "bookingRate": zod.number(),
+  "transferRate": zod.number()
+})
+export const GetPlatformAnalyticsSourcesResponse = zod.array(GetPlatformAnalyticsSourcesResponseItem)
+
+
+/**
+ * @summary Per-campaign performance breakdown
+ */
+export const GetPlatformAnalyticsCampaignsQueryParams = zod.object({
+  "from": zod.date(),
+  "to": zod.date()
+})
+
+export const GetPlatformAnalyticsCampaignsResponseItem = zod.object({
+  "campaignId": zod.number(),
+  "campaignName": zod.string(),
+  "agentName": zod.string().nullish(),
+  "total": zod.number(),
+  "called": zod.number(),
+  "connected": zod.number(),
+  "booked": zod.number(),
+  "transferred": zod.number(),
+  "successRate": zod.number(),
+  "connectionRate": zod.number()
+})
+export const GetPlatformAnalyticsCampaignsResponse = zod.array(GetPlatformAnalyticsCampaignsResponseItem)
+
+
+/**
+ * @summary Per-agent performance breakdown
+ */
+export const GetPlatformAnalyticsAgentsQueryParams = zod.object({
+  "from": zod.date(),
+  "to": zod.date()
+})
+
+export const GetPlatformAnalyticsAgentsResponseItem = zod.object({
+  "agentId": zod.number().nullish(),
+  "agentName": zod.string(),
+  "total": zod.number(),
+  "called": zod.number(),
+  "connected": zod.number(),
+  "booked": zod.number(),
+  "transferred": zod.number(),
+  "connectionRate": zod.number(),
+  "bookingRate": zod.number(),
+  "transferRate": zod.number(),
+  "avgDurationSeconds": zod.number().nullish(),
+  "sentimentBreakdown": zod.record(zod.string(), zod.number())
+})
+export const GetPlatformAnalyticsAgentsResponse = zod.array(GetPlatformAnalyticsAgentsResponseItem)
+
+
+/**
+ * @summary Queue health — callbacks, bookings, transfers
+ */
+export const GetPlatformAnalyticsQueueResponse = zod.object({
+  "callbacks": zod.object({
+  "total": zod.number(),
+  "pending": zod.number(),
+  "completed": zod.number(),
+  "cancelled": zod.number(),
+  "missed": zod.number(),
+  "overdue": zod.number()
+}),
+  "bookings": zod.object({
+  "total": zod.number(),
+  "scheduled": zod.number(),
+  "completed": zod.number(),
+  "cancelled": zod.number()
+}),
+  "transfers": zod.object({
+  "total": zod.number(),
+  "initiated": zod.number(),
+  "connected": zod.number(),
+  "completed": zod.number(),
+  "failed": zod.number()
+})
+})
+
+
+/**
+ * @summary Single-batch analytics detail
+ */
+export const GetPlatformAnalyticsBatchParams = zod.object({
+  "batchId": zod.coerce.number()
+})
+
+export const GetPlatformAnalyticsBatchQueryParams = zod.object({
+  "from": zod.date().optional(),
+  "to": zod.date().optional()
+})
+
+export const GetPlatformAnalyticsBatchResponse = zod.object({
+  "batchId": zod.number(),
+  "batchName": zod.string(),
+  "campaignName": zod.string(),
+  "totalLeads": zod.number(),
+  "called": zod.number(),
+  "connected": zod.number(),
+  "booked": zod.number(),
+  "transferred": zod.number(),
+  "failed": zod.number(),
+  "connectionRate": zod.number(),
+  "bookingRate": zod.number(),
+  "dailyTrend": zod.array(zod.object({
+  "date": zod.string(),
+  "connected": zod.number(),
+  "booked": zod.number(),
+  "transferred": zod.number(),
+  "failed": zod.number(),
+  "callbacks": zod.number()
+})).optional()
+})
+
+
+/**
+ * @summary Search across campaigns, leads, batches, bookings, callbacks
+ */
+export const globalSearchQueryQMin = 2;
+
+
+
+export const GlobalSearchQueryParams = zod.object({
+  "q": zod.coerce.string().min(globalSearchQueryQMin)
+})
+
+export const GlobalSearchResponse = zod.object({
+  "campaigns": zod.array(zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "subtitle": zod.string(),
+  "badge": zod.string().nullish(),
+  "url": zod.string(),
+  "type": zod.string()
+})),
+  "leads": zod.array(zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "subtitle": zod.string(),
+  "badge": zod.string().nullish(),
+  "url": zod.string(),
+  "type": zod.string()
+})),
+  "batches": zod.array(zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "subtitle": zod.string(),
+  "badge": zod.string().nullish(),
+  "url": zod.string(),
+  "type": zod.string()
+})),
+  "bookings": zod.array(zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "subtitle": zod.string(),
+  "badge": zod.string().nullish(),
+  "url": zod.string(),
+  "type": zod.string()
+})),
+  "callbacks": zod.array(zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "subtitle": zod.string(),
+  "badge": zod.string().nullish(),
+  "url": zod.string(),
+  "type": zod.string()
+}))
+})
+
+

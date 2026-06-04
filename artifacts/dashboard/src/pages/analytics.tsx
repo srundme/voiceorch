@@ -4,7 +4,6 @@
  */
 
 import { useState, useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -20,16 +19,14 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { format, subDays, parseISO } from "date-fns";
 import { useChartTheme } from "@/hooks/use-chart-theme";
-
-// ── Constants ─────────────────────────────────────────────────────────────────
-
-const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
-
-async function apiFetch<T>(url: string): Promise<T> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  return res.json() as Promise<T>;
-}
+import {
+  useGetPlatformAnalyticsOverview,
+  useGetPlatformAnalyticsFunnel,
+  useGetPlatformAnalyticsSources,
+  useGetPlatformAnalyticsCampaigns,
+  useGetPlatformAnalyticsAgents,
+  useGetPlatformAnalyticsQueue,
+} from "@workspace/api-client-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -118,12 +115,12 @@ function KpiCard({
     <div className={cn("p-4 rounded-lg border bg-card", highlight && "border-primary/30 bg-primary/5")}>
       <div className="flex items-start justify-between mb-3">
         <p className="text-xs text-muted-foreground leading-tight">{label}</p>
-        <div className="h-7 w-7 rounded-md flex items-center justify-center bg-muted shrink-0">
-          <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+        <div className="h-6 w-6 rounded-md bg-muted flex items-center justify-center">
+          <Icon className="h-3 w-3 text-muted-foreground" />
         </div>
       </div>
-      <p className="text-2xl font-bold tabular-nums">{value}</p>
-      {sub && <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>}
+      <p className="text-xl font-bold tabular-nums">{value}</p>
+      {sub && <p className="text-[10px] text-muted-foreground mt-1">{sub}</p>}
     </div>
   );
 }
@@ -176,12 +173,8 @@ function fmtDur(s: number | null | undefined) {
 
 function OverviewTab({ range }: { range: DateRange }) {
   const ct = useChartTheme();
-  const { data, isLoading } = useQuery<OverviewData>({
-    queryKey: ["platform-analytics-overview", range],
-    queryFn: () => apiFetch(`${BASE}/api/platform/analytics/overview?from=${range.from}&to=${range.to}`),
-  });
-
-  const d = data;
+  const { data, isLoading } = useGetPlatformAnalyticsOverview({ from: range.from, to: range.to });
+  const d = data as OverviewData | undefined;
 
   const kpis = [
     { label: "Total Leads",           value: (d?.totalLeads       ?? 0).toLocaleString(), icon: Users,          sub: "imported in range" },
@@ -267,16 +260,17 @@ function FunnelTab({ range }: { range: DateRange }) {
   const [campaignId, setCampaignId] = useState<string>("");
   const [sourceId,   setSourceId]   = useState<string>("");
 
-  const params = new URLSearchParams({ from: range.from, to: range.to });
-  if (campaignId) params.set("campaignId", campaignId);
-  if (sourceId)   params.set("sourceId",   sourceId);
+  const params = {
+    from: range.from,
+    to:   range.to,
+    ...(campaignId ? { campaignId: Number(campaignId) } : {}),
+    ...(sourceId   ? { sourceId:   Number(sourceId)   } : {}),
+  };
 
-  const { data, isLoading } = useQuery<FunnelData>({
-    queryKey: ["platform-analytics-funnel", range, campaignId, sourceId],
-    queryFn: () => apiFetch(`${BASE}/api/platform/analytics/funnel?${params}`),
-  });
+  const { data, isLoading } = useGetPlatformAnalyticsFunnel(params);
+  const d = data as FunnelData | undefined;
 
-  const funnel   = data?.funnel   ?? [];
+  const funnel   = d?.funnel   ?? [];
   const maxCount = funnel[0]?.count ?? 1;
 
   const STAGE_COLORS: Record<string, string> = {
@@ -299,7 +293,7 @@ function FunnelTab({ range }: { range: DateRange }) {
           className="text-xs rounded-md border border-border bg-background px-2 py-1.5 min-w-36"
         >
           <option value="">All Campaigns</option>
-          {(data?.filters.campaigns ?? []).map(c => (
+          {(d?.filters.campaigns ?? []).map(c => (
             <option key={c.id} value={c.id}>{c.name}</option>
           ))}
         </select>
@@ -309,7 +303,7 @@ function FunnelTab({ range }: { range: DateRange }) {
           className="text-xs rounded-md border border-border bg-background px-2 py-1.5 min-w-36"
         >
           <option value="">All Sources</option>
-          {(data?.filters.sources ?? []).map(s => (
+          {(d?.filters.sources ?? []).map(s => (
             <option key={s.id} value={s.id}>{s.name}</option>
           ))}
         </select>
@@ -359,23 +353,21 @@ function FunnelTab({ range }: { range: DateRange }) {
 // ── Tab: Sources ──────────────────────────────────────────────────────────────
 
 function SourcesTab({ range }: { range: DateRange }) {
-  const { data = [], isLoading } = useQuery<SourceRow[]>({
-    queryKey: ["platform-analytics-sources", range],
-    queryFn: () => apiFetch(`${BASE}/api/platform/analytics/sources?from=${range.from}&to=${range.to}`),
-  });
+  const { data, isLoading } = useGetPlatformAnalyticsSources({ from: range.from, to: range.to });
+  const rows = (data as SourceRow[] | undefined) ?? [];
 
   function handleExport() {
     exportCsv(
       `sources-${range.from}-${range.to}.csv`,
       ["Source", "Type", "Total", "Called", "Connected", "Booked", "Transferred", "Connection%", "Booking%", "Transfer%"],
-      data.flatMap(r => [[r.sourceName, r.sourceType, r.total, r.called, r.connected, r.booked, r.transferred, r.connectionRate, r.bookingRate, r.transferRate]]),
+      rows.map(r => [r.sourceName, r.sourceType, r.total, r.called, r.connected, r.booked, r.transferred, r.connectionRate, r.bookingRate, r.transferRate]),
     );
   }
 
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
-        <Button size="sm" variant="outline" onClick={handleExport} disabled={data.length === 0}>
+        <Button size="sm" variant="outline" onClick={handleExport} disabled={rows.length === 0}>
           <Download className="h-3.5 w-3.5 mr-1.5" /> Export CSV
         </Button>
       </div>
@@ -398,10 +390,10 @@ function SourcesTab({ range }: { range: DateRange }) {
             {isLoading && (
               <tr><td colSpan={9} className="text-center text-muted-foreground py-10 text-xs">Loading…</td></tr>
             )}
-            {!isLoading && data.length === 0 && (
+            {!isLoading && rows.length === 0 && (
               <tr><td colSpan={9} className="text-center text-muted-foreground py-10 text-xs">No source data for this range.</td></tr>
             )}
-            {data.map((r, i) => (
+            {rows.map((r, i) => (
               <tr key={r.sourceId ?? i} className="border-b border-border/40 last:border-0 hover:bg-muted/20 transition-colors">
                 <td className="px-4 py-3 font-medium">{r.sourceName}</td>
                 <td className="px-4 py-3">
@@ -426,23 +418,21 @@ function SourcesTab({ range }: { range: DateRange }) {
 // ── Tab: Campaigns ────────────────────────────────────────────────────────────
 
 function CampaignsTab({ range }: { range: DateRange }) {
-  const { data = [], isLoading } = useQuery<CampaignRow[]>({
-    queryKey: ["platform-analytics-campaigns", range],
-    queryFn: () => apiFetch(`${BASE}/api/platform/analytics/campaigns?from=${range.from}&to=${range.to}`),
-  });
+  const { data, isLoading } = useGetPlatformAnalyticsCampaigns({ from: range.from, to: range.to });
+  const rows = (data as CampaignRow[] | undefined) ?? [];
 
   function handleExport() {
     exportCsv(
       `campaigns-${range.from}-${range.to}.csv`,
       ["Campaign", "Agent", "Total", "Called", "Connected", "Booked", "Transferred", "Conn%", "Success%"],
-      data.flatMap(r => [[r.campaignName, r.agentName ?? "", r.total, r.called, r.connected, r.booked, r.transferred, r.connectionRate, r.successRate]]),
+      rows.map(r => [r.campaignName, r.agentName ?? "", r.total, r.called, r.connected, r.booked, r.transferred, r.connectionRate, r.successRate]),
     );
   }
 
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
-        <Button size="sm" variant="outline" onClick={handleExport} disabled={data.length === 0}>
+        <Button size="sm" variant="outline" onClick={handleExport} disabled={rows.length === 0}>
           <Download className="h-3.5 w-3.5 mr-1.5" /> Export CSV
         </Button>
       </div>
@@ -465,10 +455,10 @@ function CampaignsTab({ range }: { range: DateRange }) {
             {isLoading && (
               <tr><td colSpan={9} className="text-center text-muted-foreground py-10 text-xs">Loading…</td></tr>
             )}
-            {!isLoading && data.length === 0 && (
+            {!isLoading && rows.length === 0 && (
               <tr><td colSpan={9} className="text-center text-muted-foreground py-10 text-xs">No campaign data for this range.</td></tr>
             )}
-            {data.map(r => (
+            {rows.map(r => (
               <tr key={r.campaignId} className="border-b border-border/40 last:border-0 hover:bg-muted/20 transition-colors">
                 <td className="px-4 py-3">
                   <Link href={`/app/campaigns/${r.campaignId}`} className="font-medium hover:underline text-foreground">
@@ -503,20 +493,18 @@ function CampaignsTab({ range }: { range: DateRange }) {
 
 function AgentsTab({ range }: { range: DateRange }) {
   const ct = useChartTheme();
-  const { data = [], isLoading } = useQuery<AgentRow[]>({
-    queryKey: ["platform-analytics-agents", range],
-    queryFn: () => apiFetch(`${BASE}/api/platform/analytics/agents?from=${range.from}&to=${range.to}`),
-  });
+  const { data, isLoading } = useGetPlatformAnalyticsAgents({ from: range.from, to: range.to });
+  const rows = (data as AgentRow[] | undefined) ?? [];
 
   function handleExport() {
     exportCsv(
       `agents-${range.from}-${range.to}.csv`,
       ["Agent", "Total", "Called", "Connected", "Booked", "Transferred", "Conn%", "Book%", "Xfer%", "Avg Duration (s)"],
-      data.flatMap(r => [[r.agentName, r.total, r.called, r.connected, r.booked, r.transferred, r.connectionRate, r.bookingRate, r.transferRate, r.avgDurationSeconds ?? ""]]),
+      rows.map(r => [r.agentName, r.total, r.called, r.connected, r.booked, r.transferred, r.connectionRate, r.bookingRate, r.transferRate, r.avgDurationSeconds ?? ""]),
     );
   }
 
-  const chartData = data.slice(0, 10).map(r => ({
+  const chartData = rows.slice(0, 10).map(r => ({
     name: r.agentName.length > 14 ? r.agentName.slice(0, 14) + "…" : r.agentName,
     Booked: r.booked, Transferred: r.transferred, Connected: r.connected,
   }));
@@ -524,7 +512,7 @@ function AgentsTab({ range }: { range: DateRange }) {
   return (
     <div className="space-y-6">
       <div className="flex justify-end">
-        <Button size="sm" variant="outline" onClick={handleExport} disabled={data.length === 0}>
+        <Button size="sm" variant="outline" onClick={handleExport} disabled={rows.length === 0}>
           <Download className="h-3.5 w-3.5 mr-1.5" /> Export CSV
         </Button>
       </div>
@@ -568,10 +556,10 @@ function AgentsTab({ range }: { range: DateRange }) {
             {isLoading && (
               <tr><td colSpan={9} className="text-center text-muted-foreground py-10 text-xs">Loading…</td></tr>
             )}
-            {!isLoading && data.length === 0 && (
+            {!isLoading && rows.length === 0 && (
               <tr><td colSpan={9} className="text-center text-muted-foreground py-10 text-xs">No agent data for this range.</td></tr>
             )}
-            {data.map((r, i) => (
+            {rows.map((r, i) => (
               <tr key={r.agentId ?? i} className="border-b border-border/40 last:border-0 hover:bg-muted/20 transition-colors">
                 <td className="px-4 py-3 text-muted-foreground text-xs tabular-nums">{i + 1}</td>
                 <td className="px-4 py-3 font-medium">
@@ -598,15 +586,12 @@ function AgentsTab({ range }: { range: DateRange }) {
 // ── Tab: Queue ────────────────────────────────────────────────────────────────
 
 function QueueTab() {
-  const { data, isLoading } = useQuery<QueueData>({
-    queryKey: ["platform-analytics-queue"],
-    queryFn: () => apiFetch(`${BASE}/api/platform/analytics/queue`),
-    refetchInterval: 60000,
-  });
+  const { data, isLoading } = useGetPlatformAnalyticsQueue();
+  const d = data as QueueData | undefined;
 
-  const cb = data?.callbacks;
-  const bk = data?.bookings;
-  const tr = data?.transfers;
+  const cb = d?.callbacks;
+  const bk = d?.bookings;
+  const tr = d?.transfers;
 
   return (
     <div className="space-y-4">

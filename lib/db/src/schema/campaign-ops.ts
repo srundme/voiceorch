@@ -1,5 +1,5 @@
 import {
-  pgTable, serial, integer, text, timestamp, boolean, decimal, jsonb
+  pgTable, serial, integer, text, timestamp, boolean, decimal, jsonb, index
 } from "drizzle-orm/pg-core";
 import { agentsTable } from "./agents";
 import { campaignsTable, campaignBatchesTable, campaignLeadsTable } from "./campaigns";
@@ -25,7 +25,10 @@ export const leadSourcesTable = pgTable("lead_sources", {
   // Each batch can store its own override in campaign_batches.batch_field_mapping.
   fieldMapping: jsonb("field_mapping").$type<Record<string, string>>().default({}),
   createdAt:    timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, t => [
+  index("lead_sources_user_id_idx").on(t.userId),
+  index("lead_sources_campaign_id_idx").on(t.campaignId),
+]);
 
 export type LeadSource = typeof leadSourcesTable.$inferSelect;
 export type InsertLeadSource = typeof leadSourcesTable.$inferInsert;
@@ -47,7 +50,10 @@ export const leadTransfersTable = pgTable("lead_transfers", {
   durationSeconds:  integer("duration_seconds"),
   transferTime:     timestamp("transfer_time", { withTimezone: true }).notNull().defaultNow(),
   createdAt:        timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, t => [
+  index("lead_transfers_lead_id_idx").on(t.leadId),
+  index("lead_transfers_campaign_id_idx").on(t.campaignId),
+]);
 
 export type LeadTransfer = typeof leadTransfersTable.$inferSelect;
 export type InsertLeadTransfer = typeof leadTransfersTable.$inferInsert;
@@ -61,7 +67,9 @@ export const leadNotesTable = pgTable("lead_notes", {
   body:       text("body").notNull(),
   createdBy:  text("created_by").notNull(),
   createdAt:  timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, t => [
+  index("lead_notes_lead_id_idx").on(t.leadId),
+]);
 
 export type LeadNote = typeof leadNotesTable.$inferSelect;
 export type InsertLeadNote = typeof leadNotesTable.$inferInsert;
@@ -81,7 +89,10 @@ export const leadTasksTable = pgTable("lead_tasks", {
   assignedToType:  text("assigned_to_type").default("user"),
   createdAt:       timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   completedAt:     timestamp("completed_at", { withTimezone: true }),
-});
+}, t => [
+  index("lead_tasks_lead_id_idx").on(t.leadId),
+  index("lead_tasks_status_idx").on(t.status),
+]);
 
 export type LeadTask = typeof leadTasksTable.$inferSelect;
 export type InsertLeadTask = typeof leadTasksTable.$inferInsert;
@@ -94,7 +105,9 @@ export const leadTagsTable = pgTable("lead_tags", {
   campaignId: integer("campaign_id").references(() => campaignsTable.id, { onDelete: "cascade" }).notNull(),
   tag:        text("tag").notNull(),
   createdAt:  timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, t => [
+  index("lead_tags_lead_id_idx").on(t.leadId),
+]);
 
 export type LeadTag = typeof leadTagsTable.$inferSelect;
 export type InsertLeadTag = typeof leadTagsTable.$inferInsert;
@@ -127,7 +140,9 @@ export const batchImportRunsTable = pgTable("batch_import_runs", {
     rowIndex?: number;
   }>>(),
   createdAt:        timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, t => [
+  index("batch_import_runs_batch_id_idx").on(t.batchId),
+]);
 
 export type BatchImportRun = typeof batchImportRunsTable.$inferSelect;
 export type InsertBatchImportRun = typeof batchImportRunsTable.$inferInsert;
@@ -147,7 +162,9 @@ export const agentVariablesTable = pgTable("agent_variables", {
   defaultValue:  text("default_value"),
   dataType:      text("data_type").notNull().default("string"),
   createdAt:     timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, t => [
+  index("agent_variables_agent_id_idx").on(t.agentId),
+]);
 
 export type AgentVariable = typeof agentVariablesTable.$inferSelect;
 export type InsertAgentVariable = typeof agentVariablesTable.$inferInsert;
@@ -183,7 +200,11 @@ export const batchHealthSnapshotsTable = pgTable("batch_health_snapshots", {
   // Full breakdown keyed by operationalOutcome value → count
   operationalOutcomeBreakdown: jsonb("operational_outcome_breakdown").$type<Record<string, number>>(),
   createdAt:                   timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, t => [
+  index("batch_health_snapshots_batch_id_idx").on(t.batchId),
+  index("batch_health_snapshots_campaign_id_idx").on(t.campaignId),
+  index("batch_health_snapshots_time_idx").on(t.snapshotTime),
+]);
 
 export type BatchHealthSnapshot    = typeof batchHealthSnapshotsTable.$inferSelect;
 export type InsertBatchHealthSnapshot = typeof batchHealthSnapshotsTable.$inferInsert;

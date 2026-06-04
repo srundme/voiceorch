@@ -74,7 +74,10 @@ export const campaignBatchesTable = pgTable("campaign_batches", {
   batchFieldMapping:  json("batch_field_mapping").$type<Record<string, string>>(),
   createdAt:          timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt:          timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-});
+}, t => [
+  index("campaign_batches_campaign_id_idx").on(t.campaignId),
+  index("campaign_batches_status_idx").on(t.status),
+]);
 
 // ── Batch Daily Metrics ───────────────────────────────────────────────────────
 // Updated by lifecycle engine. One row per batch per UTC day.
@@ -129,4 +132,11 @@ export const campaignLeadsTable = pgTable("campaign_leads", {
   duplicateOfLeadId: integer("duplicate_of_lead_id"),
   duplicateStatus:  text("duplicate_status"),
   createdAt:        timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, t => [
+  index("campaign_leads_campaign_id_idx").on(t.campaignId),
+  index("campaign_leads_batch_id_idx").on(t.batchId),
+  index("campaign_leads_call_status_idx").on(t.callStatus),
+  index("campaign_leads_operational_outcome_idx").on(t.operationalOutcome),
+  index("campaign_leads_normalized_phone_idx").on(t.normalizedPhone),
+  index("campaign_leads_campaign_status_idx").on(t.campaignId, t.callStatus),
+]);
