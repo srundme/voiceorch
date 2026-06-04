@@ -467,8 +467,12 @@ export async function handleWebCallWebSocket(
   let speakingStartedAt = 0;  // timestamp (ms) when speaking last transitioned to true
   let speakingEndedAt = 0;    // timestamp (ms) when speaking last transitioned to false
   let lastChunkSentAt = 0;    // timestamp (ms) of the most recent TTS audio chunk sent to client
-  let interrupted = false;        // barge-in flag; checked inside audio loop
-  let bargeInFrames = 0;         // consecutive high-RMS frames counted while agent is speaking
+  let interrupted = false;          // barge-in flag; checked inside audio loop
+  let bargeInFrames = 0;           // high-RMS frames accumulated while agent is speaking
+  let bargeInLowEnergyFrames = 0;  // consecutive LOW-energy frames since the last high-energy frame
+  // bargeInFrames is NOT reset on a single low-energy frame — natural speech has brief
+  // inter-syllable dips. Only reset after BARGE_IN_LOW_RESET consecutive low frames.
+  const BARGE_IN_LOW_RESET = 5;    // ~200ms of silence resets the barge-in run
 
   // ── Recording ─────────────────────────────────────────────────────────────
   // Stereo WAV: L=caller (16 kHz from browser), R=agent (TTS pre-amplification)
@@ -1075,6 +1079,7 @@ export async function handleWebCallWebSocket(
         audioChunks.splice(0);
       }
       bargeInFrames = 0;
+      bargeInLowEnergyFrames = 0;
 
       // 3. Pipelined sentence playback — synthesis ran in parallel with LLM
       // streaming, so each job is likely already resolved by now.
@@ -1673,6 +1678,7 @@ export async function handleWebCallWebSocket(
       const inStartGrace = Date.now() - speakingStartedAt < BARGE_IN_ECHO_GRACE_MS;
       if (!inStartGrace && rms > BARGE_IN_RMS) {
         bargeInFrames++;
+        bargeInLowEnergyFrames = 0; // high-energy frame — reset the dip counter
         const bargeFrame = Buffer.from(data);
         audioChunks.push(bargeFrame); // accumulate speech for batch STT fallback
         streamSTT?.sendAudio(bargeFrame); // also feed streaming STT so it has the full utterance
@@ -1682,12 +1688,21 @@ export async function handleWebCallWebSocket(
           sendStatus("thinking");
           logger.info({ callId, rms, bargeInFrames, effectiveBargeInMinFrames }, "Barge-in triggered");
         }
-      } else {
-        bargeInFrames = 0; // frame dropped below threshold (or in start grace) — reset the run
+      } else if (!inStartGrace) {
+        // Low-energy frame while outside start grace.
+        // Don't reset bargeInFrames immediately — natural speech has brief inter-syllable
+        // dips. Only reset after BARGE_IN_LOW_RESET consecutive low frames (~200ms silence).
+        bargeInLowEnergyFrames++;
+        if (bargeInLowEnergyFrames >= BARGE_IN_LOW_RESET) {
+          bargeInFrames = 0;
+          bargeInLowEnergyFrames = 0;
+        }
       }
+      // Note: frames inside start grace are completely ignored (no counter changes)
       return; // don't touch silence timer while speaking
     }
-    bargeInFrames = 0; // agent not speaking — reset
+    bargeInFrames = 0;           // agent not speaking — reset
+    bargeInLowEnergyFrames = 0;
 
     // End grace: suppress new-turn detection for BARGE_IN_END_GRACE_MS after the last
     // TTS chunk was sent. This prevents the trailing echo of the agent's final word
