@@ -23,6 +23,7 @@ import {
   useInitiateOutboundCall,
   useListEventTypes,
   useListCalendars,
+  useListAmbientSounds,
   getListAgentsQueryKey,
   getGetAgentQueryKey,
   getListCallsQueryKey,
@@ -968,6 +969,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
   const { data: kbs } = useListKnowledgeSources();
   const { data: eventTypes } = useListEventTypes();
   const { data: calendars } = useListCalendars();
+  const { data: ambientSounds, isLoading: ambientSoundsLoading } = useListAmbientSounds();
 
   // ── Booking-tool modal state (Tools tab) ───────────────────────────────
   const [bookingModal, setBookingModal] = useState<null | {
@@ -2187,10 +2189,18 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Ambient & Noise</p>
                 <ToggleRow label="Ambient Noise" desc="Play background audio to make the call feel natural" checked={cfg.ambientNoiseEnabled ?? false} onChange={v => setCfg({ ambientNoiseEnabled: v })} />
                 {cfg.ambientNoiseEnabled && <div><p className="text-xs text-muted-foreground mb-1">Track</p>
-                  <Select value={cfg.ambientNoiseTrack ?? "office-ambience"} onValueChange={v => setCfg({ ambientNoiseTrack: v })}>
-                    <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
-                    <SelectContent className="bg-card border-border">{["office-ambience","cafe","coffee-shop","convention-hall","home","outdoor","restaurant"].map(t => <SelectItem key={t} value={t} className="text-foreground text-xs capitalize">{t.replace(/-/g, " ")}</SelectItem>)}</SelectContent>
-                  </Select>
+                  {ambientSoundsLoading ? (
+                    <div className="h-7 flex items-center text-xs text-muted-foreground">Loading tracks…</div>
+                  ) : !ambientSounds || ambientSounds.length === 0 ? (
+                    <div className="h-7 flex items-center text-xs text-muted-foreground italic">No ambient sounds uploaded yet — ask your admin to add some.</div>
+                  ) : (
+                    <Select value={cfg.ambientNoiseTrack ?? ""} onValueChange={v => setCfg({ ambientNoiseTrack: v })}>
+                      <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue placeholder="Select a track" /></SelectTrigger>
+                      <SelectContent className="bg-card border-border">
+                        {ambientSounds.map(s => <SelectItem key={s.id} value={s.id} className="text-foreground text-xs">{s.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>}
                 <ToggleRow label="Noise Cancellation" desc="Filter background noise from caller audio" checked={noiseCancellationEnabled} onChange={v => { setNoiseCancellationEnabled(v); setDirty(true); }} />
               </div>

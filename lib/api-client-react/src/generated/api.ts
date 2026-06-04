@@ -50,6 +50,8 @@ import type {
   AgentStats,
   AgentTemplate,
   AgentUpdate,
+  AmbientSoundOption,
+  AmbientSoundRecord,
   AssignPhoneNumberInput,
   AutoPaySettings,
   AvailabilityOverride,
@@ -73,6 +75,7 @@ import type {
   CampaignCreate,
   CampaignLead,
   CampaignUpdate,
+  CreateAmbientSoundBody,
   CsvImportBody,
   CsvImportResult,
   DailyCallVolume,
@@ -9998,4 +10001,379 @@ export const useRunToolTest = <TError = ErrorType<void>,
       > => {
       return useMutation(getRunToolTestMutationOptions(options));
     }
+
+export const getListAdminAmbientSoundsUrl = () => {
+
+
+
+
+  return `/api/admin/ambient-sounds`
+}
+
+/**
+ * @summary List all uploaded ambient sounds (admin)
+ */
+export const listAdminAmbientSounds = async ( options?: RequestInit): Promise<AmbientSoundRecord[]> => {
+
+  return customFetch<AmbientSoundRecord[]>(getListAdminAmbientSoundsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAdminAmbientSoundsQueryKey = () => {
+    return [
+    `/api/admin/ambient-sounds`
+    ] as const;
+    }
+
+
+export const getListAdminAmbientSoundsQueryOptions = <TData = Awaited<ReturnType<typeof listAdminAmbientSounds>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAdminAmbientSounds>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAdminAmbientSoundsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAdminAmbientSounds>>> = ({ signal }) => listAdminAmbientSounds({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAdminAmbientSounds>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAdminAmbientSoundsQueryResult = NonNullable<Awaited<ReturnType<typeof listAdminAmbientSounds>>>
+export type ListAdminAmbientSoundsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all uploaded ambient sounds (admin)
+ */
+
+export function useListAdminAmbientSounds<TData = Awaited<ReturnType<typeof listAdminAmbientSounds>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAdminAmbientSounds>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAdminAmbientSoundsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateAmbientSoundUrl = () => {
+
+
+
+
+  return `/api/admin/ambient-sounds`
+}
+
+/**
+ * @summary Upload a new ambient sound file (admin, multipart)
+ */
+export const createAmbientSound = async (createAmbientSoundBody: CreateAmbientSoundBody, options?: RequestInit): Promise<AmbientSoundRecord> => {
+    const formData = new FormData();
+formData.append(`file`, createAmbientSoundBody.file);
+formData.append(`name`, createAmbientSoundBody.name);
+
+  return customFetch<AmbientSoundRecord>(getCreateAmbientSoundUrl(),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body:
+      formData,
+  }
+);}
+
+
+
+
+export const getCreateAmbientSoundMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAmbientSound>>, TError,{data: BodyType<CreateAmbientSoundBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createAmbientSound>>, TError,{data: BodyType<CreateAmbientSoundBody>}, TContext> => {
+
+const mutationKey = ['createAmbientSound'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createAmbientSound>>, {data: BodyType<CreateAmbientSoundBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createAmbientSound(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateAmbientSoundMutationResult = NonNullable<Awaited<ReturnType<typeof createAmbientSound>>>
+    export type CreateAmbientSoundMutationBody = BodyType<CreateAmbientSoundBody>
+    export type CreateAmbientSoundMutationError = ErrorType<void>
+
+    /**
+ * @summary Upload a new ambient sound file (admin, multipart)
+ */
+export const useCreateAmbientSound = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAmbientSound>>, TError,{data: BodyType<CreateAmbientSoundBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createAmbientSound>>,
+        TError,
+        {data: BodyType<CreateAmbientSoundBody>},
+        TContext
+      > => {
+      return useMutation(getCreateAmbientSoundMutationOptions(options));
+    }
+
+export const getDeleteAmbientSoundUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/ambient-sounds/${id}`
+}
+
+/**
+ * @summary Delete an ambient sound and its GCS objects (admin)
+ */
+export const deleteAmbientSound = async (id: string, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteAmbientSoundUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteAmbientSoundMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAmbientSound>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteAmbientSound>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['deleteAmbientSound'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteAmbientSound>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteAmbientSound(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteAmbientSoundMutationResult = NonNullable<Awaited<ReturnType<typeof deleteAmbientSound>>>
+
+    export type DeleteAmbientSoundMutationError = ErrorType<void>
+
+    /**
+ * @summary Delete an ambient sound and its GCS objects (admin)
+ */
+export const useDeleteAmbientSound = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAmbientSound>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteAmbientSound>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getDeleteAmbientSoundMutationOptions(options));
+    }
+
+export const getListAmbientSoundsUrl = () => {
+
+
+
+
+  return `/api/ambient-sounds`
+}
+
+/**
+ * @summary List available ambient sounds (id + name) for the agent dropdown
+ */
+export const listAmbientSounds = async ( options?: RequestInit): Promise<AmbientSoundOption[]> => {
+
+  return customFetch<AmbientSoundOption[]>(getListAmbientSoundsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAmbientSoundsQueryKey = () => {
+    return [
+    `/api/ambient-sounds`
+    ] as const;
+    }
+
+
+export const getListAmbientSoundsQueryOptions = <TData = Awaited<ReturnType<typeof listAmbientSounds>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAmbientSounds>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAmbientSoundsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAmbientSounds>>> = ({ signal }) => listAmbientSounds({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAmbientSounds>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAmbientSoundsQueryResult = NonNullable<Awaited<ReturnType<typeof listAmbientSounds>>>
+export type ListAmbientSoundsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List available ambient sounds (id + name) for the agent dropdown
+ */
+
+export function useListAmbientSounds<TData = Awaited<ReturnType<typeof listAmbientSounds>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAmbientSounds>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAmbientSoundsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetAmbientSoundAudioUrl = (id: string,) => {
+
+
+
+
+  return `/api/ambient-sounds/${id}/audio`
+}
+
+/**
+ * @summary Stream/proxy the original audio file for browser preview
+ */
+export const getAmbientSoundAudio = async (id: string, options?: RequestInit): Promise<Blob> => {
+
+  return customFetch<Blob>(getGetAmbientSoundAudioUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAmbientSoundAudioQueryKey = (id: string,) => {
+    return [
+    `/api/ambient-sounds/${id}/audio`
+    ] as const;
+    }
+
+
+export const getGetAmbientSoundAudioQueryOptions = <TData = Awaited<ReturnType<typeof getAmbientSoundAudio>>, TError = ErrorType<void>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAmbientSoundAudio>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAmbientSoundAudioQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAmbientSoundAudio>>> = ({ signal }) => getAmbientSoundAudio(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAmbientSoundAudio>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAmbientSoundAudioQueryResult = NonNullable<Awaited<ReturnType<typeof getAmbientSoundAudio>>>
+export type GetAmbientSoundAudioQueryError = ErrorType<void>
+
+
+/**
+ * @summary Stream/proxy the original audio file for browser preview
+ */
+
+export function useGetAmbientSoundAudio<TData = Awaited<ReturnType<typeof getAmbientSoundAudio>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAmbientSoundAudio>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAmbientSoundAudioQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 

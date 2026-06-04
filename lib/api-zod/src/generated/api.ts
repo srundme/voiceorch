@@ -3131,3 +3131,64 @@ export const RunToolTestResponse = zod.object({
 })
 
 
+/**
+ * @summary List all uploaded ambient sounds (admin)
+ */
+export const ListAdminAmbientSoundsHeader = zod.object({
+  "X-Admin-Token": zod.string().describe('Platform admin token (matches ADMIN_TOKEN env var).')
+})
+
+export const ListAdminAmbientSoundsResponseItem = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "mimeType": zod.string(),
+  "fileSize": zod.number(),
+  "durationSeconds": zod.number().nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const ListAdminAmbientSoundsResponse = zod.array(ListAdminAmbientSoundsResponseItem)
+
+
+/**
+ * @summary Upload a new ambient sound file (admin, multipart)
+ */
+export const CreateAmbientSoundHeader = zod.object({
+  "X-Admin-Token": zod.string().describe('Platform admin token (matches ADMIN_TOKEN env var).')
+})
+
+export const CreateAmbientSoundBody = zod.object({
+  "file": zod.instanceof(File),
+  "name": zod.string()
+})
+
+
+/**
+ * @summary Delete an ambient sound and its GCS objects (admin)
+ */
+export const DeleteAmbientSoundParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DeleteAmbientSoundHeader = zod.object({
+  "X-Admin-Token": zod.string().describe('Platform admin token (matches ADMIN_TOKEN env var).')
+})
+
+
+/**
+ * @summary List available ambient sounds (id + name) for the agent dropdown
+ */
+export const ListAmbientSoundsResponseItem = zod.object({
+  "id": zod.string(),
+  "name": zod.string()
+})
+export const ListAmbientSoundsResponse = zod.array(ListAmbientSoundsResponseItem)
+
+
+/**
+ * @summary Stream/proxy the original audio file for browser preview
+ */
+export const GetAmbientSoundAudioParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+

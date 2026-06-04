@@ -5,6 +5,10 @@
  * track.  No external audio files are required — everything is computed from
  * a seeded PRNG + simple IIR filter shaping at construction time.
  *
+ * Also supports file-based ambient tracks loaded from GCS (FileAmbientNoiseStream).
+ * When an ambientNoiseTrack value does NOT match a key in TRACK_PARAMS, it is
+ * treated as an uploaded sound ID and loaded from GCS via loadPcmLoop().
+ *
  * PCM format throughout: 8 kHz, 16-bit signed little-endian (same as the
  * rest of the pipeline).  mulaw helpers mirror what audio.ts exposes so we
  * keep this file self-contained.
@@ -18,6 +22,8 @@
  */
 
 import { linearToMulaw, mulawToLinear } from "./audio.js";
+import { Storage } from "@google-cloud/storage";
+import { logger } from "../lib/logger.js";
 
 // ── Track configuration ────────────────────────────────────────────────────────
 
@@ -36,7 +42,7 @@ interface TrackParams {
   speechVol: number;
 }
 
-const TRACK_PARAMS: Record<string, TrackParams> = {
+export const TRACK_PARAMS: Record<string, TrackParams> = {
   "office-ambience":   { alpha: 0.86, alpha2: 0.50, blend: 0.3, gain: 3800, silenceVol: 0.22, speechVol: 0.10 },
   "cafe":              { alpha: 0.68, alpha2: 0.40, blend: 0.4, gain: 4800, silenceVol: 0.28, speechVol: 0.12 },
   "coffee-shop":       { alpha: 0.70, alpha2: 0.42, blend: 0.4, gain: 4500, silenceVol: 0.26, speechVol: 0.11 },
@@ -153,6 +159,109 @@ export class AmbientNoiseStream {
     }
     return buf;
   }
+}
+
+// ── FileAmbientNoiseStream — uploaded PCM from GCS ────────────────────────────
+
+const SILENCE_VOL = 0.22;
+const SPEECH_VOL  = 0.10;
+
+export class FileAmbientNoiseStream {
+  private readonly loop: Int16Array;
+  private pos = 0;
+  private readonly loopSamples: number;
+
+  constructor(pcmBuffer: Buffer) {
+    // The PCM buffer is raw s16le 8 kHz mono — convert to Int16Array
+    const samples = pcmBuffer.length / 2;
+    this.loopSamples = samples;
+    this.loop = new Int16Array(samples);
+    for (let i = 0; i < samples; i++) {
+      this.loop[i] = pcmBuffer.readInt16LE(i * 2);
+    }
+  }
+
+  nextMulawChunk(): Buffer {
+    const pcm = this.readPcm(CHUNK_SAMPLES, SILENCE_VOL);
+    return pcmToMulaw(pcm);
+  }
+
+  mixIntoMulaw(ttsMulaw: Buffer): Buffer {
+    const ttsLen     = ttsMulaw.length;
+    const ambientPcm = this.readPcm(ttsLen, SPEECH_VOL);
+
+    const mixed = Buffer.allocUnsafe(ttsLen * 2);
+    for (let i = 0; i < ttsLen; i++) {
+      const ttsSample     = mulawToLinear(ttsMulaw[i]!);
+      const ambientSample = ambientPcm.readInt16LE(i * 2);
+      const sum           = Math.max(-32767, Math.min(32767, ttsSample + ambientSample));
+      mixed.writeInt16LE(sum, i * 2);
+    }
+    return pcmToMulaw(mixed);
+  }
+
+  private readPcm(numSamples: number, vol: number): Buffer {
+    if (this.loopSamples === 0) return Buffer.alloc(numSamples * 2);
+    const buf = Buffer.allocUnsafe(numSamples * 2);
+    for (let i = 0; i < numSamples; i++) {
+      const sample = Math.round(this.loop[this.pos]! * vol);
+      buf.writeInt16LE(Math.max(-32767, Math.min(32767, sample)), i * 2);
+      this.pos = (this.pos + 1) % this.loopSamples;
+    }
+    return buf;
+  }
+}
+
+// ── GCS PCM cache ─────────────────────────────────────────────────────────────
+
+const SIDECAR = "http://127.0.0.1:1106";
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function makeGcsClient(): Storage {
+  return new Storage({
+    credentials: {
+      audience: "replit",
+      subject_token_type: "access_token",
+      token_url: `${SIDECAR}/token`,
+      type: "external_account",
+      credential_source: {
+        url: `${SIDECAR}/credential`,
+        format: { type: "json", subject_token_field_name: "access_token" },
+      },
+      universe_domain: "googleapis.com",
+    } as any,
+    projectId: "",
+  });
+}
+
+/** In-memory cache: id → PCM Buffer.  Keyed by ambient sound UUID. */
+const pcmCache = new Map<string, Buffer>();
+
+/**
+ * Download the pre-converted PCM loop for an uploaded ambient sound from GCS.
+ * Results are cached in-process for the lifetime of the server process.
+ * Call invalidatePcmCache(id) when a sound is deleted.
+ */
+export async function loadPcmLoop(id: string): Promise<Buffer> {
+  const cached = pcmCache.get(id);
+  if (cached) return cached;
+
+  const bucketId = process.env["DEFAULT_OBJECT_STORAGE_BUCKET_ID"];
+  if (!bucketId) throw new Error("DEFAULT_OBJECT_STORAGE_BUCKET_ID not set");
+
+  const pcmKey = `ambient-sounds/${id}/loop.pcm`;
+  logger.info({ id, pcmKey }, "ambient: loading PCM loop from GCS");
+
+  const [data] = await makeGcsClient().bucket(bucketId).file(pcmKey).download();
+  const buf = Buffer.isBuffer(data) ? data : Buffer.from(data as Uint8Array);
+  pcmCache.set(id, buf);
+  logger.info({ id, bytes: buf.length }, "ambient: PCM loop loaded and cached");
+  return buf;
+}
+
+/** Remove a cached PCM buffer when the corresponding sound is deleted. */
+export function invalidatePcmCache(id: string): void {
+  pcmCache.delete(id);
 }
 
 // ── Local PCM→mulaw (avoids circular import with audio.ts) ───────────────────

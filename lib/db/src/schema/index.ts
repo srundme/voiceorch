@@ -27,3 +27,4 @@ export * from "./meta";
 export * from "./call-transfers";
 export * from "./provider-minute-rates";
 export * from "./verified-destinations";
+export * from "./ambient-sounds";

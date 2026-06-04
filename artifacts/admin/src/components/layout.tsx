@@ -16,6 +16,7 @@ import {
   Calendar,
   Phone,
   PhoneCall,
+  Music,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -69,6 +70,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/managed-numbers", label: "Managed Numbers", icon: Phone },
     { href: "/voices",       label: "Voices",       icon: Mic2 },
     { href: "/prompt-template", label: "Prompt Template", icon: FileText },
+    { href: "/ambient-sounds",  label: "Ambient Sounds",  icon: Music },
     { href: "/all-agents",   label: "All Agents",   icon: Bot },
     { href: "/scheduling",   label: "Scheduling",   icon: Calendar },
     { href: "/call-pricing", label: "Call Pricing",  icon: PhoneCall },

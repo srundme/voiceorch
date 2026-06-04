@@ -6,7 +6,7 @@ import { toReadableError } from "./utils.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { createTTSAdapter } from "./adapters/tts/index.js";
 import { encodeMulaw, upsample8to16, downsample16to8, decodeMulaw, hasSpeechEnergy } from "./audio.js";
-import { AmbientNoiseStream } from "./ambient.js";
+import { AmbientNoiseStream, FileAmbientNoiseStream, TRACK_PARAMS, loadPcmLoop } from "./ambient.js";
 import { DtmfDetector } from "./dtmf.js";
 import { processAudioIn, processRawPcm8kIn, destroyAudioSession } from "./audioPool.js";
 import { RecordingBuffer } from "./recorder.js";
@@ -129,7 +129,7 @@ export class OrchestrationPipeline {
   private closed = false;
 
   // Ambient noise
-  private ambientStream: AmbientNoiseStream | null = null;
+  private ambientStream: AmbientNoiseStream | FileAmbientNoiseStream | null = null;
   private ambientInterval: ReturnType<typeof setInterval> | null = null;
 
   // IVR / DTMF
@@ -190,7 +190,26 @@ export class OrchestrationPipeline {
 
     // Ambient noise — start looping silence-fill interval
     if (this.agent.ambientNoiseEnabled && this.agent.ambientNoiseTrack) {
-      this.ambientStream = new AmbientNoiseStream(this.agent.ambientNoiseTrack);
+      const track = this.agent.ambientNoiseTrack;
+      if (Object.prototype.hasOwnProperty.call(TRACK_PARAMS, track)) {
+        // Built-in procedural track — synchronous
+        this.ambientStream = new AmbientNoiseStream(track);
+        logger.info({ callId: config.callId, track }, "Ambient noise enabled (built-in track)");
+      } else {
+        // Uploaded sound ID — load PCM from GCS asynchronously
+        // ambientStream starts as null; the interval skips while loading
+        logger.info({ callId: config.callId, soundId: track }, "Ambient noise enabled (uploaded sound, loading PCM…)");
+        loadPcmLoop(track)
+          .then((pcmBuffer) => {
+            if (!this.closed) {
+              this.ambientStream = new FileAmbientNoiseStream(pcmBuffer);
+              logger.info({ callId: config.callId, soundId: track }, "Ambient noise: PCM loop ready");
+            }
+          })
+          .catch((err) => {
+            logger.error({ callId: config.callId, soundId: track, err }, "Ambient noise: failed to load PCM loop — ambient disabled for this call");
+          });
+      }
       // Send one 20 ms ambient chunk every 20 ms while the agent is silent.
       // When isPlaying=true playSentence owns the timing, so we skip here to
       // avoid interleaving two concurrent senders on the same WebSocket.
@@ -199,7 +218,6 @@ export class OrchestrationPipeline {
           this.config.onAudioOut(this.ambientStream.nextMulawChunk());
         }
       }, 20);
-      logger.info({ callId: config.callId, track: this.agent.ambientNoiseTrack }, "Ambient noise enabled");
     }
 
     logger.info({ callId: config.callId, agent: this.agent.name }, "Pipeline initialized");

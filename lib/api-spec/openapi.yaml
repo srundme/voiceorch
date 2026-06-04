@@ -44,6 +44,8 @@ tags:
     description: Admin platform-wide STT/LLM/TTS usage monitoring
   - name: usage
     description: User-facing usage summary and budget
+  - name: ambient-sounds
+    description: Admin-managed ambient sound library and user-facing ambient track listing
 
 paths:
   /healthz:
@@ -2879,6 +2881,106 @@ paths:
         "404":
           description: Agent or tool not found
 
+  # ── Ambient Sounds (Admin) ────────────────────────────────────────────────────
+  /admin/ambient-sounds:
+    get:
+      operationId: listAdminAmbientSounds
+      tags: [ambient-sounds]
+      summary: List all uploaded ambient sounds (admin)
+      parameters:
+        - { $ref: '#/components/parameters/AdminToken' }
+      responses:
+        "200":
+          description: List of ambient sounds
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AmbientSoundRecord"
+    post:
+      operationId: createAmbientSound
+      tags: [ambient-sounds]
+      summary: Upload a new ambient sound file (admin, multipart)
+      parameters:
+        - { $ref: '#/components/parameters/AdminToken' }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, name]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                name:
+                  type: string
+      responses:
+        "201":
+          description: Created ambient sound
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AmbientSoundRecord"
+        "400":
+          description: Validation error or transcode failure
+
+  /admin/ambient-sounds/{id}:
+    delete:
+      operationId: deleteAmbientSound
+      tags: [ambient-sounds]
+      summary: Delete an ambient sound and its GCS objects (admin)
+      parameters:
+        - { $ref: '#/components/parameters/AdminToken' }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  # ── Ambient Sounds (User-facing) ──────────────────────────────────────────────
+  /ambient-sounds:
+    get:
+      operationId: listAmbientSounds
+      tags: [ambient-sounds]
+      summary: List available ambient sounds (id + name) for the agent dropdown
+      responses:
+        "200":
+          description: List of ambient sound options
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AmbientSoundOption"
+
+  /ambient-sounds/{id}/audio:
+    get:
+      operationId: getAmbientSoundAudio
+      tags: [ambient-sounds]
+      summary: Stream/proxy the original audio file for browser preview
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Audio file stream
+          content:
+            audio/mpeg:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Not found
+
 components:
   parameters:
     AdminToken:
@@ -3048,6 +3150,24 @@ components:
       properties:
         result:
           type: string
+
+    AmbientSoundRecord:
+      type: object
+      required: [id, name, mimeType, fileSize, createdAt]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        mimeType: { type: string }
+        fileSize: { type: integer }
+        durationSeconds: { type: ["number", "null"] }
+        createdAt: { type: string, format: date-time }
+
+    AmbientSoundOption:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string }
+        name: { type: string }
 
     Agent:
       type: object

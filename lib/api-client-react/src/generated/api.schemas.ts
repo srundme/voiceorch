@@ -180,6 +180,21 @@ export interface TestToolResponse {
   result: string;
 }
 
+export interface AmbientSoundRecord {
+  id: string;
+  name: string;
+  mimeType: string;
+  fileSize: number;
+  /** @nullable */
+  durationSeconds?: number | null;
+  createdAt: string;
+}
+
+export interface AmbientSoundOption {
+  id: string;
+  name: string;
+}
+
 /**
  * managed = platform master keys; byop = user-supplied keys
  * @nullable
@@ -2444,5 +2459,10 @@ export type PostAdminPromptTemplatesPreview200 = {
 
 export type GetAdminAgents200 = {
   agents: AdminAgentSummary[];
+};
+
+export type CreateAmbientSoundBody = {
+  file: Blob;
+  name: string;
 };
 

@@ -19,6 +19,7 @@ import adminRouter from "./admin.js";
 import adminVoicesRouter from "./admin-voices.js";
 import adminUsageRouter from "./admin-usage.js";
 import adminPromptTemplatesRouter from "./admin-prompt-templates.js";
+import ambientSoundsRouter, { ambientSoundsUserRouter } from "./ambient-sounds.js";
 import wizardRouter from "./wizard.js";
 import campaignsRouter from "./campaigns.js";
 import campaignBatchesRouter from "./campaign-batches.js";
@@ -44,6 +45,7 @@ router.use(adminRouter);
 router.use(adminVoicesRouter);
 router.use(adminUsageRouter);
 router.use(adminPromptTemplatesRouter);
+router.use(ambientSoundsRouter);
 
 // Public campaign lead webhook — must be before provisionUser (no Clerk session needed)
 router.use(campaignWebhookRouter);
@@ -54,6 +56,7 @@ router.use(utilsRouter);
 
 router.use(storageRouter);
 router.use(provisionUser);
+router.use(ambientSoundsUserRouter);
 router.use(healthRouter);
 router.use(agentsRouter);
 router.use(callsRouter);

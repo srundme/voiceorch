@@ -6,7 +6,7 @@ import { createLLMAdapter } from "../adapters/llm/index.js";
 import { createTTSAdapter } from "../adapters/tts/index.js";
 import { downsample16to8, upsample8to16, decodeMulaw } from "../audio.js";
 import { processRawPcm8kIn } from "../audioPool.js";
-import { AmbientNoiseStream } from "../ambient.js";
+import { AmbientNoiseStream, FileAmbientNoiseStream, TRACK_PARAMS, loadPcmLoop } from "../ambient.js";
 import { toReadableError } from "../utils.js";
 import { logger } from "../../lib/logger.js";
 import { RecordingBuffer } from "../recorder.js";
@@ -429,11 +429,24 @@ export async function handleWebCallWebSocket(
   // ── Ambient noise ─────────────────────────────────────────────────────────
   const ambientEnabled = (agentCfg["ambientNoiseEnabled"] as boolean | undefined) ?? false;
   const ambientTrack   = (agentCfg["ambientNoiseTrack"]   as string | undefined) ?? null;
-  let ambientStream: AmbientNoiseStream | null = null;
+  let ambientStream: AmbientNoiseStream | FileAmbientNoiseStream | null = null;
   let ambientInterval: ReturnType<typeof setInterval> | null = null;
   if (ambientEnabled && ambientTrack) {
-    ambientStream = new AmbientNoiseStream(ambientTrack);
-    logger.info({ callId, track: ambientTrack }, "Webcall: ambient noise enabled");
+    if (Object.prototype.hasOwnProperty.call(TRACK_PARAMS, ambientTrack)) {
+      // Built-in named track
+      ambientStream = new AmbientNoiseStream(ambientTrack);
+      logger.info({ callId, track: ambientTrack }, "Webcall: ambient noise enabled (built-in)");
+    } else {
+      // UUID — uploaded file; load asynchronously and assign once ready
+      logger.info({ callId, track: ambientTrack }, "Webcall: ambient noise enabled (file upload)");
+      loadPcmLoop(ambientTrack)
+        .then((pcmBuffer) => {
+          ambientStream = new FileAmbientNoiseStream(pcmBuffer);
+        })
+        .catch((err) => {
+          logger.warn({ callId, track: ambientTrack, err }, "Webcall: failed to load uploaded ambient PCM; skipping");
+        });
+    }
   }
 
   // ── State ─────────────────────────────────────────────────────────────────
@@ -1374,12 +1387,14 @@ export async function handleWebCallWebSocket(
 
   // ── Hangup ────────────────────────────────────────────────────────────────
   // ── Ambient noise interval (webcall) ──────────────────────────────────────
-  // Send one 20ms upsampled ambient chunk every 20ms while the agent is silent.
-  if (ambientStream) {
+  // Start interval whenever ambient is enabled; for uploaded UUID tracks the
+  // stream is initially null while loadPcmLoop() resolves asynchronously, so
+  // each tick guards on ambientStream (mirroring pipeline.ts behaviour).
+  if (ambientEnabled && ambientTrack) {
     ambientInterval = setInterval(() => {
-      if (closed || speaking) return;
+      if (closed || speaking || !ambientStream) return;
       // ambient.ts produces 8kHz mulaw — decode to PCM8k then upsample to PCM16k
-      const mulawChunk = ambientStream!.nextMulawChunk();
+      const mulawChunk = ambientStream.nextMulawChunk();
       const pcm16k = upsample8to16(decodeMulaw(mulawChunk));
       if (ws.readyState === ws.OPEN) ws.send(pcm16k);
     }, 20);
