@@ -68,6 +68,12 @@ import type {
   BatchAnalytics,
   BatchHealthSnapshot,
   BatchImportRun,
+  BatchWorkspaceActivity,
+  BatchWorkspaceFunnel,
+  BatchWorkspaceHeader,
+  BatchWorkspaceKpis,
+  BatchWorkspaceLeadsPage,
+  BatchWorkspaceSources,
   Booking,
   BookingInput,
   BookingMetrics,
@@ -113,6 +119,7 @@ import type {
   GetAdminAgents200,
   GetAdminPromptTemplates200,
   GetAvailableSlotsParams,
+  GetBatchWorkspaceActivityParams,
   GetCommandCenterActivityStream200,
   GetCommandCenterActivityStreamParams,
   GetCommandCenterLiveOps200,
@@ -150,6 +157,7 @@ import type {
   ListAvailablePhoneNumbersParams,
   ListBatchLeads200,
   ListBatchLeadsParams,
+  ListBatchWorkspaceLeadsParams,
   ListBookingsParams,
   ListCallsParams,
   ListCampaignBookingsParams,
@@ -8927,6 +8935,522 @@ export function useExportCampaignCallbacks<TData = Awaited<ReturnType<typeof exp
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getExportCampaignCallbacksQueryOptions(id,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetBatchWorkspaceHeaderUrl = (id: number,
+    batchId: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/batches/${batchId}/workspace/header`
+}
+
+/**
+ * @summary Batch header info (name, agent, source, campaign)
+ */
+export const getBatchWorkspaceHeader = async (id: number,
+    batchId: number, options?: RequestInit): Promise<BatchWorkspaceHeader> => {
+
+  return customFetch<BatchWorkspaceHeader>(getGetBatchWorkspaceHeaderUrl(id,batchId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBatchWorkspaceHeaderQueryKey = (id: number,
+    batchId: number,) => {
+    return [
+    `/api/campaigns/${id}/batches/${batchId}/workspace/header`
+    ] as const;
+    }
+
+
+export const getGetBatchWorkspaceHeaderQueryOptions = <TData = Awaited<ReturnType<typeof getBatchWorkspaceHeader>>, TError = ErrorType<void>>(id: number,
+    batchId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBatchWorkspaceHeader>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBatchWorkspaceHeaderQueryKey(id,batchId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBatchWorkspaceHeader>>> = ({ signal }) => getBatchWorkspaceHeader(id,batchId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id && batchId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBatchWorkspaceHeader>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBatchWorkspaceHeaderQueryResult = NonNullable<Awaited<ReturnType<typeof getBatchWorkspaceHeader>>>
+export type GetBatchWorkspaceHeaderQueryError = ErrorType<void>
+
+
+/**
+ * @summary Batch header info (name, agent, source, campaign)
+ */
+
+export function useGetBatchWorkspaceHeader<TData = Awaited<ReturnType<typeof getBatchWorkspaceHeader>>, TError = ErrorType<void>>(
+ id: number,
+    batchId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBatchWorkspaceHeader>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBatchWorkspaceHeaderQueryOptions(id,batchId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetBatchWorkspaceKpisUrl = (id: number,
+    batchId: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/batches/${batchId}/workspace/kpis`
+}
+
+/**
+ * @summary Batch KPI counts
+ */
+export const getBatchWorkspaceKpis = async (id: number,
+    batchId: number, options?: RequestInit): Promise<BatchWorkspaceKpis> => {
+
+  return customFetch<BatchWorkspaceKpis>(getGetBatchWorkspaceKpisUrl(id,batchId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBatchWorkspaceKpisQueryKey = (id: number,
+    batchId: number,) => {
+    return [
+    `/api/campaigns/${id}/batches/${batchId}/workspace/kpis`
+    ] as const;
+    }
+
+
+export const getGetBatchWorkspaceKpisQueryOptions = <TData = Awaited<ReturnType<typeof getBatchWorkspaceKpis>>, TError = ErrorType<void>>(id: number,
+    batchId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBatchWorkspaceKpis>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBatchWorkspaceKpisQueryKey(id,batchId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBatchWorkspaceKpis>>> = ({ signal }) => getBatchWorkspaceKpis(id,batchId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id && batchId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBatchWorkspaceKpis>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBatchWorkspaceKpisQueryResult = NonNullable<Awaited<ReturnType<typeof getBatchWorkspaceKpis>>>
+export type GetBatchWorkspaceKpisQueryError = ErrorType<void>
+
+
+/**
+ * @summary Batch KPI counts
+ */
+
+export function useGetBatchWorkspaceKpis<TData = Awaited<ReturnType<typeof getBatchWorkspaceKpis>>, TError = ErrorType<void>>(
+ id: number,
+    batchId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBatchWorkspaceKpis>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBatchWorkspaceKpisQueryOptions(id,batchId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetBatchWorkspaceFunnelUrl = (id: number,
+    batchId: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/batches/${batchId}/workspace/funnel`
+}
+
+/**
+ * @summary Operational funnel stages
+ */
+export const getBatchWorkspaceFunnel = async (id: number,
+    batchId: number, options?: RequestInit): Promise<BatchWorkspaceFunnel> => {
+
+  return customFetch<BatchWorkspaceFunnel>(getGetBatchWorkspaceFunnelUrl(id,batchId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBatchWorkspaceFunnelQueryKey = (id: number,
+    batchId: number,) => {
+    return [
+    `/api/campaigns/${id}/batches/${batchId}/workspace/funnel`
+    ] as const;
+    }
+
+
+export const getGetBatchWorkspaceFunnelQueryOptions = <TData = Awaited<ReturnType<typeof getBatchWorkspaceFunnel>>, TError = ErrorType<void>>(id: number,
+    batchId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBatchWorkspaceFunnel>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBatchWorkspaceFunnelQueryKey(id,batchId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBatchWorkspaceFunnel>>> = ({ signal }) => getBatchWorkspaceFunnel(id,batchId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id && batchId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBatchWorkspaceFunnel>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBatchWorkspaceFunnelQueryResult = NonNullable<Awaited<ReturnType<typeof getBatchWorkspaceFunnel>>>
+export type GetBatchWorkspaceFunnelQueryError = ErrorType<void>
+
+
+/**
+ * @summary Operational funnel stages
+ */
+
+export function useGetBatchWorkspaceFunnel<TData = Awaited<ReturnType<typeof getBatchWorkspaceFunnel>>, TError = ErrorType<void>>(
+ id: number,
+    batchId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBatchWorkspaceFunnel>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBatchWorkspaceFunnelQueryOptions(id,batchId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListBatchWorkspaceLeadsUrl = (id: number,
+    batchId: number,
+    params?: ListBatchWorkspaceLeadsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/campaigns/${id}/batches/${batchId}/workspace/leads?${stringifiedParams}` : `/api/campaigns/${id}/batches/${batchId}/workspace/leads`
+}
+
+/**
+ * @summary Enriched lead table for batch workspace
+ */
+export const listBatchWorkspaceLeads = async (id: number,
+    batchId: number,
+    params?: ListBatchWorkspaceLeadsParams, options?: RequestInit): Promise<BatchWorkspaceLeadsPage> => {
+
+  return customFetch<BatchWorkspaceLeadsPage>(getListBatchWorkspaceLeadsUrl(id,batchId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListBatchWorkspaceLeadsQueryKey = (id: number,
+    batchId: number,
+    params?: ListBatchWorkspaceLeadsParams,) => {
+    return [
+    `/api/campaigns/${id}/batches/${batchId}/workspace/leads`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListBatchWorkspaceLeadsQueryOptions = <TData = Awaited<ReturnType<typeof listBatchWorkspaceLeads>>, TError = ErrorType<void>>(id: number,
+    batchId: number,
+    params?: ListBatchWorkspaceLeadsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBatchWorkspaceLeads>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListBatchWorkspaceLeadsQueryKey(id,batchId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listBatchWorkspaceLeads>>> = ({ signal }) => listBatchWorkspaceLeads(id,batchId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id && batchId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listBatchWorkspaceLeads>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListBatchWorkspaceLeadsQueryResult = NonNullable<Awaited<ReturnType<typeof listBatchWorkspaceLeads>>>
+export type ListBatchWorkspaceLeadsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Enriched lead table for batch workspace
+ */
+
+export function useListBatchWorkspaceLeads<TData = Awaited<ReturnType<typeof listBatchWorkspaceLeads>>, TError = ErrorType<void>>(
+ id: number,
+    batchId: number,
+    params?: ListBatchWorkspaceLeadsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBatchWorkspaceLeads>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListBatchWorkspaceLeadsQueryOptions(id,batchId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetBatchWorkspaceActivityUrl = (id: number,
+    batchId: number,
+    params?: GetBatchWorkspaceActivityParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/campaigns/${id}/batches/${batchId}/workspace/activity?${stringifiedParams}` : `/api/campaigns/${id}/batches/${batchId}/workspace/activity`
+}
+
+/**
+ * @summary Batch activity stream from lead timeline
+ */
+export const getBatchWorkspaceActivity = async (id: number,
+    batchId: number,
+    params?: GetBatchWorkspaceActivityParams, options?: RequestInit): Promise<BatchWorkspaceActivity> => {
+
+  return customFetch<BatchWorkspaceActivity>(getGetBatchWorkspaceActivityUrl(id,batchId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBatchWorkspaceActivityQueryKey = (id: number,
+    batchId: number,
+    params?: GetBatchWorkspaceActivityParams,) => {
+    return [
+    `/api/campaigns/${id}/batches/${batchId}/workspace/activity`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetBatchWorkspaceActivityQueryOptions = <TData = Awaited<ReturnType<typeof getBatchWorkspaceActivity>>, TError = ErrorType<void>>(id: number,
+    batchId: number,
+    params?: GetBatchWorkspaceActivityParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBatchWorkspaceActivity>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBatchWorkspaceActivityQueryKey(id,batchId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBatchWorkspaceActivity>>> = ({ signal }) => getBatchWorkspaceActivity(id,batchId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id && batchId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBatchWorkspaceActivity>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBatchWorkspaceActivityQueryResult = NonNullable<Awaited<ReturnType<typeof getBatchWorkspaceActivity>>>
+export type GetBatchWorkspaceActivityQueryError = ErrorType<void>
+
+
+/**
+ * @summary Batch activity stream from lead timeline
+ */
+
+export function useGetBatchWorkspaceActivity<TData = Awaited<ReturnType<typeof getBatchWorkspaceActivity>>, TError = ErrorType<void>>(
+ id: number,
+    batchId: number,
+    params?: GetBatchWorkspaceActivityParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBatchWorkspaceActivity>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBatchWorkspaceActivityQueryOptions(id,batchId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetBatchWorkspaceSourcesUrl = (id: number,
+    batchId: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/batches/${batchId}/workspace/sources`
+}
+
+/**
+ * @summary Import source insights for a batch
+ */
+export const getBatchWorkspaceSources = async (id: number,
+    batchId: number, options?: RequestInit): Promise<BatchWorkspaceSources> => {
+
+  return customFetch<BatchWorkspaceSources>(getGetBatchWorkspaceSourcesUrl(id,batchId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBatchWorkspaceSourcesQueryKey = (id: number,
+    batchId: number,) => {
+    return [
+    `/api/campaigns/${id}/batches/${batchId}/workspace/sources`
+    ] as const;
+    }
+
+
+export const getGetBatchWorkspaceSourcesQueryOptions = <TData = Awaited<ReturnType<typeof getBatchWorkspaceSources>>, TError = ErrorType<void>>(id: number,
+    batchId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBatchWorkspaceSources>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBatchWorkspaceSourcesQueryKey(id,batchId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBatchWorkspaceSources>>> = ({ signal }) => getBatchWorkspaceSources(id,batchId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id && batchId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBatchWorkspaceSources>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBatchWorkspaceSourcesQueryResult = NonNullable<Awaited<ReturnType<typeof getBatchWorkspaceSources>>>
+export type GetBatchWorkspaceSourcesQueryError = ErrorType<void>
+
+
+/**
+ * @summary Import source insights for a batch
+ */
+
+export function useGetBatchWorkspaceSources<TData = Awaited<ReturnType<typeof getBatchWorkspaceSources>>, TError = ErrorType<void>>(
+ id: number,
+    batchId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBatchWorkspaceSources>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBatchWorkspaceSourcesQueryOptions(id,batchId,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

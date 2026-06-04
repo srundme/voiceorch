@@ -3064,6 +3064,143 @@ export interface CallbackRescheduleRequest {
   callbackAt: string;
 }
 
+export type BatchWorkspaceHeaderBatch = {
+  id?: number;
+  name?: string;
+  status?: string;
+  leadSource?: string;
+  totalLeads?: number;
+  calledLeads?: number;
+  createdAt?: string;
+  scheduledStartAt?: string | null;
+};
+
+export type BatchWorkspaceHeaderCampaign = {
+  id?: number;
+  name?: string;
+  agentName?: string | null;
+  fromNumber?: string | null;
+};
+
+export type BatchWorkspaceHeaderSource = {
+  name?: string;
+  type?: string;
+};
+
+export interface BatchWorkspaceHeader {
+  batch?: BatchWorkspaceHeaderBatch;
+  campaign?: BatchWorkspaceHeaderCampaign;
+  source?: BatchWorkspaceHeaderSource;
+}
+
+export interface BatchWorkspaceKpis {
+  total: number;
+  connected: number;
+  failed: number;
+  pending: number;
+  callbacks: number;
+  incoming: number;
+  bookings: number;
+  transfers: number;
+  successRate: number;
+}
+
+export interface BatchFunnelStage {
+  key: string;
+  label: string;
+  value: number;
+}
+
+export interface BatchWorkspaceFunnel {
+  stages: BatchFunnelStage[];
+  total: number;
+}
+
+export interface BatchWorkspaceLeadCallbackInfo {
+  status?: string;
+  callbackAt?: string | null;
+}
+
+export interface BatchWorkspaceLeadBookingInfo {
+  meetingTime?: string | null;
+  meetingStatus?: string;
+  meetingLink?: string | null;
+}
+
+export interface BatchWorkspaceLeadTransferInfo {
+  status?: string;
+  transferTo?: string;
+}
+
+export interface BatchWorkspaceLead {
+  id: number;
+  name?: string | null;
+  phone: string;
+  callStatus: string;
+  operationalOutcome: string;
+  disposition?: string | null;
+  callAttempts: number;
+  lastAttemptAt?: string | null;
+  callId?: number | null;
+  createdAt: string;
+  callback?: BatchWorkspaceLeadCallbackInfo;
+  booking?: BatchWorkspaceLeadBookingInfo;
+  transfer?: BatchWorkspaceLeadTransferInfo;
+}
+
+export interface BatchWorkspaceLeadsPage {
+  items: BatchWorkspaceLead[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export type BatchActivityEventData = { [key: string]: unknown } | null;
+
+export interface BatchActivityEvent {
+  id: number;
+  leadId: number;
+  leadName?: string | null;
+  leadPhone?: string | null;
+  eventType: string;
+  data?: BatchActivityEventData;
+  createdAt: string;
+}
+
+export interface BatchWorkspaceActivity {
+  events: BatchActivityEvent[];
+}
+
+export interface BatchSourceSummary {
+  sourceName?: string;
+  sourceType?: string;
+  importRuns?: number;
+  totalRows?: number;
+  validRows?: number;
+  duplicates?: number;
+  errors?: number;
+}
+
+export interface BatchImportRunItem {
+  id?: number;
+  fileName?: string | null;
+  status?: string;
+  totalRows?: number;
+  validRows?: number;
+  invalidRows?: number;
+  duplicateRows?: number;
+  createdRows?: number;
+  processingTimeMs?: number | null;
+  createdAt?: string;
+  sourceName?: string | null;
+  sourceType?: string | null;
+}
+
+export interface BatchWorkspaceSources {
+  sources: BatchSourceSummary[];
+  runs: BatchImportRunItem[];
+}
+
 export interface TransferMetrics {
   pending: number;
   completed: number;
@@ -3360,6 +3497,17 @@ export type RescheduleCampaignCallback200 = {
 
 export type ExportCampaignCallbacksParams = {
 status?: string;
+};
+
+export type ListBatchWorkspaceLeadsParams = {
+page?: number;
+limit?: number;
+status?: string;
+outcome?: string;
+};
+
+export type GetBatchWorkspaceActivityParams = {
+limit?: number;
 };
 
 export type ListCampaignTransfersParams = {

@@ -2904,6 +2904,186 @@ export const ExportCampaignCallbacksQueryParams = zod.object({
 
 
 /**
+ * @summary Batch header info (name, agent, source, campaign)
+ */
+export const GetBatchWorkspaceHeaderParams = zod.object({
+  "id": zod.coerce.number(),
+  "batchId": zod.coerce.number()
+})
+
+export const GetBatchWorkspaceHeaderResponse = zod.object({
+  "batch": zod.object({
+  "id": zod.number().optional(),
+  "name": zod.string().optional(),
+  "status": zod.string().optional(),
+  "leadSource": zod.string().optional(),
+  "totalLeads": zod.number().optional(),
+  "calledLeads": zod.number().optional(),
+  "createdAt": zod.coerce.date().optional(),
+  "scheduledStartAt": zod.coerce.date().nullish()
+}).optional(),
+  "campaign": zod.object({
+  "id": zod.number().optional(),
+  "name": zod.string().optional(),
+  "agentName": zod.string().nullish(),
+  "fromNumber": zod.string().nullish()
+}).optional(),
+  "source": zod.object({
+  "name": zod.string().optional(),
+  "type": zod.string().optional()
+}).optional()
+})
+
+
+/**
+ * @summary Batch KPI counts
+ */
+export const GetBatchWorkspaceKpisParams = zod.object({
+  "id": zod.coerce.number(),
+  "batchId": zod.coerce.number()
+})
+
+export const GetBatchWorkspaceKpisResponse = zod.object({
+  "total": zod.number(),
+  "connected": zod.number(),
+  "failed": zod.number(),
+  "pending": zod.number(),
+  "callbacks": zod.number(),
+  "incoming": zod.number(),
+  "bookings": zod.number(),
+  "transfers": zod.number(),
+  "successRate": zod.number()
+})
+
+
+/**
+ * @summary Operational funnel stages
+ */
+export const GetBatchWorkspaceFunnelParams = zod.object({
+  "id": zod.coerce.number(),
+  "batchId": zod.coerce.number()
+})
+
+export const GetBatchWorkspaceFunnelResponse = zod.object({
+  "stages": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "value": zod.number()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Enriched lead table for batch workspace
+ */
+export const ListBatchWorkspaceLeadsParams = zod.object({
+  "id": zod.coerce.number(),
+  "batchId": zod.coerce.number()
+})
+
+export const ListBatchWorkspaceLeadsQueryParams = zod.object({
+  "page": zod.coerce.number().optional(),
+  "limit": zod.coerce.number().optional(),
+  "status": zod.coerce.string().optional(),
+  "outcome": zod.coerce.string().optional()
+})
+
+export const ListBatchWorkspaceLeadsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string().nullish(),
+  "phone": zod.string(),
+  "callStatus": zod.string(),
+  "operationalOutcome": zod.string(),
+  "disposition": zod.string().nullish(),
+  "callAttempts": zod.number(),
+  "lastAttemptAt": zod.coerce.date().nullish(),
+  "callId": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "callback": zod.object({
+  "status": zod.string().optional(),
+  "callbackAt": zod.coerce.date().nullish()
+}).optional(),
+  "booking": zod.object({
+  "meetingTime": zod.coerce.date().nullish(),
+  "meetingStatus": zod.string().optional(),
+  "meetingLink": zod.string().nullish()
+}).optional(),
+  "transfer": zod.object({
+  "status": zod.string().optional(),
+  "transferTo": zod.string().optional()
+}).optional()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "limit": zod.number()
+})
+
+
+/**
+ * @summary Batch activity stream from lead timeline
+ */
+export const GetBatchWorkspaceActivityParams = zod.object({
+  "id": zod.coerce.number(),
+  "batchId": zod.coerce.number()
+})
+
+export const GetBatchWorkspaceActivityQueryParams = zod.object({
+  "limit": zod.coerce.number().optional()
+})
+
+export const GetBatchWorkspaceActivityResponse = zod.object({
+  "events": zod.array(zod.object({
+  "id": zod.number(),
+  "leadId": zod.number(),
+  "leadName": zod.string().nullish(),
+  "leadPhone": zod.string().nullish(),
+  "eventType": zod.string(),
+  "data": zod.object({
+
+}).passthrough().nullish(),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Import source insights for a batch
+ */
+export const GetBatchWorkspaceSourcesParams = zod.object({
+  "id": zod.coerce.number(),
+  "batchId": zod.coerce.number()
+})
+
+export const GetBatchWorkspaceSourcesResponse = zod.object({
+  "sources": zod.array(zod.object({
+  "sourceName": zod.string().optional(),
+  "sourceType": zod.string().optional(),
+  "importRuns": zod.number().optional(),
+  "totalRows": zod.number().optional(),
+  "validRows": zod.number().optional(),
+  "duplicates": zod.number().optional(),
+  "errors": zod.number().optional()
+})),
+  "runs": zod.array(zod.object({
+  "id": zod.number().optional(),
+  "fileName": zod.string().nullish(),
+  "status": zod.string().optional(),
+  "totalRows": zod.number().optional(),
+  "validRows": zod.number().optional(),
+  "invalidRows": zod.number().optional(),
+  "duplicateRows": zod.number().optional(),
+  "createdRows": zod.number().optional(),
+  "processingTimeMs": zod.number().nullish(),
+  "createdAt": zod.coerce.date().optional(),
+  "sourceName": zod.string().nullish(),
+  "sourceType": zod.string().nullish()
+}))
+})
+
+
+/**
  * @summary Transfer metric counts for a campaign
  */
 export const GetCampaignTransferMetricsParams = zod.object({

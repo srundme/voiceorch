@@ -2830,6 +2830,113 @@ paths:
         "401": { description: Unauthorized }
         "404": { description: Not found }
 
+  /campaigns/{id}/batches/{batchId}/workspace/header:
+    get:
+      operationId: getBatchWorkspaceHeader
+      tags: [campaigns]
+      summary: Batch header info (name, agent, source, campaign)
+      parameters:
+        - { name: id,      in: path, required: true, schema: { type: integer } }
+        - { name: batchId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Batch header
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BatchWorkspaceHeader" }
+        "401": { description: Unauthorized }
+        "404": { description: Not found }
+
+  /campaigns/{id}/batches/{batchId}/workspace/kpis:
+    get:
+      operationId: getBatchWorkspaceKpis
+      tags: [campaigns]
+      summary: Batch KPI counts
+      parameters:
+        - { name: id,      in: path, required: true, schema: { type: integer } }
+        - { name: batchId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: KPIs
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BatchWorkspaceKpis" }
+        "401": { description: Unauthorized }
+        "404": { description: Not found }
+
+  /campaigns/{id}/batches/{batchId}/workspace/funnel:
+    get:
+      operationId: getBatchWorkspaceFunnel
+      tags: [campaigns]
+      summary: Operational funnel stages
+      parameters:
+        - { name: id,      in: path, required: true, schema: { type: integer } }
+        - { name: batchId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Funnel
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BatchWorkspaceFunnel" }
+        "401": { description: Unauthorized }
+        "404": { description: Not found }
+
+  /campaigns/{id}/batches/{batchId}/workspace/leads:
+    get:
+      operationId: listBatchWorkspaceLeads
+      tags: [campaigns]
+      summary: Enriched lead table for batch workspace
+      parameters:
+        - { name: id,      in: path, required: true, schema: { type: integer } }
+        - { name: batchId, in: path, required: true, schema: { type: integer } }
+        - { name: page,    in: query, schema: { type: integer } }
+        - { name: limit,   in: query, schema: { type: integer } }
+        - { name: status,  in: query, schema: { type: string } }
+        - { name: outcome, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Leads page
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BatchWorkspaceLeadsPage" }
+        "401": { description: Unauthorized }
+        "404": { description: Not found }
+
+  /campaigns/{id}/batches/{batchId}/workspace/activity:
+    get:
+      operationId: getBatchWorkspaceActivity
+      tags: [campaigns]
+      summary: Batch activity stream from lead timeline
+      parameters:
+        - { name: id,      in: path, required: true, schema: { type: integer } }
+        - { name: batchId, in: path, required: true, schema: { type: integer } }
+        - { name: limit,   in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: Activity events
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BatchWorkspaceActivity" }
+        "401": { description: Unauthorized }
+        "404": { description: Not found }
+
+  /campaigns/{id}/batches/{batchId}/workspace/sources:
+    get:
+      operationId: getBatchWorkspaceSources
+      tags: [campaigns]
+      summary: Import source insights for a batch
+      parameters:
+        - { name: id,      in: path, required: true, schema: { type: integer } }
+        - { name: batchId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Sources
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BatchWorkspaceSources" }
+        "401": { description: Unauthorized }
+        "404": { description: Not found }
+
   /campaigns/{id}/transfers/metrics:
     get:
       operationId: getCampaignTransferMetrics
@@ -7988,6 +8095,173 @@ components:
       required: [callbackAt]
       properties:
         callbackAt: { type: string, format: date-time }
+
+    BatchWorkspaceHeader:
+      type: object
+      properties:
+        batch:
+          type: object
+          properties:
+            id:               { type: integer }
+            name:             { type: string }
+            status:           { type: string }
+            leadSource:       { type: string }
+            totalLeads:       { type: integer }
+            calledLeads:      { type: integer }
+            createdAt:        { type: string, format: date-time }
+            scheduledStartAt: { type: string, format: date-time, nullable: true }
+        campaign:
+          type: object
+          properties:
+            id:         { type: integer }
+            name:       { type: string }
+            agentName:  { type: string, nullable: true }
+            fromNumber: { type: string, nullable: true }
+        source:
+          type: object
+          properties:
+            name: { type: string }
+            type: { type: string }
+
+    BatchWorkspaceKpis:
+      type: object
+      required: [total, connected, failed, pending, callbacks, incoming, bookings, transfers, successRate]
+      properties:
+        total:       { type: integer }
+        connected:   { type: integer }
+        failed:      { type: integer }
+        pending:     { type: integer }
+        callbacks:   { type: integer }
+        incoming:    { type: integer }
+        bookings:    { type: integer }
+        transfers:   { type: integer }
+        successRate: { type: integer }
+
+    BatchFunnelStage:
+      type: object
+      required: [key, label, value]
+      properties:
+        key:   { type: string }
+        label: { type: string }
+        value: { type: integer }
+
+    BatchWorkspaceFunnel:
+      type: object
+      required: [stages, total]
+      properties:
+        stages:
+          type: array
+          items: { $ref: "#/components/schemas/BatchFunnelStage" }
+        total: { type: integer }
+
+    BatchWorkspaceLeadCallbackInfo:
+      type: object
+      properties:
+        status:     { type: string }
+        callbackAt: { type: string, format: date-time, nullable: true }
+
+    BatchWorkspaceLeadBookingInfo:
+      type: object
+      properties:
+        meetingTime:   { type: string, format: date-time, nullable: true }
+        meetingStatus: { type: string }
+        meetingLink:   { type: string, nullable: true }
+
+    BatchWorkspaceLeadTransferInfo:
+      type: object
+      properties:
+        status:     { type: string }
+        transferTo: { type: string }
+
+    BatchWorkspaceLead:
+      type: object
+      required: [id, phone, callStatus, operationalOutcome, callAttempts, createdAt]
+      properties:
+        id:                 { type: integer }
+        name:               { type: string, nullable: true }
+        phone:              { type: string }
+        callStatus:         { type: string }
+        operationalOutcome: { type: string }
+        disposition:        { type: string, nullable: true }
+        callAttempts:       { type: integer }
+        lastAttemptAt:      { type: string, format: date-time, nullable: true }
+        callId:             { type: integer, nullable: true }
+        createdAt:          { type: string, format: date-time }
+        callback:
+          $ref: "#/components/schemas/BatchWorkspaceLeadCallbackInfo"
+        booking:
+          $ref: "#/components/schemas/BatchWorkspaceLeadBookingInfo"
+        transfer:
+          $ref: "#/components/schemas/BatchWorkspaceLeadTransferInfo"
+
+    BatchWorkspaceLeadsPage:
+      type: object
+      required: [items, total, page, limit]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/BatchWorkspaceLead" }
+        total: { type: integer }
+        page:  { type: integer }
+        limit: { type: integer }
+
+    BatchActivityEvent:
+      type: object
+      required: [id, leadId, eventType, createdAt]
+      properties:
+        id:        { type: integer }
+        leadId:    { type: integer }
+        leadName:  { type: string, nullable: true }
+        leadPhone: { type: string, nullable: true }
+        eventType: { type: string }
+        data:      { type: object, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    BatchWorkspaceActivity:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          items: { $ref: "#/components/schemas/BatchActivityEvent" }
+
+    BatchSourceSummary:
+      type: object
+      properties:
+        sourceName: { type: string }
+        sourceType: { type: string }
+        importRuns: { type: integer }
+        totalRows:  { type: integer }
+        validRows:  { type: integer }
+        duplicates: { type: integer }
+        errors:     { type: integer }
+
+    BatchImportRunItem:
+      type: object
+      properties:
+        id:               { type: integer }
+        fileName:         { type: string, nullable: true }
+        status:           { type: string }
+        totalRows:        { type: integer }
+        validRows:        { type: integer }
+        invalidRows:      { type: integer }
+        duplicateRows:    { type: integer }
+        createdRows:      { type: integer }
+        processingTimeMs: { type: integer, nullable: true }
+        createdAt:        { type: string, format: date-time }
+        sourceName:       { type: string, nullable: true }
+        sourceType:       { type: string, nullable: true }
+
+    BatchWorkspaceSources:
+      type: object
+      required: [sources, runs]
+      properties:
+        sources:
+          type: array
+          items: { $ref: "#/components/schemas/BatchSourceSummary" }
+        runs:
+          type: array
+          items: { $ref: "#/components/schemas/BatchImportRunItem" }
 
     TransferMetrics:
       type: object

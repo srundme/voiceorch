@@ -1,279 +1,736 @@
+/**
+ * Batch Workspace — Phase 4
+ * Transforms a batch from "import container" → Operational Command Center.
+ * Layout: Header → KPI Strip → Tabs (Overview | Leads | Activity | Sources)
+ * Keeps existing controls (Start / Pause / Stop / Redial) intact.
+ */
+
 import { useState } from "react";
 import { useRoute, Link } from "wouter";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  useGetCampaignBatch,
-  useGetCampaign,
-  useListBatchLeads,
-  useUpdateCampaignBatch,
-  useRedialBatchNoPickup,
+  useUpdateCampaignBatch, useRedialBatchNoPickup,
   useRetryCampaignLead,
-  useGetBatchAnalytics,
   getListCampaignBatchesQueryKey,
   getListBatchLeadsQueryKey,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  ArrowLeft, Phone, Play, Pause, Square, RotateCcw,
-  Eye, ChevronDown, ChevronRight, PhoneCall, PhoneIncoming, Clock,
-  CheckCircle2, XCircle, PlayCircle, PauseCircle, X, Activity,
-  Users, Hash, TrendingUp, BarChart3, AlertTriangle, Target, User, Bell
+  ArrowLeft, Play, Pause, Square, RotateCcw, ChevronRight,
+  Users, Phone, PhoneCall, Calendar, ArrowRightLeft, XCircle,
+  TrendingUp, CheckCircle2, Bell, PhoneIncoming, ExternalLink,
+  Eye, Activity, FileText, Database, AlertTriangle, RefreshCw,
+  User,
 } from "lucide-react";
-import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
+import { useLocation } from "wouter";
+import { formatDistanceToNow, format } from "date-fns";
 
-// ── Types ──────────────────────────────────────────────────────────────────
+const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
-type LeadItem = {
-  id: number;
-  campaignId: number;
-  batchId: number | null;
-  phone: string;
-  name: string | null;
-  callStatus: string;
-  disposition: string | null;
-  callId: number | null;
-  fromNumber: string | null;
-  toNumber: string | null;
-  durationSeconds: number | null;
-  source: string;
-  hasCallback: boolean;
-  callbackStatus: string | null;
-  createdAt: string;
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type BatchWorkspaceKpis = {
+  total: number; connected: number; failed: number; pending: number;
+  callbacks: number; incoming: number; bookings: number; transfers: number;
+  successRate: number;
 };
 
-type LeadListResponse = { leads: LeadItem[]; total: number };
+type FunnelStage = { key: string; label: string; value: number };
+type BatchFunnel = { stages: FunnelStage[]; total: number };
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+type BatchWorkspaceLead = {
+  id: number; name: string | null; phone: string;
+  callStatus: string; operationalOutcome: string;
+  disposition: string | null; callAttempts: number;
+  lastAttemptAt: string | null; callId: number | null; createdAt: string;
+  callback: { status: string; callbackAt: string | null } | null;
+  booking: { meetingTime: string | null; meetingStatus: string; meetingLink: string | null } | null;
+  transfer: { status: string; transferTo: string } | null;
+};
 
-function fmtDuration(secs: number | null | undefined): string {
-  if (!secs) return "—";
-  const m = Math.floor(secs / 60);
-  const s = secs % 60;
-  return m > 0 ? `${m}m ${s}s` : `${s}s`;
-}
+type BatchLeadsPage = { items: BatchWorkspaceLead[]; total: number; page: number; limit: number };
 
-function StatusBadge({ status }: { status: string }) {
-  const configs: Record<string, { label: string; icon: React.ReactNode; bg: string; text: string; border: string }> = {
-    pending: { label: "Pending", icon: <PauseCircle className="h-3 w-3" />, bg: "bg-muted/50", text: "text-muted-foreground", border: "border-border" },
-    calling: { label: "Calling", icon: <PhoneCall className="h-3 w-3" />, bg: "bg-blue-500/10", text: "text-blue-600 dark:text-blue-400", border: "border-blue-500/20" },
-    completed: { label: "Completed", icon: <CheckCircle2 className="h-3 w-3" />, bg: "bg-emerald-500/10", text: "text-emerald-600 dark:text-emerald-400", border: "border-emerald-500/20" },
-    failed: { label: "Failed", icon: <XCircle className="h-3 w-3" />, bg: "bg-red-500/10", text: "text-red-600 dark:text-red-400", border: "border-red-500/20" },
-    skipped: { label: "Skipped", icon: <X className="h-3 w-3" />, bg: "bg-muted/30", text: "text-muted-foreground/60", border: "border-border" },
+type ActivityEvent = {
+  id: number; leadId: number; leadName: string | null; leadPhone: string | null;
+  eventType: string; data: Record<string, unknown> | null; createdAt: string;
+};
+
+type ImportRun = {
+  id: number; fileName: string | null; status: string;
+  totalRows: number; validRows: number; invalidRows: number; duplicateRows: number; createdRows: number;
+  processingTimeMs: number | null; createdAt: string;
+  sourceName: string | null; sourceType: string | null;
+};
+
+type SourceSummary = {
+  sourceName: string; sourceType: string;
+  importRuns: number; totalRows: number; validRows: number; duplicates: number; errors: number;
+};
+
+type BatchHeader = {
+  batch: {
+    id: number; name: string; status: string; leadSource: string;
+    totalLeads: number; calledLeads: number; createdAt: string;
+    scheduledStartAt: string | null;
   };
-  const cfg = configs[status] ?? { label: status, icon: <Activity className="h-3 w-3" />, bg: "bg-muted/50", text: "text-muted-foreground", border: "border-border" };
-  return (
-    <span className={`inline-flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1 rounded-md border ${cfg.bg} ${cfg.text} ${cfg.border}`}>
-      {cfg.icon}
-      {cfg.label}
-    </span>
-  );
+  campaign: { id: number; name: string; agentName: string | null; fromNumber: string | null };
+  source: { name: string; type: string } | null;
+};
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+async function apiFetch<T>(url: string): Promise<T> {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(await r.text());
+  return r.json() as Promise<T>;
 }
+
+function fmtDuration(s: number | null | undefined): string {
+  if (!s) return "—";
+  const m = Math.floor(s / 60);
+  return m > 0 ? `${m}m ${s % 60}s` : `${s}s`;
+}
+
+function fmtRelative(iso: string): string {
+  return formatDistanceToNow(new Date(iso), { addSuffix: true });
+}
+
+// ── Status / outcome config ───────────────────────────────────────────────────
+
+const CALL_STATUS: Record<string, { label: string; cls: string }> = {
+  pending:   { label: "Pending",   cls: "bg-muted/50 text-muted-foreground border-border"             },
+  calling:   { label: "Calling",   cls: "bg-sky-500/10 text-sky-600 border-sky-500/20"               },
+  completed: { label: "Completed", cls: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"   },
+  failed:    { label: "Failed",    cls: "bg-red-500/10 text-red-500 border-red-500/20"               },
+  skipped:   { label: "Skipped",   cls: "bg-muted/30 text-muted-foreground/60 border-border"         },
+};
+
+const OUTCOME: Record<string, { label: string; color: string }> = {
+  pending:              { label: "Pending",          color: "text-muted-foreground/50" },
+  booking_created:      { label: "Booked",           color: "text-emerald-500"         },
+  transfer_completed:   { label: "Transferred",      color: "text-sky-500"             },
+  callback_requested:   { label: "Callback",         color: "text-amber-500"           },
+  interest_confirmed:   { label: "Interested",       color: "text-violet-500"          },
+  no_contact:           { label: "No Contact",       color: "text-muted-foreground/60" },
+  dnc_blocked:          { label: "DNC",              color: "text-red-400"             },
+  failed:               { label: "Failed",           color: "text-red-500"             },
+};
+
+const BATCH_STATUS: Record<string, { label: string; cls: string }> = {
+  draft:     { label: "Draft",     cls: "bg-muted/50 text-muted-foreground border-border"           },
+  running:   { label: "Running",   cls: "bg-sky-500/10 text-sky-600 border-sky-500/30"             },
+  paused:    { label: "Paused",    cls: "bg-amber-500/10 text-amber-600 border-amber-500/30"       },
+  completed: { label: "Completed", cls: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30" },
+  stopped:   { label: "Stopped",   cls: "bg-red-500/10 text-red-500 border-red-500/30"             },
+};
+
+const EVENT_CFG: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
+  lead_imported:         { label: "Lead Imported",        icon: <Users className="h-3 w-3"         />, color: "text-violet-500"   },
+  call_started:          { label: "Call Started",         icon: <PhoneCall className="h-3 w-3"     />, color: "text-sky-500"      },
+  call_completed:        { label: "Call Completed",       icon: <CheckCircle2 className="h-3 w-3"  />, color: "text-emerald-500"  },
+  booking_created:       { label: "Booking Created",      icon: <Calendar className="h-3 w-3"      />, color: "text-emerald-500"  },
+  transfer_completed:    { label: "Transfer Completed",   icon: <ArrowRightLeft className="h-3 w-3"/>, color: "text-sky-500"      },
+  callback_scheduled:    { label: "Callback Scheduled",   icon: <Bell className="h-3 w-3"          />, color: "text-amber-500"    },
+  callback_completed:    { label: "Callback Completed",   icon: <CheckCircle2 className="h-3 w-3"  />, color: "text-emerald-500"  },
+  disposition_set:       { label: "Disposition Set",      icon: <Activity className="h-3 w-3"      />, color: "text-muted-foreground/60" },
+  outcome_updated:       { label: "Outcome Updated",      icon: <TrendingUp className="h-3 w-3"    />, color: "text-violet-500"   },
+};
+
+// ── BatchStatusBadge ──────────────────────────────────────────────────────────
 
 function BatchStatusBadge({ status }: { status: string }) {
-  const configs: Record<string, { label: string; icon: React.ReactNode; bg: string; text: string; border: string }> = {
-    draft: { label: "Draft", icon: <PauseCircle className="h-3 w-3" />, bg: "bg-muted/50", text: "text-muted-foreground", border: "border-border" },
-    running: { label: "Running", icon: <PlayCircle className="h-3 w-3" />, bg: "bg-blue-500/10", text: "text-blue-600 dark:text-blue-400", border: "border-blue-500/20" },
-    paused: { label: "Paused", icon: <PauseCircle className="h-3 w-3" />, bg: "bg-amber-500/10", text: "text-amber-600 dark:text-amber-400", border: "border-amber-500/20" },
-    completed: { label: "Completed", icon: <CheckCircle2 className="h-3 w-3" />, bg: "bg-emerald-500/10", text: "text-emerald-600 dark:text-emerald-400", border: "border-emerald-500/20" },
-    stopped: { label: "Stopped", icon: <XCircle className="h-3 w-3" />, bg: "bg-red-500/10", text: "text-red-600 dark:text-red-400", border: "border-red-500/20" },
-  };
-  const cfg = configs[status] ?? { label: status, icon: <Activity className="h-3 w-3" />, bg: "bg-muted/50", text: "text-muted-foreground", border: "border-border" };
+  const cfg = BATCH_STATUS[status] ?? { label: status, cls: "bg-muted/50 text-muted-foreground border-border" };
   return (
-    <span className={`inline-flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1 rounded-md border ${cfg.bg} ${cfg.text} ${cfg.border}`}>
-      {cfg.icon}
+    <span className={cn("inline-flex items-center text-[10px] font-semibold px-2.5 py-1 rounded-md border", cfg.cls)}>
       {cfg.label}
     </span>
   );
 }
 
-// ── Filter bar ──────────────────────────────────────────────────────────────
+// ── KPI Card ──────────────────────────────────────────────────────────────────
 
-const FIXED_FILTERS = [
-  { key: "all", label: "All", icon: Phone },
-  { key: "no_pickup", label: "No Pickup", icon: PhoneCall },
-  { key: "inbound", label: "Inbound", icon: PhoneIncoming },
-  { key: "callbacks", label: "Callbacks", icon: Clock },
-];
-
-function FilterBar({ active, onChange, dynamicFilters }: {
-  active: string;
-  onChange: (f: string) => void;
-  dynamicFilters: string[];
+function KpiCard({ icon, label, value, color, onClick, active }: {
+  icon: React.ReactNode; label: string; value: number | string;
+  color?: string; onClick?: () => void; active?: boolean;
 }) {
-  const all = [
-    ...FIXED_FILTERS,
-    ...dynamicFilters.map(d => ({
-      key: d,
-      label: d.charAt(0).toUpperCase() + d.slice(1).replace(/_/g, " "),
-      icon: null,
-    })),
-  ];
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {all.map(f => (
-        <button
-          key={f.key}
-          onClick={() => onChange(f.key)}
-          className={[
-            "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all",
-            active === f.key
-              ? "bg-foreground text-background"
-              : "bg-elevated/40 border border-border text-muted-foreground hover:bg-elevated hover:text-foreground",
-          ].join(" ")}
-        >
-          {f.icon && <f.icon className="h-3 w-3" />}
-          {f.label}
-        </button>
-      ))}
+    <button
+      onClick={onClick}
+      disabled={!onClick}
+      className={cn(
+        "flex-1 min-w-[90px] rounded-lg border px-3.5 py-3 text-left transition-all",
+        active  ? "border-primary/40 bg-primary/5 shadow-sm" : "border-border/40 bg-card hover:bg-muted/20",
+        !onClick && "cursor-default",
+      )}
+    >
+      <div className="flex items-center gap-1.5 mb-1">
+        <span className={cn("text-muted-foreground/50", color)}>{icon}</span>
+        <span className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/40">{label}</span>
+      </div>
+      <p className={cn("text-xl font-bold tabular-nums", color ?? "text-foreground")}>{value}</p>
+    </button>
+  );
+}
+
+// ── Funnel ────────────────────────────────────────────────────────────────────
+
+function BatchFunnelView({ funnel }: { funnel: BatchFunnel }) {
+  const total = funnel.total || 1;
+  const COLORS = [
+    "bg-sky-500", "bg-violet-500", "bg-emerald-500",
+    "bg-amber-500", "bg-emerald-600", "bg-sky-600",
+  ];
+
+  return (
+    <div className="space-y-2">
+      {funnel.stages.map((s, i) => {
+        const pct = Math.round((s.value / total) * 100);
+        return (
+          <div key={s.key} className="flex items-center gap-3">
+            <span className="text-[10px] text-muted-foreground/60 w-20 text-right shrink-0">{s.label}</span>
+            <div className="flex-1 h-5 bg-muted/30 rounded-sm overflow-hidden">
+              <div
+                className={cn("h-full rounded-sm transition-all duration-500", COLORS[i])}
+                style={{ width: `${Math.max(pct, pct > 0 ? 2 : 0)}%` }}
+              />
+            </div>
+            <span className="text-[10px] font-mono font-semibold w-16 tabular-nums">
+              {s.value.toLocaleString()} <span className="text-muted-foreground/40">({pct}%)</span>
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-// ── Call log row ───────────────────────────────────────────────────────────
+// ── Overview Tab ──────────────────────────────────────────────────────────────
 
-function CallRow({ lead, filter, onRetry }: { lead: LeadItem; filter: string; onRetry?: (leadId: number) => void }) {
-  const [expanded, setExpanded] = useState(false);
+function OverviewTab({ campaignId, batchId, header }: {
+  campaignId: number; batchId: number; header: BatchHeader | undefined;
+}) {
+  const { data: funnel } = useQuery<BatchFunnel>({
+    queryKey: ["batch-funnel", campaignId, batchId],
+    queryFn: () => apiFetch(`${BASE}/api/campaigns/${campaignId}/batches/${batchId}/workspace/funnel`),
+    refetchInterval: 15000,
+  });
+
+  const b = header?.batch;
+  const c = header?.campaign;
+  const calledPct = b && b.totalLeads > 0 ? Math.round((b.calledLeads / b.totalLeads) * 100) : 0;
 
   return (
-    <>
-      <tr
-        className="hover:bg-elevated/20 transition-colors cursor-pointer group"
-        onClick={() => setExpanded(e => !e)}
-      >
-        <td className="px-4 py-3">
-          <StatusBadge status={lead.callStatus} />
-          {filter === "callbacks" && lead.hasCallback && (
-            <Badge variant="outline" className={`ml-1.5 text-[10px] ${lead.callbackStatus === "done" ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" : "bg-blue-500/10 text-blue-600 border-blue-500/20"}`}>
-              {lead.callbackStatus === "done" ? "Callback Made" : "Pending"}
-            </Badge>
-          )}
-        </td>
-        <td className="px-4 py-3 text-[11px] text-muted-foreground whitespace-nowrap">
-          {format(new Date(lead.createdAt), "MMM d, HH:mm")}
-        </td>
-        <td className="px-4 py-3 hidden sm:table-cell">
-          <span className="text-[11px] font-mono text-foreground/60">
-            {lead.fromNumber ?? <span className="text-muted-foreground/30">—</span>}
-          </span>
-        </td>
-        <td className="px-4 py-3">
-          <span className="text-[11px] font-mono text-foreground">
-            {lead.toNumber ?? lead.phone}
-          </span>
-        </td>
-        <td className="px-4 py-3 hidden md:table-cell">
-          <span className="text-[11px] text-muted-foreground tabular-nums">
-            {fmtDuration(lead.durationSeconds)}
-          </span>
-        </td>
-        <td className="px-4 py-3 w-24">
-          <div className="flex items-center gap-2">
-            <Link href={`/app/campaigns/${lead.campaignId}/leads/${lead.id}`} onClick={e => e.stopPropagation()} aria-label="View lead profile">
-              <User className="h-3.5 w-3.5 text-muted-foreground/40 hover:text-primary transition-colors" />
-            </Link>
-            {lead.callId && (
-              <Link href={`/app/calls/${lead.callId}`} onClick={e => e.stopPropagation()}>
-                <Eye className="h-3.5 w-3.5 text-muted-foreground/40 hover:text-foreground transition-colors" />
-              </Link>
-            )}
-            {onRetry && lead.callStatus === "failed" && (
-              <button
-                onClick={e => { e.stopPropagation(); onRetry(lead.id); }}
-                className="text-[10px] text-amber-600 hover:text-amber-700 hover:underline"
-              >
-                Retry
-              </button>
-            )}
-            {expanded
-              ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/40" />
-              : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40" />
-            }
+    <div className="space-y-4 p-5">
+      {/* Funnel */}
+      <div className="rounded-xl border border-border/40 bg-card p-5">
+        <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground/50 mb-4 flex items-center gap-2">
+          <TrendingUp className="h-3.5 w-3.5" /> Operational Funnel
+        </h3>
+        {funnel ? (
+          <BatchFunnelView funnel={funnel} />
+        ) : (
+          <div className="space-y-2">
+            {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-5 w-full" />)}
           </div>
-        </td>
-      </tr>
-      {expanded && (
-        <tr className="bg-elevated/10 border-b border-border/30">
-          <td colSpan={6} className="px-6 py-3">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
-              <div>
-                <span className="text-muted-foreground/50 uppercase tracking-wider text-[10px]">Name</span>
-                <p className="text-foreground mt-0.5">{lead.name ?? "—"}</p>
+        )}
+      </div>
+
+      {/* Batch info cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {/* Batch Details */}
+        <div className="rounded-xl border border-border/40 bg-card p-4 space-y-2.5">
+          <p className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/40">Batch Details</p>
+          <Row label="Status">
+            {b && <BatchStatusBadge status={b.status} />}
+          </Row>
+          <Row label="Created">{b ? format(new Date(b.createdAt), "MMM d, yyyy HH:mm") : "—"}</Row>
+          <Row label="Scheduled Start">{b?.scheduledStartAt ? format(new Date(b.scheduledStartAt), "MMM d, yyyy HH:mm") : "Not scheduled"}</Row>
+          <Row label="Lead Source">{b?.leadSource ?? "—"}</Row>
+          <Row label="Source Name">{header?.source?.name ?? "—"}</Row>
+        </div>
+
+        {/* Campaign & Agent */}
+        <div className="rounded-xl border border-border/40 bg-card p-4 space-y-2.5">
+          <p className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/40">Campaign & Agent</p>
+          <Row label="Campaign">{c?.name ?? "—"}</Row>
+          <Row label="Agent">{c?.agentName ?? "No agent"}</Row>
+          <Row label="From Number">{c?.fromNumber ?? "Unset"}</Row>
+        </div>
+
+        {/* Progress */}
+        <div className="rounded-xl border border-border/40 bg-card p-4 space-y-2.5">
+          <p className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/40">Progress</p>
+          <Row label="Total Leads">{b?.totalLeads ?? 0}</Row>
+          <Row label="Called">{b?.calledLeads ?? 0}</Row>
+          <Row label="Remaining">{((b?.totalLeads ?? 0) - (b?.calledLeads ?? 0))}</Row>
+          <Row label="Progress">
+            <div className="flex items-center gap-2">
+              <div className="h-1.5 w-20 bg-muted rounded-full overflow-hidden">
+                <div className="h-full bg-primary/50 rounded-full" style={{ width: `${calledPct}%` }} />
               </div>
-              <div>
-                <span className="text-muted-foreground/50 uppercase tracking-wider text-[10px]">Disposition</span>
-                <p className="text-foreground mt-0.5">{lead.disposition ?? "—"}</p>
-              </div>
-              <div>
-                <span className="text-muted-foreground/50 uppercase tracking-wider text-[10px]">Attempts</span>
-                <p className="text-foreground mt-0.5">{lead.source}</p>
-              </div>
-              {lead.callId && (
-                <div>
-                  <span className="text-muted-foreground/50 uppercase tracking-wider text-[10px]">Call</span>
-                  <Link href={`/app/calls/${lead.callId}`}>
-                    <p className="text-primary hover:underline mt-0.5">#{lead.callId}</p>
-                  </Link>
-                </div>
-              )}
+              <span className="text-xs font-mono">{calledPct}%</span>
             </div>
-          </td>
-        </tr>
-      )}
-    </>
+          </Row>
+        </div>
+      </div>
+    </div>
   );
 }
 
-// ── Page ──────────────────────────────────────────────────────────────────
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-[10px] text-muted-foreground/50 shrink-0">{label}</span>
+      <span className="text-xs font-medium text-right">{children}</span>
+    </div>
+  );
+}
 
-export default function BatchDetailPage() {
+// ── Leads Tab ─────────────────────────────────────────────────────────────────
+
+function LeadsTab({ campaignId, batchId }: { campaignId: number; batchId: number }) {
+  const [, navigate] = useLocation();
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const retry = useRetryCampaignLead();
+
+  const [page,    setPage]    = useState(0);
+  const [status,  setStatus]  = useState("all");
+  const [outcome, setOutcome] = useState("all");
+  const LIMIT = 50;
+
+  const queryKey = ["batch-ws-leads", campaignId, batchId, status, outcome, page];
+  const { data, isFetching } = useQuery<BatchLeadsPage>({
+    queryKey,
+    queryFn: () => {
+      const p = new URLSearchParams({ status, outcome, page: String(page), limit: String(LIMIT) });
+      return apiFetch<BatchLeadsPage>(`${BASE}/api/campaigns/${campaignId}/batches/${batchId}/workspace/leads?${p}`);
+    },
+    refetchInterval: 10000,
+    placeholderData: prev => prev,
+  });
+
+  async function handleRetry(leadId: number) {
+    try {
+      await retry.mutateAsync({ id: campaignId, leadId });
+      await qc.invalidateQueries({ queryKey });
+      toast({ title: "Retry queued" });
+    } catch { toast({ title: "Failed", variant: "destructive" }); }
+  }
+
+  const items = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / LIMIT));
+
+  const STATUS_FILTERS = [
+    { key: "all", label: "All" },
+    { key: "pending",   label: "Pending"   },
+    { key: "completed", label: "Completed" },
+    { key: "failed",    label: "Failed"    },
+    { key: "calling",   label: "Calling"   },
+  ];
+
+  const OUTCOME_FILTERS = [
+    { key: "all",              label: "All Outcomes"   },
+    { key: "booking_created",  label: "Booked"         },
+    { key: "transfer_completed", label: "Transferred"  },
+    { key: "callback_requested", label: "Callback"     },
+    { key: "interest_confirmed", label: "Interested"   },
+    { key: "no_contact",       label: "No Contact"     },
+    { key: "failed",           label: "Failed"         },
+  ];
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-2 px-5 py-3 border-b border-border/30">
+        <div className="flex items-center gap-1">
+          {STATUS_FILTERS.map(f => (
+            <button
+              key={f.key}
+              onClick={() => { setStatus(f.key); setPage(0); }}
+              className={cn(
+                "px-2.5 py-1 rounded text-[11px] font-medium transition-colors",
+                status === f.key ? "bg-foreground/10 text-foreground" : "text-muted-foreground hover:bg-muted/40",
+              )}
+            >{f.label}</button>
+          ))}
+        </div>
+        <div className="w-px h-4 bg-border/50" />
+        <div className="flex items-center gap-1 flex-wrap">
+          {OUTCOME_FILTERS.map(f => (
+            <button
+              key={f.key}
+              onClick={() => { setOutcome(f.key); setPage(0); }}
+              className={cn(
+                "px-2.5 py-1 rounded text-[11px] font-medium transition-colors",
+                outcome === f.key ? "bg-foreground/10 text-foreground" : "text-muted-foreground hover:bg-muted/40",
+              )}
+            >{f.label}</button>
+          ))}
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-[10px] text-muted-foreground/40">{total.toLocaleString()} leads</span>
+          <Button size="sm" variant="ghost" className={cn("h-6 w-6 p-0", isFetching && "opacity-60")}
+            onClick={() => qc.invalidateQueries({ queryKey })}>
+            <RefreshCw className={cn("h-3 w-3", isFetching && "animate-spin")} />
+          </Button>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {items.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-40 gap-2">
+            <Users className="h-7 w-7 text-muted-foreground/20" />
+            <p className="text-sm text-muted-foreground/40">No leads in this view</p>
+          </div>
+        ) : (
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border/30">
+              <tr>
+                <th className="px-4 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider">Lead</th>
+                <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider">Status</th>
+                <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden sm:table-cell">Outcome</th>
+                <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden md:table-cell">Disposition</th>
+                <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden lg:table-cell">Attempts</th>
+                <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden lg:table-cell">Last Activity</th>
+                <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden xl:table-cell">Booking</th>
+                <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden xl:table-cell">Transfer</th>
+                <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden xl:table-cell">Callback</th>
+                <th className="px-3 py-2 text-right text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider w-20">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/30">
+              {items.map(lead => {
+                const sc = CALL_STATUS[lead.callStatus] ?? { label: lead.callStatus, cls: "bg-muted/50 text-muted-foreground border-border" };
+                const oc = OUTCOME[lead.operationalOutcome] ?? { label: lead.operationalOutcome, color: "text-muted-foreground/50" };
+                return (
+                  <tr key={lead.id} className="hover:bg-muted/20 transition-colors">
+                    {/* Lead */}
+                    <td className="px-4 py-2.5">
+                      <p className="font-medium truncate max-w-[110px]">{lead.name ?? "—"}</p>
+                      <p className="text-[10px] font-mono text-muted-foreground/60">{lead.phone}</p>
+                    </td>
+                    {/* Status */}
+                    <td className="px-3 py-2.5">
+                      <span className={cn("inline-flex text-[10px] font-semibold px-2 py-0.5 rounded border", sc.cls)}>
+                        {sc.label}
+                      </span>
+                    </td>
+                    {/* Outcome */}
+                    <td className="px-3 py-2.5 hidden sm:table-cell">
+                      <span className={cn("text-[10px] font-medium", oc.color)}>{oc.label}</span>
+                    </td>
+                    {/* Disposition */}
+                    <td className="px-3 py-2.5 hidden md:table-cell">
+                      <span className="text-[10px] text-muted-foreground/70 truncate max-w-[80px] block">
+                        {lead.disposition ?? "—"}
+                      </span>
+                    </td>
+                    {/* Attempts */}
+                    <td className="px-3 py-2.5 hidden lg:table-cell">
+                      <span className="text-[10px] tabular-nums text-muted-foreground/60">{lead.callAttempts}</span>
+                    </td>
+                    {/* Last Activity */}
+                    <td className="px-3 py-2.5 hidden lg:table-cell">
+                      <span className="text-[10px] text-muted-foreground/60">
+                        {lead.lastAttemptAt ? fmtRelative(lead.lastAttemptAt) : "—"}
+                      </span>
+                    </td>
+                    {/* Booking */}
+                    <td className="px-3 py-2.5 hidden xl:table-cell">
+                      {lead.booking ? (
+                        <div className="flex items-center gap-1 text-emerald-500">
+                          <Calendar className="h-2.5 w-2.5" />
+                          <span className="text-[10px]">{lead.booking.meetingStatus}</span>
+                        </div>
+                      ) : <span className="text-muted-foreground/30 text-[10px]">—</span>}
+                    </td>
+                    {/* Transfer */}
+                    <td className="px-3 py-2.5 hidden xl:table-cell">
+                      {lead.transfer ? (
+                        <div className="flex items-center gap-1 text-sky-500">
+                          <ArrowRightLeft className="h-2.5 w-2.5" />
+                          <span className="text-[10px]">{lead.transfer.status}</span>
+                        </div>
+                      ) : <span className="text-muted-foreground/30 text-[10px]">—</span>}
+                    </td>
+                    {/* Callback */}
+                    <td className="px-3 py-2.5 hidden xl:table-cell">
+                      {lead.callback ? (
+                        <div className="flex items-center gap-1 text-amber-500">
+                          <Bell className="h-2.5 w-2.5" />
+                          <span className="text-[10px]">{lead.callback.status}</span>
+                        </div>
+                      ) : <span className="text-muted-foreground/30 text-[10px]">—</span>}
+                    </td>
+                    {/* Actions */}
+                    <td className="px-3 py-2.5">
+                      <div className="flex items-center justify-end gap-1">
+                        {lead.callId && (
+                          <Button size="icon" variant="ghost" className="h-6 w-6"
+                            title="View Call" onClick={() => navigate(`/app/calls/${lead.callId}`)}>
+                            <Eye className="h-3 w-3 text-muted-foreground/50" />
+                          </Button>
+                        )}
+                        <Button size="icon" variant="ghost" className="h-6 w-6"
+                          title="Open Lead" onClick={() => navigate(`/app/campaigns/${campaignId}/leads/${lead.id}`)}>
+                          <ExternalLink className="h-3 w-3 text-muted-foreground/50" />
+                        </Button>
+                        {lead.callStatus === "failed" && (
+                          <Button size="icon" variant="ghost" className="h-6 w-6"
+                            title="Retry" onClick={() => void handleRetry(lead.id)}>
+                            <RotateCcw className="h-3 w-3 text-amber-500" />
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Pagination */}
+      {total > LIMIT && (
+        <div className="flex items-center justify-between px-5 py-2 border-t border-border/30 text-[11px] text-muted-foreground/50">
+          <span>{page * LIMIT + 1}–{Math.min((page + 1) * LIMIT, total)} of {total.toLocaleString()}</span>
+          <div className="flex items-center gap-1">
+            <Button size="sm" variant="ghost" className="h-6 text-xs" disabled={page === 0} onClick={() => setPage(p => p - 1)}>Prev</Button>
+            <span className="px-2">{page + 1}/{totalPages}</span>
+            <Button size="sm" variant="ghost" className="h-6 text-xs" disabled={page + 1 >= totalPages} onClick={() => setPage(p => p + 1)}>Next</Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Activity Tab ──────────────────────────────────────────────────────────────
+
+function ActivityTab({ campaignId, batchId }: { campaignId: number; batchId: number }) {
+  const { data, isFetching, refetch } = useQuery<{ events: ActivityEvent[] }>({
+    queryKey: ["batch-activity", campaignId, batchId],
+    queryFn: () => apiFetch(`${BASE}/api/campaigns/${campaignId}/batches/${batchId}/workspace/activity`),
+    refetchInterval: 15000,
+  });
+
+  const events = data?.events ?? [];
+
+  return (
+    <div className="p-5">
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground/40 flex items-center gap-2">
+          <Activity className="h-3.5 w-3.5" /> Activity Stream
+        </p>
+        <Button size="sm" variant="ghost" className={cn("h-7 gap-1.5 text-xs", isFetching && "opacity-60")}
+          onClick={() => void refetch()}>
+          <RefreshCw className={cn("h-3 w-3", isFetching && "animate-spin")} />
+        </Button>
+      </div>
+
+      {events.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-40 gap-2">
+          <Activity className="h-7 w-7 text-muted-foreground/20" />
+          <p className="text-sm text-muted-foreground/40">No activity recorded yet</p>
+          <p className="text-xs text-muted-foreground/30">Events will appear here as leads progress</p>
+        </div>
+      ) : (
+        <div className="space-y-1">
+          {events.map(evt => {
+            const cfg = EVENT_CFG[evt.eventType] ?? {
+              label: evt.eventType.replace(/_/g, " "),
+              icon: <Activity className="h-3 w-3" />,
+              color: "text-muted-foreground/50",
+            };
+            return (
+              <div key={evt.id} className="flex items-start gap-3 py-2 border-b border-border/20 last:border-0">
+                <div className={cn("mt-0.5 shrink-0", cfg.color)}>{cfg.icon}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={cn("text-xs font-medium", cfg.color)}>{cfg.label}</span>
+                    {(evt.leadName || evt.leadPhone) && (
+                      <span className="text-[10px] text-muted-foreground/60 truncate">
+                        {evt.leadName ?? evt.leadPhone}
+                      </span>
+                    )}
+                    {typeof evt.data?.disposition === "string" && evt.data.disposition && (
+                      <span className="text-[10px] text-muted-foreground/50 italic">
+                        &ldquo;{evt.data.disposition}&rdquo;
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <span className="text-[10px] text-muted-foreground/40 shrink-0">{fmtRelative(evt.createdAt)}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Sources Tab ───────────────────────────────────────────────────────────────
+
+function SourcesTab({ campaignId, batchId }: { campaignId: number; batchId: number }) {
+  const { data } = useQuery<{ sources: SourceSummary[]; runs: ImportRun[] }>({
+    queryKey: ["batch-sources", campaignId, batchId],
+    queryFn: () => apiFetch(`${BASE}/api/campaigns/${campaignId}/batches/${batchId}/workspace/sources`),
+  });
+
+  const sources = data?.sources ?? [];
+  const runs    = data?.runs    ?? [];
+
+  return (
+    <div className="p-5 space-y-5">
+      {/* Source Summary */}
+      {sources.length > 0 && (
+        <div className="rounded-xl border border-border/40 bg-card p-4">
+          <p className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/40 mb-3">Source Summary</p>
+          <div className="space-y-0">
+            {sources.map((s, i) => (
+              <div key={i} className="flex items-center gap-3 py-2.5 border-b border-border/20 last:border-0">
+                <div className="flex items-center gap-2 min-w-[130px]">
+                  <Database className="h-3 w-3 text-muted-foreground/40" />
+                  <div>
+                    <p className="text-xs font-medium">{s.sourceName}</p>
+                    <p className="text-[10px] text-muted-foreground/50 uppercase">{s.sourceType}</p>
+                  </div>
+                </div>
+                <div className="flex gap-4 text-[11px] flex-wrap">
+                  <div className="text-center"><p className="text-foreground font-semibold">{s.importRuns}</p><p className="text-muted-foreground/40 text-[9px]">Runs</p></div>
+                  <div className="text-center"><p className="text-foreground font-semibold">{s.totalRows.toLocaleString()}</p><p className="text-muted-foreground/40 text-[9px]">Total</p></div>
+                  <div className="text-center"><p className="text-emerald-500 font-semibold">{s.validRows.toLocaleString()}</p><p className="text-muted-foreground/40 text-[9px]">Valid</p></div>
+                  <div className="text-center"><p className="text-amber-500 font-semibold">{s.duplicates.toLocaleString()}</p><p className="text-muted-foreground/40 text-[9px]">Dupes</p></div>
+                  <div className="text-center"><p className="text-red-500 font-semibold">{s.errors.toLocaleString()}</p><p className="text-muted-foreground/40 text-[9px]">Errors</p></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Import Run History */}
+      <div className="rounded-xl border border-border/40 bg-card overflow-hidden">
+        <div className="px-4 py-3 border-b border-border/30">
+          <p className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/40 flex items-center gap-2">
+            <FileText className="h-3 w-3" /> Import Runs
+          </p>
+        </div>
+        {runs.length === 0 ? (
+          <div className="py-10 flex flex-col items-center gap-2">
+            <FileText className="h-7 w-7 text-muted-foreground/20" />
+            <p className="text-xs text-muted-foreground/40">No import runs recorded</p>
+          </div>
+        ) : (
+          <table className="w-full text-xs">
+            <thead className="border-b border-border/30 bg-muted/10">
+              <tr>
+                <th className="px-4 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider">File / Source</th>
+                <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden sm:table-cell">Status</th>
+                <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider">Total</th>
+                <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden md:table-cell">Created</th>
+                <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden md:table-cell">Dupes</th>
+                <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden lg:table-cell">Errors</th>
+                <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden xl:table-cell">When</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/20">
+              {runs.map(r => (
+                <tr key={r.id} className="hover:bg-muted/10">
+                  <td className="px-4 py-2.5">
+                    <p className="font-medium truncate max-w-[160px]">{r.fileName ?? r.sourceName ?? "Unknown"}</p>
+                    {r.sourceType && <p className="text-[10px] text-muted-foreground/50 uppercase">{r.sourceType}</p>}
+                  </td>
+                  <td className="px-3 py-2.5 hidden sm:table-cell">
+                    <span className={cn(
+                      "inline-flex text-[10px] font-semibold px-2 py-0.5 rounded border",
+                      r.status === "completed" ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" :
+                      r.status === "failed"    ? "bg-red-500/10 text-red-500 border-red-500/20" :
+                      "bg-amber-500/10 text-amber-600 border-amber-500/20",
+                    )}>
+                      {r.status}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <p className="tabular-nums">{r.totalRows}</p>
+                    <p className="text-[10px] text-emerald-500">{r.createdRows} created</p>
+                  </td>
+                  <td className="px-3 py-2.5 hidden md:table-cell">
+                    <span className={cn("tabular-nums", r.duplicateRows > 0 ? "text-amber-500" : "text-muted-foreground/50")}>
+                      {r.duplicateRows}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5 hidden md:table-cell">
+                    <span className={cn("tabular-nums", r.invalidRows > 0 ? "text-red-500" : "text-muted-foreground/50")}>
+                      {r.invalidRows}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5 hidden lg:table-cell">
+                    <span className="text-muted-foreground/50">
+                      {r.processingTimeMs != null ? `${(r.processingTimeMs / 1000).toFixed(1)}s` : "—"}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5 hidden xl:table-cell">
+                    <span className="text-muted-foreground/50">{fmtRelative(r.createdAt)}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
+type WorkspaceTab = "overview" | "leads" | "activity" | "sources";
+
+export default function BatchWorkspacePage() {
   const [, params] = useRoute("/app/campaigns/:id/batches/:batchId");
-  const campaignId = parseInt(params?.id ?? "0", 10);
-  const batchId = parseInt(params?.batchId ?? "0", 10);
+  const campaignId = parseInt(params?.id      ?? "0", 10);
+  const batchId    = parseInt(params?.batchId ?? "0", 10);
 
-  const [filter, setFilter] = useState("all");
-  const [page, setPage] = useState(0);
-  const [showAnalytics, setShowAnalytics] = useState(false);
-  const PAGE_SIZE = 20;
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>("overview");
   const { toast } = useToast();
   const qc = useQueryClient();
 
   const update = useUpdateCampaignBatch();
   const redial = useRedialBatchNoPickup();
-  const retry = useRetryCampaignLead();
 
-  const { data: campaign } = useGetCampaign(campaignId);
-  const { data: batch } = useGetCampaignBatch(campaignId, batchId);
-  const { data: analytics } = useGetBatchAnalytics(campaignId, batchId);
-  const { data: leadsData, isLoading } = useListBatchLeads(
-    campaignId, batchId,
-    { filter, limit: PAGE_SIZE, offset: page * PAGE_SIZE },
-  );
+  // Header data (light, kept in sync with polling)
+  const { data: header } = useQuery<BatchHeader>({
+    queryKey: ["batch-ws-header", campaignId, batchId],
+    queryFn: () => apiFetch(`${BASE}/api/campaigns/${campaignId}/batches/${batchId}/workspace/header`),
+    refetchInterval: 10000,
+  });
 
-  const raw = leadsData as LeadListResponse | LeadItem[] | undefined;
-  const items = Array.isArray(raw) ? (raw as LeadItem[]) : ((raw as LeadListResponse)?.leads ?? []);
-  const total = Array.isArray(raw) ? items.length : ((raw as LeadListResponse)?.total ?? 0);
+  // KPIs
+  const { data: kpis } = useQuery<BatchWorkspaceKpis>({
+    queryKey: ["batch-ws-kpis", campaignId, batchId],
+    queryFn: () => apiFetch(`${BASE}/api/campaigns/${campaignId}/batches/${batchId}/workspace/kpis`),
+    refetchInterval: 10000,
+  });
 
-  const dynamicDispositions = [...new Set(
-    items
-      .filter(l => l.disposition && !["pending", "calling", "completed", "failed", "skipped"].includes(l.disposition))
-      .map(l => l.disposition!)
-  )];
-
-  function changeFilter(f: string) {
-    setFilter(f);
-    setPage(0);
-  }
+  const batchStatus = header?.batch.status ?? "draft";
 
   async function handleControl(status: "running" | "paused" | "stopped") {
     try {
       await update.mutateAsync({ id: campaignId, batchId, data: { status } });
       await qc.invalidateQueries({ queryKey: getListCampaignBatchesQueryKey(campaignId) });
+      await qc.invalidateQueries({ queryKey: ["batch-ws-header", campaignId, batchId] });
       toast({ title: status === "running" ? "Batch started" : status === "paused" ? "Batch paused" : "Batch stopped" });
     } catch {
-      toast({ title: "Error", description: "Action failed. Please try again.", variant: "destructive" });
+      toast({ title: "Action failed", variant: "destructive" });
     }
   }
 
@@ -287,265 +744,129 @@ export default function BatchDetailPage() {
     }
   }
 
-  async function handleRetryLead(leadId: number) {
-    try {
-      await retry.mutateAsync({ id: campaignId, leadId });
-      await qc.invalidateQueries({ queryKey: getListBatchLeadsQueryKey(campaignId, batchId) });
-      toast({ title: "Retry queued", description: "Lead will be called again" });
-    } catch {
-      toast({ title: "Retry failed", variant: "destructive" });
-    }
-  }
-
-  const batchStatus = batch?.status ?? "draft";
-  const calledPct = batch && batch.totalLeads > 0
-    ? Math.round((batch.calledLeads / batch.totalLeads) * 100)
-    : 0;
+  const TABS: { key: WorkspaceTab; label: string; icon: React.ReactNode }[] = [
+    { key: "overview",  label: "Overview",  icon: <TrendingUp className="h-3 w-3"   /> },
+    { key: "leads",     label: "Leads",     icon: <Users className="h-3 w-3"        /> },
+    { key: "activity",  label: "Activity",  icon: <Activity className="h-3 w-3"     /> },
+    { key: "sources",   label: "Sources",   icon: <Database className="h-3 w-3"     /> },
+  ];
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden">
-      {/* Header */}
-      <div className="px-6 pt-6 pb-4 border-b border-border shrink-0">
-        <div className="flex items-center justify-between gap-4">
+
+      {/* ── Header ──────────────────────────────────────────────────────────── */}
+      <div className="px-6 pt-5 pb-3 border-b border-border/40 shrink-0">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
-            <Link href="/app/campaigns">
+            <Link href={`/app/campaigns/${campaignId}`}>
               <Button variant="outline" size="icon" className="h-8 w-8">
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             </Link>
             <div>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground/50 mb-0.5">
-                <Link href={`/app/campaigns/${campaignId}`}>
-                  <span className="hover:text-foreground transition-colors">{campaign?.name ?? "Campaign"}</span>
+              {/* Breadcrumb */}
+              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/50 mb-0.5">
+                <Link href="/app/campaigns">
+                  <span className="hover:text-foreground transition-colors">Campaigns</span>
                 </Link>
-                <ChevronRight className="h-3 w-3" />
-                <span className="text-foreground">{batch?.name ?? "Batch"}</span>
+                <ChevronRight className="h-2.5 w-2.5" />
+                <Link href={`/app/campaigns/${campaignId}`}>
+                  <span className="hover:text-foreground transition-colors">{header?.campaign.name ?? "…"}</span>
+                </Link>
+                <ChevronRight className="h-2.5 w-2.5" />
+                <span className="text-foreground">{header?.batch.name ?? "Batch"}</span>
               </div>
-              <div className="flex items-center gap-3">
-                <h2 className="text-xl font-semibold tracking-tight">{batch?.name ?? "Batch"}</h2>
-                {batch && <BatchStatusBadge status={batchStatus} />}
+
+              {/* Title + status */}
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h2 className="text-lg font-semibold tracking-tight">{header?.batch.name ?? "Batch Workspace"}</h2>
+                {header && <BatchStatusBadge status={batchStatus} />}
+                {header?.campaign.agentName && (
+                  <span className="flex items-center gap-1 text-[10px] text-muted-foreground/50">
+                    <User className="h-2.5 w-2.5" />
+                    {header.campaign.agentName}
+                  </span>
+                )}
+                {header?.campaign.fromNumber && (
+                  <span className="flex items-center gap-1 text-[10px] text-muted-foreground/50">
+                    <Phone className="h-2.5 w-2.5" />
+                    {header.campaign.fromNumber}
+                  </span>
+                )}
+                {header?.source && (
+                  <span className="flex items-center gap-1 text-[10px] text-muted-foreground/50">
+                    <Database className="h-2.5 w-2.5" />
+                    {header.source.name}
+                  </span>
+                )}
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs gap-1.5"
-              onClick={() => setShowAnalytics(s => !s)}
-            >
-              <BarChart3 className="h-3.5 w-3.5" />
-              {showAnalytics ? "Hide" : "Analytics"}
+
+          {/* Controls */}
+          <div className="flex items-center gap-2 ml-auto">
+            <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+              disabled={batchStatus === "running" || update.isPending}
+              onClick={() => void handleControl("running")}>
+              <Play className="h-3.5 w-3.5" /> Start
+            </Button>
+            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5"
+              disabled={batchStatus !== "running" || update.isPending}
+              onClick={() => void handleControl("paused")}>
+              <Pause className="h-3.5 w-3.5" /> Pause
+            </Button>
+            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 border-red-500/20 text-red-600 hover:bg-red-500/5"
+              disabled={batchStatus === "stopped" || update.isPending}
+              onClick={() => void handleControl("stopped")}>
+              <Square className="h-3.5 w-3.5" /> Stop
+            </Button>
+            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5"
+              disabled={batchStatus === "running" || redial.isPending}
+              onClick={() => void handleRedialAll()}>
+              <RotateCcw className="h-3.5 w-3.5" /> Redial
             </Button>
           </div>
         </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-auto px-6 py-5 space-y-5">
-        {/* Controls + Stats */}
-        <div className="bg-card border border-border rounded-xl p-5">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            {/* Stats */}
-            <div className="grid grid-cols-3 gap-4 sm:flex sm:items-center sm:gap-6">
-              <div>
-                <p className="text-[9px] text-muted-foreground/50 uppercase tracking-wider">Total Leads</p>
-                <p className="text-xl font-semibold text-foreground mt-0.5">{batch?.totalLeads ?? 0}</p>
-              </div>
-              <div>
-                <p className="text-[9px] text-muted-foreground/50 uppercase tracking-wider">Called</p>
-                <p className="text-xl font-semibold text-foreground mt-0.5">{batch?.calledLeads ?? 0}</p>
-              </div>
-              <div>
-                <p className="text-[9px] text-muted-foreground/50 uppercase tracking-wider">Progress</p>
-                <p className="text-xl font-semibold text-foreground mt-0.5">{calledPct}%</p>
-              </div>
-            </div>
-
-            {/* Controls */}
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
-                disabled={batchStatus === "running" || update.isPending}
-                onClick={() => void handleControl("running")}
-              >
-                <Play className="h-3.5 w-3.5" /> Start
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 text-xs gap-1.5"
-                disabled={batchStatus !== "running" || update.isPending}
-                onClick={() => void handleControl("paused")}
-              >
-                <Pause className="h-3.5 w-3.5" /> Pause
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 text-xs gap-1.5 border-red-500/20 text-red-600 hover:bg-red-500/5"
-                disabled={batchStatus === "stopped" || update.isPending}
-                onClick={() => void handleControl("stopped")}
-              >
-                <Square className="h-3.5 w-3.5" /> Stop
-              </Button>
-            </div>
-          </div>
-
-          {/* Progress bar */}
-          {batch && batch.totalLeads > 0 && (
-            <div className="mt-4">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[10px] text-muted-foreground/50">Progress</span>
-                <span className="text-[10px] text-muted-foreground font-mono">{calledPct}%</span>
-              </div>
-              <div className="h-2 bg-muted rounded-full overflow-hidden">
-                <div className="h-full bg-primary/30 rounded-full transition-all duration-500" style={{ width: `${calledPct}%` }} />
-              </div>
-              <div className="flex items-center justify-between mt-1.5 text-[10px] text-muted-foreground/50">
-                <span>{batch.calledLeads} called</span>
-                <span>{batch.totalLeads - batch.calledLeads} remaining</span>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Analytics Panel */}
-        {showAnalytics && analytics && (
-          <div className="bg-card border border-border rounded-xl p-5 space-y-4">
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-2">
-              <BarChart3 className="h-3.5 w-3.5" /> Batch Analytics
-            </h3>
-            {/* Stats grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
-              {[
-                { label: "Total",    value: analytics.stats.total,         icon: <Users className="h-3.5 w-3.5" />,    cls: "" },
-                { label: "Answered", value: analytics.stats.answered,       icon: <CheckCircle2 className="h-3.5 w-3.5" />, cls: "text-emerald-600 dark:text-emerald-400" },
-                { label: "No Pickup",value: analytics.stats.notPicked,      icon: <Phone className="h-3.5 w-3.5" />,    cls: "text-amber-600 dark:text-amber-400" },
-                { label: "Failed",   value: analytics.stats.failed,         icon: <XCircle className="h-3.5 w-3.5" />,  cls: "text-red-600 dark:text-red-400" },
-                { label: "Callbacks",value: analytics.stats.callbacks,      icon: <Bell className="h-3.5 w-3.5" />,     cls: "text-purple-600 dark:text-purple-400" },
-                { label: "Retries",  value: analytics.stats.pendingRetries, icon: <RotateCcw className="h-3.5 w-3.5" />, cls: "text-blue-600 dark:text-blue-400" },
-              ].map(s => (
-                <div key={s.label} className="rounded-lg border border-border bg-background p-3">
-                  <div className="flex items-center gap-1.5 text-muted-foreground mb-1">
-                    {s.icon}
-                    <span className="text-[9px] uppercase tracking-widest">{s.label}</span>
-                  </div>
-                  <p className={`text-xl font-semibold ${s.cls || "text-foreground"}`}>{s.value}</p>
-                </div>
-              ))}
-            </div>
-            {/* Disposition breakdown */}
-            {analytics.dispositions.length > 0 && (
-              <div>
-                <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">Dispositions</p>
-                <div className="flex flex-wrap gap-2">
-                  {analytics.dispositions.map(d => (
-                    <div key={d.label} className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-background">
-                      <span className="text-xs text-muted-foreground capitalize">{d.label}</span>
-                      <span className="text-xs font-bold text-foreground">{d.count}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Call Log */}
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-border">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <Phone className="h-4 w-4 text-muted-foreground/50" />
-                Call Log
-              </h2>
-              <span className="text-[10px] text-muted-foreground/40">{total} leads</span>
-            </div>
-            <FilterBar active={filter} onChange={changeFilter} dynamicFilters={dynamicDispositions} />
-          </div>
-
-          {isLoading ? (
-            <div className="divide-y divide-border">
-              {[...Array(5)].map((_, i) => (
-                <div key={i} className="flex items-center gap-4 px-4 py-3.5">
-                  <Skeleton className="h-5 w-16 rounded-full" />
-                  <Skeleton className="h-3 w-24 rounded" />
-                  <Skeleton className="h-3 w-20 rounded ml-auto" />
-                </div>
-              ))}
-            </div>
-          ) : items.length === 0 ? (
-            <div className="py-14 text-center">
-              <div className="h-12 w-12 rounded-2xl bg-elevated border border-border flex items-center justify-center mx-auto mb-3">
-                <Phone className="h-6 w-6 text-muted-foreground/30" />
-              </div>
-              <p className="text-sm font-medium text-foreground/40">
-                {filter === "inbound" ? "Inbound call tracking coming soon" :
-                 filter === "callbacks" ? "No scheduled callbacks" :
-                 filter === "no_pickup" ? "No no-pickup calls" :
-                 "No calls yet for this batch"}
-              </p>
-              <p className="text-xs text-muted-foreground/30 mt-1">
-                {filter === "all" ? "Start the campaign to begin calling leads" : "Try a different filter"}
-              </p>
-            </div>
-          ) : (
-            <>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-border bg-elevated/30">
-                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-widest">Status</th>
-                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-widest">Time</th>
-                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-widest hidden sm:table-cell">From</th>
-                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-widest">To</th>
-                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-widest hidden md:table-cell">Duration</th>
-                      <th className="px-4 py-2.5 w-24" />
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/60">
-                    {items.map(lead => (
-                      <CallRow key={lead.id} lead={lead} filter={filter} onRetry={handleRetryLead} />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Pagination */}
-              {total > PAGE_SIZE && (
-                <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-elevated/10">
-                  <p className="text-xs text-muted-foreground/50">
-                    {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total}
-                  </p>
-                  <div className="flex gap-1">
-                    <Button variant="outline" size="sm" className="h-7 text-xs" disabled={page === 0} onClick={() => setPage(p => p - 1)}>Prev</Button>
-                    <Button variant="outline" size="sm" className="h-7 text-xs" disabled={(page + 1) * PAGE_SIZE >= total} onClick={() => setPage(p => p + 1)}>Next</Button>
-                  </div>
-                </div>
-              )}
-
-              {/* Redial for No Pickup */}
-              {filter === "no_pickup" && items.length > 0 && (
-                <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-amber-500/5">
-                  <p className="text-xs text-amber-700/70">{items.length} no-pickup call{items.length !== 1 ? "s" : ""} — redial to retry all</p>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs gap-1.5 border-amber-500/20 text-amber-700 hover:bg-amber-500/10"
-                    onClick={() => void handleRedialAll()}
-                    disabled={redial.isPending}
-                  >
-                    <RotateCcw className="h-3 w-3" />
-                    Redial All
-                  </Button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
+      {/* ── KPI Strip ───────────────────────────────────────────────────────── */}
+      <div className="flex items-stretch gap-2 px-5 py-3 overflow-x-auto shrink-0 border-b border-border/20">
+        <KpiCard icon={<Users className="h-3 w-3" />}        label="Total"     value={kpis?.total       ?? "—"} />
+        <KpiCard icon={<PhoneCall className="h-3 w-3" />}    label="Connected" value={kpis?.connected    ?? "—"} color="text-emerald-500" onClick={() => setActiveTab("leads")} active={activeTab === "leads"} />
+        <KpiCard icon={<Bell className="h-3 w-3" />}         label="Callbacks" value={kpis?.callbacks    ?? "—"} color="text-amber-500"   onClick={() => setActiveTab("leads")} />
+        <KpiCard icon={<PhoneIncoming className="h-3 w-3" />} label="Incoming" value={kpis?.incoming     ?? "—"} color="text-sky-500"     />
+        <KpiCard icon={<Calendar className="h-3 w-3" />}     label="Bookings"  value={kpis?.bookings     ?? "—"} color="text-violet-500"  onClick={() => setActiveTab("leads")} />
+        <KpiCard icon={<ArrowRightLeft className="h-3 w-3" />} label="Transfers" value={kpis?.transfers  ?? "—"} color="text-sky-400"    onClick={() => setActiveTab("leads")} />
+        <KpiCard icon={<XCircle className="h-3 w-3" />}      label="Failed"    value={kpis?.failed       ?? "—"} color="text-red-500"     onClick={() => { setActiveTab("leads"); }} />
+        <KpiCard icon={<TrendingUp className="h-3 w-3" />}   label="Success"   value={kpis ? `${kpis.successRate}%` : "—"} color="text-emerald-500" />
       </div>
+
+      {/* ── Tab bar ─────────────────────────────────────────────────────────── */}
+      <div className="flex items-center gap-0.5 px-5 py-2 border-b border-border/20 shrink-0">
+        {TABS.map(t => (
+          <button
+            key={t.key}
+            onClick={() => setActiveTab(t.key)}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors",
+              activeTab === t.key
+                ? "bg-foreground/10 text-foreground"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/30",
+            )}
+          >
+            {t.icon} {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Tab Content ─────────────────────────────────────────────────────── */}
+      <div className="flex-1 overflow-auto min-h-0">
+        {activeTab === "overview"  && <OverviewTab  campaignId={campaignId} batchId={batchId} header={header} />}
+        {activeTab === "leads"     && <LeadsTab     campaignId={campaignId} batchId={batchId} />}
+        {activeTab === "activity"  && <ActivityTab  campaignId={campaignId} batchId={batchId} />}
+        {activeTab === "sources"   && <SourcesTab   campaignId={campaignId} batchId={batchId} />}
+      </div>
+
     </div>
   );
 }

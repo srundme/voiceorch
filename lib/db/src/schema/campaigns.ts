@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, text, timestamp, json, boolean } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, timestamp, json, boolean, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { agentsTable } from "./agents";
 
 export type CampaignFieldMappings = {
@@ -75,6 +75,29 @@ export const campaignBatchesTable = pgTable("campaign_batches", {
   createdAt:          timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt:          timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
+
+// ── Batch Daily Metrics ───────────────────────────────────────────────────────
+// Updated by lifecycle engine. One row per batch per UTC day.
+// Pre-aggregated so Phase 7 Analytics can avoid expensive historical scans.
+export const batchDailyMetricsTable = pgTable("batch_daily_metrics", {
+  id:            serial("id").primaryKey(),
+  batchId:       integer("batch_id").notNull().references(() => campaignBatchesTable.id, { onDelete: "cascade" }),
+  date:          text("date").notNull(), // YYYY-MM-DD (UTC)
+  leadsImported: integer("leads_imported").notNull().default(0),
+  connected:     integer("connected").notNull().default(0),
+  booked:        integer("booked").notNull().default(0),
+  transferred:   integer("transferred").notNull().default(0),
+  failed:        integer("failed").notNull().default(0),
+  callbacks:     integer("callbacks").notNull().default(0),
+  createdAt:     timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:     timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+}, t => [
+  uniqueIndex("batch_daily_metrics_batch_date_idx").on(t.batchId, t.date),
+  index("batch_daily_metrics_batch_idx").on(t.batchId),
+]);
+
+export type BatchDailyMetric = typeof batchDailyMetricsTable.$inferSelect;
+export type InsertBatchDailyMetric = typeof batchDailyMetricsTable.$inferInsert;
 
 export const campaignLeadsTable = pgTable("campaign_leads", {
   id:               serial("id").primaryKey(),
