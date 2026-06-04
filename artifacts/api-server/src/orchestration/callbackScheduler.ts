@@ -101,12 +101,14 @@ async function fireCallback(cb: CallbackRow, baseUrl: string): Promise<void> {
       ? (JSON.parse(provRow.extraConfig) as Record<string, string>)
       : {} as Record<string, string>;
 
+    const leadQs = cb.campaignLeadId ? `&campaignLeadId=${cb.campaignLeadId}` : "";
+
     if (provider === "twilio") {
       if (!cfg["accountSid"] || !cfg["fromNumber"]) throw new Error("Twilio config missing accountSid or fromNumber");
       await dialTwilio({
         accountSid: cfg["accountSid"]!, authToken: decryptKey(provRow.apiKey),
         fromNumber: cfg["fromNumber"]!, toNumber: cb.toNumber,
-        webhookUrl: `${baseUrl}/api/webhooks/twilio/voice?agentId=${cb.agentId}`,
+        webhookUrl: `${baseUrl}/api/webhooks/twilio/voice?agentId=${cb.agentId}${leadQs}`,
         statusCallbackUrl: `${baseUrl}/api/webhooks/twilio/status`,
       });
     } else if (provider === "plivo") {
@@ -114,14 +116,14 @@ async function fireCallback(cb: CallbackRow, baseUrl: string): Promise<void> {
       await dialPlivo({
         authId: cfg["authId"]!, authToken: decryptKey(provRow.apiKey),
         fromNumber: cfg["fromNumber"]!, toNumber: cb.toNumber,
-        answerUrl: `${baseUrl}/api/webhooks/plivo/voice?agentId=${cb.agentId}`,
+        answerUrl: `${baseUrl}/api/webhooks/plivo/voice?agentId=${cb.agentId}${leadQs}`,
       });
     } else if (provider === "vobiz") {
       if (!cfg["authId"] || !cfg["fromNumber"]) throw new Error("Vobiz config missing authId or fromNumber");
       await dialVobiz({
         authId: cfg["authId"]!, authToken: decryptKey(provRow.apiKey),
         fromNumber: cfg["fromNumber"]!, toNumber: cb.toNumber,
-        answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${cb.agentId}`,
+        answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${cb.agentId}${leadQs}`,
         hangupUrl:  `${baseUrl}/api/webhooks/vobiz/status`,
       });
     } else {

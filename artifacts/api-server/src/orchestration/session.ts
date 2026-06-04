@@ -42,6 +42,7 @@ interface ActiveSession {
   agentUserId: string | null;           // needed to scope LLM key in endSession
   agentLlmProvider: string;
   agentLlmModel: string;
+  campaignLeadId: number | null;        // re-attached to the lead when a callback is scheduled
   // Dropped-call detection: true when pipeline triggered the end (phrase/timeout/tool)
   // false means WS just closed — i.e. call was likely dropped mid-conversation
   naturalEndTriggered: boolean;
@@ -503,6 +504,7 @@ export async function createSession(params: {
     agentUserId:      agent.userId ?? null,
     agentLlmProvider: agent.llmProvider,
     agentLlmModel:    agent.llmModel ?? "",
+    campaignLeadId:   params.campaignLeadId ?? null,
   });
 
   // Persist initial session metadata to Redis
@@ -939,11 +941,12 @@ export async function endSession(sessionId: string): Promise<void> {
                 });
                 if (!wasDropped) {
                   await detectCallbackRequest({
-                    agentId:  call.agentId,
-                    toNumber: session.callerPhone!,
+                    agentId:        call.agentId,
+                    toNumber:       session.callerPhone!,
                     history,
-                    llm:      memLlm,
-                    callId:   session.callId,
+                    llm:            memLlm,
+                    callId:         session.callId,
+                    campaignLeadId: session.campaignLeadId,
                   });
                 }
               }

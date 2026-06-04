@@ -258,8 +258,9 @@ export async function detectCallbackRequest(opts: {
   history: ConversationTurn[];
   llm: LLMAdapter;
   callId: number;
+  campaignLeadId?: number | null;  // if set, the callback will re-attach to the campaign lead
 }): Promise<void> {
-  const { agentId, toNumber, userId, history, llm, callId } = opts;
+  const { agentId, toNumber, userId, history, llm, callId, campaignLeadId } = opts;
 
   if (history.length < 2) return;
 
@@ -303,6 +304,7 @@ export async function detectCallbackRequest(opts: {
     userId: userId ?? null,
     scheduledAt,
     createdFromCallId: callId,
+    campaignLeadId:    campaignLeadId ?? null,
     status: "pending",
   });
 
