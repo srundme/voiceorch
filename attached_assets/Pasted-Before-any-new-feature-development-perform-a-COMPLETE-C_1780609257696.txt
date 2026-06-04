@@ -1,0 +1,328 @@
+Before any new feature development, perform a COMPLETE Campaign Operations Module Audit and Launch Readiness Review.
+
+DO NOT BUILD ANYTHING.
+
+DO NOT MODIFY ANY CODE.
+
+DO NOT REFACTOR.
+
+ONLY AUDIT.
+
+====================================================
+
+OBJECTIVE
+
+Verify that every Campaign Operations Module feature from Phase 1A through Phase 7.1 is actually working in the application and not just implemented in code.
+
+I want a production readiness checklist with evidence.
+
+====================================================
+
+AUDIT REQUIREMENTS
+
+For every module below:
+
+1. Verify backend endpoint exists.
+2. Verify endpoint returns valid data.
+3. Verify frontend screen loads.
+4. Verify navigation path works.
+5. Verify no runtime errors.
+6. Verify empty states.
+7. Verify loading states.
+8. Verify success states.
+9. Verify mobile responsiveness.
+10. Verify permissions/auth.
+11. Verify exports work.
+12. Verify filters work.
+13. Verify search works.
+14. Verify polling works.
+15. Verify deep linking works.
+
+====================================================
+
+PHASE 1A
+
+Foundation Layer
+
+Audit:
+
+* lead_sources
+* agent_variables
+* batch_import_runs
+* duplicate engine
+* phone normalization engine
+* operational outcomes
+* timeline events
+
+====================================================
+
+PHASE 1B
+
+Batch Wizard
+
+Audit all 8 steps:
+
+* Batch Info
+* Source Selection
+* Source Configuration
+* Variable Mapping
+* Validation
+* Duplicate Handling
+* Execution Rules
+* Review & Launch
+
+Verify:
+
+* CSV upload
+* Webhook generation
+* Auto mapping
+* Duplicate preview
+* Error report generation
+* Import summary
+
+====================================================
+
+PHASE 2
+
+Command Center
+
+Audit:
+
+* KPI cards
+* Live Operations Feed
+* Activity Stream
+* Queue Health
+* Navigation
+* Filters
+* Polling
+
+====================================================
+
+PHASE 3A
+
+Live Queue
+
+Audit:
+
+* Metrics strip
+* Tabs
+* Filters
+* Search
+* Bulk actions
+* Export
+* Lead drawer
+* Queue reason
+* Polling
+
+====================================================
+
+PHASE 3B
+
+Callbacks
+
+Audit:
+
+* Metrics
+* SLA indicators
+* Call now
+* Reschedule
+* Complete
+* Bulk actions
+* Export
+
+====================================================
+
+PHASE 3C
+
+Incoming Calls
+
+Audit:
+
+* Metrics
+* Status transitions
+* Create callback
+* Reason column
+* Export
+* Polling
+
+====================================================
+
+PHASE 3D
+
+Bookings
+
+Audit:
+
+* Metrics
+* Open meeting
+* Reschedule
+* Cancel
+* Open lead
+* Scheduling integration
+
+====================================================
+
+PHASE 3E
+
+Transfers
+
+Audit:
+
+* Metrics
+* Retry transfer
+* Mark complete
+* Open lead
+* View call
+* Export
+
+====================================================
+
+PHASE 4
+
+Batch Workspace
+
+Audit:
+
+* Header
+* KPI cards
+* Funnel
+* Leads tab
+* Activity tab
+* Sources tab
+* Controls
+* Polling
+
+====================================================
+
+PHASE 5
+
+Lead CRM
+
+Audit:
+
+* Lead profile
+* Summary
+* Transcript
+* Recording
+* Sentiment
+* Intent
+* Topics
+* Notes
+* Tasks
+* Tags
+* Timeline
+* Bookings
+* Transfers
+* Callbacks
+
+====================================================
+
+PHASE 6
+
+Analytics
+
+Audit:
+
+* Overview
+* Funnel
+* Sources
+* Campaigns
+* Agents
+* Queue Analytics
+* Exports
+* Charts
+* Filters
+
+====================================================
+
+PHASE 7.1
+
+Global Search
+
+Audit:
+
+* Command palette
+* Keyboard shortcuts
+* Mobile search
+* Deep links
+* Entity results
+* Search performance
+
+====================================================
+
+TECHNICAL AUDIT
+
+Verify:
+
+* Zero TypeScript errors
+* Zero build errors
+* No dead routes
+* No console errors
+* No React warnings
+* No failed API calls
+* No OpenAPI mismatches
+* No codegen mismatches
+* No hydration issues
+* No broken links
+* No duplicate navigation paths
+
+====================================================
+
+DATABASE AUDIT
+
+Verify all tables:
+
+* Exist
+* Have indexes
+* Have foreign keys
+* Have constraints
+* Are being used
+
+Identify:
+
+* Unused tables
+* Unused columns
+* Missing indexes
+* Slow queries
+
+====================================================
+
+SECURITY AUDIT
+
+Verify:
+
+* User isolation
+* Workspace isolation
+* Ownership validation
+* Authorization checks
+* CSV validation
+* Webhook validation
+
+====================================================
+
+OUTPUT FORMAT
+
+Generate a report with:
+
+PASS ✅
+WARNING ⚠️
+FAIL ❌
+
+For every module.
+
+At the end provide:
+
+1. Launch Readiness Score (/100)
+2. Critical Issues
+3. High Priority Issues
+4. Medium Priority Issues
+5. Nice-to-Have Improvements
+6. Recommendation:
+
+   * READY FOR PRODUCTION
+   * READY FOR BETA
+   * NOT READY
+
+Do not make assumptions.
+
+Actually inspect the codebase and verify every feature before scoring.
