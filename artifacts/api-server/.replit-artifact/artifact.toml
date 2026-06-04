@@ -30,3 +30,6 @@ NODE_ENV = "production"
 
 [services.production.health.startup]
 path = "/api/healthz"
+initialDelaySeconds = 90
+periodSeconds = 10
+failureThreshold = 3
