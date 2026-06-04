@@ -1530,7 +1530,7 @@ export async function handleWebCallWebSocket(
       }
 
       // Deduct platform fee from wallet.
-      // Pricing: < 30 s → $0.015 (half rate); ≥ 30 s → ceil(seconds/60) × $0.03/min.
+      // Pricing: < 30 s → $0.02 flat; ≥ 30 s → ceil(seconds/60) × $0.03/min.
       const callUserId = agent.userId ?? null;
       if (callUserId && durationSeconds > 0) {
         const debitCents = Math.round(durationSeconds < 30
@@ -1539,6 +1539,10 @@ export async function handleWebCallWebSocket(
         const billableLabel = durationSeconds < 30
           ? "< 30 s flat"
           : `${Math.ceil(durationSeconds / 60)} min × $0.03`;
+
+        // Persist cost on the call row so it shows up in call log detail
+        await db.update(callsTable).set({ costCents: debitCents }).where(eq(callsTable.id, callId));
+
         const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, callUserId));
         if (user) {
           const newBalance = Math.round(Math.max(0, user.walletBalanceCents - debitCents));

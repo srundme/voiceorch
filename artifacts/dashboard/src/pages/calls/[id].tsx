@@ -7,7 +7,7 @@ import {
   ChevronDown, ChevronUp, Phone, Calendar, Clock, TrendingUp,
   BarChart3, Mic, Cpu, Volume2, Hash, ArrowRight, UserCheck,
   Voicemail, BookOpen, Tag, Activity, ExternalLink, Copy, CheckCircle2,
-  XCircle, PlayCircle, PauseCircle
+  XCircle, PlayCircle, PauseCircle, MicOff
 } from "lucide-react";
 import {
   useGetCall,
@@ -378,7 +378,7 @@ export default function CallDetail() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {call.recordingUrl && (
+            {call.recordingUrl ? (
               <>
                 <audio
                   controls
@@ -395,7 +395,11 @@ export default function CallDetail() {
                   <Download className="h-4 w-4" />
                 </a>
               </>
-            )}
+            ) : (call.status === "completed" || call.status === "failed") ? (
+              <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground/40 border border-dashed border-border rounded-md px-2.5 py-1.5">
+                <MicOff className="h-3 w-3" /> Recording not enabled
+              </span>
+            ) : null}
           </div>
         </div>
 
@@ -431,7 +435,7 @@ export default function CallDetail() {
             <CardContent className="p-2.5">
               <p className="text-[9px] text-muted-foreground/50 uppercase tracking-wider">Cost</p>
               <p className="text-xs font-mono text-foreground/70">
-                {costCents > 0 ? `$${(costCents / 100).toFixed(3)}` : "—"}
+                {costCents > 0 ? `₹${(costCents / 100).toFixed(2)}` : "—"}
               </p>
             </CardContent>
           </Card>
@@ -600,9 +604,14 @@ export default function CallDetail() {
                 <DetailRow label="Duration" value={formatDuration(call.durationSeconds)} icon={<Clock className="h-3 w-3" />} highlight />
                 <DetailRow label="Started" value={format(parseISO(call.createdAt), "HH:mm:ss")} icon={<PlayCircle className="h-3 w-3" />} />
                 <DetailRow label="Ended" value={call.endedAt ? format(parseISO(call.endedAt), "HH:mm:ss") : "—"} icon={<XCircle className="h-3 w-3" />} />
-                {costCents > 0 && (
-                  <DetailRow label="Platform Fee" value={`$${(costCents / 100).toFixed(3)}`} icon={<Receipt className="h-3 w-3" />} />
-                )}
+                <DetailRow
+                  label="Platform Fee"
+                  value={costCents > 0
+                    ? `₹${(costCents / 100).toFixed(2)}`
+                    : (call.status === "completed" || call.status === "failed") ? "₹0.00" : "—"
+                  }
+                  icon={<Receipt className="h-3 w-3" />}
+                />
                 <DetailRow label="Execution ID" value={call.executionId ?? `—`} icon={<Hash className="h-3 w-3" />} />
               </CardContent>
             </Card>
