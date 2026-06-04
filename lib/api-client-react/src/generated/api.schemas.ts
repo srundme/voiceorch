@@ -1342,13 +1342,15 @@ export interface Campaign {
   retryDelayMinutes: number;
   totalLeads: number;
   calledLeads: number;
+  /** Maximum concurrent calls allowed for this campaign */
+  concurrentCallLimit: number;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
 }
 
 /**
- * Maps lead source field names to roles. Must include 'phone' key.
+ * Maps lead source field names to roles. Defaults to {phone:'phone'} if omitted.
  */
 export type CampaignCreateFieldMappings = {[key: string]: string};
 
@@ -1356,9 +1358,10 @@ export interface CampaignCreate {
   name: string;
   description?: string;
   agentId: number;
-  /** Maps lead source field names to roles. Must include 'phone' key. */
-  fieldMappings: CampaignCreateFieldMappings;
+  /** Maps lead source field names to roles. Defaults to {phone:'phone'} if omitted. */
+  fieldMappings?: CampaignCreateFieldMappings;
   fromNumber?: string;
+  concurrentCallLimit?: number;
   callDelaySeconds?: number;
   maxAttempts?: number;
   retryDelayMinutes?: number;
@@ -1386,6 +1389,7 @@ export interface CampaignUpdate {
   /** Maps lead source field names to roles. */
   fieldMappings?: CampaignUpdateFieldMappings;
   fromNumber?: string;
+  concurrentCallLimit?: number;
   callDelaySeconds?: number;
   maxAttempts?: number;
   retryDelayMinutes?: number;
@@ -1434,24 +1438,72 @@ export const CampaignBatchStatus = {
   stopped: 'stopped',
 } as const;
 
+export type CampaignBatchLeadSource = typeof CampaignBatchLeadSource[keyof typeof CampaignBatchLeadSource];
+
+
+export const CampaignBatchLeadSource = {
+  csv: 'csv',
+  meta: 'meta',
+  webhook: 'webhook',
+} as const;
+
+export type CampaignBatchFieldMappings = {[key: string]: string} | null;
+
 export interface CampaignBatch {
   id: number;
   campaignId: number;
   name: string;
+  description?: string | null;
   status: CampaignBatchStatus;
+  leadSource: CampaignBatchLeadSource;
   scheduledStartAt?: string | null;
+  scheduledEndAt?: string | null;
   totalLeads: number;
   calledLeads: number;
+  fieldMappings?: CampaignBatchFieldMappings;
+  callDelaySeconds: number;
+  maxAttempts: number;
+  retryDelayMinutes: number;
+  timezone?: string | null;
+  businessHoursStart?: number | null;
+  businessHoursEnd?: number | null;
+  maxDailyCalls?: number | null;
   createdAt: string;
   updatedAt: string;
 }
 
+export type CampaignBatchCreateLeadSource = typeof CampaignBatchCreateLeadSource[keyof typeof CampaignBatchCreateLeadSource];
+
+
+export const CampaignBatchCreateLeadSource = {
+  csv: 'csv',
+  meta: 'meta',
+  webhook: 'webhook',
+} as const;
+
 export type CampaignBatchCreateLeadsItem = {[key: string]: string};
+
+/**
+ * Batch-level field mappings; overrides campaign-level if provided
+ */
+export type CampaignBatchCreateFieldMappings = {[key: string]: string};
 
 export interface CampaignBatchCreate {
   name: string;
-  leads: CampaignBatchCreateLeadsItem[];
+  description?: string;
+  leadSource?: CampaignBatchCreateLeadSource;
+  leads?: CampaignBatchCreateLeadsItem[];
   scheduledStartAt?: string | null;
+  scheduledEndAt?: string | null;
+  /** Batch-level field mappings; overrides campaign-level if provided */
+  fieldMappings?: CampaignBatchCreateFieldMappings;
+  callDelaySeconds?: number;
+  maxAttempts?: number;
+  retryDelayMinutes?: number;
+  timezone?: string;
+  businessHoursStart?: number;
+  businessHoursEnd?: number;
+  maxDailyCalls?: number;
 }
 
 export type CampaignBatchUpdateStatus = typeof CampaignBatchUpdateStatus[keyof typeof CampaignBatchUpdateStatus];

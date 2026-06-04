@@ -4535,7 +4535,7 @@ components:
 
     Campaign:
       type: object
-      required: [id, name, status, webhookToken, fieldMappings, callDelaySeconds, maxAttempts, retryDelayMinutes, totalLeads, calledLeads, isActive, createdAt, updatedAt]
+      required: [id, name, status, webhookToken, fieldMappings, callDelaySeconds, maxAttempts, retryDelayMinutes, totalLeads, calledLeads, concurrentCallLimit, isActive, createdAt, updatedAt]
       properties:
         id:
           type: integer
@@ -4570,6 +4570,10 @@ components:
           type: integer
         calledLeads:
           type: integer
+        concurrentCallLimit:
+          type: integer
+          description: "Maximum concurrent calls allowed for this campaign"
+          default: 20
         isActive:
           type: boolean
         createdAt:
@@ -4581,7 +4585,7 @@ components:
 
     CampaignCreate:
       type: object
-      required: [name, agentId, fieldMappings]
+      required: [name, agentId]
       properties:
         name:
           type: string
@@ -4591,11 +4595,14 @@ components:
           type: integer
         fieldMappings:
           type: object
-          description: "Maps lead source field names to roles. Must include 'phone' key."
+          description: "Maps lead source field names to roles. Defaults to {phone:'phone'} if omitted."
           additionalProperties:
             type: string
         fromNumber:
           type: string
+        concurrentCallLimit:
+          type: integer
+          default: 20
         callDelaySeconds:
           type: integer
           default: 5
@@ -4625,6 +4632,8 @@ components:
           description: "Maps lead source field names to roles."
         fromNumber:
           type: string
+        concurrentCallLimit:
+          type: integer
         callDelaySeconds:
           type: integer
         maxAttempts:
@@ -4686,7 +4695,7 @@ components:
 
     CampaignBatch:
       type: object
-      required: [id, campaignId, name, status, totalLeads, calledLeads, createdAt, updatedAt]
+      required: [id, campaignId, name, status, leadSource, totalLeads, calledLeads, callDelaySeconds, maxAttempts, retryDelayMinutes, createdAt, updatedAt]
       properties:
         id:
           type: integer
@@ -4694,10 +4703,20 @@ components:
           type: integer
         name:
           type: string
+        description:
+          type: string
+          nullable: true
         status:
           type: string
           enum: [draft, running, paused, stopped]
+        leadSource:
+          type: string
+          enum: [csv, meta, webhook]
         scheduledStartAt:
+          type: string
+          format: date-time
+          nullable: true
+        scheduledEndAt:
           type: string
           format: date-time
           nullable: true
@@ -4705,6 +4724,32 @@ components:
           type: integer
         calledLeads:
           type: integer
+        fieldMappings:
+          type: object
+          additionalProperties:
+            type: string
+          nullable: true
+        callDelaySeconds:
+          type: integer
+          default: 5
+        maxAttempts:
+          type: integer
+          default: 1
+        retryDelayMinutes:
+          type: integer
+          default: 60
+        timezone:
+          type: string
+          nullable: true
+        businessHoursStart:
+          type: integer
+          nullable: true
+        businessHoursEnd:
+          type: integer
+          nullable: true
+        maxDailyCalls:
+          type: integer
+          nullable: true
         createdAt:
           type: string
           format: date-time
@@ -4714,10 +4759,16 @@ components:
 
     CampaignBatchCreate:
       type: object
-      required: [name, leads]
+      required: [name]
       properties:
         name:
           type: string
+        description:
+          type: string
+        leadSource:
+          type: string
+          enum: [csv, meta, webhook]
+          default: csv
         leads:
           type: array
           items:
@@ -4728,6 +4779,32 @@ components:
           type: string
           format: date-time
           nullable: true
+        scheduledEndAt:
+          type: string
+          format: date-time
+          nullable: true
+        fieldMappings:
+          type: object
+          additionalProperties:
+            type: string
+          description: "Batch-level field mappings; overrides campaign-level if provided"
+        callDelaySeconds:
+          type: integer
+          default: 5
+        maxAttempts:
+          type: integer
+          default: 1
+        retryDelayMinutes:
+          type: integer
+          default: 60
+        timezone:
+          type: string
+        businessHoursStart:
+          type: integer
+        businessHoursEnd:
+          type: integer
+        maxDailyCalls:
+          type: integer
 
     CampaignBatchUpdate:
       type: object

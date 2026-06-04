@@ -7,6 +7,7 @@ import {
   useRetryCampaignLead,
   useRedialCampaignNoPickup,
   useListAgents,
+  useListPhoneNumbers,
 } from "@workspace/api-client-react";
 import type { Campaign } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -530,6 +531,291 @@ function CampaignRow({
   );
 }
 
+// ── Campaign Creation Wizard ──────────────────────────────────────────────
+
+const WIZARD_STEPS = ["info", "agent", "phone", "settings", "review"] as const;
+type WizardStep = (typeof WIZARD_STEPS)[number];
+
+const STEP_LABELS: Record<WizardStep, string> = {
+  info: "Details", agent: "Agent", phone: "Phone", settings: "Settings", review: "Review",
+};
+
+function CampaignWizard({
+  open,
+  onClose,
+  activeCampaigns,
+}: {
+  open: boolean;
+  onClose: () => void;
+  activeCampaigns: Campaign[];
+}) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const create = useCreateCampaign();
+  const { data: agents } = useListAgents();
+  const { data: phoneNumbers } = useListPhoneNumbers();
+
+  const [step, setStep] = useState<WizardStep>("info");
+  const [name, setName] = useState("");
+  const [desc, setDesc] = useState("");
+  const [agentId, setAgentId] = useState<number | null>(null);
+  const [fromNumber, setFromNumber] = useState<string | null>(null);
+  const [concurrentCallLimit, setConcurrentCallLimit] = useState(20);
+
+  const liveAgentIds = new Set(
+    activeCampaigns.filter(c => c.status === "active").map(c => c.agentId).filter(Boolean)
+  );
+
+  function reset() {
+    setStep("info"); setName(""); setDesc(""); setAgentId(null);
+    setFromNumber(null); setConcurrentCallLimit(20);
+  }
+  function close() { reset(); onClose(); }
+
+  const stepIdx = WIZARD_STEPS.indexOf(step);
+  const isLast = step === "review";
+  const selectedAgent = agents?.find(a => a.id === agentId);
+
+  function canNext(): boolean {
+    if (step === "info") return name.trim().length > 0;
+    if (step === "agent") return agentId !== null;
+    return true;
+  }
+
+  function next() {
+    const i = WIZARD_STEPS.indexOf(step);
+    if (i < WIZARD_STEPS.length - 1) setStep(WIZARD_STEPS[i + 1]!);
+  }
+  function back() {
+    const i = WIZARD_STEPS.indexOf(step);
+    if (i > 0) setStep(WIZARD_STEPS[i - 1]!);
+  }
+
+  async function handleCreate() {
+    if (!name.trim() || !agentId) return;
+    try {
+      await create.mutateAsync({
+        data: { name: name.trim(), description: desc.trim() || undefined, agentId, fromNumber: fromNumber ?? undefined, concurrentCallLimit },
+      });
+      await qc.invalidateQueries({ queryKey: getListCampaignsQueryKey() });
+      toast({ title: "Campaign created", description: name.trim() });
+      close();
+    } catch {
+      toast({ title: "Failed to create campaign", variant: "destructive" });
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) close(); }}>
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col gap-0 p-0 overflow-hidden">
+        <div className="px-6 pt-5 pb-4 border-b border-border shrink-0">
+          <div className="text-base font-semibold">New Campaign</div>
+          <p className="text-xs text-muted-foreground/60 mt-0.5">Set up an AI voice calling campaign in a few steps</p>
+          {/* Step indicator */}
+          <div className="flex items-center gap-1.5 mt-4">
+            {WIZARD_STEPS.map((s, i) => (
+              <div key={s} className="flex items-center gap-1.5 flex-1">
+                <div className={cn(
+                  "flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap transition-all",
+                  i < stepIdx ? "bg-foreground/10 text-muted-foreground" :
+                  i === stepIdx ? "bg-foreground text-background" :
+                  "text-muted-foreground/30"
+                )}>
+                  <span className="tabular-nums">{i + 1}</span>
+                  <span className="hidden sm:inline">{STEP_LABELS[s]}</span>
+                </div>
+                {i < WIZARD_STEPS.length - 1 && <div className="flex-1 h-px bg-border" />}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="px-6 py-5 flex-1 overflow-y-auto min-h-0">
+          {step === "info" && (
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-semibold mb-0.5">Campaign Details</h3>
+                <p className="text-xs text-muted-foreground/60">Give your campaign a name and an optional description</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Campaign Name <span className="text-destructive">*</span></Label>
+                <Input placeholder="e.g. Q3 Summer Leads" value={name} onChange={e => setName(e.target.value)}
+                  className="h-9 text-sm" autoFocus onKeyDown={e => e.key === "Enter" && canNext() && next()} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Description <span className="text-muted-foreground/40">(optional)</span></Label>
+                <Input placeholder="Short description of this campaign…" value={desc} onChange={e => setDesc(e.target.value)} className="h-9 text-xs" />
+              </div>
+            </div>
+          )}
+
+          {step === "agent" && (
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-semibold mb-0.5">Select Voice Agent</h3>
+                <p className="text-xs text-muted-foreground/60">Choose the AI agent that will handle calls in this campaign</p>
+              </div>
+              {!agents?.length ? (
+                <div className="py-10 text-center text-muted-foreground/40 text-sm">No agents found. Create an agent first.</div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {agents.map(agent => {
+                    const lang = agent.asrLanguage ?? undefined;
+                    const ttsProvider = agent.ttsProvider;
+                    const dispositions: string[] = [];
+                    const isLive = liveAgentIds.has(agent.id);
+                    const isSelected = agentId === agent.id;
+                    return (
+                      <button key={agent.id} type="button" onClick={() => setAgentId(agent.id)}
+                        className={cn(
+                          "text-left p-4 rounded-xl border transition-all",
+                          isSelected ? "border-foreground bg-foreground/5 ring-1 ring-foreground" :
+                          "border-border bg-card hover:bg-muted/30 hover:border-foreground/20"
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <p className="text-sm font-medium text-foreground truncate flex-1">{agent.name}</p>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {isLive && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600 border border-emerald-500/20">LIVE</span>}
+                            <span className={cn("h-2 w-2 rounded-full shrink-0",
+                              agent.status === "active" ? "bg-emerald-500" : agent.status === "draft" ? "bg-muted-foreground/40" : "bg-amber-500"
+                            )} />
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {lang && <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 border border-blue-500/20">{lang}</span>}
+                          {ttsProvider && <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">{ttsProvider}</span>}
+                          {dispositions.length > 0 && <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">{dispositions.length} dispositions</span>}
+                        </div>
+                        {isSelected && <div className="mt-2 flex items-center gap-1 text-[10px] text-emerald-600"><CheckCircle2 className="h-3 w-3" /> Selected</div>}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {step === "phone" && (
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-semibold mb-0.5">Caller ID Number</h3>
+                <p className="text-xs text-muted-foreground/60">Select a number to show as caller ID. You can override this per batch.</p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button type="button" onClick={() => setFromNumber(null)}
+                  className={cn("text-left p-3 rounded-xl border transition-all",
+                    fromNumber === null ? "border-foreground bg-foreground/5 ring-1 ring-foreground" : "border-border bg-card hover:bg-muted/30"
+                  )}>
+                  <p className="text-sm font-medium">Auto / Default</p>
+                  <p className="text-xs text-muted-foreground/50 mt-0.5">Let the telephony provider decide</p>
+                  {fromNumber === null && <div className="mt-1.5 flex items-center gap-1 text-[10px] text-emerald-600"><CheckCircle2 className="h-3 w-3" /> Selected</div>}
+                </button>
+                {(phoneNumbers ?? []).map(pn => {
+                  const num = pn.number;
+                  const cc = pn.countryCode;
+                  const type = pn.numberType;
+                  const isSelected = fromNumber === num;
+                  return (
+                    <button key={pn.id} type="button" onClick={() => setFromNumber(num)}
+                      className={cn("text-left p-3 rounded-xl border transition-all",
+                        isSelected ? "border-foreground bg-foreground/5 ring-1 ring-foreground" : "border-border bg-card hover:bg-muted/30"
+                      )}>
+                      <p className="text-sm font-mono font-medium text-foreground">{num}</p>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        {cc && <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">{cc}</span>}
+                        {type && <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border capitalize">{type}</span>}
+                      </div>
+                      {isSelected && <div className="mt-1.5 flex items-center gap-1 text-[10px] text-emerald-600"><CheckCircle2 className="h-3 w-3" /> Selected</div>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {step === "settings" && (
+            <div className="space-y-5">
+              <div>
+                <h3 className="text-sm font-semibold mb-0.5">Concurrency Settings</h3>
+                <p className="text-xs text-muted-foreground/60">
+                  Set the max simultaneous calls. Batch-level settings (delays, retries, business hours) are set when you create each batch.
+                </p>
+              </div>
+              <div className="bg-card border border-border rounded-xl p-5">
+                <div className="flex items-center justify-between mb-2">
+                  <Label className="text-xs">Max Concurrent Calls</Label>
+                  <span className="text-xl font-mono font-bold text-foreground">{concurrentCallLimit}</span>
+                </div>
+                <input type="range" min={1} max={100} step={1} value={concurrentCallLimit}
+                  onChange={e => setConcurrentCallLimit(Number(e.target.value))}
+                  className="w-full h-1.5 accent-foreground cursor-pointer" />
+                <div className="flex justify-between mt-1 text-[10px] text-muted-foreground/40">
+                  <span>1 (serial)</span><span>100</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                {["Call Delay", "Max Attempts", "Business Hours"].map(lbl => (
+                  <div key={lbl} className="bg-muted/30 rounded-lg p-3 text-center border border-border">
+                    <p className="text-[9px] text-muted-foreground/40 uppercase tracking-widest mb-1">{lbl}</p>
+                    <p className="text-xs font-medium text-muted-foreground/60">Per batch</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {step === "review" && (
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-semibold mb-0.5">Review &amp; Create</h3>
+                <p className="text-xs text-muted-foreground/60">Confirm your campaign configuration before creating.</p>
+              </div>
+              <div className="bg-card border border-border rounded-xl divide-y divide-border overflow-hidden">
+                {[
+                  { label: "Campaign Name", value: name, mono: false },
+                  { label: "Description",   value: desc || "—", mono: false },
+                  { label: "Agent",         value: selectedAgent?.name ?? "—", mono: false },
+                  { label: "From Number",   value: fromNumber ?? "Auto", mono: true },
+                  { label: "Concurrent Calls", value: String(concurrentCallLimit), mono: true },
+                ].map(r => (
+                  <div key={r.label} className="flex items-center justify-between px-4 py-2.5">
+                    <span className="text-xs text-muted-foreground">{r.label}</span>
+                    <span className={cn("text-sm font-medium text-foreground", r.mono && "font-mono")}>{r.value}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground/40 text-center">
+                You can add batches, set call delays, retries, and business hours from the campaign detail page.
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-4 border-t border-border shrink-0 flex items-center justify-between">
+          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={stepIdx === 0 ? close : back}>
+            {stepIdx === 0 ? "Cancel" : "← Back"}
+          </Button>
+          <div className="flex items-center gap-1">
+            {WIZARD_STEPS.map((_, i) => (
+              <div key={i} className={cn("h-1.5 rounded-full transition-all",
+                i === stepIdx ? "w-4 bg-foreground" : i < stepIdx ? "w-1.5 bg-foreground/40" : "w-1.5 bg-border"
+              )} />
+            ))}
+          </div>
+          {isLast ? (
+            <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => void handleCreate()} disabled={create.isPending}>
+              {create.isPending ? "Creating…" : "Create Campaign"}
+            </Button>
+          ) : (
+            <Button size="sm" className="h-8 text-xs" onClick={next} disabled={!canNext()}>Next →</Button>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Campaign Form Dialog ──────────────────────────────────────────────────
 
 type FieldMappings = { phone: string; name: string; email: string };
@@ -852,9 +1138,14 @@ export default function CampaignsPage() {
       </div>
 
       {/* Modals */}
+      <CampaignWizard
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        activeCampaigns={campaigns ?? []}
+      />
       <CampaignFormDialog
-        open={createOpen || !!editing}
-        onClose={() => { setCreateOpen(false); setEditing(null); }}
+        open={!!editing}
+        onClose={() => setEditing(null)}
         editing={editing}
         activeCampaigns={campaigns ?? []}
       />

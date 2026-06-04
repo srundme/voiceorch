@@ -1508,6 +1508,8 @@ export const CompleteOnboardingResponse = zod.object({
 /**
  * @summary List all campaigns for the current user
  */
+export const listCampaignsResponseConcurrentCallLimitDefault = 20;
+
 export const ListCampaignsResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -1522,6 +1524,7 @@ export const ListCampaignsResponseItem = zod.object({
   "retryDelayMinutes": zod.number(),
   "totalLeads": zod.number(),
   "calledLeads": zod.number(),
+  "concurrentCallLimit": zod.number().default(listCampaignsResponseConcurrentCallLimitDefault).describe('Maximum concurrent calls allowed for this campaign'),
   "isActive": zod.boolean(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -1532,6 +1535,7 @@ export const ListCampaignsResponse = zod.array(ListCampaignsResponseItem)
 /**
  * @summary Create a new campaign
  */
+export const createCampaignBodyConcurrentCallLimitDefault = 20;
 export const createCampaignBodyCallDelaySecondsDefault = 5;
 export const createCampaignBodyMaxAttemptsDefault = 1;
 export const createCampaignBodyRetryDelayMinutesDefault = 60;
@@ -1540,8 +1544,9 @@ export const CreateCampaignBody = zod.object({
   "name": zod.string(),
   "description": zod.string().optional(),
   "agentId": zod.number(),
-  "fieldMappings": zod.record(zod.string(), zod.string()).describe('Maps lead source field names to roles. Must include \'phone\' key.'),
+  "fieldMappings": zod.record(zod.string(), zod.string()).optional().describe('Maps lead source field names to roles. Defaults to {phone:\'phone\'} if omitted.'),
   "fromNumber": zod.string().optional(),
+  "concurrentCallLimit": zod.number().default(createCampaignBodyConcurrentCallLimitDefault),
   "callDelaySeconds": zod.number().default(createCampaignBodyCallDelaySecondsDefault),
   "maxAttempts": zod.number().default(createCampaignBodyMaxAttemptsDefault),
   "retryDelayMinutes": zod.number().default(createCampaignBodyRetryDelayMinutesDefault)
@@ -1554,6 +1559,8 @@ export const CreateCampaignBody = zod.object({
 export const GetCampaignParams = zod.object({
   "id": zod.coerce.number()
 })
+
+export const getCampaignResponseConcurrentCallLimitDefault = 20;
 
 export const GetCampaignResponse = zod.object({
   "id": zod.number(),
@@ -1569,6 +1576,7 @@ export const GetCampaignResponse = zod.object({
   "retryDelayMinutes": zod.number(),
   "totalLeads": zod.number(),
   "calledLeads": zod.number(),
+  "concurrentCallLimit": zod.number().default(getCampaignResponseConcurrentCallLimitDefault).describe('Maximum concurrent calls allowed for this campaign'),
   "isActive": zod.boolean(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -1589,11 +1597,14 @@ export const UpdateCampaignBody = zod.object({
   "status": zod.enum(['draft', 'active', 'paused']).optional(),
   "fieldMappings": zod.record(zod.string(), zod.string()).optional().describe('Maps lead source field names to roles.'),
   "fromNumber": zod.string().optional(),
+  "concurrentCallLimit": zod.number().optional(),
   "callDelaySeconds": zod.number().optional(),
   "maxAttempts": zod.number().optional(),
   "retryDelayMinutes": zod.number().optional(),
   "isActive": zod.boolean().optional()
 })
+
+export const updateCampaignResponseConcurrentCallLimitDefault = 20;
 
 export const UpdateCampaignResponse = zod.object({
   "id": zod.number(),
@@ -1609,6 +1620,7 @@ export const UpdateCampaignResponse = zod.object({
   "retryDelayMinutes": zod.number(),
   "totalLeads": zod.number(),
   "calledLeads": zod.number(),
+  "concurrentCallLimit": zod.number().default(updateCampaignResponseConcurrentCallLimitDefault).describe('Maximum concurrent calls allowed for this campaign'),
   "isActive": zod.boolean(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -1763,14 +1775,29 @@ export const ListCampaignBatchesParams = zod.object({
   "id": zod.coerce.number()
 })
 
+export const listCampaignBatchesResponseCallDelaySecondsDefault = 5;
+export const listCampaignBatchesResponseMaxAttemptsDefault = 1;
+export const listCampaignBatchesResponseRetryDelayMinutesDefault = 60;
+
 export const ListCampaignBatchesResponseItem = zod.object({
   "id": zod.number(),
   "campaignId": zod.number(),
   "name": zod.string(),
+  "description": zod.string().nullish(),
   "status": zod.enum(['draft', 'running', 'paused', 'stopped']),
+  "leadSource": zod.enum(['csv', 'meta', 'webhook']),
   "scheduledStartAt": zod.coerce.date().nullish(),
+  "scheduledEndAt": zod.coerce.date().nullish(),
   "totalLeads": zod.number(),
   "calledLeads": zod.number(),
+  "fieldMappings": zod.record(zod.string(), zod.string()).nullish(),
+  "callDelaySeconds": zod.number().default(listCampaignBatchesResponseCallDelaySecondsDefault),
+  "maxAttempts": zod.number().default(listCampaignBatchesResponseMaxAttemptsDefault),
+  "retryDelayMinutes": zod.number().default(listCampaignBatchesResponseRetryDelayMinutesDefault),
+  "timezone": zod.string().nullish(),
+  "businessHoursStart": zod.number().nullish(),
+  "businessHoursEnd": zod.number().nullish(),
+  "maxDailyCalls": zod.number().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -1784,10 +1811,26 @@ export const CreateCampaignBatchParams = zod.object({
   "id": zod.coerce.number()
 })
 
+export const createCampaignBatchBodyLeadSourceDefault = `csv`;
+export const createCampaignBatchBodyCallDelaySecondsDefault = 5;
+export const createCampaignBatchBodyMaxAttemptsDefault = 1;
+export const createCampaignBatchBodyRetryDelayMinutesDefault = 60;
+
 export const CreateCampaignBatchBody = zod.object({
   "name": zod.string(),
-  "leads": zod.array(zod.record(zod.string(), zod.string())),
-  "scheduledStartAt": zod.coerce.date().nullish()
+  "description": zod.string().optional(),
+  "leadSource": zod.enum(['csv', 'meta', 'webhook']).default(createCampaignBatchBodyLeadSourceDefault),
+  "leads": zod.array(zod.record(zod.string(), zod.string())).optional(),
+  "scheduledStartAt": zod.coerce.date().nullish(),
+  "scheduledEndAt": zod.coerce.date().nullish(),
+  "fieldMappings": zod.record(zod.string(), zod.string()).optional().describe('Batch-level field mappings; overrides campaign-level if provided'),
+  "callDelaySeconds": zod.number().default(createCampaignBatchBodyCallDelaySecondsDefault),
+  "maxAttempts": zod.number().default(createCampaignBatchBodyMaxAttemptsDefault),
+  "retryDelayMinutes": zod.number().default(createCampaignBatchBodyRetryDelayMinutesDefault),
+  "timezone": zod.string().optional(),
+  "businessHoursStart": zod.number().optional(),
+  "businessHoursEnd": zod.number().optional(),
+  "maxDailyCalls": zod.number().optional()
 })
 
 
@@ -1799,14 +1842,29 @@ export const GetCampaignBatchParams = zod.object({
   "batchId": zod.coerce.number()
 })
 
+export const getCampaignBatchResponseCallDelaySecondsDefault = 5;
+export const getCampaignBatchResponseMaxAttemptsDefault = 1;
+export const getCampaignBatchResponseRetryDelayMinutesDefault = 60;
+
 export const GetCampaignBatchResponse = zod.object({
   "id": zod.number(),
   "campaignId": zod.number(),
   "name": zod.string(),
+  "description": zod.string().nullish(),
   "status": zod.enum(['draft', 'running', 'paused', 'stopped']),
+  "leadSource": zod.enum(['csv', 'meta', 'webhook']),
   "scheduledStartAt": zod.coerce.date().nullish(),
+  "scheduledEndAt": zod.coerce.date().nullish(),
   "totalLeads": zod.number(),
   "calledLeads": zod.number(),
+  "fieldMappings": zod.record(zod.string(), zod.string()).nullish(),
+  "callDelaySeconds": zod.number().default(getCampaignBatchResponseCallDelaySecondsDefault),
+  "maxAttempts": zod.number().default(getCampaignBatchResponseMaxAttemptsDefault),
+  "retryDelayMinutes": zod.number().default(getCampaignBatchResponseRetryDelayMinutesDefault),
+  "timezone": zod.string().nullish(),
+  "businessHoursStart": zod.number().nullish(),
+  "businessHoursEnd": zod.number().nullish(),
+  "maxDailyCalls": zod.number().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -1825,14 +1883,29 @@ export const UpdateCampaignBatchBody = zod.object({
   "scheduledStartAt": zod.coerce.date().nullish()
 })
 
+export const updateCampaignBatchResponseCallDelaySecondsDefault = 5;
+export const updateCampaignBatchResponseMaxAttemptsDefault = 1;
+export const updateCampaignBatchResponseRetryDelayMinutesDefault = 60;
+
 export const UpdateCampaignBatchResponse = zod.object({
   "id": zod.number(),
   "campaignId": zod.number(),
   "name": zod.string(),
+  "description": zod.string().nullish(),
   "status": zod.enum(['draft', 'running', 'paused', 'stopped']),
+  "leadSource": zod.enum(['csv', 'meta', 'webhook']),
   "scheduledStartAt": zod.coerce.date().nullish(),
+  "scheduledEndAt": zod.coerce.date().nullish(),
   "totalLeads": zod.number(),
   "calledLeads": zod.number(),
+  "fieldMappings": zod.record(zod.string(), zod.string()).nullish(),
+  "callDelaySeconds": zod.number().default(updateCampaignBatchResponseCallDelaySecondsDefault),
+  "maxAttempts": zod.number().default(updateCampaignBatchResponseMaxAttemptsDefault),
+  "retryDelayMinutes": zod.number().default(updateCampaignBatchResponseRetryDelayMinutesDefault),
+  "timezone": zod.string().nullish(),
+  "businessHoursStart": zod.number().nullish(),
+  "businessHoursEnd": zod.number().nullish(),
+  "maxDailyCalls": zod.number().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })

@@ -16,15 +16,26 @@ type BatchRow    = typeof campaignBatchesTable.$inferSelect;
 
 function toBatch(row: BatchRow) {
   return {
-    id:               row.id,
-    campaignId:       row.campaignId,
-    name:             row.name,
-    status:           row.status,
-    scheduledStartAt: row.scheduledStartAt?.toISOString() ?? null,
-    totalLeads:       row.totalLeads,
-    calledLeads:      row.calledLeads,
-    createdAt:        row.createdAt.toISOString(),
-    updatedAt:        row.updatedAt.toISOString(),
+    id:                 row.id,
+    campaignId:         row.campaignId,
+    name:               row.name,
+    description:        row.description ?? null,
+    status:             row.status,
+    leadSource:         row.leadSource,
+    scheduledStartAt:   row.scheduledStartAt?.toISOString() ?? null,
+    scheduledEndAt:     row.scheduledEndAt?.toISOString() ?? null,
+    totalLeads:         row.totalLeads,
+    calledLeads:        row.calledLeads,
+    fieldMappings:      row.fieldMappings ?? null,
+    callDelaySeconds:   row.callDelaySeconds,
+    maxAttempts:        row.maxAttempts,
+    retryDelayMinutes:  row.retryDelayMinutes,
+    timezone:           row.timezone ?? null,
+    businessHoursStart: row.businessHoursStart ?? null,
+    businessHoursEnd:   row.businessHoursEnd ?? null,
+    maxDailyCalls:      row.maxDailyCalls ?? null,
+    createdAt:          row.createdAt.toISOString(),
+    updatedAt:          row.updatedAt.toISOString(),
   };
 }
 
@@ -77,20 +88,53 @@ router.post("/campaigns/:id/batches", async (req, res): Promise<void> => {
   const campaign = await requireCampaign(campaignId, userId);
   if (!campaign) { res.status(404).json({ error: "Not found" }); return; }
 
-  const body = req.body as { name?: string; leads?: unknown; scheduledStartAt?: string | null };
+  const body = req.body as {
+    name?: string;
+    description?: string;
+    leadSource?: string;
+    leads?: unknown;
+    scheduledStartAt?: string | null;
+    scheduledEndAt?: string | null;
+    fieldMappings?: Record<string, string>;
+    callDelaySeconds?: number;
+    maxAttempts?: number;
+    retryDelayMinutes?: number;
+    timezone?: string;
+    businessHoursStart?: number;
+    businessHoursEnd?: number;
+    maxDailyCalls?: number;
+  };
   if (!body.name?.trim()) { res.status(400).json({ error: "Batch name required" }); return; }
-  if (!Array.isArray(body.leads)) { res.status(400).json({ error: "leads must be an array" }); return; }
 
-  const rawLeads   = body.leads as Record<string, string>[];
-  const mappings   = campaign.fieldMappings as CampaignFieldMappings;
+  const leadSource = body.leadSource ?? "csv";
+  const rawLeads   = Array.isArray(body.leads) ? (body.leads as Record<string, string>[]) : [];
+
+  if (leadSource === "csv" && rawLeads.length === 0) {
+    res.status(400).json({ error: "leads must be a non-empty array for CSV batches" });
+    return;
+  }
+
+  const batchFieldMappings = body.fieldMappings ?? null;
+  const mappings   = (batchFieldMappings ?? campaign.fieldMappings) as CampaignFieldMappings;
   const phoneField = mappings.phone ?? "phone";
   const nameField  = mappings.name  ?? "name";
   const emailField = mappings.email ?? "email";
 
   const [batch] = await db.insert(campaignBatchesTable).values({
     campaignId,
-    name: body.name.trim(),
-    scheduledStartAt: body.scheduledStartAt ? new Date(body.scheduledStartAt) : null,
+    name:               body.name.trim(),
+    description:        body.description?.trim() ?? null,
+    leadSource,
+    scheduledStartAt:   body.scheduledStartAt ? new Date(body.scheduledStartAt) : null,
+    scheduledEndAt:     body.scheduledEndAt ? new Date(body.scheduledEndAt) : null,
+    fieldMappings:      batchFieldMappings as CampaignFieldMappings | null ?? undefined,
+    callDelaySeconds:   body.callDelaySeconds ?? 5,
+    maxAttempts:        body.maxAttempts ?? 1,
+    retryDelayMinutes:  body.retryDelayMinutes ?? 60,
+    timezone:           body.timezone ?? null,
+    businessHoursStart: body.businessHoursStart ?? null,
+    businessHoursEnd:   body.businessHoursEnd ?? null,
+    maxDailyCalls:      body.maxDailyCalls ?? null,
   }).returning();
 
   const toInsert: (typeof campaignLeadsTable.$inferInsert)[] = [];

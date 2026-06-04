@@ -78,22 +78,22 @@ router.post("/campaigns", async (req, res): Promise<void> => {
   const parsed = CreateCampaignBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
 
-  if (!parsed.data.fieldMappings["phone"]) {
-    res.status(400).json({ error: "fieldMappings must include a 'phone' key" });
-    return;
-  }
+  const fieldMappings: CampaignFieldMappings = parsed.data.fieldMappings
+    ? (parsed.data.fieldMappings as CampaignFieldMappings)
+    : { phone: "phone" };
 
   const [campaign] = await db.insert(campaignsTable).values({
     userId,
-    name:              parsed.data.name,
-    description:       parsed.data.description,
-    agentId:           parsed.data.agentId,
-    fieldMappings:     parsed.data.fieldMappings as CampaignFieldMappings,
-    fromNumber:        parsed.data.fromNumber,
-    callDelaySeconds:  parsed.data.callDelaySeconds,
-    maxAttempts:       parsed.data.maxAttempts,
-    retryDelayMinutes: parsed.data.retryDelayMinutes,
-    webhookToken:      randomUUID(),
+    name:                parsed.data.name,
+    description:         parsed.data.description,
+    agentId:             parsed.data.agentId,
+    fieldMappings,
+    fromNumber:          parsed.data.fromNumber,
+    concurrentCallLimit: parsed.data.concurrentCallLimit ?? 20,
+    callDelaySeconds:    parsed.data.callDelaySeconds,
+    maxAttempts:         parsed.data.maxAttempts,
+    retryDelayMinutes:   parsed.data.retryDelayMinutes,
+    webhookToken:        randomUUID(),
   }).returning();
 
   res.status(201).json(toCampaign(campaign!));

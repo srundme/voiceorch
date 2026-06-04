@@ -8,6 +8,8 @@ export type CampaignFieldMappings = {
   [extraField: string]: string | undefined;
 };
 
+export type BatchLeadSource = "csv" | "meta" | "webhook";
+
 export const campaignsTable = pgTable("campaigns", {
   id:                   serial("id").primaryKey(),
   userId:               text("user_id").notNull(),
@@ -30,15 +32,26 @@ export const campaignsTable = pgTable("campaigns", {
 });
 
 export const campaignBatchesTable = pgTable("campaign_batches", {
-  id:               serial("id").primaryKey(),
-  campaignId:       integer("campaign_id").references(() => campaignsTable.id, { onDelete: "cascade" }).notNull(),
-  name:             text("name").notNull(),
-  status:           text("status").notNull().default("draft"),
-  scheduledStartAt: timestamp("scheduled_start_at", { withTimezone: true }),
-  totalLeads:       integer("total_leads").notNull().default(0),
-  calledLeads:      integer("called_leads").notNull().default(0),
-  createdAt:        timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt:        timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+  id:                 serial("id").primaryKey(),
+  campaignId:         integer("campaign_id").references(() => campaignsTable.id, { onDelete: "cascade" }).notNull(),
+  name:               text("name").notNull(),
+  description:        text("description"),
+  status:             text("status").notNull().default("draft"),
+  leadSource:         text("lead_source").notNull().default("csv"),
+  scheduledStartAt:   timestamp("scheduled_start_at", { withTimezone: true }),
+  scheduledEndAt:     timestamp("scheduled_end_at", { withTimezone: true }),
+  totalLeads:         integer("total_leads").notNull().default(0),
+  calledLeads:        integer("called_leads").notNull().default(0),
+  fieldMappings:      json("field_mappings").$type<CampaignFieldMappings>(),
+  callDelaySeconds:   integer("call_delay_seconds").notNull().default(5),
+  maxAttempts:        integer("max_attempts").notNull().default(1),
+  retryDelayMinutes:  integer("retry_delay_minutes").notNull().default(60),
+  timezone:           text("timezone"),
+  businessHoursStart: integer("business_hours_start"),
+  businessHoursEnd:   integer("business_hours_end"),
+  maxDailyCalls:      integer("max_daily_calls"),
+  createdAt:          timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:          timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
 
 export const campaignLeadsTable = pgTable("campaign_leads", {
