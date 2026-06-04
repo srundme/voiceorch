@@ -1,0 +1,348 @@
+STOP IMPLEMENTATION.
+
+Do not start building Phases A-F yet.
+
+The current gap is not implementation.
+
+The current gap is product architecture.
+
+Before building new pages, we need to finalize the operational workflow model.
+
+Currently the platform still thinks:
+
+Campaign
+→ Batch
+→ Lead
+
+But the actual platform should think:
+
+Lead
+→ Interaction
+→ Outcome
+→ Action
+
+Everything must be designed around that flow.
+
+Before creating Command Center, Queues, Callbacks, Incoming Calls, Transfers, Bookings, Analytics, or DNC pages, define the operational architecture.
+
+Create an Architecture Design Document first.
+
+The design document must define:
+
+---
+
+1. PRIMARY OPERATING ENTITY
+
+---
+
+Determine what users spend most of their time managing.
+
+Options:
+
+Campaigns
+
+Batches
+
+Leads
+
+Interactions
+
+Queues
+
+The platform should have a single primary operating entity.
+
+My recommendation:
+
+Lead + Interaction
+
+because users care about conversations and outcomes, not campaign configuration.
+
+---
+
+2. LEAD LIFECYCLE
+
+---
+
+Define every possible state transition.
+
+Example:
+
+Lead Imported
+↓
+Queued
+↓
+Calling
+↓
+Connected
+↓
+Completed
+
+Then branches:
+
+No Pickup
+Busy
+Voicemail
+Failed
+Transferred
+Booked
+Callback Requested
+Incoming Call
+Do Not Call
+
+Map every transition.
+
+No UI work should begin until this lifecycle exists.
+
+---
+
+3. INTERACTION MODEL
+
+---
+
+One Lead can have:
+
+Multiple Calls
+
+Multiple Retries
+
+Multiple Incoming Calls
+
+Multiple Transfers
+
+Multiple Bookings
+
+Multiple Notes
+
+Multiple Timeline Events
+
+Create a complete Interaction Architecture.
+
+This becomes the foundation of the CRM.
+
+---
+
+4. QUEUE ARCHITECTURE
+
+---
+
+Before building Queue pages, define queue types.
+
+Required queues:
+
+Calling Queue
+
+Retry Queue
+
+Callback Queue
+
+Incoming Queue
+
+Transfer Queue
+
+Booking Queue
+
+Failed Queue
+
+DNC Queue
+
+For each queue define:
+
+Entry Conditions
+
+Exit Conditions
+
+Actions
+
+Metrics
+
+Ownership
+
+---
+
+5. COMMAND CENTER ARCHITECTURE
+
+---
+
+Before building the dashboard, define:
+
+What operations team should monitor.
+
+Potential widgets:
+
+Live Calls
+
+Queued Calls
+
+Callbacks
+
+Incoming Calls
+
+Transfers
+
+Bookings
+
+Failures
+
+Agent Performance
+
+Queue Health
+
+Do not build dashboard until widget architecture is approved.
+
+---
+
+6. LEAD CRM ARCHITECTURE
+
+---
+
+Design the CRM before building screens.
+
+A lead profile should contain:
+
+Identity
+
+Custom Fields
+
+Timeline
+
+Calls
+
+Recordings
+
+Summaries
+
+Dispositions
+
+Bookings
+
+Transfers
+
+Callbacks
+
+Incoming Calls
+
+Notes
+
+Tasks
+
+Ownership
+
+Tags
+
+Determine final CRM structure first.
+
+---
+
+7. ANALYTICS ARCHITECTURE
+
+---
+
+Before building analytics pages, define:
+
+Campaign Metrics
+
+Batch Metrics
+
+Lead Metrics
+
+Queue Metrics
+
+Agent Metrics
+
+Disposition Metrics
+
+Source Metrics
+
+Conversion Funnel Metrics
+
+No charts should be built until metric definitions are finalized.
+
+---
+
+8. NAVIGATION MODEL
+
+---
+
+Only after all previous sections are finalized should navigation be redesigned.
+
+Then determine:
+
+Sidebar
+
+Routes
+
+Page hierarchy
+
+Entry points
+
+Cross-navigation paths
+
+---
+
+9. IMPLEMENTATION ORDER
+
+---
+
+After architecture is finalized:
+
+Phase 1
+
+Lead Lifecycle Engine
+
+Interaction Engine
+
+Queue Engine
+
+Phase 2
+
+Command Center
+
+Live Queue
+
+Batch Workspace
+
+Phase 3
+
+Lead CRM
+
+Callbacks
+
+Incoming Calls
+
+Transfers
+
+Bookings
+
+Phase 4
+
+Analytics
+
+DNC
+
+Exports
+
+Phase 5
+
+Advanced Automation
+
+Tasks
+
+Ownership
+
+Agent Performance
+
+---
+
+## IMPORTANT
+
+Do not optimize for speed of implementation.
+
+Optimize for correctness of operational architecture.
+
+A wrong architecture with a beautiful UI will create technical debt and force multiple redesigns.
+
+The next deliverable should be:
+
+"SnapServe Campaign Operations Architecture v1"
+
+before any additional frontend development begins.
