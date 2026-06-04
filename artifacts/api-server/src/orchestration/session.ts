@@ -289,11 +289,11 @@ export async function createSession(params: {
     return row?.value ?? null;
   }
 
-  // Provider name → platform_settings key.
-  // Google/Gemini are intentionally omitted: their API requires a dedicated
-  // Google Cloud API key; mapping them to managed_qwen_key (Groq) is wrong.
+  // Provider name → platform_settings key
   const MANAGED: Record<string, string> = {
     qwen:     "managed_qwen_key",
+    google:   "managed_google_key",
+    gemini:   "managed_google_key",
     deepgram: "managed_deepgram_key",
     sarvam:   "managed_sarvam_key",
     cartesia: "managed_cartesia_key",
