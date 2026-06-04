@@ -1,13 +1,14 @@
 import React, { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { IncomingCallNotification } from "@/components/incoming-call-notification";
+import { GlobalSearch, useGlobalSearchTrigger } from "@/components/GlobalSearch";
 import {
   Users, Phone, Key, Settings, Menu,
   LayoutDashboard, BarChart3, Brain,
   Wallet, LogOut, ChevronDown, AlertCircle, Webhook,
   Zap, TrendingUp, ShieldCheck,
   Mic2, FlaskConical,
-  Monitor,
+  Monitor, Search,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useClerk, useUser } from "@clerk/react";
@@ -196,7 +197,7 @@ function UserMenu() {
 }
 
 /* ── Sidebar content ────────────────────────────────────────────────────── */
-function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
+function SidebarContent({ onNavClick, onSearchOpen }: { onNavClick?: () => void; onSearchOpen?: () => void }) {
   return (
     <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border">
       {/* Logo */}
@@ -212,8 +213,24 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
         </span>
       </div>
 
+      {/* Search trigger */}
+      <div className="px-2.5 pt-3 pb-1 shrink-0">
+        <button
+          onClick={onSearchOpen}
+          className="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-2.5 px-2.5 py-[6.5px] rounded-lg text-[13px] transition-all duration-100 cursor-pointer select-none overflow-hidden w-full text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+        >
+          <Search className="w-[14px] h-[14px] shrink-0 text-muted-foreground/50 group-hover:text-muted-foreground" />
+          <span className="truncate opacity-0 w-0 group-hover:w-auto group-hover:opacity-100 transition-all duration-300 whitespace-nowrap flex-1 text-left">
+            Search…
+          </span>
+          <span className="opacity-0 w-0 group-hover:w-auto group-hover:opacity-100 transition-all duration-300 whitespace-nowrap overflow-hidden">
+            <kbd className="text-[9px] font-medium px-1 py-0.5 rounded border border-border bg-elevated text-muted-foreground/50">⌘K</kbd>
+          </span>
+        </button>
+      </div>
+
       {/* Nav */}
-      <div className="flex-1 overflow-y-auto py-4 px-2.5 min-h-0">
+      <div className="flex-1 overflow-y-auto py-3 px-2.5 min-h-0">
         <NavItems onClick={onNavClick} />
       </div>
 
@@ -234,12 +251,13 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
 /* ── Layout ─────────────────────────────────────────────────────────────── */
 export function Layout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { open: searchOpen, setOpen: setSearchOpen } = useGlobalSearchTrigger();
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background">
       {/* Desktop sidebar */}
       <aside className="hidden md:block w-16 hover:w-[228px] group shrink-0 transition-all duration-300 ease-in-out overflow-hidden">
-        <SidebarContent />
+        <SidebarContent onSearchOpen={() => setSearchOpen(true)} />
       </aside>
 
       {/* Mobile header + drawer */}
@@ -256,9 +274,19 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <span style={{ fontWeight: 700 }}>Snap</span><span style={{ fontWeight: 400 }}>Serve</span>
             </span>
           </Link>
+          {/* Mobile search button */}
+          <button
+            onClick={() => setSearchOpen(true)}
+            className="ml-auto p-2 rounded-lg text-muted-foreground hover:bg-accent transition-colors"
+          >
+            <Search className="h-4 w-4" />
+          </button>
         </div>
         <SheetContent side="left" className="p-0 w-[228px]">
-          <SidebarContent onNavClick={() => setMobileOpen(false)} />
+          <SidebarContent
+            onNavClick={() => setMobileOpen(false)}
+            onSearchOpen={() => { setMobileOpen(false); setSearchOpen(true); }}
+          />
         </SheetContent>
       </Sheet>
 
@@ -269,6 +297,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Incoming webcall callback notification — renders globally over all pages */}
       <IncomingCallNotification />
+
+      {/* Global search palette */}
+      <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   );
 }
