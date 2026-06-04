@@ -94,8 +94,14 @@ async function transcode(inputBuffer: Buffer): Promise<Buffer> {
         reject(new Error(`ffmpeg exited with code ${code ?? "null"}`));
       }
     });
-    proc.stdin.write(inputBuffer);
-    proc.stdin.end();
+    proc.stdin.on("error", () => {});
+    try {
+      if (proc.stdin.writable) {
+        proc.stdin.write(inputBuffer);
+        proc.stdin.end();
+      }
+    } catch {
+    }
   });
 }
 
