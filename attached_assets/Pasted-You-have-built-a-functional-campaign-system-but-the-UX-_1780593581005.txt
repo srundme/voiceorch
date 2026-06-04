@@ -1,0 +1,669 @@
+You have built a functional campaign system, but the UX architecture does not match the actual business workflow of an AI voice campaign platform.
+
+The current implementation feels like a developer/admin CRUD tool. It exposes technical concepts too early in the workflow and mixes campaign-level configuration with batch-level execution settings.
+
+We need to restructure the Campaign module around how operations teams actually think.
+
+---
+
+## CURRENT PROBLEMS
+
+1. Campaign Creation is Too Technical
+
+Current Campaign Creation Modal contains:
+
+* Campaign Name
+* Description
+* Agent
+* Field Mappings
+* Call Delay
+* Max Attempts
+* From Number Override
+
+This is incorrect.
+
+At campaign creation time:
+
+* User has not selected a lead source.
+* User has not uploaded CSV.
+* User has not selected Meta Form.
+* User does not know available columns.
+
+Therefore:
+
+Field Mappings do not belong at Campaign level.
+
+CSV concepts do not belong at Campaign level.
+
+Retry settings do not belong at Campaign level.
+
+Call delay does not belong at Campaign level.
+
+These are execution settings and must belong to Batch creation.
+
+---
+
+## NEW CAMPAIGN CREATION FLOW
+
+Campaign creation should be simplified into a wizard.
+
+Step 1
+
+Campaign Information
+
+Fields:
+
+Campaign Name
+Campaign Description
+
+Step 2
+
+Select AI Agent
+
+Show agent cards.
+
+Display:
+
+Agent Name
+Language
+Voice
+Dispositions Enabled
+Transfer Enabled
+Booking Enabled
+
+Step 3
+
+Select Purchased Phone Number
+
+Do NOT show free text input.
+
+Remove:
+
+"From Number Override"
+
+Instead show:
+
+Purchased Numbers
+
++91 XXXXXXXX01
++91 XXXXXXXX02
++1 XXXXXXXX03
+
+Display:
+
+Provider
+Country
+Status
+
+Step 4
+
+Concurrency
+
+Show:
+
+Plan Limit
+
+Example:
+
+20 Concurrent Calls
+
+Allow user to select value within allowed range.
+
+Step 5
+
+Review
+
+Create Campaign
+
+---
+
+## CAMPAIGN PAGE RESTRUCTURE
+
+After campaign creation user should land on:
+
+Campaign Details Page
+
+Tabs:
+
+Overview
+Batches
+Live Activity
+Leads
+Analytics
+Settings
+
+Do not place everything on one screen.
+
+---
+
+## OVERVIEW TAB
+
+Show:
+
+Campaign Name
+
+Status
+
+Assigned Agent
+
+Assigned Number
+
+Total Leads
+
+Active Batches
+
+Connected Leads
+
+Booked Leads
+
+Transferred Leads
+
+Callbacks Pending
+
+Incoming Calls
+
+Recent Activity Feed
+
+---
+
+## BATCHES TAB
+
+This becomes the primary execution area.
+
+Button:
+
+Create Batch
+
+Batch Cards:
+
+Batch Name
+
+Status
+
+Lead Source
+
+Lead Count
+
+Connected Count
+
+Success Rate
+
+Created Date
+
+Last Activity
+
+Progress Bar
+
+---
+
+## BATCH CREATION WIZARD
+
+When user clicks Create Batch:
+
+Step 1
+
+Batch Information
+
+Batch Name
+
+Description
+
+Step 2
+
+Choose Lead Source
+
+Meta Lead Form
+
+CSV Upload
+
+---
+
+## META LEAD FORM FLOW
+
+User selects:
+
+Meta Business Account
+
+Meta Ad Account
+
+Campaign
+
+Ad Set
+
+Lead Form
+
+System automatically reads all Meta fields.
+
+Automatically generate variables:
+
+{{name}}
+
+{{phone}}
+
+{{email}}
+
+{{company}}
+
+etc.
+
+Do not ask user to manually map fields.
+
+Show detected variables preview.
+
+Batch Settings:
+
+Auto Call New Leads = ON/OFF
+
+Retry Attempts
+
+Retry Interval
+
+Business Hours
+
+Timezone
+
+Launch Batch
+
+Meta batches should run in real time.
+
+Every new lead submission should immediately enter queue.
+
+---
+
+## CSV BATCH FLOW
+
+Upload CSV
+
+System reads headers.
+
+Show detected columns.
+
+Automatically attempt variable matching.
+
+Example:
+
+Agent Variables:
+
+{{name}}
+{{phone}}
+{{city}}
+
+CSV Columns:
+
+name
+phone
+city
+
+Show mapping preview.
+
+Only ask for manual mapping if match confidence is low.
+
+Generate downloadable CSV template dynamically from agent variables.
+
+Example:
+
+phone,name,city,company
+
+Batch Scheduling:
+
+Start Date
+
+Start Time
+
+End Date
+
+End Time
+
+Business Hours
+
+Timezone
+
+Max Daily Calls
+
+Retry Attempts
+
+Retry Interval
+
+Launch Batch
+
+---
+
+## REMOVE FIELD MAPPINGS FROM CAMPAIGN CREATION
+
+Field mapping must happen inside:
+
+Meta Batch
+
+or
+
+CSV Batch
+
+because mapping depends on lead source.
+
+Campaign should never know source fields.
+
+---
+
+## LIVE ACTIVITY TAB
+
+This should become the operational command center.
+
+Display:
+
+Live Calls
+
+Queued Calls
+
+Callbacks
+
+Incoming Calls
+
+No Pickup
+
+Transferred
+
+Booked
+
+Search
+
+Advanced Filters
+
+Columns:
+
+Lead
+
+Phone
+
+Campaign
+
+Batch
+
+Status
+
+Disposition
+
+Duration
+
+Agent
+
+Last Activity
+
+Clicking any row opens Lead Profile.
+
+---
+
+## LEADS TAB
+
+CRM-style lead management.
+
+Columns:
+
+Lead Name
+
+Phone
+
+Status
+
+Disposition
+
+Source
+
+Campaign
+
+Batch
+
+Last Activity
+
+Search
+
+Bulk Actions
+
+Filters
+
+---
+
+## LEAD PROFILE PAGE
+
+Redesign into CRM layout.
+
+Header:
+
+Lead Name
+
+Phone
+
+Campaign
+
+Batch
+
+Current Disposition
+
+Assigned Owner
+
+Center Section:
+
+Call Summary
+
+Transcript
+
+Recording Player
+
+AI Insights
+
+Right Sidebar:
+
+Callbacks
+
+Bookings
+
+Transfers
+
+Notes
+
+Timeline
+
+Tabs:
+
+Call History
+
+Callbacks
+
+Retries
+
+Timeline
+
+---
+
+## ANALYTICS TAB
+
+Campaign Analytics
+
+Show:
+
+Total Leads
+
+Connected Leads
+
+Connection Rate
+
+Average Duration
+
+Booked Leads
+
+Transfer Rate
+
+Retry Success Rate
+
+Callback Success Rate
+
+Disposition Breakdown
+
+Disposition Funnel
+
+Example:
+
+Connected
+↓
+Interested
+↓
+Booked
+
+---
+
+## MISSING FEATURES TO IMPLEMENT
+
+1. Incoming Call Architecture
+
+Create incoming_calls table.
+
+When a lead calls back:
+
+Match by phone number.
+
+Attach call to:
+
+Lead
+Campaign
+Batch
+
+Display in timeline.
+
+Display in Live Activity.
+
+Display in Lead Profile.
+
+---
+
+2. Booking Tracking
+
+Create call_bookings table.
+
+Store:
+
+Meeting Time
+
+Meeting Link
+
+Meeting Status
+
+Calendar Provider
+
+Show in Lead Profile.
+
+Show in Analytics.
+
+---
+
+3. Transfer Tracking
+
+Create call_transfers table.
+
+Store:
+
+Transferred To
+
+Transfer Time
+
+Transfer Outcome
+
+Show in Lead Profile.
+
+Show in Analytics.
+
+---
+
+4. Dynamic CRM Fields
+
+Agents may define custom fields.
+
+Examples:
+
+Insurance
+
+policy_type
+
+renewal_date
+
+Real Estate
+
+budget
+
+property_type
+
+Store as dynamic JSON schema.
+
+Render automatically in Lead Profile.
+
+---
+
+5. Duplicate Lead Detection
+
+Support:
+
+Same Phone
+
+Same Email
+
+Same Custom Field
+
+Actions:
+
+Ignore
+
+Merge
+
+Reject
+
+Configurable per Campaign.
+
+---
+
+6. DNC Management
+
+Create dedicated DNC module.
+
+Features:
+
+Add Number
+
+Remove Number
+
+Import CSV
+
+Reason
+
+Every outbound call must check DNC before dialing.
+
+---
+
+7. Advanced CSV Validation
+
+Show validation report.
+
+Examples:
+
+Invalid Phone
+
+Missing Required Field
+
+Duplicate Lead
+
+Invalid Country Code
+
+Allow downloading error report.
+
+---
+
+FINAL PRODUCT PRINCIPLE
+
+Campaign = Configuration Container
+
+Batch = Execution Unit
+
+Lead = CRM Entity
+
+Call Execution = Interaction Record
+
+Live Activity = Operational Command Center
+
+The platform should feel like a modern AI outbound operations platform, not an admin CRUD panel.
