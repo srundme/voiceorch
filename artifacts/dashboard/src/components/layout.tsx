@@ -5,10 +5,9 @@ import {
   Users, Phone, Key, Settings, Menu,
   LayoutDashboard, BarChart3, Brain,
   Wallet, LogOut, ChevronDown, AlertCircle, Webhook,
-  Zap, CalendarDays, TrendingUp, ShieldCheck,
-  Facebook, ArrowRightLeft, Mic2, FlaskConical,
-  Monitor, PhoneIncoming, PhoneCall, BookOpen,
-  ContactRound, Ban, ListChecks,
+  Zap, TrendingUp, ShieldCheck,
+  Mic2, FlaskConical,
+  Monitor,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useClerk, useUser } from "@clerk/react";
@@ -20,33 +19,26 @@ const NAV_SECTIONS = [
   {
     label: "Operations",
     items: [
-      { name: "Command Center",  href: "/app/command-center",  icon: Monitor },
-      { name: "Campaigns",       href: "/app/campaigns",       icon: Zap },
-      { name: "Callbacks",       href: "/app/callbacks",       icon: PhoneCall },
-      { name: "Incoming Calls",  href: "/app/incoming",        icon: PhoneIncoming },
-      { name: "Bookings",        href: "/app/scheduling",      icon: CalendarDays },
-      { name: "Transfers",       href: "/app/transfers",       icon: ArrowRightLeft },
-      { name: "Lead CRM",        href: "/app/lead-crm",        icon: ContactRound },
-      { name: "Analytics",       href: "/app/analytics",       icon: BarChart3 },
-      { name: "DNC",             href: "/app/dnc",             icon: Ban },
+      { name: "Command Center", href: "/app/command-center", icon: Monitor },
+      { name: "Campaigns",      href: "/app/campaigns",      icon: Zap },
     ],
   },
   {
     label: "Build",
     items: [
-      { name: "Assistants",      href: "/app",                 icon: Users,          exact: true },
-      { name: "AI Knowledge",    href: "/app/knowledge-bases", icon: Brain },
-      { name: "Providers",       href: "/app/providers",       icon: Key },
-      { name: "Voices",          href: "/app/voices",          icon: Mic2 },
+      { name: "Assistants",   href: "/app",                 icon: Users, exact: true },
+      { name: "AI Knowledge", href: "/app/knowledge-bases", icon: Brain },
+      { name: "Providers",    href: "/app/providers",       icon: Key },
+      { name: "Voices",       href: "/app/voices",          icon: Mic2 },
     ],
   },
   {
     label: "Observe",
     items: [
-      { name: "Usage",           href: "/app/usage",            icon: TrendingUp },
-      { name: "Call Log",        href: "/app/calls",            icon: Phone },
-      { name: "Activity",        href: "/app/activity",         icon: LayoutDashboard },
-      { name: "Test Simulator",  href: "/app/test-simulator",   icon: FlaskConical },
+      { name: "Usage",          href: "/app/usage",          icon: TrendingUp },
+      { name: "Call Log",       href: "/app/calls",          icon: Phone },
+      { name: "Activity",       href: "/app/activity",       icon: LayoutDashboard },
+      { name: "Test Simulator", href: "/app/test-simulator", icon: FlaskConical },
     ],
   },
   {

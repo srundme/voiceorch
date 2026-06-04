@@ -30,6 +30,7 @@ import {
   CheckCircle2, X, BarChart3, PhoneCall, ArrowRight, Hash,
   Activity, PlayCircle, PauseCircle, XCircle, Info, Settings,
   Phone, Eye, Globe, Building2, Zap, ListFilter, Plus,
+  PhoneIncoming, CalendarDays, ArrowRightLeft, Radio, Ban,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 
@@ -115,6 +116,39 @@ function DetailRow({ label, value, icon }: { label: string; value: React.ReactNo
     <div className="flex items-center justify-between py-2.5 px-4 border-b border-border last:border-0">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">{icon}{label}</div>
       <div className="text-xs font-mono text-foreground/70">{value}</div>
+    </div>
+  );
+}
+
+// ── Campaign tab placeholder ──────────────────────────────────────────────────
+
+type PlaceholderColor = "blue" | "purple" | "amber" | "emerald" | "rose";
+
+const PLACEHOLDER_COLORS: Record<PlaceholderColor, { bg: string; border: string; icon: string; badge: string }> = {
+  blue:    { bg: "bg-blue-500/5",    border: "border-blue-500/15",    icon: "text-blue-400/50",    badge: "bg-blue-500/10 text-blue-400 border-blue-500/20" },
+  purple:  { bg: "bg-purple-500/5",  border: "border-purple-500/15",  icon: "text-purple-400/50",  badge: "bg-purple-500/10 text-purple-400 border-purple-500/20" },
+  amber:   { bg: "bg-amber-500/5",   border: "border-amber-500/15",   icon: "text-amber-400/50",   badge: "bg-amber-500/10 text-amber-400 border-amber-500/20" },
+  emerald: { bg: "bg-emerald-500/5", border: "border-emerald-500/15", icon: "text-emerald-400/50", badge: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" },
+  rose:    { bg: "bg-rose-500/5",    border: "border-rose-500/15",    icon: "text-rose-400/50",    badge: "bg-rose-500/10 text-rose-400 border-rose-500/20" },
+};
+
+function CampaignTabPlaceholder({
+  icon, title, description, color = "blue",
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  color?: PlaceholderColor;
+}) {
+  const c = PLACEHOLDER_COLORS[color];
+  return (
+    <div className={cn("rounded-2xl border p-10 flex flex-col items-center text-center max-w-md mx-auto mt-8", c.bg, c.border)}>
+      <div className={cn("mb-4", c.icon)}>{icon}</div>
+      <h3 className="text-sm font-semibold text-foreground/80 mb-1.5">{title}</h3>
+      <p className="text-xs text-muted-foreground/50 leading-relaxed mb-4">{description}</p>
+      <span className={cn("inline-flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1 rounded-full border", c.badge)}>
+        Coming in Phase 3
+      </span>
     </div>
   );
 }
@@ -789,12 +823,12 @@ export default function CampaignDetailPage() {
 
         {/* Tabs */}
         <Tabs defaultValue="overview" className="w-full">
-          <TabsList className="h-auto bg-transparent p-0 gap-0 border-0 -mb-px">
-            {["overview", "batches", "leads", "analytics", "settings"].map(tab => (
+          <TabsList className="h-auto bg-transparent p-0 gap-0 border-0 -mb-px overflow-x-auto flex-nowrap">
+            {(["overview", "batches", "live-queue", "callbacks", "incoming", "bookings", "transfers", "leads", "analytics", "settings"] as const).map(tab => (
               <TabsTrigger key={tab} value={tab}
-                className="h-9 px-4 rounded-none border-b-2 border-transparent bg-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:text-foreground text-muted-foreground/60 text-xs font-medium capitalize hover:text-foreground transition-colors">
-                {tab === "analytics" ? "Analytics" :
-                 tab === "overview" ? "Overview" :
+                className="h-9 px-4 rounded-none border-b-2 border-transparent bg-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:text-foreground text-muted-foreground/60 text-xs font-medium whitespace-nowrap hover:text-foreground transition-colors shrink-0">
+                {tab === "live-queue" ? "Live Queue" :
+                 tab === "incoming" ? "Incoming" :
                  tab.charAt(0).toUpperCase() + tab.slice(1)}
                 {tab === "batches" && !batchLoading && batches?.length ? (
                   <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-muted text-[9px]">{batches.length}</span>
@@ -920,6 +954,66 @@ export default function CampaignDetailPage() {
                   </div>
                 )}
               </div>
+            </div>
+          </TabsContent>
+
+          {/* ── Live Queue ─────────────────────────────────────────────────────── */}
+          <TabsContent value="live-queue" className="mt-0 border-0 p-0">
+            <div className="overflow-y-auto px-6 py-5" style={{ maxHeight: "calc(100vh - 160px)" }}>
+              <CampaignTabPlaceholder
+                icon={<Radio className="h-6 w-6" />}
+                title="Live Queue"
+                description="See which leads are currently dialing, connected, or waiting in the queue for this campaign. Updates in real-time as calls progress."
+                color="blue"
+              />
+            </div>
+          </TabsContent>
+
+          {/* ── Callbacks ──────────────────────────────────────────────────────── */}
+          <TabsContent value="callbacks" className="mt-0 border-0 p-0">
+            <div className="overflow-y-auto px-6 py-5" style={{ maxHeight: "calc(100vh - 160px)" }}>
+              <CampaignTabPlaceholder
+                icon={<PhoneCall className="h-6 w-6" />}
+                title="Callbacks"
+                description="Leads from this campaign who requested a callback. Track scheduled times, assigned agents, and completion status."
+                color="purple"
+              />
+            </div>
+          </TabsContent>
+
+          {/* ── Incoming ───────────────────────────────────────────────────────── */}
+          <TabsContent value="incoming" className="mt-0 border-0 p-0">
+            <div className="overflow-y-auto px-6 py-5" style={{ maxHeight: "calc(100vh - 160px)" }}>
+              <CampaignTabPlaceholder
+                icon={<PhoneIncoming className="h-6 w-6" />}
+                title="Incoming Calls"
+                description="Inbound calls received on this campaign's number. Review call details, transcripts, and outcomes for calls that came in."
+                color="amber"
+              />
+            </div>
+          </TabsContent>
+
+          {/* ── Bookings ───────────────────────────────────────────────────────── */}
+          <TabsContent value="bookings" className="mt-0 border-0 p-0">
+            <div className="overflow-y-auto px-6 py-5" style={{ maxHeight: "calc(100vh - 160px)" }}>
+              <CampaignTabPlaceholder
+                icon={<CalendarDays className="h-6 w-6" />}
+                title="Bookings"
+                description="Appointments booked by leads from this campaign during or after calls. View booking times, lead details, and calendar links."
+                color="emerald"
+              />
+            </div>
+          </TabsContent>
+
+          {/* ── Transfers ──────────────────────────────────────────────────────── */}
+          <TabsContent value="transfers" className="mt-0 border-0 p-0">
+            <div className="overflow-y-auto px-6 py-5" style={{ maxHeight: "calc(100vh - 160px)" }}>
+              <CampaignTabPlaceholder
+                icon={<ArrowRightLeft className="h-6 w-6" />}
+                title="Transfers"
+                description="Leads from this campaign who were transferred to a human agent. Track transfer outcomes, agents, and resolution status."
+                color="rose"
+              />
             </div>
           </TabsContent>
 
