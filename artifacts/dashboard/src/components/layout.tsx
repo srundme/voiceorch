@@ -27,7 +27,7 @@ const NAV_SECTIONS = [
   {
     label: "Build",
     items: [
-      { name: "Assistants",   href: "/app",                 icon: Users, exact: true },
+      { name: "Assistants",   href: "/app/agents",           icon: Users },
       { name: "AI Knowledge", href: "/app/knowledge-bases", icon: Brain },
       { name: "Providers",    href: "/app/providers",       icon: Key },
       { name: "Voices",       href: "/app/voices",          icon: Mic2 },
