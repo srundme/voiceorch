@@ -68,9 +68,7 @@ function NavItems({ onClick }: { onClick?: () => void }) {
           </p>
           <div className="flex flex-col gap-px">
             {section.items.map((item) => {
-              const isActive = item.exact
-                ? location === item.href
-                : location.startsWith(item.href) && item.href !== "/app";
+              const isActive = location.startsWith(item.href) && item.href !== "/app";
 
               return (
                 <Link key={item.name} href={item.href} onClick={onClick}>

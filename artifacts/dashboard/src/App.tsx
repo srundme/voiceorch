@@ -213,7 +213,7 @@ function AppRoutes() {
         <Route path="/app" component={() => <Redirect to="/app/command-center" />} />
         <Route path="/app/command-center" component={CommandCenterPage} />
         <Route path="/app/analytics" component={AnalyticsPage} />
-        <Route path="/app/agents" component={AgentsList} />
+        <Route path="/app/agents" component={AssistantsPage} />
         <Route path="/app/agents/new" component={AgentNew} />
         <Route path="/app/agents/:id/edit" component={AgentEdit} />
         <Route path="/app/agents/:id" component={AgentDetail} />
