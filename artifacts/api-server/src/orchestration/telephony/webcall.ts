@@ -14,6 +14,7 @@ import type { ConversationTurn, STTConfig, StreamSTT } from "../types.js";
 import { decryptKey } from "../../lib/crypto.js";
 import { loadCallerProfile, injectCallerMemory, updateCallerProfile, detectCallbackRequest } from "../callerMemory.js";
 import { GenderDetector } from "../genderDetector.js";
+import { GenderDetectorML } from "../genderDetectorML.js";
 import { buildDatetimeInjection } from "../datetimeInject.js";
 import {
   buildToolDefs,
@@ -409,11 +410,14 @@ export async function handleWebCallWebSocket(
   const agentCfg = (agent.agentConfig ?? {}) as Record<string, unknown>;
 
   // ── Gender detection ──────────────────────────────────────────────────────
-  const genderEnabled = (agentCfg["genderDetectionEnabled"] as boolean | undefined) ?? true;
-  const maleSal     = (agentCfg["genderDetectionMaleSalutation"]    as string | undefined) ?? "Sir";
-  const femaleSal   = (agentCfg["genderDetectionFemaleSalutation"]  as string | undefined) ?? "Ma'am";
-  const neutralSal  = (agentCfg["genderDetectionNeutralSalutation"] as string | undefined) ?? "";
-  const genderDetector = genderEnabled ? new GenderDetector(callId, logger) : null;
+  const genderEnabled   = (agentCfg["genderDetectionEnabled"]          as boolean | undefined) ?? true;
+  const genderProvider  = (agentCfg["genderDetectionProvider"]         as string  | undefined) ?? "deepgram";
+  const maleSal         = (agentCfg["genderDetectionMaleSalutation"]   as string  | undefined) ?? "Sir";
+  const femaleSal       = (agentCfg["genderDetectionFemaleSalutation"] as string  | undefined) ?? "Ma'am";
+  const neutralSal      = (agentCfg["genderDetectionNeutralSalutation"] as string | undefined) ?? "";
+  const genderDetector = genderEnabled
+    ? (genderProvider === "ml_model" ? new GenderDetectorML(callId, logger) : new GenderDetector(callId, logger))
+    : null;
 
   // ── Engine settings ────────────────────────────────────────────────────────
   const wordsForInterruption = (agentCfg["wordsForInterruption"] as number | undefined) ?? 2;

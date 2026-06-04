@@ -95,6 +95,7 @@ export type AgentConfig = {
   successCriteria?: string;  // Free-text criteria; LLM judges PASS/FAIL after each call
   // P1-F: Caller gender detection
   genderDetectionEnabled?: boolean;
+  genderDetectionProvider?: string;
   genderDetectionMaleSalutation?: string;
   genderDetectionFemaleSalutation?: string;
   genderDetectionNeutralSalutation?: string;

@@ -193,6 +193,7 @@ export interface AgentConfig {
 
   // P1-F: Caller gender detection
   genderDetectionEnabled: boolean;
+  genderDetectionProvider?: string;
   genderDetectionMaleSalutation: string;
   genderDetectionFemaleSalutation: string;
   genderDetectionNeutralSalutation: string;

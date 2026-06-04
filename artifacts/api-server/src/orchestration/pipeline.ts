@@ -1,4 +1,5 @@
 import { GenderDetector } from "./genderDetector.js";
+import { GenderDetectorML } from "./genderDetectorML.js";
 import { buildDatetimeInjection } from "./datetimeInject.js";
 import { createSTTAdapter } from "./adapters/stt/index.js";
 import { toReadableError } from "./utils.js";
@@ -133,7 +134,7 @@ export class OrchestrationPipeline {
   private dtmfTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
   // Gender detection — fires once per call using early caller speech
-  private genderDetector: GenderDetector;
+  private genderDetector: GenderDetector | GenderDetectorML;
 
   constructor(config: SessionConfig) {
     this.config = config;
@@ -145,9 +146,13 @@ export class OrchestrationPipeline {
     this.bargeInEnergyThreshold = config.agentConfig.bargeInEnergyThreshold;
     this.bargeInMinFrames       = config.agentConfig.bargeInMinFrames;
     this.bargeInEchoGraceMs     = config.agentConfig.bargeInEchoGraceMs;
-    this.genderDetector = config.agentConfig.genderDetectionEnabled
-      ? new GenderDetector(config.callId)
-      : null as unknown as GenderDetector;
+    if (config.agentConfig.genderDetectionEnabled) {
+      this.genderDetector = config.agentConfig.genderDetectionProvider === "ml_model"
+        ? new GenderDetectorML(config.callId)
+        : new GenderDetector(config.callId);
+    } else {
+      this.genderDetector = null as unknown as GenderDetector;
+    }
 
     const keys = config.providerKeys;
 

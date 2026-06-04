@@ -179,6 +179,31 @@ async def ws_gender(websocket: WebSocket):
         pass
 
 
+# ── Gender ML — file upload (autocorrelation, pure NumPy) ────────────────────
+
+@router.post("/gender-ml")
+async def detect_gender_ml_upload(file: UploadFile = File(...)):
+    """
+    Detect perceived gender using the autocorrelation-based ML model provider.
+
+    Accepts: WAV (PCM16, 8 kHz mono from telephony path).
+    Buffers 4 seconds of caller audio and runs pure-NumPy pitch analysis.
+
+    Returns:
+        {
+            "estimated_gender": "male" | "female" | "unknown",
+            "confidence": float,
+            "processing_time_ms": int
+        }
+    """
+    audio_bytes = await file.read()
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="Empty audio file")
+    from gender_service import GenderService  # noqa: PLC0415
+    svc = GenderService()
+    return svc._run_detection(audio_bytes)
+
+
 # ── Register router & run ─────────────────────────────────────────────────────
 
 app.include_router(router)

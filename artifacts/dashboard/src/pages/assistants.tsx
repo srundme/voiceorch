@@ -2188,7 +2188,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                     <Select value={cfg.genderDetectionProvider ?? "deepgram"} onValueChange={v => setCfg({ genderDetectionProvider: v })}>
                       <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
                       <SelectContent className="bg-card border-border">
-                        {[["deepgram","Deepgram"],["assemblyai","AssemblyAI"],["azure","Azure Speaker Recognition"],["internal","SnapServe built-in (pitch analysis)"]].map(([v,l]) => <SelectItem key={v} value={v} className="text-foreground text-xs">{l}</SelectItem>)}
+                        {[["deepgram","Deepgram"],["assemblyai","AssemblyAI"],["azure","Azure Speaker Recognition"],["internal","SnapServe built-in (pitch analysis)"],["ml_model","Gender Detection ML Model"]].map(([v,l]) => <SelectItem key={v} value={v} className="text-foreground text-xs">{l}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
