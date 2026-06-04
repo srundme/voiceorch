@@ -61,6 +61,8 @@ export const ListAgentsResponseItem = zod.object({
   "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
   "transferTo": zod.string().optional().describe('(call_transfer) E.164 phone number to transfer the call to (e.g. +12125551234)'),
   "warmHandoffMessage": zod.string().optional().describe('(call_transfer) Optional message the agent speaks to the caller before transferring'),
+  "transferMode": zod.enum(['cold', 'warm_summary']).optional().describe('(call_transfer) cold = immediate blind transfer (default); warm_summary = dials operator, speaks AI-generated summary when they answer, then bridges customer'),
+  "summaryPrompt": zod.string().optional().describe('(call_transfer) LLM prompt used to generate the operator briefing in warm_summary mode; a sensible default is used if omitted'),
   "url": zod.string().optional().describe('(webhook) HTTP endpoint URL to POST\/GET when this tool is invoked'),
   "method": zod.enum(['GET', 'POST']).optional().describe('(webhook) HTTP method'),
   "headers": zod.record(zod.string(), zod.string()).optional().describe('(webhook) Optional extra HTTP headers'),
@@ -147,6 +149,8 @@ export const CreateAgentBody = zod.object({
   "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
   "transferTo": zod.string().optional().describe('(call_transfer) E.164 phone number to transfer the call to (e.g. +12125551234)'),
   "warmHandoffMessage": zod.string().optional().describe('(call_transfer) Optional message the agent speaks to the caller before transferring'),
+  "transferMode": zod.enum(['cold', 'warm_summary']).optional().describe('(call_transfer) cold = immediate blind transfer (default); warm_summary = dials operator, speaks AI-generated summary when they answer, then bridges customer'),
+  "summaryPrompt": zod.string().optional().describe('(call_transfer) LLM prompt used to generate the operator briefing in warm_summary mode; a sensible default is used if omitted'),
   "url": zod.string().optional().describe('(webhook) HTTP endpoint URL to POST\/GET when this tool is invoked'),
   "method": zod.enum(['GET', 'POST']).optional().describe('(webhook) HTTP method'),
   "headers": zod.record(zod.string(), zod.string()).optional().describe('(webhook) Optional extra HTTP headers'),
@@ -218,6 +222,8 @@ export const GetAgentResponse = zod.object({
   "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
   "transferTo": zod.string().optional().describe('(call_transfer) E.164 phone number to transfer the call to (e.g. +12125551234)'),
   "warmHandoffMessage": zod.string().optional().describe('(call_transfer) Optional message the agent speaks to the caller before transferring'),
+  "transferMode": zod.enum(['cold', 'warm_summary']).optional().describe('(call_transfer) cold = immediate blind transfer (default); warm_summary = dials operator, speaks AI-generated summary when they answer, then bridges customer'),
+  "summaryPrompt": zod.string().optional().describe('(call_transfer) LLM prompt used to generate the operator briefing in warm_summary mode; a sensible default is used if omitted'),
   "url": zod.string().optional().describe('(webhook) HTTP endpoint URL to POST\/GET when this tool is invoked'),
   "method": zod.enum(['GET', 'POST']).optional().describe('(webhook) HTTP method'),
   "headers": zod.record(zod.string(), zod.string()).optional().describe('(webhook) Optional extra HTTP headers'),
@@ -308,6 +314,8 @@ export const UpdateAgentBody = zod.object({
   "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
   "transferTo": zod.string().optional().describe('(call_transfer) E.164 phone number to transfer the call to (e.g. +12125551234)'),
   "warmHandoffMessage": zod.string().optional().describe('(call_transfer) Optional message the agent speaks to the caller before transferring'),
+  "transferMode": zod.enum(['cold', 'warm_summary']).optional().describe('(call_transfer) cold = immediate blind transfer (default); warm_summary = dials operator, speaks AI-generated summary when they answer, then bridges customer'),
+  "summaryPrompt": zod.string().optional().describe('(call_transfer) LLM prompt used to generate the operator briefing in warm_summary mode; a sensible default is used if omitted'),
   "url": zod.string().optional().describe('(webhook) HTTP endpoint URL to POST\/GET when this tool is invoked'),
   "method": zod.enum(['GET', 'POST']).optional().describe('(webhook) HTTP method'),
   "headers": zod.record(zod.string(), zod.string()).optional().describe('(webhook) Optional extra HTTP headers'),
@@ -380,6 +388,8 @@ export const UpdateAgentResponse = zod.object({
   "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
   "transferTo": zod.string().optional().describe('(call_transfer) E.164 phone number to transfer the call to (e.g. +12125551234)'),
   "warmHandoffMessage": zod.string().optional().describe('(call_transfer) Optional message the agent speaks to the caller before transferring'),
+  "transferMode": zod.enum(['cold', 'warm_summary']).optional().describe('(call_transfer) cold = immediate blind transfer (default); warm_summary = dials operator, speaks AI-generated summary when they answer, then bridges customer'),
+  "summaryPrompt": zod.string().optional().describe('(call_transfer) LLM prompt used to generate the operator briefing in warm_summary mode; a sensible default is used if omitted'),
   "url": zod.string().optional().describe('(webhook) HTTP endpoint URL to POST\/GET when this tool is invoked'),
   "method": zod.enum(['GET', 'POST']).optional().describe('(webhook) HTTP method'),
   "headers": zod.record(zod.string(), zod.string()).optional().describe('(webhook) Optional extra HTTP headers'),
@@ -475,6 +485,8 @@ export const ToggleAgentResponse = zod.object({
   "description": zod.string().describe('Explains to the LLM when and why to invoke this tool'),
   "transferTo": zod.string().optional().describe('(call_transfer) E.164 phone number to transfer the call to (e.g. +12125551234)'),
   "warmHandoffMessage": zod.string().optional().describe('(call_transfer) Optional message the agent speaks to the caller before transferring'),
+  "transferMode": zod.enum(['cold', 'warm_summary']).optional().describe('(call_transfer) cold = immediate blind transfer (default); warm_summary = dials operator, speaks AI-generated summary when they answer, then bridges customer'),
+  "summaryPrompt": zod.string().optional().describe('(call_transfer) LLM prompt used to generate the operator briefing in warm_summary mode; a sensible default is used if omitted'),
   "url": zod.string().optional().describe('(webhook) HTTP endpoint URL to POST\/GET when this tool is invoked'),
   "method": zod.enum(['GET', 'POST']).optional().describe('(webhook) HTTP method'),
   "headers": zod.record(zod.string(), zod.string()).optional().describe('(webhook) Optional extra HTTP headers'),
@@ -2515,7 +2527,18 @@ export const GetMyUsageResponse = zod.object({
   "characters": zod.number().optional(),
   "estimatedCostMicros": zod.number(),
   "success": zod.boolean()
+})),
+  "callCharges": zod.object({
+  "totalCents": zod.number(),
+  "callCount": zod.number(),
+  "recentCharges": zod.array(zod.object({
+  "id": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "callId": zod.number().nullish(),
+  "amountCents": zod.number(),
+  "description": zod.string()
 }))
+})
 })
 
 

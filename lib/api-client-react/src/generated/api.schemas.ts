@@ -101,6 +101,17 @@ export const AgentToolType = {
 } as const;
 
 /**
+ * (call_transfer) cold = immediate blind transfer (default); warm_summary = dials operator, speaks AI-generated summary when they answer, then bridges customer
+ */
+export type AgentToolTransferMode = typeof AgentToolTransferMode[keyof typeof AgentToolTransferMode];
+
+
+export const AgentToolTransferMode = {
+  cold: 'cold',
+  warm_summary: 'warm_summary',
+} as const;
+
+/**
  * (webhook) HTTP method
  */
 export type AgentToolMethod = typeof AgentToolMethod[keyof typeof AgentToolMethod];
@@ -127,6 +138,10 @@ export interface AgentTool {
   transferTo?: string;
   /** (call_transfer) Optional message the agent speaks to the caller before transferring */
   warmHandoffMessage?: string;
+  /** (call_transfer) cold = immediate blind transfer (default); warm_summary = dials operator, speaks AI-generated summary when they answer, then bridges customer */
+  transferMode?: AgentToolTransferMode;
+  /** (call_transfer) LLM prompt used to generate the operator briefing in warm_summary mode; a sensible default is used if omitted */
+  summaryPrompt?: string;
   /** (webhook) HTTP endpoint URL to POST/GET when this tool is invoked */
   url?: string;
   /** (webhook) HTTP method */
@@ -2053,12 +2068,28 @@ export interface MyUsageEvent {
   success: boolean;
 }
 
+export interface CallChargeRow {
+  id: number;
+  createdAt: string;
+  /** @nullable */
+  callId?: number | null;
+  amountCents: number;
+  description: string;
+}
+
+export type MyUsageResponseCallCharges = {
+  totalCents: number;
+  callCount: number;
+  recentCharges: CallChargeRow[];
+};
+
 export interface MyUsageResponse {
   totalUsedMicros: number;
   totalAllocatedMicros?: number;
   totalRemainingMicros?: number;
   perService: MyUsageServiceRow[];
   recentEvents: MyUsageEvent[];
+  callCharges: MyUsageResponseCallCharges;
 }
 
 /**

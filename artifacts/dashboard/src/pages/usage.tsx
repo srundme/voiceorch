@@ -1,5 +1,5 @@
 import React from "react";
-import { BarChart3, TrendingUp, Zap, Mic, MessageSquare, Volume2, CheckCircle2, XCircle } from "lucide-react";
+import { BarChart3, TrendingUp, Mic, MessageSquare, Volume2, CheckCircle2, XCircle, PhoneCall } from "lucide-react";
 import { useGetMyUsage } from "@workspace/api-client-react";
 import { format, parseISO } from "date-fns";
 
@@ -109,7 +109,7 @@ export default function UsagePage() {
             )}
           </div>
 
-          {/* Per-service */}
+          {/* Per-service AI costs */}
           {data.perService.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {data.perService.map(row => <ServiceCard key={row.service} {...row} />)}
@@ -124,9 +124,68 @@ export default function UsagePage() {
             </div>
           )}
 
-          {/* Recent events */}
+          {/* Call charges */}
           <div>
-            <h2 className="text-sm font-semibold text-foreground mb-3">Recent Events</h2>
+            <h2 className="text-sm font-semibold text-foreground mb-3">Call Charges</h2>
+            <div className="bg-card border border-border rounded-2xl p-5 mb-4">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-xl bg-elevated border border-border flex items-center justify-center shrink-0">
+                  <PhoneCall className="w-4 h-4 text-muted-foreground/60" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-foreground">Platform Call Fee</p>
+                  <p className="text-xs text-muted-foreground/60">{data.callCharges.callCount} call{data.callCharges.callCount !== 1 ? "s" : ""} this month</p>
+                </div>
+                <p className="text-lg font-bold text-foreground tabular-nums">
+                  ${(data.callCharges.totalCents / 100).toFixed(2)}
+                </p>
+              </div>
+            </div>
+
+            {data.callCharges.recentCharges.length === 0 ? (
+              <div className="bg-card border border-border rounded-2xl p-6 text-center">
+                <p className="text-sm text-muted-foreground/60">No call charges yet.</p>
+              </div>
+            ) : (
+              <div className="bg-card border border-border rounded-2xl overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="text-left py-2.5 px-4 text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-widest">Time</th>
+                        <th className="text-left py-2.5 pr-3 text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-widest">Description</th>
+                        <th className="text-right py-2.5 pr-4 text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-widest">Charged</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.callCharges.recentCharges.map(c => (
+                        <tr key={c.id} className="border-b border-border/40 last:border-0 hover:bg-elevated/40 transition-colors">
+                          <td className="py-2.5 pl-4 pr-3 whitespace-nowrap">
+                            <span className="text-xs text-muted-foreground/60">{format(parseISO(c.createdAt), "MMM d, HH:mm")}</span>
+                          </td>
+                          <td className="py-2.5 pr-3">
+                            <div className="flex items-center gap-1.5">
+                              <PhoneCall className="w-3 h-3 text-muted-foreground/40 shrink-0" />
+                              <span className="text-xs text-foreground/70">{c.description}</span>
+                            </div>
+                          </td>
+                          <td className="py-2.5 pr-4 text-right">
+                            <span className="text-xs font-semibold text-foreground tabular-nums">
+                              ${(Math.abs(c.amountCents) / 100).toFixed(2)}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Recent AI service events */}
+          <div>
+            <h2 className="text-sm font-semibold text-foreground mb-3">Recent AI Service Events</h2>
             {data.recentEvents.length === 0 ? (
               <div className="bg-card border border-border rounded-2xl p-6 text-center">
                 <p className="text-sm text-muted-foreground/60">No usage events yet.</p>

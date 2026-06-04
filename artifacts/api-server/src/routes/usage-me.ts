@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { db, usageEventsTable, providerAllocationsTable } from "@workspace/db";
+import { usersTable, walletTransactionsTable } from "@workspace/db/schema";
 import { and, desc, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 
@@ -17,10 +18,13 @@ router.get("/usage/me", requireAuth, async (req, res): Promise<void> => {
     const monthFilter = gte(usageEventsTable.createdAt, monthStart);
     const monthWhere = and(userFilter, monthFilter);
 
-    // Step 1: run all three queries in parallel.
+    // Resolve the DB user once so we can query wallet transactions (which use integer userId).
+    const [dbUser] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.clerkId, userId));
+
+    // Step 1: run all queries in parallel.
     // workspaceRows fetches distinct workspaceIds across ALL the user's events
     // (not just this month) so we can resolve workspace-specific allocations.
-    const [perServiceRows, recentEvents, workspaceRows] = await Promise.all([
+    const [perServiceRows, recentEvents, workspaceRows, callChargeAgg, recentCallCharges] = await Promise.all([
       db
         .select({
           service: usageEventsTable.service,
@@ -56,6 +60,44 @@ router.get("/usage/me", requireAuth, async (req, res): Promise<void> => {
         .selectDistinct({ workspaceId: usageEventsTable.workspaceId })
         .from(usageEventsTable)
         .where(userFilter),
+
+      // Call charges this month: sum of abs(amountCents) for call_debit transactions
+      dbUser
+        ? db
+            .select({
+              totalCents: sql<string>`coalesce(sum(abs(${walletTransactionsTable.amountCents})), 0)`,
+              callCount:  sql<string>`count(*)`,
+            })
+            .from(walletTransactionsTable)
+            .where(
+              and(
+                eq(walletTransactionsTable.userId, dbUser.id),
+                eq(walletTransactionsTable.type, "call_debit"),
+                gte(walletTransactionsTable.createdAt, monthStart),
+              ),
+            )
+        : Promise.resolve([{ totalCents: "0", callCount: "0" }]),
+
+      // Recent call charge rows (last 20)
+      dbUser
+        ? db
+            .select({
+              id:          walletTransactionsTable.id,
+              createdAt:   walletTransactionsTable.createdAt,
+              callId:      walletTransactionsTable.callId,
+              amountCents: walletTransactionsTable.amountCents,
+              description: walletTransactionsTable.description,
+            })
+            .from(walletTransactionsTable)
+            .where(
+              and(
+                eq(walletTransactionsTable.userId, dbUser.id),
+                eq(walletTransactionsTable.type, "call_debit"),
+              ),
+            )
+            .orderBy(desc(walletTransactionsTable.createdAt))
+            .limit(20)
+        : Promise.resolve([]),
     ]);
 
     // Step 2: Resolve allocations — global + any workspace-specific ones.
@@ -121,6 +163,8 @@ router.get("/usage/me", requireAuth, async (req, res): Promise<void> => {
     const totalUsedMicros = perService.reduce((s, r) => s + r.usedMicros, 0);
     const totalAllocatedMicros = Object.values(allocByService).reduce((s, v) => s + v, 0);
 
+    const chargeAgg = callChargeAgg[0] ?? { totalCents: "0", callCount: "0" };
+
     res.json({
       totalUsedMicros,
       totalAllocatedMicros,
@@ -130,6 +174,17 @@ router.get("/usage/me", requireAuth, async (req, res): Promise<void> => {
         ...e,
         estimatedCostMicros: Number(e.estimatedCostMicros),
       })),
+      callCharges: {
+        totalCents: Number(chargeAgg.totalCents),
+        callCount:  Number(chargeAgg.callCount),
+        recentCharges: recentCallCharges.map((t) => ({
+          id:          t.id,
+          createdAt:   t.createdAt.toISOString(),
+          callId:      t.callId ?? null,
+          amountCents: t.amountCents,
+          description: t.description,
+        })),
+      },
     });
   } catch (err) {
     req.log.error({ err }, "usage/me failed");

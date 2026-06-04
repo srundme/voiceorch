@@ -5177,9 +5177,19 @@ components:
         estimatedCostMicros: { type: number }
         success: { type: boolean }
 
+    CallChargeRow:
+      type: object
+      required: [id, createdAt, amountCents, description]
+      properties:
+        id: { type: integer }
+        createdAt: { type: string, format: date-time }
+        callId: { type: ["integer", "null"] }
+        amountCents: { type: integer }
+        description: { type: string }
+
     MyUsageResponse:
       type: object
-      required: [perService, totalUsedMicros, recentEvents]
+      required: [perService, totalUsedMicros, recentEvents, callCharges]
       properties:
         totalUsedMicros: { type: number }
         totalAllocatedMicros: { type: number }
@@ -5190,6 +5200,15 @@ components:
         recentEvents:
           type: array
           items: { $ref: "#/components/schemas/MyUsageEvent" }
+        callCharges:
+          type: object
+          required: [totalCents, callCount, recentCharges]
+          properties:
+            totalCents: { type: integer }
+            callCount: { type: integer }
+            recentCharges:
+              type: array
+              items: { $ref: "#/components/schemas/CallChargeRow" }
 
     AdminAlert:
       type: object
