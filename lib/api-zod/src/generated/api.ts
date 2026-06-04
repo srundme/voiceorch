@@ -2695,6 +2695,149 @@ export const DeleteLeadTagParams = zod.object({
 
 
 /**
+ * @summary Get live queue status counts for a campaign
+ */
+export const GetCampaignLiveQueueMetricsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetCampaignLiveQueueMetricsResponse = zod.object({
+  "total": zod.number(),
+  "queued": zod.number(),
+  "calling": zod.number(),
+  "connected": zod.number(),
+  "retryScheduled": zod.number(),
+  "callbackScheduled": zod.number(),
+  "nopickup": zod.number(),
+  "failed": zod.number()
+})
+
+
+/**
+ * @summary Paginated, filtered lead list for the live queue
+ */
+export const ListCampaignLiveQueueLeadsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListCampaignLiveQueueLeadsQueryParams = zod.object({
+  "tab": zod.coerce.string().optional(),
+  "search": zod.coerce.string().optional(),
+  "disposition": zod.coerce.string().optional(),
+  "outcome": zod.coerce.string().optional(),
+  "page": zod.coerce.number().optional(),
+  "limit": zod.coerce.number().optional()
+})
+
+export const ListCampaignLiveQueueLeadsResponse = zod.object({
+  "leads": zod.array(zod.object({
+  "id": zod.number(),
+  "campaignId": zod.number(),
+  "batchId": zod.number().nullish(),
+  "name": zod.string().nullish(),
+  "phone": zod.string(),
+  "callStatus": zod.string(),
+  "operationalOutcome": zod.string(),
+  "disposition": zod.string().nullish(),
+  "callAttempts": zod.number(),
+  "durationSeconds": zod.number().nullish(),
+  "lastAttemptAt": zod.coerce.date().nullish(),
+  "nextRetryAt": zod.coerce.date().nullish(),
+  "callbackAt": zod.coerce.date().nullish(),
+  "responseDueBy": zod.coerce.date().nullish(),
+  "slaStatus": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "limit": zod.number()
+})
+
+
+/**
+ * @summary Retry or pause selected leads in the live queue
+ */
+export const BulkActionCampaignLeadsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const BulkActionCampaignLeadsBody = zod.object({
+  "action": zod.enum(['retry', 'pause']),
+  "leadIds": zod.array(zod.number())
+})
+
+export const BulkActionCampaignLeadsResponse = zod.object({
+  "action": zod.string(),
+  "affected": zod.number()
+})
+
+
+/**
+ * @summary Export the current live queue view as CSV
+ */
+export const ExportCampaignLiveQueueParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ExportCampaignLiveQueueQueryParams = zod.object({
+  "tab": zod.coerce.string().optional(),
+  "search": zod.coerce.string().optional()
+})
+
+
+/**
+ * @summary Enriched lead data for the queue lead drawer
+ */
+export const GetCampaignLeadDrawerParams = zod.object({
+  "id": zod.coerce.number(),
+  "leadId": zod.coerce.number()
+})
+
+export const GetCampaignLeadDrawerResponse = zod.object({
+  "lead": zod.object({
+  "id": zod.number().optional(),
+  "campaignId": zod.number().optional(),
+  "batchId": zod.number().nullish(),
+  "name": zod.string().nullish(),
+  "phone": zod.string().optional(),
+  "email": zod.string().nullish(),
+  "callStatus": zod.string().optional(),
+  "operationalOutcome": zod.string().optional(),
+  "disposition": zod.string().nullish(),
+  "callAttempts": zod.number().optional(),
+  "notes": zod.string().nullish(),
+  "leadScore": zod.number().nullish(),
+  "createdAt": zod.coerce.date().optional(),
+  "lastAttemptAt": zod.coerce.date().nullish()
+}),
+  "latestExecution": zod.object({
+  "callSummary": zod.string().nullish(),
+  "sentiment": zod.string().nullish(),
+  "detectedIntent": zod.string().nullish(),
+  "outcome": zod.string().nullish(),
+  "attemptNumber": zod.number().optional(),
+  "createdAt": zod.coerce.date().optional()
+}).nullish(),
+  "pendingRetry": zod.object({
+  "scheduledAt": zod.coerce.date().optional(),
+  "reason": zod.string().nullish()
+}).nullish(),
+  "pendingCallback": zod.object({
+  "callbackAt": zod.coerce.date().nullish(),
+  "responseDueBy": zod.coerce.date().nullish(),
+  "status": zod.string().optional()
+}).nullish(),
+  "timelinePreview": zod.array(zod.object({
+  "eventType": zod.string().optional(),
+  "data": zod.object({
+
+}).passthrough().nullish(),
+  "createdAt": zod.coerce.date().optional()
+}))
+})
+
+
+/**
  * @summary List variable registry for an agent
  */
 export const ListAgentVariablesParams = zod.object({

@@ -95,6 +95,7 @@ import type {
   EventType,
   EventTypeInput,
   EventTypeUpdate,
+  ExportCampaignLiveQueueParams,
   GetAdminAgents200,
   GetAdminPromptTemplates200,
   GetAvailableSlotsParams,
@@ -137,10 +138,16 @@ import type {
   ListCallsParams,
   ListCampaignLeads200,
   ListCampaignLeadsParams,
+  ListCampaignLiveQueueLeadsParams,
   ListEventTypesParams,
   ListMetaCampaignLeads200,
   ListMetaCampaignLeadsParams,
   ListTransactionsParams,
+  LiveQueueBulkActionRequest,
+  LiveQueueBulkActionResult,
+  LiveQueueLeadDrawer,
+  LiveQueueLeadsPage,
+  LiveQueueMetrics,
   MyUsageResponse,
   NormalizePhoneBody,
   OnboardingData,
@@ -8102,6 +8109,415 @@ export const useDeleteLeadTag = <TError = ErrorType<void>,
       > => {
       return useMutation(getDeleteLeadTagMutationOptions(options));
     }
+
+export const getGetCampaignLiveQueueMetricsUrl = (id: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/live-queue/metrics`
+}
+
+/**
+ * @summary Get live queue status counts for a campaign
+ */
+export const getCampaignLiveQueueMetrics = async (id: number, options?: RequestInit): Promise<LiveQueueMetrics> => {
+
+  return customFetch<LiveQueueMetrics>(getGetCampaignLiveQueueMetricsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCampaignLiveQueueMetricsQueryKey = (id: number,) => {
+    return [
+    `/api/campaigns/${id}/live-queue/metrics`
+    ] as const;
+    }
+
+
+export const getGetCampaignLiveQueueMetricsQueryOptions = <TData = Awaited<ReturnType<typeof getCampaignLiveQueueMetrics>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCampaignLiveQueueMetrics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCampaignLiveQueueMetricsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCampaignLiveQueueMetrics>>> = ({ signal }) => getCampaignLiveQueueMetrics(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCampaignLiveQueueMetrics>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCampaignLiveQueueMetricsQueryResult = NonNullable<Awaited<ReturnType<typeof getCampaignLiveQueueMetrics>>>
+export type GetCampaignLiveQueueMetricsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get live queue status counts for a campaign
+ */
+
+export function useGetCampaignLiveQueueMetrics<TData = Awaited<ReturnType<typeof getCampaignLiveQueueMetrics>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCampaignLiveQueueMetrics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCampaignLiveQueueMetricsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListCampaignLiveQueueLeadsUrl = (id: number,
+    params?: ListCampaignLiveQueueLeadsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/campaigns/${id}/live-queue/leads?${stringifiedParams}` : `/api/campaigns/${id}/live-queue/leads`
+}
+
+/**
+ * @summary Paginated, filtered lead list for the live queue
+ */
+export const listCampaignLiveQueueLeads = async (id: number,
+    params?: ListCampaignLiveQueueLeadsParams, options?: RequestInit): Promise<LiveQueueLeadsPage> => {
+
+  return customFetch<LiveQueueLeadsPage>(getListCampaignLiveQueueLeadsUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCampaignLiveQueueLeadsQueryKey = (id: number,
+    params?: ListCampaignLiveQueueLeadsParams,) => {
+    return [
+    `/api/campaigns/${id}/live-queue/leads`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListCampaignLiveQueueLeadsQueryOptions = <TData = Awaited<ReturnType<typeof listCampaignLiveQueueLeads>>, TError = ErrorType<void>>(id: number,
+    params?: ListCampaignLiveQueueLeadsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCampaignLiveQueueLeads>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCampaignLiveQueueLeadsQueryKey(id,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCampaignLiveQueueLeads>>> = ({ signal }) => listCampaignLiveQueueLeads(id,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCampaignLiveQueueLeads>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListCampaignLiveQueueLeadsQueryResult = NonNullable<Awaited<ReturnType<typeof listCampaignLiveQueueLeads>>>
+export type ListCampaignLiveQueueLeadsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Paginated, filtered lead list for the live queue
+ */
+
+export function useListCampaignLiveQueueLeads<TData = Awaited<ReturnType<typeof listCampaignLiveQueueLeads>>, TError = ErrorType<void>>(
+ id: number,
+    params?: ListCampaignLiveQueueLeadsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCampaignLiveQueueLeads>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListCampaignLiveQueueLeadsQueryOptions(id,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getBulkActionCampaignLeadsUrl = (id: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/live-queue/bulk-action`
+}
+
+/**
+ * @summary Retry or pause selected leads in the live queue
+ */
+export const bulkActionCampaignLeads = async (id: number,
+    liveQueueBulkActionRequest: LiveQueueBulkActionRequest, options?: RequestInit): Promise<LiveQueueBulkActionResult> => {
+
+  return customFetch<LiveQueueBulkActionResult>(getBulkActionCampaignLeadsUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      liveQueueBulkActionRequest,)
+  }
+);}
+
+
+
+
+export const getBulkActionCampaignLeadsMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkActionCampaignLeads>>, TError,{id: number;data: BodyType<LiveQueueBulkActionRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof bulkActionCampaignLeads>>, TError,{id: number;data: BodyType<LiveQueueBulkActionRequest>}, TContext> => {
+
+const mutationKey = ['bulkActionCampaignLeads'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof bulkActionCampaignLeads>>, {id: number;data: BodyType<LiveQueueBulkActionRequest>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  bulkActionCampaignLeads(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type BulkActionCampaignLeadsMutationResult = NonNullable<Awaited<ReturnType<typeof bulkActionCampaignLeads>>>
+    export type BulkActionCampaignLeadsMutationBody = BodyType<LiveQueueBulkActionRequest>
+    export type BulkActionCampaignLeadsMutationError = ErrorType<void>
+
+    /**
+ * @summary Retry or pause selected leads in the live queue
+ */
+export const useBulkActionCampaignLeads = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkActionCampaignLeads>>, TError,{id: number;data: BodyType<LiveQueueBulkActionRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof bulkActionCampaignLeads>>,
+        TError,
+        {id: number;data: BodyType<LiveQueueBulkActionRequest>},
+        TContext
+      > => {
+      return useMutation(getBulkActionCampaignLeadsMutationOptions(options));
+    }
+
+export const getExportCampaignLiveQueueUrl = (id: number,
+    params?: ExportCampaignLiveQueueParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/campaigns/${id}/live-queue/export?${stringifiedParams}` : `/api/campaigns/${id}/live-queue/export`
+}
+
+/**
+ * @summary Export the current live queue view as CSV
+ */
+export const exportCampaignLiveQueue = async (id: number,
+    params?: ExportCampaignLiveQueueParams, options?: RequestInit): Promise<string> => {
+
+  return customFetch<string>(getExportCampaignLiveQueueUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportCampaignLiveQueueQueryKey = (id: number,
+    params?: ExportCampaignLiveQueueParams,) => {
+    return [
+    `/api/campaigns/${id}/live-queue/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getExportCampaignLiveQueueQueryOptions = <TData = Awaited<ReturnType<typeof exportCampaignLiveQueue>>, TError = ErrorType<void>>(id: number,
+    params?: ExportCampaignLiveQueueParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportCampaignLiveQueue>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportCampaignLiveQueueQueryKey(id,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportCampaignLiveQueue>>> = ({ signal }) => exportCampaignLiveQueue(id,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportCampaignLiveQueue>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportCampaignLiveQueueQueryResult = NonNullable<Awaited<ReturnType<typeof exportCampaignLiveQueue>>>
+export type ExportCampaignLiveQueueQueryError = ErrorType<void>
+
+
+/**
+ * @summary Export the current live queue view as CSV
+ */
+
+export function useExportCampaignLiveQueue<TData = Awaited<ReturnType<typeof exportCampaignLiveQueue>>, TError = ErrorType<void>>(
+ id: number,
+    params?: ExportCampaignLiveQueueParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportCampaignLiveQueue>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportCampaignLiveQueueQueryOptions(id,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetCampaignLeadDrawerUrl = (id: number,
+    leadId: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/leads/${leadId}/drawer`
+}
+
+/**
+ * @summary Enriched lead data for the queue lead drawer
+ */
+export const getCampaignLeadDrawer = async (id: number,
+    leadId: number, options?: RequestInit): Promise<LiveQueueLeadDrawer> => {
+
+  return customFetch<LiveQueueLeadDrawer>(getGetCampaignLeadDrawerUrl(id,leadId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCampaignLeadDrawerQueryKey = (id: number,
+    leadId: number,) => {
+    return [
+    `/api/campaigns/${id}/leads/${leadId}/drawer`
+    ] as const;
+    }
+
+
+export const getGetCampaignLeadDrawerQueryOptions = <TData = Awaited<ReturnType<typeof getCampaignLeadDrawer>>, TError = ErrorType<void>>(id: number,
+    leadId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCampaignLeadDrawer>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCampaignLeadDrawerQueryKey(id,leadId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCampaignLeadDrawer>>> = ({ signal }) => getCampaignLeadDrawer(id,leadId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id && leadId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCampaignLeadDrawer>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCampaignLeadDrawerQueryResult = NonNullable<Awaited<ReturnType<typeof getCampaignLeadDrawer>>>
+export type GetCampaignLeadDrawerQueryError = ErrorType<void>
+
+
+/**
+ * @summary Enriched lead data for the queue lead drawer
+ */
+
+export function useGetCampaignLeadDrawer<TData = Awaited<ReturnType<typeof getCampaignLeadDrawer>>, TError = ErrorType<void>>(
+ id: number,
+    leadId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCampaignLeadDrawer>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCampaignLeadDrawerQueryOptions(id,leadId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 
 export const getListAgentVariablesUrl = (id: number,) => {
 

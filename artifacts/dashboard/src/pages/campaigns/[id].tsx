@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import LiveQueueTab from "./live-queue";
 import { useRoute, useLocation, Link } from "wouter";
 import {
   useGetCampaign, useListCampaignBatches, useCreateCampaignBatch,
@@ -960,12 +961,7 @@ export default function CampaignDetailPage() {
           {/* ── Live Queue ─────────────────────────────────────────────────────── */}
           <TabsContent value="live-queue" className="mt-0 border-0 p-0">
             <div className="overflow-y-auto px-6 py-5" style={{ maxHeight: "calc(100vh - 160px)" }}>
-              <CampaignTabPlaceholder
-                icon={<Radio className="h-6 w-6" />}
-                title="Live Queue"
-                description="See which leads are currently dialing, connected, or waiting in the queue for this campaign. Updates in real-time as calls progress."
-                color="blue"
-              />
+              <LiveQueueTab campaignId={campaign.id} />
             </div>
           </TabsContent>
 

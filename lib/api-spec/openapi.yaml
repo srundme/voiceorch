@@ -2566,6 +2566,134 @@ paths:
         "404":
           description: Not found
 
+  /campaigns/{id}/live-queue/metrics:
+    get:
+      operationId: getCampaignLiveQueueMetrics
+      tags: [campaigns]
+      summary: Get live queue status counts for a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Metrics
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LiveQueueMetrics" }
+        "401": { description: Unauthorized }
+        "404": { description: Not found }
+
+  /campaigns/{id}/live-queue/leads:
+    get:
+      operationId: listCampaignLiveQueueLeads
+      tags: [campaigns]
+      summary: Paginated, filtered lead list for the live queue
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: tab
+          in: query
+          schema: { type: string }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: disposition
+          in: query
+          schema: { type: string }
+        - name: outcome
+          in: query
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer }
+        - name: limit
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Lead page
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LiveQueueLeadsPage" }
+        "401": { description: Unauthorized }
+        "404": { description: Not found }
+
+  /campaigns/{id}/live-queue/bulk-action:
+    post:
+      operationId: bulkActionCampaignLeads
+      tags: [campaigns]
+      summary: Retry or pause selected leads in the live queue
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LiveQueueBulkActionRequest" }
+      responses:
+        "200":
+          description: Result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LiveQueueBulkActionResult" }
+        "401": { description: Unauthorized }
+        "404": { description: Not found }
+
+  /campaigns/{id}/live-queue/export:
+    get:
+      operationId: exportCampaignLiveQueue
+      tags: [campaigns]
+      summary: Export the current live queue view as CSV
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: tab
+          in: query
+          schema: { type: string }
+        - name: search
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: CSV file
+          content:
+            text/csv:
+              schema: { type: string }
+        "401": { description: Unauthorized }
+        "404": { description: Not found }
+
+  /campaigns/{id}/leads/{leadId}/drawer:
+    get:
+      operationId: getCampaignLeadDrawer
+      tags: [campaigns]
+      summary: Enriched lead data for the queue lead drawer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: leadId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Lead drawer
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LiveQueueLeadDrawer" }
+        "401": { description: Unauthorized }
+        "404": { description: Not found }
+
   /agents/{id}/variables:
     get:
       operationId: listAgentVariables
@@ -7119,3 +7247,119 @@ components:
           nullable: true
           additionalProperties: { type: integer }
         createdAt:                   { type: string, format: date-time }
+
+    LiveQueueMetrics:
+      type: object
+      required: [total, queued, calling, connected, retryScheduled, callbackScheduled, nopickup, failed]
+      properties:
+        total:             { type: integer }
+        queued:            { type: integer }
+        calling:           { type: integer }
+        connected:         { type: integer }
+        retryScheduled:    { type: integer }
+        callbackScheduled: { type: integer }
+        nopickup:          { type: integer }
+        failed:            { type: integer }
+
+    LiveQueueLead:
+      type: object
+      required: [id, campaignId, phone, callStatus, operationalOutcome, callAttempts, createdAt]
+      properties:
+        id:               { type: integer }
+        campaignId:       { type: integer }
+        batchId:          { type: integer, nullable: true }
+        name:             { type: string, nullable: true }
+        phone:            { type: string }
+        callStatus:       { type: string }
+        operationalOutcome: { type: string }
+        disposition:      { type: string, nullable: true }
+        callAttempts:     { type: integer }
+        durationSeconds:  { type: integer, nullable: true }
+        lastAttemptAt:    { type: string, format: date-time, nullable: true }
+        nextRetryAt:      { type: string, format: date-time, nullable: true }
+        callbackAt:       { type: string, format: date-time, nullable: true }
+        responseDueBy:    { type: string, format: date-time, nullable: true }
+        slaStatus:        { type: string, nullable: true }
+        createdAt:        { type: string, format: date-time }
+
+    LiveQueueLeadsPage:
+      type: object
+      required: [leads, total, page, limit]
+      properties:
+        leads:
+          type: array
+          items: { $ref: "#/components/schemas/LiveQueueLead" }
+        total: { type: integer }
+        page:  { type: integer }
+        limit: { type: integer }
+
+    LiveQueueBulkActionRequest:
+      type: object
+      required: [action, leadIds]
+      properties:
+        action:
+          type: string
+          enum: [retry, pause]
+        leadIds:
+          type: array
+          items: { type: integer }
+
+    LiveQueueBulkActionResult:
+      type: object
+      required: [action, affected]
+      properties:
+        action:   { type: string }
+        affected: { type: integer }
+
+    LiveQueueLeadDrawer:
+      type: object
+      required: [lead, timelinePreview]
+      properties:
+        lead:
+          type: object
+          properties:
+            id:               { type: integer }
+            campaignId:       { type: integer }
+            batchId:          { type: integer, nullable: true }
+            name:             { type: string, nullable: true }
+            phone:            { type: string }
+            email:            { type: string, nullable: true }
+            callStatus:       { type: string }
+            operationalOutcome: { type: string }
+            disposition:      { type: string, nullable: true }
+            callAttempts:     { type: integer }
+            notes:            { type: string, nullable: true }
+            leadScore:        { type: integer, nullable: true }
+            createdAt:        { type: string, format: date-time }
+            lastAttemptAt:    { type: string, format: date-time, nullable: true }
+        latestExecution:
+          nullable: true
+          type: object
+          properties:
+            callSummary:    { type: string, nullable: true }
+            sentiment:      { type: string, nullable: true }
+            detectedIntent: { type: string, nullable: true }
+            outcome:        { type: string, nullable: true }
+            attemptNumber:  { type: integer }
+            createdAt:      { type: string, format: date-time }
+        pendingRetry:
+          nullable: true
+          type: object
+          properties:
+            scheduledAt: { type: string, format: date-time }
+            reason:      { type: string, nullable: true }
+        pendingCallback:
+          nullable: true
+          type: object
+          properties:
+            callbackAt:    { type: string, format: date-time, nullable: true }
+            responseDueBy: { type: string, format: date-time, nullable: true }
+            status:        { type: string }
+        timelinePreview:
+          type: array
+          items:
+            type: object
+            properties:
+              eventType: { type: string }
+              data:      { type: object, nullable: true }
+              createdAt: { type: string, format: date-time }

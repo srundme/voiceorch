@@ -1,0 +1,246 @@
+Start Phase 3.
+
+But don't build all 5 tabs together.
+
+The mistake most teams make is:
+
+Live Queue
+Callbacks
+Incoming Calls
+Bookings
+Transfers
+
+all at once.
+
+You end up with 5 half-finished modules instead of 1 excellent operational workspace.
+
+Phase 3A (First Build)
+Live Queue
+
+This should become the operational heart of every campaign.
+
+Route:
+
+/app/campaigns/:id/live-queue
+Purpose
+
+Answer one question:
+
+"What is happening right now in this campaign?"
+
+Not analytics.
+
+Not history.
+
+Current operations.
+
+Queue Sources
+
+The queue should be powered from:
+
+campaign_leads
+call_executions
+call_callbacks
+operational_outcomes
+
+Not snapshots.
+
+Snapshots are for trends.
+
+Queue is live data.
+
+Queue Tabs
+
+Inside Live Queue:
+
+All
+
+Calling
+
+Queued
+
+Connected
+
+Retry Scheduled
+
+Callback Scheduled
+
+No Pickup
+
+Failed
+
+Do NOT add:
+
+Bookings
+Transfers
+Incoming Calls
+
+yet.
+
+Those get their own tabs later.
+
+Main Table
+
+Columns:
+
+Lead
+
+Phone
+
+Status
+
+Disposition
+
+Outcome
+
+Attempts
+
+Duration
+
+Next Retry
+
+Callback Time
+
+Last Activity
+Row Click
+
+Click lead:
+
+Lead Drawer
+
+Not full CRM yet.
+
+Simple slide-over panel.
+
+Show:
+
+Lead Info
+
+Latest Summary
+
+Latest Transcript Preview
+
+Timeline Preview
+
+Current Status
+
+This prepares for Phase 5 CRM.
+
+Filters
+
+Required:
+
+Status
+
+Disposition
+
+Outcome
+
+Date
+
+Search
+Bulk Actions
+
+Required:
+
+Retry
+
+Pause
+
+Export
+
+Only these 3.
+
+Don't overbuild.
+
+Queue Metrics Strip
+
+Above table:
+
+Queued
+
+Calling
+
+Connected
+
+Retry
+
+Callbacks
+
+Failed
+
+Clickable.
+
+Acts as quick filter.
+
+SLA Readiness
+
+Add columns now even if hidden:
+
+response_due_by
+
+sla_status
+
+Future callbacks module depends on them.
+
+Phase 3A Acceptance Criteria
+
+✅ Live Queue tab functional
+
+✅ Queue metrics strip
+
+✅ Filters
+
+✅ Search
+
+✅ Bulk actions
+
+✅ Lead drawer
+
+✅ Polling every 10 seconds
+
+✅ Campaign scoped
+
+Phase 3B
+
+After Live Queue is approved:
+
+Build:
+
+Callbacks
+
+This becomes first true queue module.
+
+Phase 3C
+Incoming Calls
+Phase 3D
+Bookings
+Phase 3E
+Transfers
+Important Rule
+
+For Phase 3:
+
+Do not build CRM.
+
+Do not build Analytics.
+
+Do not build Timeline.
+
+Do not build Queue Engine + 4 queue modules simultaneously.
+
+Build:
+
+Live Queue
+
+until it feels production-ready.
+
+Then move sequentially.
+
+If I were running the project, I would officially define the next sprint as:
+
+Sprint 3A
+
+Campaign Live Queue Workspace
+
+Everything else waits until that is complete. That gives users a real operational surface immediately and creates the foundation for Callbacks, Incoming Calls, Bookings, and Transfers.

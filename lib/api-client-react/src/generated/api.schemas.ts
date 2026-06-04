@@ -2902,6 +2902,114 @@ export interface BatchHealthSnapshot {
   createdAt: string;
 }
 
+export interface LiveQueueMetrics {
+  total: number;
+  queued: number;
+  calling: number;
+  connected: number;
+  retryScheduled: number;
+  callbackScheduled: number;
+  nopickup: number;
+  failed: number;
+}
+
+export interface LiveQueueLead {
+  id: number;
+  campaignId: number;
+  batchId?: number | null;
+  name?: string | null;
+  phone: string;
+  callStatus: string;
+  operationalOutcome: string;
+  disposition?: string | null;
+  callAttempts: number;
+  durationSeconds?: number | null;
+  lastAttemptAt?: string | null;
+  nextRetryAt?: string | null;
+  callbackAt?: string | null;
+  responseDueBy?: string | null;
+  slaStatus?: string | null;
+  createdAt: string;
+}
+
+export interface LiveQueueLeadsPage {
+  leads: LiveQueueLead[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export type LiveQueueBulkActionRequestAction = typeof LiveQueueBulkActionRequestAction[keyof typeof LiveQueueBulkActionRequestAction];
+
+
+export const LiveQueueBulkActionRequestAction = {
+  retry: 'retry',
+  pause: 'pause',
+} as const;
+
+export interface LiveQueueBulkActionRequest {
+  action: LiveQueueBulkActionRequestAction;
+  leadIds: number[];
+}
+
+export interface LiveQueueBulkActionResult {
+  action: string;
+  affected: number;
+}
+
+export type LiveQueueLeadDrawerLead = {
+  id?: number;
+  campaignId?: number;
+  batchId?: number | null;
+  name?: string | null;
+  phone?: string;
+  email?: string | null;
+  callStatus?: string;
+  operationalOutcome?: string;
+  disposition?: string | null;
+  callAttempts?: number;
+  notes?: string | null;
+  leadScore?: number | null;
+  createdAt?: string;
+  lastAttemptAt?: string | null;
+};
+
+export type LiveQueueLeadDrawerLatestExecution = {
+  callSummary?: string | null;
+  sentiment?: string | null;
+  detectedIntent?: string | null;
+  outcome?: string | null;
+  attemptNumber?: number;
+  createdAt?: string;
+} | null;
+
+export type LiveQueueLeadDrawerPendingRetry = {
+  scheduledAt?: string;
+  reason?: string | null;
+} | null;
+
+export type LiveQueueLeadDrawerPendingCallback = {
+  callbackAt?: string | null;
+  responseDueBy?: string | null;
+  status?: string;
+} | null;
+
+export type LiveQueueLeadDrawerTimelinePreviewItemData = { [key: string]: unknown } | null;
+
+export type LiveQueueLeadDrawerTimelinePreviewItem = {
+  eventType?: string;
+  data?: LiveQueueLeadDrawerTimelinePreviewItemData;
+  createdAt?: string;
+};
+
+export interface LiveQueueLeadDrawer {
+  lead: LiveQueueLeadDrawerLead;
+  latestExecution?: LiveQueueLeadDrawerLatestExecution;
+  pendingRetry?: LiveQueueLeadDrawerPendingRetry;
+  pendingCallback?: LiveQueueLeadDrawerPendingCallback;
+  timelinePreview: LiveQueueLeadDrawerTimelinePreviewItem[];
+}
+
 /**
  * Platform admin token (matches ADMIN_TOKEN env var).
  */
@@ -3042,6 +3150,20 @@ export type UpdateLeadSourceBody = {
 
 export type AddLeadTagBody = {
   tag: string;
+};
+
+export type ListCampaignLiveQueueLeadsParams = {
+tab?: string;
+search?: string;
+disposition?: string;
+outcome?: string;
+page?: number;
+limit?: number;
+};
+
+export type ExportCampaignLiveQueueParams = {
+tab?: string;
+search?: string;
 };
 
 export type NormalizePhoneBody = {
