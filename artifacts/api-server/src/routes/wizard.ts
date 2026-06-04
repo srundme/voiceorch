@@ -665,7 +665,7 @@ const MANAGED_KEY_NAMES = [
   // LLM
   "managed_qwen_key",
   "managed_groq_key",
-  "managed_google_key",
+  "managed_gemini_key",
   "managed_openai_key",
   "managed_anthropic_key",
   "managed_mistral_key",
