@@ -29,7 +29,7 @@ export const authRateLimit = rateLimit({
   keyGenerator: (req) => {
     // Use Clerk userId as the rate-limit key; fall back to IP (IPv6-safe)
     const userId = (req as any).clerkUserId;
-    return userId ?? ipKeyGenerator(req);
+    return userId ?? ipKeyGenerator(req.ip ?? req.socket?.remoteAddress ?? "unknown");
   },
   message: { error: "Too many requests. Please slow down." },
   handler: (req, res, _next, options) => {

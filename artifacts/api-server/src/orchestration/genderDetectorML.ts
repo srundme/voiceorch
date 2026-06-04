@@ -1,13 +1,20 @@
 /**
- * Caller gender detector — "Gender Detection ML Model" provider.
+ * Caller gender detector — progressive ML-based detection.
  *
- * Buffers the first 2 seconds of caller audio (32 000 bytes @ 8 kHz PCM16),
- * then POSTs a WAV to the voice-analysis microservice's autocorrelation
- * endpoint (/voice-analysis/gender-ml) and resolves with the detected gender.
+ * Instead of firing once after a fixed audio buffer, this detector runs after
+ * each user speech turn and locks in a gender once it is confident enough.
  *
- * Drop-in replacement for GenderDetector — exposes the same `.gender` property
- * and `addSpeechChunk(pcm8k)` interface so pipeline.ts and webcall.ts can
- * switch between the two with a single conditional.
+ * - addSpeechChunk(pcm8k) — accumulates caller audio (called on every frame).
+ * - runDetection()        — call this after each user turn ends (non-blocking).
+ *   • If confidence ≥ CONFIDENCE_THRESHOLD  → lock gender immediately.
+ *   • If accumulated audio ≥ FALLBACK_BYTES → lock with best available result.
+ *   • Otherwise keep collecting and retry next turn.
+ *
+ * "locked" turns true once the gender is committed. Subsequent runDetection()
+ * calls are no-ops and chunks are freed to release memory.
+ *
+ * The greeting always uses a neutral salutation (no waiting). The resolved
+ * gender is available for subsequent turns via the `.gender` property.
  */
 
 import { logger as rootLogger } from "../lib/logger.js";
@@ -17,10 +24,17 @@ const BITS         = 16;
 const CHANNELS     = 1;
 const SAMPLE_BYTES = BITS / 8;
 
+/** Minimum audio before we bother running detection (1 second). */
+const MIN_BYTES = 1 * SAMPLE_RATE * SAMPLE_BYTES;
+
 /**
- * 2 seconds of 8 kHz 16-bit mono PCM = 32 000 bytes.
+ * After this much audio we lock regardless of confidence — the model has seen
+ * enough of the caller's voice to make a reasonable decision (4 seconds).
  */
-const TARGET_BYTES = 2 * SAMPLE_RATE * SAMPLE_BYTES;
+const FALLBACK_BYTES = 4 * SAMPLE_RATE * SAMPLE_BYTES;
+
+/** Confidence threshold for an immediate lock (0–1 scale from the ML service). */
+const CONFIDENCE_THRESHOLD = 0.75;
 
 const GENDER_ML_SERVICE_URL = "http://localhost:5000/voice-analysis/gender-ml";
 
@@ -53,12 +67,15 @@ function buildWav(pcmData: Buffer): Buffer {
 export type DetectedGender = "male" | "female" | null;
 
 export class GenderDetectorML {
-  /** Resolved gender, or null if detection hasn't completed yet. */
+  /** Resolved gender once detection completes, null until then. */
   gender: DetectedGender = null;
+
+  /** True once gender is committed — no further detection will run. */
+  locked = false;
 
   private chunks: Buffer[] = [];
   private accumulated = 0;
-  private fired = false;
+  private detecting = false;
   private readonly callId: number;
   private readonly log: typeof rootLogger;
 
@@ -69,25 +86,34 @@ export class GenderDetectorML {
 
   /**
    * Feed a chunk of caller audio (PCM 8 kHz 16-bit LE mono).
-   * Once 2 seconds (TARGET_BYTES) have accumulated, fires async detection.
-   * Subsequent calls are no-ops.
+   * Just accumulates — detection is triggered by runDetection(), not here.
    */
   addSpeechChunk(pcm8k: Buffer): void {
-    if (this.fired) return;
+    if (this.locked) return;
     this.chunks.push(pcm8k);
     this.accumulated += pcm8k.byteLength;
-    if (this.accumulated >= TARGET_BYTES) {
-      this.fired = true;
-      const combined = Buffer.concat(this.chunks);
-      this.chunks = [];
-      this.log.info(
-        { callId: this.callId, bytes: combined.byteLength, provider: "ml_model" },
-        "Gender detection (ML model) firing",
-      );
-      this._detect(combined).catch((err) => {
-        this.log.warn({ callId: this.callId, err }, "GenderDetectorML promise rejected unexpectedly");
-      });
-    }
+  }
+
+  /**
+   * Trigger a detection attempt (fire-and-forget — does not block the caller).
+   * Call this after each user speech turn ends.
+   *
+   * No-op if:
+   *   - already locked
+   *   - a detection is already in flight
+   *   - not enough audio has accumulated yet (< MIN_BYTES)
+   */
+  runDetection(): void {
+    if (this.locked || this.detecting || this.accumulated < MIN_BYTES) return;
+    this.detecting = true;
+    const combined = Buffer.concat(this.chunks);
+    this.log.info(
+      { callId: this.callId, bytes: combined.byteLength, provider: "ml_model" },
+      "Gender detection (ML model) firing",
+    );
+    this._detect(combined).catch((err) => {
+      this.log.warn({ callId: this.callId, err }, "GenderDetectorML runDetection rejected unexpectedly");
+    }).finally(() => { this.detecting = false; });
   }
 
   private async _detect(pcm: Buffer): Promise<void> {
@@ -109,19 +135,43 @@ export class GenderDetectorML {
         return;
       }
 
-      const json = await res.json() as { estimated_gender: string; confidence: number };
-      const g    = json.estimated_gender;
+      const json       = await res.json() as { estimated_gender: string; confidence: number };
+      const g          = json.estimated_gender;
+      const confidence = json.confidence ?? 0;
 
-      if (g === "male" || g === "female") {
-        this.gender = g;
+      if (g !== "male" && g !== "female") {
         this.log.info(
-          { callId: this.callId, gender: g, confidence: json.confidence, provider: "ml_model" },
-          "Caller gender detected (ML model)",
+          { callId: this.callId, result: g, confidence, bytes: pcm.byteLength, provider: "ml_model" },
+          "Gender ML detection returned unknown — will retry next turn",
+        );
+        return;
+      }
+
+      const highConfidence  = confidence >= CONFIDENCE_THRESHOLD;
+      const enoughAudio     = this.accumulated >= FALLBACK_BYTES;
+      const shouldLock      = highConfidence || enoughAudio;
+
+      // Always record the tentative result so the system prompt can use it.
+      this.gender = g;
+
+      if (shouldLock) {
+        this.locked = true;
+        this.chunks = []; // free memory
+        this.log.info(
+          {
+            callId: this.callId,
+            gender: g,
+            confidence,
+            bytes: pcm.byteLength,
+            reason: highConfidence ? "high_confidence" : "enough_audio_fallback",
+            provider: "ml_model",
+          },
+          "Caller gender locked (progressive detection)",
         );
       } else {
         this.log.info(
-          { callId: this.callId, result: g, provider: "ml_model" },
-          "Gender ML detection returned unknown — salutation will be generic",
+          { callId: this.callId, gender: g, confidence, bytes: pcm.byteLength, provider: "ml_model" },
+          "Caller gender detected (tentative — awaiting higher confidence)",
         );
       }
     } catch (err) {

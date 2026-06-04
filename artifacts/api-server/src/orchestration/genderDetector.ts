@@ -69,6 +69,9 @@ export class GenderDetector {
   /** Resolved gender, or null if detection hasn't completed yet. */
   gender: DetectedGender = null;
 
+  /** True once gender is committed — mirrors `fired` for interface compatibility with GenderDetectorML. */
+  get locked(): boolean { return this.fired; }
+
   private chunks: Buffer[] = [];
   private accumulated = 0;
   private fired = false;
@@ -99,6 +102,12 @@ export class GenderDetector {
       });
     }
   }
+
+  /**
+   * No-op stub for interface compatibility with GenderDetectorML.
+   * The plain GenderDetector fires automatically via addSpeechChunk().
+   */
+  runDetection(): void { /* auto-fires in addSpeechChunk */ }
 
   private async _detect(pcm: Buffer): Promise<void> {
     try {

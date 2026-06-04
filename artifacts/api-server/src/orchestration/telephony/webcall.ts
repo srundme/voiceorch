@@ -508,6 +508,11 @@ export async function handleWebCallWebSocket(
       send({ type: "transcript", speaker: "user", text: userText });
       history.push({ role: "user", content: userText });
 
+      // ── Progressive gender detection — fire after each confirmed user turn ─
+      // Non-blocking: detection runs async and updates genderDetector.gender
+      // for the NEXT turn's salutation. The greeting always uses neutral.
+      if (genderDetector && !genderDetector.locked) genderDetector.runDetection();
+
       // ── End-call phrase detection ──────────────────────────────────────────
       // Mirror pipeline.ts: if the user says a configured goodbye phrase, end
       // the call immediately without routing through the LLM.
