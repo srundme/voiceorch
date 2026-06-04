@@ -3064,6 +3064,99 @@ export interface CallbackRescheduleRequest {
   callbackAt: string;
 }
 
+export interface LeadTagItem {
+  id: number;
+  tag: string;
+  createdAt: string;
+}
+
+export interface LeadInteractionSummaryData {
+  latestSummary?: string | null;
+  latestSentiment?: string | null;
+  latestIntent?: string | null;
+  latestTopics?: string[];
+  interactionCount?: number;
+  lastContactAt?: string | null;
+}
+
+export type LeadWorkspaceExecutionCall = { [key: string]: unknown } | null;
+
+export interface LeadWorkspaceExecution {
+  id?: number;
+  callId?: number | null;
+  attemptNumber?: number;
+  outcome?: string | null;
+  callSummary?: string | null;
+  sentiment?: string | null;
+  detectedIntent?: string | null;
+  keyTopics?: string[];
+  createdAt?: string;
+  call?: LeadWorkspaceExecutionCall;
+}
+
+export type LeadWorkspaceLeadLeadData = { [key: string]: unknown } | null;
+
+export type LeadWorkspaceLead = {
+  id?: number;
+  campaignId?: number;
+  batchId?: number | null;
+  phone?: string;
+  normalizedPhone?: string | null;
+  name?: string | null;
+  email?: string | null;
+  leadData?: LeadWorkspaceLeadLeadData;
+  callStatus?: string;
+  callAttempts?: number;
+  disposition?: string | null;
+  operationalOutcome?: string | null;
+  leadScore?: number | null;
+  source?: string;
+  lastAttemptAt?: string | null;
+  createdAt?: string;
+};
+
+export type LeadWorkspaceCampaign = {
+  id?: number;
+  name?: string;
+  agentName?: string | null;
+  fromNumber?: string | null;
+};
+
+export type LeadWorkspaceBatch = {
+  id?: number;
+  name?: string;
+  status?: string;
+};
+
+export type LeadWorkspaceSource = {
+  name?: string | null;
+  type?: string | null;
+};
+
+export type LeadWorkspaceCallbacksItem = { [key: string]: unknown };
+
+export type LeadWorkspacePendingRetriesItem = { [key: string]: unknown };
+
+export type LeadWorkspaceBookingsItem = { [key: string]: unknown };
+
+export type LeadWorkspaceTransfersItem = { [key: string]: unknown };
+
+export interface LeadWorkspace {
+  lead?: LeadWorkspaceLead;
+  campaign?: LeadWorkspaceCampaign;
+  batch?: LeadWorkspaceBatch;
+  source?: LeadWorkspaceSource;
+  executions?: LeadWorkspaceExecution[];
+  callbacks?: LeadWorkspaceCallbacksItem[];
+  pendingRetries?: LeadWorkspacePendingRetriesItem[];
+  bookings?: LeadWorkspaceBookingsItem[];
+  transfers?: LeadWorkspaceTransfersItem[];
+  tags?: LeadTagItem[];
+  notes?: LeadNote[];
+  tasks?: LeadTask[];
+  interactionSummary?: LeadInteractionSummaryData;
+}
+
 export type BatchWorkspaceHeaderBatch = {
   id?: number;
   name?: string;
@@ -3427,6 +3520,11 @@ export type ListBatchLeads200 = {
 
 export type RedialBatchNoPickup200 = {
   queued: number;
+};
+
+export type UpdateLeadCrmBody = {
+  score?: number;
+  disposition?: string;
 };
 
 export type UpdateLeadCallbackBodyStatus = typeof UpdateLeadCallbackBodyStatus[keyof typeof UpdateLeadCallbackBodyStatus];

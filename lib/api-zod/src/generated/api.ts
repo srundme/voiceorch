@@ -2216,6 +2216,20 @@ export const GetCampaignLeadProfileResponse = zod.object({
 
 
 /**
+ * @summary Update lead score and disposition
+ */
+export const UpdateLeadCrmParams = zod.object({
+  "id": zod.coerce.number(),
+  "leadId": zod.coerce.number()
+})
+
+export const UpdateLeadCrmBody = zod.object({
+  "score": zod.number().optional(),
+  "disposition": zod.string().optional()
+})
+
+
+/**
  * @summary Get timeline events for a campaign lead
  */
 export const GetCampaignLeadTimelineParams = zod.object({
@@ -2900,6 +2914,112 @@ export const ExportCampaignCallbacksParams = zod.object({
 
 export const ExportCampaignCallbacksQueryParams = zod.object({
   "status": zod.coerce.string().optional()
+})
+
+
+/**
+ * @summary Full Lead CRM workspace data
+ */
+export const GetLeadWorkspaceParams = zod.object({
+  "id": zod.coerce.number(),
+  "leadId": zod.coerce.number()
+})
+
+export const GetLeadWorkspaceResponse = zod.object({
+  "lead": zod.object({
+  "id": zod.number().optional(),
+  "campaignId": zod.number().optional(),
+  "batchId": zod.number().nullish(),
+  "phone": zod.string().optional(),
+  "normalizedPhone": zod.string().nullish(),
+  "name": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "leadData": zod.object({
+
+}).passthrough().nullish(),
+  "callStatus": zod.string().optional(),
+  "callAttempts": zod.number().optional(),
+  "disposition": zod.string().nullish(),
+  "operationalOutcome": zod.string().nullish(),
+  "leadScore": zod.number().nullish(),
+  "source": zod.string().optional(),
+  "lastAttemptAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date().optional()
+}).optional(),
+  "campaign": zod.object({
+  "id": zod.number().optional(),
+  "name": zod.string().optional(),
+  "agentName": zod.string().nullish(),
+  "fromNumber": zod.string().nullish()
+}).optional(),
+  "batch": zod.object({
+  "id": zod.number().optional(),
+  "name": zod.string().optional(),
+  "status": zod.string().optional()
+}).optional(),
+  "source": zod.object({
+  "name": zod.string().nullish(),
+  "type": zod.string().nullish()
+}).optional(),
+  "executions": zod.array(zod.object({
+  "id": zod.number().optional(),
+  "callId": zod.number().nullish(),
+  "attemptNumber": zod.number().optional(),
+  "outcome": zod.string().nullish(),
+  "callSummary": zod.string().nullish(),
+  "sentiment": zod.string().nullish(),
+  "detectedIntent": zod.string().nullish(),
+  "keyTopics": zod.array(zod.string()).optional(),
+  "createdAt": zod.coerce.date().optional(),
+  "call": zod.object({
+
+}).passthrough().nullish()
+})).optional(),
+  "callbacks": zod.array(zod.object({
+
+}).passthrough()).optional(),
+  "pendingRetries": zod.array(zod.object({
+
+}).passthrough()).optional(),
+  "bookings": zod.array(zod.object({
+
+}).passthrough()).optional(),
+  "transfers": zod.array(zod.object({
+
+}).passthrough()).optional(),
+  "tags": zod.array(zod.object({
+  "id": zod.number(),
+  "tag": zod.string(),
+  "createdAt": zod.coerce.date()
+})).optional(),
+  "notes": zod.array(zod.object({
+  "id": zod.number(),
+  "leadId": zod.number(),
+  "campaignId": zod.number(),
+  "body": zod.string(),
+  "createdBy": zod.string(),
+  "createdAt": zod.coerce.date()
+})).optional(),
+  "tasks": zod.array(zod.object({
+  "id": zod.number(),
+  "leadId": zod.number(),
+  "campaignId": zod.number(),
+  "title": zod.string(),
+  "dueAt": zod.coerce.date().nullish(),
+  "status": zod.enum(['open', 'done']),
+  "assignedToId": zod.string().nullish(),
+  "assignedToType": zod.string().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date()
+})).optional(),
+  "interactionSummary": zod.object({
+  "latestSummary": zod.string().nullish(),
+  "latestSentiment": zod.string().nullish(),
+  "latestIntent": zod.string().nullish(),
+  "latestTopics": zod.array(zod.string()).optional(),
+  "interactionCount": zod.number().optional(),
+  "lastContactAt": zod.coerce.date().nullish()
+}).optional()
 })
 
 

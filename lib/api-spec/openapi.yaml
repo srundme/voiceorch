@@ -1861,6 +1861,34 @@ paths:
           description: Unauthorized
         "404":
           description: Not found
+    patch:
+      operationId: updateLeadCrm
+      tags: [campaigns]
+      summary: Update lead score and disposition
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: leadId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                score:
+                  type: integer
+                disposition:
+                  type: string
+      responses:
+        "200": { description: Updated }
+        "401": { description: Unauthorized }
+        "404": { description: Not found }
 
   /campaigns/{id}/leads/{leadId}/timeline:
     get:
@@ -2827,6 +2855,23 @@ paths:
           content:
             text/csv:
               schema: { type: string }
+        "401": { description: Unauthorized }
+        "404": { description: Not found }
+
+  /campaigns/{id}/leads/{leadId}/workspace:
+    get:
+      operationId: getLeadWorkspace
+      tags: [campaigns]
+      summary: Full Lead CRM workspace data
+      parameters:
+        - { name: id,     in: path, required: true, schema: { type: integer } }
+        - { name: leadId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Lead workspace
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LeadWorkspace" }
         "401": { description: Unauthorized }
         "404": { description: Not found }
 
@@ -8095,6 +8140,109 @@ components:
       required: [callbackAt]
       properties:
         callbackAt: { type: string, format: date-time }
+
+    LeadTagItem:
+      type: object
+      required: [id, tag, createdAt]
+      properties:
+        id:        { type: integer }
+        tag:       { type: string }
+        createdAt: { type: string, format: date-time }
+
+    LeadInteractionSummaryData:
+      type: object
+      properties:
+        latestSummary:    { type: string, nullable: true }
+        latestSentiment:  { type: string, nullable: true }
+        latestIntent:     { type: string, nullable: true }
+        latestTopics:
+          type: array
+          items: { type: string }
+        interactionCount: { type: integer }
+        lastContactAt:    { type: string, format: date-time, nullable: true }
+
+    LeadWorkspaceExecution:
+      type: object
+      properties:
+        id:             { type: integer }
+        callId:         { type: integer, nullable: true }
+        attemptNumber:  { type: integer }
+        outcome:        { type: string, nullable: true }
+        callSummary:    { type: string, nullable: true }
+        sentiment:      { type: string, nullable: true }
+        detectedIntent: { type: string, nullable: true }
+        keyTopics:
+          type: array
+          items: { type: string }
+        createdAt:      { type: string, format: date-time }
+        call:           { type: object, nullable: true }
+
+    LeadWorkspace:
+      type: object
+      properties:
+        lead:
+          type: object
+          properties:
+            id:                 { type: integer }
+            campaignId:         { type: integer }
+            batchId:            { type: integer, nullable: true }
+            phone:              { type: string }
+            normalizedPhone:    { type: string, nullable: true }
+            name:               { type: string, nullable: true }
+            email:              { type: string, nullable: true }
+            leadData:           { type: object, nullable: true }
+            callStatus:         { type: string }
+            callAttempts:       { type: integer }
+            disposition:        { type: string, nullable: true }
+            operationalOutcome: { type: string, nullable: true }
+            leadScore:          { type: integer, nullable: true }
+            source:             { type: string }
+            lastAttemptAt:      { type: string, format: date-time, nullable: true }
+            createdAt:          { type: string, format: date-time }
+        campaign:
+          type: object
+          properties:
+            id:         { type: integer }
+            name:       { type: string }
+            agentName:  { type: string, nullable: true }
+            fromNumber: { type: string, nullable: true }
+        batch:
+          type: object
+          properties:
+            id:     { type: integer }
+            name:   { type: string }
+            status: { type: string }
+        source:
+          type: object
+          properties:
+            name: { type: string, nullable: true }
+            type: { type: string, nullable: true }
+        executions:
+          type: array
+          items: { $ref: "#/components/schemas/LeadWorkspaceExecution" }
+        callbacks:
+          type: array
+          items: { type: object }
+        pendingRetries:
+          type: array
+          items: { type: object }
+        bookings:
+          type: array
+          items: { type: object }
+        transfers:
+          type: array
+          items: { type: object }
+        tags:
+          type: array
+          items: { $ref: "#/components/schemas/LeadTagItem" }
+        notes:
+          type: array
+          items: { $ref: "#/components/schemas/LeadNote" }
+        tasks:
+          type: array
+          items: { $ref: "#/components/schemas/LeadTask" }
+        interactionSummary:
+          $ref: "#/components/schemas/LeadInteractionSummaryData"
 
     BatchWorkspaceHeader:
       type: object

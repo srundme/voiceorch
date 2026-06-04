@@ -39,6 +39,27 @@ export type TimelineEventType =
   | "score_updated"
   | "operational_outcome_set";
 
+// ── Lead Interaction Summary ──────────────────────────────────────────────────
+// One row per lead. Materialized cache of the latest conversation intelligence.
+// Upserted by a background job after each call execution completes.
+// CRM loads this instead of expensive cross-call aggregation every page view.
+
+export const leadInteractionSummaryTable = pgTable("lead_interaction_summaries", {
+  id:               serial("id").primaryKey(),
+  leadId:           integer("lead_id").notNull().unique().references(() => campaignLeadsTable.id, { onDelete: "cascade" }),
+  latestSummary:    text("latest_summary"),
+  latestSentiment:  text("latest_sentiment"),     // positive | neutral | negative
+  latestIntent:     text("latest_intent"),
+  latestTopics:     jsonb("latest_topics").$type<string[]>().default([]),
+  interactionCount: integer("interaction_count").notNull().default(0),
+  lastContactAt:    timestamp("last_contact_at", { withTimezone: true }),
+  lastCallId:       integer("last_call_id").references(() => callsTable.id, { onDelete: "set null" }),
+  updatedAt:        timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
+export type LeadInteractionSummary       = typeof leadInteractionSummaryTable.$inferSelect;
+export type InsertLeadInteractionSummary = typeof leadInteractionSummaryTable.$inferInsert;
+
 // ── Call Executions ───────────────────────────────────────────────────────────
 // Represents one outbound call attempt for a lead.
 // Conversation intelligence fields (sentiment, intent, topics, summary)

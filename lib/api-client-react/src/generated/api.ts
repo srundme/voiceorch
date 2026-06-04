@@ -151,6 +151,7 @@ import type {
   LeadTransfer,
   LeadTransferCreate,
   LeadTransferUpdate,
+  LeadWorkspace,
   ListActivityLogsParams,
   ListAvailabilityOverridesParams,
   ListAvailabilityParams,
@@ -219,6 +220,7 @@ import type {
   UpdateIncomingCallStatus200,
   UpdateIncomingCallStatusBody,
   UpdateLeadCallbackBody,
+  UpdateLeadCrmBody,
   UpdateLeadSourceBody,
   UserPreferences,
   UserPreferencesUpdate,
@@ -6078,6 +6080,80 @@ export function useGetCampaignLeadProfile<TData = Awaited<ReturnType<typeof getC
 
 
 
+export const getUpdateLeadCrmUrl = (id: number,
+    leadId: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/leads/${leadId}`
+}
+
+/**
+ * @summary Update lead score and disposition
+ */
+export const updateLeadCrm = async (id: number,
+    leadId: number,
+    updateLeadCrmBody: UpdateLeadCrmBody, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getUpdateLeadCrmUrl(id,leadId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateLeadCrmBody,)
+  }
+);}
+
+
+
+
+export const getUpdateLeadCrmMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateLeadCrm>>, TError,{id: number;leadId: number;data: BodyType<UpdateLeadCrmBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateLeadCrm>>, TError,{id: number;leadId: number;data: BodyType<UpdateLeadCrmBody>}, TContext> => {
+
+const mutationKey = ['updateLeadCrm'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateLeadCrm>>, {id: number;leadId: number;data: BodyType<UpdateLeadCrmBody>}> = (props) => {
+          const {id,leadId,data} = props ?? {};
+
+          return  updateLeadCrm(id,leadId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateLeadCrmMutationResult = NonNullable<Awaited<ReturnType<typeof updateLeadCrm>>>
+    export type UpdateLeadCrmMutationBody = BodyType<UpdateLeadCrmBody>
+    export type UpdateLeadCrmMutationError = ErrorType<void>
+
+    /**
+ * @summary Update lead score and disposition
+ */
+export const useUpdateLeadCrm = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateLeadCrm>>, TError,{id: number;leadId: number;data: BodyType<UpdateLeadCrmBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateLeadCrm>>,
+        TError,
+        {id: number;leadId: number;data: BodyType<UpdateLeadCrmBody>},
+        TContext
+      > => {
+      return useMutation(getUpdateLeadCrmMutationOptions(options));
+    }
+
 export const getGetCampaignLeadTimelineUrl = (id: number,
     leadId: number,) => {
 
@@ -8935,6 +9011,88 @@ export function useExportCampaignCallbacks<TData = Awaited<ReturnType<typeof exp
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getExportCampaignCallbacksQueryOptions(id,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetLeadWorkspaceUrl = (id: number,
+    leadId: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/leads/${leadId}/workspace`
+}
+
+/**
+ * @summary Full Lead CRM workspace data
+ */
+export const getLeadWorkspace = async (id: number,
+    leadId: number, options?: RequestInit): Promise<LeadWorkspace> => {
+
+  return customFetch<LeadWorkspace>(getGetLeadWorkspaceUrl(id,leadId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetLeadWorkspaceQueryKey = (id: number,
+    leadId: number,) => {
+    return [
+    `/api/campaigns/${id}/leads/${leadId}/workspace`
+    ] as const;
+    }
+
+
+export const getGetLeadWorkspaceQueryOptions = <TData = Awaited<ReturnType<typeof getLeadWorkspace>>, TError = ErrorType<void>>(id: number,
+    leadId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLeadWorkspace>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetLeadWorkspaceQueryKey(id,leadId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLeadWorkspace>>> = ({ signal }) => getLeadWorkspace(id,leadId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id && leadId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLeadWorkspace>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetLeadWorkspaceQueryResult = NonNullable<Awaited<ReturnType<typeof getLeadWorkspace>>>
+export type GetLeadWorkspaceQueryError = ErrorType<void>
+
+
+/**
+ * @summary Full Lead CRM workspace data
+ */
+
+export function useGetLeadWorkspace<TData = Awaited<ReturnType<typeof getLeadWorkspace>>, TError = ErrorType<void>>(
+ id: number,
+    leadId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLeadWorkspace>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetLeadWorkspaceQueryOptions(id,leadId,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
