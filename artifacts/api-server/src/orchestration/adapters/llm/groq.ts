@@ -1,11 +1,14 @@
 import OpenAI from "openai";
 import type { ConversationTurn, LLMAdapter, LLMUsage, ToolDefinition } from "../../types.js";
+import { logger } from "../../../lib/logger.js";
 
 /**
  * Groq — OpenAI-compatible API with ultra-fast inference
  * Models: llama-3.3-70b-versatile, llama-3.1-8b-instant, gemma2-9b-it
  *
- * Tool calling: supported on llama-3.3-70b-versatile and llama-3.1-70b-versatile
+ * Tool calling: supported on llama-3.3-70b-versatile, llama-3.1-8b-instant,
+ *   llama3-groq-*-tool-use-preview, and qwen/qwen3-32b.
+ *   gemma2-9b-it does NOT support Groq function calling — tools are stripped for it.
  * Uses identical format to OpenAI (same SDK, different baseURL)
  */
 
@@ -25,6 +28,18 @@ const TOOL_CAPABLE_MODELS = new Set([
   "llama3-groq-8b-8192-tool-use-preview",
   "qwen/qwen3-32b",
 ]);
+
+/**
+ * Scheduling-related tool names that warrant forcing tool_choice: "required".
+ * This list covers the standard native tool names defined in buildToolDefs.
+ */
+const SCHEDULING_TOOL_NAME_PATTERNS = [
+  "check_availability",
+  "book_appointment",
+  "get_bookings",
+  "cancel_appointment",
+  "reschedule_appointment",
+];
 
 function resolveGroqModel(model: string | null): string {
   const m = model ?? "";
@@ -54,8 +69,17 @@ export class GroqLLM implements LLMAdapter {
       onUsage?: (usage: LLMUsage) => void;
     }
   ): Promise<void> {
-    // Only pass tools when the model supports function calling
+    // Only pass tools when the model supports function calling.
+    // gemma2-9b-it does not support Groq function calling — warn and strip tools.
     const supportsTools = TOOL_CAPABLE_MODELS.has(this.model);
+    if (!supportsTools && options?.tools?.length) {
+      logger.warn(
+        { model: this.model, toolCount: options.tools.length },
+        "Groq: model does not support function calling — tools stripped. " +
+          "Agents using scheduling tools with this model will not be able to call tools. " +
+          "Switch to llama-3.3-70b-versatile or llama-3.1-8b-instant for tool support.",
+      );
+    }
     const groqTools = supportsTools && options?.tools?.length
       ? options.tools.map((t) => ({
           type: "function" as const,
@@ -67,6 +91,14 @@ export class GroqLLM implements LLMAdapter {
         }))
       : undefined;
 
+    // Use tool_choice: "required" when scheduling tools are present so the model
+    // is forced to invoke a tool rather than hallucinating slot times in plain text.
+    // Keep "auto" when only end_call is present to avoid forcing unnecessary tool calls.
+    const hasSchedulingTools = options?.tools?.some(
+      (t) => SCHEDULING_TOOL_NAME_PATTERNS.some((pattern) => t.name.includes(pattern)),
+    ) ?? false;
+    const toolChoice = groqTools ? (hasSchedulingTools ? "required" : "auto") : undefined;
+
     const stream = await this.client.chat.completions.create({
       model: this.model,
       stream: true,
@@ -75,7 +107,7 @@ export class GroqLLM implements LLMAdapter {
         { role: "system", content: systemPrompt },
         ...messages.map((m) => ({ role: m.role, content: m.content })),
       ],
-      ...(groqTools ? { tools: groqTools, tool_choice: "auto" } : {}),
+      ...(groqTools ? { tools: groqTools, tool_choice: toolChoice } : {}),
     });
 
     let full = "";

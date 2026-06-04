@@ -17,6 +17,18 @@ const TOOL_CAPABLE_MODELS = new Set([
   "qwen/qwen3-235b-a22b",
 ]);
 
+/**
+ * Scheduling-related tool name fragments that warrant forcing tool_choice: "required".
+ * This list covers the standard native tool names defined in buildToolDefs.
+ */
+const SCHEDULING_TOOL_NAME_PATTERNS = [
+  "check_availability",
+  "book_appointment",
+  "get_bookings",
+  "cancel_appointment",
+  "reschedule_appointment",
+];
+
 export class QwenLLM implements LLMAdapter {
   private client: OpenAI;
   private model: string;
@@ -52,6 +64,14 @@ export class QwenLLM implements LLMAdapter {
         }))
       : undefined;
 
+    // Use tool_choice: "required" when scheduling tools are present so the model
+    // is forced to invoke a tool rather than hallucinating slot times in plain text.
+    // Keep "auto" when only end_call is present to avoid forcing unnecessary tool calls.
+    const hasSchedulingTools = options?.tools?.some(
+      (t) => SCHEDULING_TOOL_NAME_PATTERNS.some((pattern) => t.name.includes(pattern)),
+    ) ?? false;
+    const toolChoice = qwenTools ? (hasSchedulingTools ? "required" : "auto") : undefined;
+
     // Prepend /no_think to disable Qwen3 extended reasoning for voice calls.
     // Think-block generation adds 200–600 ms to TTFT before the first spoken
     // word; voice agents need low latency, not deep reasoning chains.
@@ -66,7 +86,7 @@ export class QwenLLM implements LLMAdapter {
         { role: "system", content: voiceSystemPrompt },
         ...messages.map((m) => ({ role: m.role, content: m.content })),
       ],
-      ...(qwenTools ? { tools: qwenTools, tool_choice: "auto" } : {}),
+      ...(qwenTools ? { tools: qwenTools, tool_choice: toolChoice } : {}),
     });
 
     let full = "";

@@ -1091,25 +1091,35 @@ export class OrchestrationPipeline {
         `2. Always pass the caller's stated timezone into every scheduling tool call (e.g. timezone="Asia/Kolkata"). Default to "Asia/Kolkata" if not stated.`,
         `3. If "${listName}" returns an empty result, say: "There are no upcoming bookings under your name."`,
         `4. If all returned bookings are in the past, say: "Your previous appointment has already passed — I can only reschedule upcoming ones. Would you like to book a new one?"`,
+        `IMPORTANT: NEVER invent or guess slot times. You MUST call "${checkName}" before offering any available times to the caller. Only relay times that you received from a tool result.`,
       ].join("\n");
     }
 
-    // Inject booking tool guide when the agent has a native_booking tool
+    // Inject booking/availability guide when the agent has a native_booking or native_check_availability tool
     const hasBookingTool = this.agent.tools.some((t) => t.type === "native_booking");
-    if (hasBookingTool) {
+    const hasCheckAvailabilityTool = this.agent.tools.some((t) => t.type === "native_check_availability");
+    if (hasBookingTool || hasCheckAvailabilityTool) {
       const bookTool = this.agent.tools.find((t) => t.type === "native_booking");
       const checkTool = this.agent.tools.find((t) => t.type === "native_check_availability");
       const bookName = bookTool?.name ?? "book_appointment";
       const checkName = checkTool?.name ?? "check_availability";
-      systemPromptForTurn += [
+      const lines = [
         "",
         "",
         "[BOOKING TOOL GUIDE]",
-        `"${checkName}" ONLY checks available slots — it does NOT create a booking.`,
-        `Before calling "${bookName}", you MUST collect the caller's full name and email address. Ask for them if not yet provided.`,
-        `NEVER tell the caller their appointment is confirmed or scheduled unless you have received a booking_confirmed: result from "${bookName}".`,
-        `Do NOT say "Your appointment has been scheduled" or any equivalent phrase before "${bookName}" returns a booking_confirmed: result.`,
-      ].join("\n");
+        `CRITICAL: NEVER invent, guess, or assume any available slot times. You MUST call "${checkName}" before telling the caller any available times. Only relay times you received directly from a "${checkName}" tool result.`,
+      ];
+      if (hasCheckAvailabilityTool) {
+        lines.push(`"${checkName}" ONLY checks available slots — it does NOT create a booking.`);
+      }
+      if (hasBookingTool) {
+        lines.push(
+          `Before calling "${bookName}", you MUST collect the caller's full name and email address. Ask for them if not yet provided.`,
+          `NEVER tell the caller their appointment is confirmed or scheduled unless you have received a booking_confirmed: result from "${bookName}".`,
+          `Do NOT say "Your appointment has been scheduled" or any equivalent phrase before "${bookName}" returns a booking_confirmed: result.`,
+        );
+      }
+      systemPromptForTurn += lines.join("\n");
     }
 
     try {
