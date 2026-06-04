@@ -265,7 +265,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </Sheet>
 
       {/* Page content — pt-12 offsets the fixed mobile header on small screens */}
-      <main className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden bg-background pt-12 md:pt-0">
+      <main className="flex-1 min-w-0 min-h-0 flex flex-col overflow-y-auto bg-background pt-12 md:pt-0">
         {children}
       </main>
 
