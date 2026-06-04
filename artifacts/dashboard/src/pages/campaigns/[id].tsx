@@ -746,6 +746,18 @@ export default function CampaignDetailPage() {
   const [, setLocation] = useLocation();
   const [deletingBatch, setDeletingBatch] = useState<CampaignBatch | null>(null);
   const deleteBatch = useDeleteCampaignBatch();
+  const update = useUpdateCampaign();
+  const [activeTab, setActiveTab] = useState("overview");
+  const [opTab, setOpTab] = useState<"all" | "callbacks" | "incoming" | "bookings" | "transfers">("all");
+
+  async function handleStatusChange(status: "active" | "paused" | "draft") {
+    try {
+      await update.mutateAsync({ id: campaignId, data: { status } });
+      await qc.invalidateQueries({ queryKey: getGetCampaignQueryKey(campaignId) });
+    } catch {
+      toast({ title: "Failed to update status", variant: "destructive" });
+    }
+  }
 
   const { data: campaign, isLoading: campLoading } = useGetCampaign(campaignId);
   const { data: batches, isLoading: batchLoading } = useListCampaignBatches(campaignId);
@@ -801,263 +813,351 @@ export default function CampaignDetailPage() {
     <div className="flex-1 flex flex-col h-full overflow-hidden">
       {/* Header */}
       <div className="px-6 pt-5 pb-0 border-b border-border shrink-0">
-        <div className="flex items-center justify-between gap-4 mb-4">
-          <div className="flex items-center gap-3">
+        {/* Title row */}
+        <div className="flex items-start justify-between gap-4 mb-3">
+          <div className="flex items-center gap-3 min-w-0">
             <Link href="/app/campaigns">
               <Button variant="outline" size="icon" className="h-8 w-8 shrink-0">
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             </Link>
-            <div>
-              <div className="flex items-center gap-2.5">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2.5 flex-wrap">
                 <h2 className="text-xl font-semibold tracking-tight">{campaign.name}</h2>
-                <CampaignStatusBadge status={campaign.status} />
+                <StatusBadge status={campaign.status} />
               </div>
-              {campaign.description && (
-                <p className="text-xs text-muted-foreground/60 mt-0.5">{campaign.description}</p>
-              )}
+              <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+                <span className="text-xs text-muted-foreground/50 flex items-center gap-1">
+                  <Users className="h-3 w-3" /> Agent #{campaign.agentId ?? "—"}
+                </span>
+                {campaign.fromNumber && (
+                  <span className="text-xs text-muted-foreground/50 font-mono flex items-center gap-1">
+                    <Phone className="h-3 w-3" /> {campaign.fromNumber}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <a href={`${BASE}/api/campaigns/${campaignId}/csv-template`} download
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-border bg-background text-xs text-foreground/70 hover:bg-muted transition-colors">
-              <FileText className="h-3.5 w-3.5" /> CSV Template
-            </a>
+            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5"
+              onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/new`)}>
+              <Plus className="h-3.5 w-3.5" /> Create Batch
+            </Button>
+            {campaign.status === "active" && (
+              <Button size="sm" variant="outline"
+                className="h-8 text-xs gap-1.5 text-amber-600 border-amber-500/30 hover:bg-amber-500/10"
+                onClick={() => void handleStatusChange("paused")}>
+                <PauseCircle className="h-3.5 w-3.5" /> Pause
+              </Button>
+            )}
+            {campaign.status === "paused" && (
+              <Button size="sm" variant="outline"
+                className="h-8 text-xs gap-1.5 text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/10"
+                onClick={() => void handleStatusChange("active")}>
+                <PlayCircle className="h-3.5 w-3.5" /> Resume
+              </Button>
+            )}
+            {(campaign.status === "active" || campaign.status === "paused") && (
+              <Button size="sm" variant="outline"
+                className="h-8 text-xs gap-1.5 text-red-500 border-red-500/20 hover:bg-red-500/10"
+                onClick={() => void handleStatusChange("draft")}>
+                <XCircle className="h-3.5 w-3.5" /> Stop
+              </Button>
+            )}
           </div>
         </div>
 
+        {/* KPI chips */}
+        <div className="flex items-center gap-2 pb-3 overflow-x-auto">
+          {[
+            { label: "Leads",     value: campaign.totalLeads, tab: "overview" },
+            { label: "Called",    value: campaign.calledLeads, tab: "operations" },
+            { label: "Callbacks", value: analytics?.callbacks ?? 0, tab: "operations" },
+            { label: "Bookings",  value: analytics?.dispositions?.find((d: { label: string }) => d.label.toLowerCase().includes("book"))?.count ?? 0, tab: "operations" },
+            { label: "Transfers", value: analytics?.dispositions?.find((d: { label: string }) => d.label.toLowerCase().includes("transfer"))?.count ?? 0, tab: "operations" },
+          ].map(kpi => (
+            <button key={kpi.label}
+              onClick={() => setActiveTab(kpi.tab)}
+              className="flex items-center gap-2.5 px-3 py-1.5 bg-card border border-border rounded-lg hover:border-foreground/30 hover:bg-muted/20 transition-colors shrink-0 group">
+              <span className="text-[10px] text-muted-foreground/50 uppercase tracking-widest">{kpi.label}</span>
+              <span className="text-sm font-semibold text-foreground tabular-nums">{kpi.value.toLocaleString()}</span>
+            </button>
+          ))}
+        </div>
+
         {/* Tabs */}
-        <Tabs defaultValue="overview" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="h-auto bg-transparent p-0 gap-0 border-0 -mb-px overflow-x-auto flex-nowrap">
-            {(["overview", "batches", "live-queue", "callbacks", "incoming", "bookings", "transfers", "leads", "analytics", "settings"] as const).map(tab => (
+            {(["overview", "operations", "leads", "analytics", "settings"] as const).map(tab => (
               <TabsTrigger key={tab} value={tab}
                 className="h-9 px-4 rounded-none border-b-2 border-transparent bg-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:text-foreground text-muted-foreground/60 text-xs font-medium whitespace-nowrap hover:text-foreground transition-colors shrink-0">
-                {tab === "live-queue" ? "Live Queue" :
-                 tab === "incoming" ? "Incoming Calls" :
-                 tab.charAt(0).toUpperCase() + tab.slice(1)}
-                {tab === "batches" && !batchLoading && batches?.length ? (
-                  <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-muted text-[9px]">{batches.length}</span>
-                ) : null}
+                {tab.charAt(0).toUpperCase() + tab.slice(1)}
               </TabsTrigger>
             ))}
           </TabsList>
 
-          {/* ── Overview ───────────────────────────────────────────────────────── */}
+          {/* ── Overview ────────────────────────────────────────────────────── */}
           <TabsContent value="overview" className="mt-0 border-0 p-0">
-            <div className="overflow-y-auto px-6 py-5 space-y-5" style={{ maxHeight: "calc(100vh - 160px)" }}>
-              {/* Stats grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
-                {[
-                  { label: "Total Leads",  value: campaign.totalLeads },
-                  { label: "Calls Made",   value: campaign.calledLeads },
-                  { label: "Progress",     value: `${calledPct}%` },
-                  { label: "Batches",      value: batches?.length ?? 0 },
-                  { label: "Concurrent",   value: campaign.concurrentCallLimit ?? 20 },
-                  { label: "Delay",        value: `${campaign.callDelaySeconds}s` },
-                ].map(stat => (
-                  <div key={stat.label} className="bg-card border border-border rounded-xl p-3">
-                    <p className="text-[9px] text-muted-foreground/50 uppercase tracking-wider">{stat.label}</p>
-                    <p className="text-lg font-semibold text-foreground mt-0.5">{stat.value}</p>
-                  </div>
-                ))}
-              </div>
-
-              {/* Progress + Webhook */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                <div className="lg:col-span-2 bg-card border border-border rounded-xl p-5 space-y-5">
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-xs font-semibold text-foreground">Campaign Progress</p>
-                      <span className="text-xs font-mono text-muted-foreground">{calledPct}%</span>
-                    </div>
-                    <div className="h-2 bg-muted rounded-full overflow-hidden">
-                      <div className="h-full bg-primary/30 rounded-full transition-all duration-500" style={{ width: `${calledPct}%` }} />
-                    </div>
-                    <div className="flex items-center justify-between mt-2 text-[10px] text-muted-foreground/50">
-                      <span>{campaign.calledLeads} called</span>
-                      <span>{campaign.totalLeads - campaign.calledLeads} remaining</span>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-muted-foreground/40 uppercase tracking-wider mb-1.5">Webhook URL</p>
-                    <div className="flex items-center gap-2 bg-elevated/30 rounded-lg px-3 py-2.5 border border-border">
-                      <code className="text-xs font-mono text-muted-foreground/70 flex-1 truncate">{webhookUrl}</code>
-                      <CopyButton text={webhookUrl} />
-                    </div>
-                  </div>
-                  {fm && Object.keys(fm).length > 0 && (
-                    <div>
-                      <p className="text-[10px] text-muted-foreground/40 uppercase tracking-wider mb-2">Field Mappings</p>
-                      <div className="flex flex-wrap gap-2">
-                        {Object.entries(fm).map(([role, source]) => (
-                          <div key={role} className="flex items-center gap-1.5 bg-elevated/40 rounded-lg px-3 py-1.5 border border-border">
-                            <span className="text-[10px] text-muted-foreground/50 uppercase">{role}</span>
-                            <ArrowRight className="h-3 w-3 text-muted-foreground/30" />
-                            <span className="text-xs text-foreground font-mono">{source as string}</span>
-                          </div>
-                        ))}
+            <div className="overflow-y-auto px-6 py-5 space-y-5" style={{ maxHeight: "calc(100vh - 210px)" }}>
+              {/* Funnel */}
+              <div className="bg-card border border-border rounded-xl p-5">
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">Call Funnel</h3>
+                <div className="flex items-center gap-1 overflow-x-auto pb-1">
+                  {[
+                    { label: "Imported",    value: campaign.totalLeads,   cls: "bg-muted/60" },
+                    { label: "Called",      value: campaign.calledLeads,  cls: "bg-blue-500/15" },
+                    { label: "Connected",   value: (analytics?.statusBreakdown as Record<string, number> | undefined)?.["connected"] ?? "—", cls: "bg-blue-500/30" },
+                    { label: "Interested",  value: (analytics?.statusBreakdown as Record<string, number> | undefined)?.["interested"] ?? "—", cls: "bg-emerald-500/15" },
+                    { label: "Booked",      value: analytics?.dispositions?.find((d: { label: string; count: number }) => d.label.toLowerCase().includes("book"))?.count ?? "—", cls: "bg-emerald-500/30" },
+                    { label: "Transferred", value: analytics?.dispositions?.find((d: { label: string; count: number }) => d.label.toLowerCase().includes("transfer"))?.count ?? "—", cls: "bg-purple-500/20" },
+                  ].map((stage, i, arr) => (
+                    <div key={stage.label} className="flex items-center shrink-0">
+                      <div className={cn("px-4 py-3 rounded-xl text-center min-w-[88px]", stage.cls)}>
+                        <p className="text-base font-bold tabular-nums leading-none">{typeof stage.value === "number" ? stage.value.toLocaleString() : stage.value}</p>
+                        <p className="text-[10px] text-muted-foreground/60 mt-1">{stage.label}</p>
                       </div>
+                      {i < arr.length - 1 && <ChevronRight className="h-4 w-4 text-muted-foreground/20 mx-0.5 shrink-0" />}
                     </div>
-                  )}
+                  ))}
                 </div>
-                <div className="bg-card border border-border rounded-xl p-0 overflow-hidden">
-                  <div className="px-4 py-3 border-b border-border">
-                    <p className="text-xs font-semibold text-foreground flex items-center gap-2">
-                      <Info className="h-4 w-4 text-primary/70" /> Campaign Settings
-                    </p>
-                  </div>
-                  <DetailRow label="Agent ID" value={campaign.agentId ?? "—"} icon={<Hash className="h-3 w-3" />} />
-                  <DetailRow label="From Number" value={campaign.fromNumber ?? "—"} icon={<Phone className="h-3 w-3" />} />
-                  <DetailRow label="Max Attempts" value={campaign.maxAttempts} icon={<Activity className="h-3 w-3" />} />
-                  <DetailRow label="Created" value={formatDistanceToNow(new Date(campaign.createdAt), { addSuffix: true })} icon={<Calendar className="h-3 w-3" />} />
-                </div>
-              </div>
-            </div>
-          </TabsContent>
-
-          {/* ── Batches ────────────────────────────────────────────────────────── */}
-          <TabsContent value="batches" className="mt-0 border-0 p-0">
-            <div className="overflow-y-auto px-6 py-5" style={{ maxHeight: "calc(100vh - 160px)" }}>
-              <div className="bg-card border border-border rounded-xl overflow-hidden">
-                <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-                  <div className="flex items-center gap-2">
-                    <Layers className="h-4 w-4 text-muted-foreground/50" />
-                    <h2 className="text-sm font-semibold text-foreground">Batches</h2>
-                    {!batchLoading && batches && (
-                      <span className="text-xs text-muted-foreground/40">({batches.length})</span>
-                    )}
-                  </div>
-                  <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/new`)}>
-                    <Plus className="h-3.5 w-3.5" /> New Batch
-                  </Button>
-                </div>
-                {batchLoading ? (
-                  <div className="divide-y divide-border">
-                    {[1, 2].map(i => (
-                      <div key={i} className="flex items-center gap-4 px-5 py-4 animate-pulse">
-                        <div className="h-8 w-8 bg-muted rounded-lg" />
-                        <div className="flex-1 space-y-2"><div className="h-3 w-32 bg-muted rounded" /><div className="h-2.5 w-48 bg-muted rounded" /></div>
-                      </div>
-                    ))}
-                  </div>
-                ) : !batches?.length ? (
-                  <div className="py-16 text-center">
-                    <div className="h-10 w-10 rounded-xl bg-elevated border border-border flex items-center justify-center mx-auto mb-3">
-                      <Layers className="h-5 w-5 text-muted-foreground/30" />
+                {campaign.totalLeads > 0 && (
+                  <div className="mt-4">
+                    <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                      <div className="h-full bg-primary/40 rounded-full transition-all" style={{ width: `${calledPct}%` }} />
                     </div>
-                    <p className="text-sm font-medium text-foreground/70 mb-1">No batches yet</p>
-                    <p className="text-xs text-muted-foreground/40 mb-4">Create a batch to start calling leads</p>
-                    <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/new`)}>
-                      <Plus className="h-3.5 w-3.5" /> Create First Batch
-                    </Button>
-                  </div>
-                ) : (
-                  <div>
-                    {batches.map((batch, i) => (
-                      <BatchRow key={batch.id} batch={batch} index={i + 1} campaignId={campaignId} onDelete={setDeletingBatch} />
-                    ))}
+                    <div className="flex justify-between mt-1 text-[10px] text-muted-foreground/40">
+                      <span>{campaign.calledLeads.toLocaleString()} called</span>
+                      <span>{(campaign.totalLeads - campaign.calledLeads).toLocaleString()} remaining</span>
+                    </div>
                   </div>
                 )}
               </div>
+
+              {/* Batch cards */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Batches</h3>
+                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5"
+                    onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/new`)}>
+                    <Plus className="h-3 w-3" /> New Batch
+                  </Button>
+                </div>
+                {batchLoading ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {[1, 2].map(i => <div key={i} className="h-24 bg-muted rounded-xl animate-pulse" />)}
+                  </div>
+                ) : !batches?.length ? (
+                  <div className="py-10 text-center border border-dashed border-border rounded-xl">
+                    <Layers className="h-8 w-8 text-muted-foreground/20 mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground/50">No batches yet</p>
+                    <p className="text-xs text-muted-foreground/30 mt-0.5 mb-4">Create a batch to start calling leads</p>
+                    <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs"
+                      onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/new`)}>
+                      <Plus className="h-3 w-3" /> Create First Batch
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {batches.map((batch, i) => {
+                      const bPct = batch.totalLeads > 0 ? Math.round((batch.calledLeads / batch.totalLeads) * 100) : 0;
+                      return (
+                        <div key={batch.id}
+                          className="group bg-card border border-border rounded-xl p-4 cursor-pointer hover:border-foreground/20 transition-all"
+                          onClick={() => { window.location.href = `${BASE}/app/campaigns/${campaignId}/batches/${batch.id}`; }}>
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-foreground truncate">{batch.name || `Batch ${i + 1}`}</p>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <span className="text-[10px] capitalize text-muted-foreground/50">{batch.status}</span>
+                                <span className="text-[10px] text-muted-foreground/40">{batch.totalLeads.toLocaleString()} leads</span>
+                              </div>
+                            </div>
+                            <ChevronRight className="h-4 w-4 text-muted-foreground/30 shrink-0 group-hover:translate-x-0.5 transition-transform mt-0.5" />
+                          </div>
+                          {batch.totalLeads > 0 && (
+                            <div>
+                              <div className="h-1 bg-muted rounded-full overflow-hidden">
+                                <div className="h-full bg-foreground/20 rounded-full" style={{ width: `${bPct}%` }} />
+                              </div>
+                              <p className="text-[10px] text-muted-foreground/40 mt-1 font-mono">{bPct}% called</p>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Webhook */}
+              <div className="bg-card border border-border rounded-xl p-4">
+                <p className="text-[10px] text-muted-foreground/40 uppercase tracking-wider mb-2">Webhook URL</p>
+                <div className="flex items-center gap-2 bg-muted/30 rounded-lg px-3 py-2 border border-border">
+                  <code className="text-xs font-mono text-muted-foreground/70 flex-1 truncate">{webhookUrl}</code>
+                  <CopyButton text={webhookUrl} />
+                </div>
+              </div>
             </div>
           </TabsContent>
 
-          {/* ── Live Queue ─────────────────────────────────────────────────────── */}
-          <TabsContent value="live-queue" className="mt-0 border-0 p-0">
-            <div className="overflow-y-auto px-6 py-5" style={{ maxHeight: "calc(100vh - 160px)" }}>
-              <LiveQueueTab campaignId={campaign.id} />
+          {/* ── Operations ──────────────────────────────────────────────────── */}
+          <TabsContent value="operations" className="mt-0 border-0 p-0">
+            <div className="overflow-y-auto" style={{ maxHeight: "calc(100vh - 210px)" }}>
+              {/* Metrics bar */}
+              <div className="px-6 py-4 border-b border-border/60 bg-muted/10">
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                  {[
+                    { label: "Live Calls",    value: "—",   accent: "text-blue-500" },
+                    { label: "Callbacks Due", value: analytics?.callbacks ?? 0, accent: "text-amber-500" },
+                    { label: "Incoming",      value: "—",   accent: "" },
+                    { label: "Bookings",      value: analytics?.dispositions?.find((d: { label: string; count: number }) => d.label.toLowerCase().includes("book"))?.count ?? 0, accent: "text-emerald-500" },
+                    { label: "Transfers",     value: analytics?.dispositions?.find((d: { label: string; count: number }) => d.label.toLowerCase().includes("transfer"))?.count ?? 0, accent: "text-purple-500" },
+                    { label: "Failed",        value: (analytics?.statusBreakdown as Record<string, number> | undefined)?.["failed"] ?? "—", accent: "text-red-500" },
+                  ].map(m => (
+                    <div key={m.label} className="bg-card border border-border rounded-xl px-3 py-2.5 text-center">
+                      <p className="text-[9px] text-muted-foreground/40 uppercase tracking-widest leading-none mb-1">{m.label}</p>
+                      <p className={cn("text-xl font-semibold tabular-nums leading-none", m.accent || "text-foreground")}>
+                        {typeof m.value === "number" ? m.value.toLocaleString() : m.value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Sub-nav */}
+              <div className="px-6 pt-3 pb-0 flex items-center gap-0 border-b border-border/60 overflow-x-auto">
+                {(["all", "callbacks", "incoming", "bookings", "transfers"] as const).map(t => (
+                  <button key={t} onClick={() => setOpTab(t)}
+                    className={cn(
+                      "px-4 py-2.5 text-xs font-medium border-b-2 transition-colors whitespace-nowrap capitalize shrink-0 -mb-px",
+                      opTab === t
+                        ? "border-foreground text-foreground"
+                        : "border-transparent text-muted-foreground/60 hover:text-foreground"
+                    )}>
+                    {t === "all" ? "All Work" : t.charAt(0).toUpperCase() + t.slice(1)}
+                  </button>
+                ))}
+              </div>
+
+              {/* Content */}
+              <div className="px-6 py-4">
+                {opTab === "all"       && <LiveQueueTab     campaignId={campaign.id} />}
+                {opTab === "callbacks" && <CallbacksTab     campaignId={campaign.id} />}
+                {opTab === "incoming"  && <IncomingCallsTab campaignId={campaign.id} />}
+                {opTab === "bookings"  && <BookingsTab      campaignId={campaign.id} />}
+                {opTab === "transfers" && <TransfersTab     campaignId={campaign.id} />}
+              </div>
             </div>
           </TabsContent>
 
-          {/* ── Callbacks ──────────────────────────────────────────────────────── */}
-          <TabsContent value="callbacks" className="mt-0 border-0 p-0">
-            <div className="overflow-y-auto px-6 py-5" style={{ maxHeight: "calc(100vh - 160px)" }}>
-              <CallbacksTab campaignId={campaign.id} />
-            </div>
-          </TabsContent>
-
-          {/* ── Incoming ───────────────────────────────────────────────────────── */}
-          <TabsContent value="incoming" className="mt-0 border-0 p-0">
-            <div className="overflow-y-auto px-6 py-5" style={{ maxHeight: "calc(100vh - 160px)" }}>
-              <IncomingCallsTab campaignId={campaign.id} />
-            </div>
-          </TabsContent>
-
-          {/* ── Bookings ───────────────────────────────────────────────────────── */}
-          <TabsContent value="bookings" className="mt-0 border-0 p-0">
-            <div className="overflow-y-auto px-6 py-5" style={{ maxHeight: "calc(100vh - 160px)" }}>
-              <BookingsTab campaignId={campaign.id} />
-            </div>
-          </TabsContent>
-
-          {/* ── Transfers ──────────────────────────────────────────────────────── */}
-          <TabsContent value="transfers" className="mt-0 border-0 p-0">
-            <div className="overflow-y-auto px-6 py-5" style={{ maxHeight: "calc(100vh - 160px)" }}>
-              <TransfersTab campaignId={campaign.id} />
-            </div>
-          </TabsContent>
-
-          {/* ── Leads ──────────────────────────────────────────────────────────── */}
+          {/* ── Leads ───────────────────────────────────────────────────────── */}
           <TabsContent value="leads" className="mt-0 border-0 p-0">
-            <div className="overflow-y-auto px-6 py-5" style={{ maxHeight: "calc(100vh - 160px)" }}>
+            <div className="overflow-y-auto px-6 py-5" style={{ maxHeight: "calc(100vh - 210px)" }}>
               <LeadsTab campaignId={campaignId} />
             </div>
           </TabsContent>
 
-          {/* ── Analytics ──────────────────────────────────────────────────────── */}
+          {/* ── Analytics ───────────────────────────────────────────────────── */}
           <TabsContent value="analytics" className="mt-0 border-0 p-0">
-            <div className="overflow-y-auto px-6 py-5" style={{ maxHeight: "calc(100vh - 160px)" }}>
-              {!analytics || (!analytics.dispositions.length && !analytics.callbacks) ? (
+            <div className="overflow-y-auto px-6 py-5 space-y-5" style={{ maxHeight: "calc(100vh - 210px)" }}>
+              {!analytics ? (
                 <div className="py-16 text-center text-muted-foreground/40">
                   <BarChart3 className="h-10 w-10 mx-auto mb-3 opacity-30" />
                   <p className="text-sm">No analytics data yet</p>
                   <p className="text-xs mt-1">Start calling leads to see results here</p>
                 </div>
               ) : (
-                <div className="space-y-5">
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {Object.entries(analytics.statusBreakdown ?? {}).map(([status, count]) => (
-                      <div key={status} className="bg-card border border-border rounded-xl px-4 py-3">
-                        <p className="text-[9px] text-muted-foreground/50 uppercase tracking-wider capitalize">{status.replace(/_/g, " ")}</p>
-                        <p className="text-2xl font-semibold text-foreground mt-0.5 tabular-nums">{count}</p>
+                <>
+                  {/* Performance rates */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {[
+                      {
+                        label: "Connection Rate",
+                        value: analytics.calledLeads > 0
+                          ? `${Math.round(((analytics.statusBreakdown as Record<string, number> | undefined)?.["connected"] ?? 0) / analytics.calledLeads * 100)}%`
+                          : "—",
+                        desc: "Calls that connected",
+                        accent: "text-blue-500",
+                      },
+                      {
+                        label: "Booking Rate",
+                        value: analytics.calledLeads > 0
+                          ? `${Math.round(((analytics.dispositions?.find((d: { label: string; count: number }) => d.label.toLowerCase().includes("book"))?.count ?? 0) / analytics.calledLeads) * 100)}%`
+                          : "—",
+                        desc: "Calls that booked",
+                        accent: "text-emerald-500",
+                      },
+                      {
+                        label: "Transfer Rate",
+                        value: analytics.calledLeads > 0
+                          ? `${Math.round(((analytics.dispositions?.find((d: { label: string; count: number }) => d.label.toLowerCase().includes("transfer"))?.count ?? 0) / analytics.calledLeads) * 100)}%`
+                          : "—",
+                        desc: "Calls transferred",
+                        accent: "text-purple-500",
+                      },
+                    ].map(r => (
+                      <div key={r.label} className="bg-card border border-border rounded-xl p-5">
+                        <p className="text-[10px] text-muted-foreground/50 uppercase tracking-widest">{r.label}</p>
+                        <p className={cn("text-4xl font-bold mt-2 tabular-nums", r.accent)}>{r.value}</p>
+                        <p className="text-xs text-muted-foreground/40 mt-1">{r.desc}</p>
                       </div>
                     ))}
-                    {analytics.callbacks > 0 && (
-                      <div className="bg-purple-500/5 border border-purple-500/20 rounded-xl px-4 py-3">
-                        <p className="text-[9px] text-purple-400 uppercase tracking-wider">Callbacks</p>
-                        <p className="text-2xl font-semibold text-purple-300 mt-0.5 tabular-nums">{analytics.callbacks}</p>
-                      </div>
-                    )}
                   </div>
+
+                  {/* Funnel */}
+                  <div className="bg-card border border-border rounded-xl p-5">
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">Funnel</h3>
+                    <div className="space-y-2">
+                      {[
+                        { label: "Imported",  value: campaign.totalLeads },
+                        { label: "Called",    value: campaign.calledLeads },
+                        { label: "Connected", value: (analytics.statusBreakdown as Record<string, number> | undefined)?.["connected"] ?? 0 },
+                      ].map(stage => {
+                        const pct = campaign.totalLeads > 0 ? Math.round((stage.value / campaign.totalLeads) * 100) : 0;
+                        return (
+                          <div key={stage.label} className="flex items-center gap-3">
+                            <span className="text-xs text-muted-foreground/60 w-20 shrink-0">{stage.label}</span>
+                            <div className="flex-1 h-6 bg-muted rounded-md overflow-hidden">
+                              <div className="h-full bg-foreground/15 rounded-md flex items-center px-2 transition-all" style={{ width: `${Math.max(pct, 2)}%` }}>
+                                <span className="text-[10px] font-mono text-foreground/70 whitespace-nowrap">{stage.value.toLocaleString()}</span>
+                              </div>
+                            </div>
+                            <span className="text-[10px] font-mono text-muted-foreground/40 w-9 text-right shrink-0">{pct}%</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Disposition Breakdown */}
                   {analytics.dispositions.length > 0 && (
                     <div className="bg-card border border-border rounded-xl p-5">
                       <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">Disposition Breakdown</h3>
-                      <div className="flex flex-wrap gap-3">
-                        {analytics.dispositions.map(d => {
+                      <div className="space-y-3">
+                        {analytics.dispositions.map((d: { label: string; count: number }) => {
                           const pct = analytics.calledLeads > 0 ? Math.round((d.count / analytics.calledLeads) * 100) : 0;
                           return (
-                            <div key={d.label} className="flex items-center gap-3 px-4 py-3 rounded-xl border border-border bg-background min-w-[120px]">
-                              <div>
-                                <p className="text-xs text-muted-foreground capitalize truncate">{d.label}</p>
-                                <div className="flex items-baseline gap-1.5 mt-0.5">
-                                  <span className="text-xl font-bold text-foreground">{d.count}</span>
-                                  <span className="text-[10px] text-muted-foreground/50">{pct}%</span>
-                                </div>
+                            <div key={d.label} className="flex items-center gap-3">
+                              <span className="text-xs text-foreground/70 capitalize w-40 shrink-0 truncate">{d.label.replace(/_/g, " ")}</span>
+                              <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                                <div className="h-full bg-foreground/20 rounded-full transition-all" style={{ width: `${Math.max(pct, 1)}%` }} />
                               </div>
+                              <span className="text-xs font-semibold text-foreground tabular-nums w-12 text-right shrink-0">{d.count.toLocaleString()}</span>
+                              <span className="text-[10px] text-muted-foreground/40 tabular-nums w-8 text-right shrink-0">{pct}%</span>
                             </div>
                           );
                         })}
                       </div>
                     </div>
                   )}
-                </div>
+                </>
               )}
             </div>
           </TabsContent>
 
-          {/* ── Settings ───────────────────────────────────────────────────────── */}
+          {/* ── Settings ────────────────────────────────────────────────────── */}
           <TabsContent value="settings" className="mt-0 border-0 p-0">
-            <div className="overflow-y-auto px-6 py-5" style={{ maxHeight: "calc(100vh - 160px)" }}>
+            <div className="overflow-y-auto px-6 py-5" style={{ maxHeight: "calc(100vh - 210px)" }}>
               <SettingsTab campaign={campaign as unknown as Record<string, unknown>} campaignId={campaignId} />
             </div>
           </TabsContent>

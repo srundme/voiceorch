@@ -1,0 +1,259 @@
+Inside Campaign
+
+Users should immediately understand:
+
+What is happening?
+Header
+Insurance Renewal Campaign
+
+Running
+
+Agent: Insurance AI
+Phone: +91 9876543210
+
+[Create Batch]
+[Pause]
+[Stop]
+KPI Row
+Leads
+Connected
+Interested
+Callbacks
+Bookings
+Transfers
+
+These KPIs should be clickable.
+
+Main Navigation
+
+Only 5 tabs.
+
+Overview
+Operations
+Leads
+Analytics
+Settings
+
+That's all.
+
+Not 10 tabs.
+
+Not 15 tabs.
+
+Overview Tab
+
+This should answer:
+
+Is this campaign working?
+Funnel
+Imported
+↓
+Called
+↓
+Connected
+↓
+Interested
+↓
+Booked
+↓
+Transferred
+Batch Cards
+June Meta Leads
+Running
+
+3,200 Leads
+124 Bookings
+
+[Open Batch]
+Recent Activity
+Booking Created
+Transfer Completed
+Callback Scheduled
+
+Only recent important events.
+
+Operations Tab
+
+This becomes the heart.
+
+Operations Metrics
+Live Calls
+Callbacks Due
+Incoming Calls
+Bookings
+Transfers
+Failed Calls
+Sub Navigation
+All Work
+
+Callbacks
+
+Incoming
+
+Bookings
+
+Transfers
+All Work View
+
+Single table.
+
+Lead
+Status
+Disposition
+Outcome
+Next Action
+
+Examples:
+
+John
+
+Interested
+
+CALLBACK_REQUESTED
+
+Call Tomorrow 3 PM
+Rahul
+
+Interested
+
+BOOKING_CREATED
+
+Meeting Tomorrow
+
+Users don't care which queue it came from.
+
+They care:
+
+What should I do next?
+Leads Tab
+
+This becomes CRM.
+
+Table:
+
+Lead
+Phone
+Disposition
+Outcome
+Score
+Last Activity
+
+Click:
+
+Lead Workspace
+Lead Workspace
+
+This is where your AI advantage shines.
+
+Left
+Lead Info
+
+Status
+
+Disposition
+
+Outcome
+
+Score
+Center
+AI Summary
+
+Transcript
+
+Recording
+
+Sentiment
+
+Intent
+
+Topics
+
+70% width.
+
+Right
+Callbacks
+
+Bookings
+
+Transfers
+
+Tasks
+
+Notes
+Bottom
+Timeline
+
+Every interaction.
+
+Analytics Tab
+
+Keep simple.
+
+3 sections only.
+
+Performance
+Connection Rate
+
+Booking Rate
+
+Transfer Rate
+Funnel
+Imported
+Called
+Connected
+Interested
+Booked
+Transferred
+Disposition Breakdown
+
+This is important.
+
+Interested              421
+Not Interested          312
+Call Back Later         178
+Already Purchased       43
+
+This is where dispositions should live.
+
+Biggest UX Principle
+
+Instead of:
+
+Campaign
+ ↓
+Callbacks
+ ↓
+Bookings
+ ↓
+Transfers
+
+Use:
+
+Campaign
+ ↓
+Operations
+ ↓
+Work To Be Done
+
+Users should never think:
+
+"Should I go to Callbacks, Bookings, Transfers, or Incoming Calls?"
+
+Users should think:
+
+"Show me what needs attention."
+
+That's the difference between a feature-rich product and an easy-to-use product.
+
+Final Structure
+Campaign
+
+├── Overview
+├── Operations
+├── Leads
+├── Analytics
+└── Settings
+
+Everything else (batches, callbacks, incoming calls, bookings, transfers) becomes part of those workflows rather than separate destinations.
+
+That would be the most intuitive, scalable, and enterprise-friendly UX for SnapServe.

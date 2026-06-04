@@ -3,9 +3,7 @@ import { Link, useLocation } from "wouter";
 import {
   useListCampaigns, useCreateCampaign, useUpdateCampaign, useDeleteCampaign,
   getListCampaignsQueryKey,
-  useListMetaCampaignLeads, getListMetaCampaignLeadsQueryKey,
-  useRetryCampaignLead,
-  useRedialCampaignNoPickup,
+  useGetPlatformAnalyticsQueue,
   useListAgents,
   useListPhoneNumbers,
 } from "@workspace/api-client-react";
@@ -27,25 +25,19 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Plus, Copy, Check, Phone, Megaphone, Eye, ChevronDown, ChevronRight,
-  RotateCcw, PhoneIncoming, PhoneCall, Clock, Layers, MoreHorizontal,
-  Pencil, Trash2, Users, BarChart3, Search,
-  X, CheckCircle2, PlayCircle, PauseCircle, XCircle,
-  Download, Target, ArrowRight
+  Plus, Copy, Check, Phone, Megaphone, ChevronRight, X,
+  PhoneCall, Clock, MoreHorizontal,
+  Pencil, Trash2, Users, CalendarDays,
+  CheckCircle2, PlayCircle, PauseCircle, XCircle,
+  Target, Layers,
 } from "lucide-react";
-import { formatDistanceToNow, format } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
-function fmtDuration(secs: number | null | undefined): string {
-  if (!secs) return "—";
-  const m = Math.floor(secs / 60);
-  const s = secs % 60;
-  return m > 0 ? `${m}m ${s}s` : `${s}s`;
-}
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -101,321 +93,7 @@ function CampaignStatusBadge({ status }: { status: string }) {
   );
 }
 
-// ── Types ──────────────────────────────────────────────────────────────────
 
-type MetaLeadItem = {
-  id: number;
-  campaignId: number;
-  campaignName: string;
-  phone: string;
-  name: string | null;
-  callStatus: string;
-  disposition: string | null;
-  callId: number | null;
-  fromNumber: string | null;
-  toNumber: string | null;
-  durationSeconds: number | null;
-  source: string;
-  hasCallback: boolean;
-  callbackStatus: string | null;
-  createdAt: string;
-};
-
-// ── Filter pills ──────────────────────────────────────────────────────────
-
-const FILTERS = [
-  { key: "all",       label: "All",        icon: Phone },
-  { key: "no_pickup", label: "No Pickup",  icon: PhoneCall },
-  { key: "inbound",   label: "Inbound",    icon: PhoneIncoming },
-  { key: "callbacks", label: "Callbacks",  icon: Clock },
-];
-
-function FilterBar({ active, onChange, extra }: {
-  active: string;
-  onChange: (f: string) => void;
-  extra: string[];
-}) {
-  const all = [
-    ...FILTERS,
-    ...extra.map(d => ({ key: d, label: d.replace(/_/g, " "), icon: null })),
-  ];
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {all.map(f => (
-        <button
-          key={f.key}
-          onClick={() => onChange(f.key)}
-          className={cn(
-            "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all",
-            active === f.key
-              ? "bg-foreground text-background"
-              : "bg-card border border-border text-muted-foreground hover:text-foreground hover:bg-muted/60"
-          )}
-        >
-          {f.icon && <f.icon className="h-3 w-3" />}
-          {f.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-// ── Lead row ──────────────────────────────────────────────────────────────
-
-function LeadRow({ lead, filter }: { lead: MetaLeadItem; filter: string }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <>
-      <tr
-        className="group hover:bg-muted/20 transition-colors cursor-pointer"
-        onClick={() => setOpen(o => !o)}
-      >
-        <td className="px-4 py-3">
-          <CallStatusBadge status={lead.callStatus} />
-          {filter === "callbacks" && lead.hasCallback && (
-            <span className={cn(
-              "ml-1.5 text-[10px] px-1.5 py-0.5 rounded border",
-              lead.callbackStatus === "done"
-                ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
-                : "bg-blue-500/10 text-blue-500 border-blue-500/20"
-            )}>
-              {lead.callbackStatus === "done" ? "Done" : "Pending"}
-            </span>
-          )}
-        </td>
-        <td className="px-4 py-3 text-[11px] text-muted-foreground whitespace-nowrap">
-          {format(new Date(lead.createdAt), "MMM d, HH:mm")}
-        </td>
-        <td className="px-4 py-3 hidden sm:table-cell">
-          <span className="text-[11px] font-mono text-muted-foreground/60">
-            {lead.fromNumber ?? "—"}
-          </span>
-        </td>
-        <td className="px-4 py-3">
-          <span className="text-[11px] font-mono text-foreground">{lead.toNumber ?? lead.phone}</span>
-        </td>
-        <td className="px-4 py-3 hidden md:table-cell">
-          <span className="text-[11px] text-muted-foreground tabular-nums">
-            {fmtDuration(lead.durationSeconds)}
-          </span>
-        </td>
-        <td className="px-4 py-3 hidden lg:table-cell">
-          <Link href={`${BASE}/app/campaigns/${lead.campaignId}`} onClick={e => e.stopPropagation()}>
-            <span className="text-[11px] text-muted-foreground/60 hover:text-foreground hover:underline">
-              {lead.campaignName}
-            </span>
-          </Link>
-        </td>
-        <td className="px-4 py-3 w-16">
-          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-            {lead.callId && (
-              <Link href={`${BASE}/app/calls/${lead.callId}`} onClick={e => e.stopPropagation()}>
-                <Eye className="h-3.5 w-3.5 text-muted-foreground/50 hover:text-foreground" />
-              </Link>
-            )}
-            {open
-              ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/40" />
-              : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40" />
-            }
-          </div>
-        </td>
-      </tr>
-      {open && (
-        <tr className="bg-muted/10 border-b border-border/30">
-          <td colSpan={7} className="px-6 py-3">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
-              <div>
-                <p className="text-[10px] text-muted-foreground/40 uppercase tracking-widest mb-0.5">Name</p>
-                <p className="text-foreground">{lead.name ?? "—"}</p>
-              </div>
-              <div>
-                <p className="text-[10px] text-muted-foreground/40 uppercase tracking-widest mb-0.5">Disposition</p>
-                <p className="text-foreground">{lead.disposition ?? "—"}</p>
-              </div>
-              <div>
-                <p className="text-[10px] text-muted-foreground/40 uppercase tracking-widest mb-0.5">Source</p>
-                <p className="text-foreground capitalize">{lead.source.replace(/_/g, " ")}</p>
-              </div>
-              {lead.callId && (
-                <div>
-                  <p className="text-[10px] text-muted-foreground/40 uppercase tracking-widest mb-0.5">Call</p>
-                  <Link href={`${BASE}/app/calls/${lead.callId}`}>
-                    <p className="text-primary hover:underline">#{lead.callId}</p>
-                  </Link>
-                </div>
-              )}
-            </div>
-          </td>
-        </tr>
-      )}
-    </>
-  );
-}
-
-// ── Lead Activity section ─────────────────────────────────────────────────
-
-function LeadActivitySection() {
-  const [filter, setFilter] = useState("all");
-  const [page, setPage] = useState(0);
-  const [search, setSearch] = useState("");
-  const PAGE_SIZE = 20;
-
-  const qc = useQueryClient();
-  const { toast } = useToast();
-  const redial = useRedialCampaignNoPickup();
-  const retry = useRetryCampaignLead();
-
-  const { data, isLoading } = useListMetaCampaignLeads({
-    filter, limit: PAGE_SIZE, offset: page * PAGE_SIZE,
-  });
-
-  const raw = data as { leads?: MetaLeadItem[]; total?: number } | MetaLeadItem[] | undefined;
-  const items = Array.isArray(raw) ? (raw as MetaLeadItem[]) : ((raw as { leads?: MetaLeadItem[] })?.leads ?? []);
-  const total = Array.isArray(raw) ? items.length : ((raw as { total?: number })?.total ?? 0);
-
-  const visible = search.trim()
-    ? items.filter(i =>
-        i.phone?.toLowerCase().includes(search.toLowerCase()) ||
-        i.name?.toLowerCase().includes(search.toLowerCase()) ||
-        i.toNumber?.toLowerCase().includes(search.toLowerCase())
-      )
-    : items;
-
-  const extraFilters = [...new Set(
-    items
-      .filter(i => i.disposition && !["pending","calling","completed","failed","skipped"].includes(i.disposition))
-      .map(i => i.disposition!)
-  )];
-
-  function changeFilter(f: string) { setFilter(f); setPage(0); }
-
-  async function handleRedialAll() {
-    const ids = [...new Set(items.map(i => i.campaignId))];
-    let queued = 0;
-    for (const id of ids) {
-      try { queued += ((await redial.mutateAsync({ id })) as { queued?: number })?.queued ?? 0; } catch { /* skip */ }
-    }
-    await qc.invalidateQueries({ queryKey: getListMetaCampaignLeadsQueryKey() });
-    toast({ title: "Redial queued", description: `${queued} lead${queued !== 1 ? "s" : ""} scheduled` });
-  }
-
-  return (
-    <div className="bg-card border border-border rounded-2xl overflow-hidden mb-6">
-      {/* Header */}
-      <div className="px-5 pt-5 pb-4 border-b border-border">
-        <div className="flex items-start justify-between gap-4 mb-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/40">
-                Campaign Leads
-              </span>
-            </div>
-            <h2 className="text-base font-semibold text-foreground leading-none">Lead Activity</h2>
-            <p className="text-xs text-muted-foreground/50 mt-1">Calls triggered via Meta Lead Ads &amp; webhooks</p>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5 text-muted-foreground">
-              <Download className="h-3 w-3" /> Export
-            </Button>
-            <span className="text-[11px] text-muted-foreground/50 tabular-nums">
-              {isLoading ? "…" : total} leads
-            </span>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <FilterBar active={filter} onChange={changeFilter} extra={extraFilters} />
-          <div className="relative ml-auto">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/30" />
-            <Input
-              type="search"
-              placeholder="Search leads…"
-              className="pl-8 h-8 text-xs w-44 bg-muted/30 border-border/60"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Body */}
-      {isLoading ? (
-        <div className="divide-y divide-border/40">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="flex items-center gap-4 px-5 py-3.5">
-              <Skeleton className="h-5 w-16 rounded-md" />
-              <Skeleton className="h-3 w-24 rounded" />
-              <Skeleton className="h-3 w-28 rounded ml-auto" />
-            </div>
-          ))}
-        </div>
-      ) : visible.length === 0 ? (
-        <div className="py-16 text-center">
-          <div className="h-11 w-11 rounded-2xl bg-muted border border-border flex items-center justify-center mx-auto mb-3">
-            <Phone className="h-5 w-5 text-muted-foreground/20" />
-          </div>
-          <p className="text-sm font-medium text-muted-foreground/40">
-            {search ? "No leads match your search" : "No campaign leads yet"}
-          </p>
-          <p className="text-xs text-muted-foreground/30 mt-1">
-            {search ? "Try a different query" : "Leads from Meta ads and webhooks will appear here"}
-          </p>
-        </div>
-      ) : (
-        <>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border/60 bg-muted/20">
-                  <th className="px-4 py-2.5 text-left text-[10px] font-medium text-muted-foreground/40 uppercase tracking-widest">Status</th>
-                  <th className="px-4 py-2.5 text-left text-[10px] font-medium text-muted-foreground/40 uppercase tracking-widest">Time</th>
-                  <th className="px-4 py-2.5 text-left text-[10px] font-medium text-muted-foreground/40 uppercase tracking-widest hidden sm:table-cell">From</th>
-                  <th className="px-4 py-2.5 text-left text-[10px] font-medium text-muted-foreground/40 uppercase tracking-widest">To</th>
-                  <th className="px-4 py-2.5 text-left text-[10px] font-medium text-muted-foreground/40 uppercase tracking-widest hidden md:table-cell">Duration</th>
-                  <th className="px-4 py-2.5 text-left text-[10px] font-medium text-muted-foreground/40 uppercase tracking-widest hidden lg:table-cell">Campaign</th>
-                  <th className="px-4 py-2.5 w-16" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/40">
-                {visible.map(lead => (
-                  <LeadRow key={lead.id} lead={lead} filter={filter} />
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination */}
-          {total > PAGE_SIZE && (
-            <div className="flex items-center justify-between px-5 py-3 border-t border-border/60 bg-muted/10">
-              <p className="text-xs text-muted-foreground/40">
-                {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total}
-              </p>
-              <div className="flex gap-1.5">
-                <Button variant="outline" size="sm" className="h-7 text-xs" disabled={page === 0} onClick={() => setPage(p => p - 1)}>Prev</Button>
-                <Button variant="outline" size="sm" className="h-7 text-xs" disabled={(page + 1) * PAGE_SIZE >= total} onClick={() => setPage(p => p + 1)}>Next</Button>
-              </div>
-            </div>
-          )}
-
-          {filter === "no_pickup" && items.length > 0 && (
-            <div className="flex items-center justify-between px-5 py-3 border-t border-border bg-amber-500/5">
-              <p className="text-xs text-amber-600/70">{items.length} no-pickup — redial to retry all</p>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 text-xs gap-1.5 border-amber-500/20 text-amber-600 hover:bg-amber-500/10"
-                onClick={() => void handleRedialAll()}
-                disabled={redial.isPending}
-              >
-                <RotateCcw className="h-3 w-3" /> Redial All
-              </Button>
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
 
 // ── Campaign row ──────────────────────────────────────────────────────────
 
@@ -433,7 +111,6 @@ function CampaignRow({
   const calledPct = campaign.totalLeads > 0
     ? Math.round((campaign.calledLeads / campaign.totalLeads) * 100)
     : 0;
-  const webhookUrl = `${window.location.origin}${BASE}/api/webhooks/lead/${campaign.webhookToken}`;
 
   return (
     <div
@@ -459,52 +136,37 @@ function CampaignRow({
       </div>
 
       {/* Stats */}
-      <div className="hidden sm:flex items-center gap-6 shrink-0">
-        <div className="text-center">
-          <p className="text-[9px] text-muted-foreground/30 uppercase tracking-widest">Total</p>
-          <p className="text-sm font-semibold text-foreground mt-0.5 tabular-nums">{campaign.totalLeads}</p>
+      <div className="hidden sm:flex items-center gap-4 shrink-0">
+        <div className="text-center min-w-[52px]">
+          <p className="text-[9px] text-muted-foreground/30 uppercase tracking-widest">Leads</p>
+          <p className="text-sm font-semibold text-foreground mt-0.5 tabular-nums">{campaign.totalLeads.toLocaleString()}</p>
         </div>
-        <div className="text-center">
-          <p className="text-[9px] text-muted-foreground/30 uppercase tracking-widest">Called</p>
-          <p className="text-sm font-semibold text-foreground mt-0.5 tabular-nums">{campaign.calledLeads}</p>
-        </div>
-        <div className="text-center">
-          <p className="text-[9px] text-muted-foreground/30 uppercase tracking-widest">Attempts</p>
-          <p className="text-sm font-semibold text-foreground mt-0.5 tabular-nums">{campaign.maxAttempts}</p>
-        </div>
-      </div>
-
-      {/* Progress */}
-      {campaign.totalLeads > 0 && (
-        <div className="hidden md:flex items-center gap-2 w-28 shrink-0">
-          <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-            <div
-              className="h-full bg-foreground/20 rounded-full transition-all"
-              style={{ width: `${calledPct}%` }}
-            />
+        {campaign.totalLeads > 0 && (
+          <div className="flex items-center gap-1.5 w-20 shrink-0">
+            <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
+              <div className="h-full bg-foreground/20 rounded-full" style={{ width: `${calledPct}%` }} />
+            </div>
+            <span className="text-[10px] text-muted-foreground/40 font-mono w-6 text-right">{calledPct}%</span>
           </div>
-          <span className="text-[10px] text-muted-foreground/40 w-7 text-right font-mono">{calledPct}%</span>
-        </div>
-      )}
-
-      {/* Webhook copy */}
-      <div
-        className="hidden xl:flex items-center gap-1.5 max-w-[200px] shrink-0"
-        onClick={e => e.stopPropagation()}
-      >
-        <code className="text-[9px] font-mono text-muted-foreground/30 truncate">{webhookUrl}</code>
-        <CopyButton text={webhookUrl} />
+        )}
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-xs gap-1"
+          onClick={e => { e.stopPropagation(); navigate(`${BASE}/app/campaigns/${campaign.id}`); }}
+        >
+          Open <ChevronRight className="h-3 w-3" />
+        </Button>
         <button
-          className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-muted transition-colors"
+          className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-muted transition-colors opacity-0 group-hover:opacity-100"
           onClick={e => { e.stopPropagation(); setMenuOpen(m => !m); }}
         >
           <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground/50" />
         </button>
-        <ChevronRight className="h-4 w-4 text-muted-foreground/30" />
       </div>
 
       {/* Dropdown */}
@@ -997,10 +659,9 @@ export default function CampaignsPage() {
     setDeleting(null);
   }
 
+  const { data: queueData } = useGetPlatformAnalyticsQueue();
   const totalCampaigns = campaigns?.length ?? 0;
-  const activeCampaigns = campaigns?.filter(c => c.status === "active").length ?? 0;
-  const totalLeads = campaigns?.reduce((s, c) => s + c.totalLeads, 0) ?? 0;
-  const totalCalled = campaigns?.reduce((s, c) => s + c.calledLeads, 0) ?? 0;
+  const runningCampaigns = campaigns?.filter(c => c.status === "active").length ?? 0;
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden">
@@ -1022,9 +683,6 @@ export default function CampaignsPage() {
             </p>
           </div>
           <div className="flex items-center gap-2 pt-1">
-            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 text-muted-foreground">
-              <BarChart3 className="h-3.5 w-3.5" /> Analytics
-            </Button>
             <Button
               size="sm"
               className="h-8 text-xs gap-1.5"
@@ -1038,10 +696,10 @@ export default function CampaignsPage() {
         {/* Stats row */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: "Total Campaigns", value: totalCampaigns, icon: <Megaphone className="h-4 w-4 text-muted-foreground/40" />, accent: "" },
-            { label: "Active",          value: activeCampaigns, icon: <PlayCircle className="h-4 w-4 text-emerald-500" />,       accent: activeCampaigns > 0 ? "text-emerald-500" : "" },
-            { label: "Total Leads",     value: totalLeads,      icon: <Users className="h-4 w-4 text-muted-foreground/40" />,    accent: "" },
-            { label: "Leads Called",    value: totalCalled,     icon: <PhoneCall className="h-4 w-4 text-blue-500" />,           accent: totalCalled > 0 ? "text-blue-500" : "" },
+            { label: "Running Campaigns", value: runningCampaigns, icon: <Megaphone className="h-4 w-4 text-emerald-500" />, accent: runningCampaigns > 0 ? "text-emerald-500" : "" },
+            { label: "Active Calls",      value: (queueData as { activeCalls?: number } | undefined)?.activeCalls ?? 0, icon: <PhoneCall className="h-4 w-4 text-blue-500" />, accent: ((queueData as { activeCalls?: number } | undefined)?.activeCalls ?? 0) > 0 ? "text-blue-500" : "" },
+            { label: "Bookings Today",    value: (queueData as { bookingsToday?: number } | undefined)?.bookingsToday ?? 0, icon: <CalendarDays className="h-4 w-4 text-purple-500" />, accent: ((queueData as { bookingsToday?: number } | undefined)?.bookingsToday ?? 0) > 0 ? "text-purple-500" : "" },
+            { label: "Callbacks Due",     value: (queueData as { callbacksDue?: number } | undefined)?.callbacksDue ?? 0, icon: <Clock className="h-4 w-4 text-amber-500" />, accent: ((queueData as { callbacksDue?: number } | undefined)?.callbacksDue ?? 0) > 0 ? "text-amber-500" : "" },
           ].map(stat => (
             <div key={stat.label} className="flex items-center gap-3 bg-card border border-border rounded-xl px-4 py-3">
               <div className="h-8 w-8 rounded-lg bg-muted border border-border flex items-center justify-center shrink-0">
@@ -1060,9 +718,6 @@ export default function CampaignsPage() {
 
       {/* Content */}
       <div className="flex-1 overflow-auto px-6 py-5">
-        {/* Lead Activity */}
-        <LeadActivitySection />
-
         {/* Campaigns List */}
         <div className="bg-card border border-border rounded-2xl overflow-hidden">
           {/* Section header */}
@@ -1083,20 +738,6 @@ export default function CampaignsPage() {
             )}
           </div>
 
-          {/* Column headers */}
-          {!isLoading && (campaigns?.length ?? 0) > 0 && (
-            <div className="hidden sm:flex items-center gap-4 px-5 py-2 bg-muted/20 border-b border-border/40">
-              <div className="w-9 shrink-0" />
-              <div className="flex-1 text-[10px] font-medium text-muted-foreground/30 uppercase tracking-widest">Campaign</div>
-              <div className="flex items-center gap-6 shrink-0 pr-2">
-                <span className="text-[10px] font-medium text-muted-foreground/30 uppercase tracking-widest w-10 text-center">Total</span>
-                <span className="text-[10px] font-medium text-muted-foreground/30 uppercase tracking-widest w-10 text-center">Called</span>
-                <span className="text-[10px] font-medium text-muted-foreground/30 uppercase tracking-widest w-14 text-center">Attempts</span>
-              </div>
-              <div className="hidden md:block w-28 shrink-0" />
-              <div className="w-16 shrink-0" />
-            </div>
-          )}
 
           {isLoading ? (
             <div className="divide-y divide-border/40">
