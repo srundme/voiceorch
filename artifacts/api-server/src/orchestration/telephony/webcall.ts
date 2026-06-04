@@ -169,11 +169,11 @@ export async function handleWebCallWebSocket(
   const providerKeys = new Map<string, string>();
   for (const row of providerRows) providerKeys.set(row.providerName.toLowerCase(), decryptKey(row.apiKey));
 
-  // Managed platform key fallback — same map as session.ts
+  // Managed platform key fallback — same map as session.ts.
+  // Google/Gemini are intentionally omitted: their API requires a dedicated
+  // Google Cloud API key; mapping them to managed_qwen_key (Groq) is wrong.
   const MANAGED: Record<string, string> = {
     qwen:     "managed_qwen_key",
-    google:   "managed_qwen_key",
-    gemini:   "managed_qwen_key",
     deepgram: "managed_deepgram_key",
     sarvam:   "managed_sarvam_key",
     cartesia: "managed_cartesia_key",
