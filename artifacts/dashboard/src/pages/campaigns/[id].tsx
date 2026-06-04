@@ -828,7 +828,7 @@ export default function CampaignDetailPage() {
               <TabsTrigger key={tab} value={tab}
                 className="h-9 px-4 rounded-none border-b-2 border-transparent bg-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:text-foreground text-muted-foreground/60 text-xs font-medium whitespace-nowrap hover:text-foreground transition-colors shrink-0">
                 {tab === "live-queue" ? "Live Queue" :
-                 tab === "incoming" ? "Incoming" :
+                 tab === "incoming" ? "Incoming Calls" :
                  tab.charAt(0).toUpperCase() + tab.slice(1)}
                 {tab === "batches" && !batchLoading && batches?.length ? (
                   <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-muted text-[9px]">{batches.length}</span>
