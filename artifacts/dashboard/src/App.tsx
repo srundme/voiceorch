@@ -36,6 +36,7 @@ import OnboardingPage from "@/pages/onboarding";
 import CampaignsPage from "@/pages/campaigns/index";
 import CampaignDetailPage from "@/pages/campaigns/[id]";
 import BatchDetailPage from "@/pages/campaigns/[id]/batches/[batchId]";
+import BatchWizardPage from "@/pages/campaigns/batch-wizard";
 import CampaignLeadProfilePage from "@/pages/campaigns/[id]/leads/[leadId]";
 import SchedulingPage from "@/pages/scheduling/index";
 import SchedulingCalendarsPage from "@/pages/scheduling/Calendars";
@@ -223,6 +224,7 @@ function AppRoutes() {
         <Route path="/app/webhooks" component={WebhooksPage} />
         <Route path="/app/analytics/agents/:id" component={AgentAnalyticsPage} />
         <Route path="/app/campaigns/:id/leads/:leadId" component={CampaignLeadProfilePage} />
+        <Route path="/app/campaigns/:id/batches/new" component={BatchWizardPage} />
         <Route path="/app/campaigns/:id/batches/:batchId" component={BatchDetailPage} />
         <Route path="/app/campaigns/:id" component={CampaignDetailPage} />
         <Route path="/app/campaigns" component={CampaignsPage} />

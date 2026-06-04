@@ -1485,6 +1485,44 @@ export interface CampaignLead {
   createdAt: string;
 }
 
+export interface BatchImportSummary {
+  totalRows: number;
+  leadsCreated: number;
+  duplicatesFound: number;
+  invalidPhones: number;
+  dncBlocked: number;
+  importRunId?: number | null;
+}
+
+export type ValidationPreviewRowRaw = {[key: string]: string};
+
+export type ValidationPreviewRowStatus = typeof ValidationPreviewRowStatus[keyof typeof ValidationPreviewRowStatus];
+
+
+export const ValidationPreviewRowStatus = {
+  valid: 'valid',
+  warning: 'warning',
+  error: 'error',
+} as const;
+
+export interface ValidationPreviewRow {
+  rowIndex: number;
+  raw?: ValidationPreviewRowRaw;
+  normalized?: string | null;
+  phoneValid: boolean;
+  isDuplicate: boolean;
+  status: ValidationPreviewRowStatus;
+  errors: string[];
+}
+
+export interface ValidationPreviewResult {
+  totalRows: number;
+  validRows: number;
+  invalidRows: number;
+  duplicateRows: number;
+  previewRows: ValidationPreviewRow[];
+}
+
 export type CampaignBatchStatus = typeof CampaignBatchStatus[keyof typeof CampaignBatchStatus];
 
 
@@ -1504,6 +1542,8 @@ export const CampaignBatchLeadSource = {
   webhook: 'webhook',
 } as const;
 
+export type CampaignBatchBatchFieldMapping = {[key: string]: string} | null;
+
 export type CampaignBatchFieldMappings = {[key: string]: string} | null;
 
 export type CampaignBatchDuplicatePolicy = typeof CampaignBatchDuplicatePolicy[keyof typeof CampaignBatchDuplicatePolicy];
@@ -1522,6 +1562,8 @@ export interface CampaignBatch {
   description?: string | null;
   status: CampaignBatchStatus;
   leadSource: CampaignBatchLeadSource;
+  leadSourceId?: number | null;
+  batchFieldMapping?: CampaignBatchBatchFieldMapping;
   scheduledStartAt?: string | null;
   scheduledEndAt?: string | null;
   totalLeads: number;
@@ -1535,6 +1577,7 @@ export interface CampaignBatch {
   businessHoursEnd?: number | null;
   maxDailyCalls?: number | null;
   duplicatePolicy?: CampaignBatchDuplicatePolicy;
+  importSummary?: BatchImportSummary | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -1551,7 +1594,12 @@ export const CampaignBatchCreateLeadSource = {
 export type CampaignBatchCreateLeadsItem = {[key: string]: string};
 
 /**
- * Batch-level field mappings; overrides campaign-level if provided
+ * Agent-variable → CSV-header mapping stored on the batch
+ */
+export type CampaignBatchCreateBatchFieldMapping = {[key: string]: string};
+
+/**
+ * Legacy batch-level field mappings; overrides campaign-level if provided
  */
 export type CampaignBatchCreateFieldMappings = {[key: string]: string};
 
@@ -1568,10 +1616,16 @@ export interface CampaignBatchCreate {
   name: string;
   description?: string;
   leadSource?: CampaignBatchCreateLeadSource;
+  /** ID of the workspace-level lead source used for this batch */
+  leadSourceId?: number | null;
   leads?: CampaignBatchCreateLeadsItem[];
+  /** Original filename of the uploaded CSV (stored in import run) */
+  fileName?: string;
+  /** Agent-variable → CSV-header mapping stored on the batch */
+  batchFieldMapping?: CampaignBatchCreateBatchFieldMapping;
   scheduledStartAt?: string | null;
   scheduledEndAt?: string | null;
-  /** Batch-level field mappings; overrides campaign-level if provided */
+  /** Legacy batch-level field mappings; overrides campaign-level if provided */
   fieldMappings?: CampaignBatchCreateFieldMappings;
   callDelaySeconds?: number;
   maxAttempts?: number;
@@ -1581,6 +1635,8 @@ export interface CampaignBatchCreate {
   businessHoursEnd?: number;
   maxDailyCalls?: number;
   duplicatePolicy?: CampaignBatchCreateDuplicatePolicy;
+  /** If true, set batch to running immediately after import */
+  autoStart?: boolean;
 }
 
 export type CampaignBatchUpdateStatus = typeof CampaignBatchUpdateStatus[keyof typeof CampaignBatchUpdateStatus];
@@ -2851,6 +2907,25 @@ export type ListMetaCampaignLeads200 = {
 
 export type RedialCampaignNoPickup200 = {
   queued: number;
+};
+
+export type ValidateLeadsBodyLeadsItem = {[key: string]: string};
+
+export type ValidateLeadsBodyFieldMapping = {[key: string]: string};
+
+export type ValidateLeadsBodyPolicy = typeof ValidateLeadsBodyPolicy[keyof typeof ValidateLeadsBodyPolicy];
+
+
+export const ValidateLeadsBodyPolicy = {
+  ignore: 'ignore',
+  skip: 'skip',
+  reject_with_report: 'reject_with_report',
+} as const;
+
+export type ValidateLeadsBody = {
+  leads?: ValidateLeadsBodyLeadsItem[];
+  fieldMapping?: ValidateLeadsBodyFieldMapping;
+  policy?: ValidateLeadsBodyPolicy;
 };
 
 export type ListBatchLeadsParams = {

@@ -1813,6 +1813,8 @@ export const ListCampaignBatchesResponseItem = zod.object({
   "description": zod.string().nullish(),
   "status": zod.enum(['draft', 'running', 'paused', 'stopped']),
   "leadSource": zod.enum(['csv', 'meta', 'webhook']),
+  "leadSourceId": zod.number().nullish(),
+  "batchFieldMapping": zod.record(zod.string(), zod.string()).nullish(),
   "scheduledStartAt": zod.coerce.date().nullish(),
   "scheduledEndAt": zod.coerce.date().nullish(),
   "totalLeads": zod.number(),
@@ -1826,6 +1828,14 @@ export const ListCampaignBatchesResponseItem = zod.object({
   "businessHoursEnd": zod.number().nullish(),
   "maxDailyCalls": zod.number().nullish(),
   "duplicatePolicy": zod.enum(['ignore', 'skip', 'reject_with_report']).default(listCampaignBatchesResponseDuplicatePolicyDefault),
+  "importSummary": zod.object({
+  "totalRows": zod.number(),
+  "leadsCreated": zod.number(),
+  "duplicatesFound": zod.number(),
+  "invalidPhones": zod.number(),
+  "dncBlocked": zod.number(),
+  "importRunId": zod.number().nullish()
+}).nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -1844,15 +1854,19 @@ export const createCampaignBatchBodyCallDelaySecondsDefault = 5;
 export const createCampaignBatchBodyMaxAttemptsDefault = 1;
 export const createCampaignBatchBodyRetryDelayMinutesDefault = 60;
 export const createCampaignBatchBodyDuplicatePolicyDefault = `skip`;
+export const createCampaignBatchBodyAutoStartDefault = false;
 
 export const CreateCampaignBatchBody = zod.object({
   "name": zod.string(),
   "description": zod.string().optional(),
   "leadSource": zod.enum(['csv', 'meta', 'webhook']).default(createCampaignBatchBodyLeadSourceDefault),
+  "leadSourceId": zod.number().nullish().describe('ID of the workspace-level lead source used for this batch'),
   "leads": zod.array(zod.record(zod.string(), zod.string())).optional(),
+  "fileName": zod.string().optional().describe('Original filename of the uploaded CSV (stored in import run)'),
+  "batchFieldMapping": zod.record(zod.string(), zod.string()).optional().describe('Agent-variable → CSV-header mapping stored on the batch'),
   "scheduledStartAt": zod.coerce.date().nullish(),
   "scheduledEndAt": zod.coerce.date().nullish(),
-  "fieldMappings": zod.record(zod.string(), zod.string()).optional().describe('Batch-level field mappings; overrides campaign-level if provided'),
+  "fieldMappings": zod.record(zod.string(), zod.string()).optional().describe('Legacy batch-level field mappings; overrides campaign-level if provided'),
   "callDelaySeconds": zod.number().default(createCampaignBatchBodyCallDelaySecondsDefault),
   "maxAttempts": zod.number().default(createCampaignBatchBodyMaxAttemptsDefault),
   "retryDelayMinutes": zod.number().default(createCampaignBatchBodyRetryDelayMinutesDefault),
@@ -1860,7 +1874,40 @@ export const CreateCampaignBatchBody = zod.object({
   "businessHoursStart": zod.number().optional(),
   "businessHoursEnd": zod.number().optional(),
   "maxDailyCalls": zod.number().optional(),
-  "duplicatePolicy": zod.enum(['ignore', 'skip', 'reject_with_report']).default(createCampaignBatchBodyDuplicatePolicyDefault)
+  "duplicatePolicy": zod.enum(['ignore', 'skip', 'reject_with_report']).default(createCampaignBatchBodyDuplicatePolicyDefault),
+  "autoStart": zod.boolean().default(createCampaignBatchBodyAutoStartDefault).describe('If true, set batch to running immediately after import')
+})
+
+
+/**
+ * @summary Stateless validation preview — normalize phones + dedup check without committing
+ */
+export const ValidateLeadsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const validateLeadsBodyPolicyDefault = `skip`;
+
+export const ValidateLeadsBody = zod.object({
+  "leads": zod.array(zod.record(zod.string(), zod.string())).optional(),
+  "fieldMapping": zod.record(zod.string(), zod.string()).optional(),
+  "policy": zod.enum(['ignore', 'skip', 'reject_with_report']).default(validateLeadsBodyPolicyDefault)
+})
+
+export const ValidateLeadsResponse = zod.object({
+  "totalRows": zod.number(),
+  "validRows": zod.number(),
+  "invalidRows": zod.number(),
+  "duplicateRows": zod.number(),
+  "previewRows": zod.array(zod.object({
+  "rowIndex": zod.number(),
+  "raw": zod.record(zod.string(), zod.string()).optional(),
+  "normalized": zod.string().nullish(),
+  "phoneValid": zod.boolean(),
+  "isDuplicate": zod.boolean(),
+  "status": zod.enum(['valid', 'warning', 'error']),
+  "errors": zod.array(zod.string())
+}))
 })
 
 
@@ -1884,6 +1931,8 @@ export const GetCampaignBatchResponse = zod.object({
   "description": zod.string().nullish(),
   "status": zod.enum(['draft', 'running', 'paused', 'stopped']),
   "leadSource": zod.enum(['csv', 'meta', 'webhook']),
+  "leadSourceId": zod.number().nullish(),
+  "batchFieldMapping": zod.record(zod.string(), zod.string()).nullish(),
   "scheduledStartAt": zod.coerce.date().nullish(),
   "scheduledEndAt": zod.coerce.date().nullish(),
   "totalLeads": zod.number(),
@@ -1897,6 +1946,14 @@ export const GetCampaignBatchResponse = zod.object({
   "businessHoursEnd": zod.number().nullish(),
   "maxDailyCalls": zod.number().nullish(),
   "duplicatePolicy": zod.enum(['ignore', 'skip', 'reject_with_report']).default(getCampaignBatchResponseDuplicatePolicyDefault),
+  "importSummary": zod.object({
+  "totalRows": zod.number(),
+  "leadsCreated": zod.number(),
+  "duplicatesFound": zod.number(),
+  "invalidPhones": zod.number(),
+  "dncBlocked": zod.number(),
+  "importRunId": zod.number().nullish()
+}).nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -1927,6 +1984,8 @@ export const UpdateCampaignBatchResponse = zod.object({
   "description": zod.string().nullish(),
   "status": zod.enum(['draft', 'running', 'paused', 'stopped']),
   "leadSource": zod.enum(['csv', 'meta', 'webhook']),
+  "leadSourceId": zod.number().nullish(),
+  "batchFieldMapping": zod.record(zod.string(), zod.string()).nullish(),
   "scheduledStartAt": zod.coerce.date().nullish(),
   "scheduledEndAt": zod.coerce.date().nullish(),
   "totalLeads": zod.number(),
@@ -1940,6 +1999,14 @@ export const UpdateCampaignBatchResponse = zod.object({
   "businessHoursEnd": zod.number().nullish(),
   "maxDailyCalls": zod.number().nullish(),
   "duplicatePolicy": zod.enum(['ignore', 'skip', 'reject_with_report']).default(updateCampaignBatchResponseDuplicatePolicyDefault),
+  "importSummary": zod.object({
+  "totalRows": zod.number(),
+  "leadsCreated": zod.number(),
+  "duplicatesFound": zod.number(),
+  "invalidPhones": zod.number(),
+  "dncBlocked": zod.number(),
+  "importRunId": zod.number().nullish()
+}).nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -1992,6 +2059,16 @@ export const ListBatchLeadsResponse = zod.object({
   "createdAt": zod.coerce.date()
 })),
   "total": zod.number()
+})
+
+
+/**
+ * @summary Download error report CSV for a batch import run
+ */
+export const DownloadImportRunReportParams = zod.object({
+  "id": zod.coerce.number(),
+  "batchId": zod.coerce.number(),
+  "runId": zod.coerce.number()
 })
 
 

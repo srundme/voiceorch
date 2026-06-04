@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { useRoute, Link } from "wouter";
+import { useRoute, useLocation, Link } from "wouter";
 import {
   useGetCampaign, useListCampaignBatches, useCreateCampaignBatch,
   useDeleteCampaignBatch, useGetCampaignAnalytics, useUpdateCampaign,
@@ -704,7 +704,7 @@ export default function CampaignDetailPage() {
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  const [batchWizardOpen, setBatchWizardOpen] = useState(false);
+  const [, setLocation] = useLocation();
   const [deletingBatch, setDeletingBatch] = useState<CampaignBatch | null>(null);
   const deleteBatch = useDeleteCampaignBatch();
 
@@ -888,7 +888,7 @@ export default function CampaignDetailPage() {
                       <span className="text-xs text-muted-foreground/40">({batches.length})</span>
                     )}
                   </div>
-                  <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => setBatchWizardOpen(true)}>
+                  <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/new`)}>
                     <Plus className="h-3.5 w-3.5" /> New Batch
                   </Button>
                 </div>
@@ -908,7 +908,7 @@ export default function CampaignDetailPage() {
                     </div>
                     <p className="text-sm font-medium text-foreground/70 mb-1">No batches yet</p>
                     <p className="text-xs text-muted-foreground/40 mb-4">Create a batch to start calling leads</p>
-                    <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={() => setBatchWizardOpen(true)}>
+                    <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/new`)}>
                       <Plus className="h-3.5 w-3.5" /> Create First Batch
                     </Button>
                   </div>
@@ -989,14 +989,6 @@ export default function CampaignDetailPage() {
           </TabsContent>
         </Tabs>
       </div>
-
-      {/* Modals */}
-      <CreateBatchWizard
-        open={batchWizardOpen}
-        onClose={() => setBatchWizardOpen(false)}
-        campaignId={campaignId}
-        nextBatchNumber={(batches?.length ?? 0) + 1}
-      />
 
       <AlertDialog open={!!deletingBatch} onOpenChange={v => { if (!v) setDeletingBatch(null); }}>
         <AlertDialogContent>

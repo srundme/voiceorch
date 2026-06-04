@@ -1,0 +1,507 @@
+PHASE 1B — BATCH WIZARD IMPLEMENTATION SPECIFICATION
+
+Status: Approved
+Architecture Version: v1.2
+Prerequisite: Phase 1A Complete ✅
+
+Objective:
+
+Build the Batch Wizard as a lead onboarding pipeline.
+
+This is NOT a generic form builder.
+
+This is the primary entry point through which all leads enter the SnapServe operational system.
+
+Every future queue, CRM record, callback, booking, transfer, interaction, analytics event, and command center metric originates from a batch.
+
+The wizard must therefore focus on:
+
+Lead Ingestion
+Lead Validation
+Variable Mapping
+Duplicate Handling
+Execution Configuration
+
+not configuration complexity.
+
+---
+
+## USER FLOW
+
+Campaign
+↓
+Create Batch
+↓
+8 Step Wizard
+↓
+Batch Created
+↓
+Leads Enter System
+↓
+Lead Lifecycle Begins
+
+---
+
+STEP 1
+BATCH INFORMATION
+-----------------
+
+Fields:
+
+Batch Name
+Description
+
+Validation:
+
+Batch Name Required
+
+Generate:
+
+Batch ID
+
+Preview:
+
+Campaign Name
+Assigned Agent
+Assigned Phone Number
+
+Read Only
+
+---
+
+STEP 2
+LEAD SOURCE SELECTION
+---------------------
+
+Two paths:
+
+A. Select Existing Source
+
+Show workspace sources.
+
+Cards:
+
+Source Name
+Source Type
+Created Date
+Last Used
+Lead Count
+Status
+
+Source Types:
+
+Meta Form
+Webhook
+CSV Template
+
+Search supported.
+
+---
+
+B. Create New Source
+
+Source Type:
+
+Meta Form
+Webhook
+CSV Upload
+
+Future placeholders:
+
+HubSpot
+Salesforce
+Zoho
+Google Forms
+API
+
+Disabled with:
+
+"Coming Soon"
+
+---
+
+STEP 3
+SOURCE CONFIGURATION
+--------------------
+
+META SOURCE
+
+Select:
+
+Business Account
+Ad Account
+Campaign
+Ad Set
+Lead Form
+
+Show:
+
+Detected Fields
+
+Preview:
+
+Name
+Phone
+Email
+Company
+etc
+
+Store in lead_sources.
+
+---
+
+WEBHOOK SOURCE
+
+Generate:
+
+Webhook URL
+Webhook Token
+
+Show:
+
+Sample Payload
+
+Show:
+
+Detected Fields
+
+Store schema.
+
+---
+
+CSV SOURCE
+
+Upload CSV
+
+Show:
+
+File Name
+Rows
+Headers
+
+Preview first 10 rows.
+
+Create batch_import_run record.
+
+---
+
+STEP 4
+VARIABLE MAPPING
+----------------
+
+Source:
+
+agent_variables
+
+Display table:
+
+Variable
+Type
+Required
+Source Field
+Status
+
+Example:
+
+{{name}}
+Text
+Required
+full_name
+Mapped
+
+Required variables:
+
+Red if missing.
+
+Optional:
+
+Grey.
+
+Auto Mapping:
+
+Exact Match
+↓
+Normalized Match
+↓
+Fuzzy Match
+
+User may override manually.
+
+Store:
+
+batchFieldMapping
+
+---
+
+STEP 5
+VALIDATION
+----------
+
+Run:
+
+Phone Normalization Engine
+
+Duplicate Detection Engine
+
+Variable Validation Engine
+
+Show results:
+
+Total Records
+
+Valid Records
+
+Invalid Records
+
+Duplicate Records
+
+Missing Variables
+
+Phone Errors
+
+Country Issues
+
+---
+
+Validation Preview Table
+
+Columns:
+
+Lead
+Phone
+Normalized Phone
+Status
+Error
+
+Status:
+
+Valid
+Warning
+Error
+
+Download Error Report
+
+CSV supported.
+
+---
+
+STEP 6
+DUPLICATE HANDLING
+------------------
+
+Show:
+
+Duplicate Policy
+
+Options:
+
+Ignore
+Skip
+Reject With Report
+
+Descriptions:
+
+Ignore
+Create lead but mark duplicate.
+
+Skip
+Discard duplicate.
+
+Reject With Report
+Discard and include in report.
+
+Preview:
+
+Expected Leads Created
+
+Expected Leads Rejected
+
+Expected Duplicates
+
+---
+
+STEP 7
+EXECUTION RULES
+---------------
+
+Retry Attempts
+
+Retry Delay
+
+Business Hours
+
+Timezone
+
+Max Daily Calls
+
+Start Date
+
+Start Time
+
+End Date
+
+End Time
+
+Auto Start
+
+Enable/Disable
+
+Preview:
+
+Estimated Completion Time
+
+Estimated Daily Throughput
+
+---
+
+STEP 8
+REVIEW & LAUNCH
+---------------
+
+Show complete summary.
+
+Campaign
+
+Batch
+
+Agent
+
+Phone Number
+
+Lead Source
+
+Lead Count
+
+Valid Records
+
+Duplicates
+
+Duplicate Policy
+
+Execution Rules
+
+Variable Mapping Summary
+
+---
+
+Launch Actions
+
+Create Batch
+
+Create Import Run
+
+Create Leads
+
+Normalize Phones
+
+Apply Duplicate Policy
+
+Store Mapping
+
+Generate Timeline Events
+
+Queue Leads
+
+Return Success Summary
+
+---
+
+## POST-LAUNCH EXPERIENCE
+
+Do NOT redirect to Campaign Overview.
+
+Redirect to:
+
+Batch Detail Workspace
+
+Future Phase 4 screen.
+
+Temporary Placeholder:
+
+Batch Created Successfully
+
+Show:
+
+Lead Count
+
+Import Results
+
+Batch Status
+
+Open Batch
+
+---
+
+## NON-NEGOTIABLE UX RULES
+
+1. Wizard must be linear.
+
+No giant form.
+
+2. User always knows:
+
+Where they are.
+
+What happens next.
+
+3. Validation must happen before launch.
+
+Never after.
+
+4. Every error must be actionable.
+
+No generic messages.
+
+5. Required variables always visible.
+
+6. Duplicate policy must be explicit.
+
+7. Phone normalization preview must be visible.
+
+8. Import summary must be visible.
+
+9. Every import creates batch_import_run.
+
+10. Source reuse must be first-class.
+
+Most customers will reuse sources.
+
+Optimize for reuse.
+
+---
+
+## PHASE 1B ACCEPTANCE CRITERIA
+
+Meta Form Source Creation Works
+
+Webhook Source Creation Works
+
+CSV Upload Works
+
+Existing Source Reuse Works
+
+Variable Registry Integration Works
+
+Auto Mapping Works
+
+Manual Mapping Works
+
+Phone Normalization Preview Works
+
+Duplicate Preview Works
+
+Validation Report Download Works
+
+Batch Import Run Created
+
+Batch Field Mapping Stored
+
+Launch Flow Works
+
+No placeholder functionality.
+
+No skipped validation.
+
+No hardcoded mappings.
+
+Batch Wizard becomes the canonical lead onboarding workflow for the entire platform.

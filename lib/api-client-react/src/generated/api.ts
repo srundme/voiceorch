@@ -172,6 +172,8 @@ import type {
   UpdateLeadSourceBody,
   UserPreferences,
   UserPreferencesUpdate,
+  ValidateLeadsBody,
+  ValidationPreviewResult,
   VerifyPaymentInput,
   WalletInfo,
   WalletTransaction,
@@ -5391,6 +5393,78 @@ export const useCreateCampaignBatch = <TError = ErrorType<void>,
       return useMutation(getCreateCampaignBatchMutationOptions(options));
     }
 
+export const getValidateLeadsUrl = (id: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/validate-leads`
+}
+
+/**
+ * @summary Stateless validation preview — normalize phones + dedup check without committing
+ */
+export const validateLeads = async (id: number,
+    validateLeadsBody: ValidateLeadsBody, options?: RequestInit): Promise<ValidationPreviewResult> => {
+
+  return customFetch<ValidationPreviewResult>(getValidateLeadsUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      validateLeadsBody,)
+  }
+);}
+
+
+
+
+export const getValidateLeadsMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof validateLeads>>, TError,{id: number;data: BodyType<ValidateLeadsBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof validateLeads>>, TError,{id: number;data: BodyType<ValidateLeadsBody>}, TContext> => {
+
+const mutationKey = ['validateLeads'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof validateLeads>>, {id: number;data: BodyType<ValidateLeadsBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  validateLeads(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ValidateLeadsMutationResult = NonNullable<Awaited<ReturnType<typeof validateLeads>>>
+    export type ValidateLeadsMutationBody = BodyType<ValidateLeadsBody>
+    export type ValidateLeadsMutationError = ErrorType<void>
+
+    /**
+ * @summary Stateless validation preview — normalize phones + dedup check without committing
+ */
+export const useValidateLeads = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof validateLeads>>, TError,{id: number;data: BodyType<ValidateLeadsBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof validateLeads>>,
+        TError,
+        {id: number;data: BodyType<ValidateLeadsBody>},
+        TContext
+      > => {
+      return useMutation(getValidateLeadsMutationOptions(options));
+    }
+
 export const getGetCampaignBatchUrl = (id: number,
     batchId: number,) => {
 
@@ -5701,6 +5775,93 @@ export function useListBatchLeads<TData = Awaited<ReturnType<typeof listBatchLea
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getListBatchLeadsQueryOptions(id,batchId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getDownloadImportRunReportUrl = (id: number,
+    batchId: number,
+    runId: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/batches/${batchId}/import-runs/${runId}/report.csv`
+}
+
+/**
+ * @summary Download error report CSV for a batch import run
+ */
+export const downloadImportRunReport = async (id: number,
+    batchId: number,
+    runId: number, options?: RequestInit): Promise<string> => {
+
+  return customFetch<string>(getDownloadImportRunReportUrl(id,batchId,runId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getDownloadImportRunReportQueryKey = (id: number,
+    batchId: number,
+    runId: number,) => {
+    return [
+    `/api/campaigns/${id}/batches/${batchId}/import-runs/${runId}/report.csv`
+    ] as const;
+    }
+
+
+export const getDownloadImportRunReportQueryOptions = <TData = Awaited<ReturnType<typeof downloadImportRunReport>>, TError = ErrorType<void>>(id: number,
+    batchId: number,
+    runId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadImportRunReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDownloadImportRunReportQueryKey(id,batchId,runId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof downloadImportRunReport>>> = ({ signal }) => downloadImportRunReport(id,batchId,runId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id && batchId && runId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof downloadImportRunReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type DownloadImportRunReportQueryResult = NonNullable<Awaited<ReturnType<typeof downloadImportRunReport>>>
+export type DownloadImportRunReportQueryError = ErrorType<void>
+
+
+/**
+ * @summary Download error report CSV for a batch import run
+ */
+
+export function useDownloadImportRunReport<TData = Awaited<ReturnType<typeof downloadImportRunReport>>, TError = ErrorType<void>>(
+ id: number,
+    batchId: number,
+    runId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadImportRunReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getDownloadImportRunReportQueryOptions(id,batchId,runId,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

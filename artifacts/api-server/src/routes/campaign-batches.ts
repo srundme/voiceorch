@@ -2,41 +2,60 @@ import { Router, type IRouter } from "express";
 import { getAuth } from "@clerk/express";
 import {
   db, campaignsTable, campaignBatchesTable, campaignLeadsTable, callsTable,
-  leadTimelineTable, type CampaignFieldMappings,
+  leadTimelineTable, batchImportRunsTable,
+  type CampaignFieldMappings,
 } from "@workspace/db";
 import { eq, and, count, desc, inArray, sql } from "drizzle-orm";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
-import { normalizePhone } from "../lib/phone-normalize.js";
+import { normalizePhone as normalizePhoneSimple } from "../lib/phone-normalize.js";
+import { normalizePhone as normalizePhoneService, INDIA_PHONE_CONFIG } from "../services/phone-normalization.js";
 import { isOnDnc } from "../lib/dnc-check.js";
+import {
+  checkDuplicate, createImportSummary,
+  type DuplicatePolicy, type DuplicateReportEntry,
+} from "../services/duplicate-detection.js";
 
 const router: IRouter = Router();
 
 type CampaignRow = typeof campaignsTable.$inferSelect;
 type BatchRow    = typeof campaignBatchesTable.$inferSelect;
 
-function toBatch(row: BatchRow) {
+function toBatch(row: BatchRow, importSummary?: ImportSummaryResult | null) {
   return {
-    id:                 row.id,
-    campaignId:         row.campaignId,
-    name:               row.name,
-    description:        row.description ?? null,
-    status:             row.status,
-    leadSource:         row.leadSource,
-    scheduledStartAt:   row.scheduledStartAt?.toISOString() ?? null,
-    scheduledEndAt:     row.scheduledEndAt?.toISOString() ?? null,
-    totalLeads:         row.totalLeads,
-    calledLeads:        row.calledLeads,
-    fieldMappings:      row.fieldMappings ?? null,
-    callDelaySeconds:   row.callDelaySeconds,
-    maxAttempts:        row.maxAttempts,
-    retryDelayMinutes:  row.retryDelayMinutes,
-    timezone:           row.timezone ?? null,
-    businessHoursStart: row.businessHoursStart ?? null,
-    businessHoursEnd:   row.businessHoursEnd ?? null,
-    maxDailyCalls:      row.maxDailyCalls ?? null,
-    createdAt:          row.createdAt.toISOString(),
-    updatedAt:          row.updatedAt.toISOString(),
+    id:                  row.id,
+    campaignId:          row.campaignId,
+    name:                row.name,
+    description:         row.description ?? null,
+    status:              row.status,
+    leadSource:          row.leadSource,
+    leadSourceId:        (row as Record<string, unknown>)["leadSourceId"] as number | null ?? null,
+    batchFieldMapping:   (row as Record<string, unknown>)["batchFieldMapping"] as Record<string, string> | null ?? null,
+    duplicatePolicy:     (row as Record<string, unknown>)["duplicatePolicy"] as string ?? "skip",
+    scheduledStartAt:    row.scheduledStartAt?.toISOString() ?? null,
+    scheduledEndAt:      row.scheduledEndAt?.toISOString() ?? null,
+    totalLeads:          row.totalLeads,
+    calledLeads:         row.calledLeads,
+    fieldMappings:       row.fieldMappings ?? null,
+    callDelaySeconds:    row.callDelaySeconds,
+    maxAttempts:         row.maxAttempts,
+    retryDelayMinutes:   row.retryDelayMinutes,
+    timezone:            row.timezone ?? null,
+    businessHoursStart:  row.businessHoursStart ?? null,
+    businessHoursEnd:    row.businessHoursEnd ?? null,
+    maxDailyCalls:       row.maxDailyCalls ?? null,
+    createdAt:           row.createdAt.toISOString(),
+    updatedAt:           row.updatedAt.toISOString(),
+    importSummary:       importSummary ?? null,
   };
+}
+
+interface ImportSummaryResult {
+  totalRows:       number;
+  leadsCreated:    number;
+  duplicatesFound: number;
+  invalidPhones:   number;
+  dncBlocked:      number;
+  importRunId:     number | null;
 }
 
 async function requireCampaign(campaignId: number, userId: string): Promise<CampaignRow | null> {
@@ -76,7 +95,7 @@ router.get("/campaigns/:id/batches", async (req, res): Promise<void> => {
     .where(eq(campaignBatchesTable.campaignId, campaignId))
     .orderBy(desc(campaignBatchesTable.createdAt));
 
-  res.json(batches.map(toBatch));
+  res.json(batches.map(b => toBatch(b)));
 });
 
 // ── POST /campaigns/:id/batches ───────────────────────────────────────────────
@@ -92,7 +111,11 @@ router.post("/campaigns/:id/batches", async (req, res): Promise<void> => {
     name?: string;
     description?: string;
     leadSource?: string;
+    leadSourceId?: number | null;
     leads?: unknown;
+    fileName?: string;
+    batchFieldMapping?: Record<string, string> | null;
+    duplicatePolicy?: DuplicatePolicy;
     scheduledStartAt?: string | null;
     scheduledEndAt?: string | null;
     fieldMappings?: Record<string, string>;
@@ -103,22 +126,22 @@ router.post("/campaigns/:id/batches", async (req, res): Promise<void> => {
     businessHoursStart?: number;
     businessHoursEnd?: number;
     maxDailyCalls?: number;
+    autoStart?: boolean;
   };
+
   if (!body.name?.trim()) { res.status(400).json({ error: "Batch name required" }); return; }
 
-  const leadSource = body.leadSource ?? "csv";
-  const rawLeads   = Array.isArray(body.leads) ? (body.leads as Record<string, string>[]) : [];
+  const startTime      = Date.now();
+  const leadSource     = body.leadSource ?? "csv";
+  const rawLeads       = Array.isArray(body.leads) ? (body.leads as Record<string, string>[]) : [];
+  const duplicatePolicy: DuplicatePolicy = body.duplicatePolicy ?? "skip";
 
   if (leadSource === "csv" && rawLeads.length === 0) {
     res.status(400).json({ error: "leads must be a non-empty array for CSV batches" });
     return;
   }
 
-  const batchFieldMappings = body.fieldMappings ?? null;
-  const mappings   = (batchFieldMappings ?? campaign.fieldMappings) as CampaignFieldMappings;
-  const phoneField = mappings.phone ?? "phone";
-  const nameField  = mappings.name  ?? "name";
-  const emailField = mappings.email ?? "email";
+  const legacyMappings = (body.fieldMappings ?? null) as CampaignFieldMappings | null;
 
   const [batch] = await db.insert(campaignBatchesTable).values({
     campaignId,
@@ -127,7 +150,7 @@ router.post("/campaigns/:id/batches", async (req, res): Promise<void> => {
     leadSource,
     scheduledStartAt:   body.scheduledStartAt ? new Date(body.scheduledStartAt) : null,
     scheduledEndAt:     body.scheduledEndAt ? new Date(body.scheduledEndAt) : null,
-    fieldMappings:      batchFieldMappings as CampaignFieldMappings | null ?? undefined,
+    fieldMappings:      legacyMappings ?? undefined,
     callDelaySeconds:   body.callDelaySeconds ?? 5,
     maxAttempts:        body.maxAttempts ?? 1,
     retryDelayMinutes:  body.retryDelayMinutes ?? 60,
@@ -135,20 +158,77 @@ router.post("/campaigns/:id/batches", async (req, res): Promise<void> => {
     businessHoursStart: body.businessHoursStart ?? null,
     businessHoursEnd:   body.businessHoursEnd ?? null,
     maxDailyCalls:      body.maxDailyCalls ?? null,
-  }).returning();
+    leadSourceId:       body.leadSourceId ?? null,
+    batchFieldMapping:  body.batchFieldMapping ?? null,
+    duplicatePolicy:    body.duplicatePolicy ?? "skip",
+  } as typeof campaignBatchesTable.$inferInsert).returning();
+
+  // Determine column mapping
+  const bfm = body.batchFieldMapping ?? null;
+  const cfm = (campaign.fieldMappings ?? {}) as CampaignFieldMappings;
+  const phoneField = bfm?.["phone"] ?? cfm?.phone ?? "phone";
+  const nameField  = bfm?.["name"]  ?? cfm?.name  ?? "name";
+  const emailField = bfm?.["email"] ?? cfm?.email ?? "email";
 
   const toInsert: (typeof campaignLeadsTable.$inferInsert)[] = [];
-  let dncSkipped = 0;
-  for (const row of rawLeads) {
-    const phone = (row[phoneField] ?? row["phone"] ?? "").trim();
-    if (!phone) continue;
-    const normalized = normalizePhone(phone);
-    if (await isOnDnc(campaign.userId, normalized)) { dncSkipped++; continue; }
+  const errorEntries: DuplicateReportEntry[] = [];
+  let dncBlocked    = 0;
+  let invalidPhones = 0;
+  let duplicatesFound = 0;
+
+  for (let i = 0; i < rawLeads.length; i++) {
+    const row     = rawLeads[i]!;
+    const rawPhone = (row[phoneField] ?? row["phone"] ?? "").trim();
+    if (!rawPhone) { invalidPhones++; continue; }
+
+    // Normalize using the comprehensive service
+    const normResult = normalizePhoneService(rawPhone, INDIA_PHONE_CONFIG);
+    if (!normResult.valid || !normResult.normalized) {
+      invalidPhones++;
+      errorEntries.push({
+        phone:           rawPhone,
+        normalizedPhone: rawPhone,
+        reason:          "duplicate_phone", // re-using existing type; reason is invalid
+        existingLeadId:  0,
+        rowIndex:        i,
+      } as DuplicateReportEntry & { reason: string });
+      continue;
+    }
+
+    // DNC check
+    if (await isOnDnc(campaign.userId, normResult.normalized)) { dncBlocked++; continue; }
+
+    // Duplicate check with policy
+    const dupResult = await checkDuplicate(db, {
+      normalizedPhone: normResult.normalized,
+      campaignId,
+      policy:          duplicatePolicy,
+    });
+
+    if (dupResult.action === "skip" || dupResult.action === "reject") {
+      duplicatesFound++;
+      if (dupResult.reportEntry) {
+        errorEntries.push({ ...dupResult.reportEntry, rowIndex: i });
+      }
+      continue;
+    }
+
     const name  = (row[nameField]  ?? row["name"]  ?? "").trim() || null;
     const email = (row[emailField] ?? row["email"] ?? "").trim() || null;
     const leadData: Record<string, string> = {};
     for (const [k, v] of Object.entries(row)) { if (v?.trim()) leadData[k] = v.trim(); }
-    toInsert.push({ campaignId, batchId: batch!.id, phone, normalizedPhone: normalized, name, email, leadData, source: "csv" });
+
+    toInsert.push({
+      campaignId,
+      batchId:         batch!.id,
+      phone:           rawPhone,
+      normalizedPhone: normResult.normalized,
+      name,
+      email,
+      leadData,
+      source:          "csv",
+      ...(dupResult.isDuplicate ? { duplicateStatus: "duplicate" } : {}),
+    });
   }
 
   const imported = toInsert.length;
@@ -158,10 +238,14 @@ router.post("/campaigns/:id/batches", async (req, res): Promise<void> => {
       const chunk = await db.insert(campaignLeadsTable).values(toInsert.slice(i, i + 100)).returning();
       insertedLeads.push(...chunk);
     }
-    // Add timeline events for imports
     if (insertedLeads.length > 0) {
       await db.insert(leadTimelineTable).values(
-        insertedLeads.map(l => ({ leadId: l.id, campaignId, eventType: "imported", data: { source: "csv", batchId: batch!.id } }))
+        insertedLeads.map(l => ({
+          leadId:    l.id,
+          campaignId,
+          eventType: "imported",
+          data:      { source: "csv", batchId: batch!.id },
+        }))
       );
     }
     await db.update(campaignBatchesTable).set({ totalLeads: imported }).where(eq(campaignBatchesTable.id, batch!.id));
@@ -170,16 +254,151 @@ router.post("/campaigns/:id/batches", async (req, res): Promise<void> => {
       .where(eq(campaignsTable.id, campaignId));
   }
 
+  // Create batch_import_run for audit trail
+  let importRunId: number | null = null;
+  if (rawLeads.length > 0) {
+    const [run] = await db.insert(batchImportRunsTable).values({
+      batchId:          batch!.id,
+      sourceId:         body.leadSourceId ?? null,
+      fileName:         body.fileName?.trim() ?? null,
+      status:           "completed",
+      totalRows:        rawLeads.length,
+      validRows:        imported,
+      invalidRows:      invalidPhones,
+      duplicateRows:    duplicatesFound,
+      createdRows:      imported,
+      processingTimeMs: Date.now() - startTime,
+      errorReport:      errorEntries.length > 0 ? errorEntries : null,
+    } as typeof batchImportRunsTable.$inferInsert).returning();
+    importRunId = run?.id ?? null;
+  }
+
   const [fresh] = await db.select().from(campaignBatchesTable).where(eq(campaignBatchesTable.id, batch!.id));
 
-  // If scheduledStartAt is already past (or absent and user wants immediate), start at scheduled time via poller.
-  // If scheduled time is in the past, fire immediately.
   if (fresh && fresh.scheduledStartAt && fresh.scheduledStartAt <= new Date()) {
     await db.update(campaignBatchesTable).set({ status: "running" }).where(eq(campaignBatchesTable.id, fresh.id));
     await fireStartBatch(fresh, campaign);
+  } else if (body.autoStart) {
+    await db.update(campaignBatchesTable).set({ status: "running" }).where(eq(campaignBatchesTable.id, fresh!.id));
+    await fireStartBatch(fresh!, campaign);
   }
 
-  res.status(201).json(toBatch(fresh!));
+  const summary: ImportSummaryResult = {
+    totalRows:       rawLeads.length,
+    leadsCreated:    imported,
+    duplicatesFound,
+    invalidPhones,
+    dncBlocked,
+    importRunId,
+  };
+
+  res.status(201).json(toBatch(fresh!, summary));
+});
+
+// ── POST /campaigns/:id/validate-leads (stateless preview) ───────────────────
+router.post("/campaigns/:id/validate-leads", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const campaignId = parseInt(req.params["id"]!, 10);
+  const campaign = await requireCampaign(campaignId, userId);
+  if (!campaign) { res.status(404).json({ error: "Not found" }); return; }
+
+  const body = req.body as {
+    leads?: Record<string, string>[];
+    fieldMapping?: Record<string, string>;
+    policy?: DuplicatePolicy;
+  };
+
+  const leads       = Array.isArray(body.leads) ? body.leads : [];
+  const fieldMapping = body.fieldMapping ?? {};
+  const policy: DuplicatePolicy = body.policy ?? "skip";
+  const phoneField = fieldMapping["phone"] ?? "phone";
+
+  const rows: Array<{
+    rowIndex:        number;
+    raw:             Record<string, string>;
+    normalized:      string | null;
+    phoneValid:      boolean;
+    isDuplicate:     boolean;
+    status:          "valid" | "warning" | "error";
+    errors:          string[];
+  }> = [];
+
+  let validRows     = 0;
+  let invalidRows   = 0;
+  let duplicateRows = 0;
+
+  // Preview up to 200 rows to avoid timeouts; show all counts
+  const previewLimit = 200;
+
+  for (let i = 0; i < leads.length; i++) {
+    const row      = leads[i]!;
+    const rawPhone = (row[phoneField] ?? row["phone"] ?? "").trim();
+
+    if (!rawPhone) {
+      invalidRows++;
+      if (i < previewLimit) {
+        rows.push({
+          rowIndex:    i,
+          raw:         row,
+          normalized:  null,
+          phoneValid:  false,
+          isDuplicate: false,
+          status:      "error",
+          errors:      ["Phone number is empty"],
+        });
+      }
+      continue;
+    }
+
+    const normResult = normalizePhoneService(rawPhone, INDIA_PHONE_CONFIG);
+
+    let isDuplicate = false;
+    if (normResult.valid && normResult.normalized) {
+      const dupResult = await checkDuplicate(db, {
+        normalizedPhone: normResult.normalized,
+        campaignId,
+        policy,
+      });
+      isDuplicate = dupResult.isDuplicate;
+    }
+
+    let status: "valid" | "warning" | "error" = "valid";
+    const errors: string[] = [];
+
+    if (!normResult.valid) {
+      status = "error";
+      errors.push(normResult.reason ?? "Invalid phone number");
+      invalidRows++;
+    } else if (isDuplicate) {
+      status = "warning";
+      errors.push("Duplicate phone in campaign");
+      duplicateRows++;
+    } else {
+      validRows++;
+    }
+
+    if (i < previewLimit) {
+      rows.push({
+        rowIndex:    i,
+        raw:         row,
+        normalized:  normResult.normalized,
+        phoneValid:  normResult.valid,
+        isDuplicate,
+        status,
+        errors,
+      });
+    }
+  }
+
+  res.json({
+    totalRows:    leads.length,
+    validRows,
+    invalidRows,
+    duplicateRows,
+    previewRows:  rows,
+  });
 });
 
 // ── GET /campaigns/:id/batches/:batchId ──────────────────────────────────────
@@ -223,7 +442,6 @@ router.patch("/campaigns/:id/batches/:batchId", async (req, res): Promise<void> 
     .where(eq(campaignBatchesTable.id, batchId))
     .returning();
 
-  // Fire calls when transitioning to 'running'
   if (body.status === "running" && batch.status !== "running") {
     await fireStartBatch(updated!, campaign);
   }
@@ -320,6 +538,43 @@ router.get("/campaigns/:id/batches/:batchId/leads", async (req, res): Promise<vo
   });
 
   res.json({ leads: items, total: Number(total) });
+});
+
+// ── GET /campaigns/:id/batches/:batchId/import-runs/:runId/report.csv ─────────
+router.get("/campaigns/:id/batches/:batchId/import-runs/:runId/report.csv", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const campaignId = parseInt(req.params["id"]!, 10);
+  const batchId    = parseInt(req.params["batchId"]!, 10);
+  const runId      = parseInt(req.params["runId"]!, 10);
+
+  const campaign = await requireCampaign(campaignId, userId);
+  if (!campaign) { res.status(404).json({ error: "Not found" }); return; }
+
+  const batch = await requireBatch(batchId, campaignId);
+  if (!batch) { res.status(404).json({ error: "Not found" }); return; }
+
+  const [run] = await db.select().from(batchImportRunsTable)
+    .where(and(eq(batchImportRunsTable.id, runId), eq(batchImportRunsTable.batchId, batchId)));
+  if (!run) { res.status(404).json({ error: "Import run not found" }); return; }
+
+  const errors = (run.errorReport as (DuplicateReportEntry & { reason: string; rowIndex?: number })[] | null) ?? [];
+
+  const lines = [
+    "row_index,phone,normalized_phone,reason,existing_lead_id",
+    ...errors.map(e => [
+      e.rowIndex ?? "",
+      `"${(e.phone ?? "").replace(/"/g, '""')}"`,
+      `"${(e.normalizedPhone ?? "").replace(/"/g, '""')}"`,
+      `"${(e.reason ?? "").replace(/"/g, '""')}"`,
+      e.existingLeadId ?? "",
+    ].join(","))
+  ];
+
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="import-run-${runId}-errors.csv"`);
+  res.send(lines.join("\r\n"));
 });
 
 // ── POST /campaigns/:id/batches/:batchId/redial ───────────────────────────────
