@@ -66,6 +66,7 @@ import type {
   AvailabilityScheduleUpdate,
   AvailablePhoneNumber,
   BatchAnalytics,
+  BatchHealthSnapshot,
   BatchImportRun,
   Booking,
   BookingInput,
@@ -84,6 +85,7 @@ import type {
   CampaignLead,
   CampaignLeadProfile,
   CampaignUpdate,
+  CommandCenterKpis,
   CreateAmbientSoundBody,
   CsvImportBody,
   CsvImportResult,
@@ -96,6 +98,10 @@ import type {
   GetAdminAgents200,
   GetAdminPromptTemplates200,
   GetAvailableSlotsParams,
+  GetCommandCenterActivityStream200,
+  GetCommandCenterActivityStreamParams,
+  GetCommandCenterLiveOps200,
+  GetCommandCenterLiveOpsParams,
   GetPublicBookingByTokenParams,
   GetPublicSlotsParams,
   HealthStatus,
@@ -13080,4 +13086,319 @@ export function useGetAmbientSoundAudio<TData = Awaited<ReturnType<typeof getAmb
 
 
 
+
+export const getGetCommandCenterKpisUrl = () => {
+
+
+
+
+  return `/api/command-center/kpis`
+}
+
+/**
+ * @summary Get live KPI counts for the Command Center dashboard
+ */
+export const getCommandCenterKpis = async ( options?: RequestInit): Promise<CommandCenterKpis> => {
+
+  return customFetch<CommandCenterKpis>(getGetCommandCenterKpisUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCommandCenterKpisQueryKey = () => {
+    return [
+    `/api/command-center/kpis`
+    ] as const;
+    }
+
+
+export const getGetCommandCenterKpisQueryOptions = <TData = Awaited<ReturnType<typeof getCommandCenterKpis>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCommandCenterKpis>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCommandCenterKpisQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCommandCenterKpis>>> = ({ signal }) => getCommandCenterKpis({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCommandCenterKpis>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCommandCenterKpisQueryResult = NonNullable<Awaited<ReturnType<typeof getCommandCenterKpis>>>
+export type GetCommandCenterKpisQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get live KPI counts for the Command Center dashboard
+ */
+
+export function useGetCommandCenterKpis<TData = Awaited<ReturnType<typeof getCommandCenterKpis>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCommandCenterKpis>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCommandCenterKpisQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetCommandCenterLiveOpsUrl = (params?: GetCommandCenterLiveOpsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/command-center/live-ops?${stringifiedParams}` : `/api/command-center/live-ops`
+}
+
+/**
+ * @summary Get live operations feed — recent leads with current state
+ */
+export const getCommandCenterLiveOps = async (params?: GetCommandCenterLiveOpsParams, options?: RequestInit): Promise<GetCommandCenterLiveOps200> => {
+
+  return customFetch<GetCommandCenterLiveOps200>(getGetCommandCenterLiveOpsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCommandCenterLiveOpsQueryKey = (params?: GetCommandCenterLiveOpsParams,) => {
+    return [
+    `/api/command-center/live-ops`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetCommandCenterLiveOpsQueryOptions = <TData = Awaited<ReturnType<typeof getCommandCenterLiveOps>>, TError = ErrorType<unknown>>(params?: GetCommandCenterLiveOpsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCommandCenterLiveOps>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCommandCenterLiveOpsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCommandCenterLiveOps>>> = ({ signal }) => getCommandCenterLiveOps(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCommandCenterLiveOps>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCommandCenterLiveOpsQueryResult = NonNullable<Awaited<ReturnType<typeof getCommandCenterLiveOps>>>
+export type GetCommandCenterLiveOpsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get live operations feed — recent leads with current state
+ */
+
+export function useGetCommandCenterLiveOps<TData = Awaited<ReturnType<typeof getCommandCenterLiveOps>>, TError = ErrorType<unknown>>(
+ params?: GetCommandCenterLiveOpsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCommandCenterLiveOps>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCommandCenterLiveOpsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetCommandCenterActivityStreamUrl = (params?: GetCommandCenterActivityStreamParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/command-center/activity-stream?${stringifiedParams}` : `/api/command-center/activity-stream`
+}
+
+/**
+ * @summary Get system activity stream events
+ */
+export const getCommandCenterActivityStream = async (params?: GetCommandCenterActivityStreamParams, options?: RequestInit): Promise<GetCommandCenterActivityStream200> => {
+
+  return customFetch<GetCommandCenterActivityStream200>(getGetCommandCenterActivityStreamUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCommandCenterActivityStreamQueryKey = (params?: GetCommandCenterActivityStreamParams,) => {
+    return [
+    `/api/command-center/activity-stream`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetCommandCenterActivityStreamQueryOptions = <TData = Awaited<ReturnType<typeof getCommandCenterActivityStream>>, TError = ErrorType<unknown>>(params?: GetCommandCenterActivityStreamParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCommandCenterActivityStream>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCommandCenterActivityStreamQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCommandCenterActivityStream>>> = ({ signal }) => getCommandCenterActivityStream(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCommandCenterActivityStream>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCommandCenterActivityStreamQueryResult = NonNullable<Awaited<ReturnType<typeof getCommandCenterActivityStream>>>
+export type GetCommandCenterActivityStreamQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get system activity stream events
+ */
+
+export function useGetCommandCenterActivityStream<TData = Awaited<ReturnType<typeof getCommandCenterActivityStream>>, TError = ErrorType<unknown>>(
+ params?: GetCommandCenterActivityStreamParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCommandCenterActivityStream>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCommandCenterActivityStreamQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateBatchSnapshotUrl = (batchId: number,) => {
+
+
+
+
+  return `/api/command-center/snapshots/${batchId}`
+}
+
+/**
+ * @summary Take a manual health snapshot of a batch
+ */
+export const createBatchSnapshot = async (batchId: number, options?: RequestInit): Promise<BatchHealthSnapshot> => {
+
+  return customFetch<BatchHealthSnapshot>(getCreateBatchSnapshotUrl(batchId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getCreateBatchSnapshotMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createBatchSnapshot>>, TError,{batchId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createBatchSnapshot>>, TError,{batchId: number}, TContext> => {
+
+const mutationKey = ['createBatchSnapshot'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createBatchSnapshot>>, {batchId: number}> = (props) => {
+          const {batchId} = props ?? {};
+
+          return  createBatchSnapshot(batchId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateBatchSnapshotMutationResult = NonNullable<Awaited<ReturnType<typeof createBatchSnapshot>>>
+
+    export type CreateBatchSnapshotMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Take a manual health snapshot of a batch
+ */
+export const useCreateBatchSnapshot = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createBatchSnapshot>>, TError,{batchId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createBatchSnapshot>>,
+        TError,
+        {batchId: number},
+        TContext
+      > => {
+      return useMutation(getCreateBatchSnapshotMutationOptions(options));
+    }
 

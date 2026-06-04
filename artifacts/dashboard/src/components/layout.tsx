@@ -7,6 +7,8 @@ import {
   Wallet, LogOut, ChevronDown, AlertCircle, Webhook,
   Zap, CalendarDays, TrendingUp, ShieldCheck,
   Facebook, ArrowRightLeft, Mic2, FlaskConical,
+  Monitor, PhoneIncoming, PhoneCall, BookOpen,
+  ContactRound, Ban, ListChecks,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useClerk, useUser } from "@clerk/react";
@@ -15,6 +17,20 @@ import { SnapServeIcon } from "@/components/logo";
 
 /* ── Nav structure ──────────────────────────────────────────────────────── */
 const NAV_SECTIONS = [
+  {
+    label: "Operations",
+    items: [
+      { name: "Command Center",  href: "/app/command-center",  icon: Monitor },
+      { name: "Campaigns",       href: "/app/campaigns",       icon: Zap },
+      { name: "Callbacks",       href: "/app/callbacks",       icon: PhoneCall },
+      { name: "Incoming Calls",  href: "/app/incoming",        icon: PhoneIncoming },
+      { name: "Bookings",        href: "/app/scheduling",      icon: CalendarDays },
+      { name: "Transfers",       href: "/app/transfers",       icon: ArrowRightLeft },
+      { name: "Lead CRM",        href: "/app/lead-crm",        icon: ContactRound },
+      { name: "Analytics",       href: "/app/analytics",       icon: BarChart3 },
+      { name: "DNC",             href: "/app/dnc",             icon: Ban },
+    ],
+  },
   {
     label: "Build",
     items: [
@@ -27,20 +43,10 @@ const NAV_SECTIONS = [
   {
     label: "Observe",
     items: [
-      { name: "Analytics",       href: "/app/analytics",        icon: BarChart3 },
       { name: "Usage",           href: "/app/usage",            icon: TrendingUp },
       { name: "Call Log",        href: "/app/calls",            icon: Phone },
       { name: "Activity",        href: "/app/activity",         icon: LayoutDashboard },
       { name: "Test Simulator",  href: "/app/test-simulator",   icon: FlaskConical },
-    ],
-  },
-  {
-    label: "Outreach",
-    items: [
-      { name: "Campaigns",   href: "/app/campaigns",   icon: Zap },
-      { name: "Meta Leads",  href: "/app/meta-leads",  icon: Facebook },
-      { name: "Transfers",   href: "/app/transfers",   icon: ArrowRightLeft },
-      { name: "Scheduling",  href: "/app/scheduling",  icon: CalendarDays },
     ],
   },
   {

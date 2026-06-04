@@ -151,3 +151,39 @@ export const agentVariablesTable = pgTable("agent_variables", {
 
 export type AgentVariable = typeof agentVariablesTable.$inferSelect;
 export type InsertAgentVariable = typeof agentVariablesTable.$inferInsert;
+
+// ── Batch Health Snapshots ────────────────────────────────────────────────────
+// Point-in-time snapshot of a batch's operational health.
+// Written at: batch creation, every 15 min while active, batch completion,
+// and on-demand manual refresh.
+// Powers the Command Center trend cards without expensive re-aggregations.
+
+export const batchHealthSnapshotsTable = pgTable("batch_health_snapshots", {
+  id:                          serial("id").primaryKey(),
+  batchId:                     integer("batch_id").references(() => campaignBatchesTable.id, { onDelete: "cascade" }).notNull(),
+  campaignId:                  integer("campaign_id").references(() => campaignsTable.id, { onDelete: "cascade" }).notNull(),
+  snapshotTime:                timestamp("snapshot_time", { withTimezone: true }).notNull().defaultNow(),
+  // Lead counts at snapshot time
+  totalLeads:                  integer("total_leads").notNull().default(0),
+  validLeads:                  integer("valid_leads").notNull().default(0),
+  duplicates:                  integer("duplicates").notNull().default(0),
+  // Call-status breakdown
+  queued:                      integer("queued").notNull().default(0),
+  calling:                     integer("calling").notNull().default(0),
+  connected:                   integer("connected").notNull().default(0),
+  completed:                   integer("completed").notNull().default(0),
+  // Operational outcome breakdown
+  callbacks:                   integer("callbacks").notNull().default(0),
+  incomingCalls:               integer("incoming_calls").notNull().default(0),
+  booked:                      integer("booked").notNull().default(0),
+  transferred:                 integer("transferred").notNull().default(0),
+  failed:                      integer("failed").notNull().default(0),
+  noPickup:                    integer("no_pickup").notNull().default(0),
+  interested:                  integer("interested").notNull().default(0),
+  // Full breakdown keyed by operationalOutcome value → count
+  operationalOutcomeBreakdown: jsonb("operational_outcome_breakdown").$type<Record<string, number>>(),
+  createdAt:                   timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type BatchHealthSnapshot    = typeof batchHealthSnapshotsTable.$inferSelect;
+export type InsertBatchHealthSnapshot = typeof batchHealthSnapshotsTable.$inferInsert;

@@ -46,6 +46,8 @@ tags:
     description: User-facing usage summary and budget
   - name: ambient-sounds
     description: Admin-managed ambient sound library and user-facing ambient track listing
+  - name: command-center
+    description: Real-time operational dashboard — KPIs, live ops feed, activity stream, batch health snapshots
 
 paths:
   /healthz:
@@ -3911,6 +3913,83 @@ paths:
         "404":
           description: Not found
 
+  /command-center/kpis:
+    get:
+      operationId: getCommandCenterKpis
+      tags: [command-center]
+      summary: Get live KPI counts for the Command Center dashboard
+      responses:
+        "200":
+          description: Live KPI counts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandCenterKpis'
+
+  /command-center/live-ops:
+    get:
+      operationId: getCommandCenterLiveOps
+      tags: [command-center]
+      summary: Get live operations feed — recent leads with current state
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50 }
+      responses:
+        "200":
+          description: Live operations rows
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [rows]
+                properties:
+                  rows:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LiveOpsRow'
+
+  /command-center/activity-stream:
+    get:
+      operationId: getCommandCenterActivityStream
+      tags: [command-center]
+      summary: Get system activity stream events
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 30 }
+      responses:
+        "200":
+          description: Activity stream events
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events]
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ActivityStreamEvent'
+
+  /command-center/snapshots/{batchId}:
+    post:
+      operationId: createBatchSnapshot
+      tags: [command-center]
+      summary: Take a manual health snapshot of a batch
+      parameters:
+        - name: batchId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Snapshot created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchHealthSnapshot'
+
 components:
   parameters:
     AdminToken:
@@ -6968,3 +7047,75 @@ components:
         normalized: { type: ["string", "null"] }
         valid: { type: boolean }
         reason: { type: ["string", "null"] }
+
+    CommandCenterKpis:
+      type: object
+      required: [liveCalls, queued, callbacksDue, incomingCalls, bookingsToday, transfersToday, noPickup, failed, connected, interested]
+      properties:
+        liveCalls:       { type: integer }
+        queued:          { type: integer }
+        callbacksDue:    { type: integer }
+        incomingCalls:   { type: integer }
+        bookingsToday:   { type: integer }
+        transfersToday:  { type: integer }
+        noPickup:        { type: integer }
+        failed:          { type: integer }
+        connected:       { type: integer }
+        interested:      { type: integer }
+
+    LiveOpsRow:
+      type: object
+      required: [leadId, phone, callStatus, operationalOutcome, createdAt]
+      properties:
+        leadId:            { type: integer }
+        phone:             { type: string }
+        name:              { type: ["string", "null"] }
+        campaignId:        { type: integer }
+        campaignName:      { type: string }
+        batchId:           { type: ["integer", "null"] }
+        batchName:         { type: ["string", "null"] }
+        callStatus:        { type: string }
+        disposition:       { type: ["string", "null"] }
+        operationalOutcome: { type: string }
+        durationSeconds:   { type: ["integer", "null"] }
+        lastActivityAt:    { type: ["string", "null"], format: date-time }
+        createdAt:         { type: string, format: date-time }
+
+    ActivityStreamEvent:
+      type: object
+      required: [id, type, description, createdAt]
+      properties:
+        id:           { type: integer }
+        type:         { type: string }
+        resourceType: { type: ["string", "null"] }
+        resourceId:   { type: ["string", "null"] }
+        description:  { type: string }
+        createdAt:    { type: string, format: date-time }
+
+    BatchHealthSnapshot:
+      type: object
+      required: [id, batchId, campaignId, snapshotTime, totalLeads, queued, calling, connected, completed, callbacks, booked, transferred, failed, noPickup, interested, createdAt]
+      properties:
+        id:                          { type: integer }
+        batchId:                     { type: integer }
+        campaignId:                  { type: integer }
+        snapshotTime:                { type: string, format: date-time }
+        totalLeads:                  { type: integer }
+        validLeads:                  { type: integer }
+        duplicates:                  { type: integer }
+        queued:                      { type: integer }
+        calling:                     { type: integer }
+        connected:                   { type: integer }
+        completed:                   { type: integer }
+        callbacks:                   { type: integer }
+        incomingCalls:               { type: integer }
+        booked:                      { type: integer }
+        transferred:                 { type: integer }
+        failed:                      { type: integer }
+        noPickup:                    { type: integer }
+        interested:                  { type: integer }
+        operationalOutcomeBreakdown:
+          type: object
+          nullable: true
+          additionalProperties: { type: integer }
+        createdAt:                   { type: string, format: date-time }

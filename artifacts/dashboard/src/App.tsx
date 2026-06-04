@@ -54,6 +54,11 @@ import MetaLeadsPage from "@/pages/meta-leads";
 import TransfersPage from "@/pages/transfers";
 import VoicesPage from "@/pages/voices";
 import TestSimulatorPage from "@/pages/test-simulator";
+import CommandCenterPage from "@/pages/command-center/index";
+import DncPage from "@/pages/dnc/index";
+import LeadCrmPage from "@/pages/lead-crm/index";
+import CallbacksPage from "@/pages/callbacks/index";
+import IncomingCallsPage from "@/pages/incoming/index";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -208,7 +213,12 @@ function AppRoutes() {
     <Layout>
       <VoiceAssistant />
       <Switch>
-        <Route path="/app" component={AssistantsPage} />
+        <Route path="/app" component={() => <Redirect to="/app/command-center" />} />
+        <Route path="/app/command-center" component={CommandCenterPage} />
+        <Route path="/app/dnc" component={DncPage} />
+        <Route path="/app/lead-crm" component={LeadCrmPage} />
+        <Route path="/app/callbacks" component={CallbacksPage} />
+        <Route path="/app/incoming" component={IncomingCallsPage} />
         <Route path="/app/analytics" component={Dashboard} />
         <Route path="/app/agents" component={AgentsList} />
         <Route path="/app/agents/new" component={AgentNew} />

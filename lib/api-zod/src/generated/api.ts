@@ -4076,3 +4076,100 @@ export const GetAmbientSoundAudioParams = zod.object({
 })
 
 
+/**
+ * @summary Get live KPI counts for the Command Center dashboard
+ */
+export const GetCommandCenterKpisResponse = zod.object({
+  "liveCalls": zod.number(),
+  "queued": zod.number(),
+  "callbacksDue": zod.number(),
+  "incomingCalls": zod.number(),
+  "bookingsToday": zod.number(),
+  "transfersToday": zod.number(),
+  "noPickup": zod.number(),
+  "failed": zod.number(),
+  "connected": zod.number(),
+  "interested": zod.number()
+})
+
+
+/**
+ * @summary Get live operations feed — recent leads with current state
+ */
+export const getCommandCenterLiveOpsQueryLimitDefault = 50;
+
+export const GetCommandCenterLiveOpsQueryParams = zod.object({
+  "limit": zod.coerce.number().default(getCommandCenterLiveOpsQueryLimitDefault)
+})
+
+export const GetCommandCenterLiveOpsResponse = zod.object({
+  "rows": zod.array(zod.object({
+  "leadId": zod.number(),
+  "phone": zod.string(),
+  "name": zod.string().nullish(),
+  "campaignId": zod.number().optional(),
+  "campaignName": zod.string().optional(),
+  "batchId": zod.number().nullish(),
+  "batchName": zod.string().nullish(),
+  "callStatus": zod.string(),
+  "disposition": zod.string().nullish(),
+  "operationalOutcome": zod.string(),
+  "durationSeconds": zod.number().nullish(),
+  "lastActivityAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Get system activity stream events
+ */
+export const getCommandCenterActivityStreamQueryLimitDefault = 30;
+
+export const GetCommandCenterActivityStreamQueryParams = zod.object({
+  "limit": zod.coerce.number().default(getCommandCenterActivityStreamQueryLimitDefault)
+})
+
+export const GetCommandCenterActivityStreamResponse = zod.object({
+  "events": zod.array(zod.object({
+  "id": zod.number(),
+  "type": zod.string(),
+  "resourceType": zod.string().nullish(),
+  "resourceId": zod.string().nullish(),
+  "description": zod.string(),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Take a manual health snapshot of a batch
+ */
+export const CreateBatchSnapshotParams = zod.object({
+  "batchId": zod.coerce.number()
+})
+
+export const CreateBatchSnapshotResponse = zod.object({
+  "id": zod.number(),
+  "batchId": zod.number(),
+  "campaignId": zod.number(),
+  "snapshotTime": zod.coerce.date(),
+  "totalLeads": zod.number(),
+  "validLeads": zod.number().optional(),
+  "duplicates": zod.number().optional(),
+  "queued": zod.number(),
+  "calling": zod.number(),
+  "connected": zod.number(),
+  "completed": zod.number(),
+  "callbacks": zod.number(),
+  "incomingCalls": zod.number().optional(),
+  "booked": zod.number(),
+  "transferred": zod.number(),
+  "failed": zod.number(),
+  "noPickup": zod.number(),
+  "interested": zod.number(),
+  "operationalOutcomeBreakdown": zod.record(zod.string(), zod.number()).nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+

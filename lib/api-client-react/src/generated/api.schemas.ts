@@ -2831,6 +2831,77 @@ export interface PhoneNormalizeResult {
   reason?: string | null;
 }
 
+export interface CommandCenterKpis {
+  liveCalls: number;
+  queued: number;
+  callbacksDue: number;
+  incomingCalls: number;
+  bookingsToday: number;
+  transfersToday: number;
+  noPickup: number;
+  failed: number;
+  connected: number;
+  interested: number;
+}
+
+export interface LiveOpsRow {
+  leadId: number;
+  phone: string;
+  /** @nullable */
+  name?: string | null;
+  campaignId?: number;
+  campaignName?: string;
+  /** @nullable */
+  batchId?: number | null;
+  /** @nullable */
+  batchName?: string | null;
+  callStatus: string;
+  /** @nullable */
+  disposition?: string | null;
+  operationalOutcome: string;
+  /** @nullable */
+  durationSeconds?: number | null;
+  /** @nullable */
+  lastActivityAt?: string | null;
+  createdAt: string;
+}
+
+export interface ActivityStreamEvent {
+  id: number;
+  type: string;
+  /** @nullable */
+  resourceType?: string | null;
+  /** @nullable */
+  resourceId?: string | null;
+  description: string;
+  createdAt: string;
+}
+
+export type BatchHealthSnapshotOperationalOutcomeBreakdown = {[key: string]: number} | null;
+
+export interface BatchHealthSnapshot {
+  id: number;
+  batchId: number;
+  campaignId: number;
+  snapshotTime: string;
+  totalLeads: number;
+  validLeads?: number;
+  duplicates?: number;
+  queued: number;
+  calling: number;
+  connected: number;
+  completed: number;
+  callbacks: number;
+  incomingCalls?: number;
+  booked: number;
+  transferred: number;
+  failed: number;
+  noPickup: number;
+  interested: number;
+  operationalOutcomeBreakdown?: BatchHealthSnapshotOperationalOutcomeBreakdown;
+  createdAt: string;
+}
+
 /**
  * Platform admin token (matches ADMIN_TOKEN env var).
  */
@@ -3179,5 +3250,21 @@ export type GetAdminAgents200 = {
 export type CreateAmbientSoundBody = {
   file: Blob;
   name: string;
+};
+
+export type GetCommandCenterLiveOpsParams = {
+limit?: number;
+};
+
+export type GetCommandCenterLiveOps200 = {
+  rows: LiveOpsRow[];
+};
+
+export type GetCommandCenterActivityStreamParams = {
+limit?: number;
+};
+
+export type GetCommandCenterActivityStream200 = {
+  events: ActivityStreamEvent[];
 };
 

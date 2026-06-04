@@ -1,0 +1,283 @@
+Yes. Proceed with both together.
+
+This is one of the rare cases where doing a small Phase 1.5 immediately before Phase 2 is the correct decision.
+
+The batch_health_snapshots table is not a separate feature. It is foundational infrastructure for the Command Center.
+
+Without it, you'll eventually end up:
+
+Command Center
+     ↓
+Complex aggregation queries
+     ↓
+Slow dashboard
+     ↓
+Performance issues
+
+With snapshots:
+
+Batch Activity
+     ↓
+Snapshot Records
+     ↓
+Fast Dashboard
+     ↓
+Trend Analytics
+Approved Pre-Phase 2 Addition
+New Table
+batch_health_snapshots
+
+id
+
+batch_id
+
+campaign_id
+
+snapshot_time
+
+total_leads
+
+valid_leads
+
+duplicates
+
+queued
+
+calling
+
+connected
+
+completed
+
+callbacks
+
+incoming_calls
+
+booked
+
+transferred
+
+failed
+
+no_pickup
+
+interested
+
+operational_outcome_breakdown JSONB
+
+created_at
+Snapshot Frequency
+
+Do NOT snapshot every event.
+
+Recommended:
+
+Batch Created
+
+Every 15 minutes while active
+
+Batch Completed
+
+Manual Refresh
+
+This keeps storage manageable.
+
+Future Uses
+
+This single table will later power:
+
+Command Center
+
+Batch Trends
+
+Campaign Trends
+
+Agent Trends
+
+Queue Trends
+
+Analytics Hub
+
+without re-engineering.
+
+Phase 2 Approval
+
+After the snapshot migration:
+
+Start Phase 2 immediately.
+
+But keep these implementation priorities.
+
+Priority 1
+Navigation
+
+Build the operational navigation first.
+
+Campaign Operations
+
+├── Command Center
+├── Queues
+├── Campaigns
+├── Callbacks
+├── Incoming Calls
+├── Bookings
+├── Transfers
+├── Lead CRM
+├── Analytics
+├── DNC
+
+This changes the mental model of the platform.
+
+Priority 2
+Command Center
+
+This becomes:
+
+Default Landing Page
+
+Not campaign list.
+
+Not dashboard.
+
+Not analytics.
+
+Priority 3
+KPI Cards
+
+Use real data.
+
+No placeholders.
+
+Required cards:
+
+Live Calls
+
+Queued Leads
+
+Callbacks Due
+
+Incoming Calls
+
+Bookings Today
+
+Transfers Today
+
+No Pickup
+
+Failed
+
+Connected
+
+Interested
+
+Each card must:
+
+Show Count
+
+Show Trend
+
+Be Clickable
+
+Click → filtered destination.
+
+Priority 4
+Live Operations Feed
+
+This is the most important UI element.
+
+Columns:
+
+Lead
+
+Campaign
+
+Batch
+
+Status
+
+Disposition
+
+Outcome
+
+Duration
+
+Last Activity
+
+Action
+
+Requirements:
+
+Sort by latest activity
+Poll every 10 seconds (Phase 1)
+SSE-ready architecture
+Row click opens Lead CRM later
+Priority 5
+Right Panel
+
+Do not overbuild.
+
+Only:
+
+Queue Health
+
+Recent Bookings
+
+Recent Transfers
+
+Nothing more.
+
+One Additional Requirement
+
+Add:
+
+System Activity Stream
+
+Under the feed.
+
+Examples:
+
+09:02
+Batch imported
+500 leads
+
+09:03
+Retry queue created
+
+09:05
+Lead booked meeting
+
+09:06
+Transfer completed
+
+This becomes extremely useful during operations.
+
+Success Criteria for Phase 2
+
+I would approve Phase 2 only if:
+
+✅ Command Center becomes default entry point
+
+✅ KPI cards use real backend data
+
+✅ Feed updates from live data
+
+✅ Navigation is operationally focused
+
+✅ No campaign CRUD elements dominate the screen
+
+✅ Architecture is SSE-ready
+
+✅ Snapshot table is used for trends
+
+Decision
+
+Approved.
+
+Implement:
+
+batch_health_snapshots
+Full Phase 2 Command Center
+
+in the same development cycle.
+
+After Phase 2 is complete, the platform will finally start feeling like an AI operations platform rather than a campaign management application. The next major milestone after that will be Queue Management (Phase 3), because the Command Center will naturally expose the need to drill into operational queues.
