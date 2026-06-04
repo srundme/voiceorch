@@ -133,6 +133,7 @@ export const incomingCallsTable = pgTable("incoming_calls", {
   leadId:             integer("lead_id").references(() => campaignLeadsTable.id, { onDelete: "set null" }),
   callId:             integer("call_id").references(() => callsTable.id, { onDelete: "set null" }),
   incomingCallStatus: text("incoming_call_status").notNull().default("unreviewed"),
+  incomingCallReason: text("incoming_call_reason"),
   matchedAt:          timestamp("matched_at", { withTimezone: true }),
   createdAt:          timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -149,6 +150,7 @@ export const callBookingsTable = pgTable("call_bookings", {
   id:                  serial("id").primaryKey(),
   leadId:              integer("lead_id").references(() => campaignLeadsTable.id, { onDelete: "cascade" }).notNull(),
   campaignId:          integer("campaign_id").references(() => campaignsTable.id, { onDelete: "cascade" }).notNull(),
+  batchId:             integer("batch_id").references(() => campaignBatchesTable.id, { onDelete: "set null" }),
   callId:              integer("call_id").references(() => callsTable.id, { onDelete: "set null" }),
   schedulingBookingId: integer("scheduling_booking_id"),
   meetingTime:         timestamp("meeting_time", { withTimezone: true }),

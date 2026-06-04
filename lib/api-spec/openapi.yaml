@@ -2830,6 +2830,138 @@ paths:
         "401": { description: Unauthorized }
         "404": { description: Not found }
 
+  /campaigns/{id}/bookings/metrics:
+    get:
+      operationId: getCampaignBookingMetrics
+      tags: [campaigns]
+      summary: Booking metric counts for a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Booking metrics
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BookingMetrics" }
+        "401": { description: Unauthorized }
+        "404": { description: Not found }
+
+  /campaigns/{id}/bookings:
+    get:
+      operationId: listCampaignBookings
+      tags: [campaigns]
+      summary: Paginated bookings for a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer }
+        - name: limit
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Campaign bookings page
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CampaignBookingsPage" }
+        "401": { description: Unauthorized }
+        "404": { description: Not found }
+
+  /campaigns/{id}/bookings/{bookingId}/cancel:
+    patch:
+      operationId: cancelCampaignBooking
+      tags: [campaigns]
+      summary: Cancel a campaign booking
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: bookingId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:     { type: integer }
+                  status: { type: string }
+        "401": { description: Unauthorized }
+        "404": { description: Not found }
+
+  /campaigns/{id}/bookings/{bookingId}/reschedule:
+    patch:
+      operationId: rescheduleCampaignBooking
+      tags: [campaigns]
+      summary: Reschedule a campaign booking
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: bookingId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [newTime]
+              properties:
+                newTime: { type: string, format: date-time }
+      responses:
+        "200":
+          description: Rescheduled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:          { type: integer }
+                  meetingTime: { type: string, format: date-time }
+        "401": { description: Unauthorized }
+        "404": { description: Not found }
+
+  /campaigns/{id}/bookings/export:
+    get:
+      operationId: exportCampaignBookings
+      tags: [campaigns]
+      summary: Export campaign bookings as CSV
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: CSV file
+          content:
+            text/csv:
+              schema: { type: string }
+        "401": { description: Unauthorized }
+        "404": { description: Not found }
+
   /campaigns/{id}/incoming/metrics:
     get:
       operationId: getCampaignIncomingMetrics
@@ -7727,6 +7859,63 @@ components:
       required: [callbackAt]
       properties:
         callbackAt: { type: string, format: date-time }
+
+    BookingMetrics:
+      type: object
+      required: [today, upcoming, completed, cancelled, total]
+      properties:
+        today:     { type: integer }
+        upcoming:  { type: integer }
+        completed: { type: integer }
+        cancelled: { type: integer }
+        total:     { type: integer }
+
+    BookingEventTypeInfo:
+      type: object
+      required: [name, durationMins]
+      properties:
+        name:         { type: string }
+        durationMins: { type: integer }
+
+    BookingLeadInfo:
+      type: object
+      properties:
+        name:  { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+
+    CampaignBookingItem:
+      type: object
+      required: [id, leadId, status, createdAt, lead]
+      properties:
+        id:                  { type: integer }
+        leadId:              { type: integer }
+        callId:              { type: integer, nullable: true }
+        batchId:             { type: integer, nullable: true }
+        schedulingBookingId: { type: integer, nullable: true }
+        meetingTime:         { type: string, format: date-time, nullable: true }
+        slotEnd:             { type: string, format: date-time, nullable: true }
+        meetLink:            { type: string, nullable: true }
+        status:              { type: string }
+        bookedBy:            { type: string, nullable: true }
+        notes:               { type: string, nullable: true }
+        createdAt:           { type: string, format: date-time }
+        batchName:           { type: string, nullable: true }
+        eventType:
+          nullable: true
+          $ref: "#/components/schemas/BookingEventTypeInfo"
+        lead:
+          $ref: "#/components/schemas/BookingLeadInfo"
+
+    CampaignBookingsPage:
+      type: object
+      required: [items, total, page, limit]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/CampaignBookingItem" }
+        total: { type: integer }
+        page:  { type: integer }
+        limit: { type: integer }
 
     IncomingMetrics:
       type: object

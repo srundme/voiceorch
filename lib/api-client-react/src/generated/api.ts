@@ -70,6 +70,7 @@ import type {
   BatchImportRun,
   Booking,
   BookingInput,
+  BookingMetrics,
   BookingUpdate,
   BulkActionCampaignCallbacks200,
   Call,
@@ -86,10 +87,12 @@ import type {
   CampaignBatch,
   CampaignBatchCreate,
   CampaignBatchUpdate,
+  CampaignBookingsPage,
   CampaignCreate,
   CampaignLead,
   CampaignLeadProfile,
   CampaignUpdate,
+  CancelCampaignBooking200,
   CommandCenterKpis,
   CompleteCampaignCallback200,
   CreateAmbientSoundBody,
@@ -148,6 +151,7 @@ import type {
   ListBatchLeadsParams,
   ListBookingsParams,
   ListCallsParams,
+  ListCampaignBookingsParams,
   ListCampaignCallbacksParams,
   ListCampaignIncomingCallsParams,
   ListCampaignLeads200,
@@ -185,6 +189,8 @@ import type {
   PurchasePhoneNumberInput,
   RedialBatchNoPickup200,
   RedialCampaignNoPickup200,
+  RescheduleCampaignBooking200,
+  RescheduleCampaignBookingBody,
   RescheduleCampaignCallback200,
   SchedulingCalendar,
   SchedulingCalendarInput,
@@ -8915,6 +8921,395 @@ export function useExportCampaignCallbacks<TData = Awaited<ReturnType<typeof exp
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getExportCampaignCallbacksQueryOptions(id,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetCampaignBookingMetricsUrl = (id: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/bookings/metrics`
+}
+
+/**
+ * @summary Booking metric counts for a campaign
+ */
+export const getCampaignBookingMetrics = async (id: number, options?: RequestInit): Promise<BookingMetrics> => {
+
+  return customFetch<BookingMetrics>(getGetCampaignBookingMetricsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCampaignBookingMetricsQueryKey = (id: number,) => {
+    return [
+    `/api/campaigns/${id}/bookings/metrics`
+    ] as const;
+    }
+
+
+export const getGetCampaignBookingMetricsQueryOptions = <TData = Awaited<ReturnType<typeof getCampaignBookingMetrics>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCampaignBookingMetrics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCampaignBookingMetricsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCampaignBookingMetrics>>> = ({ signal }) => getCampaignBookingMetrics(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCampaignBookingMetrics>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCampaignBookingMetricsQueryResult = NonNullable<Awaited<ReturnType<typeof getCampaignBookingMetrics>>>
+export type GetCampaignBookingMetricsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Booking metric counts for a campaign
+ */
+
+export function useGetCampaignBookingMetrics<TData = Awaited<ReturnType<typeof getCampaignBookingMetrics>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCampaignBookingMetrics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCampaignBookingMetricsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListCampaignBookingsUrl = (id: number,
+    params?: ListCampaignBookingsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/campaigns/${id}/bookings?${stringifiedParams}` : `/api/campaigns/${id}/bookings`
+}
+
+/**
+ * @summary Paginated bookings for a campaign
+ */
+export const listCampaignBookings = async (id: number,
+    params?: ListCampaignBookingsParams, options?: RequestInit): Promise<CampaignBookingsPage> => {
+
+  return customFetch<CampaignBookingsPage>(getListCampaignBookingsUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCampaignBookingsQueryKey = (id: number,
+    params?: ListCampaignBookingsParams,) => {
+    return [
+    `/api/campaigns/${id}/bookings`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListCampaignBookingsQueryOptions = <TData = Awaited<ReturnType<typeof listCampaignBookings>>, TError = ErrorType<void>>(id: number,
+    params?: ListCampaignBookingsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCampaignBookings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCampaignBookingsQueryKey(id,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCampaignBookings>>> = ({ signal }) => listCampaignBookings(id,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCampaignBookings>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListCampaignBookingsQueryResult = NonNullable<Awaited<ReturnType<typeof listCampaignBookings>>>
+export type ListCampaignBookingsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Paginated bookings for a campaign
+ */
+
+export function useListCampaignBookings<TData = Awaited<ReturnType<typeof listCampaignBookings>>, TError = ErrorType<void>>(
+ id: number,
+    params?: ListCampaignBookingsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCampaignBookings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListCampaignBookingsQueryOptions(id,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCancelCampaignBookingUrl = (id: number,
+    bookingId: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/bookings/${bookingId}/cancel`
+}
+
+/**
+ * @summary Cancel a campaign booking
+ */
+export const cancelCampaignBooking = async (id: number,
+    bookingId: number, options?: RequestInit): Promise<CancelCampaignBooking200> => {
+
+  return customFetch<CancelCampaignBooking200>(getCancelCampaignBookingUrl(id,bookingId),
+  {
+    ...options,
+    method: 'PATCH'
+
+
+  }
+);}
+
+
+
+
+export const getCancelCampaignBookingMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelCampaignBooking>>, TError,{id: number;bookingId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof cancelCampaignBooking>>, TError,{id: number;bookingId: number}, TContext> => {
+
+const mutationKey = ['cancelCampaignBooking'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof cancelCampaignBooking>>, {id: number;bookingId: number}> = (props) => {
+          const {id,bookingId} = props ?? {};
+
+          return  cancelCampaignBooking(id,bookingId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CancelCampaignBookingMutationResult = NonNullable<Awaited<ReturnType<typeof cancelCampaignBooking>>>
+
+    export type CancelCampaignBookingMutationError = ErrorType<void>
+
+    /**
+ * @summary Cancel a campaign booking
+ */
+export const useCancelCampaignBooking = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelCampaignBooking>>, TError,{id: number;bookingId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof cancelCampaignBooking>>,
+        TError,
+        {id: number;bookingId: number},
+        TContext
+      > => {
+      return useMutation(getCancelCampaignBookingMutationOptions(options));
+    }
+
+export const getRescheduleCampaignBookingUrl = (id: number,
+    bookingId: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/bookings/${bookingId}/reschedule`
+}
+
+/**
+ * @summary Reschedule a campaign booking
+ */
+export const rescheduleCampaignBooking = async (id: number,
+    bookingId: number,
+    rescheduleCampaignBookingBody: RescheduleCampaignBookingBody, options?: RequestInit): Promise<RescheduleCampaignBooking200> => {
+
+  return customFetch<RescheduleCampaignBooking200>(getRescheduleCampaignBookingUrl(id,bookingId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      rescheduleCampaignBookingBody,)
+  }
+);}
+
+
+
+
+export const getRescheduleCampaignBookingMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rescheduleCampaignBooking>>, TError,{id: number;bookingId: number;data: BodyType<RescheduleCampaignBookingBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof rescheduleCampaignBooking>>, TError,{id: number;bookingId: number;data: BodyType<RescheduleCampaignBookingBody>}, TContext> => {
+
+const mutationKey = ['rescheduleCampaignBooking'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof rescheduleCampaignBooking>>, {id: number;bookingId: number;data: BodyType<RescheduleCampaignBookingBody>}> = (props) => {
+          const {id,bookingId,data} = props ?? {};
+
+          return  rescheduleCampaignBooking(id,bookingId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RescheduleCampaignBookingMutationResult = NonNullable<Awaited<ReturnType<typeof rescheduleCampaignBooking>>>
+    export type RescheduleCampaignBookingMutationBody = BodyType<RescheduleCampaignBookingBody>
+    export type RescheduleCampaignBookingMutationError = ErrorType<void>
+
+    /**
+ * @summary Reschedule a campaign booking
+ */
+export const useRescheduleCampaignBooking = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rescheduleCampaignBooking>>, TError,{id: number;bookingId: number;data: BodyType<RescheduleCampaignBookingBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof rescheduleCampaignBooking>>,
+        TError,
+        {id: number;bookingId: number;data: BodyType<RescheduleCampaignBookingBody>},
+        TContext
+      > => {
+      return useMutation(getRescheduleCampaignBookingMutationOptions(options));
+    }
+
+export const getExportCampaignBookingsUrl = (id: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/bookings/export`
+}
+
+/**
+ * @summary Export campaign bookings as CSV
+ */
+export const exportCampaignBookings = async (id: number, options?: RequestInit): Promise<string> => {
+
+  return customFetch<string>(getExportCampaignBookingsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportCampaignBookingsQueryKey = (id: number,) => {
+    return [
+    `/api/campaigns/${id}/bookings/export`
+    ] as const;
+    }
+
+
+export const getExportCampaignBookingsQueryOptions = <TData = Awaited<ReturnType<typeof exportCampaignBookings>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportCampaignBookings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportCampaignBookingsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportCampaignBookings>>> = ({ signal }) => exportCampaignBookings(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportCampaignBookings>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportCampaignBookingsQueryResult = NonNullable<Awaited<ReturnType<typeof exportCampaignBookings>>>
+export type ExportCampaignBookingsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Export campaign bookings as CSV
+ */
+
+export function useExportCampaignBookings<TData = Awaited<ReturnType<typeof exportCampaignBookings>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportCampaignBookings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportCampaignBookingsQueryOptions(id,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

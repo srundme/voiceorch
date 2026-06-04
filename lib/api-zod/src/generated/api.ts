@@ -2904,6 +2904,106 @@ export const ExportCampaignCallbacksQueryParams = zod.object({
 
 
 /**
+ * @summary Booking metric counts for a campaign
+ */
+export const GetCampaignBookingMetricsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetCampaignBookingMetricsResponse = zod.object({
+  "today": zod.number(),
+  "upcoming": zod.number(),
+  "completed": zod.number(),
+  "cancelled": zod.number(),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Paginated bookings for a campaign
+ */
+export const ListCampaignBookingsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListCampaignBookingsQueryParams = zod.object({
+  "status": zod.coerce.string().optional(),
+  "search": zod.coerce.string().optional(),
+  "page": zod.coerce.number().optional(),
+  "limit": zod.coerce.number().optional()
+})
+
+export const ListCampaignBookingsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "leadId": zod.number(),
+  "callId": zod.number().nullish(),
+  "batchId": zod.number().nullish(),
+  "schedulingBookingId": zod.number().nullish(),
+  "meetingTime": zod.coerce.date().nullish(),
+  "slotEnd": zod.coerce.date().nullish(),
+  "meetLink": zod.string().nullish(),
+  "status": zod.string(),
+  "bookedBy": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "batchName": zod.string().nullish(),
+  "eventType": zod.object({
+  "name": zod.string(),
+  "durationMins": zod.number()
+}).nullish(),
+  "lead": zod.object({
+  "name": zod.string().nullish(),
+  "phone": zod.string().nullish()
+})
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "limit": zod.number()
+})
+
+
+/**
+ * @summary Cancel a campaign booking
+ */
+export const CancelCampaignBookingParams = zod.object({
+  "id": zod.coerce.number(),
+  "bookingId": zod.coerce.number()
+})
+
+export const CancelCampaignBookingResponse = zod.object({
+  "id": zod.number().optional(),
+  "status": zod.string().optional()
+})
+
+
+/**
+ * @summary Reschedule a campaign booking
+ */
+export const RescheduleCampaignBookingParams = zod.object({
+  "id": zod.coerce.number(),
+  "bookingId": zod.coerce.number()
+})
+
+export const RescheduleCampaignBookingBody = zod.object({
+  "newTime": zod.coerce.date()
+})
+
+export const RescheduleCampaignBookingResponse = zod.object({
+  "id": zod.number().optional(),
+  "meetingTime": zod.coerce.date().optional()
+})
+
+
+/**
+ * @summary Export campaign bookings as CSV
+ */
+export const ExportCampaignBookingsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
  * @summary Incoming call metric counts
  */
 export const GetCampaignIncomingMetricsParams = zod.object({

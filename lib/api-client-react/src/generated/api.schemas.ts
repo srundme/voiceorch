@@ -3064,6 +3064,49 @@ export interface CallbackRescheduleRequest {
   callbackAt: string;
 }
 
+export interface BookingMetrics {
+  today: number;
+  upcoming: number;
+  completed: number;
+  cancelled: number;
+  total: number;
+}
+
+export interface BookingEventTypeInfo {
+  name: string;
+  durationMins: number;
+}
+
+export interface BookingLeadInfo {
+  name?: string | null;
+  phone?: string | null;
+}
+
+export interface CampaignBookingItem {
+  id: number;
+  leadId: number;
+  callId?: number | null;
+  batchId?: number | null;
+  schedulingBookingId?: number | null;
+  meetingTime?: string | null;
+  slotEnd?: string | null;
+  meetLink?: string | null;
+  status: string;
+  bookedBy?: string | null;
+  notes?: string | null;
+  createdAt: string;
+  batchName?: string | null;
+  eventType?: BookingEventTypeInfo | null;
+  lead: BookingLeadInfo;
+}
+
+export interface CampaignBookingsPage {
+  items: CampaignBookingItem[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 export interface IncomingMetrics {
   unreviewed: number;
   today: number;
@@ -3278,6 +3321,27 @@ export type RescheduleCampaignCallback200 = {
 
 export type ExportCampaignCallbacksParams = {
 status?: string;
+};
+
+export type ListCampaignBookingsParams = {
+status?: string;
+search?: string;
+page?: number;
+limit?: number;
+};
+
+export type CancelCampaignBooking200 = {
+  id?: number;
+  status?: string;
+};
+
+export type RescheduleCampaignBookingBody = {
+  newTime: string;
+};
+
+export type RescheduleCampaignBooking200 = {
+  id?: number;
+  meetingTime?: string;
 };
 
 export type ListCampaignIncomingCallsParams = {

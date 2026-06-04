@@ -44,6 +44,7 @@ type IncomingCallItem = {
   leadId:             number | null;
   callId:             number | null;
   incomingCallStatus: string;
+  incomingCallReason: string | null;
   receivedAt:         string;
   matchedAt:          string | null;
   durationSeconds:    number | null;
@@ -440,9 +441,15 @@ export default function IncomingCallsTab({ campaignId }: { campaignId: number })
 
                     {/* Reason / Intent */}
                     <td className="px-3 py-2.5 hidden lg:table-cell">
-                      <span className="text-muted-foreground/70 max-w-[180px] truncate block">
-                        {item.detectedIntent ?? "—"}
-                      </span>
+                      {item.incomingCallReason ? (
+                        <span className="text-foreground/80 max-w-[180px] truncate block">
+                          {item.incomingCallReason}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground/70 max-w-[180px] truncate block">
+                          {item.detectedIntent ?? "—"}
+                        </span>
+                      )}
                     </td>
 
                     {/* Received At */}
