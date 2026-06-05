@@ -56,12 +56,16 @@ import { provisionUser } from "../middlewares/userProvisioning.js";
 
 const router: IRouter = Router();
 
-// Admin routes bypass user provisioning middleware
+// Admin routes bypass user provisioning middleware.
+// ambient-sounds audio endpoint must be mounted BEFORE adminRouter because it
+// has its own query-token auth (for <audio src="...?token=...">), whereas
+// adminRouter applies a blanket requireAdmin middleware on /admin that only
+// looks at the x-admin-token header.
+router.use(ambientSoundsRouter);
 router.use(adminRouter);
 router.use(adminVoicesRouter);
 router.use(adminUsageRouter);
 router.use(adminPromptTemplatesRouter);
-router.use(ambientSoundsRouter);
 
 // Public campaign lead webhook — must be before provisionUser (no Clerk session needed)
 router.use(campaignWebhookRouter);
