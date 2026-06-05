@@ -241,6 +241,16 @@ function SidebarContent({ onNavClick, onSearchOpen }: { onNavClick?: () => void;
           <div className="h-1.5 w-1.5 rounded-full bg-foreground/20 shrink-0" />
           <span className="text-[10.5px] text-muted-foreground/50 flex-1 truncate opacity-0 w-0 group-hover:w-auto group-hover:opacity-100 transition-all duration-300 whitespace-nowrap">All systems operational</span>
         </div>
+        {/* Legal links */}
+        <div className="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-2 px-2.5 py-1 overflow-hidden">
+          <Link href="/privacy" className="text-[10px] text-muted-foreground/40 hover:text-muted-foreground/60 transition-colors opacity-0 w-0 group-hover:w-auto group-hover:opacity-100 whitespace-nowrap">
+            Privacy
+          </Link>
+          <span className="text-muted-foreground/20 opacity-0 w-0 group-hover:w-auto group-hover:opacity-100">|</span>
+          <Link href="/terms" className="text-[10px] text-muted-foreground/40 hover:text-muted-foreground/60 transition-colors opacity-0 w-0 group-hover:w-auto group-hover:opacity-100 whitespace-nowrap">
+            Terms
+          </Link>
+        </div>
       </div>
     </div>
   );

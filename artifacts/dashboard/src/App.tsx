@@ -32,6 +32,8 @@ import WebhooksPage from "@/pages/webhooks";
 import AgentAnalyticsPage from "@/pages/agent-analytics";
 import AnalyticsPage from "@/pages/analytics";
 import NotFound from "@/pages/not-found";
+import PrivacyPage from "@/pages/privacy";
+import TermsPage from "@/pages/terms";
 import OnboardingPage from "@/pages/onboarding";
 import CampaignsPage from "@/pages/campaigns/index";
 import CampaignDetailPage from "@/pages/campaigns/[id]";
@@ -244,6 +246,8 @@ function Router() {
           <Route path="/book/cancel" component={CancelBookingPage} />
           <Route path="/book/reschedule" component={RescheduleBookingPage} />
           <Route path="/book/:slug" component={PublicBookingPage} />
+          <Route path="/privacy" component={PrivacyPage} />
+          <Route path="/terms" component={TermsPage} />
           <Route component={NotFound} />
         </Switch>
       </QueryClientProvider>
