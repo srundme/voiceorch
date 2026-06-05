@@ -132,6 +132,7 @@ export interface STTConfig {
   /** "off" | "vapi" | "livekit" — "vapi" enables Deepgram utterance-end VAD events */
   smartEndpointing: string;
   autoFallback: boolean;
+  fallbackProviders: Array<{ provider: string; model: string | null }>;
 }
 
 export interface AgentConfig {

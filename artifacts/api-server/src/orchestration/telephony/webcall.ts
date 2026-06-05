@@ -228,6 +228,7 @@ export async function handleWebCallWebSocket(
       : [],
     smartEndpointing: agent.asrSmartEndpointing ?? "off",
     autoFallback: agent.asrAutoFallback ?? false,
+    fallbackProviders: (agent.asrFallbackProviders as Array<{ provider: string; model: string | null }> | null | undefined) ?? [],
   };
 
   const stt = createSTTAdapter(agent.asrProvider, sttKey, agent.asrModel, null, sttConfig);
@@ -303,6 +304,40 @@ export async function handleWebCallWebSocket(
           // frames are sent to the dead socket and silently discarded.
           logger.warn({ callId }, "Webcall: streaming STT closed — falling back to batch STT");
           streamSTT = null;
+
+          // If auto-fallback is on, try to reconnect with a fallback streaming provider
+          if (sttConfig.autoFallback && sttConfig.fallbackProviders.length > 0 && !closed) {
+            for (const fb of sttConfig.fallbackProviders) {
+              const fbKey = providerKeys.get(fb.provider);
+              if (!fbKey) continue;
+              try {
+                const fbAdapter = createSTTAdapter(fb.provider, fbKey, fb.model, null, sttConfig);
+                if (!fbAdapter.transcribeStream) continue;
+                streamSTT = fbAdapter.transcribeStream(
+                  (text: string, isFinal: boolean) => {
+                    if (!isFinal || !text.trim() || closed) return;
+                    if (speaking) {
+                      interrupted = true;
+                      send({ type: "interrupted" });
+                      sendStatus("thinking");
+                      logger.info({ callId }, "Webcall: barge-in via fallback streaming STT");
+                    } else if (speakingEndedAt > 0 && Date.now() - speakingEndedAt < BARGE_IN_END_GRACE_MS) {
+                      logger.info({ callId, msSinceEnd: Date.now() - speakingEndedAt }, "Webcall: discarding post-speech transcript (fallback STT)");
+                      return;
+                    }
+                    if (processing) { streamingTranscriptPending = text; return; }
+                    streamingTranscriptPending = text;
+                    void process();
+                  },
+                  () => { streamSTT = null; },
+                );
+                logger.info({ callId, provider: fb.provider }, "Webcall: streaming STT fallback reconnected");
+                break;
+              } catch (fbInitErr) {
+                logger.warn({ callId, provider: fb.provider, err: fbInitErr }, "Webcall: streaming STT fallback init failed");
+              }
+            }
+          }
         },
       );
       logger.info({ callId, provider: agent.asrProvider }, "Webcall: streaming STT initialised");
@@ -533,14 +568,41 @@ export async function handleWebCallWebSocket(
         try {
           userText = await stt.transcribe(pcm, 16000);
         } catch (sttErr) {
-          const reason = toReadableError(sttErr, "STT error");
-          logger.error({ callId, err: sttErr }, reason);
-          send({ type: "error", message: reason });
-          speaking = false;
-          speakingEndedAt = Date.now();
-          processing = false;
-          if (!closed) void hangup("error", reason);
-          return;
+          if (sttConfig.autoFallback && sttConfig.fallbackProviders.length > 0) {
+            let recovered = false;
+            for (const fb of sttConfig.fallbackProviders) {
+              const fbKey = providerKeys.get(fb.provider);
+              if (!fbKey) continue;
+              try {
+                const fbStt = createSTTAdapter(fb.provider, fbKey, fb.model, null, sttConfig);
+                userText = await fbStt.transcribe(pcm, 16000);
+                logger.info({ callId, provider: fb.provider }, "Webcall: batch STT fallback succeeded");
+                recovered = true;
+                break;
+              } catch (fbErr) {
+                logger.warn({ callId, provider: fb.provider, err: fbErr }, "Webcall: batch STT fallback failed, trying next");
+              }
+            }
+            if (!recovered) {
+              const reason = toReadableError(sttErr, "STT error (all fallbacks exhausted)");
+              logger.error({ callId, err: sttErr }, reason);
+              send({ type: "error", message: reason });
+              speaking = false;
+              speakingEndedAt = Date.now();
+              processing = false;
+              if (!closed) void hangup("error", reason);
+              return;
+            }
+          } else {
+            const reason = toReadableError(sttErr, "STT error");
+            logger.error({ callId, err: sttErr }, reason);
+            send({ type: "error", message: reason });
+            speaking = false;
+            speakingEndedAt = Date.now();
+            processing = false;
+            if (!closed) void hangup("error", reason);
+            return;
+          }
         }
       }
 

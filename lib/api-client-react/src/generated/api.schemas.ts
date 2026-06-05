@@ -243,6 +243,12 @@ export const AgentAsrSmartEndpointing = {
   livekit: 'livekit',
 } as const;
 
+export type AgentAsrFallbackProvidersItem = {
+  provider?: string;
+  /** @nullable */
+  model?: string | null;
+};
+
 /**
  * Advanced per-tab configuration (LLM params, engine, call, inbound, WhatsApp, analytics)
  * @nullable
@@ -306,6 +312,11 @@ export interface Agent {
      * @nullable
      */
   asrAutoFallback?: boolean | null;
+  /**
+     * Ordered list of backup STT providers tried when the primary fails
+     * @nullable
+     */
+  asrFallbackProviders?: AgentAsrFallbackProvidersItem[] | null;
   /** LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen */
   llmProvider: string;
   /** @nullable */
@@ -455,6 +466,12 @@ export const AgentInputAgentMode = {
   byop: 'byop',
 } as const;
 
+export type AgentInputAsrFallbackProvidersItem = {
+  provider?: string;
+  /** @nullable */
+  model?: string | null;
+};
+
 /**
  * Advanced per-tab configuration
  */
@@ -485,6 +502,8 @@ export interface AgentInput {
   asrKeyterms?: string;
   asrSmartEndpointing?: string;
   asrAutoFallback?: boolean;
+  /** Ordered list of backup STT providers tried when the primary fails */
+  asrFallbackProviders?: AgentInputAsrFallbackProvidersItem[];
   /** LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen */
   llmProvider: string;
   llmModel?: string;
@@ -531,6 +550,12 @@ export const AgentUpdateAgentMode = {
   byop: 'byop',
 } as const;
 
+export type AgentUpdateAsrFallbackProvidersItem = {
+  provider?: string;
+  /** @nullable */
+  model?: string | null;
+};
+
 /**
  * Advanced per-tab configuration
  */
@@ -556,6 +581,8 @@ export interface AgentUpdate {
   asrKeyterms?: string;
   asrSmartEndpointing?: string;
   asrAutoFallback?: boolean;
+  /** Ordered list of backup STT providers tried when the primary fails */
+  asrFallbackProviders?: AgentUpdateAsrFallbackProvidersItem[];
   /** LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen */
   llmProvider?: string;
   llmModel?: string;

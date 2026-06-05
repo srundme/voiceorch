@@ -120,6 +120,7 @@ export const agentsTable = pgTable("agents", {
   asrKeyterms: text("asr_keyterms"),
   asrSmartEndpointing: text("asr_smart_endpointing").default("off"),
   asrAutoFallback: boolean("asr_auto_fallback").default(false),
+  asrFallbackProviders: json("asr_fallback_providers").$type<Array<{provider: string; model: string | null}>>(),
   llmProvider: text("llm_provider").notNull(),
   llmModel: text("llm_model"),
   ttsProvider: text("tts_provider").notNull(),

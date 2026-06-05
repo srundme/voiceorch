@@ -38,6 +38,7 @@ export class DeepgramSTT implements STTAdapter {
     });
 
     if (this.cfg.language) params.set("language", this.cfg.language);
+    if (this.cfg.backgroundDenoising) params.set("noise_reduction", "true");
 
     for (const term of this.cfg.keyterms) {
       params.append("keywords", `${term}:2`);
@@ -91,6 +92,7 @@ export class DeepgramSTT implements STTAdapter {
     });
 
     if (this.cfg.language) params.set("language", this.cfg.language);
+    if (this.cfg.backgroundDenoising) params.set("noise_reduction", "true");
 
     if (useSmartEndpointing) {
       // VAPI/LiveKit mode — use Deepgram's VAD utterance-end events (ML-based endpointing)

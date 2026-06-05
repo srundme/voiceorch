@@ -36,6 +36,10 @@ export const ListAgentsResponseItem = zod.object({
   "asrKeyterms": zod.string().nullish().describe('Comma-separated keywords to boost transcription accuracy'),
   "asrSmartEndpointing": zod.union([zod.literal('off'),zod.literal('vapi'),zod.literal('livekit'),zod.literal(null)]).nullish().describe('Smart endpointing mode for more accurate speech endpoint detection'),
   "asrAutoFallback": zod.boolean().nullish().describe('Automatically pick a backup STT provider if the primary fails'),
+  "asrFallbackProviders": zod.array(zod.object({
+  "provider": zod.string().optional(),
+  "model": zod.string().nullish()
+})).nullish().describe('Ordered list of backup STT providers tried when the primary fails'),
   "llmProvider": zod.string().describe('LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen'),
   "llmModel": zod.string().nullish(),
   "ttsProvider": zod.string().describe('TTS provider: elevenlabs, openai, aws_polly, azure, cartesia, deepgram'),
@@ -125,6 +129,10 @@ export const CreateAgentBody = zod.object({
   "asrKeyterms": zod.string().optional(),
   "asrSmartEndpointing": zod.string().optional(),
   "asrAutoFallback": zod.boolean().optional(),
+  "asrFallbackProviders": zod.array(zod.object({
+  "provider": zod.string().optional(),
+  "model": zod.string().nullish()
+})).optional().describe('Ordered list of backup STT providers tried when the primary fails'),
   "llmProvider": zod.string().describe('LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen'),
   "llmModel": zod.string().optional(),
   "ttsProvider": zod.string(),
@@ -197,6 +205,10 @@ export const GetAgentResponse = zod.object({
   "asrKeyterms": zod.string().nullish().describe('Comma-separated keywords to boost transcription accuracy'),
   "asrSmartEndpointing": zod.union([zod.literal('off'),zod.literal('vapi'),zod.literal('livekit'),zod.literal(null)]).nullish().describe('Smart endpointing mode for more accurate speech endpoint detection'),
   "asrAutoFallback": zod.boolean().nullish().describe('Automatically pick a backup STT provider if the primary fails'),
+  "asrFallbackProviders": zod.array(zod.object({
+  "provider": zod.string().optional(),
+  "model": zod.string().nullish()
+})).nullish().describe('Ordered list of backup STT providers tried when the primary fails'),
   "llmProvider": zod.string().describe('LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen'),
   "llmModel": zod.string().nullish(),
   "ttsProvider": zod.string().describe('TTS provider: elevenlabs, openai, aws_polly, azure, cartesia, deepgram'),
@@ -289,6 +301,10 @@ export const UpdateAgentBody = zod.object({
   "asrKeyterms": zod.string().optional(),
   "asrSmartEndpointing": zod.string().optional(),
   "asrAutoFallback": zod.boolean().optional(),
+  "asrFallbackProviders": zod.array(zod.object({
+  "provider": zod.string().optional(),
+  "model": zod.string().nullish()
+})).optional().describe('Ordered list of backup STT providers tried when the primary fails'),
   "llmProvider": zod.string().optional().describe('LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen'),
   "llmModel": zod.string().optional(),
   "ttsProvider": zod.string().optional(),
@@ -363,6 +379,10 @@ export const UpdateAgentResponse = zod.object({
   "asrKeyterms": zod.string().nullish().describe('Comma-separated keywords to boost transcription accuracy'),
   "asrSmartEndpointing": zod.union([zod.literal('off'),zod.literal('vapi'),zod.literal('livekit'),zod.literal(null)]).nullish().describe('Smart endpointing mode for more accurate speech endpoint detection'),
   "asrAutoFallback": zod.boolean().nullish().describe('Automatically pick a backup STT provider if the primary fails'),
+  "asrFallbackProviders": zod.array(zod.object({
+  "provider": zod.string().optional(),
+  "model": zod.string().nullish()
+})).nullish().describe('Ordered list of backup STT providers tried when the primary fails'),
   "llmProvider": zod.string().describe('LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen'),
   "llmModel": zod.string().nullish(),
   "ttsProvider": zod.string().describe('TTS provider: elevenlabs, openai, aws_polly, azure, cartesia, deepgram'),
@@ -460,6 +480,10 @@ export const ToggleAgentResponse = zod.object({
   "asrKeyterms": zod.string().nullish().describe('Comma-separated keywords to boost transcription accuracy'),
   "asrSmartEndpointing": zod.union([zod.literal('off'),zod.literal('vapi'),zod.literal('livekit'),zod.literal(null)]).nullish().describe('Smart endpointing mode for more accurate speech endpoint detection'),
   "asrAutoFallback": zod.boolean().nullish().describe('Automatically pick a backup STT provider if the primary fails'),
+  "asrFallbackProviders": zod.array(zod.object({
+  "provider": zod.string().optional(),
+  "model": zod.string().nullish()
+})).nullish().describe('Ordered list of backup STT providers tried when the primary fails'),
   "llmProvider": zod.string().describe('LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen'),
   "llmModel": zod.string().nullish(),
   "ttsProvider": zod.string().describe('TTS provider: elevenlabs, openai, aws_polly, azure, cartesia, deepgram'),

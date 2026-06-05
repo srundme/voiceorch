@@ -5256,6 +5256,16 @@ components:
         asrAutoFallback:
           type: ["boolean", "null"]
           description: Automatically pick a backup STT provider if the primary fails
+        asrFallbackProviders:
+          type: ["array", "null"]
+          description: Ordered list of backup STT providers tried when the primary fails
+          items:
+            type: object
+            properties:
+              provider:
+                type: string
+              model:
+                type: ["string", "null"]
         llmProvider:
           type: string
           description: "LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen"
@@ -5400,6 +5410,16 @@ components:
           type: string
         asrAutoFallback:
           type: boolean
+        asrFallbackProviders:
+          type: array
+          description: Ordered list of backup STT providers tried when the primary fails
+          items:
+            type: object
+            properties:
+              provider:
+                type: string
+              model:
+                type: ["string", "null"]
         llmProvider:
           type: string
           description: "LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen"
@@ -5500,6 +5520,16 @@ components:
           type: string
         asrAutoFallback:
           type: boolean
+        asrFallbackProviders:
+          type: array
+          description: Ordered list of backup STT providers tried when the primary fails
+          items:
+            type: object
+            properties:
+              provider:
+                type: string
+              model:
+                type: ["string", "null"]
         llmProvider:
           type: string
           description: "LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen"

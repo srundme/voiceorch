@@ -146,6 +146,7 @@ export async function createSession(params: {
         : [],
       smartEndpointing: agent.asrSmartEndpointing ?? "off",
       autoFallback: agent.asrAutoFallback ?? false,
+      fallbackProviders: (agent.asrFallbackProviders as Array<{ provider: string; model: string | null }> | null | undefined) ?? [],
     },
     tools,
     // P1-A: User-defined prompt variables

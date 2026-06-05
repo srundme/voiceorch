@@ -1017,6 +1017,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
   const [asrKeyterms, setAsrKeyterms]                       = useState("");
   const [asrSmartEndpointing, setAsrSmartEndpointing]       = useState("off");
   const [asrAutoFallback, setAsrAutoFallback]               = useState(true);
+  const [asrFallbackProviders, setAsrFallbackProviders]     = useState<Array<{provider: string; model: string}>>([]);
   const [ttsProvider, setTtsProvider]                       = useState("");
   const [ttsModel, setTtsModel]                             = useState("");
   const [ttsVoice, setTtsVoice]                             = useState("");
@@ -1145,6 +1146,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
     setAsrKeyterms(agent.asrKeyterms ?? "");
     setAsrSmartEndpointing(agent.asrSmartEndpointing ?? "off");
     setAsrAutoFallback(agent.asrAutoFallback ?? true);
+    setAsrFallbackProviders(((agent as unknown as Record<string,unknown>).asrFallbackProviders as Array<{provider: string; model: string}> | null | undefined) ?? []);
     setTtsProvider(agent.ttsProvider ?? "");
     setTtsModel(agent.ttsModel ?? (agent.ttsProvider === "cartesia" ? "sonic-2" : ""));
     setTtsVoice((agent as unknown as Record<string, unknown>).ttsVoice as string ?? "");
@@ -1195,6 +1197,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
           asrKeyterms: asrKeyterms || undefined,
           asrSmartEndpointing,
           asrAutoFallback,
+          asrFallbackProviders: asrFallbackProviders.length > 0 ? asrFallbackProviders : undefined,
           ttsProvider, ttsModel: ttsModel || undefined,
           ttsVoice: ttsVoice || undefined,
           telephonyProvider: telephony,
@@ -1626,9 +1629,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                     <SelectContent className="bg-card border-border max-h-60">{LANGUAGES.map(l => <SelectItem key={l.value} value={l.value} className="text-foreground text-xs">{l.label}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
-                <SliderRow label="Confidence Threshold" desc="Discard transcripts below this score" value={asrConfidenceThreshold} onChange={v => { setAsrConfidenceThreshold(v); setDirty(true); }} min={0} max={1} step={0.01} />
-                <SliderRow label="End-of-Turn Timeout" desc="Max wait after speech ends" value={asrEndOfTurnTimeout} onChange={v => { setAsrEndOfTurnTimeout(v); setDirty(true); }} min={500} max={10000} step={100} unit="ms" />
-                <ToggleRow label="Auto Fallback" desc="Switch to backup STT if primary fails" checked={asrAutoFallback} onChange={v => { setAsrAutoFallback(v); setDirty(true); }} />
+                <ToggleRow label="Background Denoising" desc="Filter background noise before transcription (Deepgram: noise_reduction param)" checked={asrBackgroundDenoising} onChange={v => { setAsrBackgroundDenoising(v); setDirty(true); }} />
                 <div>
                   <p className="text-xs text-muted-foreground mb-1.5">Smart Endpointing</p>
                   <div className="flex border border-border rounded-lg p-0.5 bg-card w-fit">
@@ -1639,10 +1640,62 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                       </button>
                     ))}
                   </div>
+                  <p className="text-[10px] text-muted-foreground mt-1">ML-based end-of-turn detection (Deepgram only)</p>
                 </div>
+                <SliderRow label="Confidence Threshold" desc="Discard transcripts below this score" value={asrConfidenceThreshold} onChange={v => { setAsrConfidenceThreshold(v); setDirty(true); }} min={0} max={1} step={0.01} />
+                <SliderRow label="End-of-Turn Timeout" desc="Max wait after speech ends" value={asrEndOfTurnTimeout} onChange={v => { setAsrEndOfTurnTimeout(v); setDirty(true); }} min={500} max={10000} step={100} unit="ms" />
                 <div>
                   <p className="text-xs text-muted-foreground mb-1">Keyterms</p>
                   <Textarea value={asrKeyterms} onChange={e => { setAsrKeyterms(e.target.value); setDirty(true); }} placeholder="e.g. SnapServe, API, webhook" rows={2} className="bg-card border-border text-foreground text-xs resize-none placeholder:text-muted-foreground" />
+                </div>
+
+                {/* ── Transcriber Fallback ─────────────────────────────────── */}
+                <div className="border border-border/50 rounded-lg p-3 space-y-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Transcriber Fallback</p>
+                  <ToggleRow label="Auto Fallback" desc="If primary STT fails, try fallback providers automatically" checked={asrAutoFallback} onChange={v => { setAsrAutoFallback(v); setDirty(true); }} />
+                  {asrAutoFallback && (
+                    <div className="space-y-2">
+                      {asrFallbackProviders.map((fb, idx) => (
+                        <div key={idx} className="flex items-center gap-2">
+                          <Select value={fb.provider} onValueChange={v => {
+                            const updated = asrFallbackProviders.map((f, i) => i === idx ? { ...f, provider: v, model: "" } : f);
+                            setAsrFallbackProviders(updated); setDirty(true);
+                          }}>
+                            <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground flex-1"><SelectValue /></SelectTrigger>
+                            <SelectContent className="bg-card border-border">
+                              {ASR_PROVIDERS.filter(p => p.value !== asrProvider).map(p => (
+                                <SelectItem key={p.value} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Select value={fb.model || "__none__"} onValueChange={v => {
+                            const updated = asrFallbackProviders.map((f, i) => i === idx ? { ...f, model: v === "__none__" ? "" : v } : f);
+                            setAsrFallbackProviders(updated); setDirty(true);
+                          }}>
+                            <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground w-[120px]"><SelectValue placeholder="Default model" /></SelectTrigger>
+                            <SelectContent className="bg-card border-border">
+                              <SelectItem value="__none__" className="text-foreground text-xs">Default</SelectItem>
+                              {(ASR_MODELS[fb.provider] ?? []).map((m: {value: string; label: string}) => (
+                                <SelectItem key={m.value} value={m.value} className="text-foreground text-xs">{m.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <button type="button" onClick={() => { setAsrFallbackProviders(asrFallbackProviders.filter((_, i) => i !== idx)); setDirty(true); }}
+                            className="text-muted-foreground hover:text-destructive transition-colors text-xs px-1">✕</button>
+                        </div>
+                      ))}
+                      <button type="button"
+                        onClick={() => {
+                          const available = ASR_PROVIDERS.filter(p => p.value !== asrProvider && !asrFallbackProviders.some(f => f.provider === p.value));
+                          if (available.length === 0) return;
+                          setAsrFallbackProviders([...asrFallbackProviders, { provider: available[0]!.value, model: "" }]);
+                          setDirty(true);
+                        }}
+                        className="text-xs text-primary hover:text-primary/80 transition-colors flex items-center gap-1">
+                        <span className="text-base leading-none">+</span> Add Fallback Provider
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
               {/* TTS */}
@@ -2052,7 +2105,29 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                     </div>
                     <SliderRow label="Confidence Threshold" desc="Discard transcripts below this score" value={asrConfidenceThreshold} onChange={v => { setAsrConfidenceThreshold(v); setDirty(true); }} min={0} max={1} step={0.01} />
                     <SliderRow label="End-of-Turn Timeout" desc="Max wait after speech ends" value={asrEndOfTurnTimeout} onChange={v => { setAsrEndOfTurnTimeout(v); setDirty(true); }} min={500} max={10000} step={100} unit="ms" />
-                    <ToggleRow label="Auto Fallback" desc="Switch to backup STT if primary fails" checked={asrAutoFallback} onChange={v => { setAsrAutoFallback(v); setDirty(true); }} />
+                    <ToggleRow label="Background Denoising" desc="noise_reduction param (Deepgram)" checked={asrBackgroundDenoising} onChange={v => { setAsrBackgroundDenoising(v); setDirty(true); }} />
+                    <div className="border border-border/50 rounded-lg p-3 space-y-3">
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Transcriber Fallback</p>
+                      <ToggleRow label="Auto Fallback" desc="Try fallback providers if primary fails" checked={asrAutoFallback} onChange={v => { setAsrAutoFallback(v); setDirty(true); }} />
+                      {asrAutoFallback && (
+                        <div className="space-y-2">
+                          {asrFallbackProviders.map((fb, idx) => (
+                            <div key={idx} className="flex items-center gap-2">
+                              <Select value={fb.provider} onValueChange={v => { const u = asrFallbackProviders.map((f, i) => i === idx ? { ...f, provider: v, model: "" } : f); setAsrFallbackProviders(u); setDirty(true); }}>
+                                <SelectTrigger className="h-7 text-xs bg-muted border-border text-foreground flex-1"><SelectValue /></SelectTrigger>
+                                <SelectContent className="bg-card border-border">
+                                  {ASR_PROVIDERS.filter(p => p.value !== asrProvider).map(p => <SelectItem key={p.value} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                              <button type="button" onClick={() => { setAsrFallbackProviders(asrFallbackProviders.filter((_, i) => i !== idx)); setDirty(true); }} className="text-muted-foreground hover:text-destructive text-xs px-1">✕</button>
+                            </div>
+                          ))}
+                          <button type="button" onClick={() => { const a = ASR_PROVIDERS.filter(p => p.value !== asrProvider && !asrFallbackProviders.some(f => f.provider === p.value)); if (a.length > 0) { setAsrFallbackProviders([...asrFallbackProviders, { provider: a[0]!.value, model: "" }]); setDirty(true); } }} className="text-xs text-primary hover:text-primary/80 flex items-center gap-1">
+                            <span className="text-base leading-none">+</span> Add Fallback
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </>}
                   {activeDrawer === "llm" && <>
                     <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50">LLM / Brain</p>
