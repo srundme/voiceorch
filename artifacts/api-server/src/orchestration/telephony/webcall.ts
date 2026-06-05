@@ -218,7 +218,7 @@ export async function handleWebCallWebSocket(
   }
 
   const sttConfig: STTConfig = {
-    language: agent.asrLanguage ?? null,
+    language: agent.asrLanguage ?? agent.language ?? null,
     backgroundDenoising: agent.asrBackgroundDenoising ?? false,
     confidenceThreshold: agent.asrConfidenceThreshold ?? 0.40,
     endOfTurnConfidence: agent.asrEndOfTurnConfidence ?? 0.70,
