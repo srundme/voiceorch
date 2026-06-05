@@ -41,6 +41,15 @@ AI voice agent orchestration SaaS platform — users bring their own provider AP
 - Call end flow (`PATCH /calls/:id/end`) auto-computes duration and updates agent success metrics
 - Analytics endpoints are read-only aggregations — no client-side computation needed
 
+## Auth (end-user)
+
+- **Standalone Google OAuth** — no Clerk. The platform owns the Google OAuth app (`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, shared with calendar) and issues its own session token.
+- Session token: HS256 JWT signed with `SESSION_SECRET` (`lib/session.ts`), 30-day TTL, carries Google `sub` + email + name. Delivered to the SPA via the callback URL fragment (`#session=<jwt>`); the frontend (`dashboard/src/lib/auth.tsx`) stores it in `localStorage["voiceorch:session"]`.
+- Client→server: `Authorization: Bearer <jwt>` (via `setAuthTokenGetter`/`getToken`), plus `?token=` query for SSE. `attachSession` middleware validates and sets `req.clerkUserId` (= Google sub) + `req.sessionPayload`.
+- `users.clerk_id` column is **repurposed** to store the Google `sub` (not renamed). First-time users provisioned with email/name/API keys + $5 welcome credit (`userProvisioning.ts`).
+- Login routes: `GET /api/auth/google/connect` (redirect), `GET /api/auth/google/callback` (issues token). `getAuth(req)` is a local shim (`lib/auth-compat.ts`) reading `req.clerkUserId` — kept so ~20 route files compile unchanged.
+- Admin auth is separate (`x-admin-token`) and untouched.
+
 ## Product
 
 - **Dashboard** — overview stats (agents, calls today, success rate, avg duration), call volume chart, status breakdown pie chart

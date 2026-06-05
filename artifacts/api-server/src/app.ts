@@ -1,11 +1,7 @@
 import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
-import { clerkMiddleware } from "@clerk/express";
-import {
-  CLERK_PROXY_PATH,
-  clerkProxyMiddleware,
-} from "./middlewares/clerkProxyMiddleware.js";
+import { attachSession } from "./middlewares/session.js";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { ipRateLimit, authRateLimit, isRateLimitExempt } from "./lib/rate-limit.js";
@@ -33,8 +29,6 @@ app.use(
   }),
 );
 
-app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
-
 app.use(cors({ credentials: true, origin: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -48,14 +42,11 @@ app.use((req, res, next) => {
   }
 });
 
-app.use(
-  clerkMiddleware({
-    publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
-    secretKey:      process.env.CLERK_SECRET_KEY,
-  }),
-);
+// Validate the platform session token (Bearer or ?token=) and populate
+// req.clerkUserId / req.sessionPayload before rate limiting + routing.
+app.use(attachSession);
 
-// Auth-based rate limiting (inner shield, after Clerk) — skip exempt paths
+// Auth-based rate limiting (inner shield, after session is attached) — skip exempt paths
 app.use((req, res, next) => {
   if (isRateLimitExempt(req.url)) {
     next();

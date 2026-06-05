@@ -7,7 +7,7 @@
  */
 
 import { Router, type IRouter } from "express";
-import { getAuth } from "@clerk/express";
+import { getAuth } from "../lib/auth-compat.js";
 import {
   db, campaignsTable, campaignLeadsTable, callsTable,
   incomingCallsTable, callCallbacksTable, callExecutionsTable,

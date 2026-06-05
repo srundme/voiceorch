@@ -11,7 +11,7 @@ import {
   Monitor, Search, CalendarDays,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { useClerk, useUser } from "@clerk/react";
+import { useAuth } from "@/lib/auth";
 import { useGetWallet } from "@workspace/api-client-react";
 import { SnapServeIcon } from "@/components/logo";
 
@@ -139,13 +139,12 @@ function WalletBadge() {
 
 /* ── User menu ──────────────────────────────────────────────────────────── */
 function UserMenu() {
-  const { signOut } = useClerk();
-  const { user }    = useUser();
+  const { signOut, user } = useAuth();
   const [open, setOpen] = useState(false);
 
-  const name     = user?.firstName ?? user?.emailAddresses?.[0]?.emailAddress?.split("@")[0] ?? "Account";
-  const email    = user?.emailAddresses?.[0]?.emailAddress ?? "";
-  const initials = (user?.firstName?.[0] ?? email[0] ?? "A").toUpperCase();
+  const email    = user?.email ?? "";
+  const name     = user?.name ?? (email ? email.split("@")[0] : "Account");
+  const initials = (name?.[0] ?? email[0] ?? "A").toUpperCase();
 
   return (
     <div className="relative">

@@ -10,10 +10,10 @@
  */
 
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "node:crypto";
+import { APP_SECRET } from "./app-secret.js";
 
-const RAW_SECRET = process.env.SESSION_SECRET ?? "insecure-local-dev-secret";
 // Stable 32-byte AES key derived from the app secret
-const ENCRYPTION_KEY = scryptSync(RAW_SECRET, "voiceorch-api-key-salt-v1", 32);
+const ENCRYPTION_KEY = scryptSync(APP_SECRET, "voiceorch-api-key-salt-v1", 32);
 
 const ALGO   = "aes-256-gcm";
 const PREFIX = "enc:v1:";

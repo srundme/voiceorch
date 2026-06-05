@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useLocation } from "wouter";
-import { useUser, useAuth } from "@clerk/react";
+import { useAuth } from "@/lib/auth";
 import { Mic, MicOff, X, Volume2, Bot, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -47,8 +47,7 @@ function newRecognition(): ISpeechRecognition | null {
 
 export function VoiceAssistant() {
   const [, navigate] = useLocation();
-  const { user } = useUser();
-  const { getToken } = useAuth();
+  const { user, getToken } = useAuth();
 
   const [open, setOpen]         = useState(false);
   const [phase, setPhase]       = useState<Phase>("idle");
@@ -61,7 +60,7 @@ export function VoiceAssistant() {
   const recognitionRef = useRef<ISpeechRecognition | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const userName = user?.firstName ?? user?.fullName?.split(" ")[0] ?? "";
+  const userName = user?.name?.split(" ")[0] ?? "";
 
   // Auto-scroll messages
   useEffect(() => {

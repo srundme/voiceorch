@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { useAuth } from "@clerk/react";
+import { useAuth } from "@/lib/auth";
 import { useLocation } from "wouter";
 import { CreateAgentDialog } from "@/components/create-agent-dialog";
 import {

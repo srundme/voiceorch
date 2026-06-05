@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useRoute, useLocation } from "wouter";
-import { useAuth } from "@clerk/react";
+import { useAuth } from "@/lib/auth";
 import { useMutation } from "@tanstack/react-query";
 import {
   useGetCampaign, useListLeadSources, useCreateLeadSource,

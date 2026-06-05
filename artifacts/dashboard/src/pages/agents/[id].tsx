@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { useAuth } from "@clerk/react";
+import { useAuth } from "@/lib/auth";
 import { Link, useParams, useLocation } from "wouter";
 import { format, parseISO } from "date-fns";
 import {

@@ -15,9 +15,9 @@
  */
 
 import { createHmac, scryptSync } from "node:crypto";
+import { APP_SECRET } from "../../lib/app-secret.js";
 
-const RAW_SECRET = process.env["SESSION_SECRET"] ?? "insecure-local-dev-secret";
-const SIGNING_KEY = scryptSync(RAW_SECRET, "voiceorch-booking-token-salt-v1", 32);
+const SIGNING_KEY = scryptSync(APP_SECRET, "voiceorch-booking-token-salt-v1", 32);
 
 export type TokenAction = "cancel" | "reschedule";
 

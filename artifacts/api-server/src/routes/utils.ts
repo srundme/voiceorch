@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { getAuth } from "@clerk/express";
+import { getAuth } from "../lib/auth-compat.js";
 import { normalizePhone, type WorkspacePhoneConfig } from "../services/phone-normalization.js";
 
 const router: IRouter = Router();

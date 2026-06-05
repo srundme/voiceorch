@@ -4,3 +4,4 @@
 - [Replit production inter-service networking](replit-production-networking.md) — localhost:80 (proxy) not available inside production container; localhost:PORT works for same-VM services
 - [Scheduling booking path triplication](booking-path-triplication.md) — gcal/email/webhook logic is inlined in 3 separate paths (agent tool-executor, public routes, authed routes); change all three
 - [drizzle-kit push gotchas](drizzle-push-gotchas.md) — long FK names truncate at 63 chars → push loops "Changes applied" forever; raw-SQL-only columns drift silently and get dropped
+- [api-server no hot-reload](api-server-no-hot-reload.md) — backend runs a prebuilt esbuild bundle; restart the workflow after route/middleware edits or new endpoints 404

@@ -51,6 +51,7 @@ import utilsRouter from "./utils.js";
 import webcallNotifyRouter from "./webcall-notify.js";
 import voicesRouter from "./voices.js";
 import testToolRouter from "./test-tool.js";
+import authRouter from "./auth.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
 const router: IRouter = Router();
@@ -64,6 +65,9 @@ router.use(ambientSoundsRouter);
 
 // Public campaign lead webhook — must be before provisionUser (no Clerk session needed)
 router.use(campaignWebhookRouter);
+
+// Public auth routes — Google login redirect + callback (no session required)
+router.use(authRouter);
 
 // Public utility routes — no auth required
 router.use(voicesRouter);

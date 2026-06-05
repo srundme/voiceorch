@@ -8,7 +8,7 @@
  */
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { useLocation } from "wouter";
-import { useAuth } from "@clerk/react";
+import { useAuth } from "@/lib/auth";
 import { PhoneIncoming, PhoneOff, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 

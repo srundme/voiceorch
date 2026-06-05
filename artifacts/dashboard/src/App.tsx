@@ -1,11 +1,10 @@
 import { useEffect, useRef } from "react";
 import { Switch, Route, Router as WouterRouter, useLocation, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
-import { ClerkProvider, SignIn, SignUp, Show, useClerk, useAuth } from "@clerk/react";
-import { publishableKeyFromHost } from "@clerk/react/internal";
-import { shadcn } from "@clerk/themes";
+import { AuthProvider, useAuth, SignedIn, SignedOut } from "@/lib/auth";
 import { setAuthTokenGetter, setDefaultTimeoutMs, useGetOnboardingStatus } from "@workspace/api-client-react";
 import { Toaster } from "@/components/ui/toaster";
+import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeSync } from "@/components/theme-sync";
@@ -72,69 +71,7 @@ if (_storedTimeout !== null) {
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-const clerkPubKey = publishableKeyFromHost(
-  window.location.hostname,
-  import.meta.env.VITE_CLERK_PUBLISHABLE_KEY,
-);
-
-const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
-
-function stripBase(path: string): string {
-  return basePath && path.startsWith(basePath)
-    ? path.slice(basePath.length) || "/"
-    : path;
-}
-
-const clerkAppearance = {
-  theme: shadcn,
-  cssLayerName: "clerk" as const,
-  options: {
-    logoPlacement: "inside" as const,
-    logoLinkUrl: basePath || "/",
-    logoImageUrl: `${window.location.origin}${basePath}/logo.svg`,
-  },
-  variables: {
-    colorPrimary: "#ededed",
-    colorForeground: "#f4f4f5",
-    colorMutedForeground: "#a1a1aa",
-    colorDanger: "#c45454",
-    colorBackground: "#0a0a0a",
-    colorInput: "#1a1a1a",
-    colorInputForeground: "#f4f4f5",
-    colorNeutral: "#262626",
-    fontFamily: "inherit",
-    borderRadius: "0.5rem",
-  },
-  elements: {
-    rootBox: "w-full flex justify-center",
-    cardBox: "bg-zinc-950/80 backdrop-blur-xl rounded-2xl w-[440px] max-w-full overflow-hidden border border-zinc-800",
-    card: "!shadow-none !border-0 !bg-transparent !rounded-none",
-    footer: "!shadow-none !border-0 !bg-transparent !rounded-none",
-    headerTitle: "text-white font-semibold",
-    headerSubtitle: "text-zinc-400",
-    socialButtonsBlockButtonText: "text-zinc-300",
-    formFieldLabel: "text-zinc-300",
-    footerActionLink: "text-zinc-200 hover:text-white",
-    footerActionText: "text-zinc-500",
-    dividerText: "text-foreground",
-    identityPreviewEditButton: "text-zinc-200",
-    formFieldSuccessText: "text-zinc-200",
-    alertText: "text-zinc-300",
-    logoBox: "",
-    logoImage: "w-8 h-8",
-    socialButtonsBlockButton: "border-zinc-800 hover:bg-zinc-900",
-    formButtonPrimary: "bg-zinc-100 hover:bg-white text-zinc-900 font-semibold",
-    formFieldInput: "bg-zinc-900 border-zinc-800 text-white placeholder-zinc-500",
-    footerAction: "",
-    dividerLine: "bg-zinc-800",
-    alert: "bg-zinc-900 border-zinc-800",
-    otpCodeFieldInput: "bg-zinc-900 border-zinc-800 text-white",
-    formFieldRow: "",
-    main: "",
-  },
-};
-
-function ClerkAuthSync() {
+function AuthTokenSync() {
   const { getToken } = useAuth();
   useEffect(() => {
     setAuthTokenGetter(() => getToken());
@@ -143,52 +80,71 @@ function ClerkAuthSync() {
   return null;
 }
 
-function ClerkQueryClientCacheInvalidator() {
-  const { addListener } = useClerk();
+function QueryClientCacheInvalidator() {
+  const { userId } = useAuth();
   const qc = useQueryClient();
   const prevUserIdRef = useRef<string | null | undefined>(undefined);
 
   useEffect(() => {
-    const unsub = addListener(({ user }) => {
-      const userId = user?.id ?? null;
-      if (prevUserIdRef.current !== undefined && prevUserIdRef.current !== userId) {
-        qc.clear();
-      }
-      prevUserIdRef.current = userId;
-    });
-    return unsub;
-  }, [addListener, qc]);
+    if (prevUserIdRef.current !== undefined && prevUserIdRef.current !== userId) {
+      qc.clear();
+    }
+    prevUserIdRef.current = userId;
+  }, [userId, qc]);
 
   return null;
 }
 
-function SignInPage() {
+function GoogleGlyph() {
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
-      <SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} />
-    </div>
+    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
+      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.76h3.56c2.08-1.92 3.28-4.74 3.28-8.09Z" />
+      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.56-2.76c-.98.66-2.23 1.06-3.72 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23Z" />
+      <path fill="#FBBC05" d="M5.84 14.1a6.6 6.6 0 0 1 0-4.2V7.06H2.18a11 11 0 0 0 0 9.88l3.66-2.84Z" />
+      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1A11 11 0 0 0 2.18 7.06l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38Z" />
+    </svg>
   );
 }
 
-function SignUpPage() {
+function SignInPage() {
+  const { signIn } = useAuth();
+  const authError =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).has("auth_error");
+
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
-      <SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} />
+      <div className="w-[420px] max-w-full rounded-2xl border border-zinc-800 bg-zinc-950/80 p-10 backdrop-blur-xl">
+        <div className="flex flex-col items-center text-center">
+          <img src={`${basePath}/logo.svg`} alt="SnapServe" className="mb-6 h-10 w-10" />
+          <h1 className="text-xl font-semibold text-white">Welcome to SnapServe</h1>
+          <p className="mt-2 text-sm text-zinc-400">
+            Sign in to manage your voice agents. New here? You'll get $5 free credit to start building.
+          </p>
+        </div>
+
+        {authError && (
+          <div className="mt-6 rounded-lg border border-red-900/50 bg-red-950/40 px-4 py-3 text-sm text-red-300">
+            We couldn't sign you in. Please try again.
+          </div>
+        )}
+
+        <Button
+          onClick={signIn}
+          className="mt-8 flex w-full items-center justify-center gap-3 bg-zinc-100 font-semibold text-zinc-900 hover:bg-white"
+        >
+          <GoogleGlyph />
+          Continue with Google
+        </Button>
+      </div>
     </div>
   );
 }
 
 function HomeRedirect() {
-  return (
-    <>
-      <Show when="signed-in">
-        <Redirect to="/app" />
-      </Show>
-      <Show when="signed-out">
-        <LandingPage />
-      </Show>
-    </>
-  );
+  const { isLoaded, isSignedIn } = useAuth();
+  if (!isLoaded) return <SnapServeLoader />;
+  return isSignedIn ? <Redirect to="/app" /> : <LandingPage />;
 }
 
 function AppRoutes() {
@@ -254,47 +210,36 @@ function AppRoutes() {
 }
 
 function ProtectedApp() {
+  const { isLoaded } = useAuth();
+  if (!isLoaded) return <SnapServeLoader />;
   return (
     <>
-      <Show when="signed-in">
+      <SignedIn>
         <Switch>
           {/* Onboarding is full-screen — no sidebar layout */}
           <Route path="/app/onboarding" component={OnboardingPage} />
           {/* All other /app/* routes go through the onboarding gate + Layout */}
           <Route path="/app/*?" component={AppRoutes} />
         </Switch>
-      </Show>
-      <Show when="signed-out">
+      </SignedIn>
+      <SignedOut>
         <Redirect to="/" />
-      </Show>
+      </SignedOut>
     </>
   );
 }
 
 function Router() {
-  const [, setLocation] = useLocation();
   return (
-    <ClerkProvider
-      publishableKey={clerkPubKey}
-      proxyUrl={clerkProxyUrl}
-      appearance={clerkAppearance}
-      signInUrl={`${basePath}/sign-in`}
-      signUpUrl={`${basePath}/sign-up`}
-      localization={{
-        signIn: { start: { title: "Welcome back to SnapServe", subtitle: "Sign in to manage your voice agents" } },
-        signUp: { start: { title: "Create your SnapServe account", subtitle: "Get $5 free credit to start building" } },
-      }}
-      routerPush={(to) => setLocation(stripBase(to))}
-      routerReplace={(to) => setLocation(stripBase(to), { replace: true })}
-    >
+    <AuthProvider>
       <QueryClientProvider client={queryClient}>
-        <ClerkAuthSync />
-        <ClerkQueryClientCacheInvalidator />
+        <AuthTokenSync />
+        <QueryClientCacheInvalidator />
         <ThemeSync />
         <Switch>
           <Route path="/" component={HomeRedirect} />
           <Route path="/sign-in/*?" component={SignInPage} />
-          <Route path="/sign-up/*?" component={SignUpPage} />
+          <Route path="/sign-up/*?" component={SignInPage} />
           <Route path="/app/*?" component={ProtectedApp} />
           <Route path="/book/cancel" component={CancelBookingPage} />
           <Route path="/book/reschedule" component={RescheduleBookingPage} />
@@ -302,7 +247,7 @@ function Router() {
           <Route component={NotFound} />
         </Switch>
       </QueryClientProvider>
-    </ClerkProvider>
+    </AuthProvider>
   );
 }
 

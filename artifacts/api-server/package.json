@@ -11,8 +11,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@clerk/express": "^2.1.19",
-    "@clerk/shared": "^4.12.2",
     "@google-cloud/storage": "^7.19.0",
     "@google/generative-ai": "^0.24.1",
     "@upstash/redis": "^1.38.0",

@@ -1,50 +1,38 @@
-import { getAuth, clerkClient } from "@clerk/express";
 import type { Request, Response, NextFunction } from "express";
 import { randomBytes } from "crypto";
 import { db } from "@workspace/db";
 import { usersTable, walletTransactionsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
+import type { SessionPayload } from "../lib/session.js";
 
 function generateApiKey() { return `vok_${randomBytes(24).toString("hex")}`; }
 function generateOrgKey() { return `voo_${randomBytes(24).toString("hex")}`; }
 
 const FREE_CREDIT_CENTS = 500; // $5.00
 
-type ClerkIdentity = { email: string | null; name: string | null };
-
-async function fetchClerkIdentity(clerkId: string, log?: any): Promise<ClerkIdentity> {
-  try {
-    const u = await clerkClient.users.getUser(clerkId);
-    const primaryId = u.primaryEmailAddressId;
-    const primary = u.emailAddresses?.find((e) => e.id === primaryId) ?? u.emailAddresses?.[0];
-    const email = primary?.emailAddress ?? null;
-    const fullName = [u.firstName, u.lastName].filter(Boolean).join(" ").trim();
-    const name = fullName || u.username || null;
-    return { email, name };
-  } catch (err) {
-    log?.error?.({ err, clerkId }, "fetchClerkIdentity failed");
-    return { email: null, name: null };
-  }
-}
-
+/**
+ * Provision (or heal) the local user record for the authenticated Google
+ * account. Identity comes from the verified session payload set by
+ * `attachSession`; `users.clerk_id` stores the Google account subject id.
+ * First-time users get API keys and a $5 welcome credit.
+ */
 export async function provisionUser(req: Request, _res: Response, next: NextFunction): Promise<void> {
-  const auth = getAuth(req);
-  const clerkId = auth?.userId;
-  if (!clerkId) {
+  const session = (req as unknown as { sessionPayload?: SessionPayload }).sessionPayload;
+  if (!session) {
     next();
     return;
   }
 
+  const sub = session.sub;
   try {
-    let [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
+    let [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, sub));
     if (!user) {
-      const { email, name } = await fetchClerkIdentity(clerkId, (req as any).log);
       [user] = await db
         .insert(usersTable)
         .values({
-          clerkId,
-          email,
-          name,
+          clerkId: sub,
+          email: session.email,
+          name: session.name,
           walletBalanceCents: FREE_CREDIT_CENTS,
           freeCreditsGranted: true,
           apiKey: generateApiKey(),
@@ -60,15 +48,14 @@ export async function provisionUser(req: Request, _res: Response, next: NextFunc
         status: "completed",
       });
     } else if (user.email === null || user.name === null) {
-      const { email, name } = await fetchClerkIdentity(clerkId, (req as any).log);
-      if (email !== null || name !== null) {
+      if (session.email !== null || session.name !== null) {
         const [healed] = await db
           .update(usersTable)
           .set({
-            email: user.email ?? email,
-            name: user.name ?? name,
+            email: user.email ?? session.email,
+            name: user.name ?? session.name,
           })
-          .where(eq(usersTable.clerkId, clerkId))
+          .where(eq(usersTable.clerkId, sub))
           .returning();
         if (healed) user = healed;
       }
