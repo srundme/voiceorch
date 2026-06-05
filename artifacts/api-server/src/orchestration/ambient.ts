@@ -21,8 +21,11 @@
  *   onAudioOut(stream.mixIntoMulaw(ttsMulawChunk));
  */
 
-import { linearToMulaw, mulawToLinear } from "./audio.js";
+import { linearToMulaw, mulawToLinear, upsample8to16 } from "./audio.js";
 import { Storage } from "@google-cloud/storage";
+import { db, ambientSoundsTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
+import { spawn } from "child_process";
 import { logger } from "../lib/logger.js";
 
 // ── Track configuration ────────────────────────────────────────────────────────
@@ -150,6 +153,15 @@ export class AmbientNoiseStream {
     return pcmToMulaw(mixed);
   }
 
+  /**
+   * Mixes ambient noise under a PCM16/16 kHz speech buffer (the web-call audio
+   * format) at speech-level volume.  Ambient is generated at 8 kHz then upsampled
+   * to 16 kHz to match the speech sample rate before being summed in.
+   */
+  mixIntoPcm16k(speechPcm16k: Buffer): Buffer {
+    return mixAmbientIntoPcm16k(speechPcm16k, (n) => this.readPcm(n, this.speechVol));
+  }
+
   private readPcm(numSamples: number, vol: number): Buffer {
     const buf = Buffer.allocUnsafe(numSamples * 2);
     for (let i = 0; i < numSamples; i++) {
@@ -159,6 +171,24 @@ export class AmbientNoiseStream {
     }
     return buf;
   }
+}
+
+/** Shared PCM16/16 kHz ambient mixing helper used by both ambient stream types. */
+function mixAmbientIntoPcm16k(
+  speechPcm16k: Buffer,
+  readAmbient8k: (numSamples8k: number) => Buffer,
+): Buffer {
+  const samples16k = speechPcm16k.length >> 1;
+  const samples8k = Math.ceil(samples16k / 2);
+  const ambient8k = readAmbient8k(samples8k);
+  const ambient16k = upsample8to16(ambient8k);
+  const out = Buffer.allocUnsafe(speechPcm16k.length);
+  for (let i = 0; i < samples16k; i++) {
+    const speech = speechPcm16k.readInt16LE(i * 2);
+    const ambient = i * 2 + 1 < ambient16k.length ? ambient16k.readInt16LE(i * 2) : 0;
+    out.writeInt16LE(Math.max(-32767, Math.min(32767, speech + ambient)), i * 2);
+  }
+  return out;
 }
 
 // ── FileAmbientNoiseStream — uploaded PCM from GCS ────────────────────────────
@@ -198,6 +228,11 @@ export class FileAmbientNoiseStream {
       mixed.writeInt16LE(sum, i * 2);
     }
     return pcmToMulaw(mixed);
+  }
+
+  /** See AmbientNoiseStream.mixIntoPcm16k. */
+  mixIntoPcm16k(speechPcm16k: Buffer): Buffer {
+    return mixAmbientIntoPcm16k(speechPcm16k, (n) => this.readPcm(n, SPEECH_VOL));
   }
 
   private readPcm(numSamples: number, vol: number): Buffer {
@@ -241,6 +276,12 @@ const pcmCache = new Map<string, Buffer>();
  * Download the pre-converted PCM loop for an uploaded ambient sound from GCS.
  * Results are cached in-process for the lifetime of the server process.
  * Call invalidatePcmCache(id) when a sound is deleted.
+ *
+ * Self-healing: if the `loop.pcm` object is missing or empty (e.g. the upload's
+ * background transcode failed, or the sound predates PCM generation), the
+ * original file is re-transcoded on demand and the loop is written back to GCS
+ * so subsequent calls hit the fast path. Throws (with a logged reason) only when
+ * neither the PCM loop nor a usable original can be produced.
  */
 export async function loadPcmLoop(id: string): Promise<Buffer> {
   const cached = pcmCache.get(id);
@@ -249,14 +290,101 @@ export async function loadPcmLoop(id: string): Promise<Buffer> {
   const bucketId = process.env["DEFAULT_OBJECT_STORAGE_BUCKET_ID"];
   if (!bucketId) throw new Error("DEFAULT_OBJECT_STORAGE_BUCKET_ID not set");
 
+  const bucket = makeGcsClient().bucket(bucketId);
   const pcmKey = `ambient-sounds/${id}/loop.pcm`;
-  logger.info({ id, pcmKey }, "ambient: loading PCM loop from GCS");
 
-  const [data] = await makeGcsClient().bucket(bucketId).file(pcmKey).download();
-  const buf = Buffer.isBuffer(data) ? data : Buffer.from(data as Uint8Array);
+  // 1. Fast path — try the pre-converted PCM loop.
+  try {
+    const [exists] = await bucket.file(pcmKey).exists();
+    if (exists) {
+      const [data] = await bucket.file(pcmKey).download();
+      const buf = Buffer.isBuffer(data) ? data : Buffer.from(data as Uint8Array);
+      if (buf.length >= 2) {
+        pcmCache.set(id, buf);
+        logger.info({ id, bytes: buf.length }, "ambient: PCM loop loaded and cached");
+        return buf;
+      }
+      logger.warn({ id, pcmKey, bytes: buf.length }, "ambient: PCM loop is empty — regenerating from original");
+    } else {
+      logger.warn({ id, pcmKey }, "ambient: PCM loop missing in storage — regenerating from original");
+    }
+  } catch (err) {
+    logger.warn({ id, pcmKey, err }, "ambient: PCM loop download failed — attempting regeneration from original");
+  }
+
+  // 2. Self-heal — re-transcode from the stored original.
+  const buf = await regeneratePcmLoop(id, bucket, pcmKey);
   pcmCache.set(id, buf);
-  logger.info({ id, bytes: buf.length }, "ambient: PCM loop loaded and cached");
   return buf;
+}
+
+/** Re-transcode an uploaded sound's original file into the 8 kHz PCM loop. */
+async function regeneratePcmLoop(
+  id: string,
+  bucket: ReturnType<ReturnType<typeof makeGcsClient>["bucket"]>,
+  pcmKey: string,
+): Promise<Buffer> {
+  const [sound] = await db.select().from(ambientSoundsTable).where(eq(ambientSoundsTable.id, id));
+  if (!sound) throw new Error(`ambient: sound ${id} not found in DB — cannot regenerate PCM loop`);
+
+  const originalKey = sound.storageKey;
+  const [origExists] = await bucket.file(originalKey).exists();
+  if (!origExists) {
+    throw new Error(`ambient: original audio missing in storage (${originalKey}) — cannot regenerate PCM loop`);
+  }
+
+  logger.info({ id, originalKey }, "ambient: downloading original to regenerate PCM loop");
+  const [origData] = await bucket.file(originalKey).download();
+  const origBuf = Buffer.isBuffer(origData) ? origData : Buffer.from(origData as Uint8Array);
+
+  const pcmBuf = await transcodeToPcm8k(origBuf);
+  if (pcmBuf.length < 2) {
+    throw new Error(`ambient: transcode of ${originalKey} produced empty PCM — cannot regenerate PCM loop`);
+  }
+
+  // Write the loop back so future calls hit the fast path, and record the key.
+  try {
+    await bucket.file(pcmKey).save(pcmBuf, { contentType: "audio/pcm" });
+    await db.update(ambientSoundsTable).set({ pcmStorageKey: pcmKey }).where(eq(ambientSoundsTable.id, id));
+    logger.info({ id, pcmKey, bytes: pcmBuf.length }, "ambient: PCM loop regenerated and persisted to storage");
+  } catch (saveErr) {
+    // Even if persistence fails, return the freshly transcoded buffer for this call.
+    logger.warn({ id, pcmKey, saveErr }, "ambient: regenerated PCM loop but failed to persist — using in-memory copy");
+  }
+  return pcmBuf;
+}
+
+/** Transcode an arbitrary audio file buffer to raw s16le 8 kHz mono PCM via ffmpeg. */
+function transcodeToPcm8k(inputBuffer: Buffer): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn("ffmpeg", [
+      "-i", "pipe:0",
+      "-f", "s16le",
+      "-ar", "8000",
+      "-ac", "1",
+      "pipe:1",
+    ], { stdio: ["pipe", "pipe", "pipe"] });
+
+    const chunks: Buffer[] = [];
+    let settled = false;
+    proc.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
+    proc.on("error", (err) => { if (!settled) { settled = true; reject(err); } });
+    proc.on("close", (code: number | null) => {
+      if (settled) return;
+      settled = true;
+      if (code === 0) resolve(Buffer.concat(chunks));
+      else reject(new Error(`ffmpeg exited with code ${code ?? "null"}`));
+    });
+    proc.stdin.on("error", () => {});
+    try {
+      if (proc.stdin.writable) {
+        proc.stdin.write(inputBuffer);
+        proc.stdin.end();
+      }
+    } catch {
+      /* stdin already closed — close handler resolves/rejects */
+    }
+  });
 }
 
 /** Remove a cached PCM buffer when the corresponding sound is deleted. */

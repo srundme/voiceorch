@@ -84,50 +84,6 @@ function StatusBanner({ status }: { status: UploadStatus }) {
   );
 }
 
-function AudioPlayer({ soundId, name }: { soundId: string; name: string }) {
-  const [playing, setPlaying] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-
-  function toggle() {
-    if (!audioRef.current) {
-      const audio = new Audio();
-      const token2 = localStorage.getItem("adminToken") ?? "";
-      audio.src = `${BASE}/ambient-sounds/${soundId}/audio?token=${encodeURIComponent(token2)}`;
-      audio.onended = () => setPlaying(false);
-      audio.onerror = () => setPlaying(false);
-      audioRef.current = audio;
-    }
-    if (playing) {
-      audioRef.current.pause();
-      setPlaying(false);
-    } else {
-      audioRef.current.play().catch(() => setPlaying(false));
-      setPlaying(true);
-    }
-  }
-
-  useEffect(() => {
-    return () => {
-      audioRef.current?.pause();
-    };
-  }, []);
-
-  return (
-    <Button
-      variant="ghost"
-      size="sm"
-      onClick={toggle}
-      aria-label={playing ? `Pause ${name}` : `Play ${name}`}
-    >
-      {playing ? (
-        <Pause className="h-4 w-4" />
-      ) : (
-        <Play className="h-4 w-4" />
-      )}
-    </Button>
-  );
-}
-
 export default function AmbientSoundsPage() {
   const { toast } = useToast();
   const [sounds, setSounds] = useState<SoundRow[]>([]);
@@ -135,9 +91,71 @@ export default function AmbientSoundsPage() {
   const [status, setStatus] = useState<UploadStatus>({ kind: "idle" });
   const [name, setName] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [playingId, setPlayingId] = useState<string | null>(null);
+  const previewRef = useRef<HTMLAudioElement | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const isUploading = status.kind === "uploading";
+
+  function stopPreview() {
+    if (previewRef.current) {
+      previewRef.current.pause();
+      previewRef.current = null;
+    }
+    setPlayingId(null);
+  }
+
+  function togglePreview(id: string) {
+    // Clicking the currently-playing track pauses it.
+    if (playingId === id) {
+      stopPreview();
+      return;
+    }
+    // Only one preview plays at a time — stop any other before starting.
+    if (previewRef.current) {
+      previewRef.current.pause();
+      previewRef.current = null;
+    }
+    const token = localStorage.getItem("adminToken") ?? "";
+    const audio = new Audio(
+      `${BASE}/ambient-sounds/${id}/audio?token=${encodeURIComponent(token)}`,
+    );
+    previewRef.current = audio;
+    setPlayingId(id);
+    audio.onended = () => {
+      if (previewRef.current === audio) stopPreview();
+    };
+    audio.onerror = () => {
+      if (previewRef.current === audio) {
+        previewRef.current = null;
+        setPlayingId(null);
+      }
+      toast({
+        title: "Playback failed",
+        description:
+          "Could not play this sound. The audio file may be missing from storage or in an unsupported format.",
+        variant: "destructive",
+      });
+    };
+    audio.play().catch((err: unknown) => {
+      if (previewRef.current === audio) {
+        previewRef.current = null;
+        setPlayingId(null);
+      }
+      toast({
+        title: "Playback failed",
+        description: err instanceof Error ? err.message : "Could not start playback.",
+        variant: "destructive",
+      });
+    });
+  }
+
+  useEffect(() => {
+    return () => {
+      previewRef.current?.pause();
+      previewRef.current = null;
+    };
+  }, []);
 
   async function load() {
     setLoading(true);
@@ -328,7 +346,18 @@ export default function AmbientSoundsPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
-                    <AudioPlayer soundId={s.id} name={s.name} />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => togglePreview(s.id)}
+                      aria-label={playingId === s.id ? `Pause ${s.name}` : `Play ${s.name}`}
+                    >
+                      {playingId === s.id ? (
+                        <Pause className="h-4 w-4" />
+                      ) : (
+                        <Play className="h-4 w-4" />
+                      )}
+                    </Button>
                     <Button
                       variant="ghost"
                       size="sm"

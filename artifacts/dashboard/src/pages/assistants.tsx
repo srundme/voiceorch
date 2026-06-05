@@ -10,6 +10,7 @@ import {
   AlertTriangle, Target, AlignLeft, Zap, RefreshCw, ClipboardList, X,
   PhoneForwarded, Globe, CalendarPlus, CalendarClock, CalendarX, CalendarCheck, Wrench,
   ChevronRight, ChevronUp, GitBranch, MessageSquare, LayoutGrid, Workflow,
+  Play, Pause,
 } from "lucide-react";
 import {
   useListAgents,
@@ -1026,6 +1027,9 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
   const [cartesiaVoiceSource, setCartesiaVoiceSource]       = useState<"cartesia" | "whitelist" | "fallback">("fallback");
   const [voicePlaying, setVoicePlaying]                     = useState<string | null>(null);
   const voiceAudioRef                                       = useRef<HTMLAudioElement | null>(null);
+  const [ambientPreviewPlaying, setAmbientPreviewPlaying]   = useState<string | null>(null);
+  const ambientAudioRef                                     = useRef<HTMLAudioElement | null>(null);
+  const ambientPreviewUrlRef                                = useRef<string | null>(null);
   const [telephony, setTelephony]                           = useState("");
 
   // ── Tab 4 — Engine ──────────────────────────────────────────────
@@ -1096,6 +1100,58 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
     }
   }
 
+  // ── Ambient track preview ────────────────────────────────────────
+  // The user audio endpoint is Bearer-authenticated; <audio> can't send headers,
+  // so fetch it as an authenticated blob and play via an object URL.
+  function stopAmbientPreview() {
+    if (ambientAudioRef.current) {
+      ambientAudioRef.current.pause();
+      ambientAudioRef.current = null;
+    }
+    if (ambientPreviewUrlRef.current) {
+      URL.revokeObjectURL(ambientPreviewUrlRef.current);
+      ambientPreviewUrlRef.current = null;
+    }
+    setAmbientPreviewPlaying(null);
+  }
+
+  async function previewAmbient(soundId: string) {
+    if (ambientPreviewPlaying === soundId) {
+      stopAmbientPreview();
+      return;
+    }
+    stopAmbientPreview();
+    setAmbientPreviewPlaying(soundId);
+    try {
+      const res = await apiFetch(`/api/ambient-sounds/${soundId}/audio`);
+      if (!res.ok) throw new Error(`Preview failed (HTTP ${res.status})`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      ambientAudioRef.current = audio;
+      ambientPreviewUrlRef.current = url;
+      audio.onended = () => stopAmbientPreview();
+      audio.onerror = () => {
+        stopAmbientPreview();
+        toast({ title: "Playback failed", description: "Could not play this ambient track.", variant: "destructive" });
+      };
+      await audio.play();
+    } catch (err) {
+      stopAmbientPreview();
+      toast({
+        title: "Playback failed",
+        description: err instanceof Error ? err.message : "Could not preview this ambient track.",
+        variant: "destructive",
+      });
+    }
+  }
+
+  // Stop any ambient preview on unmount.
+  useEffect(() => {
+    return () => stopAmbientPreview();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ── Tab 5 — Call ────────────────────────────────────────────────
   const [maxDuration, setMaxDuration]                       = useState(300);
   const [silenceTimeout, setSilenceTimeout]                 = useState(30);
@@ -1105,6 +1161,14 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
 
   // ── Advanced (agentConfig JSONB) covers LLM/Audio/Engine/Call/Analytics/Inbound/WhatsApp advanced fields
   const [agentConfig, setAgentConfig]                       = useState<AgentCfg>({});
+
+  // Stop ambient preview when a different track is selected or the toggle is turned off.
+  useEffect(() => {
+    if (ambientPreviewPlaying && ambientPreviewPlaying !== agentConfig.ambientNoiseTrack) {
+      stopAmbientPreview();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentConfig.ambientNoiseTrack, agentConfig.ambientNoiseEnabled]);
 
   const [dirty, setDirty]                                   = useState(false);
   const [activeDrawer, setActiveDrawer]                     = useState<string | null>(null);
@@ -2269,12 +2333,26 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                   ) : !ambientSounds || ambientSounds.length === 0 ? (
                     <div className="h-7 flex items-center text-xs text-muted-foreground italic">No ambient sounds uploaded yet — ask your admin to add some.</div>
                   ) : (
-                    <Select value={cfg.ambientNoiseTrack ?? ""} onValueChange={v => setCfg({ ambientNoiseTrack: v })}>
-                      <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue placeholder="Select a track" /></SelectTrigger>
-                      <SelectContent className="bg-card border-border">
-                        {ambientSounds.map(s => <SelectItem key={s.id} value={s.id} className="text-foreground text-xs">{s.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <div className="flex items-center gap-2">
+                      <Select value={cfg.ambientNoiseTrack ?? ""} onValueChange={v => setCfg({ ambientNoiseTrack: v })}>
+                        <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue placeholder="Select a track" /></SelectTrigger>
+                        <SelectContent className="bg-card border-border">
+                          {ambientSounds.map(s => <SelectItem key={s.id} value={s.id} className="text-foreground text-xs">{s.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <button
+                        type="button"
+                        disabled={!cfg.ambientNoiseTrack}
+                        onClick={() => { if (cfg.ambientNoiseTrack) void previewAmbient(cfg.ambientNoiseTrack); }}
+                        aria-label={ambientPreviewPlaying && ambientPreviewPlaying === cfg.ambientNoiseTrack ? "Pause preview" : "Play preview"}
+                        title={cfg.ambientNoiseTrack ? "Preview track" : "Select a track to preview"}
+                        className="h-7 w-7 shrink-0 flex items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {ambientPreviewPlaying && ambientPreviewPlaying === cfg.ambientNoiseTrack
+                          ? <Pause className="h-3.5 w-3.5" />
+                          : <Play className="h-3.5 w-3.5" />}
+                      </button>
+                    </div>
                   )}
                 </div>}
                 <ToggleRow label="Noise Cancellation" desc="Filter background noise from caller audio" checked={noiseCancellationEnabled} onChange={v => { setNoiseCancellationEnabled(v); setDirty(true); }} />

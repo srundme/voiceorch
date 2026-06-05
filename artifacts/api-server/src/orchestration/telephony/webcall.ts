@@ -139,6 +139,15 @@ export async function handleWebCallWebSocket(
   }
   function sendStatus(status: Status) { send({ type: "status", status }); }
   function sendAudio(pcm: Buffer) { if (ws.readyState === ws.OPEN) { ws.send(pcm); lastChunkSentAt = Date.now(); } }
+  // Speech output: amplify the TTS PCM16/16kHz chunk, then mix continuous ambient
+  // background under it so the background audio is audible WHILE the agent speaks
+  // (matching the live telephony pipeline, which mixes ambient into every TTS chunk).
+  // The silence-fill interval is gated on `speaking`, so it never double-sends here.
+  function sendSpeechAudio(pcm16k: Buffer) {
+    const amplified = amplifyPcm(pcm16k, TTS_VOLUME_GAIN);
+    const out = ambientStream ? ambientStream.mixIntoPcm16k(amplified) : amplified;
+    sendAudio(out);
+  }
 
   // ── Load agent + provider keys ────────────────────────────────────────────
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId));
@@ -653,7 +662,7 @@ export async function handleWebCallWebSocket(
                 speakingStartedAt = Date.now();
                 for (let j = 0; j < audio.length; j += AUDIO_CHUNK_BYTES) {
                   if (closed || interrupted) break;
-                  sendAudio(amplifyPcm(audio.slice(j, j + AUDIO_CHUNK_BYTES), TTS_VOLUME_GAIN));
+                  sendSpeechAudio(audio.slice(j, j + AUDIO_CHUNK_BYTES));
                   await new Promise<void>((r) => setTimeout(r, 40));
                 }
                 speaking = false;
@@ -1014,7 +1023,7 @@ export async function handleWebCallWebSocket(
                 speakingStartedAt = Date.now();
                 for (let j = 0; j < audio.length; j += AUDIO_CHUNK_BYTES) {
                   if (closed || interrupted) break;
-                  sendAudio(amplifyPcm(audio.slice(j, j + AUDIO_CHUNK_BYTES), TTS_VOLUME_GAIN));
+                  sendSpeechAudio(audio.slice(j, j + AUDIO_CHUNK_BYTES));
                   await new Promise<void>((r) => setTimeout(r, 40));
                 }
                 speaking = false;
@@ -1108,7 +1117,7 @@ export async function handleWebCallWebSocket(
                   if (!closed) {
                     for (let j = 0; j < audio.length; j += AUDIO_CHUNK_BYTES) {
                       if (closed || interrupted) break;
-                      sendAudio(amplifyPcm(audio.slice(j, j + AUDIO_CHUNK_BYTES), TTS_VOLUME_GAIN));
+                      sendSpeechAudio(audio.slice(j, j + AUDIO_CHUNK_BYTES));
                       await new Promise<void>((r) => setTimeout(r, 40));
                     }
                   }
@@ -1207,7 +1216,7 @@ export async function handleWebCallWebSocket(
           if (closed || interrupted) break;
           const chunk = pcmOut.slice(j, j + AUDIO_CHUNK_BYTES);
           recording.addAgentChunk(chunk);
-          sendAudio(amplifyPcm(chunk, TTS_VOLUME_GAIN));
+          sendSpeechAudio(chunk);
           await new Promise<void>(r => setTimeout(r, 40));
         }
       }
@@ -1277,7 +1286,7 @@ export async function handleWebCallWebSocket(
                   if (!closed) {
                     for (let j = 0; j < audio.length; j += AUDIO_CHUNK_BYTES) {
                       if (closed || interrupted) break;
-                      sendAudio(amplifyPcm(audio.slice(j, j + AUDIO_CHUNK_BYTES), TTS_VOLUME_GAIN));
+                      sendSpeechAudio(audio.slice(j, j + AUDIO_CHUNK_BYTES));
                       await new Promise<void>((r) => setTimeout(r, 40));
                     }
                   }
@@ -1374,7 +1383,7 @@ export async function handleWebCallWebSocket(
             const { audio } = await tts.synthesize(agent.inactivityMessage);
             for (let j = 0; j < audio.length; j += AUDIO_CHUNK_BYTES) {
               if (closed) break;
-              sendAudio(amplifyPcm(audio.slice(j, j + AUDIO_CHUNK_BYTES), TTS_VOLUME_GAIN));
+              sendSpeechAudio(audio.slice(j, j + AUDIO_CHUNK_BYTES));
               await new Promise<void>((r) => setTimeout(r, 40));
             }
           } catch { /* ignore — still hang up */ }
@@ -1467,7 +1476,7 @@ export async function handleWebCallWebSocket(
 
         for (let j = 0; j < greetAudio.length; j += AUDIO_CHUNK_BYTES) {
           if (closed || interrupted) break;
-          sendAudio(amplifyPcm(greetAudio.slice(j, j + AUDIO_CHUNK_BYTES), TTS_VOLUME_GAIN));
+          sendSpeechAudio(greetAudio.slice(j, j + AUDIO_CHUNK_BYTES));
           await new Promise<void>(r => setTimeout(r, 40));
         }
 
