@@ -30,7 +30,7 @@ from pydantic import BaseModel
 
 
 async def _bg_warmup() -> None:
-    """Import librosa in a thread so the first real request is not slow.
+    """Import librosa and wav2vec2 model in threads so the first real request is not slow.
 
     Uses asyncio.create_task() (called from lifespan) so uvicorn completes
     startup immediately — this coroutine runs fully in the background.
@@ -42,6 +42,14 @@ async def _bg_warmup() -> None:
         except Exception:
             pass
     await loop.run_in_executor(concurrent.futures.ThreadPoolExecutor(max_workers=1), _load)
+
+    def _load_ml_v2():
+        try:
+            from gender_service_ml import _ModelLoader  # noqa: PLC0415
+            _ModelLoader.get()  # actually loads wav2vec2 weights into memory
+        except Exception:
+            pass
+    await loop.run_in_executor(concurrent.futures.ThreadPoolExecutor(max_workers=1), _load_ml_v2)
 
 
 @asynccontextmanager
@@ -202,6 +210,54 @@ async def detect_gender_ml_upload(file: UploadFile = File(...)):
     from gender_service import GenderService  # noqa: PLC0415
     svc = GenderService()
     return svc._run_detection(audio_bytes)
+
+
+# ── Gender ML v2 — file upload (wav2vec2 transformer) ────────────────────────
+
+@router.post("/gender-ml-v2")
+async def detect_gender_ml_v2_upload(file: UploadFile = File(...)):
+    """
+    Detect perceived gender using the wav2vec2 transformer ML model (v2).
+
+    Accepts: WAV (PCM16, 8 kHz mono from telephony path).
+    Buffers 2 seconds of caller audio and runs wav2vec2 inference.
+
+    Returns:
+        {
+            "estimated_gender": "male" | "female" | "unknown",
+            "confidence": float,
+            "processing_time_ms": int
+        }
+    """
+    import io    # noqa: PLC0415
+    import time  # noqa: PLC0415
+    import numpy as np   # noqa: PLC0415
+    import soundfile as sf  # noqa: PLC0415
+    audio_bytes = await file.read()
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="Empty audio file")
+    from gender_service_ml import MLGenderService  # noqa: PLC0415
+    t0 = time.monotonic()
+
+    # Decode WAV → mono float32 → int16 PCM bytes (MLGenderService buffer format)
+    audio_float, sr = sf.read(io.BytesIO(audio_bytes), dtype="float32", always_2d=False)
+    if audio_float.ndim > 1:
+        audio_float = audio_float.mean(axis=1)
+    pcm_bytes = (audio_float * 32768.0).astype(np.int16).tobytes()
+
+    svc = MLGenderService(enabled=True, sample_rate=int(sr))
+    svc._buffer.extend(pcm_bytes)
+    svc._run_detection()
+
+    result = svc.get_result()
+    processing_time_ms = int((time.monotonic() - t0) * 1000)
+    gender = result.get("gender", "neutral")
+    estimated_gender = gender if gender in ("male", "female") else "unknown"
+    return {
+        "estimated_gender": estimated_gender,
+        "confidence": result.get("confidence", 0.0),
+        "processing_time_ms": processing_time_ms,
+    }
 
 
 # ── Register router & run ─────────────────────────────────────────────────────
