@@ -74,6 +74,44 @@ const FS           = 8000;                       // samples per second
 const LOOP_SAMPLES = LOOP_SECONDS * FS;          // 64 000 samples
 const CHUNK_SAMPLES = 160;                       // 20 ms @ 8 kHz (1 mulaw chunk)
 
+// Every ambient loop (built-in *and* uploaded) is normalised to this RMS at
+// construction time so that the silence/speech volume multipliers below produce
+// a consistent, audible background regardless of a track's filter shaping or an
+// uploaded file's native level. ~5000 RMS ≈ -16 dBFS; with SILENCE_VOL the
+// silence-period ambient lands around -27 dBFS and the speech-mixed ambient
+// around -33 dBFS — clearly perceptible but well under the agent's voice.
+const TARGET_LOOP_RMS = 5000;
+
+// Volume applied to the (normalised) loop. Shared by built-in + uploaded tracks.
+const SILENCE_VOL = 0.28; // ambient while the agent is silent  (~-27 dBFS)
+const SPEECH_VOL  = 0.14; // ambient mixed under TTS speech      (~-33 dBFS)
+
+/**
+ * Scale an Int16 loop in place so its RMS matches `targetRms`, without clipping.
+ * If the loudest sample would exceed range after scaling, the scale is capped so
+ * peaks stay within ~95% of full scale (the loop may then sit slightly below the
+ * target RMS, which is fine — it just avoids introducing distortion).
+ */
+function normalizeLoopRms(loop: Int16Array, targetRms: number): void {
+  if (loop.length === 0) return;
+  let sumSq = 0;
+  let peak = 1;
+  for (let i = 0; i < loop.length; i++) {
+    const v = loop[i]!;
+    sumSq += v * v;
+    const a = Math.abs(v);
+    if (a > peak) peak = a;
+  }
+  const rms = Math.sqrt(sumSq / loop.length);
+  if (rms < 1) return; // effectively silent — nothing to normalise
+  let scale = targetRms / rms;
+  const maxScale = (0.95 * 32767) / peak;
+  if (scale > maxScale) scale = maxScale;
+  for (let i = 0; i < loop.length; i++) {
+    loop[i] = Math.max(-32767, Math.min(32767, Math.round(loop[i]! * scale)));
+  }
+}
+
 function generateLoop(track: string): Int16Array {
   const p    = TRACK_PARAMS[track] ?? DEFAULT_PARAMS;
   const prng = makeXorshift(hashStr(track));
@@ -98,6 +136,9 @@ function generateLoop(track: string): Int16Array {
     out[i] = Math.max(-32767, Math.min(32767, s));
   }
 
+  // Equalise the post-filter level so all tracks are audible at the same volume.
+  normalizeLoopRms(out, TARGET_LOOP_RMS);
+
   return out;
 }
 
@@ -120,10 +161,11 @@ export class AmbientNoiseStream {
 
   constructor(track: string) {
     const key = Object.keys(TRACK_PARAMS).find(k => k === track) ?? "office-ambience";
-    const p   = TRACK_PARAMS[key] ?? DEFAULT_PARAMS;
+    // Loops are RMS-normalised in generateLoop, so a single shared volume pair
+    // yields a consistent, audible background across every built-in track.
     this.loop       = generateLoop(key);
-    this.silenceVol = p.silenceVol;
-    this.speechVol  = p.speechVol;
+    this.silenceVol = SILENCE_VOL;
+    this.speechVol  = SPEECH_VOL;
   }
 
   /**
@@ -192,9 +234,9 @@ function mixAmbientIntoPcm16k(
 }
 
 // ── FileAmbientNoiseStream — uploaded PCM from GCS ────────────────────────────
-
-const SILENCE_VOL = 0.22;
-const SPEECH_VOL  = 0.10;
+// Shares the equalised SILENCE_VOL / SPEECH_VOL and RMS normalisation used by
+// the built-in tracks, so uploaded ambience is audible at the same background
+// level regardless of the original file's recording volume.
 
 export class FileAmbientNoiseStream {
   private readonly loop: Int16Array;
@@ -209,6 +251,8 @@ export class FileAmbientNoiseStream {
     for (let i = 0; i < samples; i++) {
       this.loop[i] = pcmBuffer.readInt16LE(i * 2);
     }
+    // Equalise uploaded-file level to match built-in tracks.
+    normalizeLoopRms(this.loop, TARGET_LOOP_RMS);
   }
 
   nextMulawChunk(): Buffer {
