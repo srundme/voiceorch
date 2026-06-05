@@ -1,5 +1,6 @@
 import { GenderDetector } from "./genderDetector.js";
 import { GenderDetectorML } from "./genderDetectorML.js";
+import { GenderDetectorMLv2 } from "./genderDetectorMLv2.js";
 import { buildDatetimeInjection } from "./datetimeInject.js";
 import { createSTTAdapter } from "./adapters/stt/index.js";
 import { toReadableError } from "./utils.js";
@@ -141,7 +142,7 @@ export class OrchestrationPipeline {
   private dtmfTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
   // Gender detection — fires once per call using early caller speech
-  private genderDetector: GenderDetector | GenderDetectorML;
+  private genderDetector: GenderDetector | GenderDetectorML | GenderDetectorMLv2;
 
   constructor(config: SessionConfig) {
     this.config = config;
@@ -154,9 +155,12 @@ export class OrchestrationPipeline {
     this.bargeInMinFrames       = config.agentConfig.bargeInMinFrames;
     this.bargeInEchoGraceMs     = config.agentConfig.bargeInEchoGraceMs;
     if (config.agentConfig.genderDetectionEnabled) {
-      this.genderDetector = config.agentConfig.genderDetectionProvider === "ml_model"
-        ? new GenderDetectorML(config.callId)
-        : new GenderDetector(config.callId);
+      const gp = config.agentConfig.genderDetectionProvider;
+      this.genderDetector = gp === "ml_model_v2"
+        ? new GenderDetectorMLv2(config.callId)
+        : gp === "ml_model"
+          ? new GenderDetectorML(config.callId)
+          : new GenderDetector(config.callId);
     } else {
       this.genderDetector = null as unknown as GenderDetector;
     }
@@ -946,6 +950,11 @@ export class OrchestrationPipeline {
     logger.info({ callId: this.config.callId, transcript, sttLatencyMs }, "Processing turn");
     this.config.onTranscript("user", transcript);
     this.conversationHistory.push({ role: "user", content: transcript });
+
+    // ── Progressive gender detection — fire after each confirmed user turn ──
+    // Non-blocking: updates genderDetector.gender for the next turn's salutation.
+    // GenderDetector (v0) auto-fires via addSpeechChunk and treats this as a no-op.
+    if (this.genderDetector && !this.genderDetector.locked) this.genderDetector.runDetection();
 
     // ── Guardrail route check ──
     // Fast word-overlap classifier — runs before the main LLM to intercept

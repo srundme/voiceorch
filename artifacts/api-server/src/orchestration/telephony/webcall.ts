@@ -15,6 +15,7 @@ import { decryptKey } from "../../lib/crypto.js";
 import { loadCallerProfile, injectCallerMemory, updateCallerProfile, detectCallbackRequest } from "../callerMemory.js";
 import { GenderDetector } from "../genderDetector.js";
 import { GenderDetectorML } from "../genderDetectorML.js";
+import { GenderDetectorMLv2 } from "../genderDetectorMLv2.js";
 import { buildDatetimeInjection } from "../datetimeInject.js";
 import {
   buildToolDefs,
@@ -429,7 +430,11 @@ export async function handleWebCallWebSocket(
   const femaleSal       = (agentCfg["genderDetectionFemaleSalutation"] as string  | undefined) ?? "Ma'am";
   const neutralSal      = (agentCfg["genderDetectionNeutralSalutation"] as string | undefined) ?? "";
   const genderDetector = genderEnabled
-    ? (genderProvider === "ml_model" ? new GenderDetectorML(callId, logger) : new GenderDetector(callId, logger))
+    ? genderProvider === "ml_model_v2"
+      ? new GenderDetectorMLv2(callId, logger)
+      : genderProvider === "ml_model"
+        ? new GenderDetectorML(callId, logger)
+        : new GenderDetector(callId, logger)
     : null;
 
   // ── Engine settings ────────────────────────────────────────────────────────
