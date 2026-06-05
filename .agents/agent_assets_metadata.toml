@@ -42,3 +42,15 @@ id = "qE36IUBD9z71Yv8qBfk4A"
 uri = "file://docs/SnapServe-Campaign-Book.md"
 type = "text"
 title = "SnapServe Campaign Book - Complete Campaign Module Guide"
+
+[[outputs]]
+id = "DmFqda6By8XSmPUDJXbMr"
+uri = "file://screenshots/privacy-page.jpg"
+type = "image"
+title = "Privacy Policy Page"
+
+[[outputs]]
+id = "aAu2M1UJ5NWrl_UL-qI9s"
+uri = "file://screenshots/terms-page.jpg"
+type = "image"
+title = "Terms of Service Page"
