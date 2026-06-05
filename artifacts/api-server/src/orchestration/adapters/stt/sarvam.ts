@@ -58,6 +58,7 @@ export class SarvamSTT implements STTAdapter {
   private readonly key: string;
   private readonly model: string;
   private readonly langCode: string;
+  private readonly endOfTurnTimeout: number;
 
   // Conditionally present — undefined for batch-only (saarika) models so the
   // pipeline's `if (stt.transcribeStream)` guard correctly bypasses streaming.
@@ -68,6 +69,7 @@ export class SarvamSTT implements STTAdapter {
     const candidate = model ?? "";
     this.model = VALID_SARVAM_STT_MODELS.has(candidate) ? candidate : DEFAULT_SARVAM_STT_MODEL;
     this.langCode = normaliseSarvamLang(cfg.language);
+    this.endOfTurnTimeout = cfg.endOfTurnTimeout;
 
     if (STREAMING_MODELS.has(this.model)) {
       this.transcribeStream = this.buildStreamingSession.bind(this);
@@ -129,7 +131,7 @@ export class SarvamSTT implements STTAdapter {
     // the conversation history).
     let latestTranscript = "";
     let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
-    const FALLBACK_MS = 2000; // fire if speech_end never arrives
+    const FALLBACK_MS = this.endOfTurnTimeout; // fire if speech_end never arrives
 
     function emitFinal() {
       if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
