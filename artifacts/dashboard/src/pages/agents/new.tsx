@@ -393,6 +393,7 @@ export default function AgentNew() {
     if (timezone) agentConfig["timezone"] = timezone;
     const submitData = {
       ...rest,
+      asrLanguage: rest.asrLanguage || null,
       ...(Object.keys(agentConfig).length > 0 ? { agentConfig } : {}),
       dispositionSchema: (rest.dispositionSchema ?? []).map(f => ({
         ...f,

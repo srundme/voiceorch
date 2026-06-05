@@ -70,6 +70,7 @@ export const agentFormSchema = z.object({
   endCallPhrases:           z.string().optional(),
   silenceTimeoutSeconds:    z.number().min(5).max(300).optional(),
   language:                 z.string().optional(),
+  asrLanguage:              z.string().optional(),
   backchannelingEnabled:    z.boolean().optional(),
   backchannelingFrequency:  z.number().min(0).max(1).optional(),
   webhookUrl:               z.string().optional(),
@@ -126,6 +127,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   if (timezone) agentConfig["timezone"] = timezone;
   return {
     ...rest,
+    asrLanguage: rest.asrLanguage || null,
     ...(Object.keys(agentConfig).length > 0 ? { agentConfig } : {}),
     dispositionSchema: (rest.dispositionSchema ?? []).map(f => ({
       ...f,
@@ -181,7 +183,7 @@ export default function AgentEdit() {
       ttsVoice: "", ttsModel: "", telephonyProvider: "twilio",
       systemPrompt: "", temperature: 0.10, maxDuration: 300,
       greetingMessage: "Hello", endCallPhrases: "", silenceTimeoutSeconds: 30,
-      language: "en-US", backchannelingEnabled: true, backchannelingFrequency: 0.5,
+      language: "en-US", asrLanguage: "", backchannelingEnabled: true, backchannelingFrequency: 0.5,
       webhookUrl: "", webhookSecret: "", noiseCancellationEnabled: true,
       promptVariables: [], vadSilenceMs: 250, bargeInEnabled: true, bargeInEnergyThreshold: 1200, bargeInMinFrames: 4,
       timezone: "",
@@ -229,6 +231,7 @@ export default function AgentEdit() {
       endCallPhrases:          agent.endCallPhrases ?? "",
       silenceTimeoutSeconds:   agent.silenceTimeoutSeconds ?? 30,
       language:                agent.language ?? "en-US",
+      asrLanguage:             agent.asrLanguage ?? "",
       backchannelingEnabled:    agent.backchannelingEnabled ?? true,
       backchannelingFrequency:  agent.backchannelingFrequency ?? 0.5,
       webhookUrl:               agent.webhookUrl ?? "",
@@ -450,6 +453,15 @@ export default function AgentEdit() {
                         </FormItem>
                       )} />
                     </div>
+
+                    <FormField control={form.control} name="asrLanguage" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>ASR Language Override</FormLabel>
+                        <FormControl><Input placeholder="e.g. en-IN, hi, ta-IN (leave blank to use Language above)" {...field} /></FormControl>
+                        <FormDescription className="text-[11px]">Overrides the general language for ASR only. Leave blank to use the Language field above.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
 
                     <div className="space-y-3 p-4 border rounded-md bg-muted/20">
                       <div className="flex items-center justify-between">

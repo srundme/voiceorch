@@ -136,7 +136,7 @@ export async function createSession(params: {
     ivrGreeting: (agentCfg["ivrGreeting"] as string | undefined) ?? null,
     ivrOptions: (agentCfg["ivrOptions"] as Array<{ digit: string; label: string; targetAgentId?: number }> | undefined) ?? [],
     sttConfig: {
-      language: agent.asrLanguage ?? agent.language ?? null,
+      language: agent.asrLanguage || agent.language || null,
       backgroundDenoising: agent.asrBackgroundDenoising ?? false,
       confidenceThreshold: agent.asrConfidenceThreshold ?? 0.40,
       endOfTurnConfidence: agent.asrEndOfTurnConfidence ?? 0.70,
