@@ -276,12 +276,20 @@ export async function handleWebCallWebSocket(
       streamSTT = stt.transcribeStream(
         (text, isFinal) => {
           if (!isFinal || !text.trim() || closed) return;
-          // Barge-in: if agent is speaking, interrupt immediately
+          // Barge-in: if agent is speaking, only interrupt if the transcript
+          // meets the same wordsForInterruption gate as energy-based barge-in.
+          // This prevents a faint background speaker (distant person) producing
+          // a short 1-word Sarvam/Deepgram transcript from cutting the agent off.
           if (speaking) {
+            const wc = text.trim().split(/\s+/).length;
+            if (wc < wordsForInterruption) {
+              logger.info({ callId, text, wc, wordsForInterruption }, "Webcall: ignoring short STT transcript during speaking");
+              return;
+            }
             interrupted = true;
             send({ type: "interrupted" });
             sendStatus("thinking");
-            logger.info({ callId }, "Webcall: barge-in via streaming STT");
+            logger.info({ callId, wc }, "Webcall: barge-in via streaming STT");
           } else if (speakingEndedAt > 0 && Date.now() - speakingEndedAt < BARGE_IN_END_GRACE_MS) {
             // Transcript arrived after speaking ended but within the end-grace window.
             // It was produced from frames fed to the STT provider *during* barge-in detection
@@ -317,10 +325,15 @@ export async function handleWebCallWebSocket(
                   (text: string, isFinal: boolean) => {
                     if (!isFinal || !text.trim() || closed) return;
                     if (speaking) {
+                      const wc = text.trim().split(/\s+/).length;
+                      if (wc < wordsForInterruption) {
+                        logger.info({ callId, text, wc, wordsForInterruption }, "Webcall: ignoring short transcript (fallback STT)");
+                        return;
+                      }
                       interrupted = true;
                       send({ type: "interrupted" });
                       sendStatus("thinking");
-                      logger.info({ callId }, "Webcall: barge-in via fallback streaming STT");
+                      logger.info({ callId, wc }, "Webcall: barge-in via fallback streaming STT");
                     } else if (speakingEndedAt > 0 && Date.now() - speakingEndedAt < BARGE_IN_END_GRACE_MS) {
                       logger.info({ callId, msSinceEnd: Date.now() - speakingEndedAt }, "Webcall: discarding post-speech transcript (fallback STT)");
                       return;
