@@ -30,3 +30,9 @@ id = "xhBxf0LigV5w9kDKmfCVl"
 uri = "file://.local/docs/campaign-ops-architecture-v1.md"
 type = "text"
 title = "SnapServe Campaign Operations Architecture v1.2 — Frozen"
+
+[[outputs]]
+id = "1qf9-ULja9_Q20pfZoJ0K"
+uri = "file://docs/SnapServe-Book.md"
+type = "text"
+title = "SnapServe Book - Complete Technical Guide"
