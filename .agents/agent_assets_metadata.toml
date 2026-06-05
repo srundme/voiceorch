@@ -36,3 +36,9 @@ id = "1qf9-ULja9_Q20pfZoJ0K"
 uri = "file://docs/SnapServe-Book.md"
 type = "text"
 title = "SnapServe Book - Complete Technical Guide"
+
+[[outputs]]
+id = "qE36IUBD9z71Yv8qBfk4A"
+uri = "file://docs/SnapServe-Campaign-Book.md"
+type = "text"
+title = "SnapServe Campaign Book - Complete Campaign Module Guide"

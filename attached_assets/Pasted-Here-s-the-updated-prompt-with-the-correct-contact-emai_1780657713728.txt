@@ -1,0 +1,48 @@
+Here's the updated prompt with the correct contact email:
+
+---
+
+> Create two public pages for my app at the following routes:
+> - `/privacy` → accessible at `https://snapserve.ai/privacy`
+> - `/terms` → accessible at `https://snapserve.ai/terms`
+>
+> **Company details to use:**
+> - App/Company name: **SnapServe AI**
+> - Website: **https://snapserve.ai**
+> - Contact email: **support@snapserve.ai**
+> - App description: An AI Voice Agent Orchestration platform that allows users to connect their Google Calendar for automated meeting scheduling and Google Meet link generation.
+>
+> **Privacy Policy page** (`/privacy`) must include these sections to pass Google OAuth verification:
+> - What data we collect (name, email, profile picture from Google login; Google Calendar data)
+> - Why we collect it (to authenticate users and enable calendar-based booking)
+> - How we use Google user data (only for scheduling, never sold to third parties)
+> - How we store and protect data
+> - Third-party services used (Google OAuth, Google Calendar API)
+> - User rights (access, delete, revoke Google permissions)
+> - Contact information: **support@snapserve.ai**
+> - Last updated date: **June 2026**
+>
+> **Terms of Service page** (`/terms`) must include:
+> - Acceptance of terms
+> - Description of the service
+> - User responsibilities
+> - Prohibited uses
+> - Intellectual property
+> - Limitation of liability
+> - Termination clause
+> - Governing law
+> - Contact information: **support@snapserve.ai**
+> - Last updated date: **June 2026**
+>
+> **Design requirements:**
+> - Match the existing app's styling/theme
+> - Clean, professional, readable layout
+> - Mobile responsive
+> - No login required to view these pages (fully public)
+> - Add a footer link to both pages from the main app (Privacy Policy | Terms of Service)
+>
+> These pages are required for **Google OAuth verification** so the content must be accurate, complete, and legally sufficient. Do not use placeholder text — fill in all sections with real content based on the app description above.
+
+---
+
+> ⚠️ **Important note:** Make sure `support@snapserve.ai` is an active email inbox before submitting to Google — they may send verification emails to it. If it's not set up yet, set up email forwarding on your domain first.
