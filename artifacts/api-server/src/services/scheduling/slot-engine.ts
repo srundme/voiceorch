@@ -1,4 +1,11 @@
-import { addMinutes, format, parseISO, isAfter, isBefore, eachDayOfInterval } from "date-fns";
+import {
+  addMinutes,
+  format,
+  parseISO,
+  isAfter,
+  isBefore,
+  eachDayOfInterval,
+} from "date-fns";
 import { toZonedTime, fromZonedTime } from "date-fns-tz";
 import {
   db,
@@ -85,7 +92,11 @@ export async function getAvailableSlots(
       rangeEndUTC,
     );
     logger.info(
-      { calendarId: calendar.id, connectionId: calendar.googleCalendarConnectionId, busyCount: gcalBusy.length },
+      {
+        calendarId: calendar.id,
+        connectionId: calendar.googleCalendarConnectionId,
+        busyCount: gcalBusy.length,
+      },
       "slot-engine: fetched GCal busy periods",
     );
   }
@@ -103,23 +114,37 @@ export async function getAvailableSlots(
     .where(
       and(
         eq(bookingsTable.calendarId, calendar.id),
-        or(eq(bookingsTable.status, "pending"), eq(bookingsTable.status, "confirmed")),
+        or(
+          eq(bookingsTable.status, "pending"),
+          eq(bookingsTable.status, "confirmed"),
+        ),
         lt(bookingsTable.slotStart, rangeEndUTC),
         gt(bookingsTable.slotEnd, rangeStartUTC),
       ),
     );
 
   // Fetch each booking's own event type to get its buffers (so conflicts are symmetric).
-  const bookingEventTypeIds = [...new Set(existingBookings.map((b) => b.eventTypeId))];
+  const bookingEventTypeIds = [
+    ...new Set(existingBookings.map((b) => b.eventTypeId)),
+  ];
   const bookingEventTypes = bookingEventTypeIds.length
     ? await db
-        .select({ id: eventTypesTable.id, bufferBeforeMins: eventTypesTable.bufferBeforeMins, bufferAfterMins: eventTypesTable.bufferAfterMins })
+        .select({
+          id: eventTypesTable.id,
+          bufferBeforeMins: eventTypesTable.bufferBeforeMins,
+          bufferAfterMins: eventTypesTable.bufferAfterMins,
+        })
         .from(eventTypesTable)
-        .where(sql`${eventTypesTable.id} = ANY(${sql.raw(`ARRAY[${bookingEventTypeIds.join(",")}]`)})`)
+        .where(
+          sql`${eventTypesTable.id} = ANY(${sql.raw(`ARRAY[${bookingEventTypeIds.join(",")}]`)})`,
+        )
     : [];
   const etBufferMap = new Map(bookingEventTypes.map((et) => [et.id, et]));
 
-  const days = eachDayOfInterval({ start: rangeStartLocal, end: rangeEndLocal });
+  const days = eachDayOfInterval({
+    start: rangeStartLocal,
+    end: rangeEndLocal,
+  });
   const slots: TimeSlot[] = [];
 
   for (const day of days) {
@@ -131,7 +156,12 @@ export async function getAvailableSlots(
     const dayOfWeek = day.getDay();
     let windows: Array<{ startTime: string; endTime: string }> = [];
 
-    if (override && !override.isBlocked && override.startTime && override.endTime) {
+    if (
+      override &&
+      !override.isBlocked &&
+      override.startTime &&
+      override.endTime
+    ) {
       windows = [{ startTime: override.startTime, endTime: override.endTime }];
     } else {
       windows = schedules
@@ -172,7 +202,14 @@ export async function getAvailableSlots(
           const bAfter = bEt?.bufferAfterMins ?? 0;
           const bEffectiveStart = addMinutes(b.slotStart, -bBefore);
           const bEffectiveEnd = addMinutes(b.slotEnd, bAfter);
-          if (isOverlapping(effectiveStart, effectiveEnd, bEffectiveStart, bEffectiveEnd)) {
+          if (
+            isOverlapping(
+              effectiveStart,
+              effectiveEnd,
+              bEffectiveStart,
+              bEffectiveEnd,
+            )
+          ) {
             bufferConflicts++;
           }
           if (isOverlapping(slotStart, slotEnd, b.slotStart, b.slotEnd)) {
@@ -187,7 +224,9 @@ export async function getAvailableSlots(
         const noBufferViolation = bufferConflicts === exactConflicts; // all conflicts are within the exact slot (same slot, multi-capacity)
 
         // Reject the slot if it overlaps any Google Calendar busy window.
-        const gcalConflict = gcalBusy.some((b) => isOverlapping(slotStart, slotEnd, b.start, b.end));
+        const gcalConflict = gcalBusy.some((b) =>
+          isOverlapping(slotStart, slotEnd, b.start, b.end),
+        );
 
         if (withinCapacity && noBufferViolation && !gcalConflict) {
           slots.push({ slotStart, slotEnd });
@@ -213,7 +252,10 @@ export async function isSlotAvailable(
 ): Promise<boolean> {
   const conditions: any[] = [
     eq(bookingsTable.calendarId, calendarId),
-    or(eq(bookingsTable.status, "pending"), eq(bookingsTable.status, "confirmed")),
+    or(
+      eq(bookingsTable.status, "pending"),
+      eq(bookingsTable.status, "confirmed"),
+    ),
     lt(bookingsTable.slotStart, slotEnd),
     gt(bookingsTable.slotEnd, slotStart),
   ];
@@ -230,6 +272,11 @@ export async function isSlotAvailable(
   return conflicts.length === 0;
 }
 
-function isOverlapping(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): boolean {
+function isOverlapping(
+  aStart: Date,
+  aEnd: Date,
+  bStart: Date,
+  bEnd: Date,
+): boolean {
   return isBefore(aStart, bEnd) && isAfter(aEnd, bStart);
 }
