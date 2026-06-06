@@ -1,0 +1,48 @@
+Here's the prompt to give to Replit:
+
+---
+
+> I need to create a comprehensive **low-level technical course** on AI Voice Agent development and Voice Orchestration, based entirely on the codebase in this Replit project (SnapServe AI / Bolna Orchestrator).
+>
+> **Target audience:**
+> - Developers (full-stack, backend)
+> - Agency owners who want to build and deploy their own voice AI systems
+> - AI/ML Engineers who want to implement voice orchestration pipelines
+>
+> **This is NOT a high-level overview course.** Every topic must go deep into actual implementation — real code, real architecture decisions, real debugging scenarios pulled directly from this codebase.
+>
+> **Please analyze the entire codebase and generate:**
+>
+> 1. A full **course curriculum** with module names and learning objectives
+> 2. A **topic list** for each module with specific subtopics
+> 3. For each topic, identify the **exact file, function, or code** in this project that demonstrates it
+> 4. Estimated **time per module**
+> 5. **Prerequisites** students need before starting
+> 6. **Hands-on project** ideas for each module (things students actually build)
+>
+> **Topics the curriculum must cover (use the actual codebase as the source):**
+> - Voice agent architecture and telephony pipeline
+> - AI orchestration and tool calling during live calls
+> - Scheduling system and slot engine implementation
+> - Google Calendar and Google OAuth integration
+> - Database schema design for voice AI systems
+> - Webhook design and event dispatching
+> - Multi-environment deployment (dev, staging, production on Replit)
+> - Authentication systems (Clerk replacement with Google OAuth)
+> - Real-time call handling and concurrency (advisory locks, race condition prevention)
+> - LLM prompt engineering for voice agents
+> - API design for voice orchestration platforms
+> - Testing and debugging voice AI systems
+>
+> **Output format:**
+> - Module number and title
+> - 1-line learning objective
+> - List of topics with the exact file/function reference from this codebase
+> - Estimated duration
+> - Hands-on exercise for that module
+>
+> The goal is for a developer or agency owner to finish this course and be able to **build, deploy, and scale their own AI Voice Agent Orchestration platform from scratch.**
+
+---
+
+This will give you a curriculum grounded in your actual code — not generic AI content. Once Replit generates the curriculum, share it here and I'll help you structure it into a proper course outline with pricing and platform recommendations.
