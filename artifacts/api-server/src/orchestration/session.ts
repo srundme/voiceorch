@@ -18,6 +18,7 @@ import {
   loadCallerProfile,
   injectCallerMemory,
   updateCallerProfile,
+  latchCallerName,
   detectCallbackRequest,
   type CallerProfile,
 } from "./callerMemory.js";
@@ -374,6 +375,21 @@ export async function createSession(params: {
     rawPcmOutput: params.telephonyProvider === "vobiz",
     onTranscript: (speaker, text) => {
       logger.debug({ callId: callRecord.id, speaker, text: text.slice(0, 80) }, "Transcript");
+      // Real-time name latch — persist immediately so the name is saved even
+      // if the call drops before the post-call LLM extraction runs.
+      if (speaker === "user" && callerPhone) {
+        void latchCallerName({
+          agentId:      params.agentId,
+          phoneNumber:  callerPhone,
+          transcript:   text,
+          existingName: callerProfileSnapshot?.name ?? null,
+          callId:       callRecord.id,
+        }).then((latched) => {
+          if (latched && callerProfileSnapshot) {
+            callerProfileSnapshot = { ...callerProfileSnapshot, name: latched };
+          }
+        });
+      }
     },
     onCallEnd: () => {
       naturalEndTriggered = true;

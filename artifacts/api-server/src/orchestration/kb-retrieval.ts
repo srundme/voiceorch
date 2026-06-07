@@ -3,6 +3,14 @@ import { eq, and } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 
 /**
+ * Hard ceiling on KB entries sent to the LLM.
+ * Beyond ~200 entries the context window gets overwhelmed and recall degrades.
+ * Entries are fetched in DB insertion order; the most recently added entries
+ * are excluded when the source exceeds this cap.
+ */
+const MAX_KB_ENTRIES = 200;
+
+/**
  * Load all knowledge entries for a source and format them as a
  * prompt-injectable context block.
  *
@@ -23,9 +31,16 @@ export async function retrieveKbContext(
       .select()
       .from(knowledgeEntriesTable)
       .where(eq(knowledgeEntriesTable.sourceId, knowledgeSourceId))
-      .limit(Math.max(topK, 50));
+      .limit(Math.min(Math.max(topK, 50), MAX_KB_ENTRIES));
 
     if (!entries.length) return "";
+
+    if (entries.length >= MAX_KB_ENTRIES) {
+      logger.warn(
+        { knowledgeSourceId, cap: MAX_KB_ENTRIES },
+        "KB entries capped at MAX_KB_ENTRIES — source has more entries than were injected into the prompt",
+      );
+    }
 
     return entries
       .map(e => {

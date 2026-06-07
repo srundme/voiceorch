@@ -359,3 +359,76 @@ export async function detectCallbackRequest(opts: {
     "Scheduled callback registered",
   );
 }
+
+// ── Real-time name latch ──────────────────────────────────────────────────────
+
+/**
+ * Regex patterns that detect a caller self-introducing their name.
+ * Matches common spoken phrases; deliberately conservative to avoid false positives.
+ * Capture group 1 is the name (one or two capitalised words).
+ */
+const NAME_PATTERNS: RegExp[] = [
+  /\bmy name is ([A-Za-z][a-z]+(?: [A-Za-z][a-z]+)?)\b/i,
+  /\bi(?:'m| am) ([A-Za-z][a-z]+(?: [A-Za-z][a-z]+)?)\b/i,
+  /\bthis is ([A-Za-z][a-z]+(?: [A-Za-z][a-z]+)?)(?:\s+(?:speaking|calling|here))?\b/i,
+  /\bcall me ([A-Za-z][a-z]+(?: [A-Za-z][a-z]+)?)\b/i,
+  /\bname(?:'s| is) ([A-Za-z][a-z]+(?: [A-Za-z][a-z]+)?)\b/i,
+];
+
+/** Common words that match the patterns but are never real names. */
+const NAME_STOPWORDS = new Set([
+  "sure", "sorry", "good", "fine", "here", "happy", "okay", "just",
+  "calling", "speaking", "back", "checking", "looking", "trying",
+  "not", "also", "right", "ready", "interested",
+]);
+
+/**
+ * Inspect a single user-turn transcript for a name self-introduction.
+ * If a name is detected that differs from the existing cached name, the
+ * new name is immediately persisted to `caller_profiles` so it is saved
+ * even if the call drops before the post-call LLM extraction runs.
+ *
+ * Designed to be called fire-and-forget from the onTranscript hook.
+ * Never throws — all errors are logged and swallowed.
+ *
+ * Returns the detected (and persisted) name, or null if nothing new was found.
+ */
+export async function latchCallerName(opts: {
+  agentId: number;
+  phoneNumber: string;
+  transcript: string;
+  existingName: string | null;
+  callId: number;
+}): Promise<string | null> {
+  const { agentId, phoneNumber, transcript, existingName, callId } = opts;
+
+  let detected: string | null = null;
+  for (const pattern of NAME_PATTERNS) {
+    const match = transcript.match(pattern);
+    const candidate = match?.[1]?.trim();
+    if (candidate && !NAME_STOPWORDS.has(candidate.toLowerCase())) {
+      detected = candidate;
+      break;
+    }
+  }
+
+  if (!detected) return null;
+  if (detected.toLowerCase() === existingName?.toLowerCase()) return null;
+
+  try {
+    await db
+      .update(callerProfilesTable)
+      .set({ name: detected, updatedAt: new Date() })
+      .where(
+        and(
+          eq(callerProfilesTable.agentId, agentId),
+          eq(callerProfilesTable.phoneNumber, phoneNumber),
+        ),
+      );
+    logger.info({ callId, agentId, phoneNumber, detectedName: detected }, "Caller name latched in real-time");
+    return detected;
+  } catch (err) {
+    logger.warn({ callId, agentId, phoneNumber, err }, "Real-time caller name latch DB write failed");
+    return null;
+  }
+}
