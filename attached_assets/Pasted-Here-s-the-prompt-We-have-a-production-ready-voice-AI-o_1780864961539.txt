@@ -1,0 +1,38 @@
+Here's the prompt:
+
+---
+
+> We have a production-ready voice AI orchestration system. Core pipeline is solid — STT path isolation, barge-in protection, worker load balancing, memory retry durability are all in place. Now I want to implement the next layer of improvements to push toward best-in-class latency and conversation quality. Implement the following four changes in order of priority:
+>
+> **Priority 1 — Parallel Prefetch During Speech (`pipeline.ts`)**
+> Currently: STT finishes → then memory fetch + KB retrieval start → then LLM called.
+> Change: On VAD speech-start (when first speech frame is detected), immediately fire `loadCallerProfile()` and `retrieveKbContext()` in parallel using `Promise.all`. Use the partial transcript from streaming STT (or an empty query for batch) to seed the KB fetch. By the time STT finishes, memory and KB are already resolved. Pass pre-fetched results directly into `processTurn()` — skip the fetch inside the turn loop if results are already available. Expected latency saving: 150-300ms per turn.
+>
+> **Priority 2 — Semantic Utterance Router (new file: `services/utterance-router.ts`)**
+> Before calling the LLM in `processTurn()`, classify the transcript into one of three tiers:
+> - `SIMPLE` — FAQ, greeting, confirmation, closing. Route to Groq + Llama 3.3 70B (fastest, cheapest)
+> - `TOOL` — requires tool calling (scheduling, transfer, lookup). Route to GPT-4o mini
+> - `COMPLEX` — multi-step reasoning, edge cases, objection handling. Route to the agent's configured primary LLM
+>
+> Use a lightweight classifier prompt (single LLM call with max_tokens: 10, respond only with SIMPLE / TOOL / COMPLEX). Run this classification on Groq regardless of agent config — it must be fast. Then route accordingly. Add a `routingLatencyMs` metric to the latency tracker.
+>
+> **Priority 3 — Filler Audio for Dead Air (`pipeline.ts` + `session.ts`)**
+> Pre-generate a set of filler audio clips at session start using the agent's configured TTS voice:
+> - "One moment please..."
+> - "Let me check that for you..."
+> - "Sure, give me just a second..."
+>
+> Store as PCM buffers in session memory. When `processTurn()` starts and LLM has not returned a first token within 800ms, automatically play a randomly selected filler clip. Cancel filler playback the moment first LLM token arrives. Do not play filler if the turn is classified as `SIMPLE` (response will arrive before the threshold anyway). Track `fillerPlayedCount` in session metrics.
+>
+> **Priority 4 — Explicit Call State Machine (`pipeline.ts`)**
+> Replace all boolean flags (`isPlaying`, `isBargingIn`, `isProcessing`, etc.) with an explicit state machine. States:
+> - `IDLE` — no audio activity
+> - `LISTENING` — VAD detecting speech, buffering audio
+> - `PROCESSING` — STT + LLM + memory fetch in progress
+> - `SPEAKING` — TTS playing to caller
+> - `BARGE_IN` — user interrupted, cancelling TTS, transitioning to LISTENING
+> - `ERROR` — unrecoverable turn failure, session recovery logic runs
+>
+> Valid transitions only: IDLE→LISTENING, LISTENING→PROCESSING, PROCESSING→SPEAKING, SPEAKING→BARGE_IN, BARGE_IN→LISTENING, any→ERROR. Reject invalid transitions with a warning log. Expose current state in session metrics. This will make future debugging, feature additions, and error recovery dramatically cleaner.
+>
+> For each priority, show the exact files changed, the specific lines modified, and the before/after code. Do not refactor anything outside the scope of these four changes.

@@ -41,6 +41,13 @@ const CHUNK_SIZE_MULAW        = 160;    // 20ms @ 8kHz mulaw for paced batch pla
 const VAD_THRESHOLD           = 100;    // RMS threshold for speech detection
 const STREAM_ACCUM_BYTES      = 640;    // 20ms of 16kHz PCM before forwarding a TTS stream chunk
 const HANDOFF_SILENCE_MS      = 3000;   // sustained silence that may indicate a phone handoff
+const FILLER_THRESHOLD_MS     = 800;    // play a filler phrase if LLM has not returned a first
+                                        // token within this window (and backchannel didn't fire)
+const FILLER_PHRASES = [
+  "One moment please...",
+  "Let me check that for you...",
+  "Sure, give me just a second...",
+];
 const TTS_STREAM_TIMEOUT_MS   = 8000;   // abort TTS streaming fetch if no data within 8 s —
                                          // prevents a hung Cartesia/ElevenLabs connection from
                                          // silencing the call until Vobiz times out and drops it
@@ -113,8 +120,18 @@ export class OrchestrationPipeline {
   private streamSTTReconnectAttempts = 0;
   private streamSTTReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
+  // KB prefetch — fired on the first speech frame of a new utterance so the
+  // result is ready by the time STT finishes and processTurn() starts.
+  // Consumed (set to null) at the top of processTurn() to avoid stale reuse.
+  private kbPrefetchPromise: Promise<string | null> | null = null;
+  // Tracks whether we are currently inside an active speech segment for the
+  // streaming STT path (where there is no audioBuffer to check against).
+  private inSpeechSegment = false;
+
   // Metrics
   private firstAudioSentAt: number | null = null;
+  // Count of filler phrases played due to slow LLM response (>800 ms to first token)
+  private fillerPlayedCount = 0;
 
   // Usage accumulators — updated on every LLM call and every TTS synthesis.
   // Exposed via getUsageTotals() so session.ts can pass real values to recordUsage().
@@ -281,6 +298,10 @@ export class OrchestrationPipeline {
    * Handles barge-in detection and queuing if a turn is already in progress.
    */
   private async handleStreamingTranscript(transcript: string): Promise<void> {
+    // A final transcript marks the end of the current speech segment — reset the
+    // flag so the NEXT utterance triggers a fresh KB prefetch.
+    this.inSpeechSegment = false;
+
     if (this.bargeInEnabled && this.isPlaying && !this.bargeInRequested) {
       // Accumulate word count across streaming callbacks for this user turn and
       // only fire barge-in once the wordsForInterruption threshold is reached,
@@ -377,6 +398,16 @@ export class OrchestrationPipeline {
     if (this.streamSTT) {
       // Feed all frames (not just speech) — librosa pyin handles silence gracefully
       this.genderDetector?.addSpeechChunk(pcm8k);
+      // KB prefetch: fire on the first frame of a new speech segment so the lookup
+      // runs during the utterance rather than after STT resolves.
+      if (!this.inSpeechSegment && !this.isProcessing && this.agent.knowledgeBaseId) {
+        this.inSpeechSegment = true;
+        this.kbPrefetchPromise = retrieveKbContext(this.agent.knowledgeBaseId, "")
+          .catch((err) => {
+            logger.warn({ callId: this.config.callId, err }, "KB prefetch (streaming STT) failed");
+            return null;
+          });
+      }
       this.streamSTT.sendAudio(pcm16k);
       return;
     }
@@ -431,6 +462,16 @@ export class OrchestrationPipeline {
     if (this.isProcessing) return;
 
     if (hasSpeech) {
+      // KB prefetch: fire on the very first speech frame of a new utterance so
+      // the lookup runs while the user is still speaking + during the silence
+      // wait + during STT — well before processTurn() needs the result.
+      if (this.audioBuffer.length === 0 && this.agent.knowledgeBaseId) {
+        this.kbPrefetchPromise = retrieveKbContext(this.agent.knowledgeBaseId, "")
+          .catch((err) => {
+            logger.warn({ callId: this.config.callId, err }, "KB prefetch (batch STT) failed");
+            return null;
+          });
+      }
       this.audioBuffer.push(pcm8k);
       this.resetSilenceTimer();
     } else if (this.audioBuffer.length > 0) {
@@ -1048,33 +1089,41 @@ export class OrchestrationPipeline {
 
     const playPromise = playTask();
 
-    // ── KB retrieval: kick off immediately so it runs concurrently ───────────
-    // Start the KB lookup as a promise RIGHT NOW — before the backchannel phrase
-    // is even enqueued.  That way KB retrieval overlaps with the backchannel TTS
-    // playback instead of adding to LLM start latency.
+    // ── KB retrieval: use speech-start prefetch if available, else kick off now ─
+    // When a prefetch fired on first-speech-frame (handleProcessedAudio), the
+    // lookup has been running during the entire utterance + silence wait + STT
+    // and is likely already resolved by the time we reach this line.
+    // If no prefetch is available (agent has no KB, or prefetch wasn't triggered),
+    // fall back to launching it here so it still overlaps with backchannel TTS.
     let systemPromptForTurn = this.agent.systemPrompt;
     const dtInjection = buildDatetimeInjection(this.agent.timezone);
     systemPromptForTurn = `${dtInjection}\n\n${systemPromptForTurn}`;
-    let kbContextPromise: Promise<string | null> = Promise.resolve(null);
-    if (this.agent.knowledgeBaseId) {
-      {
-        kbContextPromise = retrieveKbContext(this.agent.knowledgeBaseId, transcript)
-          .catch((err) => {
-            logger.warn({ callId: this.config.callId, err }, "KB retrieval failed — continuing without context");
-            return null;
-          });
-      }
+    let kbContextPromise: Promise<string | null>;
+    if (this.kbPrefetchPromise) {
+      kbContextPromise = this.kbPrefetchPromise;
+      this.kbPrefetchPromise = null;
+      logger.debug({ callId: this.config.callId }, "KB context: using speech-start prefetch");
+    } else if (this.agent.knowledgeBaseId) {
+      kbContextPromise = retrieveKbContext(this.agent.knowledgeBaseId, transcript)
+        .catch((err) => {
+          logger.warn({ callId: this.config.callId, err }, "KB retrieval failed — continuing without context");
+          return null;
+        });
+    } else {
+      kbContextPromise = Promise.resolve(null);
     }
 
     // ── Backchannel: enqueue filler CONCURRENT with KB retrieval + LLM startup ─
     // playTask starts TTS-ing the filler phrase while KB lookup and LLM warm up.
     // This fills the dead silence between the user finishing speaking and the
     // first agent word.
+    let backchanneledThisTurn = false;
     if (this.agent.backchannelingEnabled && !this.closed && !this.bargeInRequested) {
       const freq = this.agent.backchannelingFrequency ?? 0.5;
       if (Math.random() < freq) {
         const phrase = BACKCHANNEL_PHRASES[Math.floor(Math.random() * BACKCHANNEL_PHRASES.length)]!;
         enqueue(phrase);
+        backchanneledThisTurn = true;
       }
     }
 
@@ -1166,12 +1215,32 @@ export class OrchestrationPipeline {
       systemPromptForTurn += lines.join("\n");
     }
 
+    // ── Dead-air filler timer ────────────────────────────────────────────────
+    // If the LLM has not returned a first token within FILLER_THRESHOLD_MS and
+    // backchannel didn't already cover the silence, enqueue a filler phrase so
+    // the caller hears something rather than dead air.
+    let fillerTimer: ReturnType<typeof setTimeout> | null = null;
+    if (!backchanneledThisTurn && !this.closed && !this.bargeInRequested) {
+      fillerTimer = setTimeout(() => {
+        if (!llmFirstTokenAt && !this.bargeInRequested && !this.closed) {
+          const phrase = FILLER_PHRASES[Math.floor(Math.random() * FILLER_PHRASES.length)]!;
+          enqueue(phrase);
+          this.fillerPlayedCount++;
+          logger.info({ callId: this.config.callId, phrase }, "Dead-air filler enqueued (LLM > 800 ms)");
+        }
+      }, FILLER_THRESHOLD_MS);
+    }
+
     try {
       await this.llm.chat(
         this.conversationHistory,
         systemPromptForTurn,
         (token) => {
-          if (!llmFirstTokenAt) llmFirstTokenAt = Date.now();
+          if (!llmFirstTokenAt) {
+            llmFirstTokenAt = Date.now();
+            // LLM responded in time — cancel the dead-air filler before it fires
+            if (fillerTimer) { clearTimeout(fillerTimer); fillerTimer = null; }
+          }
           llmResponse += token;                  // keep raw response (incl. think blocks)
           const afterThink = filterThinkToken(token);
           if (!afterThink) return;               // token was entirely inside a think block
@@ -1205,6 +1274,7 @@ export class OrchestrationPipeline {
             }
       );
     } catch (llmErr) {
+      if (fillerTimer) { clearTimeout(fillerTimer); fillerTimer = null; }
       const reason = toReadableError(llmErr, "LLM error");
       logger.error({ callId: this.config.callId, err: llmErr }, reason);
       this.config.onFatalError?.(reason);
@@ -1214,6 +1284,9 @@ export class OrchestrationPipeline {
       await playPromise;
       throw llmErr;
     }
+    // Safety net: clear filler timer if LLM completed without streaming any tokens
+    // (e.g. pure tool-call response that never invokes onToken)
+    if (fillerTimer) { clearTimeout(fillerTimer); fillerTimer = null; }
 
     // ── If LLM called a tool, execute it and skip TTS ──
     if (triggeredToolName) {
@@ -1351,11 +1424,12 @@ export class OrchestrationPipeline {
    *   returned real token counts; undefined when the provider doesn't expose them
    *   (e.g. Sarvam), allowing session.ts to fall back to turn-count heuristics.
    */
-  getUsageTotals(): { llmInputTokens?: number; llmOutputTokens?: number; ttsCharacters: number } {
+  getUsageTotals(): { llmInputTokens?: number; llmOutputTokens?: number; ttsCharacters: number; fillerPlayedCount: number } {
     return {
       llmInputTokens: this.hasRealLlmUsage ? this.llmInputTokensTotal : undefined,
       llmOutputTokens: this.hasRealLlmUsage ? this.llmOutputTokensTotal : undefined,
       ttsCharacters: this.ttsCharactersTotal,
+      fillerPlayedCount: this.fillerPlayedCount,
     };
   }
 
