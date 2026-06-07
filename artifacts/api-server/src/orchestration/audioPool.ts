@@ -39,6 +39,9 @@ class AudioWorkerThread {
   private worker: Worker;
   private pending = new Map<string, Pending>();
 
+  /** Number of in-flight requests on this worker — used for load-based routing. */
+  get pendingCount(): number { return this.pending.size; }
+
   constructor(workerUrl: URL) {
     this.worker = new Worker(workerUrl);
     this.worker.on("message", (msg: WorkerResponse) => {
@@ -77,6 +80,22 @@ class AudioWorkerThread {
   }
 }
 
+/**
+ * Sticky worker assignment per callId.
+ *
+ * A call's NoiseCanceller state lives on exactly one worker, so once a callId
+ * has been routed we must keep sending it to the same worker for the entire
+ * duration of the call.  New callIds are assigned to the least-loaded worker
+ * at the time of their first chunk to spread load when noise cancellation is
+ * heavy on some workers.
+ *
+ * Entries are deleted by destroyAudioSession() at call end to prevent unbounded growth.
+ */
+const callWorkerIndex = new Map<string, number>();
+
+/** Max in-flight chunks per worker before we log a skew warning. */
+const WORKER_SKEW_WARN_THRESHOLD = 5;
+
 let pool: AudioWorkerThread[] = [];
 let ready = false;
 
@@ -90,11 +109,35 @@ export function initAudioPool(workerUrl: URL): void {
   logger.info({ poolSize: POOL_SIZE }, "Audio worker pool initialised");
 }
 
-/** Consistent hash: same callId always routes to the same worker. */
+/**
+ * Return the worker for a callId, using sticky assignment.
+ *
+ * - If the callId already has an assigned worker (from a previous chunk in this
+ *   call), return that worker — NoiseCanceller state must not move mid-call.
+ * - If this is the first chunk for the callId, pick the least-loaded worker
+ *   and record the assignment.  Ties are broken by worker index (stable).
+ */
 function workerFor(callId: string): AudioWorkerThread {
-  let h = 0;
-  for (let i = 0; i < callId.length; i++) h = (h * 31 + callId.charCodeAt(i)) | 0;
-  return pool[Math.abs(h) % pool.length]!;
+  const existing = callWorkerIndex.get(callId);
+  if (existing !== undefined) return pool[existing]!;
+
+  let minLoad = Infinity;
+  let minIdx  = 0;
+  for (let i = 0; i < pool.length; i++) {
+    const load = pool[i]!.pendingCount;
+    if (load < minLoad) { minLoad = load; minIdx = i; }
+  }
+
+  callWorkerIndex.set(callId, minIdx);
+
+  if (minLoad >= WORKER_SKEW_WARN_THRESHOLD) {
+    logger.warn(
+      { callId, workerIdx: minIdx, pendingCount: minLoad, poolSize: pool.length },
+      "Audio worker pool skew — least-loaded worker already at threshold"
+    );
+  }
+
+  return pool[minIdx]!;
 }
 
 export function processAudioIn(
@@ -118,7 +161,9 @@ export function processRawPcm8kIn(
 
 export function destroyAudioSession(callId: string): void {
   if (!ready) return;
-  workerFor(callId).destroySession(callId);
+  const worker = workerFor(callId);
+  worker.destroySession(callId);
+  callWorkerIndex.delete(callId);
 }
 
 // ── Inline fallback (no pool) ─────────────────────────────────────────────────

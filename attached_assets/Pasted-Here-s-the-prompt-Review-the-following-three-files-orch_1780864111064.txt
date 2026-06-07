@@ -1,0 +1,16 @@
+Here's the prompt:
+
+---
+
+> Review the following three files: `orchestration/audioPool.ts`, `services/kb-retrieval.ts`, and `services/callerMemory.ts`. I want to identify and fix three specific issues:
+>
+> **Issue 1 — Audio Worker Pool Skew (`audioPool.ts`)**
+> Current design uses consistent hashing by callId across 7 workers. If noise cancellation is heavy on some calls, that worker becomes a bottleneck and all calls hashed to it queue up. Fix: add a worker load monitor that tracks queue depth per worker. If a worker's queue exceeds a threshold (e.g. 3 pending chunks), new calls should be assigned to the least-loaded worker instead of the hashed one. Existing in-flight calls must stay on their original worker (noise canceller state dependency). Only new call assignments should rebalance.
+>
+> **Issue 2 — KB Retrieval Quality (`kb-retrieval.ts`)**
+> Current implementation uses PostgreSQL Full Text Search on `knowledge_entries` table. FTS is keyword-based and misses semantic matches (e.g. "cost" won't match "pricing"). Fix: add pgvector-based semantic search alongside FTS. On KB entry creation/update, generate an embedding (OpenAI `text-embedding-3-small` or equivalent) and store in a `vector` column. At retrieval time, run both FTS and vector similarity search, merge results (deduplicate by entry id), re-rank by combined score, and return top 10 (not 50 — injecting 50 entries bloats LLM context and increases latency). If pgvector is not available, fall back to FTS only.
+>
+> **Issue 3 — Caller Memory Update Durability (`callerMemory.ts`)**
+> Current `updateCallerProfile()` runs a post-call LLM extraction and writes to DB. If the LLM times out or DB write fails, the memory update is silently lost. Fix: wrap the update in a retry mechanism — 3 attempts with exponential backoff (1s, 2s, 4s). If all retries fail, write the raw transcript to a `failed_memory_updates` table with callId, phoneNumber, timestamp, and transcript so it can be reprocessed manually or by a background job. Add structured error logging on each failure with the specific error reason.
+>
+> For each issue, show me the exact lines that need to change and provide the updated code. Do not refactor anything outside the scope of these three fixes.

@@ -188,26 +188,48 @@ export async function updateCallerProfile(opts: {
     ? `Prior context from previous calls: ${existing.summary}\n\n`
     : "";
 
+  const MAX_ATTEMPTS = 3;
+  const BACKOFF_BASE_MS = 1000;
+
+  // ── Phase 2a: LLM extraction with retry ───────────────────────────────────
   let raw = "";
-  try {
-    await llm.chat(
-      [
-        {
-          role: "user",
-          content:
-            `${priorContext}Given this call transcript, extract caller information.\n` +
-            `Return ONLY valid JSON with exactly these fields:\n` +
-            `- "name": caller's name if explicitly stated, otherwise null\n` +
-            `- "summary": 1–3 sentences capturing key interests, issues, preferences, and follow-ups. Merge with prior context if available.\n\n` +
-            `Transcript:\n${transcript.slice(0, 6000)}`,
-        },
-      ],
-      "You extract caller profile information from voice call transcripts. Return only a JSON object with 'name' (string|null) and 'summary' (string) fields. Be concise and factual.",
-      () => {},
-      (full) => { raw = full; },
+  let llmSucceeded = false;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      await llm.chat(
+        [
+          {
+            role: "user",
+            content:
+              `${priorContext}Given this call transcript, extract caller information.\n` +
+              `Return ONLY valid JSON with exactly these fields:\n` +
+              `- "name": caller's name if explicitly stated, otherwise null\n` +
+              `- "summary": 1–3 sentences capturing key interests, issues, preferences, and follow-ups. Merge with prior context if available.\n\n` +
+              `Transcript:\n${transcript.slice(0, 6000)}`,
+          },
+        ],
+        "You extract caller profile information from voice call transcripts. Return only a JSON object with 'name' (string|null) and 'summary' (string) fields. Be concise and factual.",
+        () => {},
+        (full) => { raw = full; },
+      );
+      llmSucceeded = true;
+      break;
+    } catch (llmErr) {
+      logger.warn(
+        { agentId, phoneNumber, callId, attempt, maxAttempts: MAX_ATTEMPTS, llmErr },
+        "Caller profile LLM extraction failed — will retry",
+      );
+      if (attempt < MAX_ATTEMPTS) {
+        await new Promise<void>((r) => setTimeout(r, BACKOFF_BASE_MS * (2 ** (attempt - 1))));
+      }
+    }
+  }
+
+  if (!llmSucceeded) {
+    logger.error(
+      { agentId, phoneNumber, callId, transcript: transcript.slice(0, 500) },
+      "Caller profile LLM extraction failed after all retries — summary not updated",
     );
-  } catch (llmErr) {
-    logger.warn({ agentId, phoneNumber, callId, llmErr }, "Caller profile LLM extraction failed — summary not updated");
     return;
   }
 
@@ -225,20 +247,44 @@ export async function updateCallerProfile(opts: {
     return;
   }
 
-  // Only update name + summary; counters already written in Phase 1
-  await db
-    .update(callerProfilesTable)
-    .set({
-      name:      extracted.name    ? extracted.name    : sql`caller_profiles.name`,
-      summary:   extracted.summary ? extracted.summary : sql`caller_profiles.summary`,
-      updatedAt: now,
-    })
-    .where(
-      and(
-        eq(callerProfilesTable.agentId,     agentId),
-        eq(callerProfilesTable.phoneNumber, phoneNumber),
-      ),
+  // ── Phase 2b: DB write with retry ─────────────────────────────────────────
+  let dbSucceeded = false;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      // Only update name + summary; counters already written in Phase 1
+      await db
+        .update(callerProfilesTable)
+        .set({
+          name:      extracted.name    ? extracted.name    : sql`caller_profiles.name`,
+          summary:   extracted.summary ? extracted.summary : sql`caller_profiles.summary`,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(callerProfilesTable.agentId,     agentId),
+            eq(callerProfilesTable.phoneNumber, phoneNumber),
+          ),
+        );
+      dbSucceeded = true;
+      break;
+    } catch (dbErr) {
+      logger.warn(
+        { agentId, phoneNumber, callId, attempt, maxAttempts: MAX_ATTEMPTS, dbErr },
+        "Caller profile DB write failed — will retry",
+      );
+      if (attempt < MAX_ATTEMPTS) {
+        await new Promise<void>((r) => setTimeout(r, BACKOFF_BASE_MS * (2 ** (attempt - 1))));
+      }
+    }
+  }
+
+  if (!dbSucceeded) {
+    logger.error(
+      { agentId, phoneNumber, callId, extractedName: extracted.name ?? null, summarySample: (extracted.summary ?? "").slice(0, 200) },
+      "Caller profile DB write failed after all retries — summary not persisted",
     );
+    return;
+  }
 
   logger.info({ agentId, phoneNumber, callId }, "Caller profile summary updated via LLM");
 }
