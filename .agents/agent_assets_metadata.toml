@@ -54,3 +54,9 @@ id = "aAu2M1UJ5NWrl_UL-qI9s"
 uri = "file://screenshots/terms-page.jpg"
 type = "image"
 title = "Terms of Service Page"
+
+[[outputs]]
+id = "FxlMo75D9CYlpaTO90kTh"
+uri = "file://backup_clean.sql.gz"
+type = "unspecified"
+title = "VoiceOrch DB Backup (272 KB compressed)"
