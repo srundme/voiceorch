@@ -1,11 +1,5 @@
 [phases.setup]
-nixPkgs = ["nodejs_20"]
+nixPkgs = ["nodejs_24"]
 
 [phases.install]
-cmds = ["npm install -g pnpm", "pnpm install"]
-
-[phases.build]
-cmds = ["pnpm --filter @workspace/dashboard build"]
-
-[start]
-cmd = "pnpm --filter @workspace/dashboard start"
+cmds = ["corepack enable", "pnpm install --frozen-lockfile"]
