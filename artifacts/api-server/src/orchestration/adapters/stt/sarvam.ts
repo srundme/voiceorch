@@ -46,6 +46,7 @@ function normaliseSarvamLang(code: string | null): string {
   if (remapped) return remapped;
   const withIN = `${code}-IN`;
   if (VALID_SARVAM_LANG.has(withIN)) return withIN;
+  logger.warn({ rawLang: code }, "Sarvam language unrecognised — falling back to en-IN");
   return "en-IN";
 }
 
@@ -154,7 +155,7 @@ export class SarvamSTT implements STTAdapter {
       if (safetyTimer)       { clearTimeout(safetyTimer);       safetyTimer = null; }
     }
 
-    function emitFinal(): void {
+    function emitFinal(trigger: string): void {
       if (hasEmitted) return;   // first path wins; all subsequent calls are no-ops
       hasEmitted = true;
       lastEmitAt = Date.now();
@@ -162,7 +163,7 @@ export class SarvamSTT implements STTAdapter {
       if (!latestTranscript) return;
       const text = latestTranscript;
       latestTranscript = "";
-      logger.info({ text: text.slice(0, 80) }, "Sarvam streaming STT → final");
+      logger.info({ trigger, text: text.slice(0, 80) }, "Sarvam streaming STT → final");
       onTranscript(text, true);
     }
 
@@ -172,7 +173,7 @@ export class SarvamSTT implements STTAdapter {
       latestTranscript = "";
       clearTimers();
       // Arm safety timer — fires only if neither partials nor speech_end arrive
-      safetyTimer = setTimeout(emitFinal, SAFETY_MS);
+      safetyTimer = setTimeout(() => emitFinal("safety"), SAFETY_MS);
     }
 
     const ws = new WebSocket(wsUrl, {
@@ -217,12 +218,12 @@ export class SarvamSTT implements STTAdapter {
 
           // Lazy-arm safety timer in case speech_start event was not received.
           if (!safetyTimer && !hasEmitted) {
-            safetyTimer = setTimeout(emitFinal, SAFETY_MS);
+            safetyTimer = setTimeout(() => emitFinal("safety"), SAFETY_MS);
           }
 
           // Reset local silence timer — emit LOCAL_SILENCE_MS after the last partial.
           if (localSilenceTimer) clearTimeout(localSilenceTimer);
-          localSilenceTimer = setTimeout(emitFinal, LOCAL_SILENCE_MS);
+          localSilenceTimer = setTimeout(() => emitFinal("local_silence"), LOCAL_SILENCE_MS);
         }
         return;
       }
@@ -234,7 +235,7 @@ export class SarvamSTT implements STTAdapter {
           onSpeechStart();
         } else if (event === "speech_end") {
           // Sarvam VAD confirms end of utterance — emit immediately.
-          emitFinal();
+          emitFinal("speech_end");
         }
       }
     });
