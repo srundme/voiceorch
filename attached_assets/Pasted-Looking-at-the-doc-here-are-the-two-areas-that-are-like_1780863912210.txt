@@ -1,0 +1,27 @@
+Looking at the doc, here are the two areas that are likely off:
+
+**1. STT — Silence-based turn triggering is too rigid**
+
+The doc says VAD buffers audio and triggers a turn when silence exceeds `vadSilenceMs` (default 250ms). The problem: with streaming STT (Deepgram/Sarvam), end-of-turn detection should come from `utterance_end_ms` / `vad_events` from the STT provider itself — not a local silence timer. If both are running simultaneously, you get a race condition where the local silence fires first, cuts the audio stream mid-sentence, and sends an incomplete buffer to STT. Result: truncated transcripts.
+
+**2. Barge-in — Energy threshold is too coarse**
+
+The doc says if `rmsEnergy > 1200` for 4+ consecutive frames → interrupt TTS. The problem: RMS energy of the *outgoing TTS audio being played back* can bleed into the incoming audio measurement (especially on telephony where audio is full-duplex over the same socket). The AI ends up barging in on itself. Also, 4 frames at 20ms each = 80ms — that's a very short confirmation window that will cause false positives on plosive sounds or line noise.
+
+---
+
+Here's a prompt you can give Replit:
+
+---
+
+**Prompt for Replit:**
+
+> Review the STT and barge-in logic in `orchestration/pipeline.ts` and `orchestration/audioPool.ts` for two specific issues:
+>
+> **Issue 1 — STT turn trigger race condition:**
+> When streaming STT is active (Deepgram/Sarvam), the local VAD silence timer (`vadSilenceMs`) and the STT provider's `utterance_end` / `vad_events` signal are both capable of triggering `processTurn()`. If the local silence timer fires first, it may cut the audio stream before the STT provider has finished transcribing, resulting in truncated or empty transcripts. Fix: when streaming STT is enabled, disable or subordinate the local silence trigger — let the STT provider's `utterance_end` event be the sole trigger for `processTurn()`. The local VAD should only gate *whether* audio is sent to the STT stream, not *when* a turn ends.
+>
+> **Issue 2 — Barge-in false positives from TTS echo and line noise:**
+> The barge-in check uses raw `rmsEnergy > bargeInEnergyThreshold` (1200) on incoming audio during TTS playback. On telephony (full-duplex), TTS output audio can bleed back into the incoming audio path, causing the AI to barge in on itself. Additionally, 4 consecutive frames (≈80ms) is too short a confirmation window and triggers on transient noise. Fix: (a) implement acoustic echo cancellation or suppress barge-in detection during the first N ms of TTS playback when echo is most likely; (b) increase the consecutive frame confirmation window (suggest 8–10 frames / ~160–200ms); (c) optionally add a cooldown period after a barge-in fires before it can fire again.
+>
+> Please show the specific lines in `pipeline.ts` where these changes need to happen.
