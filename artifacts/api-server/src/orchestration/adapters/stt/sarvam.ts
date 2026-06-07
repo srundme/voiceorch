@@ -125,21 +125,54 @@ export class SarvamSTT implements STTAdapter {
     let closing = false;
     const audioQueue: Buffer[] = [];
 
-    // Buffer the latest partial transcript — only emit once per utterance on
-    // speech_end so the caller doesn't receive dozens of near-identical partials
-    // for a single sentence (each would trigger a separate LLM turn and pollute
-    // the conversation history).
-    let latestTranscript = "";
-    let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
-    const FALLBACK_MS = this.endOfTurnTimeout; // fire if speech_end never arrives
+    // ── Hybrid emit (Option D) ────────────────────────────────────────────
+    // Emit the transcript on whichever arrives first:
+    //   1. speech_end VAD event from Sarvam's server, OR
+    //   2. LOCAL_SILENCE_MS (600 ms) after the last partial with no new partial
+    //
+    // A hard SAFETY_MS timer (= endOfTurnTimeout, default 5 000 ms) is armed
+    // once per utterance in case no partials arrive at all (very short word,
+    // Sarvam server delay, etc.).
+    //
+    // hasEmitted ensures exactly one emit per utterance — whichever path wins
+    // first, all subsequent calls to emitFinal() for that utterance are no-ops.
+    //
+    // State is reset either by the speech_start VAD event (primary) or by a
+    // 1 500 ms grace window after the last emit (fallback for missed speech_start).
+    const LOCAL_SILENCE_MS = 600;
+    const SAFETY_MS = this.endOfTurnTimeout;
+    const INTER_UTTERANCE_GRACE_MS = 1500; // how long to wait before treating a new partial as a new utterance
 
-    function emitFinal() {
-      if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
+    let latestTranscript = "";
+    let hasEmitted = false;
+    let lastEmitAt = 0;
+    let localSilenceTimer: ReturnType<typeof setTimeout> | null = null;
+    let safetyTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function clearTimers(): void {
+      if (localSilenceTimer) { clearTimeout(localSilenceTimer); localSilenceTimer = null; }
+      if (safetyTimer)       { clearTimeout(safetyTimer);       safetyTimer = null; }
+    }
+
+    function emitFinal(): void {
+      if (hasEmitted) return;   // first path wins; all subsequent calls are no-ops
+      hasEmitted = true;
+      lastEmitAt = Date.now();
+      clearTimers();
       if (!latestTranscript) return;
       const text = latestTranscript;
       latestTranscript = "";
       logger.info({ text: text.slice(0, 80) }, "Sarvam streaming STT → final");
       onTranscript(text, true);
+    }
+
+    /** Called on speech_start VAD event — canonical utterance boundary reset. */
+    function onSpeechStart(): void {
+      hasEmitted = false;
+      latestTranscript = "";
+      clearTimers();
+      // Arm safety timer — fires only if neither partials nor speech_end arrive
+      safetyTimer = setTimeout(emitFinal, SAFETY_MS);
     }
 
     const ws = new WebSocket(wsUrl, {
@@ -169,23 +202,38 @@ export class SarvamSTT implements STTAdapter {
       }
 
       if (msg.type === "data") {
-        // Partial transcript — keep the latest one and arm the fallback timer.
-        // We do NOT emit yet; we wait for the speech_end VAD event below.
         const transcript = msg.data?.transcript?.trim();
         if (transcript) {
+          // Grace-window fallback: if speech_start was missed but enough time
+          // has passed since the last emit, treat this as a new utterance.
+          if (hasEmitted && Date.now() - lastEmitAt > INTER_UTTERANCE_GRACE_MS) {
+            hasEmitted = false;
+            latestTranscript = "";
+            clearTimers();
+          }
+
           latestTranscript = transcript;
           logger.info({ text: transcript.slice(0, 80) }, "Sarvam streaming STT → partial");
-          // Reset fallback timer so it only fires after 2 s of silence
-          if (fallbackTimer) clearTimeout(fallbackTimer);
-          fallbackTimer = setTimeout(emitFinal, FALLBACK_MS);
+
+          // Lazy-arm safety timer in case speech_start event was not received.
+          if (!safetyTimer && !hasEmitted) {
+            safetyTimer = setTimeout(emitFinal, SAFETY_MS);
+          }
+
+          // Reset local silence timer — emit LOCAL_SILENCE_MS after the last partial.
+          if (localSilenceTimer) clearTimeout(localSilenceTimer);
+          localSilenceTimer = setTimeout(emitFinal, LOCAL_SILENCE_MS);
         }
         return;
       }
 
       if (msg.type === "events") {
-        // VAD signals: speech_start | speech_end
-        // speech_end is the definitive "utterance done" signal — emit now.
-        if (msg.data?.event === "speech_end") {
+        const event = msg.data?.event;
+        if (event === "speech_start") {
+          // Canonical utterance boundary — reset all state for the new segment.
+          onSpeechStart();
+        } else if (event === "speech_end") {
+          // Sarvam VAD confirms end of utterance — emit immediately.
           emitFinal();
         }
       }
@@ -197,6 +245,7 @@ export class SarvamSTT implements STTAdapter {
 
     ws.on("close", () => {
       logger.info("Sarvam streaming STT WebSocket closed");
+      clearTimers();
       onClose?.();
     });
 
