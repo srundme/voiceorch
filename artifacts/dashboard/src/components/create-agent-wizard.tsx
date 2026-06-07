@@ -259,7 +259,11 @@ function getManagedStack(languages: string[]) {
   const hasIndic = languages.some(l => ["hindi","telugu","kannada","marathi","gujarati","bengali","malayalam"].includes(l));
   return {
     asrProvider:       (hasTamil || hasIndic) ? "sarvam" : "deepgram",
-    asrModel:          (hasTamil || hasIndic) ? "saarika:v2.5" : "nova-2-general",
+    // saaras:v3 is Sarvam's streaming (WebSocket) model — much better for Indic
+    // languages because it processes audio continuously instead of waiting for
+    // silence to accumulate a batch chunk. saarika:v2.5 was causing Tamil speech
+    // to be cut mid-phrase by the VAD silence detector before sending to Sarvam.
+    asrModel:          (hasTamil || hasIndic) ? "saaras:v3" : "nova-2-general",
     llmProvider:       (hasTamil || hasIndic) ? "qwen" : "sarvam",
     llmModel:          (hasTamil || hasIndic) ? "qwen/qwen3-32b" : "sarvam-30b",
     ttsProvider:       "cartesia",
