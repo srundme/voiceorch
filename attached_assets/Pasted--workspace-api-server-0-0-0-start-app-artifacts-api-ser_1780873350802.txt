@@ -1,0 +1,86 @@
+> @workspace/api-server@0.0.0 start /app/artifacts/api-server
+> node -e "const {execSync}=require('child_process');try{execSync('fuser -k '+process.env.PORT+'/tcp 2>/dev/null')}catch{};setTimeout(()=>{},500)" && node --enable-source-maps ./dist/index.mjs
+Starting Container
+    at resolveSecret (/app/artifacts/api-server/src/lib/app-secret.ts:23:9)
+/app/artifacts/api-server/src/lib/app-secret.ts:23
+    at <anonymous> (/app/artifacts/api-server/src/lib/app-secret.ts:30:35)
+  throw new Error(
+    at ModuleJob.run (node:internal/modules/esm/module_job:325:25)
+        ^
+    at async ModuleLoader.import (node:internal/modules/esm/loader:606:24)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+Error: SESSION_SECRET is not set. It is required to sign session tokens and encrypt stored secrets. Set SESSION_SECRET before starting the server.
+Node.js v20.19.5
+/app/artifacts/api-server:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/api-server@0.0.0 start: `node -e "const {execSync}=require('child_process');try{execSync('fuser -k '+process.env.PORT+'/tcp 2>/dev/null')}catch{};setTimeout(()=>{},500)" && node --enable-source-maps ./dist/index.mjs`
+Exit status 1
+> @workspace/api-server@0.0.0 start /app/artifacts/api-server
+> node -e "const {execSync}=require('child_process');try{execSync('fuser -k '+process.env.PORT+'/tcp 2>/dev/null')}catch{};setTimeout(()=>{},500)" && node --enable-source-maps ./dist/index.mjs
+    at resolveSecret (/app/artifacts/api-server/src/lib/app-secret.ts:23:9)
+    at async ModuleLoader.import (node:internal/modules/esm/loader:606:24)
+    at <anonymous> (/app/artifacts/api-server/src/lib/app-secret.ts:30:35)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+/app/artifacts/api-server/src/lib/app-secret.ts:23
+Node.js v20.19.5
+    at ModuleJob.run (node:internal/modules/esm/module_job:325:25)
+  throw new Error(
+        ^
+Error: SESSION_SECRET is not set. It is required to sign session tokens and encrypt stored secrets. Set SESSION_SECRET before starting the server.
+/app/artifacts/api-server:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/api-server@0.0.0 start: `node -e "const {execSync}=require('child_process');try{execSync('fuser -k '+process.env.PORT+'/tcp 2>/dev/null')}catch{};setTimeout(()=>{},500)" && node --enable-source-maps ./dist/index.mjs`
+Exit status 1
+> @workspace/api-server@0.0.0 start /app/artifacts/api-server
+> node -e "const {execSync}=require('child_process');try{execSync('fuser -k '+process.env.PORT+'/tcp 2>/dev/null')}catch{};setTimeout(()=>{},500)" && node --enable-source-maps ./dist/index.mjs
+Error: SESSION_SECRET is not set. It is required to sign session tokens and encrypt stored secrets. Set SESSION_SECRET before starting the server.
+    at resolveSecret (/app/artifacts/api-server/src/lib/app-secret.ts:23:9)
+    at <anonymous> (/app/artifacts/api-server/src/lib/app-secret.ts:30:35)
+    at ModuleJob.run (node:internal/modules/esm/module_job:325:25)
+    at async ModuleLoader.import (node:internal/modules/esm/loader:606:24)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+Node.js v20.19.5
+/app/artifacts/api-server/src/lib/app-secret.ts:23
+  throw new Error(
+        ^
+/app/artifacts/api-server:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/api-server@0.0.0 start: `node -e "const {execSync}=require('child_process');try{execSync('fuser -k '+process.env.PORT+'/tcp 2>/dev/null')}catch{};setTimeout(()=>{},500)" && node --enable-source-maps ./dist/index.mjs`
+Exit status 1
+> @workspace/api-server@0.0.0 start /app/artifacts/api-server
+> node -e "const {execSync}=require('child_process');try{execSync('fuser -k '+process.env.PORT+'/tcp 2>/dev/null')}catch{};setTimeout(()=>{},500)" && node --enable-source-maps ./dist/index.mjs
+/app/artifacts/api-server/src/lib/app-secret.ts:23
+  throw new Error(
+        ^
+Error: SESSION_SECRET is not set. It is required to sign session tokens and encrypt stored secrets. Set SESSION_SECRET before starting the server.
+    at resolveSecret (/app/artifacts/api-server/src/lib/app-secret.ts:23:9)
+    at <anonymous> (/app/artifacts/api-server/src/lib/app-secret.ts:30:35)
+    at ModuleJob.run (node:internal/modules/esm/module_job:325:25)
+    at async ModuleLoader.import (node:internal/modules/esm/loader:606:24)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+Node.js v20.19.5
+/app/artifacts/api-server:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/api-server@0.0.0 start: `node -e "const {execSync}=require('child_process');try{execSync('fuser -k '+process.env.PORT+'/tcp 2>/dev/null')}catch{};setTimeout(()=>{},500)" && node --enable-source-maps ./dist/index.mjs`
+Exit status 1
+> @workspace/api-server@0.0.0 start /app/artifacts/api-server
+> node -e "const {execSync}=require('child_process');try{execSync('fuser -k '+process.env.PORT+'/tcp 2>/dev/null')}catch{};setTimeout(()=>{},500)" && node --enable-source-maps ./dist/index.mjs
+/app/artifacts/api-server/src/lib/app-secret.ts:23
+  throw new Error(
+        ^
+Error: SESSION_SECRET is not set. It is required to sign session tokens and encrypt stored secrets. Set SESSION_SECRET before starting the server.
+    at resolveSecret (/app/artifacts/api-server/src/lib/app-secret.ts:23:9)
+    at <anonymous> (/app/artifacts/api-server/src/lib/app-secret.ts:30:35)
+    at ModuleJob.run (node:internal/modules/esm/module_job:325:25)
+    at async ModuleLoader.import (node:internal/modules/esm/loader:606:24)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+Node.js v20.19.5
+/app/artifacts/api-server:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/api-server@0.0.0 start: `node -e "const {execSync}=require('child_process');try{execSync('fuser -k '+process.env.PORT+'/tcp 2>/dev/null')}catch{};setTimeout(()=>{},500)" && node --enable-source-maps ./dist/index.mjs`
+Exit status 1
+> @workspace/api-server@0.0.0 start /app/artifacts/api-server
+> node -e "const {execSync}=require('child_process');try{execSync('fuser -k '+process.env.PORT+'/tcp 2>/dev/null')}catch{};setTimeout(()=>{},500)" && node --enable-source-maps ./dist/index.mjs
+/app/artifacts/api-server/src/lib/app-secret.ts:23
+  throw new Error(
+        ^
+Error: SESSION_SECRET is not set. It is required to sign session tokens and encrypt stored secrets. Set SESSION_SECRET before starting the server.
+    at resolveSecret (/app/artifacts/api-server/src/lib/app-secret.ts:23:9)
+    at <anonymous> (/app/artifacts/api-server/src/lib/app-secret.ts:30:35)
+    at ModuleJob.run (node:internal/modules/esm/module_job:325:25)
+    at async ModuleLoader.import (node:internal/modules/esm/loader:606:24)
