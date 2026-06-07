@@ -33,6 +33,7 @@ import {
   executeNativeListBookings as sharedExecuteNativeListBookings,
   executeWebhookTool as sharedExecuteWebhookTool,
   parsePreferredDate,
+  writeTransferLeadDb,
 } from "../services/tool-executor.js";
 
 const VAD_SILENCE_MS          = 250;    // silence window before STT flush
@@ -768,6 +769,12 @@ export class OrchestrationPipeline {
 
     if (tool.type === "call_transfer") {
       await this.executeCallTransfer(tool, args);
+    } else if (tool.type === "transfer_cold") {
+      await this.executeTransferCold(tool, args);
+    } else if (tool.type === "transfer_warm") {
+      await this.executeTransferWarm(tool, args);
+    } else if (tool.type === "transfer_agent") {
+      await this.executeTransferAgent(tool, args);
     } else if (tool.type === "webhook") {
       await this.executeWebhookTool(tool, args);
     } else if (tool.type === "send_sms") {
@@ -974,6 +981,113 @@ export class OrchestrationPipeline {
     // Notify session layer (triggers telephony transfer + marks call as transferred)
     this.config.onCallTransfer?.(tool.transferTo, operatorSummary);
     this.config.onCallEnd();
+  }
+
+  // ── New transfer tool executors (T3+) ─────────────────────────────────────────
+
+  private async executeTransferCold(tool: AgentTool & { type: "transfer_cold" }, _args: Record<string, unknown>): Promise<void> {
+    logger.info({ callId: this.config.callId, transferTo: tool.targetNumber, type: "cold" }, "Executing transfer_cold");
+
+    // Optional hold message
+    if (tool.holdMessage?.trim()) {
+      this.config.onTranscript("agent", tool.holdMessage);
+      this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
+      this.isPlaying = true;
+      try {
+        await this.playSentence(tool.holdMessage);
+      } catch (err) {
+        logger.error({ callId: this.config.callId, err }, "transfer_cold: hold message TTS error");
+      } finally {
+        this.isPlaying = false;
+      }
+    }
+
+    // Notify session layer (triggers telephony redirect)
+    this.config.onCallTransfer?.(tool.targetNumber);
+    this.config.onCallEnd();
+
+    // Write lead transfer DB
+    void writeTransferLeadDb({
+      callId: this.config.callId,
+      campaignLeadId: this.config.campaignLeadId ?? null,
+      transferTo: tool.targetNumber,
+      type: "cold",
+    });
+  }
+
+  private async executeTransferWarm(tool: AgentTool & { type: "transfer_warm" }, _args: Record<string, unknown>): Promise<void> {
+    logger.info({ callId: this.config.callId, transferTo: tool.targetNumber, type: "warm" }, "Executing transfer_warm");
+
+    // Optional hold message
+    if (tool.holdMessage?.trim()) {
+      this.config.onTranscript("agent", tool.holdMessage);
+      this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
+      this.isPlaying = true;
+      try {
+        await this.playSentence(tool.holdMessage);
+      } catch (err) {
+        logger.error({ callId: this.config.callId, err }, "transfer_warm: hold message TTS error");
+      } finally {
+        this.isPlaying = false;
+      }
+    }
+
+    // Generate LLM operator briefing
+    const defaultPrompt = [
+      "You are summarising this call for the human agent who will now take over.",
+      "Write a concise briefing (3–5 sentences) covering:",
+      "  • Customer name (if mentioned)",
+      "  • The core issue or request",
+      "  • Priority / urgency (High / Medium / Low)",
+      "  • Any key context the agent needs to resolve it quickly",
+      "Use plain prose — no bullet points, no markdown. Speak directly to the operator.",
+    ].join("\n");
+    const prompt = tool.summaryPrompt?.trim() || defaultPrompt;
+
+    let operatorSummary: string | undefined;
+    try {
+      let summaryText = "";
+      await this.llm.chat(
+        this.conversationHistory,
+        prompt,
+        (token) => { summaryText += token; },
+        (full)  => { summaryText = full; },
+      );
+      operatorSummary = summaryText.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+      logger.info({ callId: this.config.callId, summaryLength: operatorSummary.length }, "transfer_warm: operator summary ready");
+    } catch (err) {
+      logger.error({ callId: this.config.callId, err }, "transfer_warm: summary generation failed — proceeding without summary");
+    }
+
+    // Notify session layer (triggers telephony redirect + warm briefing)
+    this.config.onCallTransfer?.(tool.targetNumber, operatorSummary);
+    this.config.onCallEnd();
+
+    // Write lead transfer DB
+    void writeTransferLeadDb({
+      callId: this.config.callId,
+      campaignLeadId: this.config.campaignLeadId ?? null,
+      transferTo: tool.targetNumber,
+      type: "warm",
+      summary: operatorSummary,
+    });
+  }
+
+  private async executeTransferAgent(tool: AgentTool & { type: "transfer_agent" }, _args: Record<string, unknown>): Promise<void> {
+    const targetAgentId = tool.targetAgentId;
+    logger.info({ callId: this.config.callId, targetAgentId }, "Executing transfer_agent");
+
+    // Notify session layer with agent: prefix (session.ts will handle AI-to-AI handoff)
+    this.config.onCallTransfer?.(`agent:${targetAgentId}`);
+    this.config.onCallEnd();
+
+    // Write lead transfer DB
+    void writeTransferLeadDb({
+      callId: this.config.callId,
+      campaignLeadId: this.config.campaignLeadId ?? null,
+      transferTo: `agent:${targetAgentId}`,
+      type: "agent",
+    });
   }
 
   // ── Core turn logic ───────────────────────────────────────────────────────────

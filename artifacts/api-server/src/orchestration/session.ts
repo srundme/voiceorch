@@ -371,6 +371,7 @@ export async function createSession(params: {
     providerKeys,
     telephonyProvider: params.telephonyProvider,
     callerPhone,
+    campaignLeadId: params.campaignLeadId ?? null,
     onAudioOut: params.onAudioOut,
     rawPcmOutput: params.telephonyProvider === "vobiz",
     onTranscript: (speaker, text) => {
@@ -401,6 +402,16 @@ export async function createSession(params: {
       const isWarm = !!operatorSummary;
       logger.info({ callId: callRecord.id, transferTo: to, warm: isWarm }, "Call transfer initiated");
       void patchSessionMeta(sessionId, { wasTransferred: true, transferredTo: to }, redisTtl);
+
+      // AI-to-AI transfer: agent: prefix means transfer to another agent
+      if (to.startsWith("agent:")) {
+        const targetAgentId = parseInt(to.slice(6), 10);
+        logger.info({ callId: callRecord.id, targetAgentId }, "Agent-to-agent transfer detected — skipping telephony redirect");
+        // Future: swap pipeline to new agent; for now telephony redirect is skipped
+        // so the caller stays on the line while the same agent continues.
+        void patchSessionMeta(sessionId, { transferType: "agent", targetAgentId }, redisTtl);
+        return;
+      }
 
       // Execute the actual provider-level call redirect
       void (async () => {

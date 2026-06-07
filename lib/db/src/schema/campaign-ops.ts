@@ -46,6 +46,8 @@ export const leadTransfersTable = pgTable("lead_transfers", {
   batchId:          integer("batch_id").references(() => campaignBatchesTable.id, { onDelete: "set null" }),
   callExecutionId:  integer("call_execution_id").references(() => callExecutionsTable.id, { onDelete: "set null" }),
   transferredTo:    text("transferred_to").notNull(),
+  type:             text("type").notNull().default("cold"), // cold | warm | agent
+  summary:          text("summary"),
   outcome:          text("outcome"),
   durationSeconds:  integer("duration_seconds"),
   transferTime:     timestamp("transfer_time", { withTimezone: true }).notNull().defaultNow(),

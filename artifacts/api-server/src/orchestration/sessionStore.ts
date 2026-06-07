@@ -26,6 +26,9 @@ export interface SessionMeta {
   llmTotal: number;
   ttsTotal: number;
   metricsCount: number;
+  /** AI-to-AI transfer marker */
+  transferType?: "agent";
+  targetAgentId?: number;
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────

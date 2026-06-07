@@ -106,7 +106,35 @@ export interface NativeListBookingsTool {
   timezone?: string;
 }
 
-export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | EndCallTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool | NativeCheckAvailabilityTool | NativeListBookingsTool;
+export interface TransferColdTool {
+  type: "transfer_cold";
+  name: string;
+  description: string;
+  targetNumber: string;
+  /** Optional hold message spoken before the transfer */
+  holdMessage?: string;
+}
+
+export interface TransferWarmTool {
+  type: "transfer_warm";
+  name: string;
+  description: string;
+  targetNumber: string;
+  /** Optional hold message spoken before the transfer */
+  holdMessage?: string;
+  /** Optional LLM prompt override for generating the operator briefing */
+  summaryPrompt?: string;
+}
+
+export interface TransferAgentTool {
+  type: "transfer_agent";
+  name: string;
+  description: string;
+  /** Target agent ID to transfer the call to */
+  targetAgentId: number;
+}
+
+export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | EndCallTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool | NativeCheckAvailabilityTool | NativeListBookingsTool | TransferColdTool | TransferWarmTool | TransferAgentTool;
 
 /** JSON Schema-compatible tool definition passed to LLM providers */
 export interface ToolDefinition {
@@ -281,6 +309,8 @@ export interface SessionConfig {
   providerKeys: Map<string, string>;
   telephonyProvider: TelephonyProvider;
   callerPhone?: string | null;
+  /** Campaign lead ID for outbound calls — enables transfer DB writes + lead timeline */
+  campaignLeadId?: number | null;
   onAudioOut: (audio: Buffer) => void;
   onTranscript: (speaker: "user" | "agent", text: string) => void;
   onCallEnd: () => void;

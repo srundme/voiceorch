@@ -6,9 +6,15 @@ import {
   eventTypesTable,
   schedulingCalendarsTable,
   agentsTable,
+  campaignLeadsTable,
+  leadTransfersTable,
+  leadTimelineTable,
+  callExecutionsTable,
 } from "@workspace/db";
 import { eq, and, or, sql } from "drizzle-orm";
+import type { ConversationTurn } from "../orchestration/types.js";
 import { getAvailableSlots } from "./scheduling/slot-engine.js";
+import { computeOperationalOutcome, setOperationalOutcome } from "./operational-outcome.js";
 import { buildSlotLockKey } from "./scheduling/lock.js";
 import {
   sendBookingCreatedEmail,
@@ -156,6 +162,48 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
               },
             },
             required: ["attendee_name"],
+          },
+        };
+      }
+      if (t.type === "transfer_cold") {
+        return {
+          name: t.name,
+          description: t.description,
+          parameters: {
+            type: "object",
+            properties: {
+              targetNumber: { type: "string", description: "Phone number to transfer the call to, e.g. +911234567890" },
+              holdMessage:  { type: "string", description: "Optional message to speak before transferring (e.g. 'Please hold while we connect you')" },
+            },
+            required: ["targetNumber"],
+          },
+        };
+      }
+      if (t.type === "transfer_warm") {
+        return {
+          name: t.name,
+          description: t.description,
+          parameters: {
+            type: "object",
+            properties: {
+              targetNumber:  { type: "string", description: "Phone number of the human agent to transfer the call to" },
+              holdMessage:   { type: "string", description: "Optional message to speak before transferring (e.g. 'Please hold for a moment while I connect you')" },
+            },
+            required: ["targetNumber"],
+          },
+        };
+      }
+      if (t.type === "transfer_agent") {
+        return {
+          name: t.name,
+          description: t.description,
+          parameters: {
+            type: "object",
+            properties: {
+              targetAgentId: { type: "string", description: "ID of the specialist agent to transfer the call to" },
+              context:       { type: "string", description: "Optional context to pass to the new agent about what the caller needs" },
+            },
+            required: ["targetAgentId"],
           },
         };
       }
@@ -1044,6 +1092,75 @@ export async function executeWebhookTool(
   } catch (err) {
     logger.error({ callId, url: tool.url, err }, "Webhook tool execution failed");
     return "error: webhook tool failed to execute";
+  }
+}
+
+// ── Transfer DB helpers ────────────────────────────────────────────────────────
+
+export async function writeTransferLeadDb(
+  opts: {
+    callId: number;
+    campaignLeadId: number | null;
+    transferTo: string;
+    type: "cold" | "warm" | "agent";
+    summary?: string;
+  },
+): Promise<void> {
+  const { callId, campaignLeadId, transferTo, type, summary } = opts;
+  if (!campaignLeadId) return;
+
+  // Resolve campaignId and batchId from the lead
+  let campaignId: number | undefined;
+  let batchId: number | null = null;
+  try {
+    const [lead] = await db.select().from(campaignLeadsTable).where(eq(campaignLeadsTable.id, campaignLeadId));
+    if (lead) {
+      campaignId = lead.campaignId;
+      batchId = lead.batchId ?? null;
+    }
+  } catch (err) {
+    logger.warn({ callId, campaignLeadId, err }, "Transfer DB: failed to load lead — skipping DB writes");
+    return;
+  }
+  if (!campaignId) return;
+
+  // Find the active call execution for this call
+  let callExecutionId: number | null = null;
+  try {
+    const [exec] = await db.select().from(callExecutionsTable).where(eq(callExecutionsTable.callId, callId));
+    if (exec) callExecutionId = exec.id;
+  } catch (err) {
+    logger.warn({ callId, err }, "Transfer DB: failed to resolve call execution");
+  }
+
+  // Insert lead_transfers record
+  let transferId: number | null = null;
+  try {
+    const [row] = await db.insert(leadTransfersTable).values({
+      leadId: campaignLeadId,
+      campaignId,
+      batchId,
+      callExecutionId: callExecutionId ?? undefined,
+      transferredTo: transferTo,
+      type,
+      summary: summary ?? null,
+      transferTime: new Date(),
+    }).returning({ id: leadTransfersTable.id });
+    transferId = row?.id ?? null;
+  } catch (err) {
+    logger.error({ callId, campaignLeadId, err }, "Transfer DB: lead_transfers insert failed");
+  }
+
+  // Write lead_timeline event
+  try {
+    await db.insert(leadTimelineTable).values({
+      leadId: campaignLeadId,
+      campaignId,
+      eventType: `transfer_${type}`,
+      data: { transferTo, summary: summary ?? null, transferId },
+    });
+  } catch (err) {
+    logger.warn({ callId, campaignLeadId, err }, "Transfer DB: lead_timeline insert failed");
   }
 }
 
