@@ -114,13 +114,18 @@ export class SarvamSTT implements STTAdapter {
     const apiModel = "saaras:v3";
 
     const params = new URLSearchParams({
-      "language-code": this.langCode,
+      language_code: this.langCode,
       model: apiModel,
       input_audio_codec: "pcm_s16le",
       sample_rate: "16000",
     });
 
     const wsUrl = `wss://api.sarvam.ai/speech-to-text/ws?${params.toString()}`;
+
+    logger.info(
+      { langCode: this.langCode, model: apiModel, wsUrl },
+      "Sarvam streaming STT: opening WebSocket"
+    );
 
     let wsReady = false;
     let closing = false;
