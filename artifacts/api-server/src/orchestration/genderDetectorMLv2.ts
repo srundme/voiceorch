@@ -42,7 +42,7 @@ const CONFIDENCE_THRESHOLD = 0.75;
  */
 const _BUFFER_SIZE = 32_000; // eslint-disable-line @typescript-eslint/no-unused-vars
 
-const GENDER_ML_SERVICE_URL = "http://localhost:5000/voice-analysis/gender-ml-v2";
+const GENDER_ML_SERVICE_URL = process.env["GENDER_SERVICE_URL"] ?? "http://localhost:5000/voice-analysis/gender-ml-v2";
 
 // ── WAV builder ───────────────────────────────────────────────────────────────
 

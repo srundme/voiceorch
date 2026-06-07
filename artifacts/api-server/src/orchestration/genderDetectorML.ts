@@ -36,7 +36,7 @@ const FALLBACK_BYTES = 4 * SAMPLE_RATE * SAMPLE_BYTES;
 /** Confidence threshold for an immediate lock (0–1 scale from the ML service). */
 const CONFIDENCE_THRESHOLD = 0.75;
 
-const GENDER_ML_SERVICE_URL = "http://localhost:5000/voice-analysis/gender-ml";
+const GENDER_ML_SERVICE_URL = process.env["GENDER_SERVICE_URL"] ?? "http://localhost:5000/voice-analysis/gender-ml";
 
 // ── WAV builder ───────────────────────────────────────────────────────────────
 
