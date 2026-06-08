@@ -733,6 +733,11 @@ const LANGUAGES = [
   { value: "pa-IN", label: "Punjabi" },
   { value: "uk",    label: "Ukrainian" },
   { value: "fi",    label: "Finnish" },
+  { value: "ta+en", label: "Tamil + English (mixed)" },
+  { value: "hi+en", label: "Hindi + English (mixed)" },
+  { value: "te+en", label: "Telugu + English (mixed)" },
+  { value: "kn+en", label: "Kannada + English (mixed)" },
+  { value: "ml+en", label: "Malayalam + English (mixed)" },
 ];
 
 type AgentCfg = {

@@ -39,8 +39,15 @@ const LANG_REMAP: Record<string, string> = {
   te: "te-IN", gu: "gu-IN", ur: "ur-IN",
 };
 
+/** Language codes that represent code-switching — Sarvam handles these best with "unknown". */
+const CODE_SWITCH_LANGS = new Set([
+  "ta+en", "hi+en", "te+en", "kn+en", "ml+en", "bn+en", "gu+en", "pa+en",
+  "tamil+en", "hindi+en", "telugu+en", "kannada+en", "malayalam+en",
+]);
+
 function normaliseSarvamLang(code: string | null): string {
   if (!code) return "en-IN";
+  if (CODE_SWITCH_LANGS.has(code.toLowerCase())) return "unknown";
   if (VALID_SARVAM_LANG.has(code)) return code;
   const remapped = LANG_REMAP[code.toLowerCase()];
   if (remapped) return remapped;

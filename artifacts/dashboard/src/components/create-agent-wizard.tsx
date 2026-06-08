@@ -233,30 +233,41 @@ const MICRO_INIT: MicroAnswers = { answers: [], jdFileContent: "", jdFileName: "
 
 /* ── Language catalogue ─────────────────────────────────────────────────── */
 const LANGUAGES = [
-  { code: "english",   label: "English" },
-  { code: "hindi",     label: "Hindi" },
-  { code: "tamil",     label: "Tamil" },
-  { code: "telugu",    label: "Telugu" },
-  { code: "kannada",   label: "Kannada" },
-  { code: "marathi",   label: "Marathi" },
-  { code: "gujarati",  label: "Gujarati" },
-  { code: "bengali",   label: "Bengali" },
-  { code: "malayalam", label: "Malayalam" },
+  { code: "english",      label: "English" },
+  { code: "hindi",        label: "Hindi" },
+  { code: "tamil",        label: "Tamil" },
+  { code: "telugu",       label: "Telugu" },
+  { code: "kannada",      label: "Kannada" },
+  { code: "marathi",      label: "Marathi" },
+  { code: "gujarati",     label: "Gujarati" },
+  { code: "bengali",      label: "Bengali" },
+  { code: "malayalam",    label: "Malayalam" },
+  { code: "tamil+en",     label: "Tamil + English (mixed)" },
+  { code: "hindi+en",     label: "Hindi + English (mixed)" },
+  { code: "telugu+en",    label: "Telugu + English (mixed)" },
+  { code: "kannada+en",   label: "Kannada + English (mixed)" },
+  { code: "malayalam+en", label: "Malayalam + English (mixed)" },
 ];
 
 /* ── Managed stack ──────────────────────────────────────────────────────── */
 const LANG_CODE_MAP: Record<string, string> = {
   english: "en-US", hindi: "hi", tamil: "ta", telugu: "te",
   kannada: "kn", marathi: "mr", gujarati: "gu", bengali: "bn", malayalam: "ml",
+  "tamil+en": "ta+en", "hindi+en": "hi+en", "telugu+en": "te+en",
+  "kannada+en": "kn+en", "malayalam+en": "ml+en",
 };
 const ASR_LANG_CODE_MAP: Record<string, string> = {
   english: "en", hindi: "hi", tamil: "ta-IN", telugu: "te-IN",
   kannada: "kn-IN", marathi: "mr-IN", gujarati: "gu-IN", bengali: "bn-IN", malayalam: "ml-IN",
+  "tamil+en": "ta+en", "hindi+en": "hi+en", "telugu+en": "te+en",
+  "kannada+en": "kn+en", "malayalam+en": "ml+en",
 };
 
+const MIXED_LANGS = new Set(["tamil+en", "hindi+en", "telugu+en", "kannada+en", "malayalam+en"]);
+
 function getManagedStack(languages: string[]) {
-  const hasTamil = languages.includes("tamil");
-  const hasIndic = languages.some(l => ["hindi","telugu","kannada","marathi","gujarati","bengali","malayalam"].includes(l));
+  const hasTamil = languages.includes("tamil") || languages.includes("tamil+en");
+  const hasIndic = languages.some(l => ["hindi","telugu","kannada","marathi","gujarati","bengali","malayalam","hindi+en","telugu+en","kannada+en","malayalam+en"].includes(l));
   return {
     asrProvider:       (hasTamil || hasIndic) ? "sarvam" : "deepgram",
     // saaras:v3 is Sarvam's streaming (WebSocket) model — much better for Indic
