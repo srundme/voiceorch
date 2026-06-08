@@ -505,6 +505,11 @@ export async function handleWebCallWebSocket(
     Math.round(wordsForInterruption * 6 * 40 / WEBCALL_FRAME_MS),
   );
   const incrementalDelayMs = (agentCfg["incrementalDelay"] as number | undefined) ?? 0;
+  // Per-agent endpointing: how long to wait after speech ends before sending to STT.
+  // Falls back to VAD_SILENCE_MS (200ms) if not configured by the user.
+  const agentVadSilenceMs = Math.max(50, Math.min(2000,
+    (agentCfg["vadSilenceMs"] as number | undefined) ?? VAD_SILENCE_MS,
+  ));
   const hangupAfterLlmCall = (agentCfg["hangupAfterLlmCall"] as boolean | undefined) ?? false;
 
   // ── Ambient noise ─────────────────────────────────────────────────────────
@@ -1360,7 +1365,7 @@ export async function handleWebCallWebSocket(
 
   function scheduleSilenceFlush() {
     if (silenceTimer || processing) return;
-    silenceTimer = setTimeout(() => { silenceTimer = null; void process(); }, VAD_SILENCE_MS);
+    silenceTimer = setTimeout(() => { silenceTimer = null; void process(); }, agentVadSilenceMs);
   }
 
   function clearSilenceTimer() {

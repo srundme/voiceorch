@@ -742,7 +742,7 @@ type AgentCfg = {
   guardrailRoutes?: Array<{ name: string; scoreThreshold: number; utterances: string; response: string }>;
   secondaryLanguage?: string; secondaryLanguages?: string[]; ttsStream?: boolean; ttsSamplingRate?: number;
   ttsEncoding?: string; ttsAudioFormat?: string;
-  wordsForInterruption?: number; incrementalDelay?: number;
+  wordsForInterruption?: number; incrementalDelay?: number; vadSilenceMs?: number;
   backchannelingStartDelay?: number; ambientNoiseEnabled?: boolean; ambientNoiseTrack?: string;
   hangupAfterLlmCall?: boolean; callCancellationPrompt?: string;
   voicemailDetection?: boolean;
@@ -2312,9 +2312,41 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
             <div className="px-5 py-4 max-w-2xl space-y-5">
               <button onClick={() => setActiveTab("pipeline")} className="text-[11px] text-muted-foreground/50 hover:text-foreground flex items-center gap-1 transition-colors"><ChevronRight className="h-3 w-3 rotate-180" /> Back to Pipeline</button>
               <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-5">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Interruption</p>
-                <SliderRow label="Words for Interruption" desc="User words that trigger an agent interruption" value={cfg.wordsForInterruption ?? 2} onChange={v => setCfg({ wordsForInterruption: v })} min={1} max={10} step={1} />
-                <SliderRow label="Incremental Delay" desc="Delay between LLM streaming chunks" value={cfg.incrementalDelay ?? 100} onChange={v => setCfg({ incrementalDelay: v })} min={0} max={2000} step={10} unit="ms" />
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Transcription &amp; Interruptions</p>
+                <SliderRow label="Number of words to wait for before interrupting" desc="Agent will not consider interruptions until this many words are spoken" value={cfg.wordsForInterruption ?? 2} onChange={v => setCfg({ wordsForInterruption: v })} min={1} max={10} step={1} />
+              </div>
+              <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-5">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Response Latency</p>
+                {(() => {
+                  const ep = cfg.vadSilenceMs ?? 200;
+                  const ld = cfg.incrementalDelay ?? 0;
+                  const preset = (ep === 50 && ld === 0) ? "fast" : (ep === 200 && ld === 0) ? "normal" : (ep === 400 && ld === 200) ? "slow" : "custom";
+                  return (<>
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1">
+                        <p className="text-[11px] font-medium text-foreground mb-1">Response Rate</p>
+                        <Select value={preset} onValueChange={v => {
+                          if (v === "fast")   setCfg({ vadSilenceMs: 50,  incrementalDelay: 0 });
+                          if (v === "normal") setCfg({ vadSilenceMs: 200, incrementalDelay: 0 });
+                          if (v === "slow")   setCfg({ vadSilenceMs: 400, incrementalDelay: 200 });
+                        }}>
+                          <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground w-36">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="bg-card border-border">
+                            <SelectItem value="fast"   className="text-xs text-foreground">Fast</SelectItem>
+                            <SelectItem value="normal" className="text-xs text-foreground">Normal</SelectItem>
+                            <SelectItem value="slow"   className="text-xs text-foreground">Slow</SelectItem>
+                            <SelectItem value="custom" className="text-xs text-foreground">Custom</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <SliderRow label="Endpointing" desc="Milliseconds of silence your agent waits before generating a response" value={ep} onChange={v => setCfg({ vadSilenceMs: v })} min={50} max={2000} step={50} unit="ms" />
+                    <SliderRow label="Linear Delay" desc="Additional delay that accounts for long pauses mid-sentence" value={ld} onChange={v => setCfg({ incrementalDelay: v })} min={0} max={2000} step={10} unit="ms" />
+                    {preset === "custom" && <p className="text-[10px] text-muted-foreground/60">Set custom Endpointing and Linear Delay values as per your requirement</p>}
+                  </>);
+                })()}
               </div>
               <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-5">
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Backchanneling</p>
