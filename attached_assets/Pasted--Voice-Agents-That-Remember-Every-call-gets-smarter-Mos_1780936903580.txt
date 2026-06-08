@@ -1,0 +1,264 @@
+# Voice Agents That Remember
+
+### Every call gets smarter.
+
+Most AI voice agents forget everything after the conversation ends.
+
+SnapServe gives your voice agents persistent relationship memory, allowing them to remember previous conversations, callback requests, customer preferences, objections, booking history, and context across every call.
+
+Whether the next conversation happens in 10 minutes or 10 months, your AI picks up exactly where it left off.
+
+### Start Free
+
+### Book Demo
+
+No credit card required • $5 Free Credits • Bring Your Own API Keys
+
+---
+
+# The Problem
+
+## Voice AI Can Talk. It Can't Remember.
+
+Today's voice platforms can answer calls.
+
+They can make calls.
+
+They can sound human.
+
+But when the same person answers the phone next week, the conversation starts from zero.
+
+Again.
+
+And again.
+
+And again.
+
+Real businesses don't work like that.
+
+Real relationships don't work like that.
+
+---
+
+# Meet Relationship Memory™
+
+## The Memory Layer For AI Voice Agents
+
+When a prospect says:
+
+"Call me next Tuesday."
+
+Your agent remembers.
+
+When a customer says:
+
+"I'm interested in the Enterprise plan."
+
+Your agent remembers.
+
+When a lead says:
+
+"My budget is around $10,000."
+
+Your agent remembers.
+
+When the next call happens, the AI already knows the history.
+
+No repeated introductions.
+
+No repeated explanations.
+
+No lost context.
+
+Just continuous conversations.
+
+---
+
+# What Happens Without SnapServe
+
+### Call #1
+
+AI:
+"Would you like to learn more about our product?"
+
+Prospect:
+"I'm busy. Call me next Tuesday."
+
+### Call #2
+
+AI:
+"Hi, would you like to learn more about our product?"
+
+Prospect:
+"Who are you?"
+
+The relationship starts over.
+
+---
+
+# What Happens With SnapServe
+
+### Call #1
+
+AI:
+"Would you like to learn more about our product?"
+
+Prospect:
+"I'm busy. Call me next Tuesday. I'm interested in your Enterprise package."
+
+Memory stored automatically.
+
+---
+
+### Call #2
+
+AI:
+"Hi John. Last week you asked me to call back today regarding the Enterprise package. Is now a good time to continue our conversation?"
+
+Prospect:
+"Yes."
+
+The conversation continues.
+
+---
+
+# More Than Memory
+
+## Everything You Need To Deploy Voice AI
+
+### Real-Time Voice Orchestration
+
+Connect OpenAI, Deepgram, ElevenLabs, Gemini, Sarvam, Twilio and more.
+
+Build custom voice pipelines in minutes.
+
+### Outbound Campaigns
+
+Upload leads.
+
+Schedule calls.
+
+Track dispositions.
+
+Automate follow-ups.
+
+### Smart Scheduling
+
+Built-in booking engine with calendar sync and timezone awareness.
+
+### Knowledge Base
+
+Give agents access to documents, FAQs and company knowledge during live conversations.
+
+### Live Monitoring
+
+Watch active calls, transcripts and performance metrics in real time.
+
+### Web Voice Widget
+
+Add voice AI to any website using a single script tag.
+
+---
+
+# Bring Your Own Providers
+
+Your providers.
+
+Your API keys.
+
+Your costs.
+
+Your control.
+
+Connect:
+
+• OpenAI
+• Anthropic
+• Gemini
+• DeepSeek
+• Deepgram
+• ElevenLabs
+• Cartesia
+• Twilio
+• Plivo
+• Sarvam
+
+No vendor lock-in.
+
+No forced model choices.
+
+---
+
+# Built For
+
+### AI Agencies
+
+Deploy voice agents for multiple clients from one platform.
+
+### Developers
+
+Skip months of infrastructure work and launch production-ready voice AI faster.
+
+### SaaS Founders
+
+Add voice capabilities to your product without building the backend.
+
+### Enterprises
+
+Scale thousands of conversations while maintaining context across every customer interaction.
+
+---
+
+# Why SnapServe
+
+Most platforms help you make calls.
+
+SnapServe helps you build relationships.
+
+Most platforms orchestrate conversations.
+
+SnapServe remembers them.
+
+Most platforms handle voice.
+
+SnapServe handles continuity.
+
+---
+
+# Pricing
+
+### Developer
+
+$0.08/min
+
+Perfect for testing and prototypes.
+
+### Production
+
+$0.12/min
+
+For customer-facing voice agents at scale.
+
+### Enterprise
+
+Custom Pricing
+
+Dedicated infrastructure and unlimited concurrency.
+
+You pay providers directly.
+
+SnapServe only charges for orchestration and memory.
+
+---
+
+# Build Voice Agents That Never Forget
+
+Stop rebuilding context.
+
+Stop losing conversations.
+
+Stop treating every call like the first call.
+
+Create voice agents that remember.
+
+### Start Free Today
