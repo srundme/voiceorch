@@ -55,6 +55,14 @@ interface SarvamStreamMsg {
   data?: { transcript?: string; message?: string; event?: string };
 }
 
+/**
+ * Set to true the first time a streaming WebSocket gets a 403 response.
+ * All subsequent SarvamSTT instances will skip the WS attempt and go straight
+ * to batch mode, saving ~1 second of failed-connection latency per call.
+ * Reset on server restart.
+ */
+let streamingSubscriptionUnavailable = false;
+
 export class SarvamSTT implements STTAdapter {
   private readonly key: string;
   private readonly model: string;
@@ -72,7 +80,7 @@ export class SarvamSTT implements STTAdapter {
     this.langCode = normaliseSarvamLang(cfg.language);
     this.endOfTurnTimeout = cfg.endOfTurnTimeout;
 
-    if (STREAMING_MODELS.has(this.model)) {
+    if (STREAMING_MODELS.has(this.model) && !streamingSubscriptionUnavailable) {
       this.transcribeStream = this.buildStreamingSession.bind(this);
     }
   }
@@ -262,7 +270,16 @@ export class SarvamSTT implements STTAdapter {
     });
 
     ws.on("error", (err: unknown) => {
-      logger.error({ err }, "Sarvam streaming STT WebSocket error");
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("403")) {
+        streamingSubscriptionUnavailable = true;
+        logger.warn(
+          "Sarvam streaming STT got 403 — streaming subscription unavailable; " +
+          "switching all future calls to batch mode for this server session"
+        );
+      } else {
+        logger.error({ err }, "Sarvam streaming STT WebSocket error");
+      }
     });
 
     ws.on("close", () => {
