@@ -15,7 +15,7 @@ import { handlePlivoWebSocket } from "./orchestration/telephony/plivo.js";
 import { handleVobizWebSocket } from "./orchestration/telephony/vobiz.js";
 import { handleWebCallWebSocket } from "./orchestration/telephony/webcall.js";
 import { db } from "@workspace/db";
-import { platformSettingsTable } from "@workspace/db";
+import { platformSettingsTable, agentsTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -64,6 +64,31 @@ server.on("upgrade", (request, socket, head) => {
   });
 });
 
+/**
+ * One-shot idempotent migration: upgrade agents still using the legacy
+ * batch-only saarika:v2.5 model to saaras:v3 (streaming WebSocket).
+ * saarika:v2.5 has no transcribeStream support — those agents fell back to the
+ * slow VAD-silence batch path (600ms+ latency) instead of the fast streaming path.
+ * Safe to keep running on every startup; it becomes a no-op once no rows remain.
+ */
+async function migrateSaarikaToSaaras(): Promise<void> {
+  try {
+    const result = await db
+      .update(agentsTable)
+      .set({ asrModel: "saaras:v3" })
+      .where(eq(agentsTable.asrModel, "saarika:v2.5"))
+      .returning({ id: agentsTable.id, name: agentsTable.name });
+    if (result.length > 0) {
+      logger.info(
+        { count: result.length, ids: result.map(r => r.id) },
+        "Migrated agents from saarika:v2.5 → saaras:v3 (streaming STT)"
+      );
+    }
+  } catch (err) {
+    logger.warn({ err }, "saarika→saaras migration failed (non-fatal)");
+  }
+}
+
 async function seedManagedKeyFromEnv(dbKey: string, envVar: string): Promise<void> {
   const envKey = (process.env[envVar] ?? "").trim();
   if (!envKey) return;
@@ -90,6 +115,7 @@ server.listen(port, () => {
   void seedManagedKeyFromEnv("managed_qwen_key",     "GROQ_API_KEY");
   void seedManagedKeyFromEnv("managed_sarvam_key",   "SARVAM_API_KEY");
   void seedManagedKeyFromEnv("managed_cartesia_key", "CARTESIA_API_KEY");
+  void migrateSaarikaToSaaras();
   startCallbackPoller();
   startSpikeChecker();
   startAlertSweep();
