@@ -118,12 +118,22 @@ export class SarvamSTT implements STTAdapter {
       model: apiModel,
       input_audio_codec: "pcm_s16le",
       sample_rate: "16000",
+      // Pass key as query param too — some reverse-proxy setups strip custom
+      // headers during the WebSocket upgrade handshake, causing 403.
+      "api-subscription-key": this.key,
     });
 
     const wsUrl = `wss://api.sarvam.ai/speech-to-text/ws?${params.toString()}`;
 
+    // Log a sanitized URL without the API key
+    const safeParams = new URLSearchParams({
+      language_code: this.langCode,
+      model: apiModel,
+      input_audio_codec: "pcm_s16le",
+      sample_rate: "16000",
+    });
     logger.info(
-      { langCode: this.langCode, model: apiModel, wsUrl },
+      { langCode: this.langCode, model: apiModel, wsUrl: `wss://api.sarvam.ai/speech-to-text/ws?${safeParams.toString()}` },
       "Sarvam streaming STT: opening WebSocket"
     );
 

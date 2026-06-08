@@ -32,7 +32,7 @@ const activeCalls = new Map<string, number>();
 const MAX_CONCURRENT_CALLS = 5;
 
 // ── Tuning constants ─────────────────────────────────────────────────────────
-const VAD_SILENCE_MS           = 450;   // silence window before sending audio to STT (ms)
+const VAD_SILENCE_MS           = 200;   // silence window before sending audio to STT (ms)
 const SPEECH_RMS_THRESHOLD     = 400;   // normal VAD — user speaking (agent silent)
 const BARGE_IN_RMS             = 800;   // energy threshold while agent is speaking.
                                         // Browser echoCancellation suppresses the mic signal during TTS by ~6–12 dB,
