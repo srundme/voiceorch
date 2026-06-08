@@ -108,7 +108,7 @@ async function seedManagedKeyFromEnv(dbKey: string, envVar: string): Promise<voi
   }
 }
 
-agnost.init("aaba3367-0081-4ee1-9319-c1b604fff441");
+agnost.init("aaba3367-0081-4ee1-9319-c1b604fff441", { debug: true });
 
 server.listen(port, () => {
   logger.info({ port }, "Server listening");
