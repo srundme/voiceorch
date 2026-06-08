@@ -144,10 +144,16 @@ export class SarvamSTT implements STTAdapter {
     // first, all subsequent calls to emitFinal() for that utterance are no-ops.
     //
     // State is reset either by the speech_start VAD event (primary) or by a
-    // 1 500 ms grace window after the last emit (fallback for missed speech_start).
-    const LOCAL_SILENCE_MS = 600;
+    // 600 ms grace window after the last emit (fallback for missed speech_start).
+    // How long after the last partial to emit if speech_end doesn't arrive.
+    // 200 ms is aggressive but safe — Sarvam sends speech_end within ~100–400 ms
+    // after real speech ends, so this only fires if the VAD event is genuinely late.
+    const LOCAL_SILENCE_MS = 200;
     const SAFETY_MS = this.endOfTurnTimeout;
-    const INTER_UTTERANCE_GRACE_MS = 1500; // how long to wait before treating a new partial as a new utterance
+    // After emitting a final, ignore new partials for this window (treats them as
+    // a continuation rather than a brand-new utterance). Reduced from 1500 → 600 ms
+    // so back-to-back short phrases are processed faster.
+    const INTER_UTTERANCE_GRACE_MS = 600;
 
     let latestTranscript = "";
     let hasEmitted = false;

@@ -117,7 +117,7 @@ export class OrchestrationPipeline {
 
   // Streaming STT (Deepgram live transcription)
   private streamSTT: StreamSTT | null = null;
-  private pendingTranscript: string | null = null;
+  private pendingTranscript: { text: string; emittedAt: number } | null = null;
   private streamSTTReconnectAttempts = 0;
   private streamSTTReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -266,7 +266,7 @@ export class OrchestrationPipeline {
           if (!isFinal || !text.trim() || this.closed) return;
           this.streamSTTReconnectAttempts = 0; // reset backoff on successful transcript
           this.resetHangupTimer();
-          void this.handleStreamingTranscript(text);
+          void this.handleStreamingTranscript(text, Date.now());
         },
         () => {
           // Stream closed — attempt reconnect unless the call is already over
@@ -298,7 +298,12 @@ export class OrchestrationPipeline {
    * Called by the streaming STT callback when a final transcript arrives.
    * Handles barge-in detection and queuing if a turn is already in progress.
    */
-  private async handleStreamingTranscript(transcript: string): Promise<void> {
+  private async handleStreamingTranscript(transcript: string, sttEmittedAt = Date.now()): Promise<void> {
+    const sttToProcessMs = Date.now() - sttEmittedAt;
+    logger.info(
+      { callId: this.config.callId, sttToProcessMs, queued: this.isProcessing },
+      "Streaming STT transcript received"
+    );
     // A final transcript marks the end of the current speech segment — reset the
     // flag so the NEXT utterance triggers a fresh KB prefetch.
     this.inSpeechSegment = false;
@@ -328,7 +333,7 @@ export class OrchestrationPipeline {
     }
 
     if (this.isProcessing) {
-      this.pendingTranscript = transcript;
+      this.pendingTranscript = { text: transcript, emittedAt: sttEmittedAt };
       return;
     }
 
@@ -342,7 +347,7 @@ export class OrchestrationPipeline {
       const pending = this.pendingTranscript;
       if (pending) {
         this.pendingTranscript = null;
-        void this.handleStreamingTranscript(pending);
+        void this.handleStreamingTranscript(pending.text, pending.emittedAt);
       }
     }
   }
