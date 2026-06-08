@@ -176,7 +176,9 @@ function ThreeOrb({ className }: { className?: string }) {
     const l2 = new THREE.PointLight(0xc084fc, 2.5, 9);
     l2.position.set(-2, -1.5, -1);
     scene.add(l2);
-    scene.add(Object.assign(new THREE.PointLight(0x06b6d4, 1.5, 7), { position: new THREE.Vector3(0, -2, 2) }));
+    const l3 = new THREE.PointLight(0x06b6d4, 1.5, 7);
+    l3.position.set(0, -2, 2);
+    scene.add(l3);
 
     /* ── Animation ────────────────────────────────────────── */
     const clock = new THREE.Clock();
