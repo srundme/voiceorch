@@ -368,6 +368,11 @@ export interface Agent {
      */
   backchannelingFrequency?: number | null;
   /**
+     * Comma-separated custom backchannel phrases (e.g. "சரி,ஆமாம்,புரிகிறது"). Leave blank to use the built-in English defaults.
+     * @nullable
+     */
+  backchannelPhrases?: string | null;
+  /**
      * URL to POST a call summary JSON to when the call ends
      * @nullable
      */
@@ -520,6 +525,7 @@ export interface AgentInput {
   language?: string;
   backchannelingEnabled?: boolean;
   backchannelingFrequency?: number;
+  backchannelPhrases?: string;
   webhookUrl?: string;
   noiseCancellationEnabled?: boolean;
   inactivityMessage?: string;
@@ -599,6 +605,7 @@ export interface AgentUpdate {
   language?: string;
   backchannelingEnabled?: boolean;
   backchannelingFrequency?: number;
+  backchannelPhrases?: string;
   webhookUrl?: string;
   noiseCancellationEnabled?: boolean;
   inactivityMessage?: string;

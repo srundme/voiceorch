@@ -138,6 +138,7 @@ export const agentsTable = pgTable("agents", {
   language: text("language"),
   backchannelingEnabled: boolean("backchanneling_enabled").default(false),
   backchannelingFrequency: real("backchanneling_frequency"),
+  backchannelPhrases: text("backchannel_phrases"),
   webhookUrl: text("webhook_url"),
   noiseCancellationEnabled: boolean("noise_cancellation_enabled").default(false),
   inactivityMessage: text("inactivity_message"),

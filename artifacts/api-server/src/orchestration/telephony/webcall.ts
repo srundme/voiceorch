@@ -914,7 +914,11 @@ export async function handleWebCallWebSocket(
       if (toolIterations === 0 && agent.backchannelingEnabled && !interrupted) {
         const freq = (agent.backchannelingFrequency ?? 0.3) as number;
         if (Math.random() < freq) {
-          const phrase = BACKCHANNEL_PHRASES[Math.floor(Math.random() * BACKCHANNEL_PHRASES.length)]!;
+          const customPhrases = agent.backchannelPhrases
+            ? agent.backchannelPhrases.split(",").map(s => s.trim()).filter(Boolean)
+            : [];
+          const phrasePool = customPhrases.length > 0 ? customPhrases : BACKCHANNEL_PHRASES;
+          const phrase = phrasePool[Math.floor(Math.random() * phrasePool.length)]!;
           queueSentence(phrase);
         }
       }

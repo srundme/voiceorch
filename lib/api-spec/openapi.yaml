@@ -5306,6 +5306,9 @@ components:
         backchannelingFrequency:
           type: ["number", "null"]
           description: Probability (0–1) of backchanneling on each turn
+        backchannelPhrases:
+          type: ["string", "null"]
+          description: Comma-separated custom backchannel phrases (e.g. "சரி,ஆமாம்,புரிகிறது"). Leave blank to use the built-in English defaults.
         webhookUrl:
           type: ["string", "null"]
           description: URL to POST a call summary JSON to when the call ends
@@ -5451,6 +5454,8 @@ components:
           type: boolean
         backchannelingFrequency:
           type: number
+        backchannelPhrases:
+          type: string
         webhookUrl:
           type: string
         noiseCancellationEnabled:
@@ -5561,6 +5566,8 @@ components:
           type: boolean
         backchannelingFrequency:
           type: number
+        backchannelPhrases:
+          type: string
         webhookUrl:
           type: string
         noiseCancellationEnabled:

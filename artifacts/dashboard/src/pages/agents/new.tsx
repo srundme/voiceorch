@@ -190,6 +190,7 @@ const agentFormSchema = z.object({
   language:                 z.string().optional(),
   backchannelingEnabled:    z.boolean().optional(),
   backchannelingFrequency:  z.number().min(0).max(1).optional(),
+  backchannelPhrases:       z.string().optional(),
   webhookUrl:               z.string().optional(),
   noiseCancellationEnabled:  z.boolean().optional(),
   inactivityMessage:         z.string().optional(),
@@ -300,6 +301,7 @@ export default function AgentNew() {
       language:                 "en-US",
       backchannelingEnabled:    true,
       backchannelingFrequency:  0.5,
+      backchannelPhrases:       "",
       webhookUrl:               "",
       noiseCancellationEnabled: true,
       inactivityMessage:        "",
@@ -699,18 +701,30 @@ export default function AgentNew() {
                         )} />
                       </div>
                       {backchannelingEnabled && (
-                        <FormField control={form.control} name="backchannelingFrequency" render={({ field }) => (
-                          <FormItem>
-                            <div className="flex justify-between text-xs text-muted-foreground">
-                              <span>Frequency</span>
-                              <span>{Math.round((backchannelingFrequency ?? 0.5) * 100)}% of turns</span>
-                            </div>
-                            <FormControl>
-                              <Slider min={0} max={1} step={0.05} value={[field.value ?? 0.5]}
-                                onValueChange={(vals) => field.onChange(vals[0])} />
-                            </FormControl>
-                          </FormItem>
-                        )} />
+                        <>
+                          <FormField control={form.control} name="backchannelingFrequency" render={({ field }) => (
+                            <FormItem>
+                              <div className="flex justify-between text-xs text-muted-foreground">
+                                <span>Frequency</span>
+                                <span>{Math.round((backchannelingFrequency ?? 0.5) * 100)}% of turns</span>
+                              </div>
+                              <FormControl>
+                                <Slider min={0} max={1} step={0.05} value={[field.value ?? 0.5]}
+                                  onValueChange={(vals) => field.onChange(vals[0])} />
+                              </FormControl>
+                            </FormItem>
+                          )} />
+                          <FormField control={form.control} name="backchannelPhrases" render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Backchannel Phrases</FormLabel>
+                              <FormControl>
+                                <Input placeholder="I see, Got it, Okay, சரி, ஆமாம், புரிகிறது" {...field} />
+                              </FormControl>
+                              <FormDescription>Comma-separated. Leave blank to use the default English phrases.</FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+                        </>
                       )}
                     </div>
 

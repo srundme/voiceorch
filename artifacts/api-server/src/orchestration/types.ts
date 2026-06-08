@@ -185,6 +185,7 @@ export interface AgentConfig {
   language: string | null;
   backchannelingEnabled: boolean;
   backchannelingFrequency: number | null;
+  backchannelPhrases: string[];
   webhookUrl: string | null;
   noiseCancellationEnabled: boolean;
   ambientNoiseEnabled: boolean;

@@ -1240,7 +1240,8 @@ export class OrchestrationPipeline {
     if (this.agent.backchannelingEnabled && !this.closed && !this.bargeInRequested) {
       const freq = this.agent.backchannelingFrequency ?? 0.5;
       if (Math.random() < freq) {
-        const phrase = BACKCHANNEL_PHRASES[Math.floor(Math.random() * BACKCHANNEL_PHRASES.length)]!;
+        const pool = this.agent.backchannelPhrases.length > 0 ? this.agent.backchannelPhrases : BACKCHANNEL_PHRASES;
+        const phrase = pool[Math.floor(Math.random() * pool.length)]!;
         enqueue(phrase);
         backchanneledThisTurn = true;
       }
