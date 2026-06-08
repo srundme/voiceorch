@@ -60,3 +60,9 @@ id = "FxlMo75D9CYlpaTO90kTh"
 uri = "file://backup_clean.sql.gz"
 type = "unspecified"
 title = "VoiceOrch DB Backup (272 KB compressed)"
+
+[[outputs]]
+id = "KKQcGgbdFUBKYVBdtaPg0"
+uri = "file://snapserve-product-details.md"
+type = "text"
+title = "SnapServe AI — Product Details"
