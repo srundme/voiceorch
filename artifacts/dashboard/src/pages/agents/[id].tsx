@@ -39,12 +39,19 @@ interface Msg { speaker: "user" | "agent"; text: string }
 function useWebcallKeyStatus() {
   const [keys, setKeys]       = useState<Record<string, boolean> | null>(null);
   const [loading, setLoading] = useState(true);
+  const { getToken } = useAuth();
   useEffect(() => {
-    fetch("/api/billing/webcall-key-status", { credentials: "include" })
-      .then(r => r.ok ? r.json() : null)
-      .then((d: Record<string, boolean> | null) => { setKeys(d); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, []);
+    void (async () => {
+      try {
+        const token = await getToken();
+        const headers: Record<string, string> = {};
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        const r = await fetch("/api/billing/webcall-key-status", { headers });
+        const d: Record<string, boolean> | null = r.ok ? await r.json() as Record<string, boolean> : null;
+        setKeys(d);
+      } catch { /* ignore */ } finally { setLoading(false); }
+    })();
+  }, [getToken]);
   return { keys, loading };
 }
 
