@@ -14,6 +14,7 @@ import { getLoginAuthUrl, exchangeLoginCode } from "../services/auth/google-logi
 import { createSessionToken } from "../lib/session.js";
 import { isTrustedOrigin, dashboardBase, deriveRedirectUri } from "../lib/oauth-redirect.js";
 import { logger } from "../lib/logger.js";
+import * as agnost from "agnostai";
 
 const router: IRouter = Router();
 
@@ -68,6 +69,10 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
       sub: profile.sub,
       email: profile.email,
       name: profile.name,
+    });
+    agnost.identify(profile.sub, {
+      email: profile.email ?? "",
+      name: profile.name ?? "",
     });
     logger.info({ sub: profile.sub, email: profile.email }, "User signed in via Google");
     res.redirect(`${base}/app#session=${encodeURIComponent(token)}`);

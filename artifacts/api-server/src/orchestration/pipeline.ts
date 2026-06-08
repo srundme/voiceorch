@@ -1,3 +1,4 @@
+import * as agnost from "agnostai";
 import { GenderDetector } from "./genderDetector.js";
 import { GenderDetectorML } from "./genderDetectorML.js";
 import { GenderDetectorMLv2 } from "./genderDetectorMLv2.js";
@@ -1351,6 +1352,19 @@ export class OrchestrationPipeline {
       }, FILLER_THRESHOLD_MS);
     }
 
+    const _agnostTurn = agnost.begin({
+      userId:         this.config.callerPhone ?? String(this.config.callId),
+      agentName:      this.agent.name,
+      input:          transcript,
+      conversationId: String(this.config.callId),
+      properties: {
+        agentId:     this.agent.id,
+        llmProvider: this.agent.llmProvider,
+        llmModel:    this.agent.llmModel ?? "",
+        callId:      this.config.callId,
+      },
+    });
+
     try {
       await this.llm.chat(
         this.conversationHistory,
@@ -1393,8 +1407,10 @@ export class OrchestrationPipeline {
               },
             }
       );
+      _agnostTurn?.end(llmResponse);
     } catch (llmErr) {
       if (fillerTimer) { clearTimeout(fillerTimer); fillerTimer = null; }
+      _agnostTurn?.end(String(llmErr), false);
       const reason = toReadableError(llmErr, "LLM error");
       logger.error({ callId: this.config.callId, err: llmErr }, reason);
       this.config.onFatalError?.(reason);

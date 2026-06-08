@@ -1,0 +1,71 @@
+# Integrate Agnost AI analytics into this project
+
+Agnost org ID: aaba3367-0081-4ee1-9319-c1b604fff441
+Integration: **TypeScript SDK**
+
+1. Look at my project and confirm the TypeScript SDK integration below is the right fit for this codebase.
+2. Install the SDK, wire it into the actual code (not a demo file), and use real values from my codebase for user IDs, agent names, inputs, and outputs. Do not use placeholder values.
+3. Keep the integration dead simple — just the SDK init, tracking calls, and user identification. No wrappers, no utility files, no abstractions. Inline it where the code already lives.
+4. Run the app and confirm it starts without errors.
+
+## What the integration MUST capture
+
+The final instrumentation should try to track all six of these signals using real values from the codebase (no placeholders, no hard-coded strings):
+
+1. **User ID** — the actual logged-in user, from auth/session/request headers
+2. **Session ID / Conversation ID** — the thread or session identifier that groups multiple turns together
+3. **Input** — the user's message / tool arguments
+4. **Output** — the agent/tool response
+5. **Success** — whether the call succeeded (set to `false` on exceptions)
+6. **Agent name / Tool name** — the logical name of the agent or tool being invoked (MCP tool name, chat agent name, etc.)
+
+---
+
+## SDK TypeScript
+
+Install: `npm install agnostai`
+
+```typescript
+import * as agnost from 'agnostai';
+agnost.init('aaba3367-0081-4ee1-9319-c1b604fff441');
+
+// At login / session start — pass any arbitrary key: value pairs for this user.
+agnost.identify(<actualUserId>, {
+  <userKey1>: <userValue1>,
+  <userKey2>: <userValue2>,
+  // ... add whatever keys are meaningful for this project
+});
+
+// Wrap every turn. Same conversationId across turns in one thread.
+const interaction = agnost.begin({
+  userId:         <actualUserId>,
+  agentName:      <agentOrToolName>,
+  input:          <userMessageOrToolArgs>,
+  conversationId: <threadOrSessionId>,
+  properties:     { <key1>: <value1>, <key2>: <value2> }, // arbitrary metadata relevant to this codebase
+});
+
+try {
+  const output = await <call your LLM / tool>;
+  interaction.setProperties({ <key>: <value> }); // add more arbitrary metadata as you discover it
+  interaction.end(output);                       // success defaults to true
+} catch (err) {
+  interaction.end(String(err), false);           // mark this turn as failed
+}
+
+// On process shutdown
+await agnost.shutdown();
+```
+
+For more details: https://docs.agnost.ai/typescript-conversation
+
+---
+
+## Rules for implementation
+
+1. Use real values from the codebase for user_id, agent_name, input, output, session/conversation_id, metadata. No placeholders, no hard-coded strings, no demo files.
+2. Instrument in the code path that actually handles turns/tool calls. Do NOT create wrappers, helper modules, or abstractions around the SDK.
+3. Verify: all six signals (user ID, session/conversation ID, input, output, success, agent/tool name) are present on every tracked call, plus `identify()` runs at login.
+4. Run the app and confirm it starts without errors.
+
+Full docs: https://docs.agnost.ai

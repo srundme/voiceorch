@@ -2,6 +2,7 @@ import http from "http";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { WebSocketServer } from "ws";
+import * as agnost from "agnostai";
 import app from "./app.js";
 import { logger } from "./lib/logger.js";
 import { initAudioPool } from "./orchestration/audioPool.js";
@@ -107,6 +108,8 @@ async function seedManagedKeyFromEnv(dbKey: string, envVar: string): Promise<voi
   }
 }
 
+agnost.init("aaba3367-0081-4ee1-9319-c1b604fff441");
+
 server.listen(port, () => {
   logger.info({ port }, "Server listening");
   // Initialise audio pool after the server is already listening so the port is
@@ -125,6 +128,7 @@ server.listen(port, () => {
 
 function gracefulShutdown(signal: string) {
   logger.info({ signal }, "Received shutdown signal, closing server");
+  void agnost.shutdown();
   server.close((err) => {
     if (err) {
       logger.error({ err }, "Error closing server");

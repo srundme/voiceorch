@@ -351,7 +351,7 @@ importers:
         version: 7.3.3(@types/node@25.6.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.8.4)
       vitest:
         specifier: ^4.1.7
-        version: 4.1.7(@types/node@25.6.2)(jsdom@29.1.1)(vite@7.3.3(@types/node@25.6.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.8.4))
+        version: 4.1.7(@types/node@25.6.2)(jiti@2.7.0)(jsdom@29.1.1)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.8.4)
       wouter:
         specifier: ^3.3.5
         version: 3.9.0(react@19.1.0)
@@ -376,6 +376,9 @@ importers:
       '@workspace/db':
         specifier: workspace:*
         version: link:../../lib/db
+      agnostai:
+        specifier: ^0.1.2
+        version: 0.1.2
       cookie-parser:
         specifier: ^1.4.7
         version: 1.4.7
@@ -475,7 +478,7 @@ importers:
         version: 3.1.0
       vitest:
         specifier: ^4.1.7
-        version: 4.1.7(@types/node@25.6.2)(jsdom@29.1.1)(vite@7.3.3(@types/node@25.6.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.8.4))
+        version: 4.1.7(@types/node@25.6.2)(jiti@2.7.0)(jsdom@29.1.1)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.8.4)
 
   artifacts/dashboard:
     devDependencies:
@@ -679,7 +682,7 @@ importers:
         version: 7.3.3(@types/node@25.6.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.8.4)
       vitest:
         specifier: ^4.1.7
-        version: 4.1.7(@types/node@25.6.2)(jsdom@29.1.1)(vite@7.3.3(@types/node@25.6.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.8.4))
+        version: 4.1.7(@types/node@25.6.2)(jiti@2.7.0)(jsdom@29.1.1)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.8.4)
       wouter:
         specifier: ^3.3.5
         version: 3.9.0(react@19.1.0)
@@ -2450,6 +2453,10 @@ packages:
   agent-base@7.1.4:
     resolution: {integrity: sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ==}
     engines: {node: '>= 14'}
+
+  agnostai@0.1.2:
+    resolution: {integrity: sha512-BpXHRNpNQSXF2WUXeTX1HirSg055BHBo9Kg7/ffkQxbUeMF/DXRzkVoCeUVsYY9EkYBa5H/21QxvQ9YEgtEGJg==}
+    engines: {node: '>=18.0.0'}
 
   ajv-draft-04@1.0.0:
     resolution: {integrity: sha512-mv00Te6nmYbRp5DCwclxtt7yV/joXJPGS7nM+97GdxvuttCOfgI3K4U25zboyeX0O+myI8ERluxQe5wljMmVIw==}
@@ -4465,7 +4472,6 @@ packages:
       '@vitest/ui': 4.1.7
       happy-dom: '*'
       jsdom: '*'
-      vite: ^6.0.0 || ^7.0.0 || ^8.0.0
     peerDependenciesMeta:
       '@edge-runtime/vm':
         optional: true
@@ -6094,6 +6100,10 @@ snapshots:
       - supports-color
 
   agent-base@7.1.4: {}
+
+  agnostai@0.1.2:
+    dependencies:
+      uuid: 9.0.1
 
   ajv-draft-04@1.0.0(ajv@8.20.0):
     optionalDependencies:
@@ -7979,7 +7989,7 @@ snapshots:
       tsx: 4.21.0
       yaml: 2.8.4
 
-  vitest@4.1.7(@types/node@25.6.2)(jsdom@29.1.1)(vite@7.3.3(@types/node@25.6.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.8.4)):
+  vitest@4.1.7(@types/node@25.6.2)(jiti@2.7.0)(jsdom@29.1.1)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.8.4):
     dependencies:
       '@vitest/expect': 4.1.7
       '@vitest/mocker': 4.1.7(vite@7.3.3(@types/node@25.6.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.8.4))
@@ -8005,7 +8015,17 @@ snapshots:
       '@types/node': 25.6.2
       jsdom: 29.1.1
     transitivePeerDependencies:
+      - jiti
+      - less
+      - lightningcss
       - msw
+      - sass
+      - sass-embedded
+      - stylus
+      - sugarss
+      - terser
+      - tsx
+      - yaml
 
   w3c-xmlserializer@5.0.0:
     dependencies:
