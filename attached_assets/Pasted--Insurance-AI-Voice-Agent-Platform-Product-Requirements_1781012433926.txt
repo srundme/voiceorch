@@ -1,0 +1,209 @@
+# Insurance AI Voice Agent Platform – Product Requirements
+
+## Project Overview
+
+We already have a fully functional AI Voice Orchestration Platform that handles telephony, speech-to-text, LLM processing, text-to-speech, call management, campaigns, phone numbers, and analytics.
+
+The goal of this new application is to use the same orchestration infrastructure but create a specialized platform for insurance agents and insurance sales teams in India.
+
+## Core Concept
+
+The platform will provide pre-trained AI Voice Agents for major insurance companies in India.
+
+Instead of users creating agents from scratch, the Admin team will create, train, test, and manage all insurance-specific AI agents.
+
+Each AI agent will represent a specific insurance company and will be trained on all policies, plans, benefits, eligibility criteria, claim processes, and FAQs related to that company.
+
+Examples:
+
+* ICICI Lombard AI Agent
+* HDFC ERGO AI Agent
+* Star Health AI Agent
+* Niva Bupa AI Agent
+* Tata AIG AI Agent
+* SBI General AI Agent
+
+The platform should initially support approximately 30–32 insurance companies.
+
+---
+
+## Admin Panel
+
+The Admin Panel will act as the master control center.
+
+### Agent Management
+
+Admins can:
+
+* Create Insurance Company AI Agents
+* Configure system prompts
+* Upload policy documents
+* Upload product brochures
+* Upload claim documents
+* Upload FAQ documents
+* Train AI agents
+* Retrain AI agents
+* Test AI responses
+* Approve agents before publishing
+
+### Knowledge Base Management
+
+Admins can:
+
+* Add new policies
+* Update existing policies
+* Remove outdated policies
+* Manage insurance company documents
+* Version control policy updates
+
+### Agent Testing
+
+Admins can:
+
+* Simulate customer conversations
+* Verify policy recommendations
+* Test objection handling
+* Validate compliance responses
+* Review call quality
+
+Only fully tested and approved agents become available to users.
+
+---
+
+## User Flow
+
+### Login
+
+Users log in using:
+
+* Agent Code
+* Email
+* Mobile Number
+
+### Dashboard
+
+After login, users can view all available insurance company agents.
+
+Example:
+
+* ICICI Lombard Agent
+* HDFC ERGO Agent
+* Star Health Agent
+* Niva Bupa Agent
+* SBI General Agent
+
+### Agent Selection
+
+Users select:
+
+1. Insurance Company
+2. Specific AI Agent
+3. Campaign Type
+
+### Purchase Access
+
+Users pay a subscription or usage fee to access selected agents.
+
+### Phone Number Purchase
+
+To run campaigns, users must purchase a virtual phone number through the platform.
+
+The phone number system already exists in the current application and should be reused.
+
+---
+
+## Campaign Management
+
+Users can create campaigns.
+
+Example:
+
+"Health Insurance Lead Follow-up Campaign"
+
+Inside a campaign, users can:
+
+* Upload lead lists
+* Create multiple call batches
+* Schedule calls
+* Start campaigns
+* Pause campaigns
+* Resume campaigns
+
+### Batch Calling
+
+One campaign can contain multiple batches.
+
+Example:
+
+Campaign:
+Health Insurance Follow-up
+
+Batch 1:
+500 Leads
+
+Batch 2:
+1000 Leads
+
+Batch 3:
+750 Leads
+
+The AI should process all batches independently while keeping reporting under the same campaign.
+
+---
+
+## AI Calling Capabilities
+
+The AI agents should be able to:
+
+* Introduce insurance products
+* Explain policy benefits
+* Explain premium amounts
+* Answer policy questions
+* Handle customer objections
+* Qualify leads
+* Collect customer information
+* Schedule callbacks
+* Transfer hot leads to human agents
+* Generate call summaries
+
+---
+
+## Reporting & Analytics
+
+Users should have access to:
+
+* Total Calls
+* Connected Calls
+* Qualified Leads
+* Interested Customers
+* Callback Requests
+* Conversion Tracking
+* Agent Performance
+* Campaign Performance
+* Call Recordings
+* Call Transcripts
+
+---
+
+## Architecture
+
+Reuse the existing AI Voice Orchestration infrastructure:
+
+* Telephony Engine
+* STT (Speech-to-Text)
+* LLM Layer
+* TTS (Text-to-Speech)
+* Campaign Engine
+* Phone Number Management
+* Call Recording
+* Analytics System
+
+Build a new Insurance SaaS layer on top of the existing infrastructure.
+
+The insurance platform should function as a separate SaaS product while sharing the same backend orchestration system.
+
+---
+
+## End Goal
+
+Create India's largest Insurance AI Calling Platform where insurance agents and agencies can instantly access fully trained AI voice agents for multiple insurance companies, launch outbound campaigns, and generate qualified insurance leads without building or training AI agents themselves.
