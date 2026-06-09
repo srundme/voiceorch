@@ -273,6 +273,9 @@ function WebCallPanel({ agent, onCallSaved }: { agent: InsuranceAgent; onCallSav
   const nextPlayRef  = useRef<{ t: number }>({ t: 0 });
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const phaseRef = useRef<CallPhase>("idle");
+  // Gate mic transmission while the agent is speaking so the TTS echo from
+  // the browser speaker cannot trigger false barge-in detection on the server.
+  const agentSpeakingRef = useRef(false);
 
   useEffect(() => { phaseRef.current = phase; }, [phase]);
   useEffect(() => {
@@ -391,6 +394,9 @@ function WebCallPanel({ agent, onCallSaved }: { agent: InsuranceAgent; onCallSav
       processor.connect(audioCtx.destination);
       processor.onaudioprocess = (e) => {
         if (ws.readyState !== WebSocket.OPEN) return;
+        // Suppress mic while agent is speaking — prevents TTS echo from the
+        // browser speaker triggering false barge-in detection on the server.
+        if (agentSpeakingRef.current) return;
         const float32 = e.inputBuffer.getChannelData(0);
         ws.send(floatToPcm16(float32));
       };
@@ -413,7 +419,10 @@ function WebCallPanel({ agent, onCallSaved }: { agent: InsuranceAgent; onCallSav
             setDuration(d => d + 1);
           }, 1000);
         } else if (msg["type"] === "status") {
-          setStatus(String(msg["status"] ?? ""));
+          const st = String(msg["status"] ?? "");
+          setStatus(st);
+          // Track agent speaking state so the mic gate can suppress echo
+          agentSpeakingRef.current = st === "speaking";
         } else if (msg["type"] === "transcript") {
           const line: TranscriptLine = {
             role: msg["speaker"] === "user" ? "user" : "agent",
@@ -422,6 +431,7 @@ function WebCallPanel({ agent, onCallSaved }: { agent: InsuranceAgent; onCallSav
           currentTranscript.push(line);
           setTranscript([...currentTranscript]);
         } else if (msg["type"] === "interrupted") {
+          agentSpeakingRef.current = false;
           nextPlayRef.current.t = audioCtx.currentTime;
         } else if (msg["type"] === "ended") {
           currentDuration = typeof msg["durationSeconds"] === "number" ? msg["durationSeconds"] : currentDuration;
