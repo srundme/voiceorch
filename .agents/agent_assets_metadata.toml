@@ -66,3 +66,9 @@ id = "KKQcGgbdFUBKYVBdtaPg0"
 uri = "file://snapserve-product-details.md"
 type = "text"
 title = "SnapServe AI — Product Details"
+
+[[outputs]]
+id = "mYxcCvDinjXCK0t9YBwqi"
+uri = "file://SnapServe_Investor_Overview.md"
+type = "text"
+title = "SnapServe AI — Investor Overview"
