@@ -36,7 +36,16 @@ const FALLBACK_BYTES = 4 * SAMPLE_RATE * SAMPLE_BYTES;
 /** Confidence threshold for an immediate lock (0–1 scale from the ML service). */
 const CONFIDENCE_THRESHOLD = 0.75;
 
-const GENDER_ML_SERVICE_URL = process.env["GENDER_SERVICE_URL"] ?? "http://localhost:5000/voice-analysis/gender-ml";
+const _GENDER_SERVICE_BASE = (process.env["GENDER_SERVICE_URL"] ?? "http://localhost:5000/voice-analysis").replace(/\/+$/, "");
+const GENDER_ML_SERVICE_URL = `${_GENDER_SERVICE_BASE}/gender-ml`;
+
+// Startup warning so misconfigured deployments are caught in logs immediately.
+if (process.env["GENDER_SERVICE_URL"] && process.env["GENDER_SERVICE_URL"].includes("/gender-ml")) {
+  rootLogger.warn(
+    { configured: process.env["GENDER_SERVICE_URL"] },
+    "GENDER_SERVICE_URL should be a base URL (e.g. http://host:5000/voice-analysis), not a full endpoint path. The /gender-ml suffix is appended automatically.",
+  );
+}
 
 // ── WAV builder ───────────────────────────────────────────────────────────────
 
