@@ -61,6 +61,8 @@ export interface DispositionField {
   options?: string;
 }
 
+export type AgentType = 'general_purpose' | 'outbound_sales' | 'inbound_support' | 'appointment_booking' | 'lead_qualification';
+
 export interface InsuranceAgent {
   id: string;
   companyId: string;
@@ -75,9 +77,21 @@ export interface InsuranceAgent {
   kbEntries: number;
   totalCalls: number;
   conversionRate: number;
+  avgDurationSeconds: number;
   lastUpdated: string;
 
+  agentType?: AgentType;
   agentMode?: 'managed' | 'byop';
+
+  /* Memory */
+  memoryEnabled?: boolean;
+  crossCallMemoryEnabled?: boolean;
+  contextWindowMessages?: number;
+
+  /* Auto Callback */
+  autoCallbackEnabled?: boolean;
+  autoCallbackRetries?: number;
+  autoCallbackDelaySeconds?: number;
 
   asrProvider?: string;
   asrModel?: string;

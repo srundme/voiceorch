@@ -271,7 +271,7 @@ export default function FamilyAgentNew() {
       policyName: policy?.name,
       status: "draft",
       voiceId: data.ttsVoice ?? "",
-      kbEntries: 0, totalCalls: 0, conversionRate: 0,
+      kbEntries: 0, totalCalls: 0, conversionRate: 0, avgDurationSeconds: 0,
       lastUpdated: new Date().toISOString(),
       agentMode,
       webhookSecret,

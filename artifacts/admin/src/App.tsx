@@ -98,8 +98,9 @@ function Router() {
       <ProtectedRoute path="/family/companies" component={FamilyCompaniesPage} />
       <ProtectedRoute path="/family/companies/:companyId/policies/:policyId" component={PolicyKBPage} />
       <ProtectedRoute path="/family/companies/:companyId" component={FamilyCompanyDetailPage} />
-      <ProtectedRoute path="/family/agents/new" component={FamilyAgentNewPage} />
-      <ProtectedRoute path="/family/agents/:id" component={FamilyAgentDetailPage} />
+      {/* All agent routes → same Vapi-style unified page */}
+      <ProtectedRoute path="/family/agents/new" component={FamilyAgentsPage} />
+      <ProtectedRoute path="/family/agents/:id" component={FamilyAgentsPage} />
       <ProtectedRoute path="/family/agents" component={FamilyAgentsPage} />
 
       <Route component={NotFound} />
