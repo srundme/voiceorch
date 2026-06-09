@@ -17,6 +17,7 @@ import {
   Phone,
   PhoneCall,
   Music,
+  ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -75,6 +76,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/scheduling",   label: "Scheduling",   icon: Calendar },
     { href: "/call-pricing", label: "Call Pricing",  icon: PhoneCall },
     { href: "/settings",     label: "Settings",     icon: Settings },
+    { href: "/family-agents", label: "Family Agents", icon: ShieldCheck, section: "Family" },
   ];
 
   return (
@@ -86,25 +88,38 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
         
         <nav className="flex-1 overflow-y-auto p-3 space-y-0.5">
-          {navItems.map((item) => {
+          {navItems.map((item, idx) => {
             const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
             const Icon = item.icon;
-            
+            const showSection = (item as any).section && (idx === 0 || !(navItems[idx - 1] as any).section);
+
             return (
-              <Link 
-                key={item.href} 
-                href={item.href}
-                className={cn(
-                  "flex items-center px-3 py-2 rounded-md text-[13px] font-medium transition-colors",
-                  isActive 
-                    ? "bg-muted text-foreground" 
-                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+              <div key={item.href}>
+                {showSection && (
+                  <div className="px-3 pt-4 pb-1">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-px bg-border" />
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60">
+                        {(item as any).section}
+                      </span>
+                      <div className="flex-1 h-px bg-border" />
+                    </div>
+                  </div>
                 )}
-                data-testid={`nav-${item.label.toLowerCase()}`}
-              >
-                <Icon className={cn("h-4 w-4 mr-2.5", isActive ? "opacity-100 text-primary" : "opacity-70")} />
-                {item.label}
-              </Link>
+                <Link
+                  href={item.href}
+                  className={cn(
+                    "flex items-center px-3 py-2 rounded-md text-[13px] font-medium transition-colors",
+                    isActive
+                      ? "bg-muted text-foreground"
+                      : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                  )}
+                  data-testid={`nav-${item.label.toLowerCase()}`}
+                >
+                  <Icon className={cn("h-4 w-4 mr-2.5", isActive ? "opacity-100 text-primary" : "opacity-70")} />
+                  {item.label}
+                </Link>
+              </div>
             );
           })}
         </nav>

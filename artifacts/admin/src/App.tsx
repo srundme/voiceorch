@@ -23,6 +23,8 @@ import SchedulingPage from "@/pages/scheduling";
 import CallPricingPage from "@/pages/call-pricing";
 import HealthChecklistPage from "@/pages/health";
 import AmbientSoundsPage from "@/pages/ambient-sounds";
+import FamilyAgentsPage from "@/pages/family-agents";
+import FamilyAgentDetailPage from "@/pages/family-agent-detail";
 
 import UsageOverviewPage from "@/pages/usage/overview";
 import ServicePage from "@/pages/usage/service";
@@ -93,6 +95,8 @@ function Router() {
       <ProtectedRoute path="/health" component={HealthChecklistPage} />
       <ProtectedRoute path="/ambient-sounds" component={AmbientSoundsPage} />
       <ProtectedRoute path="/settings" component={PlatformSettings} />
+      <ProtectedRoute path="/family-agents" component={FamilyAgentsPage} />
+      <ProtectedRoute path="/family-agents/:id" component={FamilyAgentDetailPage} />
       <Route component={NotFound} />
     </Switch>
   );
