@@ -26,6 +26,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useFamilyStore, InsuranceAgent } from "@/lib/family-store";
 import { AGENT_TIMEZONES } from "@/lib/agent-providers";
+import { useAdminListedVoices } from "@/hooks/use-admin-api";
 
 /* ── Provider / model catalogues ─────────────────────────────────────────── */
 
@@ -314,6 +315,8 @@ export default function FamilyAgentNew() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { companies, agents, policies, saveAgents } = useFamilyStore();
+  const { data: listedVoicesData } = useAdminListedVoices();
+  const cartesiaListedVoices = listedVoicesData?.voices ?? [];
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [showAdvancedSTT, setShowAdvancedSTT] = useState(false);
   const [agentMode, setAgentMode] = useState<"managed" | "byop">("byop");
@@ -982,7 +985,40 @@ export default function FamilyAgentNew() {
                         <FormMessage />
                       </FormItem>
                     )} />
-                    {TTS_VOICES[ttsProvider] !== undefined && TTS_VOICES[ttsProvider] !== null && (
+                    {/* Cartesia: dropdown from admin-listed voices */}
+                    {ttsProvider === "cartesia" && (
+                      <FormField control={form.control} name="ttsVoice" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs">Voice</FormLabel>
+                          {cartesiaListedVoices.length > 0 ? (
+                            <Select value={field.value ?? ""} onValueChange={field.onChange}>
+                              <FormControl>
+                                <SelectTrigger><SelectValue placeholder="Select voice" /></SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {cartesiaListedVoices.map(v => (
+                                  <SelectItem key={v.id} value={v.id}>
+                                    {v.name}{v.language ? ` · ${v.language}` : ""}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <FormControl>
+                              <Input placeholder="Paste a Cartesia voice ID" {...field} />
+                            </FormControl>
+                          )}
+                          {cartesiaListedVoices.length === 0 && (
+                            <FormDescription className="text-[11px]">
+                              No voices listed yet — visit the <strong>Voices</strong> panel to whitelist some, or paste a voice ID directly.
+                            </FormDescription>
+                          )}
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    )}
+                    {/* Other providers with a predefined voice catalogue */}
+                    {ttsProvider !== "cartesia" && TTS_VOICES[ttsProvider] !== undefined && TTS_VOICES[ttsProvider] !== null && (
                       <FormField control={form.control} name="ttsVoice" render={({ field }) => (
                         <FormItem>
                           <FormLabel className="text-xs">Voice</FormLabel>
@@ -993,7 +1029,8 @@ export default function FamilyAgentNew() {
                         </FormItem>
                       )} />
                     )}
-                    {TTS_VOICES[ttsProvider] === null && (
+                    {/* Other providers that require a free-text voice ID (ElevenLabs, Azure TTS) */}
+                    {ttsProvider !== "cartesia" && TTS_VOICES[ttsProvider] === null && (
                       <FormField control={form.control} name="ttsVoice" render={({ field }) => (
                         <FormItem>
                           <FormLabel className="text-xs">Voice ID</FormLabel>
