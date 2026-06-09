@@ -1121,4 +1121,83 @@ router.get("/admin/vobiz-balance", async (req, res): Promise<void> => {
   }
 });
 
+// ── Family Agent Provision ────────────────────────────────────────────────────
+// Creates or updates a VoiceOrch agent record from a Family localStorage agent config.
+// Returns the integer agentId so the webcall WebSocket can connect to it.
+router.post("/admin/family/provision", async (req, res): Promise<void> => {
+  try {
+    const body = req.body as Record<string, unknown>;
+    const familyAgentId = body["familyAgentId"] as string | undefined;
+    if (!familyAgentId) { res.status(400).json({ error: "familyAgentId required" }); return; }
+
+    const asrProvider       = (body["asrProvider"] as string) || "deepgram";
+    const llmProvider       = (body["llmProvider"] as string) || "qwen";
+    const ttsProvider       = (body["ttsProvider"] as string) || "cartesia";
+    const telephonyProvider = (body["telephonyProvider"] as string) || "vobiz";
+    const ambientSoundId    = (body["ambientSoundId"] as string | undefined) ?? null;
+
+    const agentConfigPayload = {
+      familyAgentId,
+      isTestAgent: true,
+      ...(ambientSoundId ? { ambientNoiseEnabled: true, ambientNoiseTrack: ambientSoundId } : {}),
+    };
+
+    const agentData = {
+      name:            (body["name"] as string) || "Family Test Agent",
+      agentMode:       "managed" as const,
+      agentType:       "general" as const,
+      status:          "testing",
+      systemPrompt:    (body["systemPrompt"] as string) || "",
+      asrProvider,
+      asrModel:        (body["asrModel"] as string | undefined) ?? null,
+      asrLanguage:     (body["asrLanguage"] as string | undefined) ?? null,
+      asrBackgroundDenoising: Boolean(body["asrBackgroundDenoising"]),
+      asrConfidenceThreshold: typeof body["asrConfidenceThreshold"] === "number" ? body["asrConfidenceThreshold"] as number : null,
+      asrEndOfTurnConfidence: typeof body["asrEndOfTurnConfidence"] === "number" ? body["asrEndOfTurnConfidence"] as number : null,
+      asrEndOfTurnTimeout:    typeof body["asrEndOfTurnTimeout"]    === "number" ? body["asrEndOfTurnTimeout"]    as number : null,
+      asrKeyterms:     (body["asrKeyterms"] as string | undefined) ?? null,
+      asrSmartEndpointing: (body["asrSmartEndpointing"] as string | undefined) ?? "off",
+      asrAutoFallback: Boolean(body["asrAutoFallback"]),
+      llmProvider,
+      llmModel:        (body["llmModel"]   as string | undefined) ?? null,
+      ttsProvider,
+      ttsVoice:        (body["ttsVoice"]   as string | undefined) ?? null,
+      ttsModel:        (body["ttsModel"]   as string | undefined) ?? null,
+      telephonyProvider,
+      temperature:     typeof body["temperature"]   === "number" ? body["temperature"]   as number : null,
+      maxDuration:     typeof body["maxDuration"]    === "number" ? body["maxDuration"]    as number : null,
+      greetingMessage: (body["greetingMessage"]  as string | undefined) ?? null,
+      endCallPhrases:  (body["endCallPhrases"]   as string | undefined) ?? null,
+      language:        (body["language"]          as string | undefined) ?? null,
+      backchannelingEnabled:   Boolean(body["backchannelingEnabled"]),
+      backchannelingFrequency: typeof body["backchannelingFrequency"] === "number" ? body["backchannelingFrequency"] as number : null,
+      backchannelPhrases:      (body["backchannelPhrases"]  as string | undefined) ?? null,
+      noiseCancellationEnabled: Boolean(body["noiseCancellationEnabled"]),
+      inactivityMessage:        (body["inactivityMessage"] as string | undefined) ?? null,
+      webhookUrl:               (body["webhookUrl"]        as string | undefined) ?? null,
+      silenceTimeoutSeconds:    typeof body["silenceTimeoutSeconds"] === "number" ? body["silenceTimeoutSeconds"] as number : null,
+      dispositionSchema:        Array.isArray(body["dispositionSchema"]) ? body["dispositionSchema"] as Record<string, unknown>[] : null,
+      agentConfig:              agentConfigPayload as Record<string, unknown>,
+      userId:                   null,
+    };
+
+    // Find existing agent provisioned for this family agent
+    const [existing] = await db.select({ id: agentsTable.id })
+      .from(agentsTable)
+      .where(sql`agent_config->>'familyAgentId' = ${familyAgentId}`)
+      .limit(1);
+
+    if (existing) {
+      await db.update(agentsTable).set(agentData).where(eq(agentsTable.id, existing.id));
+      res.json({ agentId: existing.id });
+    } else {
+      const [created] = await db.insert(agentsTable).values(agentData).returning({ id: agentsTable.id });
+      res.json({ agentId: created!.id });
+    }
+  } catch (err) {
+    req.log.error({ err }, "admin/family/provision failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 export default router;

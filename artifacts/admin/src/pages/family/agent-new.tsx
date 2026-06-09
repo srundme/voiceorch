@@ -3,6 +3,7 @@ import { Link, useLocation } from "wouter";
 import {
   ArrowLeft, Save, Bot, Plus, Trash2, PhoneForwarded, Sparkles,
   ChevronDown, ChevronUp, Database, ClipboardList, Building2,
+  Maximize2, Volume2,
 } from "lucide-react";
 import { z } from "zod";
 import { useForm, useWatch, useFieldArray } from "react-hook-form";
@@ -25,8 +26,8 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useFamilyStore, InsuranceAgent } from "@/lib/family-store";
-import { AGENT_TIMEZONES } from "@/lib/agent-providers";
-import { useAdminListedVoices, useManagedKeys } from "@/hooks/use-admin-api";
+import { AGENT_TIMEZONES, LANGUAGES as ALL_LANGUAGES } from "@/lib/agent-providers";
+import { useAdminListedVoices, useManagedKeys, useAdminAmbientSounds } from "@/hooks/use-admin-api";
 
 /* ── Provider / model catalogues ─────────────────────────────────────────── */
 
@@ -95,24 +96,7 @@ const TELEPHONY_MANAGED_KEYS: Record<string, string[]> = {
   vobiz: ["managed_vobiz_auth_id"],
 };
 
-const LANGUAGES = [
-  { value: "en-US", label: "English (US)" },
-  { value: "en-GB", label: "English (UK)" },
-  { value: "en-IN", label: "English (India)" },
-  { value: "es",    label: "Spanish" },
-  { value: "hi",    label: "Hindi" },
-  { value: "ta-IN", label: "Tamil" },
-  { value: "te-IN", label: "Telugu" },
-  { value: "kn-IN", label: "Kannada" },
-  { value: "ml-IN", label: "Malayalam" },
-  { value: "bn-IN", label: "Bengali (India)" },
-  { value: "fr",    label: "French" },
-  { value: "de",    label: "German" },
-  { value: "ja",    label: "Japanese" },
-  { value: "ko",    label: "Korean" },
-  { value: "zh",    label: "Chinese (Mandarin)" },
-  { value: "ar",    label: "Arabic" },
-];
+const LANGUAGES = ALL_LANGUAGES;
 
 const ASR_MODELS: Record<string, { value: string; label: string }[]> = {
   deepgram:   [{ value: "nova-2", label: "Nova-2 (recommended)" }, { value: "nova-2-phonecall", label: "Nova-2 Phone Call" }, { value: "nova-2-meeting", label: "Nova-2 Meeting" }],
@@ -242,6 +226,7 @@ const agentFormSchema = z.object({
   autoCallbackEnabled:      z.boolean().optional(),
   autoCallbackRetries:      z.number().min(1).max(10).optional(),
   autoCallbackDelaySeconds: z.number().min(10).max(3600).optional(),
+  ambientSoundId:           z.string().optional(),
 });
 
 type AgentFormValues = z.infer<typeof agentFormSchema>;
@@ -348,6 +333,9 @@ export default function FamilyAgentNew() {
   const { data: listedVoicesData } = useAdminListedVoices();
   const cartesiaListedVoices = listedVoicesData?.voices ?? [];
   const { data: mk } = useManagedKeys();
+  const { data: ambientSoundsData } = useAdminAmbientSounds();
+  const ambientSounds = ambientSoundsData ?? [];
+  const [fullscreenPrompt, setFullscreenPrompt] = useState(false);
   const hasKey = (keys: string[]) => !mk || keys.some(k => k in mk);
   const availableAsrProviders = ASR_PROVIDERS.filter(p => hasKey(ASR_MANAGED_KEYS[p.value] ?? []));
   const availableLlmProviders = LLM_PROVIDERS.filter(p => hasKey(LLM_MANAGED_KEYS[p.value] ?? []));
@@ -378,7 +366,7 @@ export default function FamilyAgentNew() {
       asrBackgroundDenoising: false, asrConfidenceThreshold: 0.40,
       asrEndOfTurnConfidence: 0.70, asrEndOfTurnTimeout: 5000,
       asrKeyterms: "", asrSmartEndpointing: "off" as const, asrAutoFallback: true,
-      webhookSecret: "", promptVariables: [],
+      webhookSecret: "", ambientSoundId: "", promptVariables: [],
       vadSilenceMs: 250, bargeInEnabled: true, bargeInEnergyThreshold: 1200, bargeInMinFrames: 4,
       timezone: "", tools: [], dispositionSchema: [],
       memoryEnabled: false, crossCallMemoryEnabled: false, contextWindowMessages: 20,
@@ -398,6 +386,7 @@ export default function FamilyAgentNew() {
   const selectedCompanyId = useWatch({ control: form.control, name: "companyId" });
   const memoryEnabled = useWatch({ control: form.control, name: "memoryEnabled" });
   const autoCallbackEnabled = useWatch({ control: form.control, name: "autoCallbackEnabled" });
+  const systemPromptWatch = useWatch({ control: form.control, name: "systemPrompt" });
 
   const isMounted = useRef(false);
   useEffect(() => {
@@ -444,7 +433,7 @@ export default function FamilyAgentNew() {
       status: "draft",
       systemPrompt: data.systemPrompt,
       voiceId: data.ttsVoice ?? "",
-      kbEntries: 0, totalCalls: 0, conversionRate: 0, avgDurationSeconds: 0,
+      kbEntries: 0, totalCalls: 0, successfulCalls: 0, conversionRate: 0, avgDurationSeconds: 0,
       lastUpdated: now,
       agentMode: "managed",
       agentType: data.agentType as any,
@@ -494,6 +483,7 @@ export default function FamilyAgentNew() {
       autoCallbackEnabled: data.autoCallbackEnabled,
       autoCallbackRetries: data.autoCallbackRetries,
       autoCallbackDelaySeconds: data.autoCallbackDelaySeconds,
+      ambientSoundId: data.ambientSoundId || undefined,
     };
     saveAgents([...agents, newAgent]);
     toast({ title: "Agent Created", description: `"${newAgent.name}" has been created as a draft.` });
@@ -665,7 +655,12 @@ export default function FamilyAgentNew() {
               <CardContent className="space-y-4">
                 <FormField control={form.control} name="systemPrompt" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>System Prompt</FormLabel>
+                    <div className="flex items-center justify-between">
+                      <FormLabel>System Prompt</FormLabel>
+                      <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => setFullscreenPrompt(true)} title="Expand">
+                        <Maximize2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                     <FormControl>
                       <Textarea placeholder="You are a helpful insurance assistant..." className="min-h-[120px] font-mono text-sm" {...field} />
                     </FormControl>
@@ -773,6 +768,28 @@ export default function FamilyAgentNew() {
                         </FormItem>
                       )} />
                     </div>
+
+                    <FormField control={form.control} name="ambientSoundId" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-1.5">
+                          <Volume2 className="h-3.5 w-3.5 text-muted-foreground" /> Ambient Background Sound
+                        </FormLabel>
+                        <Select
+                          onValueChange={(v) => field.onChange(v === "__none__" ? "" : v)}
+                          value={field.value || "__none__"}
+                        >
+                          <FormControl><SelectTrigger><SelectValue placeholder="No ambient sound" /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value="__none__">None</SelectItem>
+                            {ambientSounds.map(s => (
+                              <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription className="text-[11px]">Mixes background audio into TTS output (office noise, call centre, etc.)</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
 
                     <FormField control={form.control} name="asrLanguage" render={({ field }) => (
                       <FormItem>
@@ -1622,6 +1639,26 @@ export default function FamilyAgentNew() {
           </div>
         </form>
       </Form>
+
+      {/* ── Fullscreen system prompt dialog ── */}
+      <Dialog open={fullscreenPrompt} onOpenChange={setFullscreenPrompt}>
+        <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>System Prompt</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 flex flex-col gap-3">
+            <Textarea
+              className="flex-1 font-mono text-sm resize-none"
+              value={systemPromptWatch ?? ""}
+              onChange={(e) => form.setValue("systemPrompt", e.target.value, { shouldDirty: true })}
+              placeholder="You are a helpful insurance assistant..."
+            />
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={() => setFullscreenPrompt(false)}>Close</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

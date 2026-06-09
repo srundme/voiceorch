@@ -488,3 +488,70 @@ export function useGrowthInactive() {
     queryFn: () => adminFetch<any[]>("/growth/inactive"),
   });
 }
+
+// ── Ambient Sounds ────────────────────────────────────────────────────────────
+
+export interface AmbientSound {
+  id: string;
+  name: string;
+  mimeType: string;
+  fileSize: number;
+  durationSeconds: number | null;
+}
+
+export function useAdminAmbientSounds() {
+  return useQuery({
+    queryKey: ["admin", "ambient-sounds"],
+    queryFn: () => adminFetch<AmbientSound[]>("/ambient-sounds"),
+  });
+}
+
+// ── Family Agent Provision ────────────────────────────────────────────────────
+
+export interface ProvisionFamilyAgentInput {
+  familyAgentId: string;
+  name: string;
+  systemPrompt: string;
+  asrProvider: string;
+  asrModel?: string;
+  asrLanguage?: string;
+  asrBackgroundDenoising?: boolean;
+  asrConfidenceThreshold?: number;
+  asrEndOfTurnConfidence?: number;
+  asrEndOfTurnTimeout?: number;
+  asrKeyterms?: string;
+  asrSmartEndpointing?: string;
+  asrAutoFallback?: boolean;
+  llmProvider: string;
+  llmModel?: string;
+  ttsProvider: string;
+  ttsVoice?: string;
+  ttsModel?: string;
+  telephonyProvider: string;
+  temperature?: number;
+  maxDuration?: number;
+  greetingMessage?: string;
+  endCallPhrases?: string;
+  language?: string;
+  backchannelingEnabled?: boolean;
+  backchannelingFrequency?: number;
+  backchannelPhrases?: string;
+  noiseCancellationEnabled?: boolean;
+  inactivityMessage?: string;
+  webhookUrl?: string;
+  silenceTimeoutSeconds?: number;
+  ambientSoundId?: string;
+  dispositionSchema?: Array<{ key: string; label: string; type: string; required?: boolean; options?: string }>;
+  memoryEnabled?: boolean;
+  crossCallMemoryEnabled?: boolean;
+}
+
+export function useProvisionFamilyAgent() {
+  return useMutation({
+    mutationFn: (data: ProvisionFamilyAgentInput) =>
+      adminFetch<{ agentId: number }>("/family/provision", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+  });
+}

@@ -76,12 +76,16 @@ export interface InsuranceAgent {
   voiceId: string;
   kbEntries: number;
   totalCalls: number;
+  successfulCalls: number;
   conversionRate: number;
   avgDurationSeconds: number;
   lastUpdated: string;
 
   agentType?: AgentType;
   agentMode?: 'managed' | 'byop';
+
+  /* Backend link — set when agent is provisioned for webcall testing */
+  backendAgentId?: number;
 
   /* Memory */
   memoryEnabled?: boolean;
@@ -92,6 +96,9 @@ export interface InsuranceAgent {
   autoCallbackEnabled?: boolean;
   autoCallbackRetries?: number;
   autoCallbackDelaySeconds?: number;
+
+  /* Ambient noise */
+  ambientSoundId?: string;
 
   asrProvider?: string;
   asrModel?: string;
@@ -140,6 +147,29 @@ export interface InsuranceAgent {
   dispositionSchema?: DispositionField[];
 }
 
+/* ── Call record ─────────────────────────────────────────────────────────── */
+
+export type CallStatus = 'completed' | 'failed' | 'missed' | 'in_progress';
+
+export interface InsuranceCall {
+  id: string;
+  agentId: string;
+  status: CallStatus;
+  startedAt: string;
+  endedAt?: string;
+  durationSeconds?: number;
+  callerPhone?: string;
+  /* Transcript — each line is "role: text" */
+  transcript?: string;
+  summary?: string;
+  recordingUrl?: string;
+  metadata?: Record<string, string>;
+  /* Disposition data keyed by DispositionField.key */
+  dispositionData?: Record<string, string | number | boolean>;
+  /* Backend call ID from the calls table, if available */
+  backendCallId?: number;
+}
+
 export const DEFAULT_COMPANIES: InsuranceCompany[] = [
   { id: '1',  name: 'ICICI Lombard',        logoColor: '#F26522', category: 'general' },
   { id: '2',  name: 'HDFC ERGO',            logoColor: '#B61F24', category: 'general' },
@@ -175,13 +205,14 @@ export const DEFAULT_COMPANIES: InsuranceCompany[] = [
   { id: '32', name: 'Zuno General',         logoColor: '#00A9E0', category: 'general' },
 ];
 
-const STORE_VERSION = 'v3';
+const STORE_VERSION = 'v4';
 
 export function useFamilyStore() {
   const [companies] = useState<InsuranceCompany[]>(DEFAULT_COMPANIES);
   const [agents, setAgents] = useState<InsuranceAgent[]>([]);
   const [policies, setPolicies] = useState<InsurancePolicy[]>([]);
   const [documents, setDocuments] = useState<PolicyDocument[]>([]);
+  const [calls, setCalls] = useState<InsuranceCall[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
@@ -190,16 +221,19 @@ export function useFamilyStore() {
       localStorage.removeItem('family_kb');
       localStorage.removeItem('family_policies');
       localStorage.removeItem('family_docs');
+      localStorage.removeItem('family_calls');
       localStorage.setItem('family_store_version', STORE_VERSION);
     }
 
     const storedAgents   = localStorage.getItem('family_agents');
     const storedPolicies = localStorage.getItem('family_policies');
     const storedDocs     = localStorage.getItem('family_docs');
+    const storedCalls    = localStorage.getItem('family_calls');
 
     setAgents(storedAgents   ? (JSON.parse(storedAgents)   as InsuranceAgent[])  : []);
     setPolicies(storedPolicies ? (JSON.parse(storedPolicies) as InsurancePolicy[]) : []);
     setDocuments(storedDocs  ? (JSON.parse(storedDocs)     as PolicyDocument[])  : []);
+    setCalls(storedCalls     ? (JSON.parse(storedCalls)    as InsuranceCall[])   : []);
     setIsLoaded(true);
   }, []);
 
@@ -218,5 +252,24 @@ export function useFamilyStore() {
     localStorage.setItem('family_docs', JSON.stringify(next));
   };
 
-  return { companies, agents, policies, documents, saveAgents, savePolicies, saveDocuments, isLoaded };
+  const saveCalls = (next: InsuranceCall[]) => {
+    setCalls(next);
+    localStorage.setItem('family_calls', JSON.stringify(next));
+  };
+
+  const addCall = (call: InsuranceCall) => {
+    const next = [call, ...calls];
+    saveCalls(next);
+  };
+
+  const updateCall = (id: string, patch: Partial<InsuranceCall>) => {
+    const next = calls.map(c => c.id === id ? { ...c, ...patch } : c);
+    saveCalls(next);
+  };
+
+  return {
+    companies, agents, policies, documents, calls,
+    saveAgents, savePolicies, saveDocuments, saveCalls, addCall, updateCall,
+    isLoaded,
+  };
 }
