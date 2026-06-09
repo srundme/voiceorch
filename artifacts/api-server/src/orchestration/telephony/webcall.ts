@@ -1425,7 +1425,7 @@ export async function handleWebCallWebSocket(
             }
           } catch { /* ignore — still hang up */ }
         }
-        if (!closed) void hangup("normal");
+        if (!closed) void hangup("silence_timeout");
       })();
     }, agent.silenceTimeoutSeconds * 1000);
   }

@@ -263,6 +263,7 @@ function WebCallPanel({ agent, onCallSaved }: { agent: InsuranceAgent; onCallSav
   const [error, setError] = useState<string | null>(null);
   const [duration, setDuration] = useState(0);
   const [micOn, setMicOn] = useState(true);
+  const [callEndReason, setCallEndReason] = useState<string | null>(null);
 
   const wsRef    = useRef<WebSocket | null>(null);
   const ctxRef   = useRef<AudioContext | null>(null);
@@ -295,10 +296,19 @@ function WebCallPanel({ agent, onCallSaved }: { agent: InsuranceAgent; onCallSav
     ctxRef.current = null;
   }, []);
 
-  const doEndCall = useCallback((lines: TranscriptLine[], dur: number) => {
+  const REASON_LABELS: Record<string, string> = {
+    normal: "Call ended normally.",
+    silence_timeout: "Call ended: no response detected (silence timeout).",
+    timeout: "Call ended: maximum duration reached.",
+    disconnected: "Call ended: connection lost.",
+    error: "Call ended due to an error.",
+  };
+
+  const doEndCall = useCallback((lines: TranscriptLine[], dur: number, reason?: string) => {
     if (phaseRef.current === "ended" || phaseRef.current === "idle") return;
     cleanup();
     setPhase("ended");
+    setCallEndReason(reason ?? null);
     const now = new Date();
     const call: InsuranceCall = {
       id: `${Date.now()}`,
@@ -310,8 +320,9 @@ function WebCallPanel({ agent, onCallSaved }: { agent: InsuranceAgent; onCallSav
       transcript: lines.map(l => `${l.role === "agent" ? "Agent" : "User"}: ${l.text}`).join("\n"),
     };
     onCallSaved(call);
-    toast({ title: "Call ended", description: `Duration: ${dur}s. Saved to Call Log.` });
-  }, [agent.id, cleanup, onCallSaved, toast]);
+    const label = reason ? (REASON_LABELS[reason] ?? `Call ended (${reason}).`) : "Call ended.";
+    toast({ title: "Call ended", description: `${label} Duration: ${dur}s.` });
+  }, [agent.id, cleanup, onCallSaved, toast]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const startCall = async () => {
     setError(null);
@@ -436,7 +447,7 @@ function WebCallPanel({ agent, onCallSaved }: { agent: InsuranceAgent; onCallSav
         } else if (msg["type"] === "ended") {
           currentDuration = typeof msg["durationSeconds"] === "number" ? msg["durationSeconds"] : currentDuration;
           setDuration(currentDuration);
-          doEndCall(currentTranscript, currentDuration);
+          doEndCall(currentTranscript, currentDuration, typeof msg["reason"] === "string" ? msg["reason"] : undefined);
         } else if (msg["type"] === "error") {
           setError(String(msg["message"] ?? "Unknown error"));
           if (phaseRef.current !== "active") setPhase("idle");
@@ -446,7 +457,7 @@ function WebCallPanel({ agent, onCallSaved }: { agent: InsuranceAgent; onCallSav
 
     ws.onclose = () => {
       if (phaseRef.current === "active") {
-        doEndCall(currentTranscript, currentDuration);
+        doEndCall(currentTranscript, currentDuration, "disconnected");
       }
     };
 
@@ -460,7 +471,7 @@ function WebCallPanel({ agent, onCallSaved }: { agent: InsuranceAgent; onCallSav
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: "end" }));
     }
-    doEndCall(transcript, duration);
+    doEndCall(transcript, duration, "normal");
   };
 
   const toggleMic = () => {
@@ -469,7 +480,7 @@ function WebCallPanel({ agent, onCallSaved }: { agent: InsuranceAgent; onCallSav
     setMicOn(v => !v);
   };
 
-  const reset = () => { setPhase("idle"); setTranscript([]); setError(null); setDuration(0); };
+  const reset = () => { setPhase("idle"); setTranscript([]); setError(null); setDuration(0); setCallEndReason(null); };
 
   const fmtDur = (s: number) => `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
 
@@ -511,7 +522,9 @@ function WebCallPanel({ agent, onCallSaved }: { agent: InsuranceAgent; onCallSav
           <div className="min-h-[300px] max-h-[420px] overflow-y-auto rounded-md border bg-muted/20 p-4 space-y-3">
             {transcript.length === 0 && phase !== "active" && (
               <p className="text-sm text-muted-foreground text-center pt-16">
-                {phase === "ended" ? "Call ended." : "Start the call to see a live transcript here."}
+                {phase === "ended"
+                  ? (callEndReason && REASON_LABELS[callEndReason]) || "Call ended."
+                  : "Start the call to see a live transcript here."}
               </p>
             )}
             {transcript.map((line, i) => (
@@ -530,6 +543,20 @@ function WebCallPanel({ agent, onCallSaved }: { agent: InsuranceAgent; onCallSav
             ))}
             <div ref={transcriptEndRef} />
           </div>
+
+          {/* End reason banner */}
+          {phase === "ended" && callEndReason && (
+            <div className={`rounded-md border px-3 py-2 text-sm flex items-center gap-2 ${
+              callEndReason === "silence_timeout"
+                ? "border-amber-400/40 bg-amber-50/60 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
+                : callEndReason === "error" || callEndReason === "disconnected"
+                  ? "border-destructive/40 bg-destructive/10 text-destructive"
+                  : "border-border bg-muted/40 text-muted-foreground"
+            }`}>
+              <PhoneOff className="h-3.5 w-3.5 shrink-0" />
+              {REASON_LABELS[callEndReason] ?? `Call ended (${callEndReason}).`}
+            </div>
+          )}
 
           {/* Controls */}
           <div className="flex items-center justify-center gap-3">
