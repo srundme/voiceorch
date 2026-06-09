@@ -26,7 +26,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useFamilyStore, InsuranceAgent } from "@/lib/family-store";
 import { AGENT_TIMEZONES } from "@/lib/agent-providers";
-import { useAdminListedVoices } from "@/hooks/use-admin-api";
+import { useAdminListedVoices, useManagedKeys } from "@/hooks/use-admin-api";
 
 /* ── Provider / model catalogues ─────────────────────────────────────────── */
 
@@ -64,6 +64,36 @@ const TELEPHONY_PROVIDERS = [
   { value: "plivo",  label: "Plivo" },
   { value: "vobiz",  label: "Vobiz" },
 ];
+
+/* ── Managed-key → provider maps (filters pipeline dropdowns to admin-configured providers only) ── */
+const ASR_MANAGED_KEYS: Record<string, string[]> = {
+  deepgram:   ["managed_deepgram_key"],
+  sarvam:     ["managed_sarvam_key"],
+  assemblyai: ["managed_assemblyai_key"],
+  azure:      ["managed_azure_speech_key"],
+};
+const LLM_MANAGED_KEYS: Record<string, string[]> = {
+  openai:    ["managed_openai_key"],
+  anthropic: ["managed_anthropic_key"],
+  google:    ["managed_gemini_key"],
+  deepseek:  ["managed_deepseek_key"],
+  mistral:   ["managed_mistral_key"],
+  cohere:    ["managed_cohere_key"],
+  qwen:      ["managed_qwen_key", "managed_groq_key"],
+  groq:      ["managed_groq_key"],
+  sarvam:    ["managed_sarvam_key"],
+};
+const TTS_MANAGED_KEYS: Record<string, string[]> = {
+  cartesia:      ["managed_cartesia_key"],
+  elevenlabs:    ["managed_elevenlabs_key"],
+  openai_tts:    ["managed_openai_key"],
+  deepgram_aura: ["managed_deepgram_key"],
+  azure_tts:     ["managed_azure_speech_key"],
+  sarvam:        ["managed_sarvam_key"],
+};
+const TELEPHONY_MANAGED_KEYS: Record<string, string[]> = {
+  vobiz: ["managed_vobiz_auth_id"],
+};
 
 const LANGUAGES = [
   { value: "en-US", label: "English (US)" },
@@ -317,19 +347,28 @@ export default function FamilyAgentNew() {
   const { companies, agents, policies, saveAgents } = useFamilyStore();
   const { data: listedVoicesData } = useAdminListedVoices();
   const cartesiaListedVoices = listedVoicesData?.voices ?? [];
+  const { data: mk } = useManagedKeys();
+  const hasKey = (keys: string[]) => !mk || keys.some(k => k in mk);
+  const availableAsrProviders = ASR_PROVIDERS.filter(p => hasKey(ASR_MANAGED_KEYS[p.value] ?? []));
+  const availableLlmProviders = LLM_PROVIDERS.filter(p => hasKey(LLM_MANAGED_KEYS[p.value] ?? []));
+  const availableTtsProviders = TTS_PROVIDERS.filter(p => hasKey(TTS_MANAGED_KEYS[p.value] ?? []));
+  const availableTelephonyProviders = (() => {
+    if (!mk) return TELEPHONY_PROVIDERS;
+    const f = TELEPHONY_PROVIDERS.filter(p => (TELEPHONY_MANAGED_KEYS[p.value] ?? []).some(k => k in mk));
+    return f.length > 0 ? f : TELEPHONY_PROVIDERS;
+  })();
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [showAdvancedSTT, setShowAdvancedSTT] = useState(false);
-  const [agentMode, setAgentMode] = useState<"managed" | "byop">("byop");
 
   const form = useForm<AgentFormValues>({
     resolver: zodResolver(agentFormSchema),
     defaultValues: {
       companyId: "", policyId: "", agentType: "inbound_support",
       name: "", description: "",
-      asrProvider: "azure", asrModel: "en-US-standard",
-      llmProvider: "openai", llmModel: "gpt-4o-mini",
-      ttsProvider: "elevenlabs", ttsVoice: "", ttsModel: "",
-      telephonyProvider: "twilio",
+      asrProvider: "deepgram", asrModel: "nova-2",
+      llmProvider: "qwen", llmModel: "qwen/qwen3-32b",
+      ttsProvider: "cartesia", ttsVoice: "", ttsModel: "sonic-3",
+      telephonyProvider: "vobiz",
       systemPrompt: "You are a helpful AI voice assistant for insurance customers.",
       temperature: 0.7, maxDuration: 600,
       greetingMessage: "", endCallPhrases: "", silenceTimeoutSeconds: 30,
@@ -369,16 +408,6 @@ export default function FamilyAgentNew() {
   useEffect(() => { form.setValue("ttsVoice", DEFAULT_TTS_VOICE(ttsProvider)); }, [ttsProvider]);
   useEffect(() => { form.setValue("ttsModel", TTS_MODELS[ttsProvider]?.[0]?.value ?? ""); }, [ttsProvider]);
 
-  useEffect(() => {
-    if (agentMode === "managed") {
-      form.setValue("asrProvider", "deepgram");
-      form.setValue("asrModel", "nova-3");
-      form.setValue("llmProvider", "qwen");
-      form.setValue("llmModel", "qwen/qwen3-32b");
-      form.setValue("ttsProvider", "cartesia");
-      form.setValue("ttsModel", "sonic-3");
-    }
-  }, [agentMode]);
 
   const companiesForSelect = companies;
   const policiesForCompany = policies.filter(p => p.companyId === selectedCompanyId);
@@ -417,7 +446,7 @@ export default function FamilyAgentNew() {
       voiceId: data.ttsVoice ?? "",
       kbEntries: 0, totalCalls: 0, conversionRate: 0, avgDurationSeconds: 0,
       lastUpdated: now,
-      agentMode,
+      agentMode: "managed",
       agentType: data.agentType as any,
       asrProvider: data.asrProvider, asrModel: data.asrModel,
       asrLanguage: data.asrLanguage || undefined,
@@ -527,45 +556,6 @@ export default function FamilyAgentNew() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Mode Selector ── */}
-      <div className="grid grid-cols-2 gap-4">
-        <button
-          type="button"
-          onClick={() => setAgentMode("managed")}
-          className={`text-left p-4 rounded-xl border-2 transition-all ${
-            agentMode === "managed"
-              ? "border-primary bg-primary/5"
-              : "border-border bg-card hover:border-muted-foreground/40 hover:bg-muted/40"
-          }`}
-        >
-          <div className="flex items-center gap-2 mb-1.5">
-            <Sparkles className={`h-4 w-4 ${agentMode === "managed" ? "text-primary" : "text-muted-foreground"}`} />
-            <span className="font-semibold text-sm text-foreground">Managed</span>
-            <span className="ml-auto text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">Recommended</span>
-          </div>
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            Platform handles ASR, LLM, and TTS using managed API keys. Just write your system prompt.
-          </p>
-          <p className="text-[10px] text-muted-foreground/60 mt-2 font-mono">Deepgram · Qwen 3 32B · Cartesia</p>
-        </button>
-        <button
-          type="button"
-          onClick={() => setAgentMode("byop")}
-          className={`text-left p-4 rounded-xl border-2 transition-all ${
-            agentMode === "byop"
-              ? "border-primary bg-primary/5"
-              : "border-border bg-card hover:border-muted-foreground/40 hover:bg-muted/40"
-          }`}
-        >
-          <div className="flex items-center gap-2 mb-1.5">
-            <Bot className={`h-4 w-4 ${agentMode === "byop" ? "text-primary" : "text-muted-foreground"}`} />
-            <span className="font-semibold text-sm text-foreground">Bring Your Own Providers</span>
-          </div>
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            Use your own API keys for each pipeline stage. Full control over ASR, LLM, TTS, and telephony.
-          </p>
-        </button>
-      </div>
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 pb-20">
@@ -903,10 +893,10 @@ export default function FamilyAgentNew() {
                     <FormField control={form.control} name="asrProvider" render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-xs">Provider</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value} disabled={agentMode === "managed"}>
+                        <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                           <SelectContent>
-                            {ASR_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+                            {availableAsrProviders.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -945,10 +935,10 @@ export default function FamilyAgentNew() {
                     <FormField control={form.control} name="llmProvider" render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-xs">Provider</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value} disabled={agentMode === "managed"}>
+                        <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                           <SelectContent>
-                            {LLM_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+                            {availableLlmProviders.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -976,10 +966,10 @@ export default function FamilyAgentNew() {
                     <FormField control={form.control} name="ttsProvider" render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-xs">Provider</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value} disabled={agentMode === "managed"}>
+                        <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                           <SelectContent>
-                            {TTS_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+                            {availableTtsProviders.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -1065,7 +1055,7 @@ export default function FamilyAgentNew() {
                         <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                           <SelectContent>
-                            {TELEPHONY_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+                            {availableTelephonyProviders.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
                           </SelectContent>
                         </Select>
                         <FormMessage />

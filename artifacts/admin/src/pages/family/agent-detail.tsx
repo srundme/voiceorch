@@ -24,7 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useFamilyStore, InsuranceAgent, AgentStatus } from "@/lib/family-store";
 import { AGENT_TIMEZONES } from "@/lib/agent-providers";
-import { useAdminListedVoices } from "@/hooks/use-admin-api";
+import { useAdminListedVoices, useManagedKeys } from "@/hooks/use-admin-api";
 
 /* ── Provider / model catalogues ─────────────────────────────────────────── */
 
@@ -48,6 +48,37 @@ const TTS_PROVIDERS = [
 const TELEPHONY_PROVIDERS = [
   { value: "twilio", label: "Twilio" }, { value: "plivo", label: "Plivo" }, { value: "vobiz", label: "Vobiz" },
 ];
+
+/* ── Managed-key → provider maps ── */
+const ASR_MANAGED_KEYS: Record<string, string[]> = {
+  deepgram:   ["managed_deepgram_key"],
+  sarvam:     ["managed_sarvam_key"],
+  assemblyai: ["managed_assemblyai_key"],
+  azure:      ["managed_azure_speech_key"],
+};
+const LLM_MANAGED_KEYS: Record<string, string[]> = {
+  openai:    ["managed_openai_key"],
+  anthropic: ["managed_anthropic_key"],
+  google:    ["managed_gemini_key"],
+  deepseek:  ["managed_deepseek_key"],
+  mistral:   ["managed_mistral_key"],
+  cohere:    ["managed_cohere_key"],
+  qwen:      ["managed_qwen_key", "managed_groq_key"],
+  groq:      ["managed_groq_key"],
+  sarvam:    ["managed_sarvam_key"],
+};
+const TTS_MANAGED_KEYS: Record<string, string[]> = {
+  cartesia:      ["managed_cartesia_key"],
+  elevenlabs:    ["managed_elevenlabs_key"],
+  openai_tts:    ["managed_openai_key"],
+  deepgram_aura: ["managed_deepgram_key"],
+  azure_tts:     ["managed_azure_speech_key"],
+  sarvam:        ["managed_sarvam_key"],
+};
+const TELEPHONY_MANAGED_KEYS: Record<string, string[]> = {
+  vobiz: ["managed_vobiz_auth_id"],
+};
+
 const LANGUAGES = [
   { value: "en-US", label: "English (US)" }, { value: "en-GB", label: "English (UK)" },
   { value: "en-IN", label: "English (India)" }, { value: "es",    label: "Spanish" },
@@ -205,6 +236,16 @@ export default function FamilyAgentDetail() {
   const { companies, agents, policies, saveAgents, isLoaded } = useFamilyStore();
   const { data: listedVoicesData } = useAdminListedVoices();
   const cartesiaListedVoices = listedVoicesData?.voices ?? [];
+  const { data: mk } = useManagedKeys();
+  const hasKey = (keys: string[]) => !mk || keys.some(k => k in mk);
+  const availableAsrProviders = ASR_PROVIDERS.filter(p => hasKey(ASR_MANAGED_KEYS[p.value] ?? []));
+  const availableLlmProviders = LLM_PROVIDERS.filter(p => hasKey(LLM_MANAGED_KEYS[p.value] ?? []));
+  const availableTtsProviders = TTS_PROVIDERS.filter(p => hasKey(TTS_MANAGED_KEYS[p.value] ?? []));
+  const availableTelephonyProviders = (() => {
+    if (!mk) return TELEPHONY_PROVIDERS;
+    const f = TELEPHONY_PROVIDERS.filter(p => (TELEPHONY_MANAGED_KEYS[p.value] ?? []).some(k => k in mk));
+    return f.length > 0 ? f : TELEPHONY_PROVIDERS;
+  })();
   const [showAdvancedSTT, setShowAdvancedSTT] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -731,7 +772,7 @@ export default function FamilyAgentDetail() {
                         <FormLabel className="text-xs">Provider</FormLabel>
                         <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                          <SelectContent>{ASR_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}</SelectContent>
+                          <SelectContent>{availableAsrProviders.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}</SelectContent>
                         </Select>
                         <FormMessage />
                       </FormItem>
@@ -768,7 +809,7 @@ export default function FamilyAgentDetail() {
                         <FormLabel className="text-xs">Provider</FormLabel>
                         <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                          <SelectContent>{LLM_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}</SelectContent>
+                          <SelectContent>{availableLlmProviders.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}</SelectContent>
                         </Select>
                         <FormMessage />
                       </FormItem>
@@ -794,7 +835,7 @@ export default function FamilyAgentDetail() {
                         <FormLabel className="text-xs">Provider</FormLabel>
                         <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                          <SelectContent>{TTS_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}</SelectContent>
+                          <SelectContent>{availableTtsProviders.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}</SelectContent>
                         </Select>
                         <FormMessage />
                       </FormItem>
@@ -872,7 +913,7 @@ export default function FamilyAgentDetail() {
                         <FormLabel className="text-xs">Provider</FormLabel>
                         <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                          <SelectContent>{TELEPHONY_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}</SelectContent>
+                          <SelectContent>{availableTelephonyProviders.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}</SelectContent>
                         </Select>
                         <FormMessage />
                       </FormItem>
