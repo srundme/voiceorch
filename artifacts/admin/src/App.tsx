@@ -23,9 +23,6 @@ import SchedulingPage from "@/pages/scheduling";
 import CallPricingPage from "@/pages/call-pricing";
 import HealthChecklistPage from "@/pages/health";
 import AmbientSoundsPage from "@/pages/ambient-sounds";
-import FamilyAgentsPage from "@/pages/family-agents";
-import FamilyAgentDetailPage from "@/pages/family-agent-detail";
-import FamilyAgentNewPage from "@/pages/family-agent-new";
 
 import UsageOverviewPage from "@/pages/usage/overview";
 import ServicePage from "@/pages/usage/service";
@@ -36,23 +33,23 @@ import PricingPage from "@/pages/usage/pricing";
 import AllocationsPage from "@/pages/usage/allocations";
 import AlertsPage from "@/pages/usage/alerts";
 
+import FamilyCompaniesPage from "@/pages/family/companies";
+import FamilyCompanyDetailPage from "@/pages/family/company-detail";
+import PolicyKBPage from "@/pages/family/policy-kb";
+import FamilyAgentsPage from "@/pages/family/agents";
+import FamilyAgentNewPage from "@/pages/family/agent-new";
+import FamilyAgentDetailPage from "@/pages/family/agent-detail";
+
 const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 1,
-      refetchOnWindowFocus: false,
-    },
-  },
+  defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
 });
 
 function ProtectedRoute({ component: Component, ...rest }: { component: any; path?: string }) {
   const token = localStorage.getItem("adminToken");
-
   if (!token) {
     window.location.href = `${import.meta.env.BASE_URL}login`;
     return null;
   }
-
   return (
     <Route {...rest}>
       {(params) => (
@@ -96,9 +93,15 @@ function Router() {
       <ProtectedRoute path="/health" component={HealthChecklistPage} />
       <ProtectedRoute path="/ambient-sounds" component={AmbientSoundsPage} />
       <ProtectedRoute path="/settings" component={PlatformSettings} />
-      <ProtectedRoute path="/family-agents" component={FamilyAgentsPage} />
-      <ProtectedRoute path="/family-agents/new" component={FamilyAgentNewPage} />
-      <ProtectedRoute path="/family-agents/:id" component={FamilyAgentDetailPage} />
+
+      {/* Family module — 4 sub-sections */}
+      <ProtectedRoute path="/family/companies" component={FamilyCompaniesPage} />
+      <ProtectedRoute path="/family/companies/:companyId/policies/:policyId" component={PolicyKBPage} />
+      <ProtectedRoute path="/family/companies/:companyId" component={FamilyCompanyDetailPage} />
+      <ProtectedRoute path="/family/agents/new" component={FamilyAgentNewPage} />
+      <ProtectedRoute path="/family/agents/:id" component={FamilyAgentDetailPage} />
+      <ProtectedRoute path="/family/agents" component={FamilyAgentsPage} />
+
       <Route component={NotFound} />
     </Switch>
   );

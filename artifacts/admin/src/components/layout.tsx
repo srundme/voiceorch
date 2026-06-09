@@ -17,6 +17,7 @@ import {
   Phone,
   PhoneCall,
   Music,
+  Building2,
   ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -51,6 +52,13 @@ function BrandMark({ compact = false }: { compact?: boolean }) {
   );
 }
 
+type NavItem = {
+  href: string;
+  label: string;
+  icon: React.ElementType;
+  section?: string;
+};
+
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
 
@@ -59,24 +67,25 @@ export function Layout({ children }: { children: React.ReactNode }) {
     window.location.href = `${import.meta.env.BASE_URL}login`;
   };
 
-  const navItems = [
-    { href: "/", label: "Overview", icon: Activity },
-    { href: "/users", label: "Users", icon: Users },
-    { href: "/finance", label: "Finance", icon: Wallet },
-    { href: "/usage", label: "Usage Monitoring", icon: BarChart2 },
-    { href: "/platform", label: "Platform", icon: Cpu },
-    { href: "/health", label: "Health", icon: Activity },
-    { href: "/growth", label: "Growth", icon: BarChart3 },
-    { href: "/managed-keys", label: "Managed Keys", icon: KeyRound },
-    { href: "/managed-numbers", label: "Managed Numbers", icon: Phone },
-    { href: "/voices",       label: "Voices",       icon: Mic2 },
-    { href: "/prompt-template", label: "Prompt Template", icon: FileText },
-    { href: "/ambient-sounds",  label: "Ambient Sounds",  icon: Music },
-    { href: "/all-agents",   label: "All Agents",   icon: Bot },
-    { href: "/scheduling",   label: "Scheduling",   icon: Calendar },
-    { href: "/call-pricing", label: "Call Pricing",  icon: PhoneCall },
-    { href: "/settings",     label: "Settings",     icon: Settings },
-    { href: "/family-agents", label: "Family Agents", icon: ShieldCheck, section: "Family" },
+  const navItems: NavItem[] = [
+    { href: "/",               label: "Overview",         icon: Activity },
+    { href: "/users",          label: "Users",            icon: Users },
+    { href: "/finance",        label: "Finance",          icon: Wallet },
+    { href: "/usage",          label: "Usage Monitoring", icon: BarChart2 },
+    { href: "/platform",       label: "Platform",         icon: Cpu },
+    { href: "/health",         label: "Health",           icon: Activity },
+    { href: "/growth",         label: "Growth",           icon: BarChart3 },
+    { href: "/managed-keys",   label: "Managed Keys",     icon: KeyRound },
+    { href: "/managed-numbers",label: "Managed Numbers",  icon: Phone },
+    { href: "/voices",         label: "Voices",           icon: Mic2 },
+    { href: "/prompt-template",label: "Prompt Template",  icon: FileText },
+    { href: "/ambient-sounds", label: "Ambient Sounds",   icon: Music },
+    { href: "/all-agents",     label: "All Agents",       icon: Bot },
+    { href: "/scheduling",     label: "Scheduling",       icon: Calendar },
+    { href: "/call-pricing",   label: "Call Pricing",     icon: PhoneCall },
+    { href: "/settings",       label: "Settings",         icon: Settings },
+    { href: "/family/companies", label: "Companies",      icon: Building2,  section: "Family Insurance" },
+    { href: "/family/agents",    label: "AI Agents",      icon: ShieldCheck },
   ];
 
   return (
@@ -91,7 +100,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           {navItems.map((item, idx) => {
             const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
             const Icon = item.icon;
-            const showSection = (item as any).section && (idx === 0 || !(navItems[idx - 1] as any).section);
+            const showSection = item.section && (idx === 0 || !navItems[idx - 1].section);
 
             return (
               <div key={item.href}>
@@ -100,7 +109,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     <div className="flex items-center gap-2">
                       <div className="flex-1 h-px bg-border" />
                       <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60">
-                        {(item as any).section}
+                        {item.section}
                       </span>
                       <div className="flex-1 h-px bg-border" />
                     </div>
