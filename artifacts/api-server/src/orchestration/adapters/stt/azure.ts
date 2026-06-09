@@ -1,42 +1,130 @@
+import { WebSocket } from "ws";
 import { pcmToWav } from "../../audio.js";
 import type { STTAdapter } from "./base.js";
-import type { STTConfig } from "../../types.js";
+import type { STTConfig, StreamSTT } from "../../types.js";
+import { logger } from "../../../lib/logger.js";
+
+// ── Azure Speech WebSocket framing ─────────────────────────────────────────
+//
+// Text messages (speech.config, speech.context):
+//   "Path: <path>\r\nX-Timestamp: <iso>\r\nContent-Type: application/json; charset=utf-8\r\n\r\n<json>"
+//
+// Binary messages (audio chunks):
+//   [2-byte big-endian header length][header string bytes][raw PCM bytes]
+//   Header string: "Path: audio\r\nX-Timestamp: <iso>\r\nContent-Type: audio/x-raw;format=PCM;bit=16;channels=1;samplerate=16000\r\n"
+//
+// Received text messages carry a "Path:" header indicating the event type.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Build a text-frame for speech.config / speech.context. */
+function textFrame(path: string, body: string): string {
+  return (
+    `Path: ${path}\r\n` +
+    `X-Timestamp: ${new Date().toISOString()}\r\n` +
+    `Content-Type: application/json; charset=utf-8\r\n` +
+    `\r\n${body}`
+  );
+}
+
+/** Build a binary audio frame for raw 16-bit / 16 kHz / mono PCM. */
+function audioFrame(pcm: Buffer): Buffer {
+  const hdr = Buffer.from(
+    `Path: audio\r\nX-Timestamp: ${new Date().toISOString()}\r\n` +
+    `Content-Type: audio/x-raw;format=PCM;bit=16;channels=1;samplerate=16000\r\n`,
+    "utf8",
+  );
+  const lenBuf = Buffer.alloc(2);
+  lenBuf.writeUInt16BE(hdr.length, 0);
+  return Buffer.concat([lenBuf, hdr, pcm]);
+}
+
+/** Extract the Path value and body from a received text frame. */
+function parseFrame(raw: string): { path: string; body: string } | null {
+  const sep = raw.indexOf("\r\n\r\n");
+  if (sep === -1) return null;
+  const headers = raw.slice(0, sep);
+  const body = raw.slice(sep + 4);
+  const m = headers.match(/Path:\s*(\S+)/i);
+  return m ? { path: m[1].toLowerCase(), body } : null;
+}
+
+// ── Response types ─────────────────────────────────────────────────────────
+
+interface AzurePhraseBody {
+  RecognitionStatus?: string;
+  DisplayText?: string;
+  NBest?: Array<{ Confidence?: number; Display?: string }>;
+}
+
+interface AzureHypothesisBody {
+  Text?: string;
+}
+
+// ── Adapter ────────────────────────────────────────────────────────────────
 
 /**
- * Azure Cognitive Services — Batch Speech-to-Text via REST
- * extraConfig JSON: { "region": "eastus" }
- * Language is taken from STTConfig.language (overrides extraConfig.language).
+ * Azure Cognitive Services — Speech-to-Text
+ *
+ * Implements both:
+ *  • Batch REST      → `transcribe()`         (short utterances, ≤ 15 s)
+ *  • Streaming WS    → `transcribeStream()`   (continuous, real-time)
+ *
+ * extraConfig JSON fields:
+ *   region      — Azure region slug, e.g. "eastus" (default: "eastus")
+ *   endpointId  — Custom model endpoint ID (optional)
+ *
+ * Language comes from STTConfig.language; falls back to extraConfig.language
+ * then "en-US".
  */
 export class AzureSTT implements STTAdapter {
-  private key: string;
-  private region: string;
-  private language: string;
-  private model: string | null;
+  private readonly key: string;
+  private readonly region: string;
+  private readonly language: string;
+  private readonly model: string | null;
+  private readonly endpointId: string | null;
+  private readonly cfg: STTConfig;
 
   constructor(
     apiKey: string,
     model: string | null,
     extraConfig: string | null,
-    cfg: STTConfig
+    cfg: STTConfig,
   ) {
     this.key = apiKey;
     this.model = model;
-    const extra = extraConfig ? (JSON.parse(extraConfig) as { region?: string; language?: string }) : {};
+    this.cfg = cfg;
+
+    const extra = extraConfig
+      ? (JSON.parse(extraConfig) as {
+          region?: string;
+          language?: string;
+          endpointId?: string;
+        })
+      : {};
+
     this.region = extra.region ?? "eastus";
-    // sttConfig.language takes priority over extraConfig.language
+    this.endpointId = extra.endpointId ?? null;
     this.language = cfg.language ?? extra.language ?? "en-US";
   }
+
+  // ── Batch REST ────────────────────────────────────────────────────────────
 
   async transcribe(audioBuffer: Buffer, sampleRate = 16000): Promise<string> {
     const wav = pcmToWav(audioBuffer, sampleRate);
 
-    const url = `https://${this.region}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=${this.language}`;
+    const params = new URLSearchParams({ language: this.language, format: "detailed" });
+    if (this.model) params.set("model", this.model);
+    if (this.endpointId) params.set("endpointId", this.endpointId);
+
+    const url =
+      `https://${this.region}.stt.speech.microsoft.com/speech/recognition/` +
+      `conversation/cognitiveservices/v1?${params.toString()}`;
 
     const resp = await fetch(url, {
       method: "POST",
       headers: {
         "Ocp-Apim-Subscription-Key": this.key,
-        "Content-Type": "audio/wav",
+        "Content-Type": "audio/wav; codecs=audio/pcm; samplerate=16000",
         Accept: "application/json",
       },
       body: wav,
@@ -47,7 +135,205 @@ export class AzureSTT implements STTAdapter {
       throw new Error(`Azure STT error ${resp.status}: ${err}`);
     }
 
-    const json = (await resp.json()) as { DisplayText?: string; RecognitionStatus?: string };
-    return json.DisplayText?.trim() ?? "";
+    const json = (await resp.json()) as AzurePhraseBody;
+
+    if (json.RecognitionStatus !== "Success") {
+      logger.info(
+        { status: json.RecognitionStatus },
+        "Azure STT batch: non-success recognition status",
+      );
+      return "";
+    }
+
+    // Confidence filter (NBest[0] carries per-utterance score with format=detailed)
+    const best = json.NBest?.[0];
+    if (best?.Confidence !== undefined && best.Confidence < this.cfg.confidenceThreshold) {
+      logger.info(
+        { confidence: best.Confidence, threshold: this.cfg.confidenceThreshold },
+        "Azure STT batch: transcript filtered by confidence",
+      );
+      return "";
+    }
+
+    return (best?.Display ?? json.DisplayText ?? "").trim();
+  }
+
+  // ── Streaming WebSocket ───────────────────────────────────────────────────
+
+  transcribeStream(
+    onTranscript: (text: string, isFinal: boolean) => void,
+    onClose?: () => void,
+  ): StreamSTT {
+    const params = new URLSearchParams({ language: this.language, format: "detailed" });
+    if (this.model) params.set("model", this.model);
+    if (this.endpointId) params.set("endpointId", this.endpointId);
+
+    const wsUrl =
+      `wss://${this.region}.stt.speech.microsoft.com/speech/recognition/` +
+      `conversation/cognitiveservices/v1?${params.toString()}`;
+
+    let wsReady = false;
+    const audioQueue: Buffer[] = [];
+
+    const ws = new WebSocket(wsUrl, {
+      headers: { "Ocp-Apim-Subscription-Key": this.key },
+    });
+
+    ws.on("open", () => {
+      wsReady = true;
+
+      // ① Speech config — declares the audio format to Azure
+      ws.send(
+        textFrame(
+          "speech.config",
+          JSON.stringify({
+            context: {
+              system: { version: "1.0.0" },
+              os: { platform: "node", name: "node", version: process.version },
+              device: {
+                manufacturer: "voiceorch",
+                model: "voiceorch",
+                version: "1.0",
+              },
+            },
+          }),
+        ),
+      );
+
+      // ② Speech context — phrase list for keyterm boosting
+      if (this.cfg.keyterms.length > 0) {
+        ws.send(
+          textFrame(
+            "speech.context",
+            JSON.stringify({
+              phraseDetection: {
+                onInterim: { resultType: "Always" },
+                onSuccess: { resultType: "Always" },
+                mode: "Conversation",
+              },
+              phraseList: {
+                onRecognition: {
+                  enabled: true,
+                  phrases: this.cfg.keyterms,
+                },
+              },
+            }),
+          ),
+        );
+      }
+
+      // ③ Flush any audio queued before the socket was ready
+      for (const chunk of audioQueue.splice(0)) {
+        ws.send(audioFrame(chunk));
+      }
+
+      logger.info(
+        {
+          region: this.region,
+          language: this.language,
+          keyterms: this.cfg.keyterms.length,
+          hasEndpointId: !!this.endpointId,
+        },
+        "Azure streaming STT WebSocket opened",
+      );
+    });
+
+    ws.on("message", (raw: Buffer | string, isBinary: boolean) => {
+      // Azure only sends transcript events as text frames; skip binary frames.
+      if (isBinary) return;
+
+      const parsed = parseFrame(raw.toString());
+      if (!parsed) return;
+
+      const { path, body } = parsed;
+
+      // ── Interim hypothesis ──────────────────────────────────────────────
+      if (path === "speech.hypothesis") {
+        try {
+          const msg = JSON.parse(body) as AzureHypothesisBody;
+          const text = msg.Text?.trim();
+          if (text) onTranscript(text, false);
+        } catch {
+          // malformed JSON — ignore
+        }
+        return;
+      }
+
+      // ── Final phrase ────────────────────────────────────────────────────
+      if (path === "speech.phrase") {
+        try {
+          const msg = JSON.parse(body) as AzurePhraseBody;
+
+          if (msg.RecognitionStatus !== "Success") {
+            // InitialSilenceTimeout, NoMatch, etc. — nothing to emit
+            return;
+          }
+
+          const best = msg.NBest?.[0];
+          const confidence = best?.Confidence ?? 1;
+          const text = (best?.Display ?? msg.DisplayText ?? "").trim();
+
+          if (!text) return;
+
+          if (confidence < this.cfg.confidenceThreshold) {
+            logger.info(
+              { confidence, threshold: this.cfg.confidenceThreshold },
+              "Azure stream: transcript filtered by confidence",
+            );
+            return;
+          }
+
+          onTranscript(text, true);
+        } catch {
+          // malformed JSON — ignore
+        }
+        return;
+      }
+
+      // ── Turn lifecycle (informational only) ─────────────────────────────
+      // After turn.end the socket stays open; the next audio chunk starts a
+      // new turn automatically — no reconnect needed.
+      if (path === "turn.end") {
+        logger.debug({ region: this.region }, "Azure STT: turn.end");
+        return;
+      }
+
+      if (path === "turn.start") {
+        logger.debug({ region: this.region }, "Azure STT: turn.start");
+        return;
+      }
+
+      if (path === "speech.enddetected") {
+        logger.debug({ region: this.region }, "Azure STT: speech.enddetected");
+        return;
+      }
+    });
+
+    ws.on("error", (err: unknown) => {
+      logger.error({ err }, "Azure streaming STT WebSocket error");
+    });
+
+    ws.on("close", (code: number, reason: Buffer) => {
+      logger.info(
+        { code, reason: reason.toString() },
+        "Azure streaming STT WebSocket closed",
+      );
+      onClose?.();
+    });
+
+    return {
+      sendAudio(chunk: Buffer): void {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(audioFrame(chunk));
+        } else if (!wsReady) {
+          audioQueue.push(chunk);
+        }
+        // If closed/closing: pipeline auto-reconnect will open a fresh socket.
+      },
+
+      close(): void {
+        if (ws.readyState < WebSocket.CLOSING) ws.close();
+      },
+    };
   }
 }
