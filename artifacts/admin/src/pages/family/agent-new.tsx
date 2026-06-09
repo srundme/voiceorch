@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import {
   ArrowLeft, Save, Bot, Plus, Trash2, PhoneForwarded, Sparkles,
   ChevronDown, ChevronUp, Database, ClipboardList, Building2,
-  Maximize2, Volume2,
+  Maximize2, Volume2, Brain, Phone,
 } from "lucide-react";
 import { z } from "zod";
 import { useForm, useWatch, useFieldArray } from "react-hook-form";
@@ -492,74 +492,92 @@ export default function FamilyAgentNew() {
   };
 
   return (
-    <div className="flex-1 space-y-6 p-6 md:p-8 pt-6 max-w-5xl mx-auto h-full flex flex-col">
-      <div className="flex items-center gap-4">
-        <Link href="/family/agents">
-          <Button variant="outline" size="icon" className="h-8 w-8">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
-        <div className="flex-1">
-          <h2 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-            <Bot className="h-6 w-6 text-primary" />
-            Create Agent
-          </h2>
-          <p className="text-muted-foreground">Configure a new insurance AI voice agent pipeline.</p>
-        </div>
-        <Button type="button" variant="outline" onClick={() => setTemplatesOpen(true)} className="gap-2">
-          <Sparkles className="h-4 w-4 text-foreground" />
-          Use Template
-        </Button>
+    <div className="relative flex-1 overflow-y-auto">
+      {/* ── Ambient background orbs ── */}
+      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+        <div className="absolute -top-48 left-1/4 h-[640px] w-[640px] rounded-full bg-violet-600/10 blur-[160px]" />
+        <div className="absolute top-1/3 -right-24 h-[500px] w-[500px] rounded-full bg-blue-600/10 blur-[140px]" />
+        <div className="absolute bottom-0 left-8 h-[420px] w-[420px] rounded-full blur-[120px]" style={{background:"rgba(6,182,212,0.07)"}} />
+        <div className="absolute top-2/3 left-1/2 h-[300px] w-[300px] rounded-full blur-[100px]" style={{background:"rgba(236,72,153,0.06)"}} />
       </div>
 
-      {/* Templates dialog */}
-      <Dialog open={templatesOpen} onOpenChange={setTemplatesOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4" /> Start from a template
-            </DialogTitle>
-            <DialogDescription>
-              Pick a template to prefill the form. You can customise everything afterwards.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid grid-cols-1 gap-3 mt-2">
-            {INSURANCE_TEMPLATES.map(tpl => (
-              <button
-                key={tpl.id}
-                onClick={() => applyTemplate(tpl)}
-                className="text-left p-4 rounded-lg bg-muted border border-border hover:border-muted-foreground/30 hover:bg-accent transition-colors"
-              >
-                <div className="flex items-start justify-between gap-3 mb-1">
-                  <p className="text-sm font-semibold text-foreground">{tpl.name}</p>
-                  <Badge className={`text-[10px] shrink-0 ${CATEGORY_COLORS[tpl.category] ?? CATEGORY_COLORS.general}`}>
-                    {tpl.category}
-                  </Badge>
-                </div>
-                <p className="text-xs text-muted-foreground leading-relaxed">{tpl.description}</p>
-                <p className="text-[11px] text-muted-foreground/60 mt-2 font-mono">
-                  {tpl.asrProvider} · {tpl.llmProvider} · {tpl.ttsProvider}
-                </p>
-              </button>
-            ))}
+      <div className="glass-form max-w-5xl mx-auto space-y-5 p-6 md:p-8 pt-6 pb-28">
+
+        {/* ── Page header ── */}
+        <div className="flex items-center gap-4 mb-2">
+          <Link href="/family/agents">
+            <Button variant="ghost" size="icon"
+              className="h-9 w-9 rounded-xl border border-white/[0.08] bg-white/[0.04] hover:bg-white/[0.09] text-white/60 hover:text-white transition-all">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          </Link>
+          <div className="flex-1">
+            <h2 className="text-2xl font-semibold tracking-tight text-white flex items-center gap-3">
+              <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+                style={{background:"linear-gradient(135deg,#7c3aed,#2563eb)",boxShadow:"0 0 22px rgba(124,58,237,0.50)"}}>
+                <Bot className="h-4 w-4 text-white" />
+              </span>
+              Create Agent
+            </h2>
+            <p className="text-sm text-white/38 mt-0.5 ml-[48px]">Configure a new insurance AI voice agent pipeline.</p>
           </div>
-        </DialogContent>
-      </Dialog>
+          <Button type="button" variant="ghost" onClick={() => setTemplatesOpen(true)}
+            className="gap-2 rounded-xl border border-white/[0.08] bg-white/[0.04] hover:bg-white/[0.09] text-white/60 hover:text-white transition-all px-4">
+            <Sparkles className="h-3.5 w-3.5" />
+            <span className="text-sm">Use Template</span>
+          </Button>
+        </div>
 
+        {/* ── Templates dialog ── */}
+        <Dialog open={templatesOpen} onOpenChange={setTemplatesOpen}>
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4" /> Start from a template
+              </DialogTitle>
+              <DialogDescription>
+                Pick a template to prefill the form. You can customise everything afterwards.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid grid-cols-1 gap-3 mt-2">
+              {INSURANCE_TEMPLATES.map(tpl => (
+                <button
+                  key={tpl.id}
+                  onClick={() => applyTemplate(tpl)}
+                  className="text-left p-4 rounded-lg bg-muted border border-border hover:border-muted-foreground/30 hover:bg-accent transition-colors"
+                >
+                  <div className="flex items-start justify-between gap-3 mb-1">
+                    <p className="text-sm font-semibold text-foreground">{tpl.name}</p>
+                    <Badge className={`text-[10px] shrink-0 ${CATEGORY_COLORS[tpl.category] ?? CATEGORY_COLORS.general}`}>
+                      {tpl.category}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">{tpl.description}</p>
+                  <p className="text-[11px] text-muted-foreground/60 mt-2 font-mono">
+                    {tpl.asrProvider} · {tpl.llmProvider} · {tpl.ttsProvider}
+                  </p>
+                </button>
+              ))}
+            </div>
+          </DialogContent>
+        </Dialog>
 
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 pb-20">
+        <Form {...form}>
+          <form id="agent-new-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
 
-          {/* ── Company & Policy ── */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Building2 className="h-4 w-4 text-primary" />
-                Company &amp; Policy
-              </CardTitle>
-              <CardDescription>Associate this agent with an insurance company and optionally a specific product policy.</CardDescription>
-            </CardHeader>
-            <CardContent>
+            {/* ── Company & Policy ── */}
+            <div className="glass-card">
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/12 to-transparent pointer-events-none" />
+              <div className="flex items-center gap-3 mb-5">
+                <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl"
+                  style={{background:"linear-gradient(135deg,#7c3aed,#2563eb)",boxShadow:"0 0 16px rgba(124,58,237,0.40)"}}>
+                  <Building2 className="h-3.5 w-3.5 text-white" />
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-white/90">Company &amp; Policy</p>
+                  <p className="text-[11px] text-white/38 mt-0.5">Associate this agent with an insurance company and optionally a specific product policy.</p>
+                </div>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <FormField control={form.control} name="companyId" render={({ field }) => (
                   <FormItem>
@@ -617,18 +635,25 @@ export default function FamilyAgentNew() {
                   </FormItem>
                 )} />
               </div>
-            </CardContent>
-          </Card>
+            </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* ── General + AI Behavior (2-col) ── */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 
-            {/* ── General ── */}
-            <Card>
-              <CardHeader>
-                <CardTitle>General Information</CardTitle>
-                <CardDescription>Basic details about your agent.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
+              {/* General */}
+              <div className="glass-card">
+                <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/12 to-transparent pointer-events-none" />
+                <div className="flex items-center gap-2.5 mb-5">
+                  <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+                    style={{background:"linear-gradient(135deg,#0ea5e9,#6366f1)",boxShadow:"0 0 14px rgba(14,165,233,0.38)"}}>
+                    <Bot className="h-3.5 w-3.5 text-white" />
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-white/90">General Information</p>
+                    <p className="text-[11px] text-white/38 mt-0.5">Basic details about your agent.</p>
+                  </div>
+                </div>
+                <div className="space-y-4">
                 <FormField control={form.control} name="name" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Agent Name</FormLabel>
@@ -643,16 +668,23 @@ export default function FamilyAgentNew() {
                     <FormMessage />
                   </FormItem>
                 )} />
-              </CardContent>
-            </Card>
+                </div>
+              </div>
 
-            {/* ── AI Behavior ── */}
-            <Card>
-              <CardHeader>
-                <CardTitle>AI Behavior</CardTitle>
-                <CardDescription>Configure how the agent responds.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
+              {/* AI Behavior */}
+              <div className="glass-card">
+                <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/12 to-transparent pointer-events-none" />
+                <div className="flex items-center gap-2.5 mb-5">
+                  <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+                    style={{background:"linear-gradient(135deg,#a855f7,#6366f1)",boxShadow:"0 0 14px rgba(168,85,247,0.38)"}}>
+                    <Sparkles className="h-3.5 w-3.5 text-white" />
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-white/90">AI Behavior</p>
+                    <p className="text-[11px] text-white/38 mt-0.5">Configure how the agent responds.</p>
+                  </div>
+                </div>
+                <div className="space-y-4">
                 <FormField control={form.control} name="systemPrompt" render={({ field }) => (
                   <FormItem>
                     <div className="flex items-center justify-between">
@@ -697,17 +729,24 @@ export default function FamilyAgentNew() {
                     <FormMessage />
                   </FormItem>
                 )} />
-              </CardContent>
-            </Card>
+                </div>
+              </div>
+            </div>
 
             {/* ── Conversation Behavior ── */}
-            <Card className="md:col-span-2">
-              <CardHeader>
-                <CardTitle>Conversation Behavior</CardTitle>
-                <CardDescription>Control how the agent opens, responds, and ends calls.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="glass-card">
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/12 to-transparent pointer-events-none" />
+              <div className="flex items-center gap-2.5 mb-5">
+                <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+                  style={{background:"linear-gradient(135deg,#10b981,#0ea5e9)",boxShadow:"0 0 14px rgba(16,185,129,0.38)"}}>
+                  <Volume2 className="h-3.5 w-3.5 text-white" />
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-white/90">Conversation Behavior</p>
+                  <p className="text-[11px] text-white/38 mt-0.5">Control how the agent opens, responds, and ends calls.</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-4">
                     <FormField control={form.control} name="greetingMessage" render={({ field }) => (
                       <FormItem>
@@ -802,11 +841,11 @@ export default function FamilyAgentNew() {
                       </FormItem>
                     )} />
 
-                    <div className="space-y-3 p-4 border rounded-md bg-muted/20">
+                    <div className="glass-toggle-row space-y-3">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm font-medium leading-none">Noise Cancellation</p>
-                          <p className="text-xs text-muted-foreground mt-1">Request noise reduction from the ASR provider</p>
+                          <p className="text-sm font-medium leading-none text-white/80">Noise Cancellation</p>
+                          <p className="text-xs text-white/35 mt-1">Request noise reduction from the ASR provider</p>
                         </div>
                         <FormField control={form.control} name="noiseCancellationEnabled" render={({ field }) => (
                           <FormItem>
@@ -822,11 +861,11 @@ export default function FamilyAgentNew() {
                       </div>
                     </div>
 
-                    <div className="space-y-3 p-4 border rounded-md bg-muted/20">
+                    <div className="glass-toggle-row space-y-3">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm font-medium leading-none">Backchanneling</p>
-                          <p className="text-xs text-muted-foreground mt-1">Agent says "I see", "Got it" etc. while thinking</p>
+                          <p className="text-sm font-medium leading-none text-white/80">Backchanneling</p>
+                          <p className="text-xs text-white/35 mt-1">Agent says "I see", "Got it" etc. while thinking</p>
                         </div>
                         <FormField control={form.control} name="backchannelingEnabled" render={({ field }) => (
                           <FormItem>
@@ -889,24 +928,30 @@ export default function FamilyAgentNew() {
                     )} />
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+            </div>
 
             {/* ── Pipeline ── */}
-            <Card className="md:col-span-2">
-              <CardHeader>
-                <CardTitle>Pipeline Configuration</CardTitle>
-                <CardDescription>Select providers and models for each stage.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="glass-card">
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/12 to-transparent pointer-events-none" />
+              <div className="flex items-center gap-2.5 mb-5">
+                <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+                  style={{background:"linear-gradient(135deg,#f59e0b,#ef4444)",boxShadow:"0 0 14px rgba(245,158,11,0.38)"}}>
+                  <PhoneForwarded className="h-3.5 w-3.5 text-white" />
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-white/90">Pipeline Configuration</p>
+                  <p className="text-[11px] text-white/38 mt-0.5">Select providers and models for each stage of the voice pipeline.</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
 
-                  {/* Step 1 — ASR */}
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="flex items-center justify-center h-5 w-5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold shrink-0">1</span>
-                      <p className="text-sm font-semibold">ASR <span className="text-muted-foreground font-normal text-xs">— Speech-to-Text</span></p>
-                    </div>
+                {/* Step 1 — ASR */}
+                <div className="glass-pipeline-step" style={{border:"1px solid rgba(6,182,212,0.22)",background:"rgba(6,182,212,0.05)"}}>
+                  <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/20 to-transparent pointer-events-none" />
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="flex items-center justify-center h-5 w-5 rounded-md text-[10px] font-bold shrink-0 text-white" style={{background:"linear-gradient(135deg,#06b6d4,#0284c7)"}}>1</span>
+                    <p className="text-xs font-semibold text-white/80">ASR <span className="text-white/40 font-normal">— Speech-to-Text</span></p>
+                  </div>
                     <FormField control={form.control} name="asrProvider" render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-xs">Provider</FormLabel>
@@ -944,10 +989,11 @@ export default function FamilyAgentNew() {
                   </div>
 
                   {/* Step 2 — LLM */}
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="flex items-center justify-center h-5 w-5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold shrink-0">2</span>
-                      <p className="text-sm font-semibold">LLM <span className="text-muted-foreground font-normal text-xs">— Language Model</span></p>
+                  <div className="glass-pipeline-step" style={{border:"1px solid rgba(139,92,246,0.22)",background:"rgba(139,92,246,0.05)"}}>
+                    <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-violet-400/20 to-transparent pointer-events-none" />
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="flex items-center justify-center h-5 w-5 rounded-md text-[10px] font-bold shrink-0 text-white" style={{background:"linear-gradient(135deg,#7c3aed,#6366f1)"}}>2</span>
+                      <p className="text-xs font-semibold text-white/80">LLM <span className="text-white/40 font-normal">— Language Model</span></p>
                     </div>
                     <FormField control={form.control} name="llmProvider" render={({ field }) => (
                       <FormItem>
@@ -975,10 +1021,11 @@ export default function FamilyAgentNew() {
                   </div>
 
                   {/* Step 3 — TTS */}
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="flex items-center justify-center h-5 w-5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold shrink-0">3</span>
-                      <p className="text-sm font-semibold">TTS <span className="text-muted-foreground font-normal text-xs">— Text-to-Speech</span></p>
+                  <div className="glass-pipeline-step" style={{border:"1px solid rgba(16,185,129,0.22)",background:"rgba(16,185,129,0.05)"}}>
+                    <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-400/20 to-transparent pointer-events-none" />
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="flex items-center justify-center h-5 w-5 rounded-md text-[10px] font-bold shrink-0 text-white" style={{background:"linear-gradient(135deg,#10b981,#059669)"}}>3</span>
+                      <p className="text-xs font-semibold text-white/80">TTS <span className="text-white/40 font-normal">— Text-to-Speech</span></p>
                     </div>
                     <FormField control={form.control} name="ttsProvider" render={({ field }) => (
                       <FormItem>
@@ -1061,10 +1108,11 @@ export default function FamilyAgentNew() {
                   </div>
 
                   {/* Step 4 — Telephony */}
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="flex items-center justify-center h-5 w-5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold shrink-0">4</span>
-                      <p className="text-sm font-semibold">Telephony</p>
+                  <div className="glass-pipeline-step" style={{border:"1px solid rgba(249,115,22,0.22)",background:"rgba(249,115,22,0.05)"}}>
+                    <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-orange-400/20 to-transparent pointer-events-none" />
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="flex items-center justify-center h-5 w-5 rounded-md text-[10px] font-bold shrink-0 text-white" style={{background:"linear-gradient(135deg,#f97316,#dc2626)"}}>4</span>
+                      <p className="text-xs font-semibold text-white/80">Telephony</p>
                     </div>
                     <FormField control={form.control} name="telephonyProvider" render={({ field }) => (
                       <FormItem>
@@ -1080,24 +1128,27 @@ export default function FamilyAgentNew() {
                     )} />
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
+            </div>
 
-          {/* ── Advanced STT ── */}
-          <Card>
-            <CardHeader className="pb-3 cursor-pointer" onClick={() => setShowAdvancedSTT(v => !v)}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-base">Advanced STT Settings</CardTitle>
-                  <CardDescription>Fine-tune streaming STT behaviour, confidence thresholds, and end-of-turn detection.</CardDescription>
+            {/* ── Advanced STT ── */}
+            <div className="glass-card">
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/12 to-transparent pointer-events-none" />
+              <button type="button" className="flex items-center justify-between w-full" onClick={() => setShowAdvancedSTT(v => !v)}>
+                <div className="flex items-center gap-2.5">
+                  <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+                    style={{background:"linear-gradient(135deg,#06b6d4,#3b82f6)",boxShadow:"0 0 14px rgba(6,182,212,0.35)"}}>
+                    <ChevronDown className="h-3.5 w-3.5 text-white" />
+                  </span>
+                  <div className="text-left">
+                    <p className="text-sm font-semibold text-white/90">Advanced STT Settings</p>
+                    <p className="text-[11px] text-white/38 mt-0.5">Fine-tune streaming STT behaviour, confidence thresholds, and end-of-turn detection.</p>
+                  </div>
                 </div>
-                {showAdvancedSTT ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-              </div>
-            </CardHeader>
-            {showAdvancedSTT && (
-              <CardContent>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {showAdvancedSTT ? <ChevronUp className="h-4 w-4 text-white/40 shrink-0" /> : <ChevronDown className="h-4 w-4 text-white/40 shrink-0" />}
+              </button>
+              {showAdvancedSTT && (
+                <div className="mt-5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                   <FormField control={form.control} name="asrKeyterms" render={({ field }) => (
                     <FormItem className="sm:col-span-2 lg:col-span-3">
                       <FormLabel>Key-terms / Boosted Words</FormLabel>
@@ -1155,11 +1206,11 @@ export default function FamilyAgentNew() {
                     </FormItem>
                   )} />
 
-                  <div className="space-y-3 p-3 border rounded-md bg-muted/20">
+                  <div className="glass-toggle-row space-y-3">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-medium">Background Denoising</p>
-                        <p className="text-xs text-muted-foreground">Filter background noise during transcription</p>
+                        <p className="text-sm font-medium text-white/80">Background Denoising</p>
+                        <p className="text-xs text-white/35">Filter background noise during transcription</p>
                       </div>
                       <FormField control={form.control} name="asrBackgroundDenoising" render={({ field }) => (
                         <FormItem>
@@ -1175,11 +1226,11 @@ export default function FamilyAgentNew() {
                     </div>
                   </div>
 
-                  <div className="space-y-3 p-3 border rounded-md bg-muted/20">
+                  <div className="glass-toggle-row space-y-3">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-medium">Auto Fallback</p>
-                        <p className="text-xs text-muted-foreground">Switch to batch STT if streaming fails</p>
+                        <p className="text-sm font-medium text-white/80">Auto Fallback</p>
+                        <p className="text-xs text-white/35">Switch to batch STT if streaming fails</p>
                       </div>
                       <FormField control={form.control} name="asrAutoFallback" render={({ field }) => (
                         <FormItem>
@@ -1195,44 +1246,49 @@ export default function FamilyAgentNew() {
                     </div>
                   </div>
                 </div>
-              </CardContent>
-            )}
-          </Card>
-
-          {/* ── Knowledge Base ── */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Database className="h-4 w-4 text-primary" />
-                Knowledge Base <span className="text-muted-foreground font-normal text-sm ml-1">(policy-linked)</span>
-              </CardTitle>
-              <CardDescription>
-                The agent's knowledge base is managed through the Company → Policy page.
-                Select a policy above to link a KB — the agent will use it for RAG on every turn.
-              </CardDescription>
-            </CardHeader>
-          </Card>
-
-          {/* ── Prompt Variables ── */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2">Prompt Variables</CardTitle>
-                  <CardDescription>
-                    Define <code>{"{{key}}"}</code> placeholders for your system prompt. Defaults are used unless overridden by inbound call parameters.
-                  </CardDescription>
                 </div>
-                <Button type="button" variant="outline" size="sm" className="gap-1"
+              )}
+            </div>
+
+            {/* ── Knowledge Base ── */}
+            <div className="glass-card">
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/12 to-transparent pointer-events-none" />
+              <div className="flex items-center gap-2.5">
+                <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+                  style={{background:"linear-gradient(135deg,#f59e0b,#d97706)",boxShadow:"0 0 14px rgba(245,158,11,0.35)"}}>
+                  <Database className="h-3.5 w-3.5 text-white" />
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-white/90">Knowledge Base <span className="text-white/38 font-normal text-xs">(policy-linked)</span></p>
+                  <p className="text-[11px] text-white/38 mt-0.5">The agent's knowledge base is managed through the Company → Policy page. Select a policy above to link a KB — the agent will use it for RAG on every turn.</p>
+                </div>
+              </div>
+            </div>
+
+            {/* ── Prompt Variables ── */}
+            <div className="glass-card">
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/12 to-transparent pointer-events-none" />
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2.5">
+                  <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+                    style={{background:"linear-gradient(135deg,#ec4899,#a855f7)",boxShadow:"0 0 14px rgba(236,72,153,0.35)"}}>
+                    <ClipboardList className="h-3.5 w-3.5 text-white" />
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-white/90">Prompt Variables</p>
+                    <p className="text-[11px] text-white/38 mt-0.5">Define <code>{"{{key}}"}</code> placeholders; overridden by inbound call parameters.</p>
+                  </div>
+                </div>
+                <Button type="button" variant="ghost" size="sm"
+                  className="gap-1 border border-white/[0.08] bg-white/[0.04] hover:bg-white/[0.09] text-white/60 hover:text-white rounded-lg text-xs"
                   onClick={() => appendPromptVar({ key: "", defaultValue: "", description: "" })}>
-                  <Plus className="h-3.5 w-3.5" /> Add Variable
+                  <Plus className="h-3 w-3" /> Add Variable
                 </Button>
               </div>
-            </CardHeader>
-            {promptVarFields.length > 0 && (
-              <CardContent className="space-y-3 max-h-96 overflow-y-auto">
-                {promptVarFields.map((field, index) => (
-                  <div key={field.id} className="relative grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 border rounded-md bg-muted/20">
+              {promptVarFields.length > 0 && (
+                <div className="space-y-2.5 max-h-96 overflow-y-auto">
+                  {promptVarFields.map((field, index) => (
+                    <div key={field.id} className="glass-array-item relative grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <Button type="button" variant="ghost" size="icon"
                       className="absolute top-2 right-2 h-7 w-7 text-muted-foreground hover:text-destructive"
                       onClick={() => removePromptVar(index)}>
@@ -1259,20 +1315,26 @@ export default function FamilyAgentNew() {
                         <FormMessage />
                       </FormItem>
                     )} />
-                  </div>
-                ))}
-              </CardContent>
-            )}
-          </Card>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
-          {/* ── Voice Activity Detection ── */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Voice Activity Detection &amp; Barge-in</CardTitle>
-              <CardDescription>Fine-tune how the agent detects speech and handles interruptions.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* ── Voice Activity Detection ── */}
+            <div className="glass-card">
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/12 to-transparent pointer-events-none" />
+              <div className="flex items-center gap-2.5 mb-5">
+                <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+                  style={{background:"linear-gradient(135deg,#0ea5e9,#06b6d4)",boxShadow:"0 0 14px rgba(14,165,233,0.35)"}}>
+                  <Volume2 className="h-3.5 w-3.5 text-white" />
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-white/90">Voice Activity Detection &amp; Barge-in</p>
+                  <p className="text-[11px] text-white/38 mt-0.5">Fine-tune how the agent detects speech and handles interruptions.</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
                 <FormField control={form.control} name="vadSilenceMs" render={({ field }) => (
                   <FormItem>
                     <FormLabel>VAD Silence Window (ms)</FormLabel>
@@ -1320,29 +1382,32 @@ export default function FamilyAgentNew() {
                   </FormItem>
                 )} />
               </div>
-            </CardContent>
-          </Card>
+            </div>
 
-          {/* ── Tools ── */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2"><PhoneForwarded className="h-4 w-4" /> Tools</CardTitle>
-                  <CardDescription>Actions the LLM can trigger mid-call. The agent decides when to use them based on the conversation.</CardDescription>
+            {/* ── Tools ── */}
+            <div className="glass-card">
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/12 to-transparent pointer-events-none" />
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2.5">
+                  <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+                    style={{background:"linear-gradient(135deg,#f97316,#dc2626)",boxShadow:"0 0 14px rgba(249,115,22,0.35)"}}>
+                    <PhoneForwarded className="h-3.5 w-3.5 text-white" />
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-white/90">Tools</p>
+                    <p className="text-[11px] text-white/38 mt-0.5">Actions the LLM can trigger mid-call based on the conversation.</p>
+                  </div>
                 </div>
-                <Button
-                  type="button" variant="outline" size="sm"
-                  onClick={() => appendTool({ type: "call_transfer", name: "transfer_to_human", description: "Transfer the call to a human agent when the caller requests it or the issue cannot be resolved automatically.", transferTo: "", warmHandoffMessage: "" })}
-                >
-                  <Plus className="h-4 w-4 mr-1" /> Add Tool
+                <Button type="button" variant="ghost" size="sm"
+                  className="gap-1 border border-white/[0.08] bg-white/[0.04] hover:bg-white/[0.09] text-white/60 hover:text-white rounded-lg text-xs"
+                  onClick={() => appendTool({ type: "call_transfer", name: "transfer_to_human", description: "Transfer the call to a human agent when the caller requests it or the issue cannot be resolved automatically.", transferTo: "", warmHandoffMessage: "" })}>
+                  <Plus className="h-3 w-3" /> Add Tool
                 </Button>
               </div>
-            </CardHeader>
-            {toolFields.length > 0 && (
-              <CardContent className="space-y-4">
-                {toolFields.map((field, index) => (
-                  <div key={field.id} className="border rounded-md p-4 bg-muted/20 space-y-3 relative">
+              {toolFields.length > 0 && (
+                <div className="space-y-3">
+                  {toolFields.map((field, index) => (
+                    <div key={field.id} className="glass-array-item space-y-3">
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Call Transfer</span>
                       <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => removeTool(index)}>
@@ -1408,34 +1473,38 @@ export default function FamilyAgentNew() {
                         </FormItem>
                       )} />
                     )}
-                  </div>
-                ))}
-              </CardContent>
-            )}
-          </Card>
-
-          {/* ── Disposition Schema ── */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2"><ClipboardList className="h-4 w-4" /> Disposition Fields</CardTitle>
-                  <CardDescription>Define fields the AI will automatically extract from each call transcript after the call ends.</CardDescription>
+                    </div>
+                  ))}
                 </div>
-                <Button
-                  type="button" variant="outline" size="sm"
-                  onClick={() => appendDisposition({ type: "text", key: "", label: "", required: false, options: "" })}
-                >
-                  <Plus className="h-4 w-4 mr-1" /> Add Field
+              )}
+            </div>
+
+            {/* ── Disposition Schema ── */}
+            <div className="glass-card">
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/12 to-transparent pointer-events-none" />
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2.5">
+                  <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+                    style={{background:"linear-gradient(135deg,#8b5cf6,#ec4899)",boxShadow:"0 0 14px rgba(139,92,246,0.35)"}}>
+                    <ClipboardList className="h-3.5 w-3.5 text-white" />
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-white/90">Disposition Fields</p>
+                    <p className="text-[11px] text-white/38 mt-0.5">Fields the AI automatically extracts from each call transcript after the call ends.</p>
+                  </div>
+                </div>
+                <Button type="button" variant="ghost" size="sm"
+                  className="gap-1 border border-white/[0.08] bg-white/[0.04] hover:bg-white/[0.09] text-white/60 hover:text-white rounded-lg text-xs"
+                  onClick={() => appendDisposition({ type: "text", key: "", label: "", required: false, options: "" })}>
+                  <Plus className="h-3 w-3" /> Add Field
                 </Button>
               </div>
-            </CardHeader>
-            {dispositionFields.length > 0 && (
-              <CardContent className="space-y-3">
-                {dispositionFields.map((field, index) => {
-                  const watchedType = form.watch(`dispositionSchema.${index}.type`);
-                  return (
-                    <div key={field.id} className="border rounded-md p-4 bg-muted/20 space-y-3 relative">
+              {dispositionFields.length > 0 && (
+                <div className="space-y-2.5">
+                  {dispositionFields.map((field, index) => {
+                    const watchedType = form.watch(`dispositionSchema.${index}.type`);
+                    return (
+                      <div key={field.id} className="glass-array-item space-y-3">
                       <Button type="button" variant="ghost" size="icon"
                         className="absolute top-2 right-2 h-7 w-7 text-muted-foreground hover:text-destructive"
                         onClick={() => removeDisposition(index)}>
@@ -1484,19 +1553,25 @@ export default function FamilyAgentNew() {
                         )} />
                       )}
                     </div>
-                  );
-                })}
-              </CardContent>
-            )}
-          </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
 
-          {/* ── Usage Limits ── */}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Usage Limits <span className="text-muted-foreground font-normal text-sm ml-1">(optional)</span></CardTitle>
-              <CardDescription>Cap concurrent calls and monthly spend for this agent.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+            {/* ── Usage Limits ── */}
+            <div className="glass-card">
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/12 to-transparent pointer-events-none" />
+              <div className="flex items-center gap-2.5 mb-5">
+                <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+                  style={{background:"linear-gradient(135deg,#6366f1,#8b5cf6)",boxShadow:"0 0 14px rgba(99,102,241,0.35)"}}>
+                  <ChevronDown className="h-3.5 w-3.5 text-white" />
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-white/90">Usage Limits <span className="text-white/38 font-normal text-xs">(optional)</span></p>
+                  <p className="text-[11px] text-white/38 mt-0.5">Cap concurrent calls and monthly spend for this agent.</p>
+                </div>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField control={form.control} name="maxConcurrentCalls" render={({ field }) => (
                   <FormItem>
@@ -1526,16 +1601,21 @@ export default function FamilyAgentNew() {
                   </FormItem>
                 )} />
               </div>
-            </CardContent>
-          </Card>
+            </div>
 
-          {/* ── Memory ── */}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Memory &amp; Context</CardTitle>
-              <CardDescription>Configure in-call and cross-call memory for this agent.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+            {/* ── Memory ── */}
+            <div className="glass-card">
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/12 to-transparent pointer-events-none" />
+              <div className="flex items-center gap-2.5 mb-5">
+                <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+                  style={{background:"linear-gradient(135deg,#10b981,#059669)",boxShadow:"0 0 14px rgba(16,185,129,0.35)"}}>
+                  <Brain className="h-3.5 w-3.5 text-white" />
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-white/90">Memory &amp; Context</p>
+                  <p className="text-[11px] text-white/38 mt-0.5">Configure in-call and cross-call memory for this agent.</p>
+                </div>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <FormField control={form.control} name="memoryEnabled" render={({ field }) => (
                   <FormItem className="flex flex-col">
@@ -1572,16 +1652,21 @@ export default function FamilyAgentNew() {
                   )} />
                 )}
               </div>
-            </CardContent>
-          </Card>
+            </div>
 
-          {/* ── Auto Callback ── */}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Auto Callback</CardTitle>
-              <CardDescription>Automatically retry calls when the customer doesn't answer.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+            {/* ── Auto Callback ── */}
+            <div className="glass-card">
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/12 to-transparent pointer-events-none" />
+              <div className="flex items-center gap-2.5 mb-5">
+                <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+                  style={{background:"linear-gradient(135deg,#f59e0b,#ef4444)",boxShadow:"0 0 14px rgba(245,158,11,0.35)"}}>
+                  <Phone className="h-3.5 w-3.5 text-white" />
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-white/90">Auto Callback</p>
+                  <p className="text-[11px] text-white/38 mt-0.5">Automatically retry calls when the customer doesn't answer.</p>
+                </div>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <FormField control={form.control} name="autoCallbackEnabled" render={({ field }) => (
                   <FormItem className="flex flex-col">
@@ -1622,39 +1707,53 @@ export default function FamilyAgentNew() {
                   </>
                 )}
               </div>
-            </CardContent>
-          </Card>
-
-          {/* ── Fixed bottom bar ── */}
-          <div className="fixed bottom-0 left-0 md:left-64 right-0 p-4 bg-background/80 backdrop-blur-sm border-t border-border flex justify-end z-10">
-            <div className="max-w-5xl mx-auto w-full flex justify-end gap-4">
-              <Link href="/family/agents">
-                <Button type="button" variant="outline">Cancel</Button>
-              </Link>
-              <Button type="submit" disabled={isSaving}>
-                <Save className="mr-2 h-4 w-4" />
-                {isSaving ? "Creating…" : "Create Agent"}
-              </Button>
             </div>
-          </div>
-        </form>
-      </Form>
+
+            {/* bottom spacer so content isn't hidden behind fixed bar */}
+            <div className="h-24" />
+          </form>
+        </Form>
+      </div>{/* end glass-form */}
+
+      {/* ── Fixed bottom bar ── */}
+      <div className="fixed bottom-0 left-0 md:left-64 right-0 z-20"
+        style={{background:"rgba(10,10,18,0.82)",backdropFilter:"blur(18px)",borderTop:"1px solid rgba(255,255,255,0.07)"}}>
+        <div className="max-w-5xl mx-auto px-6 py-3 flex justify-end gap-3">
+          <Link href="/family/agents">
+            <Button type="button" variant="ghost"
+              className="border border-white/[0.09] bg-white/[0.04] hover:bg-white/[0.08] text-white/60 hover:text-white rounded-xl px-5">
+              Cancel
+            </Button>
+          </Link>
+          <Button
+            type="submit" form="agent-new-form" disabled={isSaving}
+            className="gap-2 rounded-xl px-6 text-sm font-semibold"
+            style={{background:"linear-gradient(135deg,#6366f1,#8b5cf6)",boxShadow:"0 0 20px rgba(99,102,241,0.4)"}}>
+            <Save className="h-3.5 w-3.5" />
+            {isSaving ? "Creating…" : "Create Agent"}
+          </Button>
+        </div>
+      </div>
 
       {/* ── Fullscreen system prompt dialog ── */}
       <Dialog open={fullscreenPrompt} onOpenChange={setFullscreenPrompt}>
-        <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
+        <DialogContent className="max-w-4xl h-[80vh] flex flex-col"
+          style={{background:"rgba(14,14,24,0.95)",backdropFilter:"blur(24px)",border:"1px solid rgba(255,255,255,0.1)"}}>
           <DialogHeader>
-            <DialogTitle>System Prompt</DialogTitle>
+            <DialogTitle className="text-white/90">System Prompt</DialogTitle>
           </DialogHeader>
-          <div className="flex-1 flex flex-col gap-3">
+          <div className="flex-1 flex flex-col gap-3 min-h-0">
             <Textarea
-              className="flex-1 font-mono text-sm resize-none"
+              className="flex-1 font-mono text-sm resize-none bg-white/[0.04] border-white/[0.08] text-white/80 placeholder:text-white/25 focus-visible:ring-indigo-500/40"
               value={systemPromptWatch ?? ""}
               onChange={(e) => form.setValue("systemPrompt", e.target.value, { shouldDirty: true })}
               placeholder="You are a helpful insurance assistant..."
             />
             <div className="flex justify-end">
-              <Button variant="outline" onClick={() => setFullscreenPrompt(false)}>Close</Button>
+              <Button variant="ghost" onClick={() => setFullscreenPrompt(false)}
+                className="border border-white/[0.09] bg-white/[0.04] hover:bg-white/[0.08] text-white/60 hover:text-white rounded-xl px-5">
+                Close
+              </Button>
             </div>
           </div>
         </DialogContent>

@@ -188,4 +188,136 @@
       0 1px 2px rgba(0,0,0,0.4),
       inset 0 1px 0 0 rgba(255,255,255,0.04);
   }
+
+  /* ── Liquid Glass Page ───────────────────────────────────────────── */
+  .glass-card {
+    position: relative;
+    overflow: hidden;
+    border-radius: 18px;
+    border: 1px solid rgba(255,255,255,0.065);
+    background: rgba(255,255,255,0.028);
+    backdrop-filter: blur(44px) saturate(160%);
+    -webkit-backdrop-filter: blur(44px) saturate(160%);
+    padding: 22px 24px;
+    box-shadow: 0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.07);
+  }
+
+  .glass-pipeline-step {
+    position: relative;
+    overflow: hidden;
+    border-radius: 14px;
+    backdrop-filter: blur(28px) saturate(150%);
+    -webkit-backdrop-filter: blur(28px) saturate(150%);
+    padding: 16px;
+    box-shadow: 0 2px 20px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.07);
+  }
+
+  .glass-toggle-row {
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.065);
+    background: rgba(255,255,255,0.03);
+    padding: 12px 14px;
+  }
+
+  .glass-array-item {
+    position: relative;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.065);
+    background: rgba(255,255,255,0.03);
+    padding: 14px 16px;
+  }
+
+  /* ── Scoped form-field overrides inside .glass-form ─────────────── */
+  .glass-form [data-slot="form-label"],
+  .glass-form label {
+    color: rgba(255,255,255,0.50) !important;
+    font-size: 11px !important;
+    font-weight: 500 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.055em !important;
+  }
+
+  .glass-form [data-slot="form-description"],
+  .glass-form [data-slot="form-message"] {
+    color: rgba(255,255,255,0.32) !important;
+    font-size: 11px !important;
+  }
+
+  .glass-form [data-slot="form-message"] {
+    color: rgba(255,100,100,0.85) !important;
+  }
+
+  .glass-form input,
+  .glass-form textarea {
+    background: rgba(255,255,255,0.045) !important;
+    border-color: rgba(255,255,255,0.085) !important;
+    color: rgba(255,255,255,0.88) !important;
+    border-radius: 10px !important;
+  }
+
+  .glass-form input::placeholder,
+  .glass-form textarea::placeholder {
+    color: rgba(255,255,255,0.20) !important;
+  }
+
+  .glass-form input:focus-visible,
+  .glass-form textarea:focus-visible {
+    border-color: rgba(139,92,246,0.55) !important;
+    box-shadow: 0 0 0 2px rgba(139,92,246,0.20), 0 0 14px rgba(139,92,246,0.12) !important;
+    background: rgba(255,255,255,0.06) !important;
+    outline: none !important;
+  }
+
+  .glass-form button[role="combobox"] {
+    background: rgba(255,255,255,0.045) !important;
+    border-color: rgba(255,255,255,0.085) !important;
+    color: rgba(255,255,255,0.88) !important;
+    border-radius: 10px !important;
+  }
+
+  .glass-form button[role="combobox"]:focus {
+    border-color: rgba(139,92,246,0.55) !important;
+    box-shadow: 0 0 0 2px rgba(139,92,246,0.20) !important;
+    outline: none !important;
+  }
+
+  .glass-form button[role="combobox"] span[data-placeholder] {
+    color: rgba(255,255,255,0.25) !important;
+  }
+
+  /* Slider */
+  .glass-form [data-orientation="horizontal"][data-slot="slider"] > span:first-child {
+    background: rgba(255,255,255,0.1) !important;
+  }
+  .glass-form [data-orientation="horizontal"][data-slot="slider"] [data-slot="slider-range"] {
+    background: linear-gradient(90deg, #7c3aed, #3b82f6) !important;
+  }
+
+  /* Switch */
+  .glass-form button[role="switch"] {
+    background: rgba(255,255,255,0.1) !important;
+    border-color: transparent !important;
+  }
+  .glass-form button[role="switch"][data-state="checked"] {
+    background: linear-gradient(135deg, #7c3aed, #2563eb) !important;
+    box-shadow: 0 0 12px rgba(124,58,237,0.45) !important;
+  }
+
+  /* small text inside glass panels */
+  .glass-card .text-muted-foreground,
+  .glass-card p.text-xs,
+  .glass-card p.text-sm {
+    color: rgba(255,255,255,0.35) !important;
+  }
+  .glass-card p.text-sm.font-medium,
+  .glass-card p.text-sm.font-semibold {
+    color: rgba(255,255,255,0.82) !important;
+  }
+  .glass-card code {
+    color: rgba(168,139,250,0.90) !important;
+    background: rgba(139,92,246,0.12) !important;
+    border-radius: 4px !important;
+    padding: 1px 5px !important;
+    font-size: 11px !important;
+  }
 }
