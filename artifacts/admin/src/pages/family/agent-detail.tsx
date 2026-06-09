@@ -727,7 +727,11 @@ export default function FamilyAgentDetail() {
   const agentCalls = calls.filter(c => c.agentId === params.id).sort(
     (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
   );
-  const formInitialized = useRef(false);
+  // Track which agent ID the form has been initialised for.
+  // Using agent.id (string) instead of a boolean prevents a race where the
+  // effect fires before the store finishes loading (agent=undefined), sets the
+  // flag, and then refuses to re-run once the agent is actually available.
+  const formInitializedFor = useRef<string | null>(null);
 
   const form = useForm<AgentFormValues>({
     resolver: zodResolver(agentFormSchema),
@@ -767,8 +771,9 @@ export default function FamilyAgentDetail() {
   const systemPromptWatch = useWatch({ control: form.control, name: "systemPrompt" });
 
   useEffect(() => {
-    if (!agent || formInitialized.current || !isLoaded) return;
-    formInitialized.current = true;
+    if (!agent || !isLoaded) return;
+    if (formInitializedFor.current === agent.id) return;
+    formInitializedFor.current = agent.id;
     form.reset({
       status:            agent.status,
       companyId:         agent.companyId,
@@ -827,7 +832,7 @@ export default function FamilyAgentDetail() {
       autoCallbackRetries:      agent.autoCallbackRetries ?? 3,
       autoCallbackDelaySeconds: agent.autoCallbackDelaySeconds ?? 300,
     });
-  }, [agent, isLoaded]);
+  }, [agent?.id, isLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const policiesForCompany = policies.filter(p => p.companyId === selectedCompanyId);
 
