@@ -73,7 +73,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
   },
   title: {
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700" as const,
     fontSize: 28,
   },
   content: {
@@ -94,15 +94,15 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   avatarText: {
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600" as const,
     fontSize: 32,
   },
   name: {
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700" as const,
     fontSize: 24,
   },
   code: {
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500" as const,
     fontSize: 16,
   },
   section: {
@@ -117,11 +117,11 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   rowText: {
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500" as const,
     fontSize: 16,
   },
   rowValue: {
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600" as const,
     fontSize: 16,
   },
   divider: {
@@ -136,7 +136,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   logoutText: {
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600" as const,
     fontSize: 16,
   },
 });

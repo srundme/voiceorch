@@ -64,7 +64,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
   },
   title: {
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700" as const,
     fontSize: 28,
   },
   listContent: {
@@ -95,7 +95,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   companyName: {
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600" as const,
     fontSize: 18,
   },
   statusBadge: {
@@ -104,7 +104,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   statusText: {
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500" as const,
     fontSize: 12,
   },
   cardBody: {
@@ -116,7 +116,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   statText: {
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500" as const,
     fontSize: 14,
   },
 });

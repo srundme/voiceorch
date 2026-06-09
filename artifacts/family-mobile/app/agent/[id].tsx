@@ -94,11 +94,11 @@ const styles = StyleSheet.create({
     borderRadius: 32,
   },
   title: {
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700" as const,
     fontSize: 24,
   },
   description: {
-    fontFamily: "Inter_400Regular",
+    fontWeight: "400" as const,
     fontSize: 16,
     textAlign: "center",
   },
@@ -106,7 +106,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   sectionTitle: {
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600" as const,
     fontSize: 18,
   },
   card: {
@@ -121,11 +121,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   featureText: {
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500" as const,
     fontSize: 16,
   },
   bubble: {
-    fontFamily: "Inter_400Regular",
+    fontWeight: "400" as const,
     fontSize: 14,
     padding: 12,
     borderRadius: 16,
@@ -149,7 +149,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   buttonText: {
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600" as const,
     fontSize: 16,
   },
 });

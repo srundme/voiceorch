@@ -89,7 +89,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
   },
   title: {
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700" as const,
     fontSize: 28,
   },
   listContent: {
@@ -109,12 +109,12 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
   },
   campaignName: {
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600" as const,
     fontSize: 18,
     marginBottom: 4,
   },
   companyName: {
-    fontFamily: "Inter_400Regular",
+    fontWeight: "400" as const,
     fontSize: 14,
   },
   statusBadge: {
@@ -123,7 +123,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   statusText: {
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600" as const,
     fontSize: 10,
   },
   statsRow: {
@@ -134,11 +134,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   statValue: {
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600" as const,
     fontSize: 20,
   },
   statLabel: {
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500" as const,
     fontSize: 12,
   },
   emptyContainer: {
@@ -149,11 +149,11 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   emptyText: {
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600" as const,
     fontSize: 18,
   },
   emptySubtext: {
-    fontFamily: "Inter_400Regular",
+    fontWeight: "400" as const,
     fontSize: 14,
     textAlign: "center",
   },

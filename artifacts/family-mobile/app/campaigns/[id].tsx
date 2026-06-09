@@ -107,7 +107,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   title: {
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700" as const,
     fontSize: 24,
   },
   statusBadge: {
@@ -116,7 +116,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   statusText: {
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600" as const,
     fontSize: 12,
   },
   card: {
@@ -132,11 +132,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   statValue: {
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700" as const,
     fontSize: 24,
   },
   statLabel: {
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500" as const,
     fontSize: 14,
     marginTop: 4,
   },
@@ -144,7 +144,7 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   sectionTitle: {
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600" as const,
     fontSize: 18,
   },
   activityItem: {
@@ -158,11 +158,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   activityTitle: {
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500" as const,
     fontSize: 16,
   },
   activitySub: {
-    fontFamily: "Inter_400Regular",
+    fontWeight: "400" as const,
     fontSize: 14,
     marginTop: 2,
   },
@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   buttonText: {
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600" as const,
     fontSize: 16,
   },
 });

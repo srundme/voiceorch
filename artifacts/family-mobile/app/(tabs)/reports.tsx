@@ -49,7 +49,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
   },
   title: {
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700" as const,
     fontSize: 28,
   },
   grid: {
@@ -73,11 +73,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   statTitle: {
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500" as const,
     fontSize: 14,
   },
   statValue: {
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700" as const,
     fontSize: 24,
   },
 });

@@ -83,24 +83,24 @@ const styles = StyleSheet.create({
     marginBottom: 48,
   },
   title: {
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700" as const,
     fontSize: 32,
     marginBottom: 8,
   },
   subtitle: {
-    fontFamily: "Inter_400Regular",
+    fontWeight: "400" as const,
     fontSize: 16,
   },
   form: {
     gap: 16,
   },
   label: {
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600" as const,
     fontSize: 14,
     marginBottom: -8,
   },
   input: {
-    fontFamily: "Inter_400Regular",
+    fontWeight: "400" as const,
     borderWidth: 1,
     borderRadius: 8,
     paddingHorizontal: 16,
@@ -114,7 +114,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   buttonText: {
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600" as const,
     fontSize: 16,
   },
 });

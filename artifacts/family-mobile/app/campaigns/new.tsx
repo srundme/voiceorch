@@ -146,7 +146,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   stepText: {
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500" as const,
     fontSize: 14,
   },
   content: {
@@ -157,7 +157,7 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   title: {
-    fontFamily: "Inter_700Bold",
+    fontWeight: "700" as const,
     fontSize: 24,
     marginBottom: 8,
   },
@@ -175,16 +175,16 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   optionText: {
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500" as const,
     fontSize: 16,
     flex: 1,
   },
   label: {
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600" as const,
     fontSize: 14,
   },
   input: {
-    fontFamily: "Inter_400Regular",
+    fontWeight: "400" as const,
     borderWidth: 1,
     borderRadius: 8,
     paddingHorizontal: 16,
@@ -200,7 +200,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   uploadText: {
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500" as const,
     fontSize: 16,
   },
   summaryCard: {
@@ -209,11 +209,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   summaryLabel: {
-    fontFamily: "Inter_500Medium",
+    fontWeight: "500" as const,
     fontSize: 14,
   },
   summaryValue: {
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600" as const,
     fontSize: 18,
     marginTop: 4,
   },
@@ -228,7 +228,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   buttonText: {
-    fontFamily: "Inter_600SemiBold",
+    fontWeight: "600" as const,
     fontSize: 16,
   },
 });
