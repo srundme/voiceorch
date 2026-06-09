@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { ArrowLeft, Bot, Plus, Trash2, PhoneForwarded, Sparkles, ChevronDown, ChevronUp, Database, ClipboardList } from "lucide-react";
+import {
+  ArrowLeft, Save, Bot, Plus, Trash2, PhoneForwarded, Sparkles,
+  ChevronDown, ChevronUp, Database, ClipboardList, Building2,
+} from "lucide-react";
 import { z } from "zod";
 import { useForm, useWatch, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -11,12 +14,20 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useFamilyStore, InsuranceAgent } from "@/lib/family-store";
+import { AGENT_TIMEZONES } from "@/lib/agent-providers";
 
-/* ── Provider / model catalogues (identical to dashboard new.tsx) ─────────── */
+/* ── Provider / model catalogues ─────────────────────────────────────────── */
 
 const ASR_PROVIDERS = [
   { value: "deepgram",   label: "Deepgram Nova" },
@@ -25,6 +36,7 @@ const ASR_PROVIDERS = [
   { value: "sarvam",     label: "Sarvam (Saarika)" },
   { value: "cartesia",   label: "Cartesia" },
 ];
+
 const LLM_PROVIDERS = [
   { value: "openai",    label: "OpenAI" },
   { value: "anthropic", label: "Anthropic Claude" },
@@ -36,6 +48,7 @@ const LLM_PROVIDERS = [
   { value: "groq",      label: "Groq" },
   { value: "sarvam",    label: "Sarvam" },
 ];
+
 const TTS_PROVIDERS = [
   { value: "elevenlabs",    label: "ElevenLabs" },
   { value: "openai_tts",    label: "OpenAI TTS" },
@@ -44,79 +57,87 @@ const TTS_PROVIDERS = [
   { value: "azure_tts",     label: "Azure TTS" },
   { value: "sarvam",        label: "Sarvam (Bulbul)" },
 ];
+
 const TELEPHONY_PROVIDERS = [
   { value: "twilio", label: "Twilio" },
   { value: "plivo",  label: "Plivo" },
   { value: "vobiz",  label: "Vobiz" },
 ];
+
 const LANGUAGES = [
   { value: "en-US", label: "English (US)" },
   { value: "en-GB", label: "English (UK)" },
   { value: "en-IN", label: "English (India)" },
+  { value: "es",    label: "Spanish" },
   { value: "hi",    label: "Hindi" },
   { value: "ta-IN", label: "Tamil" },
   { value: "te-IN", label: "Telugu" },
   { value: "kn-IN", label: "Kannada" },
   { value: "ml-IN", label: "Malayalam" },
   { value: "bn-IN", label: "Bengali (India)" },
-  { value: "mr-IN", label: "Marathi" },
-  { value: "es",    label: "Spanish" },
   { value: "fr",    label: "French" },
   { value: "de",    label: "German" },
+  { value: "ja",    label: "Japanese" },
+  { value: "ko",    label: "Korean" },
+  { value: "zh",    label: "Chinese (Mandarin)" },
   { value: "ar",    label: "Arabic" },
 ];
+
 const ASR_MODELS: Record<string, { value: string; label: string }[]> = {
-  deepgram:   [{ value: "nova-2", label: "Nova-2 (recommended)" }, { value: "nova-2-phonecall", label: "Nova-2 Phone Call" }, { value: "nova-2-meeting", label: "Nova-2 Meeting" }, { value: "whisper-large", label: "Whisper Large" }],
+  deepgram:   [{ value: "nova-2", label: "Nova-2 (recommended)" }, { value: "nova-2-phonecall", label: "Nova-2 Phone Call" }, { value: "nova-2-meeting", label: "Nova-2 Meeting" }],
   azure:      [{ value: "en-US-standard", label: "en-US-standard" }, { value: "en-US-enhanced", label: "en-US-enhanced" }, { value: "en-IN-standard", label: "en-IN-standard" }],
   assemblyai: [{ value: "best", label: "Best (default)" }, { value: "nano", label: "Nano (fast)" }],
-  sarvam:     [{ value: "saaras:v3", label: "Saaras v3 — real-time streaming (recommended)" }, { value: "saarika:v2.5", label: "Saarika v2.5 — batch (accurate)" }],
+  sarvam:     [
+    { value: "saaras:v3",     label: "Saaras v3 — real-time streaming (recommended)" },
+    { value: "saarika:v2.5",  label: "Saarika v2.5 — batch (accurate)" },
+    { value: "saarika:flash", label: "Saarika Flash — batch (fast, deprecated)" },
+  ],
   cartesia:   [{ value: "sonic-english", label: "Sonic English" }, { value: "sonic-multilingual", label: "Sonic Multilingual" }],
 };
+
 const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
   openai:    [{ value: "gpt-4o-mini", label: "GPT-4o Mini" }, { value: "gpt-4o", label: "GPT-4o" }, { value: "gpt-4-turbo", label: "GPT-4 Turbo" }, { value: "gpt-3.5-turbo", label: "GPT-3.5 Turbo" }],
   anthropic: [{ value: "claude-opus-4-5", label: "Claude Opus 4 (best)" }, { value: "claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet" }, { value: "claude-3-5-haiku-20241022", label: "Claude 3.5 Haiku (fast)" }],
-  google:    [{ value: "gemini-2.5-flash", label: "Gemini 2.5 Flash" }, { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash" }, { value: "gemini-1.5-pro", label: "Gemini 1.5 Pro" }],
+  google:    [{ value: "gemini-2.5-flash", label: "Gemini 2.5 Flash (recommended)" }, { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash" }, { value: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite (fast)" }, { value: "gemini-1.5-pro", label: "Gemini 1.5 Pro" }],
   deepseek:  [{ value: "deepseek-chat", label: "DeepSeek V3 (chat)" }, { value: "deepseek-reasoner", label: "DeepSeek R1 (reasoner)" }],
-  mistral:   [{ value: "mistral-large-latest", label: "Mistral Large" }, { value: "mistral-small-latest", label: "Mistral Small (fast)" }],
+  mistral:   [{ value: "mistral-large-latest", label: "Mistral Large (best)" }, { value: "mistral-small-latest", label: "Mistral Small (fast)" }],
   cohere:    [{ value: "command-r-plus-08-2024", label: "Command R+ (best)" }, { value: "command-r-08-2024", label: "Command R" }],
   qwen:      [{ value: "qwen/qwen3-32b", label: "Qwen 3 32B (recommended)" }, { value: "qwen/qwen3-235b-a22b", label: "Qwen 3 235B" }],
-  groq:      [{ value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B" }, { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B (fast)" }],
+  groq:      [{ value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B (recommended)" }, { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B (fast)" }],
   sarvam:    [{ value: "sarvam-30b", label: "Sarvam 30B (recommended)" }, { value: "sarvam-105b", label: "Sarvam 105B" }],
 };
+
 const TTS_MODELS: Record<string, { value: string; label: string }[]> = {
   cartesia: [
-    { value: "sonic-3.5",   label: "Sonic 3.5 ✦ New — 42 languages" },
+    { value: "sonic-3.5",   label: "Sonic 3.5 ✦ New — 42 languages, lowest latency" },
     { value: "sonic-3",     label: "Sonic 3" },
     { value: "sonic-2",     label: "Sonic 2 (stable)" },
-    { value: "sonic-turbo", label: "Sonic Turbo (fast)" },
+    { value: "sonic-turbo", label: "Sonic Turbo (fast, low-latency)" },
   ],
 };
+
 const TTS_VOICES: Record<string, { value: string; label: string }[] | null> = {
   elevenlabs: null, cartesia: null, azure_tts: null,
   openai_tts: [
-    { value: "alloy", label: "Alloy (neutral)" }, { value: "ash", label: "Ash (warm)" },
-    { value: "coral", label: "Coral (friendly)" }, { value: "echo", label: "Echo (deep)" },
-    { value: "nova", label: "Nova (energetic)" }, { value: "shimmer", label: "Shimmer (clear)" },
+    { value: "alloy",   label: "Alloy (neutral)" }, { value: "ash",    label: "Ash (warm)" },
+    { value: "coral",   label: "Coral (friendly)" }, { value: "echo",  label: "Echo (deep)" },
+    { value: "fable",   label: "Fable (expressive)" }, { value: "onyx", label: "Onyx (authoritative)" },
+    { value: "nova",    label: "Nova (energetic)" }, { value: "sage",  label: "Sage (calm)" },
+    { value: "shimmer", label: "Shimmer (clear)" },
   ],
   deepgram_aura: [
-    { value: "aura-2-en", label: "Aura 2 (default)" }, { value: "aura-asteria-en", label: "Asteria (warm female)" },
-    { value: "aura-luna-en", label: "Luna (soft female)" }, { value: "aura-zeus-en", label: "Zeus (deep male)" },
+    { value: "aura-2-en",       label: "Aura 2 (default)" }, { value: "aura-asteria-en", label: "Asteria (warm female)" },
+    { value: "aura-luna-en",    label: "Luna (soft female)" }, { value: "aura-stella-en", label: "Stella (bright female)" },
+    { value: "aura-zeus-en",    label: "Zeus (deep male)" },  { value: "aura-orion-en",  label: "Orion (male)" },
   ],
   sarvam: [
-    { value: "meera", label: "Meera (female)" }, { value: "pavithra", label: "Pavithra (female)" },
-    { value: "arvind", label: "Arvind (male)" }, { value: "amol", label: "Amol (male)" },
-    { value: "neel", label: "Neel (male)" }, { value: "arjun", label: "Arjun (male)" },
+    { value: "meera",    label: "Meera (female)" }, { value: "pavithra", label: "Pavithra (female)" },
+    { value: "maitreyi", label: "Maitreyi (female)" }, { value: "arvind", label: "Arvind (male)" },
+    { value: "amol",     label: "Amol (male)" }, { value: "amartya", label: "Amartya (male)" },
+    { value: "neel",     label: "Neel (male)" }, { value: "misha",   label: "Misha (female)" },
+    { value: "arjun",    label: "Arjun (male)" }, { value: "maya",   label: "Maya (female)" },
   ],
 };
-const AGENT_TIMEZONES = [
-  { value: "UTC",           label: "UTC (UTC+00:00)" },
-  { value: "Asia/Kolkata",  label: "Asia/Kolkata (UTC+05:30)" },
-  { value: "Asia/Dubai",    label: "Asia/Dubai (UTC+04:00)" },
-  { value: "Asia/Singapore",label: "Asia/Singapore (UTC+08:00)" },
-  { value: "Europe/London", label: "Europe/London (UTC+00:00)" },
-  { value: "America/New_York", label: "America/New_York (UTC-05:00)" },
-  { value: "America/Los_Angeles", label: "America/Los_Angeles (UTC-08:00)" },
-];
 
 const DEFAULT_ASR_MODEL = (p: string) => ASR_MODELS[p]?.[0]?.value ?? "";
 const DEFAULT_LLM_MODEL = (p: string) => LLM_MODELS[p]?.[0]?.value ?? "";
@@ -125,10 +146,11 @@ const DEFAULT_TTS_VOICE = (p: string) => TTS_VOICES[p]?.[0]?.value ?? "";
 /* ── Form schema ──────────────────────────────────────────────────────────── */
 
 const agentFormSchema = z.object({
-  name:              z.string().min(1, "Name is required"),
-  description:       z.string().optional(),
   companyId:         z.string().min(1, "Company is required"),
   policyId:          z.string().optional(),
+  agentType:         z.string().optional(),
+  name:              z.string().min(1, "Name is required"),
+  description:       z.string().optional(),
   asrProvider:       z.string().min(1, "ASR Provider is required"),
   asrModel:          z.string().optional(),
   llmProvider:       z.string().min(1, "LLM Provider is required"),
@@ -148,17 +170,17 @@ const agentFormSchema = z.object({
   backchannelingFrequency: z.number().min(0).max(1).optional(),
   backchannelPhrases:      z.string().optional(),
   webhookUrl:              z.string().optional(),
-  noiseCancellationEnabled:z.boolean().optional(),
-  inactivityMessage:       z.string().optional(),
-  asrLanguage:             z.string().optional(),
-  asrBackgroundDenoising:  z.boolean().optional(),
-  asrConfidenceThreshold:  z.number().min(0).max(1).optional(),
-  asrEndOfTurnConfidence:  z.number().min(0.3).max(1).optional(),
-  asrEndOfTurnTimeout:     z.number().min(100).max(30000).optional(),
-  asrKeyterms:             z.string().optional(),
-  asrSmartEndpointing:     z.enum(["off", "vapi", "livekit"]).optional(),
-  asrAutoFallback:         z.boolean().optional(),
-  webhookSecret:           z.string().optional(),
+  noiseCancellationEnabled: z.boolean().optional(),
+  inactivityMessage:        z.string().optional(),
+  asrLanguage:              z.string().optional(),
+  asrBackgroundDenoising:   z.boolean().optional(),
+  asrConfidenceThreshold:   z.number().min(0).max(1).optional(),
+  asrEndOfTurnConfidence:   z.number().min(0.3).max(1).optional(),
+  asrEndOfTurnTimeout:      z.number().min(100).max(30000).optional(),
+  asrKeyterms:              z.string().optional(),
+  asrSmartEndpointing:      z.enum(["off", "vapi", "livekit"]).optional(),
+  asrAutoFallback:          z.boolean().optional(),
+  webhookSecret:            z.string().optional(),
   promptVariables: z.array(z.object({
     key: z.string().min(1, "Key required"), defaultValue: z.string(), description: z.string().optional(),
   })).optional(),
@@ -183,12 +205,98 @@ const agentFormSchema = z.object({
     type: z.enum(["text", "number", "boolean", "choice"]),
     required: z.boolean().optional(), options: z.string().optional(),
   })).optional(),
+  memoryEnabled:          z.boolean().optional(),
+  crossCallMemoryEnabled: z.boolean().optional(),
+  contextWindowMessages:  z.number().min(5).max(100).optional(),
+  autoCallbackEnabled:      z.boolean().optional(),
+  autoCallbackRetries:      z.number().min(1).max(10).optional(),
+  autoCallbackDelaySeconds: z.number().min(10).max(3600).optional(),
 });
+
 type AgentFormValues = z.infer<typeof agentFormSchema>;
 
-function ModelSelect({ options, value, onChange, placeholder }: {
+/* ── Insurance templates ──────────────────────────────────────────────────── */
+
+const INSURANCE_TEMPLATES = [
+  {
+    id: 1, category: "support",
+    name: "Motor Insurance Support",
+    description: "Handles motor insurance queries, claims status, and renewal reminders.",
+    asrProvider: "sarvam", llmProvider: "qwen", ttsProvider: "sarvam", telephonyProvider: "vobiz",
+    systemPrompt: `You are a helpful motor insurance support agent for {{company_name}}.
+Your role is to assist customers with:
+- Policy details and coverage information
+- Claims status and filing guidance
+- Renewal reminders and premium calculations
+- Roadside assistance queries
+
+Always be professional, empathetic and clear. Ask for the customer's policy number or registered mobile number.`,
+    greetingMessage: "Hello! I'm your motor insurance assistant from {{company_name}}. Could I have your policy number or registered mobile number to get started?",
+    temperature: 0.3,
+  },
+  {
+    id: 2, category: "sales",
+    name: "Health Insurance Outbound Sales",
+    description: "Outbound calls for health insurance policy sales and lead qualification.",
+    asrProvider: "sarvam", llmProvider: "qwen", ttsProvider: "sarvam", telephonyProvider: "vobiz",
+    systemPrompt: `You are an outbound health insurance sales agent for {{company_name}}.
+Your goal is to:
+- Introduce the health insurance plan to the prospect
+- Understand their current health coverage and family situation
+- Highlight key benefits relevant to their needs
+- Schedule a follow-up or close the sale
+
+Be friendly, not pushy. Respect if they are not interested.`,
+    greetingMessage: "Hello, may I speak with {{customer_name}}? I'm calling from {{company_name}} about our health insurance plans.",
+    temperature: 0.4,
+  },
+  {
+    id: 3, category: "support",
+    name: "Claims Processing Assistant",
+    description: "Guide customers step-by-step through the insurance claims process.",
+    asrProvider: "deepgram", llmProvider: "google", ttsProvider: "cartesia", telephonyProvider: "twilio",
+    systemPrompt: `You are a claims processing assistant for {{company_name}}.
+Help customers:
+- Understand what documents they need to submit
+- Track the status of an existing claim
+- Escalate urgent or complex cases to human agents
+- Provide estimated processing timelines
+
+Always collect the policy number and claim reference number at the start.`,
+    greetingMessage: "Hello! I'm the claims assistant at {{company_name}}. Could you please share your policy number to get started?",
+    temperature: 0.2,
+  },
+  {
+    id: 4, category: "sales",
+    name: "Policy Renewal Agent",
+    description: "Follow up on expiring policies and facilitate renewals.",
+    asrProvider: "sarvam", llmProvider: "qwen", ttsProvider: "sarvam", telephonyProvider: "vobiz",
+    systemPrompt: `You are a policy renewal specialist for {{company_name}}.
+Your tasks:
+- Inform the customer about their upcoming policy renewal
+- Confirm coverage details and any changes in premium
+- Process renewal payment or send payment link
+- Update nominee and contact information if needed`,
+    greetingMessage: "Hello! This is {{company_name}} calling about your insurance policy which is due for renewal. Am I speaking with the policyholder?",
+    temperature: 0.3,
+  },
+];
+
+const CATEGORY_COLORS: Record<string, string> = {
+  support: "bg-muted text-zinc-300 border-border",
+  sales:   "bg-muted text-zinc-300 border-border",
+  general: "bg-muted text-muted-foreground border-border",
+};
+
+/* ── Smart model select ───────────────────────────────────────────────────── */
+
+function ModelSelect({
+  options, value, onChange, placeholder,
+}: {
   options: { value: string; label: string }[];
-  value: string | undefined; onChange: (v: string) => void; placeholder?: string;
+  value: string | undefined;
+  onChange: (v: string) => void;
+  placeholder?: string;
 }) {
   return (
     <Select value={value ?? ""} onValueChange={onChange}>
@@ -205,145 +313,280 @@ function ModelSelect({ options, value, onChange, placeholder }: {
 export default function FamilyAgentNew() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const { companies, policies, agents, saveAgents, isLoaded } = useFamilyStore();
+  const { companies, agents, policies, saveAgents } = useFamilyStore();
+  const [templatesOpen, setTemplatesOpen] = useState(false);
   const [showAdvancedSTT, setShowAdvancedSTT] = useState(false);
-  const [agentMode, setAgentMode] = useState<"managed" | "byop">("managed");
+  const [agentMode, setAgentMode] = useState<"managed" | "byop">("byop");
 
   const form = useForm<AgentFormValues>({
     resolver: zodResolver(agentFormSchema),
     defaultValues: {
-      name: "", description: "", companyId: "", policyId: "",
-      asrProvider: "deepgram", asrModel: "nova-2",
-      llmProvider: "qwen", llmModel: "qwen/qwen3-32b",
-      ttsProvider: "cartesia", ttsModel: "sonic-3",
+      companyId: "", policyId: "", agentType: "inbound_support",
+      name: "", description: "",
+      asrProvider: "azure", asrModel: "en-US-standard",
+      llmProvider: "openai", llmModel: "gpt-4o-mini",
+      ttsProvider: "elevenlabs", ttsVoice: "", ttsModel: "",
       telephonyProvider: "twilio",
       systemPrompt: "You are a helpful AI voice assistant for insurance customers.",
       temperature: 0.7, maxDuration: 600,
-      greetingMessage: "", endCallPhrases: "",
-      silenceTimeoutSeconds: 30, language: "en-IN",
-      backchannelingEnabled: true, backchannelingFrequency: 0.5, backchannelPhrases: "",
-      webhookUrl: "", noiseCancellationEnabled: true, inactivityMessage: "",
-      asrLanguage: "", asrBackgroundDenoising: false,
-      asrConfidenceThreshold: 0.40, asrEndOfTurnConfidence: 0.70, asrEndOfTurnTimeout: 5000,
-      asrKeyterms: "", asrSmartEndpointing: "off", asrAutoFallback: true,
+      greetingMessage: "", endCallPhrases: "", silenceTimeoutSeconds: 30,
+      language: "en-IN", backchannelingEnabled: true, backchannelingFrequency: 0.5,
+      backchannelPhrases: "", webhookUrl: "", noiseCancellationEnabled: true,
+      inactivityMessage: "", asrLanguage: "",
+      asrBackgroundDenoising: false, asrConfidenceThreshold: 0.40,
+      asrEndOfTurnConfidence: 0.70, asrEndOfTurnTimeout: 5000,
+      asrKeyterms: "", asrSmartEndpointing: "off" as const, asrAutoFallback: true,
       webhookSecret: "", promptVariables: [],
       vadSilenceMs: 250, bargeInEnabled: true, bargeInEnergyThreshold: 1200, bargeInMinFrames: 4,
-      timezone: "Asia/Kolkata", tools: [], dispositionSchema: [],
+      timezone: "", tools: [], dispositionSchema: [],
+      memoryEnabled: false, crossCallMemoryEnabled: false, contextWindowMessages: 20,
+      autoCallbackEnabled: false, autoCallbackRetries: 3, autoCallbackDelaySeconds: 300,
     },
   });
 
-  const { fields: toolFields,        append: appendTool,        remove: removeTool        } = useFieldArray({ control: form.control, name: "tools" });
+  const { fields: toolFields, append: appendTool, remove: removeTool } = useFieldArray({ control: form.control, name: "tools" });
   const { fields: dispositionFields, append: appendDisposition, remove: removeDisposition } = useFieldArray({ control: form.control, name: "dispositionSchema" });
-  const { fields: promptVarFields,   append: appendPromptVar,   remove: removePromptVar   } = useFieldArray({ control: form.control, name: "promptVariables" });
+  const { fields: promptVarFields, append: appendPromptVar, remove: removePromptVar } = useFieldArray({ control: form.control, name: "promptVariables" });
 
-  const asrProvider          = useWatch({ control: form.control, name: "asrProvider" });
-  const llmProvider          = useWatch({ control: form.control, name: "llmProvider" });
-  const ttsProvider          = useWatch({ control: form.control, name: "ttsProvider" });
-  const selectedCompanyId    = useWatch({ control: form.control, name: "companyId" });
-  const backchannelingEnabled    = useWatch({ control: form.control, name: "backchannelingEnabled" });
-  const backchannelingFrequency  = useWatch({ control: form.control, name: "backchannelingFrequency" });
-
-  const companyPolicies = policies.filter(p => p.companyId === selectedCompanyId);
+  const asrProvider = useWatch({ control: form.control, name: "asrProvider" });
+  const llmProvider = useWatch({ control: form.control, name: "llmProvider" });
+  const ttsProvider = useWatch({ control: form.control, name: "ttsProvider" });
+  const backchannelingEnabled = useWatch({ control: form.control, name: "backchannelingEnabled" });
+  const backchannelingFrequency = useWatch({ control: form.control, name: "backchannelingFrequency" });
+  const selectedCompanyId = useWatch({ control: form.control, name: "companyId" });
+  const memoryEnabled = useWatch({ control: form.control, name: "memoryEnabled" });
+  const autoCallbackEnabled = useWatch({ control: form.control, name: "autoCallbackEnabled" });
 
   const isMounted = useRef(false);
-  useEffect(() => { if (!isMounted.current) { isMounted.current = true; return; } form.setValue("asrModel", DEFAULT_ASR_MODEL(asrProvider)); }, [asrProvider]);
+  useEffect(() => {
+    if (!isMounted.current) { isMounted.current = true; return; }
+    form.setValue("asrModel", DEFAULT_ASR_MODEL(asrProvider));
+  }, [asrProvider]);
   useEffect(() => { form.setValue("llmModel", DEFAULT_LLM_MODEL(llmProvider)); }, [llmProvider]);
   useEffect(() => { form.setValue("ttsVoice", DEFAULT_TTS_VOICE(ttsProvider)); }, [ttsProvider]);
   useEffect(() => { form.setValue("ttsModel", TTS_MODELS[ttsProvider]?.[0]?.value ?? ""); }, [ttsProvider]);
+
   useEffect(() => {
     if (agentMode === "managed") {
-      form.setValue("asrProvider", "deepgram"); form.setValue("asrModel", "nova-2");
-      form.setValue("llmProvider", "qwen");     form.setValue("llmModel", "qwen/qwen3-32b");
-      form.setValue("ttsProvider", "cartesia"); form.setValue("ttsModel", "sonic-3");
+      form.setValue("asrProvider", "deepgram");
+      form.setValue("asrModel", "nova-3");
+      form.setValue("llmProvider", "qwen");
+      form.setValue("llmModel", "qwen/qwen3-32b");
+      form.setValue("ttsProvider", "cartesia");
+      form.setValue("ttsModel", "sonic-3");
     }
   }, [agentMode]);
-  useEffect(() => { form.setValue("policyId", ""); }, [selectedCompanyId]);
+
+  const companiesForSelect = companies;
+  const policiesForCompany = policies.filter(p => p.companyId === selectedCompanyId);
+
+  const applyTemplate = (tpl: typeof INSURANCE_TEMPLATES[0]) => {
+    form.setValue("name", tpl.name);
+    form.setValue("description", tpl.description);
+    if (tpl.asrProvider) form.setValue("asrProvider", tpl.asrProvider);
+    if (tpl.llmProvider) form.setValue("llmProvider", tpl.llmProvider);
+    if (tpl.ttsProvider) form.setValue("ttsProvider", tpl.ttsProvider);
+    if (tpl.telephonyProvider) form.setValue("telephonyProvider", tpl.telephonyProvider);
+    if (tpl.systemPrompt) form.setValue("systemPrompt", tpl.systemPrompt);
+    if (tpl.greetingMessage) form.setValue("greetingMessage", tpl.greetingMessage);
+    if (tpl.temperature != null) form.setValue("temperature", tpl.temperature);
+    setTemplatesOpen(false);
+    toast({ title: `Template applied: ${tpl.name}`, description: "Form prefilled — adjust any fields then save." });
+  };
+
+  const [isSaving, setIsSaving] = useState(false);
 
   const onSubmit = (data: AgentFormValues) => {
+    setIsSaving(true);
     const company = companies.find(c => c.id === data.companyId);
-    const policy  = policies.find(p => p.id === data.policyId);
-    const { companyId, policyId, webhookSecret, promptVariables, vadSilenceMs, bargeInEnabled, bargeInEnergyThreshold, bargeInMinFrames, timezone, ...rest } = data;
+    const policy = policies.find(p => p.id === data.policyId);
+    const now = new Date().toISOString();
     const newAgent: InsuranceAgent = {
-      id: `fa-${Date.now()}`,
-      companyId,
-      companyName: company?.name ?? "",
-      policyId:   policyId || undefined,
-      policyName: policy?.name,
+      id: Date.now().toString(),
+      companyId: data.companyId,
+      companyName: company?.name ?? data.companyId,
+      policyId: data.policyId || undefined,
+      policyName: policy?.name || undefined,
+      name: data.name,
+      description: data.description,
       status: "draft",
+      systemPrompt: data.systemPrompt,
       voiceId: data.ttsVoice ?? "",
       kbEntries: 0, totalCalls: 0, conversionRate: 0, avgDurationSeconds: 0,
-      lastUpdated: new Date().toISOString(),
+      lastUpdated: now,
       agentMode,
-      webhookSecret,
-      promptVariables,
-      vadSilenceMs,
-      bargeInEnabled,
-      bargeInEnergyThreshold,
-      bargeInMinFrames,
-      timezone,
-      ...rest,
+      agentType: data.agentType as any,
+      asrProvider: data.asrProvider, asrModel: data.asrModel,
+      asrLanguage: data.asrLanguage || undefined,
+      asrBackgroundDenoising: data.asrBackgroundDenoising,
+      asrConfidenceThreshold: data.asrConfidenceThreshold,
+      asrEndOfTurnConfidence: data.asrEndOfTurnConfidence,
+      asrEndOfTurnTimeout: data.asrEndOfTurnTimeout,
+      asrKeyterms: data.asrKeyterms || undefined,
+      asrSmartEndpointing: data.asrSmartEndpointing,
+      asrAutoFallback: data.asrAutoFallback,
+      llmProvider: data.llmProvider, llmModel: data.llmModel,
+      ttsProvider: data.ttsProvider, ttsVoice: data.ttsVoice, ttsModel: data.ttsModel,
+      telephonyProvider: data.telephonyProvider,
+      temperature: data.temperature, maxDuration: data.maxDuration,
+      greetingMessage: data.greetingMessage || undefined,
+      endCallPhrases: data.endCallPhrases || undefined,
+      silenceTimeoutSeconds: data.silenceTimeoutSeconds,
+      language: data.language,
+      backchannelingEnabled: data.backchannelingEnabled,
+      backchannelingFrequency: data.backchannelingFrequency,
+      backchannelPhrases: data.backchannelPhrases || undefined,
+      webhookUrl: data.webhookUrl || undefined,
+      webhookSecret: data.webhookSecret || undefined,
+      noiseCancellationEnabled: data.noiseCancellationEnabled,
+      inactivityMessage: data.inactivityMessage || undefined,
+      timezone: data.timezone || undefined,
+      promptVariables: data.promptVariables,
+      vadSilenceMs: data.vadSilenceMs,
+      bargeInEnabled: data.bargeInEnabled,
+      bargeInEnergyThreshold: data.bargeInEnergyThreshold,
+      bargeInMinFrames: data.bargeInMinFrames,
+      tools: data.tools?.map(t => ({
+        ...t,
+        transferMode: t.transferMode ?? "cold",
+      })),
+      dispositionSchema: data.dispositionSchema?.map(f => ({
+        ...f,
+        options: f.options ? f.options.split(",").map(s => s.trim()).filter(Boolean).join(", ") : undefined,
+      })),
+      maxConcurrentCalls: data.maxConcurrentCalls,
+      monthlySpendLimitCents: data.monthlySpendLimitCents,
+      memoryEnabled: data.memoryEnabled,
+      crossCallMemoryEnabled: data.crossCallMemoryEnabled,
+      contextWindowMessages: data.contextWindowMessages,
+      autoCallbackEnabled: data.autoCallbackEnabled,
+      autoCallbackRetries: data.autoCallbackRetries,
+      autoCallbackDelaySeconds: data.autoCallbackDelaySeconds,
     };
     saveAgents([...agents, newAgent]);
-    toast({ title: "Agent Created", description: "Draft agent saved. Move it through the pipeline to publish." });
+    toast({ title: "Agent Created", description: `"${newAgent.name}" has been created as a draft.` });
+    setIsSaving(false);
     setLocation("/family/agents");
   };
 
-  if (!isLoaded) return <p className="text-sm text-muted-foreground">Loading…</p>;
-
   return (
-    <div className="flex-1 space-y-6 max-w-5xl mx-auto">
+    <div className="flex-1 space-y-6 p-6 md:p-8 pt-6 max-w-5xl mx-auto h-full flex flex-col">
       <div className="flex items-center gap-4">
         <Link href="/family/agents">
-          <Button variant="outline" size="icon" className="h-8 w-8"><ArrowLeft className="h-4 w-4" /></Button>
+          <Button variant="outline" size="icon" className="h-8 w-8">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
         </Link>
         <div className="flex-1">
           <h2 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-            <Bot className="h-6 w-6 text-primary" /> Create Agent
+            <Bot className="h-6 w-6 text-primary" />
+            Create Agent
           </h2>
-          <p className="text-muted-foreground">Configure a new AI voice agent for an insurance policy.</p>
+          <p className="text-muted-foreground">Configure a new insurance AI voice agent pipeline.</p>
         </div>
+        <Button type="button" variant="outline" onClick={() => setTemplatesOpen(true)} className="gap-2">
+          <Sparkles className="h-4 w-4 text-foreground" />
+          Use Template
+        </Button>
       </div>
 
-      {/* Mode Selector */}
+      {/* Templates dialog */}
+      <Dialog open={templatesOpen} onOpenChange={setTemplatesOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4" /> Start from a template
+            </DialogTitle>
+            <DialogDescription>
+              Pick a template to prefill the form. You can customise everything afterwards.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-1 gap-3 mt-2">
+            {INSURANCE_TEMPLATES.map(tpl => (
+              <button
+                key={tpl.id}
+                onClick={() => applyTemplate(tpl)}
+                className="text-left p-4 rounded-lg bg-muted border border-border hover:border-muted-foreground/30 hover:bg-accent transition-colors"
+              >
+                <div className="flex items-start justify-between gap-3 mb-1">
+                  <p className="text-sm font-semibold text-foreground">{tpl.name}</p>
+                  <Badge className={`text-[10px] shrink-0 ${CATEGORY_COLORS[tpl.category] ?? CATEGORY_COLORS.general}`}>
+                    {tpl.category}
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">{tpl.description}</p>
+                <p className="text-[11px] text-muted-foreground/60 mt-2 font-mono">
+                  {tpl.asrProvider} · {tpl.llmProvider} · {tpl.ttsProvider}
+                </p>
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Mode Selector ── */}
       <div className="grid grid-cols-2 gap-4">
-        <button type="button" onClick={() => setAgentMode("managed")}
-          className={`text-left p-4 rounded-xl border-2 transition-all ${agentMode === "managed" ? "border-primary bg-primary/5" : "border-border bg-card hover:border-muted-foreground/40 hover:bg-muted/40"}`}>
+        <button
+          type="button"
+          onClick={() => setAgentMode("managed")}
+          className={`text-left p-4 rounded-xl border-2 transition-all ${
+            agentMode === "managed"
+              ? "border-primary bg-primary/5"
+              : "border-border bg-card hover:border-muted-foreground/40 hover:bg-muted/40"
+          }`}
+        >
           <div className="flex items-center gap-2 mb-1.5">
             <Sparkles className={`h-4 w-4 ${agentMode === "managed" ? "text-primary" : "text-muted-foreground"}`} />
-            <span className="font-semibold text-sm">Managed</span>
+            <span className="font-semibold text-sm text-foreground">Managed</span>
             <span className="ml-auto text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">Recommended</span>
           </div>
-          <p className="text-xs text-muted-foreground leading-relaxed">Platform handles ASR, LLM, and TTS using managed API keys. Just write your system prompt.</p>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Platform handles ASR, LLM, and TTS using managed API keys. Just write your system prompt.
+          </p>
           <p className="text-[10px] text-muted-foreground/60 mt-2 font-mono">Deepgram · Qwen 3 32B · Cartesia</p>
         </button>
-        <button type="button" onClick={() => setAgentMode("byop")}
-          className={`text-left p-4 rounded-xl border-2 transition-all ${agentMode === "byop" ? "border-primary bg-primary/5" : "border-border bg-card hover:border-muted-foreground/40 hover:bg-muted/40"}`}>
+        <button
+          type="button"
+          onClick={() => setAgentMode("byop")}
+          className={`text-left p-4 rounded-xl border-2 transition-all ${
+            agentMode === "byop"
+              ? "border-primary bg-primary/5"
+              : "border-border bg-card hover:border-muted-foreground/40 hover:bg-muted/40"
+          }`}
+        >
           <div className="flex items-center gap-2 mb-1.5">
             <Bot className={`h-4 w-4 ${agentMode === "byop" ? "text-primary" : "text-muted-foreground"}`} />
-            <span className="font-semibold text-sm">Bring Your Own Providers</span>
+            <span className="font-semibold text-sm text-foreground">Bring Your Own Providers</span>
           </div>
-          <p className="text-xs text-muted-foreground leading-relaxed">Use your own API keys for each pipeline stage. Full control over ASR, LLM, TTS, and telephony.</p>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Use your own API keys for each pipeline stage. Full control over ASR, LLM, TTS, and telephony.
+          </p>
         </button>
       </div>
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 pb-20">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-            {/* Company & Policy */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Database className="h-4 w-4 text-primary" /> Company &amp; Policy</CardTitle>
-                <CardDescription>Connect this agent to an insurance company and its RAG knowledge base.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
+          {/* ── Company & Policy ── */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Building2 className="h-4 w-4 text-primary" />
+                Company &amp; Policy
+              </CardTitle>
+              <CardDescription>Associate this agent with an insurance company and optionally a specific product policy.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <FormField control={form.control} name="companyId" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Insurance Company <span className="text-destructive">*</span></FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <FormLabel>Company <span className="text-destructive">*</span></FormLabel>
+                    <Select onValueChange={v => { field.onChange(v); form.setValue("policyId", ""); }} value={field.value}>
                       <FormControl><SelectTrigger><SelectValue placeholder="Select company" /></SelectTrigger></FormControl>
                       <SelectContent className="max-h-64">
-                        {companies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                        {companiesForSelect.map(c => (
+                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -351,25 +594,48 @@ export default function FamilyAgentNew() {
                 )} />
                 <FormField control={form.control} name="policyId" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Policy / RAG Knowledge Base</FormLabel>
+                    <FormLabel>Policy <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
                     <Select onValueChange={field.onChange} value={field.value ?? ""} disabled={!selectedCompanyId}>
-                      <FormControl><SelectTrigger><SelectValue placeholder={selectedCompanyId ? (companyPolicies.length === 0 ? "No policies — create one first" : "Select policy") : "Select company first"} /></SelectTrigger></FormControl>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Select policy" /></SelectTrigger></FormControl>
                       <SelectContent>
-                        {companyPolicies.map(p => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.name} <span className="text-muted-foreground text-xs">· {p.productType}</span>
-                          </SelectItem>
+                        <SelectItem value="">None</SelectItem>
+                        {policiesForCompany.map(p => (
+                          <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-                    <FormDescription>The agent will use this policy's knowledge base for RAG retrieval.</FormDescription>
+                    <FormDescription className="text-[11px]">
+                      {!selectedCompanyId ? "Select a company first." :
+                        policiesForCompany.length === 0
+                          ? "No policies for this company — add them on the Companies page."
+                          : "Agent will use this policy's KB for RAG."}
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )} />
-              </CardContent>
-            </Card>
+                <FormField control={form.control} name="agentType" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Agent Type</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        <SelectItem value="inbound_support">Inbound Support</SelectItem>
+                        <SelectItem value="outbound_sales">Outbound Sales</SelectItem>
+                        <SelectItem value="appointment_booking">Appointment Booking</SelectItem>
+                        <SelectItem value="lead_qualification">Lead Qualification</SelectItem>
+                        <SelectItem value="general_purpose">General Purpose</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
+            </CardContent>
+          </Card>
 
-            {/* General */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+            {/* ── General ── */}
             <Card>
               <CardHeader>
                 <CardTitle>General Information</CardTitle>
@@ -378,22 +644,22 @@ export default function FamilyAgentNew() {
               <CardContent className="space-y-4">
                 <FormField control={form.control} name="name" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Agent Name <span className="text-destructive">*</span></FormLabel>
-                    <FormControl><Input placeholder="e.g. ICICI Motor Renewal Agent" {...field} /></FormControl>
+                    <FormLabel>Agent Name</FormLabel>
+                    <FormControl><Input placeholder="e.g. Motor Claims Agent" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="description" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Description (Optional)</FormLabel>
-                    <FormControl><Input placeholder="e.g. Handles outbound motor renewal calls" {...field} /></FormControl>
+                    <FormControl><Input placeholder="e.g. Handles motor insurance claims queries" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
               </CardContent>
             </Card>
 
-            {/* AI Behavior */}
+            {/* ── AI Behavior ── */}
             <Card>
               <CardHeader>
                 <CardTitle>AI Behavior</CardTitle>
@@ -402,9 +668,9 @@ export default function FamilyAgentNew() {
               <CardContent className="space-y-4">
                 <FormField control={form.control} name="systemPrompt" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>System Prompt <span className="text-destructive">*</span></FormLabel>
+                    <FormLabel>System Prompt</FormLabel>
                     <FormControl>
-                      <Textarea placeholder="You are a helpful assistant..." className="min-h-[120px] font-mono text-sm" {...field} />
+                      <Textarea placeholder="You are a helpful insurance assistant..." className="min-h-[120px] font-mono text-sm" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -414,10 +680,12 @@ export default function FamilyAgentNew() {
                     <FormLabel>Timezone</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value ?? ""}>
                       <FormControl>
-                        <SelectTrigger><SelectValue placeholder="Select timezone" /></SelectTrigger>
+                        <SelectTrigger><SelectValue placeholder="No timezone (server UTC used)" /></SelectTrigger>
                       </FormControl>
-                      <SelectContent>
-                        {AGENT_TIMEZONES.map(tz => <SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>)}
+                      <SelectContent className="max-h-64">
+                        {AGENT_TIMEZONES.map(tz => (
+                          <SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <FormDescription>Current date &amp; time in this timezone is injected into every LLM call.</FormDescription>
@@ -430,8 +698,8 @@ export default function FamilyAgentNew() {
                       <FormLabel>Temperature: {field.value}</FormLabel>
                     </div>
                     <FormControl>
-                      <Slider min={0} max={2} step={0.1} defaultValue={[field.value || 0.7]}
-                        onValueChange={vals => field.onChange(vals[0])} />
+                      <Slider min={0} max={2} step={0.1} value={[field.value ?? 0.7]}
+                        onValueChange={(vals) => field.onChange(vals[0])} />
                     </FormControl>
                     <FormDescription>Higher = more creative. Lower = more deterministic.</FormDescription>
                     <FormMessage />
@@ -440,7 +708,7 @@ export default function FamilyAgentNew() {
               </CardContent>
             </Card>
 
-            {/* Conversation Behavior */}
+            {/* ── Conversation Behavior ── */}
             <Card className="md:col-span-2">
               <CardHeader>
                 <CardTitle>Conversation Behavior</CardTitle>
@@ -453,21 +721,34 @@ export default function FamilyAgentNew() {
                       <FormItem>
                         <FormLabel>Greeting Message</FormLabel>
                         <FormControl>
-                          <Textarea placeholder="e.g. Namaste! Main ICICI se bol raha hun. Aapki kya madad kar sakta hun?" className="min-h-[80px]" {...field} />
+                          <Textarea placeholder="e.g. Hello! Thanks for calling. How can I help you today?" className="min-h-[80px]" {...field} />
                         </FormControl>
-                        <FormDescription>First thing the agent says when a call connects.</FormDescription>
+                        <FormDescription>First thing the agent says. Leave blank to let the LLM generate one.</FormDescription>
                         <FormMessage />
                       </FormItem>
                     )} />
                     <FormField control={form.control} name="endCallPhrases" render={({ field }) => (
                       <FormItem>
                         <FormLabel>End-Call Phrases</FormLabel>
-                        <FormControl><Input placeholder="goodbye, bye, shukriya, alvida" {...field} /></FormControl>
-                        <FormDescription>Comma-separated. If the caller says any of these, the call ends automatically.</FormDescription>
+                        <FormControl>
+                          <Input placeholder="goodbye, bye, have a great day, thank you for calling" {...field} />
+                        </FormControl>
+                        <FormDescription>Comma-separated. Triggers automatic hangup when detected.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="inactivityMessage" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Inactivity Message</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g. Are you still there? How can I help you?" {...field} />
+                        </FormControl>
+                        <FormDescription>Spoken when the caller goes silent beyond the silence timeout.</FormDescription>
                         <FormMessage />
                       </FormItem>
                     )} />
                   </div>
+
                   <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                       <FormField control={form.control} name="language" render={({ field }) => (
@@ -475,8 +756,11 @@ export default function FamilyAgentNew() {
                           <FormLabel>Language</FormLabel>
                           <Select onValueChange={field.onChange} value={field.value ?? ""}>
                             <FormControl><SelectTrigger><SelectValue placeholder="Select language" /></SelectTrigger></FormControl>
-                            <SelectContent>{LANGUAGES.map(l => <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>)}</SelectContent>
+                            <SelectContent>
+                              {LANGUAGES.map(l => <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>)}
+                            </SelectContent>
                           </Select>
+                          <FormDescription>Passed to ASR + TTS.</FormDescription>
                           <FormMessage />
                         </FormItem>
                       )} />
@@ -485,12 +769,25 @@ export default function FamilyAgentNew() {
                           <FormLabel>Silence Timeout (s)</FormLabel>
                           <FormControl>
                             <Input type="number" min={5} max={300} placeholder="30" {...field}
-                              onChange={e => field.onChange(parseInt(e.target.value, 10))} />
+                              onChange={(e) => field.onChange(parseInt(e.target.value, 10))} />
                           </FormControl>
+                          <FormDescription>Hang up after N seconds silence.</FormDescription>
                           <FormMessage />
                         </FormItem>
                       )} />
                     </div>
+
+                    <FormField control={form.control} name="asrLanguage" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>ASR Language Override</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g. en-IN, hi, ta-IN (leave blank to use Language above)" {...field} />
+                        </FormControl>
+                        <FormDescription className="text-[11px]">Overrides the general language for ASR only.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+
                     <div className="space-y-3 p-4 border rounded-md bg-muted/20">
                       <div className="flex items-center justify-between">
                         <div>
@@ -499,14 +796,18 @@ export default function FamilyAgentNew() {
                         </div>
                         <FormField control={form.control} name="noiseCancellationEnabled" render={({ field }) => (
                           <FormItem>
-                            <Select onValueChange={v => field.onChange(v === "true")} value={field.value ? "true" : "false"}>
+                            <Select onValueChange={(v) => field.onChange(v === "true")} value={field.value ? "true" : "false"}>
                               <FormControl><SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger></FormControl>
-                              <SelectContent><SelectItem value="false">Off</SelectItem><SelectItem value="true">On</SelectItem></SelectContent>
+                              <SelectContent>
+                                <SelectItem value="false">Off</SelectItem>
+                                <SelectItem value="true">On</SelectItem>
+                              </SelectContent>
                             </Select>
                           </FormItem>
                         )} />
                       </div>
                     </div>
+
                     <div className="space-y-3 p-4 border rounded-md bg-muted/20">
                       <div className="flex items-center justify-between">
                         <div>
@@ -515,9 +816,12 @@ export default function FamilyAgentNew() {
                         </div>
                         <FormField control={form.control} name="backchannelingEnabled" render={({ field }) => (
                           <FormItem>
-                            <Select onValueChange={v => field.onChange(v === "true")} value={field.value ? "true" : "false"}>
+                            <Select onValueChange={(v) => field.onChange(v === "true")} value={field.value ? "true" : "false"}>
                               <FormControl><SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger></FormControl>
-                              <SelectContent><SelectItem value="false">Off</SelectItem><SelectItem value="true">On</SelectItem></SelectContent>
+                              <SelectContent>
+                                <SelectItem value="false">Off</SelectItem>
+                                <SelectItem value="true">On</SelectItem>
+                              </SelectContent>
                             </Select>
                           </FormItem>
                         )} />
@@ -532,25 +836,30 @@ export default function FamilyAgentNew() {
                               </div>
                               <FormControl>
                                 <Slider min={0} max={1} step={0.05} value={[field.value ?? 0.5]}
-                                  onValueChange={vals => field.onChange(vals[0])} />
+                                  onValueChange={(vals) => field.onChange(vals[0])} />
                               </FormControl>
                             </FormItem>
                           )} />
                           <FormField control={form.control} name="backchannelPhrases" render={({ field }) => (
                             <FormItem>
                               <FormLabel>Backchannel Phrases</FormLabel>
-                              <FormControl><Input placeholder="I see, Got it, Okay, समझ गया, ठीक है" {...field} /></FormControl>
-                              <FormDescription>Comma-separated. Leave blank for defaults.</FormDescription>
+                              <FormControl>
+                                <Input placeholder="I see, Got it, Okay, हाँ, समझ गया, ठीक है" {...field} />
+                              </FormControl>
+                              <FormDescription>Comma-separated. Leave blank for default English phrases.</FormDescription>
                               <FormMessage />
                             </FormItem>
                           )} />
                         </>
                       )}
                     </div>
+
                     <FormField control={form.control} name="webhookUrl" render={({ field }) => (
                       <FormItem>
                         <FormLabel>Post-Call Webhook URL</FormLabel>
-                        <FormControl><Input placeholder="https://your-server.com/webhook/calls" {...field} /></FormControl>
+                        <FormControl>
+                          <Input placeholder="https://your-server.com/webhook/calls" {...field} />
+                        </FormControl>
                         <FormDescription>Receives a JSON summary when each call ends.</FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -558,15 +867,9 @@ export default function FamilyAgentNew() {
                     <FormField control={form.control} name="webhookSecret" render={({ field }) => (
                       <FormItem>
                         <FormLabel>Webhook Signing Secret</FormLabel>
-                        <FormControl><Input type="password" placeholder="Optional — enables HMAC signature header" {...field} /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name="inactivityMessage" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Inactivity Message</FormLabel>
-                        <FormControl><Input placeholder="e.g. I haven't heard from you — goodbye!" {...field} /></FormControl>
-                        <FormDescription>Spoken right before silence-timeout hangup.</FormDescription>
+                        <FormControl>
+                          <Input type="password" placeholder="Optional — enables HMAC signature header" {...field} />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )} />
@@ -575,7 +878,7 @@ export default function FamilyAgentNew() {
               </CardContent>
             </Card>
 
-            {/* Pipeline */}
+            {/* ── Pipeline ── */}
             <Card className="md:col-span-2">
               <CardHeader>
                 <CardTitle>Pipeline Configuration</CardTitle>
@@ -583,130 +886,147 @@ export default function FamilyAgentNew() {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                  {agentMode === "managed" ? (
-                    <div className="md:col-span-3 flex items-center gap-3 p-4 rounded-xl border border-primary/20 bg-primary/5">
-                      <Sparkles className="h-5 w-5 text-primary shrink-0" />
-                      <div>
-                        <p className="text-sm font-medium">Platform-managed pipeline</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">Deepgram Nova-2 (ASR) · Qwen 3 32B (LLM) · Cartesia Sonic-3 (TTS) — powered by managed API keys.</p>
-                      </div>
+
+                  {/* Step 1 — ASR */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="flex items-center justify-center h-5 w-5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold shrink-0">1</span>
+                      <p className="text-sm font-semibold">ASR <span className="text-muted-foreground font-normal text-xs">— Speech-to-Text</span></p>
                     </div>
-                  ) : (
-                    <>
-                      <div className="space-y-4 p-4 border rounded-md bg-muted/20 relative">
-                        <div className="absolute top-0 right-0 -mt-3 -mr-3 bg-card border border-border rounded-full px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Step 1</div>
-                        <h4 className="font-medium border-b pb-2">Speech-to-Text</h4>
-                        <FormField control={form.control} name="asrProvider" render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-xs">Provider</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value}>
-                              <FormControl><SelectTrigger><SelectValue placeholder="Select ASR" /></SelectTrigger></FormControl>
-                              <SelectContent>{ASR_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}</SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )} />
-                        <FormField control={form.control} name="asrModel" render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-xs">Model</FormLabel>
-                            <FormControl>
-                              {ASR_MODELS[asrProvider] ? (
-                                <ModelSelect options={ASR_MODELS[asrProvider]!} value={field.value} onChange={field.onChange} />
-                              ) : (
-                                <Input placeholder="Enter model name" {...field} />
-                              )}
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )} />
-                      </div>
-                      <div className="space-y-4 p-4 border rounded-md bg-muted/20 relative">
-                        <div className="absolute top-0 right-0 -mt-3 -mr-3 bg-card border border-border rounded-full px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Step 2</div>
-                        <h4 className="font-medium border-b pb-2">Language Model</h4>
-                        <FormField control={form.control} name="llmProvider" render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-xs">Provider</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value}>
-                              <FormControl><SelectTrigger><SelectValue placeholder="Select LLM" /></SelectTrigger></FormControl>
-                              <SelectContent>{LLM_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}</SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )} />
-                        <FormField control={form.control} name="llmModel" render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-xs">Model</FormLabel>
-                            <FormControl>
-                              {LLM_MODELS[llmProvider] ? (
-                                <ModelSelect options={LLM_MODELS[llmProvider]!} value={field.value} onChange={field.onChange} />
-                              ) : (
-                                <Input placeholder="Enter model name" {...field} />
-                              )}
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )} />
-                      </div>
-                      <div className="space-y-4 p-4 border rounded-md bg-muted/20 relative">
-                        <div className="absolute top-0 right-0 -mt-3 -mr-3 bg-card border border-border rounded-full px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Step 3</div>
-                        <h4 className="font-medium border-b pb-2">Text-to-Speech</h4>
-                        <FormField control={form.control} name="ttsProvider" render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-xs">Provider</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value}>
-                              <FormControl><SelectTrigger><SelectValue placeholder="Select TTS" /></SelectTrigger></FormControl>
-                              <SelectContent>{TTS_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}</SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )} />
-                        {TTS_MODELS[ttsProvider] && (
-                          <FormField control={form.control} name="ttsModel" render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-xs">Model</FormLabel>
-                              <FormControl>
-                                <ModelSelect options={TTS_MODELS[ttsProvider]!} value={field.value} onChange={field.onChange} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )} />
-                        )}
-                        <FormField control={form.control} name="ttsVoice" render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-xs">{TTS_VOICES[ttsProvider] ? "Voice" : "Voice ID"}</FormLabel>
-                            <FormControl>
-                              {TTS_VOICES[ttsProvider] ? (
-                                <ModelSelect options={TTS_VOICES[ttsProvider]!} value={field.value} onChange={field.onChange} placeholder="Select voice" />
-                              ) : (
-                                <Input placeholder={ttsProvider === "elevenlabs" ? "e.g. 21m00Tcm4TlvDq8ikWAM" : "e.g. 694f9389-aac1-45b6-b726-9d9369183238"} {...field} />
-                              )}
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )} />
-                      </div>
-                    </>
-                  )}
-                  <div className="space-y-4 p-4 border rounded-md bg-muted/20 relative">
-                    <div className="absolute top-0 right-0 -mt-3 -mr-3 bg-card border border-border rounded-full px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{agentMode === "managed" ? "Step 2" : "Step 4"}</div>
-                    <h4 className="font-medium border-b pb-2">Telephony</h4>
-                    <FormField control={form.control} name="telephonyProvider" render={({ field }) => (
+                    <FormField control={form.control} name="asrProvider" render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-xs">Provider</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl><SelectTrigger><SelectValue placeholder="Select Telephony" /></SelectTrigger></FormControl>
-                          <SelectContent>{TELEPHONY_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}</SelectContent>
+                        <Select onValueChange={field.onChange} value={field.value} disabled={agentMode === "managed"}>
+                          <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            {ASR_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+                          </SelectContent>
                         </Select>
                         <FormMessage />
                       </FormItem>
                     )} />
+                    {ASR_MODELS[asrProvider] && (
+                      <FormField control={form.control} name="asrModel" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs">Model</FormLabel>
+                          <FormControl>
+                            <ModelSelect options={ASR_MODELS[asrProvider]} value={field.value} onChange={field.onChange} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    )}
                     <FormField control={form.control} name="maxDuration" render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-xs">Max Duration (s)</FormLabel>
                         <FormControl>
-                          <Input type="number" min={60} max={3600} {...field}
-                            onChange={e => field.onChange(parseInt(e.target.value, 10))} />
+                          <Input type="number" min={10} max={3600} placeholder="600"
+                            {...field} onChange={e => field.onChange(parseInt(e.target.value, 10))} />
                         </FormControl>
+                        <FormDescription className="text-[11px]">Hard limit on call length.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  </div>
+
+                  {/* Step 2 — LLM */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="flex items-center justify-center h-5 w-5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold shrink-0">2</span>
+                      <p className="text-sm font-semibold">LLM <span className="text-muted-foreground font-normal text-xs">— Language Model</span></p>
+                    </div>
+                    <FormField control={form.control} name="llmProvider" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Provider</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value} disabled={agentMode === "managed"}>
+                          <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            {LLM_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    {LLM_MODELS[llmProvider] && (
+                      <FormField control={form.control} name="llmModel" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs">Model</FormLabel>
+                          <FormControl>
+                            <ModelSelect options={LLM_MODELS[llmProvider]} value={field.value} onChange={field.onChange} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    )}
+                  </div>
+
+                  {/* Step 3 — TTS */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="flex items-center justify-center h-5 w-5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold shrink-0">3</span>
+                      <p className="text-sm font-semibold">TTS <span className="text-muted-foreground font-normal text-xs">— Text-to-Speech</span></p>
+                    </div>
+                    <FormField control={form.control} name="ttsProvider" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Provider</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value} disabled={agentMode === "managed"}>
+                          <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            {TTS_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    {TTS_VOICES[ttsProvider] !== undefined && TTS_VOICES[ttsProvider] !== null && (
+                      <FormField control={form.control} name="ttsVoice" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs">Voice</FormLabel>
+                          <FormControl>
+                            <ModelSelect options={TTS_VOICES[ttsProvider]!} value={field.value} onChange={field.onChange} placeholder="Select voice" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    )}
+                    {TTS_VOICES[ttsProvider] === null && (
+                      <FormField control={form.control} name="ttsVoice" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs">Voice ID</FormLabel>
+                          <FormControl><Input placeholder="e.g. EXAVITQu4vr4xnSDxMaL" {...field} /></FormControl>
+                          <FormDescription className="text-[11px]">Paste a voice ID from your provider account.</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    )}
+                    {TTS_MODELS[ttsProvider] && (
+                      <FormField control={form.control} name="ttsModel" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs">Model</FormLabel>
+                          <FormControl>
+                            <ModelSelect options={TTS_MODELS[ttsProvider]} value={field.value} onChange={field.onChange} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    )}
+                  </div>
+
+                  {/* Step 4 — Telephony */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="flex items-center justify-center h-5 w-5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold shrink-0">4</span>
+                      <p className="text-sm font-semibold">Telephony</p>
+                    </div>
+                    <FormField control={form.control} name="telephonyProvider" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Provider</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            {TELEPHONY_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
                         <FormMessage />
                       </FormItem>
                     )} />
@@ -714,284 +1034,558 @@ export default function FamilyAgentNew() {
                 </div>
               </CardContent>
             </Card>
+          </div>
 
-            {/* Advanced STT */}
-            <Card className="md:col-span-2">
-              <button type="button" className="w-full text-left"
-                onClick={() => setShowAdvancedSTT(v => !v)}>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="text-base">Advanced STT Settings</CardTitle>
-                      <CardDescription className="text-xs mt-0.5">Fine-tune speech recognition behaviour</CardDescription>
-                    </div>
-                    {showAdvancedSTT ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-                  </div>
-                </CardHeader>
-              </button>
-              {showAdvancedSTT && (
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <FormField control={form.control} name="asrLanguage" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>ASR Language Override</FormLabel>
-                        <FormControl><Input placeholder="e.g. hi-IN" {...field} /></FormControl>
-                        <FormDescription>Override the main language for STT only.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name="asrKeyterms" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Keyword Boosting</FormLabel>
-                        <FormControl><Input placeholder="NCB, OD cover, cashless" {...field} /></FormControl>
-                        <FormDescription>Comma-separated domain terms to boost recognition.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name="asrSmartEndpointing" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Smart Endpointing</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value ?? "off"}>
-                          <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                          <SelectContent>
-                            <SelectItem value="off">Off</SelectItem>
-                            <SelectItem value="vapi">Vapi-style</SelectItem>
-                            <SelectItem value="livekit">LiveKit-style</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name="asrConfidenceThreshold" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Confidence Threshold: {field.value}</FormLabel>
-                        <FormControl>
-                          <Slider min={0} max={1} step={0.05} value={[field.value ?? 0.4]}
-                            onValueChange={vals => field.onChange(vals[0])} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name="asrEndOfTurnConfidence" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>End-of-Turn Confidence: {field.value}</FormLabel>
-                        <FormControl>
-                          <Slider min={0.3} max={1} step={0.05} value={[field.value ?? 0.7]}
-                            onValueChange={vals => field.onChange(vals[0])} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name="asrEndOfTurnTimeout" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>End-of-Turn Timeout (ms)</FormLabel>
-                        <FormControl>
-                          <Input type="number" min={100} max={30000} {...field}
-                            onChange={e => field.onChange(parseInt(e.target.value, 10))} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                  </div>
-                </CardContent>
-              )}
-            </Card>
+          {/* ── Advanced STT ── */}
+          <Card>
+            <CardHeader className="pb-3 cursor-pointer" onClick={() => setShowAdvancedSTT(v => !v)}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base">Advanced STT Settings</CardTitle>
+                  <CardDescription>Fine-tune streaming STT behaviour, confidence thresholds, and end-of-turn detection.</CardDescription>
+                </div>
+                {showAdvancedSTT ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+              </div>
+            </CardHeader>
+            {showAdvancedSTT && (
+              <CardContent>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  <FormField control={form.control} name="asrKeyterms" render={({ field }) => (
+                    <FormItem className="sm:col-span-2 lg:col-span-3">
+                      <FormLabel>Key-terms / Boosted Words</FormLabel>
+                      <FormControl><Input placeholder="e.g. ICICI, Lombard, policyholder, IRDA, claim, deductible" {...field} /></FormControl>
+                      <FormDescription className="text-[11px]">Comma-separated words the ASR should recognise with higher accuracy.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
 
-            {/* Prompt Variables */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Prompt Variables</CardTitle>
-                <CardDescription className="text-xs">Dynamic {"{{key}}"} placeholders injected at call time.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {promptVarFields.map((f, i) => (
-                  <div key={f.id} className="flex gap-2 items-start">
-                    <div className="flex-1 space-y-1.5">
-                      <FormField control={form.control} name={`promptVariables.${i}.key`} render={({ field }) => (
-                        <FormItem><FormControl><Input placeholder="key" className="font-mono text-xs" {...field} /></FormControl><FormMessage /></FormItem>
-                      )} />
-                      <FormField control={form.control} name={`promptVariables.${i}.defaultValue`} render={({ field }) => (
-                        <FormItem><FormControl><Input placeholder="default value" className="text-xs" {...field} /></FormControl><FormMessage /></FormItem>
+                  <FormField control={form.control} name="asrSmartEndpointing" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Smart Endpointing</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value ?? "off"}>
+                        <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="off">Off (default)</SelectItem>
+                          <SelectItem value="vapi">Vapi-style</SelectItem>
+                          <SelectItem value="livekit">LiveKit-style</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormDescription className="text-[11px]">Use LLM-assisted end-of-turn detection instead of pure silence timeout.</FormDescription>
+                    </FormItem>
+                  )} />
+
+                  <FormField control={form.control} name="asrConfidenceThreshold" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Confidence Threshold: {field.value?.toFixed(2)}</FormLabel>
+                      <FormControl>
+                        <Slider min={0} max={1} step={0.05} value={[field.value ?? 0.40]}
+                          onValueChange={vals => field.onChange(vals[0])} />
+                      </FormControl>
+                      <FormDescription className="text-[11px]">Transcripts below this confidence are discarded.</FormDescription>
+                    </FormItem>
+                  )} />
+
+                  <FormField control={form.control} name="asrEndOfTurnConfidence" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>End-of-Turn Confidence: {field.value?.toFixed(2)}</FormLabel>
+                      <FormControl>
+                        <Slider min={0.3} max={1} step={0.05} value={[field.value ?? 0.70]}
+                          onValueChange={vals => field.onChange(vals[0])} />
+                      </FormControl>
+                      <FormDescription className="text-[11px]">How sure ASR must be the user stopped speaking.</FormDescription>
+                    </FormItem>
+                  )} />
+
+                  <FormField control={form.control} name="asrEndOfTurnTimeout" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>End-of-Turn Timeout (ms)</FormLabel>
+                      <FormControl>
+                        <Input type="number" min={100} max={30000} placeholder="5000" {...field}
+                          onChange={e => field.onChange(parseInt(e.target.value, 10))} />
+                      </FormControl>
+                      <FormDescription className="text-[11px]">Silence window (ms) before ASR finalizes a turn.</FormDescription>
+                    </FormItem>
+                  )} />
+
+                  <div className="space-y-3 p-3 border rounded-md bg-muted/20">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium">Background Denoising</p>
+                        <p className="text-xs text-muted-foreground">Filter background noise during transcription</p>
+                      </div>
+                      <FormField control={form.control} name="asrBackgroundDenoising" render={({ field }) => (
+                        <FormItem>
+                          <Select onValueChange={v => field.onChange(v === "true")} value={field.value ? "true" : "false"}>
+                            <FormControl><SelectTrigger className="w-[80px]"><SelectValue /></SelectTrigger></FormControl>
+                            <SelectContent>
+                              <SelectItem value="false">Off</SelectItem>
+                              <SelectItem value="true">On</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </FormItem>
                       )} />
                     </div>
-                    <Button type="button" size="sm" variant="ghost" className="mt-1 h-7 w-7 p-0 text-destructive" onClick={() => removePromptVar(i)}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
                   </div>
-                ))}
-                <Button type="button" size="sm" variant="outline" className="gap-1 w-full"
+
+                  <div className="space-y-3 p-3 border rounded-md bg-muted/20">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium">Auto Fallback</p>
+                        <p className="text-xs text-muted-foreground">Switch to batch STT if streaming fails</p>
+                      </div>
+                      <FormField control={form.control} name="asrAutoFallback" render={({ field }) => (
+                        <FormItem>
+                          <Select onValueChange={v => field.onChange(v === "true")} value={field.value ? "true" : "false"}>
+                            <FormControl><SelectTrigger className="w-[80px]"><SelectValue /></SelectTrigger></FormControl>
+                            <SelectContent>
+                              <SelectItem value="false">Off</SelectItem>
+                              <SelectItem value="true">On</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </FormItem>
+                      )} />
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            )}
+          </Card>
+
+          {/* ── Knowledge Base ── */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Database className="h-4 w-4 text-primary" />
+                Knowledge Base <span className="text-muted-foreground font-normal text-sm ml-1">(policy-linked)</span>
+              </CardTitle>
+              <CardDescription>
+                The agent's knowledge base is managed through the Company → Policy page.
+                Select a policy above to link a KB — the agent will use it for RAG on every turn.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+
+          {/* ── Prompt Variables ── */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">Prompt Variables</CardTitle>
+                  <CardDescription>
+                    Define <code>{"{{key}}"}</code> placeholders for your system prompt. Defaults are used unless overridden by inbound call parameters.
+                  </CardDescription>
+                </div>
+                <Button type="button" variant="outline" size="sm" className="gap-1"
                   onClick={() => appendPromptVar({ key: "", defaultValue: "", description: "" })}>
                   <Plus className="h-3.5 w-3.5" /> Add Variable
                 </Button>
+              </div>
+            </CardHeader>
+            {promptVarFields.length > 0 && (
+              <CardContent className="space-y-3 max-h-96 overflow-y-auto">
+                {promptVarFields.map((field, index) => (
+                  <div key={field.id} className="relative grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 border rounded-md bg-muted/20">
+                    <Button type="button" variant="ghost" size="icon"
+                      className="absolute top-2 right-2 h-7 w-7 text-muted-foreground hover:text-destructive"
+                      onClick={() => removePromptVar(index)}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                    <FormField control={form.control} name={`promptVariables.${index}.key`} render={({ field: f }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Key</FormLabel>
+                        <FormControl><Input placeholder="e.g. company_name" className="h-8 text-sm" {...f} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name={`promptVariables.${index}.defaultValue`} render={({ field: f }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Default Value</FormLabel>
+                        <FormControl><Input placeholder="e.g. ICICI Lombard" className="h-8 text-sm" {...f} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name={`promptVariables.${index}.description`} render={({ field: f }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Description <span className="text-muted-foreground">(optional)</span></FormLabel>
+                        <FormControl><Input placeholder="e.g. The insurance company name" className="h-8 text-sm" {...f} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  </div>
+                ))}
               </CardContent>
-            </Card>
+            )}
+          </Card>
 
-            {/* VAD & Barge-in */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">VAD &amp; Barge-in</CardTitle>
-                <CardDescription className="text-xs">Voice activity detection and interruption settings.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
+          {/* ── Voice Activity Detection ── */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Voice Activity Detection &amp; Barge-in</CardTitle>
+              <CardDescription>Fine-tune how the agent detects speech and handles interruptions.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 <FormField control={form.control} name="vadSilenceMs" render={({ field }) => (
                   <FormItem>
                     <FormLabel>VAD Silence Window (ms)</FormLabel>
                     <FormControl>
-                      <Input type="number" min={50} max={2000} {...field} onChange={e => field.onChange(parseInt(e.target.value, 10))} />
+                      <Input type="number" min={50} max={2000} step={50}
+                        value={field.value ?? 250}
+                        onChange={e => field.onChange(parseInt(e.target.value, 10))} />
                     </FormControl>
+                    <FormDescription className="text-[11px]">Silence before STT flushes. Default: 250 ms</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="bargeInEnabled" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Barge-in</FormLabel>
-                    <Select onValueChange={v => field.onChange(v === "true")} value={field.value ? "true" : "false"}>
-                      <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                      <SelectContent><SelectItem value="false">Disabled</SelectItem><SelectItem value="true">Enabled</SelectItem></SelectContent>
-                    </Select>
-                    <FormDescription>Allow caller to interrupt the agent mid-speech.</FormDescription>
-                    <FormMessage />
+                  <FormItem className="flex flex-col">
+                    <FormLabel>Allow Barge-in</FormLabel>
+                    <div className="flex items-center gap-3 pt-2">
+                      <Switch checked={field.value ?? true} onCheckedChange={field.onChange} />
+                      <span className="text-sm text-muted-foreground">{(field.value ?? true) ? "Enabled" : "Disabled"}</span>
+                    </div>
+                    <FormDescription className="text-[11px]">Caller can interrupt the agent while it's speaking.</FormDescription>
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="bargeInEnergyThreshold" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Energy Threshold</FormLabel>
+                    <FormLabel>Barge-in Energy Threshold</FormLabel>
                     <FormControl>
-                      <Input type="number" min={100} max={5000} {...field} onChange={e => field.onChange(parseInt(e.target.value, 10))} />
+                      <Input type="number" min={100} max={5000} step={100}
+                        value={field.value ?? 1200}
+                        onChange={e => field.onChange(parseInt(e.target.value, 10))} />
                     </FormControl>
+                    <FormDescription className="text-[11px]">Min RMS energy to count as speech. Default: 1200</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )} />
-              </CardContent>
-            </Card>
+                <FormField control={form.control} name="bargeInMinFrames" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Barge-in Min Frames</FormLabel>
+                    <FormControl>
+                      <Input type="number" min={1} max={20}
+                        value={field.value ?? 4}
+                        onChange={e => field.onChange(parseInt(e.target.value, 10))} />
+                    </FormControl>
+                    <FormDescription className="text-[11px]">Consecutive speech frames to trigger barge-in. Default: 4 (~80 ms)</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
+            </CardContent>
+          </Card>
 
-            {/* Call Transfer Tools */}
-            <Card className="md:col-span-2">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base"><PhoneForwarded className="h-4 w-4" /> Call Transfer Tools</CardTitle>
-                <CardDescription className="text-xs">Let the agent transfer calls to a human agent or department.</CardDescription>
-              </CardHeader>
+          {/* ── Tools ── */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2"><PhoneForwarded className="h-4 w-4" /> Tools</CardTitle>
+                  <CardDescription>Actions the LLM can trigger mid-call. The agent decides when to use them based on the conversation.</CardDescription>
+                </div>
+                <Button
+                  type="button" variant="outline" size="sm"
+                  onClick={() => appendTool({ type: "call_transfer", name: "transfer_to_human", description: "Transfer the call to a human agent when the caller requests it or the issue cannot be resolved automatically.", transferTo: "", warmHandoffMessage: "" })}
+                >
+                  <Plus className="h-4 w-4 mr-1" /> Add Tool
+                </Button>
+              </div>
+            </CardHeader>
+            {toolFields.length > 0 && (
               <CardContent className="space-y-4">
-                {toolFields.map((f, i) => (
-                  <div key={f.id} className="p-4 border rounded-md bg-muted/20 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-medium">Transfer Tool #{i + 1}</p>
-                      <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={() => removeTool(i)}>
-                        <Trash2 className="h-3.5 w-3.5" />
+                {toolFields.map((field, index) => (
+                  <div key={field.id} className="border rounded-md p-4 bg-muted/20 space-y-3 relative">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Call Transfer</span>
+                      <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => removeTool(index)}>
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <FormField control={form.control} name={`tools.${i}.name`} render={({ field }) => (
-                        <FormItem><FormLabel className="text-xs">Function Name</FormLabel><FormControl><Input placeholder="transfer_to_agent" className="font-mono text-xs" {...field} /></FormControl><FormMessage /></FormItem>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <FormField control={form.control} name={`tools.${index}.name`} render={({ field: f }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs">Function Name</FormLabel>
+                          <FormControl><Input placeholder="e.g. transfer_to_human" {...f} /></FormControl>
+                          <FormDescription className="text-[10px]">snake_case, no spaces — used by the LLM to call this tool</FormDescription>
+                          <FormMessage />
+                        </FormItem>
                       )} />
-                      <FormField control={form.control} name={`tools.${i}.transferTo`} render={({ field }) => (
-                        <FormItem><FormLabel className="text-xs">Transfer To (number)</FormLabel><FormControl><Input placeholder="+91 99999 99999" {...field} /></FormControl><FormMessage /></FormItem>
+                      <FormField control={form.control} name={`tools.${index}.transferTo`} render={({ field: f }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs">Transfer To (phone number)</FormLabel>
+                          <FormControl><Input placeholder="+911234567890" {...f} /></FormControl>
+                          <FormDescription className="text-[10px]">E.164 format — the human agent's number</FormDescription>
+                          <FormMessage />
+                        </FormItem>
                       )} />
                     </div>
-                    <FormField control={form.control} name={`tools.${i}.description`} render={({ field }) => (
-                      <FormItem><FormLabel className="text-xs">Description</FormLabel><FormControl><Input placeholder="Transfer to a human agent when customer requests it" {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                    <FormField control={form.control} name={`tools.${i}.transferMode`} render={({ field }) => (
+                    <FormField control={form.control} name={`tools.${index}.description`} render={({ field: f }) => (
                       <FormItem>
-                        <FormLabel className="text-xs">Handoff Mode</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value ?? "cold"}>
-                          <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                          <SelectContent><SelectItem value="cold">Cold (silent transfer)</SelectItem><SelectItem value="warm_summary">Warm (AI summary first)</SelectItem></SelectContent>
-                        </Select>
+                        <FormLabel className="text-xs">Description (shown to LLM)</FormLabel>
+                        <FormControl><Textarea className="min-h-[60px] text-sm" placeholder="Transfer the call to a human agent when the caller is frustrated or the issue cannot be resolved automatically." {...f} /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )} />
-                  </div>
-                ))}
-                <Button type="button" size="sm" variant="outline" className="gap-1"
-                  onClick={() => appendTool({ type: "call_transfer", name: "", description: "", transferTo: "", transferMode: "cold" })}>
-                  <Plus className="h-3.5 w-3.5" /> Add Transfer Tool
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* Disposition Schema */}
-            <Card className="md:col-span-2">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base"><ClipboardList className="h-4 w-4" /> Disposition Schema</CardTitle>
-                <CardDescription className="text-xs">Fields the AI will fill in after each call (outcome tracking).</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {dispositionFields.map((f, i) => (
-                  <div key={f.id} className="grid grid-cols-4 gap-3 items-end p-3 border rounded-md bg-muted/20">
-                    <FormField control={form.control} name={`dispositionSchema.${i}.key`} render={({ field }) => (
-                      <FormItem><FormLabel className="text-xs">Key</FormLabel><FormControl><Input placeholder="outcome" className="font-mono text-xs" {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                    <FormField control={form.control} name={`dispositionSchema.${i}.label`} render={({ field }) => (
-                      <FormItem><FormLabel className="text-xs">Label</FormLabel><FormControl><Input placeholder="Call Outcome" {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                    <FormField control={form.control} name={`dispositionSchema.${i}.type`} render={({ field }) => (
+                    <FormField control={form.control} name={`tools.${index}.warmHandoffMessage`} render={({ field: f }) => (
                       <FormItem>
-                        <FormLabel className="text-xs">Type</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                          <SelectContent>
-                            <SelectItem value="text">Text</SelectItem><SelectItem value="number">Number</SelectItem>
-                            <SelectItem value="boolean">Boolean</SelectItem><SelectItem value="choice">Choice</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <FormLabel className="text-xs">Hold Message (optional)</FormLabel>
+                        <FormControl><Input placeholder="e.g. I'm connecting you with a specialist now. Please hold for a moment." {...f} /></FormControl>
+                        <FormDescription className="text-[10px]">Spoken to the caller before the transfer happens</FormDescription>
                         <FormMessage />
                       </FormItem>
                     )} />
-                    <Button type="button" size="sm" variant="ghost" className="h-8 w-8 p-0 text-destructive" onClick={() => removeDisposition(i)}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                    <FormField control={form.control} name={`tools.${index}.transferMode`} render={({ field: f }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Transfer Mode</FormLabel>
+                        <div className="flex gap-2 mt-1">
+                          {([["cold", "Cold Transfer"], ["warm_summary", "Warm — Brief Operator"]] as const).map(([val, label]) => (
+                            <button key={val} type="button"
+                              onClick={() => f.onChange(val)}
+                              className={
+                                "flex-1 text-xs font-medium py-2 rounded-lg border transition-colors " +
+                                ((f.value ?? "cold") === val
+                                  ? "bg-foreground text-background border-foreground"
+                                  : "bg-card text-muted-foreground border-border hover:border-foreground/40")
+                              }>{label}</button>
+                          ))}
+                        </div>
+                      </FormItem>
+                    )} />
+                    {(form.watch(`tools.${index}.transferMode`) ?? "cold") === "warm_summary" && (
+                      <FormField control={form.control} name={`tools.${index}.summaryPrompt`} render={({ field: f }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs">Operator Briefing Prompt (optional)</FormLabel>
+                          <FormControl><Textarea className="min-h-[60px] text-sm" placeholder="Default: summarise customer name, issue, priority, and key context for the operator." {...f} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    )}
                   </div>
                 ))}
-                <Button type="button" size="sm" variant="outline" className="gap-1"
-                  onClick={() => appendDisposition({ key: "", label: "", type: "text", required: false })}>
-                  <Plus className="h-3.5 w-3.5" /> Add Field
-                </Button>
               </CardContent>
-            </Card>
+            )}
+          </Card>
 
-            {/* Usage Limits */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Usage Limits</CardTitle>
-                <CardDescription className="text-xs">Optional guardrails on concurrency and spend.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
+          {/* ── Disposition Schema ── */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2"><ClipboardList className="h-4 w-4" /> Disposition Fields</CardTitle>
+                  <CardDescription>Define fields the AI will automatically extract from each call transcript after the call ends.</CardDescription>
+                </div>
+                <Button
+                  type="button" variant="outline" size="sm"
+                  onClick={() => appendDisposition({ type: "text", key: "", label: "", required: false, options: "" })}
+                >
+                  <Plus className="h-4 w-4 mr-1" /> Add Field
+                </Button>
+              </div>
+            </CardHeader>
+            {dispositionFields.length > 0 && (
+              <CardContent className="space-y-3">
+                {dispositionFields.map((field, index) => {
+                  const watchedType = form.watch(`dispositionSchema.${index}.type`);
+                  return (
+                    <div key={field.id} className="border rounded-md p-4 bg-muted/20 space-y-3 relative">
+                      <Button type="button" variant="ghost" size="icon"
+                        className="absolute top-2 right-2 h-7 w-7 text-muted-foreground hover:text-destructive"
+                        onClick={() => removeDisposition(index)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <FormField control={form.control} name={`dispositionSchema.${index}.key`} render={({ field: f }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs">Key</FormLabel>
+                            <FormControl><Input placeholder="e.g. call_outcome" {...f} /></FormControl>
+                            <FormDescription className="text-[10px]">snake_case identifier</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                        <FormField control={form.control} name={`dispositionSchema.${index}.label`} render={({ field: f }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs">Label</FormLabel>
+                            <FormControl><Input placeholder="e.g. Call Outcome" {...f} /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                        <FormField control={form.control} name={`dispositionSchema.${index}.type`} render={({ field: f }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs">Type</FormLabel>
+                            <Select onValueChange={f.onChange} value={f.value}>
+                              <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                              <SelectContent>
+                                <SelectItem value="text">Text</SelectItem>
+                                <SelectItem value="number">Number</SelectItem>
+                                <SelectItem value="boolean">Yes / No</SelectItem>
+                                <SelectItem value="choice">Choice</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                      </div>
+                      {watchedType === "choice" && (
+                        <FormField control={form.control} name={`dispositionSchema.${index}.options`} render={({ field: f }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs">Options</FormLabel>
+                            <FormControl><Input placeholder="e.g. resolved, escalated, callback" {...f} /></FormControl>
+                            <FormDescription className="text-[10px]">Comma-separated list of allowed values</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                      )}
+                    </div>
+                  );
+                })}
+              </CardContent>
+            )}
+          </Card>
+
+          {/* ── Usage Limits ── */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Usage Limits <span className="text-muted-foreground font-normal text-sm ml-1">(optional)</span></CardTitle>
+              <CardDescription>Cap concurrent calls and monthly spend for this agent.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField control={form.control} name="maxConcurrentCalls" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Max Concurrent Calls</FormLabel>
+                    <FormLabel>Max concurrent calls</FormLabel>
                     <FormControl>
-                      <Input type="number" min={1} max={100} placeholder="Unlimited" value={field.value ?? ""}
-                        onChange={e => field.onChange(e.target.value ? parseInt(e.target.value, 10) : undefined)} />
+                      <Input type="number" placeholder="No limit" min={1} max={100}
+                        value={field.value ?? ""}
+                        onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))} />
                     </FormControl>
+                    <FormDescription className="text-[11px]">Maximum simultaneous active calls. Leave blank for no limit.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="monthlySpendLimitCents" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Monthly Spend Cap (₹)</FormLabel>
+                    <FormLabel>Monthly spend limit (USD)</FormLabel>
                     <FormControl>
-                      <Input type="number" min={1} placeholder="Unlimited" value={field.value ? (field.value / 100) : ""}
-                        onChange={e => field.onChange(e.target.value ? Math.round(parseFloat(e.target.value) * 100) : undefined)} />
+                      <div className="relative">
+                        <span className="absolute left-3 top-2.5 text-muted-foreground text-sm">$</span>
+                        <Input type="number" placeholder="No limit" min={1} step={1} className="pl-6"
+                          value={field.value != null ? (field.value / 100).toFixed(2) : ""}
+                          onChange={(e) => field.onChange(e.target.value === "" ? undefined : Math.round(Number(e.target.value) * 100))} />
+                      </div>
                     </FormControl>
-                    <FormDescription>Agent is paused when this limit is reached.</FormDescription>
+                    <FormDescription className="text-[11px]">Stop new calls when platform fees exceed this amount in a calendar month.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )} />
-              </CardContent>
-            </Card>
+              </div>
+            </CardContent>
+          </Card>
 
-          </div>
+          {/* ── Memory ── */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Memory &amp; Context</CardTitle>
+              <CardDescription>Configure in-call and cross-call memory for this agent.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <FormField control={form.control} name="memoryEnabled" render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>In-Call Memory</FormLabel>
+                    <div className="flex items-center gap-3 pt-2">
+                      <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
+                      <span className="text-sm text-muted-foreground">{(field.value ?? false) ? "Enabled" : "Disabled"}</span>
+                    </div>
+                    <FormDescription className="text-[11px]">Agent remembers context within the current call.</FormDescription>
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="crossCallMemoryEnabled" render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>Cross-Call Memory</FormLabel>
+                    <div className="flex items-center gap-3 pt-2">
+                      <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
+                      <span className="text-sm text-muted-foreground">{(field.value ?? false) ? "Enabled" : "Disabled"}</span>
+                    </div>
+                    <FormDescription className="text-[11px]">Agent remembers past calls with the same customer.</FormDescription>
+                  </FormItem>
+                )} />
+                {memoryEnabled && (
+                  <FormField control={form.control} name="contextWindowMessages" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Context Window (messages)</FormLabel>
+                      <FormControl>
+                        <Input type="number" min={5} max={100} placeholder="20"
+                          value={field.value ?? 20}
+                          onChange={e => field.onChange(parseInt(e.target.value, 10))} />
+                      </FormControl>
+                      <FormDescription className="text-[11px]">Number of previous messages to include in each LLM call.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                )}
+              </div>
+            </CardContent>
+          </Card>
 
-          {/* Sticky footer */}
-          <div className="fixed bottom-0 left-64 right-0 bg-card border-t border-border px-8 py-4 flex items-center justify-between z-10">
-            <p className="text-sm text-muted-foreground">Agent will be saved as <strong>Draft</strong> — move it through the pipeline to publish.</p>
-            <div className="flex gap-3">
+          {/* ── Auto Callback ── */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Auto Callback</CardTitle>
+              <CardDescription>Automatically retry calls when the customer doesn't answer.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <FormField control={form.control} name="autoCallbackEnabled" render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>Enable Auto Callback</FormLabel>
+                    <div className="flex items-center gap-3 pt-2">
+                      <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
+                      <span className="text-sm text-muted-foreground">{(field.value ?? false) ? "Enabled" : "Disabled"}</span>
+                    </div>
+                    <FormDescription className="text-[11px]">Retry the call if it goes unanswered.</FormDescription>
+                  </FormItem>
+                )} />
+                {autoCallbackEnabled && (
+                  <>
+                    <FormField control={form.control} name="autoCallbackRetries" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Max Retries</FormLabel>
+                        <FormControl>
+                          <Input type="number" min={1} max={10} placeholder="3"
+                            value={field.value ?? 3}
+                            onChange={e => field.onChange(parseInt(e.target.value, 10))} />
+                        </FormControl>
+                        <FormDescription className="text-[11px]">Number of callback attempts before giving up.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="autoCallbackDelaySeconds" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Delay Between Retries (s)</FormLabel>
+                        <FormControl>
+                          <Input type="number" min={10} max={3600} placeholder="300"
+                            value={field.value ?? 300}
+                            onChange={e => field.onChange(parseInt(e.target.value, 10))} />
+                        </FormControl>
+                        <FormDescription className="text-[11px]">Wait this many seconds before each retry.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  </>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* ── Fixed bottom bar ── */}
+          <div className="fixed bottom-0 left-0 md:left-64 right-0 p-4 bg-background/80 backdrop-blur-sm border-t border-border flex justify-end z-10">
+            <div className="max-w-5xl mx-auto w-full flex justify-end gap-4">
               <Link href="/family/agents">
                 <Button type="button" variant="outline">Cancel</Button>
               </Link>
-              <Button type="submit" className="gap-2">
-                <Bot className="h-4 w-4" /> Create Agent
+              <Button type="submit" disabled={isSaving}>
+                <Save className="mr-2 h-4 w-4" />
+                {isSaving ? "Creating…" : "Create Agent"}
               </Button>
             </div>
           </div>

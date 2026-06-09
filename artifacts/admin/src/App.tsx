@@ -94,13 +94,12 @@ function Router() {
       <ProtectedRoute path="/ambient-sounds" component={AmbientSoundsPage} />
       <ProtectedRoute path="/settings" component={PlatformSettings} />
 
-      {/* Family module — 4 sub-sections */}
+      {/* Family module */}
       <ProtectedRoute path="/family/companies" component={FamilyCompaniesPage} />
       <ProtectedRoute path="/family/companies/:companyId/policies/:policyId" component={PolicyKBPage} />
       <ProtectedRoute path="/family/companies/:companyId" component={FamilyCompanyDetailPage} />
-      {/* All agent routes → same Vapi-style unified page */}
-      <ProtectedRoute path="/family/agents/new" component={FamilyAgentsPage} />
-      <ProtectedRoute path="/family/agents/:id" component={FamilyAgentsPage} />
+      <ProtectedRoute path="/family/agents/new" component={FamilyAgentNewPage} />
+      <ProtectedRoute path="/family/agents/:id" component={FamilyAgentDetailPage} />
       <ProtectedRoute path="/family/agents" component={FamilyAgentsPage} />
 
       <Route component={NotFound} />
