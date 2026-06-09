@@ -108,7 +108,10 @@ async function seedManagedKeyFromEnv(dbKey: string, envVar: string): Promise<voi
   }
 }
 
-agnost.init("aaba3367-0081-4ee1-9319-c1b604fff441", { debug: true });
+const agnostApiKey = process.env["AGNOST_API_KEY"] ?? "";
+if (agnostApiKey) {
+  agnost.init(agnostApiKey, { debug: process.env["NODE_ENV"] !== "production" });
+}
 
 server.listen(port, () => {
   logger.info({ port }, "Server listening");
