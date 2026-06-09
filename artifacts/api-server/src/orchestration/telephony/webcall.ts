@@ -179,12 +179,14 @@ export async function handleWebCallWebSocket(
     else activeCalls.set(rateLimitKey, n - 1);
   });
 
-  // Scope provider keys to this agent's owner — same pattern as session.ts
+  // Scope provider keys to this agent's owner.
+  // Managed/admin agents (userId=null) get no user-specific keys — they rely
+  // entirely on platform managed keys loaded below.
   const providerRows = agent.userId
     ? await db.select().from(providersTable).where(
         and(eq(providersTable.isActive, true), eq(providersTable.userId, agent.userId))
       )
-    : await db.select().from(providersTable).where(eq(providersTable.isActive, true));
+    : [];
   const providerKeys = new Map<string, string>();
   for (const row of providerRows) {
     providerKeys.set(row.providerName.toLowerCase(), decryptKey(row.apiKey));
@@ -200,6 +202,13 @@ export async function handleWebCallWebSocket(
     sarvam:   "managed_sarvam_key",
     cartesia: "managed_cartesia_key",
     openai:   "managed_openai_key",
+    azure:    "managed_azure_speech_key",
+    assemblyai: "managed_assemblyai_key",
+  };
+  // Providers that also need an extra-config blob — key stores the region string, not JSON
+  // (matches what the admin Managed Keys panel writes as managed_azure_speech_region)
+  const MANAGED_EXTRA: Record<string, string> = {
+    azure: "managed_azure_speech_region",
   };
 
   const requiredProviders = [
@@ -220,6 +229,16 @@ export async function handleWebCallWebSocket(
           providerKeys.set(providerName, row.value);
           logger.info({ providerName, isManaged }, "webcall: using platform managed key for provider");
         }
+      }
+    }
+    // Extra config (e.g. Azure region) — stored as plain string, wrap into JSON blob
+    if (MANAGED_EXTRA[providerName] && (isManaged || !providerKeys.has(`${providerName}:extraConfig`))) {
+      const [extraRow] = await db.select().from(platformSettingsTable).where(eq(platformSettingsTable.key, MANAGED_EXTRA[providerName]!));
+      if (extraRow?.value) {
+        const existing = providerKeys.get(`${providerName}:extraConfig`);
+        const cfg = existing ? JSON.parse(existing) as Record<string, string> : {};
+        if (!cfg["region"]) cfg["region"] = extraRow.value;
+        providerKeys.set(`${providerName}:extraConfig`, JSON.stringify(cfg));
       }
     }
   }

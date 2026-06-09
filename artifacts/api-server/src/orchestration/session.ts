@@ -277,12 +277,13 @@ export async function createSession(params: {
     }
   }
 
-  // Scope provider keys to this agent's owner; fall back to all active if agent has no userId
+  // Scope provider keys to this agent's owner.
+  // Managed agents (userId=null) rely entirely on platform managed keys below.
   const providerRows = agent.userId
     ? await db.select().from(providersTable).where(
         and(eq(providersTable.isActive, true), eq(providersTable.userId, agent.userId))
       )
-    : await db.select().from(providersTable).where(eq(providersTable.isActive, true));
+    : [];
   const providerKeys = new Map<string, string>();
   for (const row of providerRows) {
     providerKeys.set(row.providerName.toLowerCase(), decryptKey(row.apiKey));
@@ -300,13 +301,20 @@ export async function createSession(params: {
 
   // Provider name → platform_settings key
   const MANAGED: Record<string, string> = {
-    qwen:     "managed_qwen_key",
-    google:   "managed_gemini_key",
-    gemini:   "managed_gemini_key",
-    deepgram: "managed_deepgram_key",
-    sarvam:   "managed_sarvam_key",
-    cartesia: "managed_cartesia_key",
-    openai:   "managed_openai_key",
+    qwen:       "managed_qwen_key",
+    google:     "managed_gemini_key",
+    gemini:     "managed_gemini_key",
+    deepgram:   "managed_deepgram_key",
+    sarvam:     "managed_sarvam_key",
+    cartesia:   "managed_cartesia_key",
+    openai:     "managed_openai_key",
+    azure:      "managed_azure_speech_key",
+    assemblyai: "managed_assemblyai_key",
+  };
+  // Providers that also need an extra-config blob — key stores the region string, not JSON
+  // (matches what the admin Managed Keys panel writes as managed_azure_speech_region)
+  const MANAGED_EXTRA: Record<string, string> = {
+    azure: "managed_azure_speech_region",
   };
 
   const requiredProviders = [
@@ -327,6 +335,16 @@ export async function createSession(params: {
           providerKeys.set(providerName, managed);
           logger.info({ providerName, isManaged }, "Using platform managed key for provider");
         }
+      }
+    }
+    // Extra config (e.g. Azure region) — stored as plain string, wrap into JSON blob
+    if (MANAGED_EXTRA[providerName] && (isManaged || !providerKeys.has(`${providerName}:extraConfig`))) {
+      const region = await getPlatformSetting(MANAGED_EXTRA[providerName]!);
+      if (region) {
+        const existing = providerKeys.get(`${providerName}:extraConfig`);
+        const cfg = existing ? JSON.parse(existing) as Record<string, string> : {};
+        if (!cfg["region"]) cfg["region"] = region;
+        providerKeys.set(`${providerName}:extraConfig`, JSON.stringify(cfg));
       }
     }
   }

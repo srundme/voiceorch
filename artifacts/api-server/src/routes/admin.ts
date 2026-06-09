@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, usersTable, walletTransactionsTable, callsTable, agentsTable, scheduledCallbacksTable, bookingsTable, eventTypesTable, schedulingCalendarsTable, platformSettingsTable, usageSpikeDismissalsTable, usageSpikeNotificationsTable, alertNotificationLogTable, providerMinuteRatesTable } from "@workspace/db";
 import { invalidateMinuteRatesCache } from "../services/minute-rates.js";
 import { eq, sql, count, sum, desc, lt, gt, and, inArray, ilike, like } from "drizzle-orm";
+import { TRACK_PARAMS } from "../orchestration/ambient.js";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { getAllSessions } from "../orchestration/session.js";
 import { logger } from "../lib/logger.js";
@@ -1119,6 +1120,29 @@ router.get("/admin/vobiz-balance", async (req, res): Promise<void> => {
     req.log.error({ err }, "admin/vobiz-balance failed");
     res.status(500).json({ error: "Internal server error" });
   }
+});
+
+// ── Ambient Sounds ────────────────────────────────────────────────────────────
+// Returns the built-in synthesized ambient tracks so the Family agent form can
+// show a dropdown.  Each entry matches the AmbientSound interface in the frontend.
+router.get("/admin/ambient-sounds", requireAdmin, (_req, res) => {
+  const LABELS: Record<string, string> = {
+    "office-ambience": "Office Ambience",
+    "cafe":            "Café",
+    "coffee-shop":     "Coffee Shop",
+    "convention-hall": "Convention Hall",
+    "home":            "Home",
+    "outdoor":         "Outdoor",
+    "restaurant":      "Restaurant",
+  };
+  const sounds = Object.keys(TRACK_PARAMS).map(id => ({
+    id,
+    name: LABELS[id] ?? id,
+    mimeType: "audio/pcm-synthesized",
+    fileSize: 0,
+    durationSeconds: null,
+  }));
+  res.json(sounds);
 });
 
 // ── Family Agent Provision ────────────────────────────────────────────────────
