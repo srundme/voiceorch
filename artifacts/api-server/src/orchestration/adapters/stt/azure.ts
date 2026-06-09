@@ -1,4 +1,5 @@
 import { WebSocket } from "ws";
+import { randomUUID } from "crypto";
 import { pcmToWav } from "../../audio.js";
 import type { STTAdapter } from "./base.js";
 import type { STTConfig, StreamSTT } from "../../types.js";
@@ -6,20 +7,25 @@ import { logger } from "../../../lib/logger.js";
 
 // ── Azure Speech WebSocket framing ─────────────────────────────────────────
 //
+// Every message TO Azure (text or binary) MUST include X-RequestId.
+// Use a single UUID per streaming session — all frames within one connection
+// share the same requestId.  Omitting X-RequestId causes a 1002 close.
+//
 // Text messages (speech.config, speech.context):
-//   "Path: <path>\r\nX-Timestamp: <iso>\r\nContent-Type: application/json; charset=utf-8\r\n\r\n<json>"
+//   "Path: <path>\r\nX-RequestId: <uuid>\r\nX-Timestamp: <iso>\r\nContent-Type: application/json; charset=utf-8\r\n\r\n<json>"
 //
 // Binary messages (audio chunks):
 //   [2-byte big-endian header length][header string bytes][raw PCM bytes]
-//   Header string: "Path: audio\r\nX-Timestamp: <iso>\r\nContent-Type: audio/x-raw;format=PCM;bit=16;channels=1;samplerate=16000\r\n"
+//   Header string: "Path: audio\r\nX-RequestId: <uuid>\r\nX-Timestamp: <iso>\r\nContent-Type: audio/x-raw;format=PCM;bit=16;channels=1;samplerate=16000\r\n"
 //
 // Received text messages carry a "Path:" header indicating the event type.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Build a text-frame for speech.config / speech.context. */
-function textFrame(path: string, body: string): string {
+function textFrame(path: string, body: string, requestId: string): string {
   return (
     `Path: ${path}\r\n` +
+    `X-RequestId: ${requestId}\r\n` +
     `X-Timestamp: ${new Date().toISOString()}\r\n` +
     `Content-Type: application/json; charset=utf-8\r\n` +
     `\r\n${body}`
@@ -27,9 +33,11 @@ function textFrame(path: string, body: string): string {
 }
 
 /** Build a binary audio frame for raw 16-bit / 16 kHz / mono PCM. */
-function audioFrame(pcm: Buffer): Buffer {
+function audioFrame(pcm: Buffer, requestId: string): Buffer {
   const hdr = Buffer.from(
-    `Path: audio\r\nX-Timestamp: ${new Date().toISOString()}\r\n` +
+    `Path: audio\r\n` +
+    `X-RequestId: ${requestId}\r\n` +
+    `X-Timestamp: ${new Date().toISOString()}\r\n` +
     `Content-Type: audio/x-raw;format=PCM;bit=16;channels=1;samplerate=16000\r\n`,
     "utf8",
   );
@@ -45,7 +53,7 @@ function parseFrame(raw: string): { path: string; body: string } | null {
   const headers = raw.slice(0, sep);
   const body = raw.slice(sep + 4);
   const m = headers.match(/Path:\s*(\S+)/i);
-  return m ? { path: m[1].toLowerCase(), body } : null;
+  return m ? { path: m[1]!.toLowerCase(), body } : null;
 }
 
 // ── Response types ─────────────────────────────────────────────────────────
@@ -145,17 +153,19 @@ export class AzureSTT implements STTAdapter {
       return "";
     }
 
-    // Confidence filter (NBest[0] carries per-utterance score with format=detailed)
+    // RecognitionStatus=Success is the primary gate for Azure batch.
+    // Confidence scores in batch mode are unreliable (especially for
+    // Indic languages) and should not be used to filter valid speech.
+    // We only discard if the result text itself is empty.
     const best = json.NBest?.[0];
-    if (best?.Confidence !== undefined && best.Confidence < this.cfg.confidenceThreshold) {
-      logger.info(
-        { confidence: best.Confidence, threshold: this.cfg.confidenceThreshold },
-        "Azure STT batch: transcript filtered by confidence",
-      );
-      return "";
-    }
+    const text = (best?.Display ?? json.DisplayText ?? "").trim();
+    if (!text) return "";
 
-    return (best?.Display ?? json.DisplayText ?? "").trim();
+    logger.info(
+      { confidence: best?.Confidence, language: this.language },
+      "Azure STT batch: transcript accepted",
+    );
+    return text;
   }
 
   // ── Streaming WebSocket ───────────────────────────────────────────────────
@@ -171,6 +181,10 @@ export class AzureSTT implements STTAdapter {
     const wsUrl =
       `wss://${this.region}.stt.speech.microsoft.com/speech/recognition/` +
       `conversation/cognitiveservices/v1?${params.toString()}`;
+
+    // One requestId per streaming session — required on every frame sent to Azure.
+    // Azure terminates the connection with 1002 if X-RequestId is missing.
+    const requestId = randomUUID().replace(/-/g, "").toUpperCase();
 
     let wsReady = false;
     const audioQueue: Buffer[] = [];
@@ -197,6 +211,7 @@ export class AzureSTT implements STTAdapter {
               },
             },
           }),
+          requestId,
         ),
       );
 
@@ -218,13 +233,14 @@ export class AzureSTT implements STTAdapter {
                 },
               },
             }),
+            requestId,
           ),
         );
       }
 
       // ③ Flush any audio queued before the socket was ready
       for (const chunk of audioQueue.splice(0)) {
-        ws.send(audioFrame(chunk));
+        ws.send(audioFrame(chunk, requestId));
       }
 
       logger.info(
@@ -270,14 +286,18 @@ export class AzureSTT implements STTAdapter {
           }
 
           const best = msg.NBest?.[0];
-          const confidence = best?.Confidence ?? 1;
           const text = (best?.Display ?? msg.DisplayText ?? "").trim();
 
           if (!text) return;
 
-          if (confidence < this.cfg.confidenceThreshold) {
+          // In streaming mode, apply confidence filter only as a soft gate.
+          // Use the configured threshold but floor it at 0.15 — Azure streaming
+          // confidence for Indic languages is naturally lower than Latin-script.
+          const confidence = best?.Confidence ?? 1;
+          const effectiveThreshold = Math.min(this.cfg.confidenceThreshold, 0.15);
+          if (confidence < effectiveThreshold) {
             logger.info(
-              { confidence, threshold: this.cfg.confidenceThreshold },
+              { confidence, effectiveThreshold, configured: this.cfg.confidenceThreshold },
               "Azure stream: transcript filtered by confidence",
             );
             return;
@@ -324,7 +344,7 @@ export class AzureSTT implements STTAdapter {
     return {
       sendAudio(chunk: Buffer): void {
         if (ws.readyState === WebSocket.OPEN) {
-          ws.send(audioFrame(chunk));
+          ws.send(audioFrame(chunk, requestId));
         } else if (!wsReady) {
           audioQueue.push(chunk);
         }

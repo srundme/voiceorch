@@ -6,3 +6,4 @@
 - [drizzle-kit push gotchas](drizzle-push-gotchas.md) — long FK names truncate at 63 chars → push loops "Changes applied" forever; raw-SQL-only columns drift silently and get dropped
 - [api-server no hot-reload](api-server-no-hot-reload.md) — backend runs a prebuilt esbuild bundle; restart the workflow after route/middleware edits or new endpoints 404
 - [Radix UI Select empty-value constraint](radix-select-empty-value.md) — SelectItem value="" crashes; use __none__ sentinel + bidirectional conversion in onChange/value
+- [Azure STT streaming protocol](azure-stt-protocol.md) — every frame (text + binary) must include X-RequestId header; omitting it causes 1002 close; batch confidence filter is too aggressive for Indic languages — rely on RecognitionStatus=Success instead
