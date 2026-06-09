@@ -431,7 +431,7 @@ export default function FamilyAgentDetail() {
                 <FormField control={form.control} name="companyId" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Company <span className="text-destructive">*</span></FormLabel>
-                    <Select onValueChange={v => { field.onChange(v); form.setValue("policyId", ""); }} value={field.value}>
+                    <Select onValueChange={v => { field.onChange(v); form.setValue("policyId", undefined); }} value={field.value}>
                       <FormControl><SelectTrigger><SelectValue placeholder="Select company" /></SelectTrigger></FormControl>
                       <SelectContent className="max-h-64">
                         {companies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
