@@ -443,10 +443,14 @@ export default function FamilyAgentDetail() {
                 <FormField control={form.control} name="policyId" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Policy <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value ?? ""} disabled={!selectedCompanyId}>
+                    <Select
+                      onValueChange={v => field.onChange(v === "__none__" ? undefined : v)}
+                      value={field.value ?? "__none__"}
+                      disabled={!selectedCompanyId}
+                    >
                       <FormControl><SelectTrigger><SelectValue placeholder="Select policy" /></SelectTrigger></FormControl>
                       <SelectContent>
-                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value="__none__">None</SelectItem>
                         {policiesForCompany.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
