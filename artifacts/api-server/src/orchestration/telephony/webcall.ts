@@ -1,6 +1,6 @@
 import type { WebSocket } from "ws";
 import { db, agentsTable, callsTable, scheduledCallbacksTable, providersTable, usersTable, walletTransactionsTable, platformSettingsTable, knowledgeEntriesTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { createSTTAdapter } from "../adapters/stt/index.js";
 import { createLLMAdapter } from "../adapters/llm/index.js";
 import { createTTSAdapter } from "../adapters/tts/index.js";
@@ -179,9 +179,17 @@ export async function handleWebCallWebSocket(
     else activeCalls.set(rateLimitKey, n - 1);
   });
 
-  const providerRows = await db.select().from(providersTable).where(eq(providersTable.isActive, true));
+  // Scope provider keys to this agent's owner — same pattern as session.ts
+  const providerRows = agent.userId
+    ? await db.select().from(providersTable).where(
+        and(eq(providersTable.isActive, true), eq(providersTable.userId, agent.userId))
+      )
+    : await db.select().from(providersTable).where(eq(providersTable.isActive, true));
   const providerKeys = new Map<string, string>();
-  for (const row of providerRows) providerKeys.set(row.providerName.toLowerCase(), decryptKey(row.apiKey));
+  for (const row of providerRows) {
+    providerKeys.set(row.providerName.toLowerCase(), decryptKey(row.apiKey));
+    if (row.extraConfig) providerKeys.set(`${row.providerName.toLowerCase()}:extraConfig`, row.extraConfig);
+  }
 
   // Managed platform key fallback — same map as session.ts
   const MANAGED: Record<string, string> = {
@@ -240,7 +248,8 @@ export async function handleWebCallWebSocket(
     fallbackProviders: (agent.asrFallbackProviders as Array<{ provider: string; model: string | null }> | null | undefined) ?? [],
   };
 
-  const stt = createSTTAdapter(agent.asrProvider, sttKey, agent.asrModel, null, sttConfig);
+  const sttExtraConfig = providerKeys.get(`${agent.asrProvider}:extraConfig`) ?? null;
+  const stt = createSTTAdapter(agent.asrProvider, sttKey, agent.asrModel, sttExtraConfig, sttConfig);
   const llm = createLLMAdapter(agent.llmProvider, llmKey, agent.llmModel);
 
   // ── Streaming STT (saaras:v3, Deepgram) ─────────────────────────────────
