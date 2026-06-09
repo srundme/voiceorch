@@ -1,14 +1,11 @@
 import { useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { useFamilyStore, AgentStatus, DEFAULT_COMPANIES } from "@/lib/family-store";
+import { useFamilyStore, AgentStatus } from "@/lib/family-store";
 import { Plus, Search, Bot, ArrowRight, TrendingUp } from "lucide-react";
 
 const STATUS_COLORS: Record<AgentStatus, string> = {
@@ -36,15 +33,10 @@ const STATUS_DOT: Record<AgentStatus, string> = {
 };
 
 export default function FamilyAgentsPage() {
-  const { agents, companies, saveAgents, isLoaded } = useFamilyStore();
+  const { agents, isLoaded } = useFamilyStore();
+  const [, setLocation] = useLocation();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [showCreate, setShowCreate] = useState(false);
-
-  const [newName, setNewName] = useState("");
-  const [newCompanyId, setNewCompanyId] = useState("");
-  const [newPrompt, setNewPrompt] = useState("");
-  const [creating, setCreating] = useState(false);
 
   const filtered = agents.filter((a) => {
     const matchesSearch =
@@ -61,31 +53,6 @@ export default function FamilyAgentsPage() {
     testing: agents.filter((a) => a.status === "testing").length,
   };
 
-  function handleCreate() {
-    if (!newName.trim() || !newCompanyId) return;
-    setCreating(true);
-    const company = DEFAULT_COMPANIES.find((c) => c.id === newCompanyId);
-    const newAgent = {
-      id: `a${Date.now()}`,
-      companyId: newCompanyId,
-      companyName: company?.name ?? "",
-      name: newName.trim(),
-      status: "draft" as AgentStatus,
-      systemPrompt: newPrompt.trim(),
-      voiceId: "v1",
-      kbEntries: 0,
-      totalCalls: 0,
-      conversionRate: 0,
-      lastUpdated: new Date().toISOString(),
-    };
-    saveAgents([...agents, newAgent]);
-    setNewName("");
-    setNewCompanyId("");
-    setNewPrompt("");
-    setCreating(false);
-    setShowCreate(false);
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -95,7 +62,7 @@ export default function FamilyAgentsPage() {
             Create and manage AI voice agents for insurance companies. Publish to make them available in the Family mobile app.
           </p>
         </div>
-        <Button onClick={() => setShowCreate(true)} className="gap-2">
+        <Button onClick={() => setLocation("/family-agents/new")} className="gap-2">
           <Plus className="h-4 w-4" />
           New Agent
         </Button>
@@ -207,52 +174,6 @@ export default function FamilyAgentsPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Create Insurance AI Agent</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <Label>Insurance Company</Label>
-              <Select value={newCompanyId} onValueChange={setNewCompanyId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select company…" />
-                </SelectTrigger>
-                <SelectContent className="max-h-64">
-                  {DEFAULT_COMPANIES.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Agent Name</Label>
-              <Input
-                placeholder="e.g. ICICI Motor Renewal Agent"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>System Prompt <span className="text-muted-foreground font-normal">(optional — can add later)</span></Label>
-              <Textarea
-                placeholder="Describe the agent's persona, goals, and key guidelines…"
-                value={newPrompt}
-                onChange={(e) => setNewPrompt(e.target.value)}
-                rows={5}
-                className="resize-none"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
-            <Button onClick={handleCreate} disabled={!newName.trim() || !newCompanyId || creating}>
-              {creating ? "Creating…" : "Create Agent"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

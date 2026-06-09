@@ -11,11 +11,36 @@ export interface InsuranceCompany {
   category: CompanyCategory;
 }
 
+export interface PromptVariable {
+  key: string;
+  defaultValue: string;
+  description?: string;
+}
+
+export interface CallTransferTool {
+  type: 'call_transfer';
+  name: string;
+  description: string;
+  transferTo: string;
+  warmHandoffMessage?: string;
+  transferMode?: 'cold' | 'warm_summary';
+  summaryPrompt?: string;
+}
+
+export interface DispositionField {
+  key: string;
+  label: string;
+  type: 'text' | 'number' | 'boolean' | 'choice';
+  required?: boolean;
+  options?: string;
+}
+
 export interface InsuranceAgent {
   id: string;
   companyId: string;
   companyName: string;
   name: string;
+  description?: string;
   status: AgentStatus;
   systemPrompt: string;
   voiceId: string;
@@ -23,6 +48,54 @@ export interface InsuranceAgent {
   totalCalls: number;
   conversionRate: number;
   lastUpdated: string;
+
+  agentMode?: 'managed' | 'byop';
+
+  asrProvider?: string;
+  asrModel?: string;
+  asrLanguage?: string;
+  asrBackgroundDenoising?: boolean;
+  asrConfidenceThreshold?: number;
+  asrEndOfTurnConfidence?: number;
+  asrEndOfTurnTimeout?: number;
+  asrKeyterms?: string;
+  asrSmartEndpointing?: 'off' | 'vapi' | 'livekit';
+  asrAutoFallback?: boolean;
+
+  llmProvider?: string;
+  llmModel?: string;
+  temperature?: number;
+
+  ttsProvider?: string;
+  ttsVoice?: string;
+  ttsModel?: string;
+
+  telephonyProvider?: string;
+
+  language?: string;
+  timezone?: string;
+  greetingMessage?: string;
+  endCallPhrases?: string;
+  silenceTimeoutSeconds?: number;
+  backchannelingEnabled?: boolean;
+  backchannelingFrequency?: number;
+  backchannelPhrases?: string;
+  noiseCancellationEnabled?: boolean;
+  inactivityMessage?: string;
+  webhookUrl?: string;
+  webhookSecret?: string;
+  maxDuration?: number;
+  maxConcurrentCalls?: number;
+  monthlySpendLimitCents?: number;
+
+  vadSilenceMs?: number;
+  bargeInEnabled?: boolean;
+  bargeInEnergyThreshold?: number;
+  bargeInMinFrames?: number;
+
+  promptVariables?: PromptVariable[];
+  tools?: CallTransferTool[];
+  dispositionSchema?: DispositionField[];
 }
 
 export interface KnowledgeEntry {
@@ -73,6 +146,17 @@ const DEFAULT_AGENTS: InsuranceAgent[] = [
   {
     id: 'a1', companyId: '1', companyName: 'ICICI Lombard', name: 'ICICI Sales Agent',
     status: 'published',
+    agentMode: 'managed',
+    asrProvider: 'deepgram', asrModel: 'nova-2',
+    llmProvider: 'qwen', llmModel: 'qwen/qwen3-32b',
+    ttsProvider: 'cartesia', ttsModel: 'sonic-3',
+    telephonyProvider: 'twilio',
+    language: 'en-IN',
+    temperature: 0.7,
+    greetingMessage: 'Namaste! Main ICICI Lombard se Priya bol rahi hun. Aapki kya madad kar sakti hun?',
+    silenceTimeoutSeconds: 30,
+    backchannelingEnabled: true,
+    noiseCancellationEnabled: true,
     systemPrompt: `You are Priya, a friendly and professional sales agent for ICICI Lombard General Insurance. Your goal is to help customers understand their motor insurance renewal options and guide them to renew their policy.\n\nKey guidelines:\n- Always greet the customer warmly in Hindi or English depending on their preference\n- Focus on the benefits of renewing early (no inspection required, continuous NCB benefit)\n- Offer to explain any claim history or premium changes clearly\n- Never pressure the customer; build trust through information\n- If customer objects to price, highlight the coverage value and claim settlement ratio (98.7%)`,
     voiceId: 'v1', kbEntries: 6, totalCalls: 12500, conversionRate: 45.2,
     lastUpdated: new Date(Date.now() - 86400000).toISOString(),
@@ -80,6 +164,17 @@ const DEFAULT_AGENTS: InsuranceAgent[] = [
   {
     id: 'a2', companyId: '3', companyName: 'Star Health', name: 'Star Health Renewal',
     status: 'testing',
+    agentMode: 'managed',
+    asrProvider: 'deepgram', asrModel: 'nova-2',
+    llmProvider: 'qwen', llmModel: 'qwen/qwen3-32b',
+    ttsProvider: 'cartesia', ttsModel: 'sonic-3',
+    telephonyProvider: 'twilio',
+    language: 'en-IN',
+    temperature: 0.6,
+    greetingMessage: 'Hello! I am Anjali from Star Health Insurance. How can I help you today?',
+    silenceTimeoutSeconds: 30,
+    backchannelingEnabled: true,
+    noiseCancellationEnabled: true,
     systemPrompt: `You are Anjali, a health insurance specialist at Star Health and Allied Insurance. You help existing customers understand their health policy renewal and coverage details.\n\nKey guidelines:\n- Remind customers about the waiting period reset if they let their policy lapse\n- Highlight the network hospital count (14,000+ hospitals)\n- Mention the tax benefit under Section 80D\n- If customer mentions a pre-existing condition, assure them about coverage continuity on renewal\n- Keep the conversation warm and empathetic — health insurance is personal`,
     voiceId: 'v2', kbEntries: 4, totalCalls: 340, conversionRate: 12.5,
     lastUpdated: new Date(Date.now() - 3600000).toISOString(),
@@ -87,6 +182,17 @@ const DEFAULT_AGENTS: InsuranceAgent[] = [
   {
     id: 'a3', companyId: '4', companyName: 'Niva Bupa', name: 'Niva Bupa Upsell',
     status: 'approved',
+    agentMode: 'byop',
+    asrProvider: 'sarvam', asrModel: 'saaras:v3',
+    llmProvider: 'sarvam', llmModel: 'sarvam-30b',
+    ttsProvider: 'sarvam', ttsVoice: 'meera',
+    telephonyProvider: 'vobiz',
+    language: 'hi',
+    temperature: 0.7,
+    greetingMessage: 'Namaste! Main Rahul, Niva Bupa Health Insurance se. Aapka waqt milne ke liye shukriya.',
+    silenceTimeoutSeconds: 35,
+    backchannelingEnabled: true,
+    noiseCancellationEnabled: true,
     systemPrompt: `You are Rahul, an insurance advisor at Niva Bupa Health Insurance. Your role is to reach out to existing basic plan holders and explain the benefits of upgrading to ReAssure or Health Companion plans.\n\nKey guidelines:\n- Start by acknowledging their current plan and thanking them for being a valued customer\n- Explain how their healthcare needs may have grown since they first enrolled\n- Highlight the key upgrade benefits: higher sum insured, OPD cover, restoration benefit\n- Be ready to calculate the premium difference on the spot\n- If they are hesitant, offer to send a detailed comparison on WhatsApp`,
     voiceId: 'v1', kbEntries: 5, totalCalls: 890, conversionRate: 31.8,
     lastUpdated: new Date(Date.now() - 7200000).toISOString(),
@@ -94,6 +200,16 @@ const DEFAULT_AGENTS: InsuranceAgent[] = [
   {
     id: 'a4', companyId: '7', companyName: 'Bajaj Allianz', name: 'Bajaj Motor Renewal',
     status: 'training',
+    agentMode: 'managed',
+    asrProvider: 'deepgram', asrModel: 'nova-2',
+    llmProvider: 'qwen', llmModel: 'qwen/qwen3-32b',
+    ttsProvider: 'cartesia', ttsModel: 'sonic-3',
+    telephonyProvider: 'twilio',
+    language: 'en-IN',
+    temperature: 0.7,
+    silenceTimeoutSeconds: 30,
+    backchannelingEnabled: true,
+    noiseCancellationEnabled: true,
     systemPrompt: `You are Vikram, a motor insurance specialist for Bajaj Allianz General Insurance. You handle outbound calls for two-wheeler and four-wheeler policy renewals.\n\nKey guidelines:\n- Always verify the vehicle registration number at the start of the call\n- Explain the difference between third-party and comprehensive coverage clearly\n- Mention the Bajaj Allianz Motor On-the-Spot (OTS) claim settlement feature\n- If customer wants to compare, focus on the 24x7 roadside assistance benefit\n- For lapsed policies, explain the inspection requirement and process`,
     voiceId: 'v3', kbEntries: 3, totalCalls: 0, conversionRate: 0,
     lastUpdated: new Date(Date.now() - 172800000).toISOString(),
@@ -101,6 +217,16 @@ const DEFAULT_AGENTS: InsuranceAgent[] = [
   {
     id: 'a5', companyId: '5', companyName: 'Tata AIG', name: 'Tata AIG Travel Agent',
     status: 'draft',
+    agentMode: 'managed',
+    asrProvider: 'deepgram', asrModel: 'nova-2',
+    llmProvider: 'qwen', llmModel: 'qwen/qwen3-32b',
+    ttsProvider: 'cartesia', ttsModel: 'sonic-3',
+    telephonyProvider: 'twilio',
+    language: 'en-IN',
+    temperature: 0.7,
+    silenceTimeoutSeconds: 30,
+    backchannelingEnabled: true,
+    noiseCancellationEnabled: true,
     systemPrompt: `You are Sanya, a travel insurance specialist at Tata AIG General Insurance. You help customers choose the right travel insurance plan for their upcoming international trips.\n\nKey guidelines:\n- Ask about destination, duration, and number of travelers upfront\n- Explain the medical emergency coverage and evacuation benefits\n- Highlight the trip cancellation and baggage loss protection\n- For senior citizens, specifically mention the dedicated claims helpline\n- Mention tie-up with 5 million+ hospitals globally`,
     voiceId: 'v2', kbEntries: 0, totalCalls: 0, conversionRate: 0,
     lastUpdated: new Date(Date.now() - 259200000).toISOString(),
