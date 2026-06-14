@@ -116,7 +116,21 @@ function parseEvent(body: any): ParsedEvent {
     return { type: "call.ended", phoneNumber: phone, agentId, transcript, durationSeconds: duration, platform: "retell" };
   }
 
-  // ── Generic / Bolna ──
+  // ── Bolna flat format (no event field, just { id, agent_id, transcript, conversation_duration, ... }) ──
+  if (body?.agent_id && body?.id && !body?.event && !body?.type && !body?.message) {
+    const phone = body?.from_number ?? body?.to_number ?? body?.phone_number ?? body?.customer_number ?? null;
+    const agentId = body.agent_id ?? null;
+    const transcript = typeof body.transcript === "string" && body.transcript.trim().length > 0
+      ? body.transcript : null;
+    const duration = body?.conversation_duration ?? null;
+
+    if (!transcript || (typeof duration === "number" && duration === 0)) {
+      return { type: "call.started", phoneNumber: phone, agentId, transcript: null, durationSeconds: null, platform: "generic" };
+    }
+    return { type: "call.ended", phoneNumber: phone, agentId, transcript, durationSeconds: duration, platform: "generic" };
+  }
+
+  // ── Generic / Bolna legacy ──
   const event = body?.event ?? body?.type ?? "";
   const phone = body?.phoneNumber ?? body?.phone_number ?? body?.from ?? null;
   const agentId = body?.agentId ?? body?.agent_id ?? null;
@@ -316,10 +330,15 @@ const TEST_MODE_USER_ID = "test-user";
 router.post("/pendrive/webhook", async (req: Request, res: Response): Promise<void> => {
   const { userId } = { userId: TEST_MODE_USER_ID };
 
-  // DEBUG: log raw Bolna payload (remove once Bolna integration is confirmed working)
-  logger.info({ body: JSON.stringify(req.body).slice(0, 2000) }, "Pendrive webhook: raw payload received");
-
   const event = parseEvent(req.body);
+
+  // Allow ?phone= query param to override/supply phone number (useful for Bolna which doesn't include it in payload)
+  const queryPhone = (req.query["phone"] as string | undefined)?.trim() || null;
+  if (queryPhone && !event.phoneNumber) {
+    (event as any).phoneNumber = queryPhone;
+  }
+
+  logger.info({ eventType: event.type, platform: event.platform, phone: event.phoneNumber ?? "none", hasTranscript: !!event.transcript }, "Pendrive webhook: event parsed");
 
   if (event.type === "unknown") {
     res.status(200).json({ ok: true, message: "Event type not recognized — no action taken" });

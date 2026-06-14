@@ -245,19 +245,33 @@ export default function ApiKeys() {
             Point any voice platform (VAPI, Retell, Bolna) to this URL. Pendrive auto-injects memory on call start and archives transcripts on call end — zero agent config changes needed.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex items-center gap-2">
-            <code className="flex-1 rounded bg-background/60 px-3 py-2 text-xs font-mono text-foreground border border-border/50 truncate">
-              POST {webhookUrl}
-            </code>
-            <Button variant="outline" size="sm" className="shrink-0" onClick={() => { navigator.clipboard.writeText(webhookUrl); }}>
-              <Copy className="h-3.5 w-3.5" />
-            </Button>
+        <CardContent className="space-y-4">
+          <div>
+            <p className="text-xs text-muted-foreground mb-1.5 font-medium">Generic / VAPI / Retell</p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 rounded bg-background/60 px-3 py-2 text-xs font-mono text-foreground border border-border/50 truncate">
+                POST {webhookUrl}
+              </code>
+              <Button variant="outline" size="sm" className="shrink-0" onClick={() => { navigator.clipboard.writeText(webhookUrl); }}>
+                <Copy className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground mb-1.5 font-medium">Bolna — append <code className="text-foreground">?phone=CALLER_NUMBER</code> so Pendrive can identify the caller</p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 rounded bg-background/60 px-3 py-2 text-xs font-mono text-foreground border border-border/50 truncate">
+                POST {webhookUrl}?phone=%2B91XXXXXXXXXX
+              </code>
+              <Button variant="outline" size="sm" className="shrink-0" onClick={() => { navigator.clipboard.writeText(`${webhookUrl}?phone=%2B91XXXXXXXXXX`); }}>
+                <Copy className="h-3.5 w-3.5" />
+              </Button>
+            </div>
           </div>
           <div className="grid grid-cols-3 gap-3 text-xs text-muted-foreground">
-            <div className="flex items-center gap-1.5"><Zap className="h-3.5 w-3.5 text-yellow-500" /><span>Auth: <code className="text-foreground">Authorization: Bearer pd_live_...</code></span></div>
-            <div className="flex items-center gap-1.5"><Zap className="h-3.5 w-3.5 text-blue-500" /><span>call.started → returns memory block</span></div>
-            <div className="flex items-center gap-1.5"><Zap className="h-3.5 w-3.5 text-green-500" /><span>call.ended → archives transcript async</span></div>
+            <div className="flex items-center gap-1.5"><Zap className="h-3.5 w-3.5 text-blue-500" /><span>call started → fetches + injects memory</span></div>
+            <div className="flex items-center gap-1.5"><Zap className="h-3.5 w-3.5 text-green-500" /><span>call ended → archives transcript async</span></div>
+            <div className="flex items-center gap-1.5"><Zap className="h-3.5 w-3.5 text-purple-500" /><span>Bolna: auto-patches system prompt</span></div>
           </div>
         </CardContent>
       </Card>
