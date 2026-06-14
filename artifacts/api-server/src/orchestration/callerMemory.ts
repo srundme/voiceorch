@@ -51,6 +51,9 @@ export interface CallerProfile {
   lastCalledAt: Date | null;
   lastCallDropped: boolean;
   lastCallDroppedAt: Date | null;
+  predictedIntent: string | null;
+  riskScore: number | null;
+  sentimentTrend: string | null;
 }
 
 export interface CallerFact {
@@ -71,6 +74,7 @@ export interface CallerCallRecord {
   callId: number | null;
   summary: string | null;
   durationSeconds: number | null;
+  sentiment: string | null;
   createdAt: Date;
 }
 
@@ -144,6 +148,7 @@ export async function loadCallerContext(
         callId:          callerCallArchiveTable.callId,
         summary:         callerCallArchiveTable.summary,
         durationSeconds: callerCallArchiveTable.durationSeconds,
+        sentiment:       callerCallArchiveTable.sentiment,
         createdAt:       callerCallArchiveTable.createdAt,
       })
       .from(callerCallArchiveTable)
@@ -156,7 +161,12 @@ export async function loadCallerContext(
   ]);
 
   return {
-    profile,
+    profile: profile ? {
+      ...profile,
+      predictedIntent: (profile as any).predictedIntent ?? null,
+      riskScore:       (profile as any).riskScore ?? null,
+      sentimentTrend:  (profile as any).sentimentTrend ?? null,
+    } : null,
     facts: currentFacts.map(r => ({
       id:                r.id,
       key:               r.key,
@@ -172,6 +182,7 @@ export async function loadCallerContext(
       callId:          r.callId,
       summary:         r.summary,
       durationSeconds: r.durationSeconds,
+      sentiment:       r.sentiment ?? null,
       createdAt:       r.createdAt,
     })),
   };
@@ -188,63 +199,119 @@ export function injectCallerMemory(systemPrompt: string, profile: CallerProfile)
 
 // ── Enhanced memory injection (all layers) ────────────────────────────────────
 
+const SENTIMENT_EMOJI: Record<string, string> = {
+  positive:  "😊",
+  neutral:   "😐",
+  negative:  "😞",
+  frustrated:"😤",
+  resolved:  "✅",
+};
+
+const TREND_LABEL: Record<string, string> = {
+  improving:       "📈 improving",
+  declining:       "📉 declining",
+  stable_positive: "✅ consistently positive",
+  stable_negative: "⚠️ consistently negative",
+  mixed:           "↕ mixed",
+};
+
+const STALE_DAYS = 90;  // facts older than this get a stale marker
+
 export function injectEnhancedMemory(systemPrompt: string, ctx: CallerContext): string {
   const { profile, facts, recentCalls } = ctx;
 
   const lines: string[] = ["=== CALLER MEMORY — NEVER FORGETS ==="];
 
-  const namePart = profile?.name ?? facts.find(f => f.key === "name")?.value ?? "unknown";
-  const callCount = profile?.callCount ?? 0;
-  const lastCallLabel = daysSinceLabel(profile?.lastCalledAt ?? null);
+  const namePart   = profile?.name ?? facts.find(f => f.key === "name")?.value ?? "unknown";
+  const callCount  = profile?.callCount ?? 0;
+  const lastLabel  = daysSinceLabel(profile?.lastCalledAt ?? null);
 
-  const headerParts: string[] = [`Name: ${namePart}`, `Total calls: ${callCount}`];
-  if (lastCallLabel) headerParts.push(`Last call: ${lastCallLabel}`);
+  const headerParts: string[] = [`Name: ${namePart}`, `Calls: ${callCount}`];
+  if (lastLabel) headerParts.push(`Last: ${lastLabel}`);
 
   const isRecentDrop =
     profile?.lastCallDropped === true &&
     profile.lastCallDroppedAt != null &&
     Date.now() - profile.lastCallDroppedAt.getTime() < DROPPED_CALL_WINDOW_MS;
 
-  if (isRecentDrop) headerParts.push("⚠ DROPPED");
+  if (isRecentDrop) headerParts.push("⚠️ LAST CALL DROPPED");
   lines.push(headerParts.join("  |  "));
 
-  // L0: current (non-superseded) structured facts
+  // ── Predicted intent (if available) ───────────────────────────────────────
+  if (profile?.predictedIntent) {
+    lines.push("");
+    lines.push(`🎯 PREDICTED REASON FOR THIS CALL: ${profile.predictedIntent}`);
+  }
+
+  // ── Risk signal ───────────────────────────────────────────────────────────
+  const risk = profile?.riskScore ?? 0;
+  if (risk >= 0.7) {
+    lines.push(`🚨 HIGH RISK CALLER (score: ${(risk * 100).toFixed(0)}%) — approach with extra patience, proactively address pain points`);
+  } else if (risk >= 0.4) {
+    lines.push(`⚠️ ELEVATED RISK (score: ${(risk * 100).toFixed(0)}%) — caller may be frustrated, handle with care`);
+  }
+
+  // ── Sentiment arc ─────────────────────────────────────────────────────────
+  const sentimentsWithData = recentCalls.filter(c => c.sentiment);
+  if (sentimentsWithData.length >= 2) {
+    const trend = profile?.sentimentTrend;
+    const arc = sentimentsWithData
+      .slice(0, 5)
+      .reverse()
+      .map(c => SENTIMENT_EMOJI[c.sentiment!] ?? "•")
+      .join(" → ");
+    const trendLabel = trend ? ` (${TREND_LABEL[trend] ?? trend})` : "";
+    lines.push(`📊 SENTIMENT ARC: ${arc}${trendLabel}`);
+  }
+
+  // ── L0: current (non-superseded) structured facts ─────────────────────────
+  const now = Date.now();
   const displayFacts = facts.filter(f => f.key !== "name" && f.confidence >= 0.5);
   if (displayFacts.length > 0) {
     lines.push("");
-    lines.push("KNOWN FACTS (confirmed across previous calls):");
+    lines.push("KNOWN FACTS:");
     for (const f of displayFacts) {
-      const age = daysSinceLabel(f.createdAt);
-      lines.push(`• ${f.key}: ${f.value}${age ? `  [${age}]` : ""}`);
+      const ageDays = Math.floor((now - f.createdAt.getTime()) / 86_400_000);
+      const staleTag = ageDays > STALE_DAYS ? "  ⚠️ may be outdated" : "";
+      const ageLabel = daysSinceLabel(f.createdAt);
+      lines.push(`• ${f.key}: ${f.value}${ageLabel ? `  [${ageLabel}]` : ""}${staleTag}`);
     }
   } else if (profile?.summary) {
     lines.push("");
     lines.push(`Prior context: ${profile.summary}`);
   }
 
-  // L1: recent episode summaries
+  // ── L1: recent episode summaries with sentiment ───────────────────────────
   const callsWithSummary = recentCalls.filter(c => c.summary);
   if (callsWithSummary.length > 0) {
     lines.push("");
-    lines.push("RECENT CALLS:");
+    lines.push("RECENT EPISODES:");
     for (const c of callsWithSummary) {
       const label = daysSinceLabel(c.createdAt) ?? "—";
-      lines.push(`[${label}] ${c.summary!.trim()}`);
+      const sentEmoji = c.sentiment ? (SENTIMENT_EMOJI[c.sentiment] ?? "") + " " : "";
+      lines.push(`[${label}] ${sentEmoji}${c.summary!.trim()}`);
     }
   }
 
+  // ── Behavioural instruction ───────────────────────────────────────────────
   lines.push("");
   if (isRecentDrop) {
     lines.push(
-      "IMPORTANT: The previous call was disconnected unexpectedly. " +
-      "This is a continuation — acknowledge the drop briefly and pick up where you left off. " +
-      "Do NOT start over or re-introduce yourself.",
+      "IMPORTANT: The previous call was dropped unexpectedly. " +
+      "Acknowledge briefly and continue where you left off. Do NOT re-introduce yourself.",
     );
   } else if (callCount > 1) {
+    const riskInstruction = risk >= 0.7
+      ? " Caller has shown frustration recently — proactively address concerns before they escalate."
+      : risk >= 0.4
+        ? " Handle with care — caller may be frustrated."
+        : "";
+    const intentInstruction = profile?.predictedIntent
+      ? ` They are likely calling about: ${profile.predictedIntent} — address this proactively if appropriate.`
+      : "";
     lines.push(
-      `IMPORTANT: This is a RETURNING caller (call #${callCount + 1}). ` +
-      "Greet them warmly as someone you recognise from previous conversations. " +
-      "Reference prior context naturally. Do NOT re-introduce yourself as if this is a first call.",
+      `IMPORTANT: RETURNING caller (call #${callCount + 1}). ` +
+      `Greet warmly by name, reference prior context naturally.${riskInstruction}${intentInstruction}`,
     );
   }
 
@@ -340,6 +407,7 @@ export async function archiveCall(opts: {
   summary: string | null;
   durationSeconds: number | null;
   factsExtracted?: boolean;
+  sentiment?: string | null;
   sentences?: Array<{ speaker: "agent" | "caller"; text: string }>;
 }): Promise<{ archiveId: number | null; sentenceIds: number[] }> {
   try {
@@ -353,6 +421,7 @@ export async function archiveCall(opts: {
         summary:         opts.summary,
         durationSeconds: opts.durationSeconds,
         factsExtracted:  opts.factsExtracted ?? false,
+        sentiment:       opts.sentiment ?? null,
       })
       .returning({ id: callerCallArchiveTable.id });
 
@@ -385,6 +454,7 @@ export async function archiveCall(opts: {
 interface ExtractedLLMResult {
   name?: string | null;
   summary?: string | null;
+  sentiment?: string | null;
   facts?: Array<{ key: string; value: string; confidence: number }>;
 }
 
@@ -408,15 +478,23 @@ async function runLLMExtraction(opts: {
         `${priorContext}${priorFactsStr}` +
         `Analyze this call transcript and extract:\n` +
         `1. A concise 1-3 sentence summary of what was discussed (merge with any prior context above)\n` +
-        `2. Key facts about the caller — ONLY things they explicitly stated\n\n` +
+        `2. The caller's emotional sentiment for THIS call\n` +
+        `3. Key facts about the caller — ONLY things they explicitly stated\n\n` +
         `Return ONLY valid JSON with exactly these fields:\n` +
         `{\n` +
         `  "name": "caller's first name if stated, otherwise null",\n` +
         `  "summary": "1-3 sentence summary",\n` +
+        `  "sentiment": "one of: positive | neutral | negative | frustrated | resolved",\n` +
         `  "facts": [\n` +
         `    { "key": "snake_case_key", "value": "the value", "confidence": 0.0-1.0 }\n` +
         `  ]\n` +
         `}\n\n` +
+        `Sentiment guide:\n` +
+        `- positive: caller was happy, satisfied, or grateful\n` +
+        `- neutral: routine call, no strong emotion\n` +
+        `- negative: caller was unhappy or expressed dissatisfaction\n` +
+        `- frustrated: caller was noticeably irritated or escalating\n` +
+        `- resolved: caller was frustrated but issue was resolved by end of call\n\n` +
         `Fact keys to extract (only if explicitly stated by caller):\n` +
         `name, age, gender, location, occupation, income_range, family_size, spouse_name,\n` +
         `children_count, health_conditions, medications, existing_policies, policy_interest,\n` +
@@ -429,7 +507,7 @@ async function runLLMExtraction(opts: {
         `- Be concise with values (e.g. "4" not "a family of four people")\n\n` +
         `Transcript:\n${transcript.slice(0, 8000)}`,
     }],
-    "You extract caller profile information from voice call transcripts. Return only a JSON object with 'name' (string|null), 'summary' (string), and 'facts' (array of {key,value,confidence}). Be conservative and factual.",
+    "You extract caller profile information from voice call transcripts. Return only a JSON object with 'name' (string|null), 'summary' (string), 'sentiment' (string), and 'facts' (array of {key,value,confidence}). Be conservative and factual.",
     () => {},
     (full) => { raw = full; },
   );
@@ -441,6 +519,131 @@ async function runLLMExtraction(opts: {
     .trim();
 
   return JSON.parse(jsonStr) as ExtractedLLMResult;
+}
+
+// ── Predict caller's next intent + risk score (async, post-archive) ───────────
+
+async function predictCallerIntent(opts: {
+  agentId: number;
+  phoneNumber: string;
+  llm: LLMAdapter;
+  callCount: number;
+}): Promise<void> {
+  const { agentId, phoneNumber, llm, callCount } = opts;
+
+  // Only predict after 2+ calls (not enough signal on first call)
+  if (callCount < 2) return;
+
+  try {
+    // Load last 5 episodes for pattern analysis
+    const episodes = await db
+      .select({
+        summary:   callerCallArchiveTable.summary,
+        sentiment: callerCallArchiveTable.sentiment,
+        createdAt: callerCallArchiveTable.createdAt,
+      })
+      .from(callerCallArchiveTable)
+      .where(and(
+        eq(callerCallArchiveTable.agentId,     agentId),
+        eq(callerCallArchiveTable.phoneNumber, phoneNumber),
+      ))
+      .orderBy(desc(callerCallArchiveTable.createdAt))
+      .limit(5);
+
+    if (episodes.length < 2) return;
+
+    const episodeLines = episodes
+      .map((e, i) => {
+        const label = daysSinceLabel(e.createdAt) ?? "—";
+        const sent = e.sentiment ? ` [${e.sentiment}]` : "";
+        return `Call ${i + 1} (${label})${sent}: ${e.summary ?? "No summary"}`;
+      })
+      .join("\n");
+
+    // Compute sentiment trend
+    const sentiments = episodes.map(e => e.sentiment).filter(Boolean) as string[];
+    const sentimentTrend = computeSentimentTrend(sentiments);
+
+    // Risk score heuristic (elevated call frequency + negative sentiment)
+    const negativeCount = sentiments.filter(s => s === "frustrated" || s === "negative").length;
+    const rawRisk = Math.min(1.0, (negativeCount / Math.max(sentiments.length, 1)) * 1.2);
+
+    let raw = "";
+    await llm.chat(
+      [{
+        role: "user",
+        content:
+          `Based on this caller's history, predict their likely intent for their NEXT call.\n\n` +
+          `Call history (most recent first):\n${episodeLines}\n\n` +
+          `Return ONLY valid JSON:\n` +
+          `{\n` +
+          `  "predictedIntent": "1 short sentence describing the most likely reason for their next call",\n` +
+          `  "riskScore": 0.0\n` +
+          `}\n\n` +
+          `riskScore guide: 0.0 = no risk, 1.0 = high churn/escalation risk.\n` +
+          `Consider: negative sentiment trend, unresolved issues, high call frequency as risk signals.\n` +
+          `Return ONLY the JSON object, no other text.`,
+      }],
+      "You are a customer behaviour analyst. Predict caller intent and risk from call history. Return only a JSON object.",
+      () => {},
+      (full) => { raw = full; },
+    );
+
+    const jsonStr = raw
+      .replace(/<think>[\s\S]*?<\/think>/g, "")
+      .replace(/```(?:json)?\s*/g, "")
+      .replace(/\s*```\s*/g, "")
+      .trim();
+
+    const parsed = JSON.parse(jsonStr) as { predictedIntent?: string; riskScore?: number };
+    const predictedIntent = parsed.predictedIntent?.slice(0, 256) ?? null;
+    const riskScore = typeof parsed.riskScore === "number"
+      ? Math.min(1, Math.max(0, (parsed.riskScore + rawRisk) / 2))
+      : rawRisk;
+
+    await db
+      .update(callerProfilesTable)
+      .set({ predictedIntent, riskScore, sentimentTrend, updatedAt: new Date() })
+      .where(and(
+        eq(callerProfilesTable.agentId,     agentId),
+        eq(callerProfilesTable.phoneNumber, phoneNumber),
+      ));
+
+    logger.info({ agentId, phoneNumber, predictedIntent, riskScore, sentimentTrend }, "Caller intent + risk predicted");
+  } catch (err) {
+    logger.warn({ err, agentId, phoneNumber }, "predictCallerIntent failed (non-fatal)");
+  }
+}
+
+// ── Sentiment trend computation ───────────────────────────────────────────────
+
+function computeSentimentTrend(sentiments: string[]): string {
+  if (sentiments.length === 0) return "unknown";
+
+  const score = (s: string) => {
+    if (s === "positive" || s === "resolved") return 1;
+    if (s === "neutral") return 0;
+    if (s === "negative") return -1;
+    if (s === "frustrated") return -2;
+    return 0;
+  };
+
+  const scores = sentiments.map(score);
+  const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+
+  if (scores.length >= 2) {
+    const recent = scores.slice(0, Math.min(3, scores.length));
+    const older  = scores.slice(Math.min(3, scores.length));
+    const recentAvg = recent.reduce((a, b) => a + b, 0) / recent.length;
+    const olderAvg  = older.length > 0 ? older.reduce((a, b) => a + b, 0) / older.length : recentAvg;
+
+    if (recentAvg > olderAvg + 0.3)  return "improving";
+    if (recentAvg < olderAvg - 0.3)  return "declining";
+  }
+
+  if (avg >= 0.7)  return "stable_positive";
+  if (avg <= -0.7) return "stable_negative";
+  return "mixed";
 }
 
 // ── updateCallerProfile — enhanced with graph edges ───────────────────────────
@@ -502,6 +705,7 @@ export async function updateCallerProfile(opts: {
     summary:         null,
     durationSeconds: durationSeconds ?? null,
     factsExtracted:  false,
+    sentiment:       null,  // filled in Phase 3 after LLM extraction
     sentences:       parsedSentences,
   });
 
@@ -581,13 +785,14 @@ export async function updateCallerProfile(opts: {
     logger.info({ agentId, phoneNumber, callId, factCount: newFactIds.length }, "Caller facts saved (with supersession)");
   }
 
-  // ── Phase 3b: update episode summary + write insight_facts edges (L1 → L0) ─
+  // ── Phase 3b: update episode summary + sentiment + insight_facts edges ───
   if (archiveId) {
     try {
       await db
         .update(callerCallArchiveTable)
         .set({
           summary:        extracted.summary ?? null,
+          sentiment:      extracted.sentiment ?? null,
           factsExtracted: newFactIds.length > 0,
         })
         .where(eq(callerCallArchiveTable.id, archiveId));
@@ -617,6 +822,11 @@ export async function updateCallerProfile(opts: {
   } catch (dbErr) {
     logger.warn({ agentId, phoneNumber, callId, dbErr }, "Caller profile summary DB write failed");
   }
+
+  // ── Phase 4: async intent prediction + risk scoring (fire-and-forget) ────
+  predictCallerIntent({ agentId, phoneNumber, llm, callCount: newCount }).catch(
+    (err) => logger.warn({ err, agentId, phoneNumber }, "predictCallerIntent fire-and-forget failed"),
+  );
 }
 
 // ── Real-time name latch (unchanged) ──────────────────────────────────────────

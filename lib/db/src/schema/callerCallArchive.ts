@@ -17,6 +17,7 @@ export const callerCallArchiveTable = pgTable("caller_call_archive", {
   summary:         text("summary"),
   durationSeconds: integer("duration_seconds"),
   factsExtracted:  boolean("facts_extracted").default(false).notNull(),
+  sentiment:       text("sentiment"),  // "positive" | "neutral" | "negative" | "frustrated" | "resolved"
   createdAt:       timestamp("created_at").defaultNow().notNull(),
 }, (t) => [
   index("caller_call_archive_lookup_idx").on(t.agentId, t.phoneNumber),

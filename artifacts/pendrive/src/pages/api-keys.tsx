@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Key, Copy, Check, Trash2, Plus, AlertCircle } from "lucide-react";
+import { Key, Copy, Check, Trash2, Plus, AlertCircle, Webhook, Zap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -85,6 +85,8 @@ export default function ApiKeys() {
       setNewKeyName("");
     }, 200);
   };
+
+  const webhookUrl = `${window.location.origin.replace(/\/pendrive.*/, "")}/api/pendrive/webhook`;
 
   return (
     <div className="space-y-6">
@@ -166,6 +168,33 @@ export default function ApiKeys() {
           </DialogContent>
         </Dialog>
       </div>
+
+      <Card className="border-primary/20 bg-primary/5">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <Webhook className="h-5 w-5 text-primary" />
+            <CardTitle className="text-base">Universal Webhook</CardTitle>
+          </div>
+          <CardDescription>
+            Point any voice platform (VAPI, Retell, Bolna) to this URL. Pendrive auto-injects memory on call start and archives transcripts on call end — zero agent config changes needed.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center gap-2">
+            <code className="flex-1 rounded bg-background/60 px-3 py-2 text-xs font-mono text-foreground border border-border/50 truncate">
+              POST {webhookUrl}
+            </code>
+            <Button variant="outline" size="sm" className="shrink-0" onClick={() => { navigator.clipboard.writeText(webhookUrl); }}>
+              <Copy className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+          <div className="grid grid-cols-3 gap-3 text-xs text-muted-foreground">
+            <div className="flex items-center gap-1.5"><Zap className="h-3.5 w-3.5 text-yellow-500" /><span>Auth: <code className="text-foreground">Authorization: Bearer pd_live_...</code></span></div>
+            <div className="flex items-center gap-1.5"><Zap className="h-3.5 w-3.5 text-blue-500" /><span>call.started → returns memory block</span></div>
+            <div className="flex items-center gap-1.5"><Zap className="h-3.5 w-3.5 text-green-500" /><span>call.ended → archives transcript async</span></div>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card className="bg-card/50">
         <Table>
