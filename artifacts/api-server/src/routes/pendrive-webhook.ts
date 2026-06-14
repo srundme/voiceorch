@@ -315,6 +315,10 @@ const TEST_MODE_USER_ID = "test-user";
 
 router.post("/pendrive/webhook", async (req: Request, res: Response): Promise<void> => {
   const { userId } = { userId: TEST_MODE_USER_ID };
+
+  // DEBUG: log raw Bolna payload (remove once Bolna integration is confirmed working)
+  logger.info({ body: JSON.stringify(req.body).slice(0, 2000) }, "Pendrive webhook: raw payload received");
+
   const event = parseEvent(req.body);
 
   if (event.type === "unknown") {
