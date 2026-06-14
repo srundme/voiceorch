@@ -399,16 +399,9 @@ router.post("/pendrive/webhook", async (req: Request, res: Response): Promise<vo
 
       logger.info({ agentId, phone: event.phoneNumber, platform: event.platform, callCount: ctx.profile?.callCount ?? 0 }, "Pendrive webhook: call.started — memory served");
 
-      // Auto-push memory into Bolna agent system prompt if configured (fire-and-forget)
-      if (memoryBlock.trim()) {
-        getBolnaConfig(userId).then(bolna => {
-          if (bolna) {
-            pushMemoryToBolnaAgent(bolna.apiKey, bolna.agentId, memoryBlock).catch(err => {
-              logger.warn({ err }, "Pendrive: Bolna auto-inject failed (non-blocking)");
-            });
-          }
-        }).catch(() => {});
-      }
+      // NOTE: We do NOT push to Bolna here — Bolna has already loaded the system prompt
+      // before firing call.started. The push happens at call.ended (after LLM extraction)
+      // so the NEXT call always starts with fresh memory.
 
       res.json(formatStartedResponse(event.platform, memoryBlock, callerName));
     } catch (err) {
@@ -465,6 +458,24 @@ router.post("/pendrive/webhook", async (req: Request, res: Response): Promise<vo
       });
 
       logger.info({ agentId, phone: event.phoneNumber, platform: event.platform }, "Pendrive webhook: call.ended — archive complete");
+
+      // Push updated memory into Bolna agent system prompt so the NEXT call starts with it
+      // We do this AFTER extraction so the freshest facts are included
+      if (event.platform === "bolna") {
+        try {
+          const bolna = await getBolnaConfig(userId);
+          if (bolna) {
+            const updatedCtx = await loadCallerContext(agentId, event.phoneNumber!);
+            const updatedMemory = injectEnhancedMemory("", updatedCtx).split("\n\n")[0] ?? "";
+            if (updatedMemory.trim()) {
+              await pushMemoryToBolnaAgent(bolna.apiKey, bolna.agentId, updatedMemory);
+              logger.info({ agentId, phone: event.phoneNumber, bolnaAgentId: bolna.agentId }, "Pendrive: memory pushed to Bolna agent for next call");
+            }
+          }
+        } catch (err) {
+          logger.warn({ err }, "Pendrive: Bolna post-call memory push failed (non-blocking)");
+        }
+      }
     } catch (err) {
       logger.error({ err, agentId, phone: event.phoneNumber }, "Pendrive webhook: background archive failed");
     }
