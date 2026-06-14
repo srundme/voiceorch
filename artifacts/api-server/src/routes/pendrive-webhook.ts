@@ -38,7 +38,7 @@ const router: IRouter = Router();
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Platform = "vapi" | "retell" | "generic";
+type Platform = "vapi" | "retell" | "bolna" | "generic";
 
 interface ParsedEvent {
   type: "call.started" | "call.ended" | "unknown";
@@ -125,9 +125,9 @@ function parseEvent(body: any): ParsedEvent {
     const duration = body?.conversation_duration ?? null;
 
     if (!transcript || (typeof duration === "number" && duration === 0)) {
-      return { type: "call.started", phoneNumber: phone, agentId, transcript: null, durationSeconds: null, platform: "generic" };
+      return { type: "call.started", phoneNumber: phone, agentId, transcript: null, durationSeconds: null, platform: "bolna" };
     }
-    return { type: "call.ended", phoneNumber: phone, agentId, transcript, durationSeconds: duration, platform: "generic" };
+    return { type: "call.ended", phoneNumber: phone, agentId, transcript, durationSeconds: duration, platform: "bolna" };
   }
 
   // ── Generic / Bolna legacy ──
