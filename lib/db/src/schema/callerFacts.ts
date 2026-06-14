@@ -11,22 +11,21 @@ import { agentsTable } from "./agents";
  *   "Current" facts are those WHERE superseded_by_id IS NULL.
  *
  * Provenance via fact_sources:
- *   source_sentence_ids tracks which L2 sentence nodes produced this fact.
  *   source_call_id is the call from which the fact was extracted.
+ *   Which specific L2 sentences produced this fact is tracked in the
+ *   caller_fact_sentence_links junction table (fact_sources edges).
  */
 export const callerFactsTable = pgTable("caller_facts", {
-  id:                serial("id").primaryKey(),
-  agentId:           integer("agent_id").references(() => agentsTable.id, { onDelete: "cascade" }).notNull(),
-  phoneNumber:       text("phone_number").notNull(),
-  key:               text("key").notNull(),
-  value:             text("value").notNull(),
-  confidence:        real("confidence").notNull().default(1.0),
-  sourceCallId:      integer("source_call_id"),
-  /** Comma-separated caller_sentences.id values — fact_sources provenance (L0→L2) */
-  sourceSentenceIds: text("source_sentence_ids").notNull().default(""),
+  id:             serial("id").primaryKey(),
+  agentId:        integer("agent_id").references(() => agentsTable.id, { onDelete: "cascade" }).notNull(),
+  phoneNumber:    text("phone_number").notNull(),
+  key:            text("key").notNull(),
+  value:          text("value").notNull(),
+  confidence:     real("confidence").notNull().default(1.0),
+  sourceCallId:   integer("source_call_id"),
   /** FK → caller_facts.id — superseded_by edge for conflict resolution */
-  supersededById:    integer("superseded_by_id").references((): AnyPgColumn => callerFactsTable.id),
-  createdAt:         timestamp("created_at").defaultNow().notNull(),
+  supersededById: integer("superseded_by_id").references((): AnyPgColumn => callerFactsTable.id),
+  createdAt:      timestamp("created_at").defaultNow().notNull(),
 }, (t) => [
   index("caller_facts_lookup_idx").on(t.agentId, t.phoneNumber),
   index("caller_facts_key_idx").on(t.agentId, t.phoneNumber, t.key),

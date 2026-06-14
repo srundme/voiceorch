@@ -29,6 +29,8 @@ import {
   callerFactsTable,
   callerCallArchiveTable,
   callerSentencesTable,
+  callerFactSentenceLinksTable,
+  callerEpisodeFactLinksTable,
 } from "@workspace/db";
 import { and, eq, desc, isNull, inArray, sql } from "drizzle-orm";
 import type { ConversationTurn } from "./types.js";
@@ -101,10 +103,6 @@ function daysSinceLabel(d: Date | null): string | null {
   return `${Math.floor(days / 365)} year${Math.floor(days / 365) > 1 ? "s" : ""} ago`;
 }
 
-function parseSentenceIds(raw: string): number[] {
-  return raw.split(",").map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
-}
-
 // ── Layer 1 compat: load just the profile row ─────────────────────────────────
 
 export async function loadCallerProfile(
@@ -165,7 +163,7 @@ export async function loadCallerContext(
       value:             r.value,
       confidence:        r.confidence,
       sourceCallId:      r.sourceCallId,
-      sourceSentenceIds: parseSentenceIds(r.sourceSentenceIds),
+      sourceSentenceIds: [],  // fetched via junction table in detail endpoints only
       supersededById:    r.supersededById,
       createdAt:         r.createdAt,
     })),
@@ -302,10 +300,9 @@ async function supersedeFact(opts: {
         agentId,
         phoneNumber,
         key,
-        value:             value.slice(0, 512),
-        confidence:        Math.min(1, Math.max(0, confidence)),
+        value:        value.slice(0, 512),
+        confidence:   Math.min(1, Math.max(0, confidence)),
         sourceCallId,
-        sourceSentenceIds: sourceSentenceIds.join(","),
       })
       .returning({ id: callerFactsTable.id });
 
@@ -317,6 +314,13 @@ async function supersedeFact(opts: {
         .update(callerFactsTable)
         .set({ supersededById: newRow.id })
         .where(eq(callerFactsTable.id, existing.id));
+    }
+
+    // Write fact_sources edges (L0 → L2) via junction table
+    if (sourceSentenceIds.length > 0) {
+      await db.insert(callerFactSentenceLinksTable).values(
+        sourceSentenceIds.map(sid => ({ factId: newRow.id, sentenceId: sid })),
+      );
     }
 
     return newRow.id;
@@ -349,7 +353,6 @@ export async function archiveCall(opts: {
         summary:         opts.summary,
         durationSeconds: opts.durationSeconds,
         factsExtracted:  opts.factsExtracted ?? false,
-        insightFactIds:  "",
       })
       .returning({ id: callerCallArchiveTable.id });
 
@@ -525,7 +528,7 @@ export async function updateCallerProfile(opts: {
       value:             r.value,
       confidence:        r.confidence,
       sourceCallId:      r.sourceCallId,
-      sourceSentenceIds: parseSentenceIds(r.sourceSentenceIds),
+      sourceSentenceIds: [],  // not needed for LLM prompt injection
       supersededById:    r.supersededById,
       createdAt:         r.createdAt,
     }));
@@ -578,7 +581,7 @@ export async function updateCallerProfile(opts: {
     logger.info({ agentId, phoneNumber, callId, factCount: newFactIds.length }, "Caller facts saved (with supersession)");
   }
 
-  // ── Phase 3b: update episode with summary + insight_fact_ids ─────────────
+  // ── Phase 3b: update episode summary + write insight_facts edges (L1 → L0) ─
   if (archiveId) {
     try {
       await db
@@ -586,9 +589,15 @@ export async function updateCallerProfile(opts: {
         .set({
           summary:        extracted.summary ?? null,
           factsExtracted: newFactIds.length > 0,
-          insightFactIds: newFactIds.join(","),
         })
         .where(eq(callerCallArchiveTable.id, archiveId));
+
+      // Insert insight_facts edges via junction table
+      if (newFactIds.length > 0) {
+        await db.insert(callerEpisodeFactLinksTable).values(
+          newFactIds.map(fid => ({ episodeId: archiveId, factId: fid })),
+        );
+      }
     } catch { /* non-fatal */ }
   }
 

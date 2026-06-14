@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, count, desc, isNull, inArray } from "drizzle-orm";
-import { db, agentsTable, schedulingCalendarsTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callerSentencesTable } from "@workspace/db";
+import { db, agentsTable, schedulingCalendarsTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callerSentencesTable, callerFactSentenceLinksTable, callerEpisodeFactLinksTable } from "@workspace/db";
 import {
   CreateAgentBody,
   UpdateAgentBody,
@@ -255,7 +255,7 @@ router.get("/agents/:id/caller-memory/:phone", requireAuth, async (req, res): Pr
     .where(and(eq(agentsTable.id, agentId), eq(agentsTable.userId, clerkId)));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
 
-  // Fetch all fact rows (current + superseded) to build chains
+  // Fetch all fact rows (current + superseded) to build chains, and episodes
   const [allFacts, allEpisodes] = await Promise.all([
     db.select().from(callerFactsTable)
       .where(and(eq(callerFactsTable.agentId, agentId), eq(callerFactsTable.phoneNumber, phoneNumber)))
@@ -266,7 +266,51 @@ router.get("/agents/:id/caller-memory/:phone", requireAuth, async (req, res): Pr
       .limit(20),
   ]);
 
-  // Build supersession chains: predecessorMap[targetId] = facts that were superseded by targetId
+  const allFactIds  = allFacts.map(f => f.id);
+  const episodeIds  = allEpisodes.map(e => e.id);
+
+  // Kick off all three queries in parallel (launch before any await)
+  const sentencesP = episodeIds.length > 0
+    ? db.select().from(callerSentencesTable)
+        .where(inArray(callerSentencesTable.episodeId, episodeIds))
+        .orderBy(callerSentencesTable.episodeId, callerSentencesTable.sequenceNum)
+    : null;
+
+  const [factSentenceLinks, episodeFactLinks] = await Promise.all([
+    allFactIds.length > 0
+      ? db.select({ factId: callerFactSentenceLinksTable.factId, sentenceId: callerFactSentenceLinksTable.sentenceId })
+          .from(callerFactSentenceLinksTable)
+          .where(inArray(callerFactSentenceLinksTable.factId, allFactIds))
+      : Promise.resolve([] as Array<{ factId: number; sentenceId: number }>),
+    episodeIds.length > 0
+      ? db.select({ episodeId: callerEpisodeFactLinksTable.episodeId, factId: callerEpisodeFactLinksTable.factId })
+          .from(callerEpisodeFactLinksTable)
+          .where(inArray(callerEpisodeFactLinksTable.episodeId, episodeIds))
+      : Promise.resolve([] as Array<{ episodeId: number; factId: number }>),
+  ]);
+
+  const sentences = sentencesP ? await sentencesP : [];
+
+  // Build lookup maps from junction tables
+  const sentenceIdsByFact = new Map<number, number[]>();
+  for (const link of factSentenceLinks) {
+    if (!sentenceIdsByFact.has(link.factId)) sentenceIdsByFact.set(link.factId, []);
+    sentenceIdsByFact.get(link.factId)!.push(link.sentenceId);
+  }
+
+  const factIdsByEpisode = new Map<number, number[]>();
+  for (const link of episodeFactLinks) {
+    if (!factIdsByEpisode.has(link.episodeId)) factIdsByEpisode.set(link.episodeId, []);
+    factIdsByEpisode.get(link.episodeId)!.push(link.factId);
+  }
+
+  const sentencesByEpisode = new Map<number, typeof sentences>();
+  for (const s of sentences) {
+    if (!sentencesByEpisode.has(s.episodeId)) sentencesByEpisode.set(s.episodeId, []);
+    sentencesByEpisode.get(s.episodeId)!.push(s);
+  }
+
+  // Build supersession chains: predecessorMap[targetId] = facts superseded by targetId
   const predecessorMap = new Map<number, typeof allFacts>();
   for (const f of allFacts) {
     if (f.supersededById !== null) {
@@ -282,10 +326,7 @@ router.get("/agents/:id/caller-memory/:phone", requireAuth, async (req, res): Pr
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   }
 
-  const parseSentenceIds = (raw: string) =>
-    raw.split(",").map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
-
-  // Current facts (non-superseded) with their history chains
+  // Current (non-superseded) facts with history chains + fact_sources from junction table
   const currentFacts = allFacts
     .filter(f => f.supersededById === null)
     .map(f => ({
@@ -294,32 +335,19 @@ router.get("/agents/:id/caller-memory/:phone", requireAuth, async (req, res): Pr
       value:             f.value,
       confidence:        f.confidence,
       sourceCallId:      f.sourceCallId,
-      sourceSentenceIds: parseSentenceIds(f.sourceSentenceIds),
+      sourceSentenceIds: sentenceIdsByFact.get(f.id) ?? [],
       createdAt:         f.createdAt,
       history:           buildHistory(f.id),
     }));
 
-  // Fetch L2 sentences for all episodes
-  const episodeIds = allEpisodes.map(e => e.id);
-  const sentences = episodeIds.length > 0
-    ? await db.select().from(callerSentencesTable)
-        .where(inArray(callerSentencesTable.episodeId, episodeIds))
-        .orderBy(callerSentencesTable.episodeId, callerSentencesTable.sequenceNum)
-    : [];
-
-  const sentencesByEpisode = new Map<number, typeof sentences>();
-  for (const s of sentences) {
-    if (!sentencesByEpisode.has(s.episodeId)) sentencesByEpisode.set(s.episodeId, []);
-    sentencesByEpisode.get(s.episodeId)!.push(s);
-  }
-
+  // Episodes with insight_facts from junction table + L2 sentences
   const episodes = allEpisodes.map(ep => ({
     id:              ep.id,
     callId:          ep.callId,
     summary:         ep.summary,
     durationSeconds: ep.durationSeconds,
     createdAt:       ep.createdAt,
-    insightFactIds:  parseSentenceIds(ep.insightFactIds),  // reuse parser — same format
+    insightFactIds:  factIdsByEpisode.get(ep.id) ?? [],
     sentences:       (sentencesByEpisode.get(ep.id) ?? []).map(s => ({
       id:          s.id,
       sequenceNum: s.sequenceNum,
