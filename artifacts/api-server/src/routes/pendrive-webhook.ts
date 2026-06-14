@@ -339,6 +339,16 @@ function formatStartedResponse(platform: Platform, memoryBlock: string, callerNa
         caller_name: callerName,
       };
 
+    case "bolna":
+      // Bolna supports %(variable)s template substitution in system prompts.
+      // Returning `variables` here causes Bolna to substitute %(caller_memory)s
+      // in the agent's system prompt for THIS session only — no cross-caller bleed.
+      return {
+        variables: { caller_memory: memoryBlock },
+        memory: memoryBlock,
+        callerName,
+      };
+
     default:
       return {
         memory: memoryBlock,
@@ -401,20 +411,13 @@ router.post("/pendrive/webhook", async (req: Request, res: Response): Promise<vo
 
       logger.info({ agentId, phone: event.phoneNumber, platform: event.platform, callCount: ctx.profile?.callCount ?? 0 }, "Pendrive webhook: call.started — memory served");
 
-      // Push THIS caller's memory SYNCHRONOUSLY before responding to Bolna.
-      // Bolna waits for our webhook response before loading the LLM context,
-      // so by holding the response until the push completes, the memory is
-      // guaranteed to be in the system prompt before the first LLM turn.
+      // For Bolna: memory is injected via %(caller_memory)s template variable in the
+      // agent system prompt. We return { variables: { caller_memory } } in the response
+      // and Bolna substitutes it at session start — correct per-caller, zero cross-bleed.
+      // (The old sync-PUT approach updated the DB but Bolna had already cached the prompt
+      // in-memory at session initialization, so it never took effect for the current call.)
       if (event.platform === "bolna") {
-        try {
-          const bolna = await getBolnaConfig(userId);
-          if (bolna) {
-            await pushMemoryToBolnaAgent(bolna.apiKey, bolna.agentId, memoryBlock);
-            logger.info({ agentId, phone: event.phoneNumber, hasMemory: !!memoryBlock.trim() }, "Pendrive: caller memory injected (sync) ✓");
-          }
-        } catch (err) {
-          logger.warn({ err }, "Pendrive: Bolna sync inject failed — continuing");
-        }
+        logger.info({ agentId, phone: event.phoneNumber, hasMemory: !!memoryBlock.trim(), callerName }, "Pendrive: Bolna caller memory ready — returning via variables");
       }
 
       res.json(formatStartedResponse(event.platform, memoryBlock, callerName));
