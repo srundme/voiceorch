@@ -210,41 +210,28 @@ async function pushMemoryToBolnaAgent(apiKey: string, agentId: string, memoryBlo
   }
   const agent = await getRes.json() as any;
 
-  // DEBUG: log all top-level keys + prompt-related fields so we know exactly what Bolna returns
-  logger.info({
-    agentId,
-    topLevelKeys: Object.keys(agent ?? {}),
-    agent_config_keys: Object.keys(agent?.agent_config ?? {}),
-    agent_prompts_keys: Object.keys(agent?.agent_prompts ?? {}),
-    agent_task_snippet: (agent?.agent_config?.agent_task ?? "").slice(0, 120),
-    task_description_snippet: (agent?.agent_prompts?.task_description ?? "").slice(0, 120),
-  }, "Bolna: GET agent structure");
-
-  // 2. Find the system prompt field (Bolna uses agent_config.agent_task)
-  const currentPrompt: string =
-    agent?.agent_config?.agent_task ??
-    agent?.agent_prompts?.task_description ??
-    "";
+  // 2. Bolna GET returns: agent_prompts.task_1.system_prompt (the real system prompt)
+  //    Bolna PUT expects: { agent_config: { agent_name, tasks, agent_task } }
+  const currentPrompt: string = agent?.agent_prompts?.task_1?.system_prompt ?? "";
 
   // 3. Strip previous Pendrive block if present, append fresh one
   const stripped = currentPrompt
     .replace(new RegExp(`${PENDRIVE_MARKER_START}[\\s\\S]*?${PENDRIVE_MARKER_END}`, "g"), "")
     .trimEnd();
 
-  const newPrompt = stripped +
+  const newPrompt = stripped + "\n\n" +
     PENDRIVE_MARKER_START + "\n" +
     memoryBlock + "\n" +
     PENDRIVE_MARKER_END;
 
-  // 4. Patch the agent — try common field locations
-  const patch: any = { ...agent };
-  if (patch?.agent_config?.agent_task !== undefined) {
-    patch.agent_config = { ...patch.agent_config, agent_task: newPrompt };
-  } else if (patch?.agent_prompts?.task_description !== undefined) {
-    patch.agent_prompts = { ...patch.agent_prompts, task_description: newPrompt };
-  } else {
-    patch.agent_config = { ...(patch.agent_config ?? {}), agent_task: newPrompt };
-  }
+  // 4. PUT uses a different shape from GET: wrap in agent_config
+  const putBody = {
+    agent_config: {
+      agent_name: agent.agent_name,
+      tasks:      agent.tasks,
+      agent_task: newPrompt,
+    },
+  };
 
   const putRes = await fetch(`${base}/agent/${agentId}`, {
     method: "PUT",
@@ -252,14 +239,14 @@ async function pushMemoryToBolnaAgent(apiKey: string, agentId: string, memoryBlo
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(patch),
+    body: JSON.stringify(putBody),
   });
 
   if (!putRes.ok) {
     const body = await putRes.text().catch(() => "");
-    logger.warn({ agentId, status: putRes.status, body }, "Bolna: PUT agent failed");
+    logger.warn({ agentId, status: putRes.status, body: body.slice(0, 300) }, "Bolna: PUT agent failed");
   } else {
-    logger.info({ agentId }, "Bolna: memory injected into agent system prompt");
+    logger.info({ agentId, promptSnippet: newPrompt.slice(0, 80) }, "Bolna: memory injected into agent system prompt ✓");
   }
 }
 
