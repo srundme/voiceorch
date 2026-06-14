@@ -399,9 +399,22 @@ router.post("/pendrive/webhook", async (req: Request, res: Response): Promise<vo
 
       logger.info({ agentId, phone: event.phoneNumber, platform: event.platform, callCount: ctx.profile?.callCount ?? 0 }, "Pendrive webhook: call.started — memory served");
 
-      // NOTE: We do NOT push to Bolna here — Bolna has already loaded the system prompt
-      // before firing call.started. The push happens at call.ended (after LLM extraction)
-      // so the NEXT call always starts with fresh memory.
+      // Push THIS caller's memory to Bolna immediately (fire-and-forget).
+      // Always push even for unknown callers — an empty block clears any stale
+      // memory from the previous call so unknown callers don't get a wrong name.
+      // Bolna plays a static welcome message first; the first LLM turn happens only after
+      // the caller speaks — so this injection lands in time for the real conversation.
+      if (event.platform === "bolna") {
+        getBolnaConfig(userId).then(bolna => {
+          if (bolna) {
+            pushMemoryToBolnaAgent(bolna.apiKey, bolna.agentId, memoryBlock).then(() => {
+              logger.info({ agentId, phone: event.phoneNumber, hasMemory: !!memoryBlock.trim() }, "Pendrive: caller memory injected on call.started ✓");
+            }).catch(err => {
+              logger.warn({ err }, "Pendrive: Bolna call.started inject failed (non-blocking)");
+            });
+          }
+        }).catch(() => {});
+      }
 
       res.json(formatStartedResponse(event.platform, memoryBlock, callerName));
     } catch (err) {
