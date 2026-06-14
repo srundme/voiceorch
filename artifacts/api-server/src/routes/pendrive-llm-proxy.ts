@@ -48,6 +48,32 @@ const PHONE_TAG_RE         = /<!--\s*pendrive:phone:([\+\d]+)\s*-->/i;
 // Fallback: any E.164-ish number already substituted in system message
 const E164_INLINE_RE       = /(?:caller[:\s]+|phone[:\s]+|number[:\s]+)(\+\d{7,15})/i;
 
+// ── In-memory caches (avoid repeat DB hits on every LLM turn) ─────────────────
+//
+// A voice call typically produces 10-30 LLM turns.  Without caching every turn
+// would pay ~20-40 ms in sequential DB lookups before the fetch to the real LLM
+// even starts.  With caches the hot path is pure in-process hash-map lookups.
+//
+//   authCache   — api-key-hash → userId,  5 min TTL
+//   configCache — userId       → config,  60 s TTL  (busted on PUT/DELETE)
+//   agentCache  — userId       → agentId, 5 min TTL
+
+interface CacheEntry<T> { value: T; expiresAt: number; }
+
+const authCache:   Map<string, CacheEntry<string>> = new Map();
+const configCache: Map<string, CacheEntry<LlmProxyConfig | null>> = new Map();
+const agentCache:  Map<string, CacheEntry<number | null>> = new Map();
+
+function cacheGet<T>(map: Map<string, CacheEntry<T>>, key: string): T | undefined {
+  const e = map.get(key);
+  if (!e) return undefined;
+  if (Date.now() > e.expiresAt) { map.delete(key); return undefined; }
+  return e.value;
+}
+function cacheSet<T>(map: Map<string, CacheEntry<T>>, key: string, value: T, ttlMs: number): void {
+  map.set(key, { value, expiresAt: Date.now() + ttlMs });
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface LlmProxyConfig {
@@ -69,24 +95,22 @@ async function resolveUser(req: Request): Promise<string | null> {
   const raw  = auth.replace(/^bearer\s+/i, "").trim();
 
   if (!raw || !raw.startsWith("pd_live_")) {
-    // No Pendrive key — fall through to test-mode (same pattern as webhook)
     return TEST_MODE_USER_ID;
   }
 
-  const hash = createHash("sha256").update(raw).digest("hex");
+  const hash   = createHash("sha256").update(raw).digest("hex");
+  const cached = cacheGet(authCache, hash);
+  if (cached !== undefined) return cached;
+
   const [row] = await db
     .select({ userId: userApiKeysTable.userId })
     .from(userApiKeysTable)
-    .where(
-      and(
-        eq(userApiKeysTable.keyHash, hash),
-        isNull(userApiKeysTable.revokedAt),
-      ),
-    );
+    .where(and(eq(userApiKeysTable.keyHash, hash), isNull(userApiKeysTable.revokedAt)));
 
   if (!row) return null;
 
-  // Touch lastUsedAt without blocking the request
+  cacheSet(authCache, hash, row.userId, 5 * 60_000);
+
   db.update(userApiKeysTable)
     .set({ lastUsedAt: new Date() })
     .where(eq(userApiKeysTable.keyHash, hash))
@@ -98,12 +122,16 @@ async function resolveUser(req: Request): Promise<string | null> {
 // ── Config helpers ────────────────────────────────────────────────────────────
 
 async function getLlmProxyConfig(userId: string): Promise<LlmProxyConfig | null> {
+  const cached = cacheGet(configCache, userId);
+  if (cached !== undefined) return cached;
+
   const [row] = await db
     .select({ value: platformSettingsTable.value })
     .from(platformSettingsTable)
     .where(eq(platformSettingsTable.key, CONFIG_KEY_PREFIX + userId));
-  if (!row?.value) return null;
-  try { return JSON.parse(row.value) as LlmProxyConfig; } catch { return null; }
+  const result = row?.value ? (() => { try { return JSON.parse(row.value) as LlmProxyConfig; } catch { return null; } })() : null;
+  cacheSet(configCache, userId, result, 60_000);
+  return result;
 }
 
 async function setLlmProxyConfig(userId: string, cfg: LlmProxyConfig): Promise<void> {
@@ -112,21 +140,28 @@ async function setLlmProxyConfig(userId: string, cfg: LlmProxyConfig): Promise<v
     .insert(platformSettingsTable)
     .values({ key, value: JSON.stringify(cfg) })
     .onConflictDoUpdate({ target: platformSettingsTable.key, set: { value: JSON.stringify(cfg) } });
+  cacheSet(configCache, userId, cfg, 60_000);
 }
 
 async function deleteLlmProxyConfig(userId: string): Promise<void> {
   await db.delete(platformSettingsTable)
     .where(eq(platformSettingsTable.key, CONFIG_KEY_PREFIX + userId));
+  configCache.delete(userId);
 }
 
 // ── Agent resolution ─────────────────────────────────────────────────────────
 
 async function resolveAgentId(userId: string): Promise<number | null> {
+  const cached = cacheGet(agentCache, userId);
+  if (cached !== undefined) return cached;
+
   const [row] = await db
     .select({ id: agentsTable.id })
     .from(agentsTable)
     .where(eq(agentsTable.userId, userId));
-  return row?.id ?? null;
+  const result = row?.id ?? null;
+  cacheSet(agentCache, userId, result, 5 * 60_000);
+  return result;
 }
 
 // ── Phone extraction ─────────────────────────────────────────────────────────
