@@ -334,8 +334,16 @@ router.get("/pendrive/context", async (req, res): Promise<void> => {
   if (!qp.success) { res.status(400).json({ error: "agentId and phoneNumber are required" }); return; }
   const { agentId, phoneNumber } = qp.data;
 
-  // Verify agent belongs to user (skip ownership check for test-user)
-  if (userId !== "test-user") {
+  // For test-user: auto-resolve the real agentId from the DB (frontend may send any value)
+  let resolvedAgentId = agentId;
+  if (userId === "test-user") {
+    const profile = await db
+      .select({ agentId: callerProfilesTable.agentId })
+      .from(callerProfilesTable)
+      .where(eq(callerProfilesTable.phoneNumber, phoneNumber))
+      .limit(1);
+    if (profile[0]) resolvedAgentId = profile[0].agentId;
+  } else {
     const [agent] = await db
       .select({ id: agentsTable.id })
       .from(agentsTable)
@@ -343,7 +351,7 @@ router.get("/pendrive/context", async (req, res): Promise<void> => {
     if (!agent) { res.status(403).json({ error: "Agent not found or access denied" }); return; }
   }
 
-  const ctx = await loadCallerContext(agentId, phoneNumber);
+  const ctx = await loadCallerContext(resolvedAgentId, phoneNumber);
   const memoryBlock = injectEnhancedMemory("", ctx).replace(/\n\n$/, "");
 
   res.json({
