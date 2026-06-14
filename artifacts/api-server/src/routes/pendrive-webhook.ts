@@ -198,7 +198,7 @@ async function fetchBolnaPhone(apiKey: string, agentId: string, executionId: str
 }
 
 async function pushMemoryToBolnaAgent(apiKey: string, agentId: string, memoryBlock: string): Promise<void> {
-  const base = "https://api.bolna.dev";
+  const base = "https://api.bolna.ai";
 
   // 1. Fetch current agent
   const getRes = await fetch(`${base}/agent/${agentId}`, {
