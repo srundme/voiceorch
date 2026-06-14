@@ -210,6 +210,16 @@ async function pushMemoryToBolnaAgent(apiKey: string, agentId: string, memoryBlo
   }
   const agent = await getRes.json() as any;
 
+  // DEBUG: log all top-level keys + prompt-related fields so we know exactly what Bolna returns
+  logger.info({
+    agentId,
+    topLevelKeys: Object.keys(agent ?? {}),
+    agent_config_keys: Object.keys(agent?.agent_config ?? {}),
+    agent_prompts_keys: Object.keys(agent?.agent_prompts ?? {}),
+    agent_task_snippet: (agent?.agent_config?.agent_task ?? "").slice(0, 120),
+    task_description_snippet: (agent?.agent_prompts?.task_description ?? "").slice(0, 120),
+  }, "Bolna: GET agent structure");
+
   // 2. Find the system prompt field (Bolna uses agent_config.agent_task)
   const currentPrompt: string =
     agent?.agent_config?.agent_task ??
