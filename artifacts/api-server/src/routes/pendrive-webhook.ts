@@ -396,7 +396,7 @@ router.post("/pendrive/webhook", async (req: Request, res: Response): Promise<vo
   if (event.type === "call.started") {
     try {
       const ctx = await loadCallerContext(agentId, event.phoneNumber);
-      const memoryBlock = injectEnhancedMemory("", ctx).split("\n\n")[0] ?? "";
+      const memoryBlock = injectEnhancedMemory("", ctx).trim();
       const callerName = ctx.profile?.name ?? ctx.facts.find(f => f.key === "name")?.value ?? null;
 
       logger.info({ agentId, phone: event.phoneNumber, platform: event.platform, callCount: ctx.profile?.callCount ?? 0 }, "Pendrive webhook: call.started — memory served");
@@ -480,7 +480,7 @@ router.post("/pendrive/webhook", async (req: Request, res: Response): Promise<vo
           const bolna = await getBolnaConfig(userId);
           if (bolna) {
             const updatedCtx = await loadCallerContext(agentId, event.phoneNumber!);
-            const updatedMemory = injectEnhancedMemory("", updatedCtx).split("\n\n")[0] ?? "";
+            const updatedMemory = injectEnhancedMemory("", updatedCtx).trim();
             if (updatedMemory.trim()) {
               await pushMemoryToBolnaAgent(bolna.apiKey, bolna.agentId, updatedMemory);
               logger.info({ agentId, phone: event.phoneNumber, bolnaAgentId: bolna.agentId }, "Pendrive: memory pushed to Bolna agent for next call");
