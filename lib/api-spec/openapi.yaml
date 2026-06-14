@@ -52,6 +52,8 @@ tags:
     description: Cross-campaign platform analytics — outcomes, funnel, sources, agents, queue
   - name: search
     description: Global search across leads, campaigns, batches, bookings, callbacks
+  - name: pendrive
+    description: Pendrive — caller memory API keys, archive, and context retrieval
 
 paths:
   /healthz:
@@ -5018,6 +5020,125 @@ paths:
               schema:
                 $ref: '#/components/schemas/GlobalSearchResponse'
 
+  # ── Pendrive ─────────────────────────────────────────────────────────────────
+  /pendrive/api-keys:
+    get:
+      operationId: listPendriveApiKeys
+      tags: [pendrive]
+      summary: List all Pendrive API keys for the current user
+      responses:
+        "200":
+          description: List of API keys
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/PendriveApiKey' }
+    post:
+      operationId: createPendriveApiKey
+      tags: [pendrive]
+      summary: Create a new Pendrive API key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PendriveApiKeyInput' }
+      responses:
+        "201":
+          description: Created API key (plaintext shown once)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PendriveApiKeyCreated' }
+
+  /pendrive/api-keys/{id}:
+    delete:
+      operationId: deletePendriveApiKey
+      tags: [pendrive]
+      summary: Revoke a Pendrive API key
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: Revoked
+
+  /pendrive/stats:
+    get:
+      operationId: getPendriveStats
+      tags: [pendrive]
+      summary: Usage stats for Pendrive dashboard
+      responses:
+        "200":
+          description: Stats
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PendriveStats' }
+
+  /pendrive/callers:
+    get:
+      operationId: listPendriveCallers
+      tags: [pendrive]
+      summary: List all callers with memory stored for this user
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema: { type: string }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, default: 50 }
+        - name: offset
+          in: query
+          required: false
+          schema: { type: integer, default: 0 }
+      responses:
+        "200":
+          description: Paged caller list
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PendriveCallerList' }
+
+  /pendrive/context:
+    get:
+      operationId: getPendriveContext
+      tags: [pendrive]
+      summary: Retrieve full caller memory context (for injection into LLM prompts)
+      parameters:
+        - name: agentId
+          in: query
+          required: true
+          schema: { type: integer }
+        - name: phoneNumber
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Caller context with memory block
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PendriveContextResult' }
+
+  /pendrive/archive:
+    post:
+      operationId: pendriveArchive
+      tags: [pendrive]
+      summary: Archive a call transcript and extract structured facts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PendriveArchiveInput' }
+      responses:
+        "200":
+          description: Archive result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PendriveArchiveResult' }
+
 components:
   parameters:
     AdminToken:
@@ -9013,3 +9134,126 @@ components:
         callbacks:
           type: array
           items: { $ref: '#/components/schemas/GlobalSearchResult' }
+
+    # ── Pendrive ────────────────────────────────────────────────────────────────
+
+    PendriveApiKey:
+      type: object
+      required: [id, name, keyPrefix, createdAt]
+      properties:
+        id:          { type: integer }
+        name:        { type: string }
+        keyPrefix:   { type: string }
+        lastUsedAt:  { type: ["string", "null"] }
+        createdAt:   { type: string }
+
+    PendriveApiKeyCreated:
+      type: object
+      required: [id, name, keyPrefix, plainKey, createdAt]
+      properties:
+        id:        { type: integer }
+        name:      { type: string }
+        keyPrefix: { type: string }
+        plainKey:  { type: string }
+        createdAt: { type: string }
+
+    PendriveApiKeyInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+
+    PendriveArchiveInput:
+      type: object
+      required: [agentId, phoneNumber, transcript]
+      properties:
+        agentId:     { type: integer }
+        phoneNumber: { type: string }
+        callId:      { type: ["integer", "null"] }
+        transcript:
+          type: array
+          items:
+            type: object
+            required: [role, content]
+            properties:
+              role:    { type: string }
+              content: { type: string }
+
+    PendriveArchiveResult:
+      type: object
+      required: [ok, factsExtracted, episodeId]
+      properties:
+        ok:             { type: boolean }
+        factsExtracted: { type: integer }
+        episodeId:      { type: integer }
+
+    PendriveCallerFact:
+      type: object
+      required: [id, key, value, confidence, createdAt]
+      properties:
+        id:         { type: integer }
+        key:        { type: string }
+        value:      { type: string }
+        confidence: { type: number }
+        createdAt:  { type: string }
+
+    PendriveCallerEpisode:
+      type: object
+      required: [id, createdAt]
+      properties:
+        id:              { type: integer }
+        summary:         { type: ["string", "null"] }
+        durationSeconds: { type: ["integer", "null"] }
+        createdAt:       { type: string }
+
+    PendriveContextResult:
+      type: object
+      required: [phoneNumber, callCount, facts, recentCalls, memoryBlock]
+      properties:
+        phoneNumber: { type: string }
+        name:        { type: ["string", "null"] }
+        callCount:   { type: integer }
+        lastCalledAt: { type: ["string", "null"] }
+        facts:
+          type: array
+          items: { $ref: '#/components/schemas/PendriveCallerFact' }
+        recentCalls:
+          type: array
+          items: { $ref: '#/components/schemas/PendriveCallerEpisode' }
+        memoryBlock: { type: string }
+
+    PendriveStats:
+      type: object
+      required: [totalCallers, totalFacts, totalEpisodes, apiCallsThisMonth]
+      properties:
+        totalCallers:       { type: integer }
+        totalFacts:         { type: integer }
+        totalEpisodes:      { type: integer }
+        apiCallsThisMonth:  { type: integer }
+        topCallers:
+          type: array
+          items:
+            type: object
+            required: [phoneNumber, callCount]
+            properties:
+              phoneNumber: { type: string }
+              name:        { type: ["string", "null"] }
+              callCount:   { type: integer }
+              factCount:   { type: integer }
+
+    PendriveCallerList:
+      type: object
+      required: [callers, total]
+      properties:
+        total: { type: integer }
+        callers:
+          type: array
+          items:
+            type: object
+            required: [phoneNumber, callCount, factCount, lastCalledAt]
+            properties:
+              phoneNumber: { type: string }
+              name:        { type: ["string", "null"] }
+              callCount:   { type: integer }
+              factCount:   { type: integer }
+              lastCalledAt: { type: ["string", "null"] }

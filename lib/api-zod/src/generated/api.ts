@@ -5316,3 +5316,127 @@ export const GlobalSearchResponse = zod.object({
 })
 
 
+/**
+ * @summary List all Pendrive API keys for the current user
+ */
+export const ListPendriveApiKeysResponseItem = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "keyPrefix": zod.string(),
+  "lastUsedAt": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+export const ListPendriveApiKeysResponse = zod.array(ListPendriveApiKeysResponseItem)
+
+
+/**
+ * @summary Create a new Pendrive API key
+ */
+export const createPendriveApiKeyBodyNameMax = 80;
+
+
+
+export const CreatePendriveApiKeyBody = zod.object({
+  "name": zod.string().min(1).max(createPendriveApiKeyBodyNameMax)
+})
+
+
+/**
+ * @summary Revoke a Pendrive API key
+ */
+export const DeletePendriveApiKeyParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary Usage stats for Pendrive dashboard
+ */
+export const GetPendriveStatsResponse = zod.object({
+  "totalCallers": zod.number(),
+  "totalFacts": zod.number(),
+  "totalEpisodes": zod.number(),
+  "apiCallsThisMonth": zod.number(),
+  "topCallers": zod.array(zod.object({
+  "phoneNumber": zod.string(),
+  "name": zod.string().nullish(),
+  "callCount": zod.number(),
+  "factCount": zod.number().optional()
+})).optional()
+})
+
+
+/**
+ * @summary List all callers with memory stored for this user
+ */
+export const listPendriveCallersQueryLimitDefault = 50;
+export const listPendriveCallersQueryOffsetDefault = 0;
+
+export const ListPendriveCallersQueryParams = zod.object({
+  "q": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().default(listPendriveCallersQueryLimitDefault),
+  "offset": zod.coerce.number().default(listPendriveCallersQueryOffsetDefault)
+})
+
+export const ListPendriveCallersResponse = zod.object({
+  "total": zod.number(),
+  "callers": zod.array(zod.object({
+  "phoneNumber": zod.string(),
+  "name": zod.string().nullish(),
+  "callCount": zod.number(),
+  "factCount": zod.number(),
+  "lastCalledAt": zod.string().nullable()
+}))
+})
+
+
+/**
+ * @summary Retrieve full caller memory context (for injection into LLM prompts)
+ */
+export const GetPendriveContextQueryParams = zod.object({
+  "agentId": zod.coerce.number(),
+  "phoneNumber": zod.coerce.string()
+})
+
+export const GetPendriveContextResponse = zod.object({
+  "phoneNumber": zod.string(),
+  "name": zod.string().nullish(),
+  "callCount": zod.number(),
+  "lastCalledAt": zod.string().nullish(),
+  "facts": zod.array(zod.object({
+  "id": zod.number(),
+  "key": zod.string(),
+  "value": zod.string(),
+  "confidence": zod.number(),
+  "createdAt": zod.string()
+})),
+  "recentCalls": zod.array(zod.object({
+  "id": zod.number(),
+  "summary": zod.string().nullish(),
+  "durationSeconds": zod.number().nullish(),
+  "createdAt": zod.string()
+})),
+  "memoryBlock": zod.string()
+})
+
+
+/**
+ * @summary Archive a call transcript and extract structured facts
+ */
+export const PendriveArchiveBody = zod.object({
+  "agentId": zod.number(),
+  "phoneNumber": zod.string(),
+  "callId": zod.number().nullish(),
+  "transcript": zod.array(zod.object({
+  "role": zod.string(),
+  "content": zod.string()
+}))
+})
+
+export const PendriveArchiveResponse = zod.object({
+  "ok": zod.boolean(),
+  "factsExtracted": zod.number(),
+  "episodeId": zod.number()
+})
+
+

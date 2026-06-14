@@ -124,6 +124,7 @@ import type {
   GetCommandCenterActivityStreamParams,
   GetCommandCenterLiveOps200,
   GetCommandCenterLiveOpsParams,
+  GetPendriveContextParams,
   GetPlatformAnalyticsAgentsParams,
   GetPlatformAnalyticsBatchParams,
   GetPlatformAnalyticsCampaignsParams,
@@ -179,6 +180,7 @@ import type {
   ListEventTypesParams,
   ListMetaCampaignLeads200,
   ListMetaCampaignLeadsParams,
+  ListPendriveCallersParams,
   ListTransactionsParams,
   LiveQueueBulkActionRequest,
   LiveQueueBulkActionResult,
@@ -190,6 +192,14 @@ import type {
   OnboardingData,
   OnboardingStatus,
   OutboundCallBody,
+  PendriveApiKey,
+  PendriveApiKeyCreated,
+  PendriveApiKeyInput,
+  PendriveArchiveInput,
+  PendriveArchiveResult,
+  PendriveCallerList,
+  PendriveContextResult,
+  PendriveStats,
   PhoneNormalizeResult,
   PhoneNumber,
   PlatformAnalyticsAgentRow,
@@ -16867,4 +16877,538 @@ export function useGlobalSearch<TData = Awaited<ReturnType<typeof globalSearch>>
 
 
 
+
+export const getListPendriveApiKeysUrl = () => {
+
+
+
+
+  return `/api/pendrive/api-keys`
+}
+
+/**
+ * @summary List all Pendrive API keys for the current user
+ */
+export const listPendriveApiKeys = async ( options?: RequestInit): Promise<PendriveApiKey[]> => {
+
+  return customFetch<PendriveApiKey[]>(getListPendriveApiKeysUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPendriveApiKeysQueryKey = () => {
+    return [
+    `/api/pendrive/api-keys`
+    ] as const;
+    }
+
+
+export const getListPendriveApiKeysQueryOptions = <TData = Awaited<ReturnType<typeof listPendriveApiKeys>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPendriveApiKeys>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPendriveApiKeysQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPendriveApiKeys>>> = ({ signal }) => listPendriveApiKeys({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPendriveApiKeys>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPendriveApiKeysQueryResult = NonNullable<Awaited<ReturnType<typeof listPendriveApiKeys>>>
+export type ListPendriveApiKeysQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all Pendrive API keys for the current user
+ */
+
+export function useListPendriveApiKeys<TData = Awaited<ReturnType<typeof listPendriveApiKeys>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPendriveApiKeys>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPendriveApiKeysQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreatePendriveApiKeyUrl = () => {
+
+
+
+
+  return `/api/pendrive/api-keys`
+}
+
+/**
+ * @summary Create a new Pendrive API key
+ */
+export const createPendriveApiKey = async (pendriveApiKeyInput: PendriveApiKeyInput, options?: RequestInit): Promise<PendriveApiKeyCreated> => {
+
+  return customFetch<PendriveApiKeyCreated>(getCreatePendriveApiKeyUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      pendriveApiKeyInput,)
+  }
+);}
+
+
+
+
+export const getCreatePendriveApiKeyMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPendriveApiKey>>, TError,{data: BodyType<PendriveApiKeyInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createPendriveApiKey>>, TError,{data: BodyType<PendriveApiKeyInput>}, TContext> => {
+
+const mutationKey = ['createPendriveApiKey'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createPendriveApiKey>>, {data: BodyType<PendriveApiKeyInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createPendriveApiKey(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreatePendriveApiKeyMutationResult = NonNullable<Awaited<ReturnType<typeof createPendriveApiKey>>>
+    export type CreatePendriveApiKeyMutationBody = BodyType<PendriveApiKeyInput>
+    export type CreatePendriveApiKeyMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a new Pendrive API key
+ */
+export const useCreatePendriveApiKey = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPendriveApiKey>>, TError,{data: BodyType<PendriveApiKeyInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createPendriveApiKey>>,
+        TError,
+        {data: BodyType<PendriveApiKeyInput>},
+        TContext
+      > => {
+      return useMutation(getCreatePendriveApiKeyMutationOptions(options));
+    }
+
+export const getDeletePendriveApiKeyUrl = (id: number,) => {
+
+
+
+
+  return `/api/pendrive/api-keys/${id}`
+}
+
+/**
+ * @summary Revoke a Pendrive API key
+ */
+export const deletePendriveApiKey = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeletePendriveApiKeyUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeletePendriveApiKeyMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePendriveApiKey>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deletePendriveApiKey>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deletePendriveApiKey'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deletePendriveApiKey>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deletePendriveApiKey(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeletePendriveApiKeyMutationResult = NonNullable<Awaited<ReturnType<typeof deletePendriveApiKey>>>
+
+    export type DeletePendriveApiKeyMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Revoke a Pendrive API key
+ */
+export const useDeletePendriveApiKey = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePendriveApiKey>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deletePendriveApiKey>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeletePendriveApiKeyMutationOptions(options));
+    }
+
+export const getGetPendriveStatsUrl = () => {
+
+
+
+
+  return `/api/pendrive/stats`
+}
+
+/**
+ * @summary Usage stats for Pendrive dashboard
+ */
+export const getPendriveStats = async ( options?: RequestInit): Promise<PendriveStats> => {
+
+  return customFetch<PendriveStats>(getGetPendriveStatsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPendriveStatsQueryKey = () => {
+    return [
+    `/api/pendrive/stats`
+    ] as const;
+    }
+
+
+export const getGetPendriveStatsQueryOptions = <TData = Awaited<ReturnType<typeof getPendriveStats>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPendriveStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPendriveStatsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPendriveStats>>> = ({ signal }) => getPendriveStats({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPendriveStats>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPendriveStatsQueryResult = NonNullable<Awaited<ReturnType<typeof getPendriveStats>>>
+export type GetPendriveStatsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Usage stats for Pendrive dashboard
+ */
+
+export function useGetPendriveStats<TData = Awaited<ReturnType<typeof getPendriveStats>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPendriveStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPendriveStatsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListPendriveCallersUrl = (params?: ListPendriveCallersParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/pendrive/callers?${stringifiedParams}` : `/api/pendrive/callers`
+}
+
+/**
+ * @summary List all callers with memory stored for this user
+ */
+export const listPendriveCallers = async (params?: ListPendriveCallersParams, options?: RequestInit): Promise<PendriveCallerList> => {
+
+  return customFetch<PendriveCallerList>(getListPendriveCallersUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPendriveCallersQueryKey = (params?: ListPendriveCallersParams,) => {
+    return [
+    `/api/pendrive/callers`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListPendriveCallersQueryOptions = <TData = Awaited<ReturnType<typeof listPendriveCallers>>, TError = ErrorType<unknown>>(params?: ListPendriveCallersParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPendriveCallers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPendriveCallersQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPendriveCallers>>> = ({ signal }) => listPendriveCallers(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPendriveCallers>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPendriveCallersQueryResult = NonNullable<Awaited<ReturnType<typeof listPendriveCallers>>>
+export type ListPendriveCallersQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all callers with memory stored for this user
+ */
+
+export function useListPendriveCallers<TData = Awaited<ReturnType<typeof listPendriveCallers>>, TError = ErrorType<unknown>>(
+ params?: ListPendriveCallersParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPendriveCallers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPendriveCallersQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetPendriveContextUrl = (params: GetPendriveContextParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/pendrive/context?${stringifiedParams}` : `/api/pendrive/context`
+}
+
+/**
+ * @summary Retrieve full caller memory context (for injection into LLM prompts)
+ */
+export const getPendriveContext = async (params: GetPendriveContextParams, options?: RequestInit): Promise<PendriveContextResult> => {
+
+  return customFetch<PendriveContextResult>(getGetPendriveContextUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPendriveContextQueryKey = (params?: GetPendriveContextParams,) => {
+    return [
+    `/api/pendrive/context`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetPendriveContextQueryOptions = <TData = Awaited<ReturnType<typeof getPendriveContext>>, TError = ErrorType<unknown>>(params: GetPendriveContextParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPendriveContext>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPendriveContextQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPendriveContext>>> = ({ signal }) => getPendriveContext(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPendriveContext>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPendriveContextQueryResult = NonNullable<Awaited<ReturnType<typeof getPendriveContext>>>
+export type GetPendriveContextQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Retrieve full caller memory context (for injection into LLM prompts)
+ */
+
+export function useGetPendriveContext<TData = Awaited<ReturnType<typeof getPendriveContext>>, TError = ErrorType<unknown>>(
+ params: GetPendriveContextParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPendriveContext>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPendriveContextQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getPendriveArchiveUrl = () => {
+
+
+
+
+  return `/api/pendrive/archive`
+}
+
+/**
+ * @summary Archive a call transcript and extract structured facts
+ */
+export const pendriveArchive = async (pendriveArchiveInput: PendriveArchiveInput, options?: RequestInit): Promise<PendriveArchiveResult> => {
+
+  return customFetch<PendriveArchiveResult>(getPendriveArchiveUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      pendriveArchiveInput,)
+  }
+);}
+
+
+
+
+export const getPendriveArchiveMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof pendriveArchive>>, TError,{data: BodyType<PendriveArchiveInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof pendriveArchive>>, TError,{data: BodyType<PendriveArchiveInput>}, TContext> => {
+
+const mutationKey = ['pendriveArchive'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof pendriveArchive>>, {data: BodyType<PendriveArchiveInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  pendriveArchive(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PendriveArchiveMutationResult = NonNullable<Awaited<ReturnType<typeof pendriveArchive>>>
+    export type PendriveArchiveMutationBody = BodyType<PendriveArchiveInput>
+    export type PendriveArchiveMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Archive a call transcript and extract structured facts
+ */
+export const usePendriveArchive = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof pendriveArchive>>, TError,{data: BodyType<PendriveArchiveInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof pendriveArchive>>,
+        TError,
+        {data: BodyType<PendriveArchiveInput>},
+        TContext
+      > => {
+      return useMutation(getPendriveArchiveMutationOptions(options));
+    }
 

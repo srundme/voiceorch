@@ -52,6 +52,7 @@ import webcallNotifyRouter from "./webcall-notify.js";
 import voicesRouter from "./voices.js";
 import testToolRouter from "./test-tool.js";
 import authRouter from "./auth.js";
+import pendriveRouter from "./pendrive.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
 const router: IRouter = Router();
@@ -123,5 +124,6 @@ router.use(callTransfersRouter);
 router.use(billingRouter);
 router.use(webcallNotifyRouter);
 router.use(testToolRouter);
+router.use(pendriveRouter);
 
 export default router;

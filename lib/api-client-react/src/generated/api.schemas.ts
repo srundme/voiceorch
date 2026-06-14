@@ -3602,6 +3602,110 @@ export interface GlobalSearchResponse {
   callbacks: GlobalSearchResult[];
 }
 
+export interface PendriveApiKey {
+  id: number;
+  name: string;
+  keyPrefix: string;
+  /** @nullable */
+  lastUsedAt?: string | null;
+  createdAt: string;
+}
+
+export interface PendriveApiKeyCreated {
+  id: number;
+  name: string;
+  keyPrefix: string;
+  plainKey: string;
+  createdAt: string;
+}
+
+export interface PendriveApiKeyInput {
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  name: string;
+}
+
+export type PendriveArchiveInputTranscriptItem = {
+  role: string;
+  content: string;
+};
+
+export interface PendriveArchiveInput {
+  agentId: number;
+  phoneNumber: string;
+  /** @nullable */
+  callId?: number | null;
+  transcript: PendriveArchiveInputTranscriptItem[];
+}
+
+export interface PendriveArchiveResult {
+  ok: boolean;
+  factsExtracted: number;
+  episodeId: number;
+}
+
+export interface PendriveCallerFact {
+  id: number;
+  key: string;
+  value: string;
+  confidence: number;
+  createdAt: string;
+}
+
+export interface PendriveCallerEpisode {
+  id: number;
+  /** @nullable */
+  summary?: string | null;
+  /** @nullable */
+  durationSeconds?: number | null;
+  createdAt: string;
+}
+
+export interface PendriveContextResult {
+  phoneNumber: string;
+  /** @nullable */
+  name?: string | null;
+  callCount: number;
+  /** @nullable */
+  lastCalledAt?: string | null;
+  facts: PendriveCallerFact[];
+  recentCalls: PendriveCallerEpisode[];
+  memoryBlock: string;
+}
+
+export type PendriveStatsTopCallersItem = {
+  phoneNumber: string;
+  /** @nullable */
+  name?: string | null;
+  callCount: number;
+  factCount?: number;
+};
+
+export interface PendriveStats {
+  totalCallers: number;
+  totalFacts: number;
+  totalEpisodes: number;
+  apiCallsThisMonth: number;
+  topCallers?: PendriveStatsTopCallersItem[];
+}
+
+export type PendriveCallerListCallersItem = {
+  phoneNumber: string;
+  /** @nullable */
+  name?: string | null;
+  callCount: number;
+  factCount: number;
+  /** @nullable */
+  lastCalledAt: string | null;
+};
+
+export interface PendriveCallerList {
+  total: number;
+  callers: PendriveCallerListCallersItem[];
+}
+
 /**
  * Platform admin token (matches ADMIN_TOKEN env var).
  */
@@ -4153,5 +4257,16 @@ export type GlobalSearchParams = {
  * @minLength 2
  */
 q: string;
+};
+
+export type ListPendriveCallersParams = {
+q?: string;
+limit?: number;
+offset?: number;
+};
+
+export type GetPendriveContextParams = {
+agentId: number;
+phoneNumber: string;
 };
 
