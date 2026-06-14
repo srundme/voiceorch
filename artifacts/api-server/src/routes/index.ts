@@ -52,9 +52,6 @@ import webcallNotifyRouter from "./webcall-notify.js";
 import voicesRouter from "./voices.js";
 import testToolRouter from "./test-tool.js";
 import authRouter from "./auth.js";
-import pendriveRouter from "./pendrive.js";
-import pendriveWebhookRouter from "./pendrive-webhook.js";
-import pendriveLlmProxyRouter from "./pendrive-llm-proxy.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
 const router: IRouter = Router();
@@ -73,11 +70,6 @@ router.use(adminPromptTemplatesRouter);
 // Public campaign lead webhook — must be before provisionUser (no Clerk session needed)
 router.use(campaignWebhookRouter);
 
-// Pendrive universal webhook — API key auth (pd_live_...), no session required
-router.use(pendriveWebhookRouter);
-
-// Pendrive LLM proxy — OpenAI-compatible, API key auth (pd_live_...), no session required
-router.use(pendriveLlmProxyRouter);
 
 // Public auth routes — Google login redirect + callback (no session required)
 router.use(authRouter);
@@ -132,6 +124,4 @@ router.use(callTransfersRouter);
 router.use(billingRouter);
 router.use(webcallNotifyRouter);
 router.use(testToolRouter);
-router.use(pendriveRouter);
-
 export default router;
