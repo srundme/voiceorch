@@ -12,7 +12,7 @@ import { logger } from "../../lib/logger.js";
 import { RecordingBuffer } from "../recorder.js";
 import type { ConversationTurn, STTConfig, StreamSTT } from "../types.js";
 import { decryptKey } from "../../lib/crypto.js";
-import { loadCallerProfile, injectCallerMemory, updateCallerProfile, detectCallbackRequest } from "../callerMemory.js";
+import { loadCallerContext, injectEnhancedMemory, updateCallerProfile, latchCallerName, latchCallerFact, detectCallbackRequest } from "../callerMemory.js";
 import { GenderDetector } from "../genderDetector.js";
 import { GenderDetectorML } from "../genderDetectorML.js";
 import { GenderDetectorMLv2 } from "../genderDetectorMLv2.js";
@@ -397,24 +397,25 @@ export async function handleWebCallWebSocket(
     }
   }
 
-  // ── Webcall caller memory ─────────────────────────────────────────────────
+  // ── Webcall caller memory (3-layer: profile + facts + archive) ───────────
   // Use "webcall:<userId>" as a stable identifier since there's no phone number.
   // This gives logged-in users the same cross-call memory that telephony callers get.
-  // Use the authenticated caller's userId as the memory key (not the agent owner's)
-  // so each distinct user gets their own cross-call memory profile.
   const webcallIdentifier = callerUserId ? `webcall:${callerUserId}` : null;
   let webcallProfile: import("../callerMemory.js").CallerProfile | null = null;
+  let webcallLatchedFacts = new Map<string, string>();
   let systemPrompt = agent.generatedPrompt ?? agent.systemPrompt ?? "";
 
   if (webcallIdentifier) {
     try {
-      webcallProfile = await loadCallerProfile(agentId, webcallIdentifier);
-      if (webcallProfile) {
-        systemPrompt = injectCallerMemory(systemPrompt, webcallProfile);
-        logger.info({ callId, agentId, callCount: webcallProfile.callCount }, "Webcall caller memory injected");
+      const webcallCtx = await loadCallerContext(agentId, webcallIdentifier);
+      webcallProfile = webcallCtx.profile;
+      for (const f of webcallCtx.facts) webcallLatchedFacts.set(f.key, f.value);
+      if (webcallProfile || webcallCtx.facts.length > 0 || webcallCtx.recentCalls.length > 0) {
+        systemPrompt = injectEnhancedMemory(systemPrompt, webcallCtx);
+        logger.info({ callId, agentId, callCount: webcallProfile?.callCount ?? 0, factCount: webcallCtx.facts.length, archiveCount: webcallCtx.recentCalls.length }, "Webcall caller memory injected");
       }
     } catch (memErr) {
-      logger.warn({ callId, agentId, memErr }, "Failed to load webcall caller profile — continuing without memory");
+      logger.warn({ callId, agentId, memErr }, "Failed to load webcall caller context — continuing without memory");
     }
   }
 
@@ -665,6 +666,14 @@ export async function handleWebCallWebSocket(
 
       send({ type: "transcript", speaker: "user", text: userText });
       history.push({ role: "user", content: userText });
+
+      // Real-time name + fact latch — fire-and-forget, never blocks the agent turn
+      if (webcallIdentifier) {
+        void latchCallerName({ agentId, phoneNumber: webcallIdentifier, transcript: userText, existingName: webcallProfile?.name ?? null, callId }).then((latched) => {
+          if (latched && webcallProfile) webcallProfile = { ...webcallProfile, name: latched };
+        });
+        void latchCallerFact({ agentId, phoneNumber: webcallIdentifier, transcript: userText, callId, existingFacts: webcallLatchedFacts }).then((updated) => { webcallLatchedFacts = updated; });
+      }
 
       // ── Progressive gender detection — fire after each confirmed user turn ─
       // Non-blocking: detection runs async and updates genderDetector.gender

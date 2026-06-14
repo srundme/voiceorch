@@ -1200,7 +1200,7 @@ router.post("/admin/family/provision", async (req, res): Promise<void> => {
       inactivityMessage:        (body["inactivityMessage"] as string | undefined) ?? null,
       webhookUrl:               (body["webhookUrl"]        as string | undefined) ?? null,
       silenceTimeoutSeconds:    typeof body["silenceTimeoutSeconds"] === "number" ? body["silenceTimeoutSeconds"] as number : null,
-      dispositionSchema:        Array.isArray(body["dispositionSchema"]) ? body["dispositionSchema"] as Record<string, unknown>[] : null,
+      dispositionSchema:        Array.isArray(body["dispositionSchema"]) ? body["dispositionSchema"] as { key: string; label: string; type: "text" | "number" | "boolean" | "choice"; options?: string[]; required?: boolean }[] : null,
       agentConfig:              agentConfigPayload as Record<string, unknown>,
       userId:                   null,
     };

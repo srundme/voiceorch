@@ -16,11 +16,15 @@ import { destroyAudioSession } from "./audioPool.js";
 import {
   humanPhone,
   loadCallerProfile,
+  loadCallerContext,
   injectCallerMemory,
+  injectEnhancedMemory,
   updateCallerProfile,
   latchCallerName,
+  latchCallerFact,
   detectCallbackRequest,
   type CallerProfile,
+  type CallerContext,
 } from "./callerMemory.js";
 
 interface MetricsAcc {
@@ -184,21 +188,25 @@ export async function createSession(params: {
     hangupAfterLlmCall: (agentCfg["hangupAfterLlmCall"] as boolean | undefined) ?? false,
   };
 
-  // ── Cross-call caller memory ────────────────────────────────────────────────
+  // ── Cross-call caller memory (3-layer: profile + facts + archive) ──────────
   const callerPhone = humanPhone(params.fromNumber, params.toNumber);
   let callerProfileSnapshot: CallerProfile | null = null;
+  // Track facts latched mid-call to avoid re-writing facts the DB already has
+  let latchedFactsMap = new Map<string, string>();
   if (callerPhone) {
     try {
-      callerProfileSnapshot = await loadCallerProfile(params.agentId, callerPhone);
-      if (callerProfileSnapshot) {
-        agentConfig.systemPrompt = injectCallerMemory(agentConfig.systemPrompt, callerProfileSnapshot);
+      const callerCtx = await loadCallerContext(params.agentId, callerPhone);
+      callerProfileSnapshot = callerCtx.profile;
+      for (const f of callerCtx.facts) latchedFactsMap.set(f.key, f.value);
+      if (callerProfileSnapshot || callerCtx.facts.length > 0 || callerCtx.recentCalls.length > 0) {
+        agentConfig.systemPrompt = injectEnhancedMemory(agentConfig.systemPrompt, callerCtx);
         logger.info(
-          { agentId: params.agentId, callerPhone, callCount: callerProfileSnapshot.callCount },
+          { agentId: params.agentId, callerPhone, callCount: callerProfileSnapshot?.callCount ?? 0, factCount: callerCtx.facts.length, archiveCount: callerCtx.recentCalls.length },
           "Caller memory injected into system prompt"
         );
       }
     } catch (memErr) {
-      logger.warn({ agentId: params.agentId, callerPhone, memErr }, "Failed to load caller profile — continuing without memory");
+      logger.warn({ agentId: params.agentId, callerPhone, memErr }, "Failed to load caller context — continuing without memory");
     }
   }
 
@@ -400,9 +408,9 @@ export async function createSession(params: {
     rawPcmOutput: params.telephonyProvider === "vobiz",
     onTranscript: (speaker, text) => {
       logger.debug({ callId: callRecord.id, speaker, text: text.slice(0, 80) }, "Transcript");
-      // Real-time name latch — persist immediately so the name is saved even
-      // if the call drops before the post-call LLM extraction runs.
       if (speaker === "user" && callerPhone) {
+        // Real-time name latch — persist immediately so the name is saved even
+        // if the call drops before the post-call LLM extraction runs.
         void latchCallerName({
           agentId:      params.agentId,
           phoneNumber:  callerPhone,
@@ -414,6 +422,14 @@ export async function createSession(params: {
             callerProfileSnapshot = { ...callerProfileSnapshot, name: latched };
           }
         });
+        // Real-time structured fact latch — pattern-based detection, fire-and-forget
+        void latchCallerFact({
+          agentId:       params.agentId,
+          phoneNumber:   callerPhone,
+          transcript:    text,
+          callId:        callRecord.id,
+          existingFacts: latchedFactsMap,
+        }).then((updated) => { latchedFactsMap = updated; });
       }
     },
     onCallEnd: () => {

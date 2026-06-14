@@ -1,16 +1,27 @@
 /**
- * Cross-call caller memory
+ * Three-layer caller memory — never forgets
  * ─────────────────────────────────────────────────────────────────
- * On every call start: look up the caller's profile by (agentId, phoneNumber)
- * and prepend a memory block to the system prompt.
  *
- * On every call end: fire-and-forget LLM extraction to update the profile.
- * Works for both inbound and outbound telephony.
- * Webcall (browser test calls) is skipped — no stable phone identifier.
+ * Layer 1 — caller_profiles   (summary string, call count, drop tracking)
+ *            Unchanged from before; kept for backward compat.
+ *
+ * Layer 2 — caller_facts      (structured key/value facts, append-only)
+ *            One row per extracted fact. Never overwritten.
+ *            Most-recent row per key = current best-known value.
+ *
+ * Layer 3 — caller_call_archive  (full transcript per call, never deleted)
+ *            Loaded at call-start to give the agent verbatim recall of
+ *            what happened in the last N conversations.
+ *
+ * Integration points (both session.ts and webcall.ts):
+ *   Call start  → loadCallerContext()  + injectEnhancedMemory()
+ *   Mid-call    → latchCallerName()    (unchanged)
+ *              → latchCallerFact()     (new — real-time fact detection)
+ *   Call end    → updateCallerProfile() (now also archives + extracts facts)
  */
 
-import { db, callerProfilesTable, scheduledCallbacksTable } from "@workspace/db";
-import { and, eq, sql } from "drizzle-orm";
+import { db, callerProfilesTable, scheduledCallbacksTable, callerFactsTable, callerCallArchiveTable } from "@workspace/db";
+import { and, eq, desc, sql } from "drizzle-orm";
 import type { ConversationTurn } from "./types.js";
 import type { createLLMAdapter } from "./adapters/llm/index.js";
 import { logger } from "../lib/logger.js";
@@ -31,29 +42,52 @@ export interface CallerProfile {
   lastCallDroppedAt: Date | null;
 }
 
+export interface CallerFact {
+  key: string;
+  value: string;
+  confidence: number;
+  sourceCallId: number | null;
+  createdAt: Date;
+}
+
+export interface CallerCallRecord {
+  id: number;
+  callId: number | null;
+  summary: string | null;
+  durationSeconds: number | null;
+  createdAt: Date;
+}
+
+export interface CallerContext {
+  profile: CallerProfile | null;
+  facts: CallerFact[];         // most-recent per key
+  recentCalls: CallerCallRecord[];  // last 5 archived calls
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-/**
- * Returns true if the number looks like a real E.164 phone number.
- * Used to tell inbound callers (real numbers) apart from special values
- * like "outbound", "webcall", "browser", or empty strings.
- */
 export function isRealPhoneNumber(n: string): boolean {
   return /^\+?\d{7,15}$/.test(n.trim());
 }
 
-/**
- * Pick the "human" party from a call's fromNumber / toNumber.
- * Inbound: fromNumber is the human.
- * Outbound: toNumber is the human.
- */
 export function humanPhone(fromNumber: string, toNumber: string): string | null {
   if (isRealPhoneNumber(fromNumber)) return fromNumber.trim();
   if (isRealPhoneNumber(toNumber))   return toNumber.trim();
-  return null;   // webcall / test — no real number
+  return null;
 }
 
-// ── Load ─────────────────────────────────────────────────────────────────────
+function daysSinceLabel(d: Date | null): string | null {
+  if (!d) return null;
+  const days = Math.floor((Date.now() - d.getTime()) / 86_400_000);
+  if (days === 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 7)  return `${days} days ago`;
+  if (days < 30) return `${Math.floor(days / 7)} week${Math.floor(days / 7) > 1 ? "s" : ""} ago`;
+  if (days < 365) return `${Math.floor(days / 30)} month${Math.floor(days / 30) > 1 ? "s" : ""} ago`;
+  return `${Math.floor(days / 365)} year${Math.floor(days / 365) > 1 ? "s" : ""} ago`;
+}
+
+// ── Layer 1 compat: load just the profile row ─────────────────────────────────
 
 export async function loadCallerProfile(
   agentId: number,
@@ -62,79 +96,247 @@ export async function loadCallerProfile(
   const [row] = await db
     .select()
     .from(callerProfilesTable)
-    .where(
-      and(
-        eq(callerProfilesTable.agentId, agentId),
-        eq(callerProfilesTable.phoneNumber, phoneNumber),
-      ),
-    );
+    .where(and(eq(callerProfilesTable.agentId, agentId), eq(callerProfilesTable.phoneNumber, phoneNumber)));
   return row ?? null;
 }
 
-// ── Inject into system prompt ─────────────────────────────────────────────────
+// ── Layer 1+2+3: load full context ────────────────────────────────────────────
 
-/** Threshold for treating a dropped call as "recent" (1 hour). */
+export async function loadCallerContext(
+  agentId: number,
+  phoneNumber: string,
+): Promise<CallerContext> {
+  const [profile, allFacts, recentCalls] = await Promise.all([
+    // Layer 1
+    loadCallerProfile(agentId, phoneNumber),
+
+    // Layer 2 — all fact rows; we'll deduplicate to most-recent per key in memory
+    db
+      .select()
+      .from(callerFactsTable)
+      .where(and(eq(callerFactsTable.agentId, agentId), eq(callerFactsTable.phoneNumber, phoneNumber)))
+      .orderBy(desc(callerFactsTable.createdAt)),
+
+    // Layer 3 — last 5 call archives
+    db
+      .select({
+        id:              callerCallArchiveTable.id,
+        callId:          callerCallArchiveTable.callId,
+        summary:         callerCallArchiveTable.summary,
+        durationSeconds: callerCallArchiveTable.durationSeconds,
+        createdAt:       callerCallArchiveTable.createdAt,
+      })
+      .from(callerCallArchiveTable)
+      .where(and(
+        eq(callerCallArchiveTable.agentId,     agentId),
+        eq(callerCallArchiveTable.phoneNumber, phoneNumber),
+      ))
+      .orderBy(desc(callerCallArchiveTable.createdAt))
+      .limit(5),
+  ]);
+
+  // Deduplicate facts: keep most-recent row per key
+  const factsByKey = new Map<string, CallerFact>();
+  for (const row of allFacts) {
+    if (!factsByKey.has(row.key)) {
+      factsByKey.set(row.key, {
+        key:          row.key,
+        value:        row.value,
+        confidence:   row.confidence,
+        sourceCallId: row.sourceCallId,
+        createdAt:    row.createdAt,
+      });
+    }
+  }
+
+  return {
+    profile,
+    facts: Array.from(factsByKey.values()),
+    recentCalls: recentCalls.map(r => ({
+      id:              r.id,
+      callId:          r.callId,
+      summary:         r.summary,
+      durationSeconds: r.durationSeconds,
+      createdAt:       r.createdAt,
+    })),
+  };
+}
+
+// ── Layer 1 compat: inject old-style memory block ─────────────────────────────
+
 const DROPPED_CALL_WINDOW_MS = 60 * 60 * 1000;
 
-/**
- * Build a concise memory header and prepend it to the system prompt.
- * If the previous call was dropped within the last hour, includes a
- * continuation cue so the agent picks up naturally rather than starting fresh.
- */
-export function injectCallerMemory(
-  systemPrompt: string,
-  profile: CallerProfile,
-): string {
-  const daysSince =
-    profile.lastCalledAt
-      ? Math.floor((Date.now() - profile.lastCalledAt.getTime()) / 86_400_000)
-      : null;
+export function injectCallerMemory(systemPrompt: string, profile: CallerProfile): string {
+  const ctx: CallerContext = { profile, facts: [], recentCalls: [] };
+  return injectEnhancedMemory(systemPrompt, ctx);
+}
+
+// ── Enhanced memory injection (all 3 layers) ──────────────────────────────────
+
+export function injectEnhancedMemory(systemPrompt: string, ctx: CallerContext): string {
+  const { profile, facts, recentCalls } = ctx;
+
+  const lines: string[] = ["=== CALLER MEMORY — NEVER FORGETS ==="];
+
+  // ── Header: name + call count + last call ────────────────────────────────
+  const namePart = profile?.name ?? facts.find(f => f.key === "name")?.value ?? "unknown";
+  const callCount = profile?.callCount ?? 0;
+  const lastCallLabel = daysSinceLabel(profile?.lastCalledAt ?? null);
+
+  const headerParts: string[] = [`Name: ${namePart}`, `Total calls: ${callCount}`];
+  if (lastCallLabel) headerParts.push(`Last call: ${lastCallLabel}`);
 
   const isRecentDrop =
-    profile.lastCallDropped &&
+    profile?.lastCallDropped === true &&
     profile.lastCallDroppedAt != null &&
     Date.now() - profile.lastCallDroppedAt.getTime() < DROPPED_CALL_WINDOW_MS;
 
-  const lastCallStr = (() => {
-    if (daysSince === null) return null;
-    const base = daysSince === 0 ? "today" : daysSince === 1 ? "yesterday" : `${daysSince} days ago`;
-    return isRecentDrop ? `${base} (call dropped — this is a continuation)` : base;
-  })();
+  if (isRecentDrop) headerParts.push("⚠ DROPPED");
+  lines.push(headerParts.join("  |  "));
 
-  const isReturning = profile.callCount > 1;
+  // ── Layer 2: structured facts ────────────────────────────────────────────
+  const displayFacts = facts.filter(f => f.key !== "name" && f.confidence >= 0.5);
+  if (displayFacts.length > 0) {
+    lines.push("");
+    lines.push("KNOWN FACTS (confirmed across previous calls):");
+    for (const f of displayFacts) {
+      const age = daysSinceLabel(f.createdAt);
+      lines.push(`• ${f.key}: ${f.value}${age ? `  [${age}]` : ""}`);
+    }
+  } else if (profile?.summary) {
+    // Fall back to Layer 1 summary if no structured facts yet
+    lines.push("");
+    lines.push(`Prior context: ${profile.summary}`);
+  }
 
-  const lines: string[] = [
-    "=== CALLER MEMORY (from previous calls) ===",
-    profile.name    ? `Name: ${profile.name}`                     : "Name: unknown",
-    `Previous calls with this agent: ${profile.callCount}`,
-    lastCallStr     ? `Last call: ${lastCallStr}`                 : null,
-    profile.summary ? `Context: ${profile.summary}`              : null,
-    isRecentDrop
-      ? "IMPORTANT: The previous call was disconnected unexpectedly. This is a continuation — acknowledge the drop briefly and pick up where you left off. Do NOT start over or re-introduce yourself."
-      : isReturning
-        ? `IMPORTANT: This is a RETURNING caller (call #${profile.callCount}). Greet them warmly as someone you recognise from previous conversations. Do NOT introduce yourself as if this is a first call. Reference the prior context naturally if relevant.`
-        : null,
-    "===========================================",
-  ].filter((l): l is string => l !== null);
+  // ── Layer 3: recent call summaries ───────────────────────────────────────
+  const callsWithSummary = recentCalls.filter(c => c.summary);
+  if (callsWithSummary.length > 0) {
+    lines.push("");
+    lines.push("RECENT CALLS:");
+    for (const c of callsWithSummary) {
+      const label = daysSinceLabel(c.createdAt) ?? "—";
+      lines.push(`[${label}] ${c.summary!.trim()}`);
+    }
+  }
+
+  // ── Behavioural instruction ──────────────────────────────────────────────
+  lines.push("");
+  if (isRecentDrop) {
+    lines.push(
+      "IMPORTANT: The previous call was disconnected unexpectedly. " +
+      "This is a continuation — acknowledge the drop briefly and pick up where you left off. " +
+      "Do NOT start over or re-introduce yourself.",
+    );
+  } else if (callCount > 1) {
+    lines.push(
+      `IMPORTANT: This is a RETURNING caller (call #${callCount + 1}). ` +
+      "Greet them warmly as someone you recognise from previous conversations. " +
+      "Reference prior context naturally. Do NOT re-introduce yourself as if this is a first call.",
+    );
+  }
+
+  lines.push("=====================================");
 
   return `${lines.join("\n")}\n\n${systemPrompt}`;
 }
 
-// ── Update after call ─────────────────────────────────────────────────────────
+// ── Archive a completed call ───────────────────────────────────────────────────
 
-/**
- * Persist the caller profile after a call ends.
- *
- * Two-phase approach so that a failing LLM extraction never prevents the
- * basic counters from being written:
- *
- * Phase 1 (always runs): upsert call count, last-call timestamp, drop flag.
- * Phase 2 (best-effort): use the LLM to extract name + summary, then update
- *          those columns.  Any failure here is logged but does NOT roll back
- *          the Phase-1 row.
- *
- * Should be called fire-and-forget after a call ends.
- */
+export async function archiveCall(opts: {
+  agentId: number;
+  phoneNumber: string;
+  callId: number | null;
+  transcript: string;
+  summary: string | null;
+  durationSeconds: number | null;
+  factsExtracted?: boolean;
+}): Promise<number | null> {
+  try {
+    const [row] = await db
+      .insert(callerCallArchiveTable)
+      .values({
+        agentId:         opts.agentId,
+        phoneNumber:     opts.phoneNumber,
+        callId:          opts.callId,
+        transcript:      opts.transcript,
+        summary:         opts.summary,
+        durationSeconds: opts.durationSeconds,
+        factsExtracted:  opts.factsExtracted ?? false,
+      })
+      .returning({ id: callerCallArchiveTable.id });
+    return row?.id ?? null;
+  } catch (err) {
+    logger.warn({ err, agentId: opts.agentId, phoneNumber: opts.phoneNumber }, "archiveCall DB write failed");
+    return null;
+  }
+}
+
+// ── Extract and save structured facts via LLM ─────────────────────────────────
+
+interface ExtractedLLMResult {
+  name?: string | null;
+  summary?: string | null;
+  facts?: Array<{ key: string; value: string; confidence: number }>;
+}
+
+async function runLLMExtraction(opts: {
+  llm: LLMAdapter;
+  transcript: string;
+  priorContext: string;
+  priorFacts: CallerFact[];
+}): Promise<ExtractedLLMResult> {
+  const { llm, transcript, priorContext, priorFacts } = opts;
+
+  const priorFactsStr = priorFacts.length > 0
+    ? `\nPreviously known facts:\n${priorFacts.map(f => `  ${f.key}: ${f.value}`).join("\n")}\n`
+    : "";
+
+  let raw = "";
+  await llm.chat(
+    [{
+      role: "user",
+      content:
+        `${priorContext}${priorFactsStr}` +
+        `Analyze this call transcript and extract:\n` +
+        `1. A concise 1-3 sentence summary of what was discussed (merge with any prior context above)\n` +
+        `2. Key facts about the caller — ONLY things they explicitly stated\n\n` +
+        `Return ONLY valid JSON with exactly these fields:\n` +
+        `{\n` +
+        `  "name": "caller's first name if stated, otherwise null",\n` +
+        `  "summary": "1-3 sentence summary",\n` +
+        `  "facts": [\n` +
+        `    { "key": "snake_case_key", "value": "the value", "confidence": 0.0-1.0 }\n` +
+        `  ]\n` +
+        `}\n\n` +
+        `Fact keys to extract (only if explicitly stated by caller):\n` +
+        `name, age, gender, location, occupation, income_range, family_size, spouse_name,\n` +
+        `children_count, health_conditions, medications, existing_policies, policy_interest,\n` +
+        `budget_range, vehicle_info, call_time_pref, language_pref, concerns, follow_up_needed,\n` +
+        `company_name, email, preferred_contact_method\n\n` +
+        `Rules:\n` +
+        `- Only include facts the caller EXPLICITLY stated — never infer or assume\n` +
+        `- confidence: 0.9+ = directly stated, 0.7-0.9 = clearly implied, below 0.7 = skip\n` +
+        `- Return empty array for facts if nothing was clearly stated\n` +
+        `- Be concise with values (e.g. "4" not "a family of four people")\n\n` +
+        `Transcript:\n${transcript.slice(0, 8000)}`,
+    }],
+    "You extract caller profile information from voice call transcripts. Return only a JSON object with 'name' (string|null), 'summary' (string), and 'facts' (array of {key,value,confidence}). Be conservative and factual.",
+    () => {},
+    (full) => { raw = full; },
+  );
+
+  const jsonStr = raw
+    .replace(/<think>[\s\S]*?<\/think>/g, "")
+    .replace(/```(?:json)?\s*/g, "")
+    .replace(/\s*```\s*/g, "")
+    .trim();
+
+  return JSON.parse(jsonStr) as ExtractedLLMResult;
+}
+
+// ── updateCallerProfile — enhanced, backward-compatible ───────────────────────
+
 export async function updateCallerProfile(opts: {
   agentId: number;
   phoneNumber: string;
@@ -143,20 +345,21 @@ export async function updateCallerProfile(opts: {
   existing: CallerProfile | null;
   callId: number;
   wasDropped?: boolean;
+  durationSeconds?: number;
 }): Promise<void> {
-  const { agentId, phoneNumber, history, llm, existing, callId, wasDropped = false } = opts;
+  const { agentId, phoneNumber, history, llm, existing, callId, wasDropped = false, durationSeconds } = opts;
 
-  if (history.length < 1) return;   // nothing to record
+  if (history.length < 1) return;
 
   const now      = new Date();
   const newCount = (existing?.callCount ?? 0) + 1;
+  const transcript = history.map(t => `${t.role === "user" ? "Caller" : "Agent"}: ${t.content}`).join("\n");
 
-  // ── Phase 1: always write the counter/timestamp row ───────────────────────
+  // ── Phase 1: counter update (always runs, same as before) ─────────────────
   await db
     .insert(callerProfilesTable)
     .values({
-      agentId,
-      phoneNumber,
+      agentId, phoneNumber,
       name:              existing?.name    ?? null,
       summary:           existing?.summary ?? null,
       callCount:         newCount,
@@ -177,196 +380,116 @@ export async function updateCallerProfile(opts: {
 
   logger.info({ agentId, phoneNumber, callId, callCount: newCount, wasDropped }, "Caller profile counter updated");
 
-  // ── Phase 2: LLM extraction (best-effort, never blocks Phase 1) ──────────
-  if (history.length < 2) return;   // too short to extract meaningful info
+  if (history.length < 2) return;
 
-  const transcript = history
-    .map((t) => `${t.role === "user" ? "Caller" : "Agent"}: ${t.content}`)
-    .join("\n");
+  // ── Phase 2: archive full transcript ──────────────────────────────────────
+  // (runs before LLM extraction so the archive row exists even if extraction fails)
+  const archiveId = await archiveCall({
+    agentId, phoneNumber, callId,
+    transcript,
+    summary:         null,   // filled in after LLM extraction in Phase 3
+    durationSeconds: durationSeconds ?? null,
+    factsExtracted:  false,
+  });
 
+  // ── Phase 3: LLM extraction (best-effort, never blocks Phase 1) ──────────
   const priorContext = existing?.summary
     ? `Prior context from previous calls: ${existing.summary}\n\n`
     : "";
 
+  // Load existing facts to pass as context to the LLM
+  let priorFacts: CallerFact[] = [];
+  try {
+    const rows = await db
+      .select()
+      .from(callerFactsTable)
+      .where(and(eq(callerFactsTable.agentId, agentId), eq(callerFactsTable.phoneNumber, phoneNumber)))
+      .orderBy(desc(callerFactsTable.createdAt));
+    const seen = new Set<string>();
+    for (const r of rows) {
+      if (!seen.has(r.key)) {
+        seen.add(r.key);
+        priorFacts.push({ key: r.key, value: r.value, confidence: r.confidence, sourceCallId: r.sourceCallId, createdAt: r.createdAt });
+      }
+    }
+  } catch { /* non-fatal */ }
+
   const MAX_ATTEMPTS = 3;
   const BACKOFF_BASE_MS = 1000;
-
-  // ── Phase 2a: LLM extraction with retry ───────────────────────────────────
-  let raw = "";
+  let extracted: ExtractedLLMResult = {};
   let llmSucceeded = false;
+
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      await llm.chat(
-        [
-          {
-            role: "user",
-            content:
-              `${priorContext}Given this call transcript, extract caller information.\n` +
-              `Return ONLY valid JSON with exactly these fields:\n` +
-              `- "name": caller's name if explicitly stated, otherwise null\n` +
-              `- "summary": 1–3 sentences capturing key interests, issues, preferences, and follow-ups. Merge with prior context if available.\n\n` +
-              `Transcript:\n${transcript.slice(0, 6000)}`,
-          },
-        ],
-        "You extract caller profile information from voice call transcripts. Return only a JSON object with 'name' (string|null) and 'summary' (string) fields. Be concise and factual.",
-        () => {},
-        (full) => { raw = full; },
-      );
+      extracted = await runLLMExtraction({ llm, transcript, priorContext, priorFacts });
       llmSucceeded = true;
       break;
     } catch (llmErr) {
-      logger.warn(
-        { agentId, phoneNumber, callId, attempt, maxAttempts: MAX_ATTEMPTS, llmErr },
-        "Caller profile LLM extraction failed — will retry",
-      );
+      logger.warn({ agentId, phoneNumber, callId, attempt, llmErr }, "Caller memory LLM extraction failed — will retry");
       if (attempt < MAX_ATTEMPTS) {
-        await new Promise<void>((r) => setTimeout(r, BACKOFF_BASE_MS * (2 ** (attempt - 1))));
+        await new Promise<void>(r => setTimeout(r, BACKOFF_BASE_MS * (2 ** (attempt - 1))));
       }
     }
   }
 
   if (!llmSucceeded) {
-    logger.error(
-      { agentId, phoneNumber, callId, transcript: transcript.slice(0, 500) },
-      "Caller profile LLM extraction failed after all retries — summary not updated",
-    );
+    logger.error({ agentId, phoneNumber, callId }, "Caller memory LLM extraction failed after all retries");
     return;
   }
 
-  let extracted: { name?: string | null; summary?: string | null } = {};
-  try {
-    // Strip think blocks and markdown code fences that some LLMs wrap JSON in
-    const jsonStr = raw
-      .replace(/<think>[\s\S]*?<\/think>/g, "")
-      .replace(/```(?:json)?\s*/g, "")
-      .replace(/\s*```\s*/g, "")
-      .trim();
-    extracted = JSON.parse(jsonStr) as typeof extracted;
-  } catch {
-    logger.warn({ agentId, phoneNumber, callId, raw: raw.slice(0, 200) }, "Caller profile JSON parse failed — summary not updated");
-    return;
-  }
+  // ── Phase 3a: save structured facts to caller_facts ───────────────────────
+  const validFacts = (extracted.facts ?? []).filter(
+    f => f.key && f.value && typeof f.confidence === "number" && f.confidence >= 0.7,
+  );
 
-  // ── Phase 2b: DB write with retry ─────────────────────────────────────────
-  let dbSucceeded = false;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+  if (validFacts.length > 0) {
     try {
-      // Only update name + summary; counters already written in Phase 1
-      await db
-        .update(callerProfilesTable)
-        .set({
-          name:      extracted.name    ? extracted.name    : sql`caller_profiles.name`,
-          summary:   extracted.summary ? extracted.summary : sql`caller_profiles.summary`,
-          updatedAt: now,
-        })
-        .where(
-          and(
-            eq(callerProfilesTable.agentId,     agentId),
-            eq(callerProfilesTable.phoneNumber, phoneNumber),
-          ),
-        );
-      dbSucceeded = true;
-      break;
-    } catch (dbErr) {
-      logger.warn(
-        { agentId, phoneNumber, callId, attempt, maxAttempts: MAX_ATTEMPTS, dbErr },
-        "Caller profile DB write failed — will retry",
+      await db.insert(callerFactsTable).values(
+        validFacts.map(f => ({
+          agentId,
+          phoneNumber,
+          key:          f.key.toLowerCase().replace(/\s+/g, "_").slice(0, 64),
+          value:        String(f.value).slice(0, 512),
+          confidence:   Math.min(1, Math.max(0, f.confidence)),
+          sourceCallId: callId,
+        })),
       );
-      if (attempt < MAX_ATTEMPTS) {
-        await new Promise<void>((r) => setTimeout(r, BACKOFF_BASE_MS * (2 ** (attempt - 1))));
-      }
+      logger.info({ agentId, phoneNumber, callId, factCount: validFacts.length }, "Caller facts saved");
+    } catch (factsErr) {
+      logger.warn({ agentId, phoneNumber, callId, factsErr }, "Caller facts DB write failed");
     }
   }
 
-  if (!dbSucceeded) {
-    logger.error(
-      { agentId, phoneNumber, callId, extractedName: extracted.name ?? null, summarySample: (extracted.summary ?? "").slice(0, 200) },
-      "Caller profile DB write failed after all retries — summary not persisted",
-    );
-    return;
+  // ── Phase 3b: update archive row with summary + factsExtracted flag ───────
+  if (archiveId && extracted.summary) {
+    try {
+      await db
+        .update(callerCallArchiveTable)
+        .set({ summary: extracted.summary, factsExtracted: validFacts.length > 0 })
+        .where(eq(callerCallArchiveTable.id, archiveId));
+    } catch { /* non-fatal */ }
   }
 
-  logger.info({ agentId, phoneNumber, callId }, "Caller profile summary updated via LLM");
-}
+  // ── Phase 3c: update caller_profiles summary (Layer 1 backward compat) ───
+  const newName    = extracted.name    || existing?.name    || null;
+  const newSummary = extracted.summary || existing?.summary || null;
 
-// ── Detect callback requests ──────────────────────────────────────────────────
-
-/**
- * Scan the transcript for "call me back in X minutes" style requests.
- * If detected, creates a scheduled_callbacks record so the poller can fire
- * an outbound call at the right time.
- * Should be called fire-and-forget after a call ends.
- */
-export async function detectCallbackRequest(opts: {
-  agentId: number;
-  toNumber: string;    // human's phone number (or "webcall:<userId>")
-  userId?: string | null;   // Clerk userId — stored so the poller can route webcall callbacks via SSE
-  history: ConversationTurn[];
-  llm: LLMAdapter;
-  callId: number;
-  campaignLeadId?: number | null;  // if set, the callback will re-attach to the campaign lead
-}): Promise<void> {
-  const { agentId, toNumber, userId, history, llm, callId, campaignLeadId } = opts;
-
-  if (history.length < 2) return;
-
-  const transcript = history
-    .map((t) => `${t.role === "user" ? "Caller" : "Agent"}: ${t.content}`)
-    .join("\n");
-
-  let raw = "";
-  await llm.chat(
-    [
-      {
-        role: "user",
-        content:
-          `Analyze this call transcript and determine if the caller explicitly requested a callback after a specific delay.\n` +
-          `Return ONLY valid JSON with these fields:\n` +
-          `- "callbackRequested": true if caller said something like "call me back", "call me in X minutes", "call me after X mins", otherwise false\n` +
-          `- "delayMinutes": the number of minutes until callback (integer), or null if not applicable\n\n` +
-          `Transcript:\n${transcript.slice(0, 4000)}`,
-      },
-    ],
-    "You detect callback scheduling requests in voice call transcripts. Return only a JSON object with 'callbackRequested' (boolean) and 'delayMinutes' (integer|null). Be conservative — only return true if the caller explicitly asked to be called back after a specific duration.",
-    () => {},
-    (full) => { raw = full; },
-  );
-
-  let extracted: { callbackRequested?: boolean; delayMinutes?: number | null } = {};
   try {
-    const jsonStr = raw.replace(/```(?:json)?\s*/gi, "").replace(/```\s*/g, "").trim();
-    extracted = JSON.parse(jsonStr) as typeof extracted;
-  } catch {
-    return;
+    await db
+      .update(callerProfilesTable)
+      .set({ name: newName, summary: newSummary, updatedAt: now })
+      .where(and(
+        eq(callerProfilesTable.agentId,     agentId),
+        eq(callerProfilesTable.phoneNumber, phoneNumber),
+      ));
+    logger.info({ agentId, phoneNumber, callId }, "Caller profile summary updated via LLM");
+  } catch (dbErr) {
+    logger.warn({ agentId, phoneNumber, callId, dbErr }, "Caller profile summary DB write failed");
   }
-
-  if (!extracted.callbackRequested || !extracted.delayMinutes || extracted.delayMinutes <= 0) return;
-
-  const scheduledAt = new Date(Date.now() + extracted.delayMinutes * 60_000);
-
-  await db.insert(scheduledCallbacksTable).values({
-    agentId,
-    toNumber,
-    userId: userId ?? null,
-    scheduledAt,
-    createdFromCallId: callId,
-    campaignLeadId:    campaignLeadId ?? null,
-    status: "pending",
-  });
-
-  logger.info(
-    { callId, agentId, toNumber, delayMinutes: extracted.delayMinutes, scheduledAt },
-    "Scheduled callback registered",
-  );
 }
 
-// ── Real-time name latch ──────────────────────────────────────────────────────
+// ── Real-time name latch (unchanged) ──────────────────────────────────────────
 
-/**
- * Regex patterns that detect a caller self-introducing their name.
- * Matches common spoken phrases; deliberately conservative to avoid false positives.
- * Capture group 1 is the name (one or two capitalised words).
- */
 const NAME_PATTERNS: RegExp[] = [
   /\bmy name is ([A-Za-z][a-z]+(?: [A-Za-z][a-z]+)?)\b/i,
   /\bi(?:'m| am) ([A-Za-z][a-z]+(?: [A-Za-z][a-z]+)?)\b/i,
@@ -375,24 +498,12 @@ const NAME_PATTERNS: RegExp[] = [
   /\bname(?:'s| is) ([A-Za-z][a-z]+(?: [A-Za-z][a-z]+)?)\b/i,
 ];
 
-/** Common words that match the patterns but are never real names. */
 const NAME_STOPWORDS = new Set([
   "sure", "sorry", "good", "fine", "here", "happy", "okay", "just",
   "calling", "speaking", "back", "checking", "looking", "trying",
   "not", "also", "right", "ready", "interested",
 ]);
 
-/**
- * Inspect a single user-turn transcript for a name self-introduction.
- * If a name is detected that differs from the existing cached name, the
- * new name is immediately persisted to `caller_profiles` so it is saved
- * even if the call drops before the post-call LLM extraction runs.
- *
- * Designed to be called fire-and-forget from the onTranscript hook.
- * Never throws — all errors are logged and swallowed.
- *
- * Returns the detected (and persisted) name, or null if nothing new was found.
- */
 export async function latchCallerName(opts: {
   agentId: number;
   phoneNumber: string;
@@ -419,16 +530,185 @@ export async function latchCallerName(opts: {
     await db
       .update(callerProfilesTable)
       .set({ name: detected, updatedAt: new Date() })
-      .where(
-        and(
-          eq(callerProfilesTable.agentId, agentId),
-          eq(callerProfilesTable.phoneNumber, phoneNumber),
-        ),
-      );
+      .where(and(
+        eq(callerProfilesTable.agentId,     agentId),
+        eq(callerProfilesTable.phoneNumber, phoneNumber),
+      ));
     logger.info({ callId, agentId, phoneNumber, detectedName: detected }, "Caller name latched in real-time");
     return detected;
   } catch (err) {
     logger.warn({ callId, agentId, phoneNumber, err }, "Real-time caller name latch DB write failed");
     return null;
   }
+}
+
+// ── Real-time fact latch (new) ────────────────────────────────────────────────
+
+/**
+ * Pattern-based detection of key facts stated mid-call.
+ * Runs on every user utterance; immediately persists to caller_facts
+ * so facts are saved even if the call drops before post-call LLM extraction.
+ */
+
+interface FactPattern {
+  key: string;
+  patterns: RegExp[];
+  extract: (match: RegExpMatchArray) => string;
+  confidence: number;
+}
+
+const FACT_PATTERNS: FactPattern[] = [
+  {
+    key: "age",
+    patterns: [
+      /\bi(?:'m| am) (\d{1,3}) years? old\b/i,
+      /\bmy age is (\d{1,3})\b/i,
+      /\b(\d{1,3}) years? old\b/i,
+    ],
+    extract: m => m[1]!,
+    confidence: 0.9,
+  },
+  {
+    key: "family_size",
+    patterns: [
+      /\bfamily of (\d+)\b/i,
+      /\b(\d+) (?:family )?members?\b/i,
+      /\b(\d+) (?:kids?|children|sons?|daughters?)\b/i,
+    ],
+    extract: m => m[1]!,
+    confidence: 0.85,
+  },
+  {
+    key: "children_count",
+    patterns: [
+      /\b(\d+) (?:kids?|children)\b/i,
+      /\bi have (\d+) (?:kids?|children|sons?|daughters?)\b/i,
+    ],
+    extract: m => m[1]!,
+    confidence: 0.85,
+  },
+  {
+    key: "location",
+    patterns: [
+      /\bi(?:'m| am) (?:from|in|based in|calling from) ([A-Z][a-zA-Z\s]{2,30}?)(?:\.|,|$)/,
+      /\bi live in ([A-Z][a-zA-Z\s]{2,30}?)(?:\.|,|$)/,
+    ],
+    extract: m => m[1]!.trim(),
+    confidence: 0.8,
+  },
+  {
+    key: "occupation",
+    patterns: [
+      /\bi(?:'m| am) a(?:n)? ([a-zA-Z\s]{3,40}?) (?:by profession|by trade|working as)\b/i,
+      /\bi work as (?:a(?:n)? )?([a-zA-Z\s]{3,40}?)\b(?:\.|,|$)/i,
+    ],
+    extract: m => m[1]!.trim(),
+    confidence: 0.8,
+  },
+  {
+    key: "budget_range",
+    patterns: [
+      /\bbudget (?:of |is |around )?(?:₹|rs\.?|inr)?\s?(\d[\d,]*)\b/i,
+      /\bcan (?:spend|afford|pay) (?:up to |around |about )?(?:₹|rs\.?|inr)?\s?(\d[\d,]*)\b/i,
+      /\b(?:₹|rs\.?|inr)\s?(\d[\d,]+)\s*(?:per year|monthly|p\.?a\.?|\/year|\/month)?\b/i,
+    ],
+    extract: m => m[1]!.replace(/,/g, ""),
+    confidence: 0.85,
+  },
+];
+
+export async function latchCallerFact(opts: {
+  agentId: number;
+  phoneNumber: string;
+  transcript: string;
+  callId: number;
+  existingFacts: Map<string, string>;  // key → current known value (to skip re-writing same fact)
+}): Promise<Map<string, string>> {
+  const { agentId, phoneNumber, transcript, callId, existingFacts } = opts;
+  const updated = new Map(existingFacts);
+
+  const toInsert: Array<{ agentId: number; phoneNumber: string; key: string; value: string; confidence: number; sourceCallId: number }> = [];
+
+  for (const fp of FACT_PATTERNS) {
+    if (updated.has(fp.key)) continue;  // already know this fact
+
+    for (const pattern of fp.patterns) {
+      const match = transcript.match(pattern);
+      if (!match) continue;
+
+      let value: string;
+      try { value = fp.extract(match).trim(); } catch { continue; }
+      if (!value || value.length > 200) continue;
+
+      updated.set(fp.key, value);
+      toInsert.push({ agentId, phoneNumber, key: fp.key, value, confidence: fp.confidence, sourceCallId: callId });
+      break;
+    }
+  }
+
+  if (toInsert.length > 0) {
+    try {
+      await db.insert(callerFactsTable).values(toInsert);
+      logger.info({ callId, agentId, phoneNumber, keys: toInsert.map(r => r.key) }, "Caller facts latched in real-time");
+    } catch (err) {
+      logger.warn({ callId, agentId, phoneNumber, err }, "Real-time caller fact latch DB write failed");
+    }
+  }
+
+  return updated;
+}
+
+// ── Detect callback requests ──────────────────────────────────────────────────
+
+export async function detectCallbackRequest(opts: {
+  agentId: number;
+  toNumber: string;
+  userId?: string | null;
+  history: ConversationTurn[];
+  llm: LLMAdapter;
+  callId: number;
+  campaignLeadId?: number | null;
+}): Promise<void> {
+  const { agentId, toNumber, userId, history, llm, callId, campaignLeadId } = opts;
+
+  if (history.length < 2) return;
+
+  const transcript = history.map(t => `${t.role === "user" ? "Caller" : "Agent"}: ${t.content}`).join("\n");
+
+  let raw = "";
+  await llm.chat(
+    [{
+      role: "user",
+      content:
+        `Analyze this call transcript and determine if the caller explicitly requested a callback after a specific delay.\n` +
+        `Return ONLY valid JSON with these fields:\n` +
+        `- "callbackRequested": true if caller said something like "call me back", "call me in X minutes", "call me after X mins", otherwise false\n` +
+        `- "delayMinutes": the number of minutes until callback (integer), or null if not applicable\n\n` +
+        `Transcript:\n${transcript.slice(0, 4000)}`,
+    }],
+    "You detect callback scheduling requests in voice call transcripts. Return only a JSON object with 'callbackRequested' (boolean) and 'delayMinutes' (integer|null). Be conservative — only return true if the caller explicitly asked to be called back after a specific duration.",
+    () => {},
+    (full) => { raw = full; },
+  );
+
+  let extracted: { callbackRequested?: boolean; delayMinutes?: number | null } = {};
+  try {
+    const jsonStr = raw.replace(/```(?:json)?\s*/gi, "").replace(/```\s*/g, "").trim();
+    extracted = JSON.parse(jsonStr) as typeof extracted;
+  } catch {
+    return;
+  }
+
+  if (!extracted.callbackRequested || !extracted.delayMinutes || extracted.delayMinutes <= 0) return;
+
+  const scheduledAt = new Date(Date.now() + extracted.delayMinutes * 60_000);
+
+  await db.insert(scheduledCallbacksTable).values({
+    agentId, toNumber, userId: userId ?? null, scheduledAt,
+    createdFromCallId: callId,
+    campaignLeadId:    campaignLeadId ?? null,
+    status: "pending",
+  });
+
+  logger.info({ callId, agentId, toNumber, delayMinutes: extracted.delayMinutes, scheduledAt }, "Scheduled callback registered");
 }
