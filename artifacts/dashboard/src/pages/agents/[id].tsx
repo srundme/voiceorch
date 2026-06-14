@@ -4,7 +4,8 @@ import { Link, useParams, useLocation } from "wouter";
 import { format, parseISO } from "date-fns";
 import {
   ArrowLeft, Settings2, Activity, Phone, BarChart2, Clock,
-  Mic, MicOff, PhoneOff, Copy, Check, Loader2, Volume2, PhoneOutgoing, Pencil
+  Mic, MicOff, PhoneOff, Copy, Check, Loader2, Volume2, PhoneOutgoing, Pencil,
+  Brain, Trash2, ChevronDown, ChevronRight, User, Calendar, Archive,
 } from "lucide-react";
 import {
   useGetAgent,
@@ -405,6 +406,303 @@ function WebCallPanel({ agentId, agentName, autostart, callbackId }: { agentId: 
   );
 }
 
+/* ── Caller Memory Tab ────────────────────────────────────────────────────── */
+
+interface CallerRow {
+  phoneNumber: string;
+  name: string | null;
+  summary: string | null;
+  callCount: number;
+  factCount: number;
+  archiveCount: number;
+  lastCalledAt: string | null;
+  lastCallDropped: boolean;
+}
+
+interface FactRow {
+  id: number;
+  key: string;
+  value: string;
+  confidence: number;
+  sourceCallId: number | null;
+  createdAt: string;
+}
+
+interface ArchiveRow {
+  id: number;
+  callId: number | null;
+  transcript: string;
+  summary: string | null;
+  durationSeconds: number | null;
+  createdAt: string;
+}
+
+interface CallerDetail {
+  facts: FactRow[];
+  archive: ArchiveRow[];
+}
+
+function relativeTime(iso: string | null): string {
+  if (!iso) return "—";
+  const ms = Date.now() - new Date(iso).getTime();
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return "just now";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d}d ago`;
+  return format(new Date(iso), "MMM d");
+}
+
+function fmtDur(s: number | null): string {
+  if (!s) return "0s";
+  const m = Math.floor(s / 60);
+  const r = Math.floor(s % 60);
+  return m > 0 ? `${m}m ${r}s` : `${r}s`;
+}
+
+function CallerMemoryTab({ agentId }: { agentId: number }) {
+  const { getToken } = useAuth();
+  const [callers, setCallers]       = useState<CallerRow[] | null>(null);
+  const [loading, setLoading]       = useState(true);
+  const [expanded, setExpanded]     = useState<string | null>(null);
+  const [detail, setDetail]         = useState<Record<string, CallerDetail>>({});
+  const [detailLoading, setDL]      = useState<string | null>(null);
+  const [deleting, setDeleting]     = useState<number | null>(null);
+  const [transcriptOpen, setTO]     = useState<string | null>(null); // archiveId
+  const { toast } = useToast();
+
+  const authHeaders = useCallback(async (): Promise<Record<string, string>> => {
+    const token = await getToken();
+    return token ? { "Authorization": `Bearer ${token}` } : {};
+  }, [getToken]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const h = await authHeaders();
+        const r = await fetch(`/api/agents/${agentId}/caller-memory`, { headers: h });
+        if (r.ok) setCallers(await r.json() as CallerRow[]);
+      } catch { /* ignore */ } finally { setLoading(false); }
+    })();
+  }, [agentId, authHeaders]);
+
+  const loadDetail = useCallback(async (phone: string) => {
+    if (detail[phone]) return;
+    setDL(phone);
+    try {
+      const h = await authHeaders();
+      const r = await fetch(`/api/agents/${agentId}/caller-memory/${encodeURIComponent(phone)}`, { headers: h });
+      if (r.ok) {
+        const body = await r.json() as CallerDetail;
+        setDetail(prev => ({ ...prev, [phone]: body }));
+      }
+    } catch { /* ignore */ } finally { setDL(null); }
+  }, [agentId, authHeaders, detail]);
+
+  const toggleExpand = (phone: string) => {
+    if (expanded === phone) { setExpanded(null); return; }
+    setExpanded(phone);
+    void loadDetail(phone);
+  };
+
+  const deleteFact = async (phone: string, factId: number) => {
+    setDeleting(factId);
+    try {
+      const h = await authHeaders();
+      await fetch(`/api/agents/${agentId}/caller-memory/${encodeURIComponent(phone)}/facts/${factId}`, { method: "DELETE", headers: h });
+      setDetail(prev => ({
+        ...prev,
+        [phone]: { ...prev[phone]!, facts: prev[phone]!.facts.filter(f => f.id !== factId) },
+      }));
+      setCallers(prev => prev?.map(c =>
+        c.phoneNumber === phone ? { ...c, factCount: Math.max(0, c.factCount - 1) } : c
+      ) ?? null);
+      toast({ title: "Fact deleted" });
+    } catch {
+      toast({ title: "Failed to delete fact", variant: "destructive" });
+    } finally { setDeleting(null); }
+  };
+
+  if (loading) return (
+    <div className="space-y-3 mt-2">
+      {[1,2,3].map(i => <Skeleton key={i} className="h-14 w-full" />)}
+    </div>
+  );
+
+  if (!callers || callers.length === 0) return (
+    <div className="flex flex-col items-center justify-center py-24 text-center gap-3">
+      <Brain className="h-12 w-12 text-muted-foreground/30" />
+      <p className="text-muted-foreground font-medium">No caller memory yet</p>
+      <p className="text-sm text-muted-foreground/70 max-w-xs">
+        The system will start building profiles after the first call. Facts are extracted automatically after each conversation.
+      </p>
+    </div>
+  );
+
+  // Deduplicate facts to most-recent per key for the detail view
+  const dedupedfacts = (facts: FactRow[]): FactRow[] => {
+    const seen = new Set<string>();
+    return facts.filter(f => { if (seen.has(f.key)) return false; seen.add(f.key); return true; });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Brain className="h-4 w-4" />
+          <span><span className="font-semibold text-foreground">{callers.length}</span> caller{callers.length !== 1 ? "s" : ""} tracked</span>
+        </div>
+        <span className="text-xs text-muted-foreground">Facts accumulate across calls — latest value per key shown</span>
+      </div>
+
+      <div className="rounded-lg border overflow-hidden">
+        {callers.map((caller, idx) => {
+          const isOpen = expanded === caller.phoneNumber;
+          const d = detail[caller.phoneNumber];
+          const facts = d ? dedupedfacts(d.facts) : [];
+
+          return (
+            <div key={caller.phoneNumber} className={idx > 0 ? "border-t" : ""}>
+              {/* Caller row */}
+              <button
+                className="w-full flex items-center gap-4 px-4 py-3 hover:bg-muted/40 transition-colors text-left"
+                onClick={() => toggleExpand(caller.phoneNumber)}
+              >
+                <div className="text-muted-foreground">
+                  {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-sm truncate">{caller.name ?? caller.phoneNumber}</span>
+                    {caller.lastCallDropped && <Badge className="text-[10px] px-1.5 py-0 bg-amber-500/20 text-amber-500 border-transparent">dropped</Badge>}
+                  </div>
+                  {caller.name && <div className="text-xs text-muted-foreground font-mono">{caller.phoneNumber}</div>}
+                </div>
+                <div className="flex items-center gap-5 text-xs text-muted-foreground shrink-0">
+                  <div className="flex items-center gap-1"><Phone className="h-3 w-3" />{caller.callCount}</div>
+                  <div className="flex items-center gap-1"><Brain className="h-3 w-3" />{caller.factCount} facts</div>
+                  <div className="flex items-center gap-1"><Archive className="h-3 w-3" />{caller.archiveCount} calls</div>
+                  <div className="flex items-center gap-1"><Clock className="h-3 w-3" />{relativeTime(caller.lastCalledAt)}</div>
+                </div>
+              </button>
+
+              {/* Expanded detail */}
+              {isOpen && (
+                <div className="border-t bg-muted/20 px-4 py-4 space-y-5">
+                  {detailLoading === caller.phoneNumber && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />Loading memory…
+                    </div>
+                  )}
+
+                  {/* Summary */}
+                  {caller.summary && (
+                    <div className="text-sm text-muted-foreground italic border-l-2 border-primary/30 pl-3">
+                      {caller.summary}
+                    </div>
+                  )}
+
+                  {/* Facts */}
+                  {d && (
+                    <div>
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                        <Brain className="h-3.5 w-3.5" />Known Facts
+                      </div>
+                      {facts.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">No structured facts extracted yet.</p>
+                      ) : (
+                        <div className="rounded-md border overflow-hidden">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b bg-muted/50">
+                                <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground w-40">Key</th>
+                                <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Value</th>
+                                <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground w-24">Confidence</th>
+                                <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground w-24">Learned</th>
+                                <th className="w-8" />
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {facts.map(fact => (
+                                <tr key={fact.id} className="border-b last:border-0 hover:bg-muted/30">
+                                  <td className="px-3 py-2 font-mono text-xs text-primary">{fact.key}</td>
+                                  <td className="px-3 py-2 font-medium">{fact.value}</td>
+                                  <td className="px-3 py-2">
+                                    <div className="flex items-center gap-1.5">
+                                      <div className="h-1.5 flex-1 rounded-full bg-muted overflow-hidden max-w-16">
+                                        <div
+                                          className={`h-full rounded-full ${fact.confidence >= 0.8 ? "bg-emerald-500" : fact.confidence >= 0.6 ? "bg-amber-500" : "bg-red-400"}`}
+                                          style={{ width: `${Math.round(fact.confidence * 100)}%` }}
+                                        />
+                                      </div>
+                                      <span className="text-xs text-muted-foreground">{Math.round(fact.confidence * 100)}%</span>
+                                    </div>
+                                  </td>
+                                  <td className="px-3 py-2 text-xs text-muted-foreground">{relativeTime(fact.createdAt)}</td>
+                                  <td className="px-2 py-2">
+                                    <button
+                                      onClick={() => void deleteFact(caller.phoneNumber, fact.id)}
+                                      disabled={deleting === fact.id}
+                                      className="text-muted-foreground hover:text-destructive transition-colors disabled:opacity-40"
+                                    >
+                                      {deleting === fact.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Call Archive */}
+                  {d && d.archive.length > 0 && (
+                    <div>
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                        <Archive className="h-3.5 w-3.5" />Call Archive
+                      </div>
+                      <div className="space-y-2">
+                        {d.archive.map(entry => (
+                          <div key={entry.id} className="rounded-md border bg-card p-3 space-y-1.5">
+                            <div className="flex items-center justify-between text-xs text-muted-foreground">
+                              <div className="flex items-center gap-2">
+                                <Calendar className="h-3 w-3" />
+                                <span>{format(new Date(entry.createdAt), "MMM d, yyyy · HH:mm")}</span>
+                                {entry.durationSeconds && <span>· {fmtDur(entry.durationSeconds)}</span>}
+                              </div>
+                              <button
+                                onClick={() => setTO(transcriptOpen === String(entry.id) ? null : String(entry.id))}
+                                className="text-muted-foreground hover:text-foreground text-xs underline-offset-2 hover:underline"
+                              >
+                                {transcriptOpen === String(entry.id) ? "Hide transcript" : "View transcript"}
+                              </button>
+                            </div>
+                            {entry.summary && <p className="text-sm">{entry.summary}</p>}
+                            {transcriptOpen === String(entry.id) && (
+                              <div className="mt-2 rounded bg-muted/60 p-3 font-mono text-xs whitespace-pre-wrap max-h-48 overflow-y-auto leading-relaxed text-muted-foreground">
+                                {entry.transcript}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /* ── Agent Detail Page ────────────────────────────────────────────────────── */
 
 export default function AgentDetail() {
@@ -590,6 +888,9 @@ export default function AgentDetail() {
           </TabsTrigger>
           <TabsTrigger value="configuration" className={tabClass}>Configuration</TabsTrigger>
           <TabsTrigger value="calls"         className={tabClass}>Call History</TabsTrigger>
+          <TabsTrigger value="memory"        className={tabClass}>
+            <Brain className="h-3.5 w-3.5 mr-1.5" />Caller Memory
+          </TabsTrigger>
         </TabsList>
 
         <div className="mt-6 flex-1 overflow-auto">
@@ -733,6 +1034,11 @@ export default function AgentDetail() {
                 </Table>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* ── Caller Memory ── */}
+          <TabsContent value="memory" className="m-0">
+            <CallerMemoryTab agentId={agent.id} />
           </TabsContent>
         </div>
       </Tabs>

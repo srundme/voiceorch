@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, and } from "drizzle-orm";
-import { db, agentsTable, schedulingCalendarsTable } from "@workspace/db";
+import { eq, and, count, desc } from "drizzle-orm";
+import { db, agentsTable, schedulingCalendarsTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable } from "@workspace/db";
 import {
   CreateAgentBody,
   UpdateAgentBody,
@@ -197,6 +197,96 @@ router.delete("/agents/:id", requireAuth, async (req, res): Promise<void> => {
   await logActivity({ userId: clerkId, eventType: "agent.deleted", resourceType: "agent", resourceId: String(deleted.id), description: `Agent "${deleted.name}" deleted` });
   res.sendStatus(204);
 });
+
+// ── Caller Memory endpoints ────────────────────────────────────────────────
+
+// List all callers tracked for this agent
+router.get("/agents/:id/caller-memory", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const agentId = parseInt(String(req.params["id"] ?? ""), 10);
+  if (isNaN(agentId)) { res.status(400).json({ error: "Invalid agent id" }); return; }
+
+  const [agent] = await db.select({ id: agentsTable.id })
+    .from(agentsTable)
+    .where(and(eq(agentsTable.id, agentId), eq(agentsTable.userId, clerkId)));
+  if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+
+  const [profiles, factCounts, archiveCounts] = await Promise.all([
+    db.select().from(callerProfilesTable)
+      .where(eq(callerProfilesTable.agentId, agentId))
+      .orderBy(desc(callerProfilesTable.lastCalledAt)),
+    db.select({ phoneNumber: callerFactsTable.phoneNumber, cnt: count() })
+      .from(callerFactsTable)
+      .where(eq(callerFactsTable.agentId, agentId))
+      .groupBy(callerFactsTable.phoneNumber),
+    db.select({ phoneNumber: callerCallArchiveTable.phoneNumber, cnt: count() })
+      .from(callerCallArchiveTable)
+      .where(eq(callerCallArchiveTable.agentId, agentId))
+      .groupBy(callerCallArchiveTable.phoneNumber),
+  ]);
+
+  const factMap    = new Map(factCounts.map(r => [r.phoneNumber, r.cnt]));
+  const archiveMap = new Map(archiveCounts.map(r => [r.phoneNumber, r.cnt]));
+
+  res.json(profiles.map(p => ({
+    phoneNumber:     p.phoneNumber,
+    name:            p.name,
+    summary:         p.summary,
+    callCount:       p.callCount,
+    factCount:       factMap.get(p.phoneNumber) ?? 0,
+    archiveCount:    archiveMap.get(p.phoneNumber) ?? 0,
+    lastCalledAt:    p.lastCalledAt,
+    lastCallDropped: p.lastCallDropped,
+  })));
+});
+
+// Get all facts + archive for a specific caller
+router.get("/agents/:id/caller-memory/:phone", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const agentId = parseInt(String(req.params["id"] ?? ""), 10);
+  const phoneNumber = decodeURIComponent(String(req.params["phone"] ?? ""));
+  if (isNaN(agentId) || !phoneNumber) { res.status(400).json({ error: "Invalid params" }); return; }
+
+  const [agent] = await db.select({ id: agentsTable.id })
+    .from(agentsTable)
+    .where(and(eq(agentsTable.id, agentId), eq(agentsTable.userId, clerkId)));
+  if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+
+  const [facts, archive] = await Promise.all([
+    db.select().from(callerFactsTable)
+      .where(and(eq(callerFactsTable.agentId, agentId), eq(callerFactsTable.phoneNumber, phoneNumber)))
+      .orderBy(desc(callerFactsTable.createdAt)),
+    db.select().from(callerCallArchiveTable)
+      .where(and(eq(callerCallArchiveTable.agentId, agentId), eq(callerCallArchiveTable.phoneNumber, phoneNumber)))
+      .orderBy(desc(callerCallArchiveTable.createdAt)),
+  ]);
+
+  res.json({ facts, archive });
+});
+
+// Delete a specific fact row
+router.delete("/agents/:id/caller-memory/:phone/facts/:factId", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const agentId = parseInt(String(req.params["id"] ?? ""), 10);
+  const factId  = parseInt(String(req.params["factId"] ?? ""), 10);
+  const phoneNumber = decodeURIComponent(String(req.params["phone"] ?? ""));
+  if (isNaN(agentId) || isNaN(factId) || !phoneNumber) { res.status(400).json({ error: "Invalid params" }); return; }
+
+  const [agent] = await db.select({ id: agentsTable.id })
+    .from(agentsTable)
+    .where(and(eq(agentsTable.id, agentId), eq(agentsTable.userId, clerkId)));
+  if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+
+  await db.delete(callerFactsTable)
+    .where(and(
+      eq(callerFactsTable.id, factId),
+      eq(callerFactsTable.agentId, agentId),
+      eq(callerFactsTable.phoneNumber, phoneNumber),
+    ));
+  res.status(204).end();
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 router.patch("/agents/:id/toggle", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
