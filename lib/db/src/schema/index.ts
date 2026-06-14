@@ -32,3 +32,4 @@ export * from "./verified-destinations";
 export * from "./ambient-sounds";
 export * from "./callerFacts";
 export * from "./callerCallArchive";
+export * from "./callerSentences";

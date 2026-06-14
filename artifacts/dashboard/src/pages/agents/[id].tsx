@@ -6,6 +6,7 @@ import {
   ArrowLeft, Settings2, Activity, Phone, BarChart2, Clock,
   Mic, MicOff, PhoneOff, Copy, Check, Loader2, Volume2, PhoneOutgoing, Pencil,
   Brain, Trash2, ChevronDown, ChevronRight, User, Calendar, Archive,
+  ArrowRight, MessageSquare, History, GitBranch,
 } from "lucide-react";
 import {
   useGetAgent,
@@ -419,27 +420,49 @@ interface CallerRow {
   lastCallDropped: boolean;
 }
 
+// ── Graph memory types (Graphiti-style L0/L1/L2) ─────────────────────────────
+
+interface FactHistory {
+  id: number;
+  value: string;
+  confidence: number;
+  createdAt: string;
+}
+
 interface FactRow {
   id: number;
   key: string;
   value: string;
   confidence: number;
   sourceCallId: number | null;
+  sourceSentenceIds: number[];
   createdAt: string;
+  /** Older versions of this fact, oldest-first (superseded_by chain) */
+  history: FactHistory[];
 }
 
-interface ArchiveRow {
+interface SentenceNode {
+  id: number;
+  sequenceNum: number;
+  speaker: string;   // 'caller' | 'agent'
+  text: string;
+}
+
+interface EpisodeRow {
   id: number;
   callId: number | null;
-  transcript: string;
   summary: string | null;
   durationSeconds: number | null;
   createdAt: string;
+  /** L0 fact IDs extracted from this episode (insight_facts edges) */
+  insightFactIds: number[];
+  /** L2 sentence nodes in NEXT-edge order */
+  sentences: SentenceNode[];
 }
 
 interface CallerDetail {
   facts: FactRow[];
-  archive: ArchiveRow[];
+  episodes: EpisodeRow[];
 }
 
 function relativeTime(iso: string | null): string {
@@ -465,13 +488,14 @@ function fmtDur(s: number | null): string {
 
 function CallerMemoryTab({ agentId }: { agentId: number }) {
   const { getToken } = useAuth();
-  const [callers, setCallers]       = useState<CallerRow[] | null>(null);
-  const [loading, setLoading]       = useState(true);
-  const [expanded, setExpanded]     = useState<string | null>(null);
-  const [detail, setDetail]         = useState<Record<string, CallerDetail>>({});
-  const [detailLoading, setDL]      = useState<string | null>(null);
-  const [deleting, setDeleting]     = useState<number | null>(null);
-  const [transcriptOpen, setTO]     = useState<string | null>(null); // archiveId
+  const [callers, setCallers]             = useState<CallerRow[] | null>(null);
+  const [loading, setLoading]             = useState(true);
+  const [expanded, setExpanded]           = useState<string | null>(null);
+  const [detail, setDetail]               = useState<Record<string, CallerDetail>>({});
+  const [detailLoading, setDL]            = useState<string | null>(null);
+  const [deleting, setDeleting]           = useState<number | null>(null);
+  const [openSentences, setOpenSentences] = useState<Set<number>>(new Set());
+  const [openHistory, setOpenHistory]     = useState<Set<number>>(new Set());
   const { toast } = useToast();
 
   const authHeaders = useCallback(async (): Promise<Record<string, string>> => {
@@ -508,6 +532,12 @@ function CallerMemoryTab({ agentId }: { agentId: number }) {
     void loadDetail(phone);
   };
 
+  const toggleSentences = (epId: number) =>
+    setOpenSentences(prev => { const s = new Set(prev); s.has(epId) ? s.delete(epId) : s.add(epId); return s; });
+
+  const toggleHistory = (factId: number) =>
+    setOpenHistory(prev => { const s = new Set(prev); s.has(factId) ? s.delete(factId) : s.add(factId); return s; });
+
   const deleteFact = async (phone: string, factId: number) => {
     setDeleting(factId);
     try {
@@ -520,7 +550,7 @@ function CallerMemoryTab({ agentId }: { agentId: number }) {
       setCallers(prev => prev?.map(c =>
         c.phoneNumber === phone ? { ...c, factCount: Math.max(0, c.factCount - 1) } : c
       ) ?? null);
-      toast({ title: "Fact deleted" });
+      toast({ title: "Fact forgotten", description: "Entire revision chain deleted." });
     } catch {
       toast({ title: "Failed to delete fact", variant: "destructive" });
     } finally { setDeleting(null); }
@@ -537,32 +567,30 @@ function CallerMemoryTab({ agentId }: { agentId: number }) {
       <Brain className="h-12 w-12 text-muted-foreground/30" />
       <p className="text-muted-foreground font-medium">No caller memory yet</p>
       <p className="text-sm text-muted-foreground/70 max-w-xs">
-        The system will start building profiles after the first call. Facts are extracted automatically after each conversation.
+        After the first call the system builds a graph memory: L0 facts, L1 episodes, and L2 sentences linked by NEXT edges.
       </p>
     </div>
   );
 
-  // Deduplicate facts to most-recent per key for the detail view
-  const dedupedfacts = (facts: FactRow[]): FactRow[] => {
-    const seen = new Set<string>();
-    return facts.filter(f => { if (seen.has(f.key)) return false; seen.add(f.key); return true; });
-  };
-
   return (
     <div className="space-y-4">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Brain className="h-4 w-4" />
           <span><span className="font-semibold text-foreground">{callers.length}</span> caller{callers.length !== 1 ? "s" : ""} tracked</span>
         </div>
-        <span className="text-xs text-muted-foreground">Facts accumulate across calls — latest value per key shown</span>
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1"><span className="font-mono bg-primary/10 text-primary px-1 rounded text-[10px]">L0</span>facts</span>
+          <span className="flex items-center gap-1"><span className="font-mono bg-amber-500/10 text-amber-600 px-1 rounded text-[10px]">L1</span>episodes</span>
+          <span className="flex items-center gap-1"><span className="font-mono bg-emerald-500/10 text-emerald-600 px-1 rounded text-[10px]">L2</span>sentences</span>
+        </div>
       </div>
 
       <div className="rounded-lg border overflow-hidden">
         {callers.map((caller, idx) => {
           const isOpen = expanded === caller.phoneNumber;
           const d = detail[caller.phoneNumber];
-          const facts = d ? dedupedfacts(d.facts) : [];
 
           return (
             <div key={caller.phoneNumber} className={idx > 0 ? "border-t" : ""}>
@@ -584,74 +612,121 @@ function CallerMemoryTab({ agentId }: { agentId: number }) {
                 <div className="flex items-center gap-5 text-xs text-muted-foreground shrink-0">
                   <div className="flex items-center gap-1"><Phone className="h-3 w-3" />{caller.callCount}</div>
                   <div className="flex items-center gap-1"><Brain className="h-3 w-3" />{caller.factCount} facts</div>
-                  <div className="flex items-center gap-1"><Archive className="h-3 w-3" />{caller.archiveCount} calls</div>
+                  <div className="flex items-center gap-1"><Archive className="h-3 w-3" />{caller.archiveCount} ep</div>
                   <div className="flex items-center gap-1"><Clock className="h-3 w-3" />{relativeTime(caller.lastCalledAt)}</div>
                 </div>
               </button>
 
-              {/* Expanded detail */}
+              {/* Expanded graph detail */}
               {isOpen && (
                 <div className="border-t bg-muted/20 px-4 py-4 space-y-5">
                   {detailLoading === caller.phoneNumber && (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
-                      <Loader2 className="h-4 w-4 animate-spin" />Loading memory…
+                      <Loader2 className="h-4 w-4 animate-spin" />Loading memory graph…
                     </div>
                   )}
 
-                  {/* Summary */}
+                  {/* LLM summary */}
                   {caller.summary && (
                     <div className="text-sm text-muted-foreground italic border-l-2 border-primary/30 pl-3">
                       {caller.summary}
                     </div>
                   )}
 
-                  {/* Facts */}
+                  {/* ── L0 Facts ────────────────────────────────────────────── */}
                   {d && (
                     <div>
-                      <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                        <Brain className="h-3.5 w-3.5" />Known Facts
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-[11px] font-mono font-bold bg-primary/10 text-primary px-1.5 py-0.5 rounded">L0</span>
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Facts</span>
+                        <span className="ml-auto text-[10px] text-muted-foreground/60 italic">vector search · superseded_by edges</span>
                       </div>
-                      {facts.length === 0 ? (
-                        <p className="text-xs text-muted-foreground">No structured facts extracted yet.</p>
+                      {d.facts.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">No facts extracted yet.</p>
                       ) : (
                         <div className="rounded-md border overflow-hidden">
                           <table className="w-full text-sm">
                             <thead>
                               <tr className="border-b bg-muted/50">
-                                <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground w-40">Key</th>
-                                <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Value</th>
+                                <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground w-36">Key</th>
+                                <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Current Value</th>
                                 <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground w-24">Confidence</th>
+                                <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground w-24">Revisions</th>
                                 <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground w-24">Learned</th>
                                 <th className="w-8" />
                               </tr>
                             </thead>
                             <tbody>
-                              {facts.map(fact => (
-                                <tr key={fact.id} className="border-b last:border-0 hover:bg-muted/30">
-                                  <td className="px-3 py-2 font-mono text-xs text-primary">{fact.key}</td>
-                                  <td className="px-3 py-2 font-medium">{fact.value}</td>
-                                  <td className="px-3 py-2">
-                                    <div className="flex items-center gap-1.5">
-                                      <div className="h-1.5 flex-1 rounded-full bg-muted overflow-hidden max-w-16">
-                                        <div
-                                          className={`h-full rounded-full ${fact.confidence >= 0.8 ? "bg-emerald-500" : fact.confidence >= 0.6 ? "bg-amber-500" : "bg-red-400"}`}
-                                          style={{ width: `${Math.round(fact.confidence * 100)}%` }}
-                                        />
+                              {d.facts.map(fact => (
+                                <React.Fragment key={fact.id}>
+                                  <tr className="border-b last:border-0 hover:bg-muted/30">
+                                    <td className="px-3 py-2 font-mono text-xs text-primary">{fact.key}</td>
+                                    <td className="px-3 py-2 font-medium">{fact.value}</td>
+                                    <td className="px-3 py-2">
+                                      <div className="flex items-center gap-1.5">
+                                        <div className="h-1.5 flex-1 rounded-full bg-muted overflow-hidden max-w-16">
+                                          <div
+                                            className={`h-full rounded-full ${fact.confidence >= 0.8 ? "bg-emerald-500" : fact.confidence >= 0.6 ? "bg-amber-500" : "bg-red-400"}`}
+                                            style={{ width: `${Math.round(fact.confidence * 100)}%` }}
+                                          />
+                                        </div>
+                                        <span className="text-xs text-muted-foreground">{Math.round(fact.confidence * 100)}%</span>
                                       </div>
-                                      <span className="text-xs text-muted-foreground">{Math.round(fact.confidence * 100)}%</span>
-                                    </div>
-                                  </td>
-                                  <td className="px-3 py-2 text-xs text-muted-foreground">{relativeTime(fact.createdAt)}</td>
-                                  <td className="px-2 py-2">
-                                    <button
-                                      onClick={() => void deleteFact(caller.phoneNumber, fact.id)}
-                                      disabled={deleting === fact.id}
-                                      className="text-muted-foreground hover:text-destructive transition-colors disabled:opacity-40"
-                                    >
-                                      {deleting === fact.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                                    </button>
-                                  </td>
-                                </tr>
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      {fact.history.length > 0 ? (
+                                        <button
+                                          onClick={() => toggleHistory(fact.id)}
+                                          className="flex items-center gap-1 text-xs text-amber-600 hover:text-amber-700 transition-colors"
+                                        >
+                                          <History className="h-3 w-3" />
+                                          {fact.history.length} rev
+                                          {openHistory.has(fact.id) ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                                        </button>
+                                      ) : (
+                                        <span className="text-xs text-muted-foreground/50">—</span>
+                                      )}
+                                    </td>
+                                    <td className="px-3 py-2 text-xs text-muted-foreground">{relativeTime(fact.createdAt)}</td>
+                                    <td className="px-2 py-2">
+                                      <button
+                                        onClick={() => void deleteFact(caller.phoneNumber, fact.id)}
+                                        disabled={deleting === fact.id}
+                                        className="text-muted-foreground hover:text-destructive transition-colors disabled:opacity-40"
+                                        title="Forget this fact (deletes entire revision chain)"
+                                      >
+                                        {deleting === fact.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                                      </button>
+                                    </td>
+                                  </tr>
+                                  {/* Supersession chain (superseded_by edges) */}
+                                  {openHistory.has(fact.id) && fact.history.length > 0 && (
+                                    <tr className="border-b last:border-0 bg-amber-500/5">
+                                      <td colSpan={6} className="px-4 py-2.5">
+                                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+                                          <GitBranch className="h-3 w-3 text-amber-500" />
+                                          <span className="font-medium text-amber-600">superseded_by chain</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          {fact.history.map((h, i) => (
+                                            <React.Fragment key={h.id}>
+                                              <span className="font-mono text-xs line-through text-muted-foreground/60 bg-muted px-1.5 py-0.5 rounded">
+                                                {h.value}
+                                              </span>
+                                              <ArrowRight className="h-3 w-3 text-muted-foreground/40 shrink-0" />
+                                            </React.Fragment>
+                                          ))}
+                                          <span className="font-mono text-xs font-semibold text-foreground bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20">
+                                            {fact.value} ← current
+                                          </span>
+                                        </div>
+                                        <p className="text-[10px] text-muted-foreground/50 mt-1">
+                                          {fact.history.map((h, i) => `${h.value} (${relativeTime(h.createdAt)})`).join(" → ")} → {fact.value} (current)
+                                        </p>
+                                      </td>
+                                    </tr>
+                                  )}
+                                </React.Fragment>
                               ))}
                             </tbody>
                           </table>
@@ -660,36 +735,92 @@ function CallerMemoryTab({ agentId }: { agentId: number }) {
                     </div>
                   )}
 
-                  {/* Call Archive */}
-                  {d && d.archive.length > 0 && (
+                  {/* ── L1 Episodes ─────────────────────────────────────────── */}
+                  {d && d.episodes.length > 0 && (
                     <div>
-                      <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                        <Archive className="h-3.5 w-3.5" />Call Archive
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-[11px] font-mono font-bold bg-amber-500/10 text-amber-600 px-1.5 py-0.5 rounded">L1</span>
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Episodes</span>
+                        <span className="ml-auto text-[10px] text-muted-foreground/60 italic">graph traversal · insight_facts edges</span>
                       </div>
                       <div className="space-y-2">
-                        {d.archive.map(entry => (
-                          <div key={entry.id} className="rounded-md border bg-card p-3 space-y-1.5">
-                            <div className="flex items-center justify-between text-xs text-muted-foreground">
-                              <div className="flex items-center gap-2">
-                                <Calendar className="h-3 w-3" />
-                                <span>{format(new Date(entry.createdAt), "MMM d, yyyy · HH:mm")}</span>
-                                {entry.durationSeconds && <span>· {fmtDur(entry.durationSeconds)}</span>}
+                        {d.episodes.map(ep => {
+                          const epFacts = d.facts.filter(f => ep.insightFactIds.includes(f.id));
+                          const sentOpen = openSentences.has(ep.id);
+                          return (
+                            <div key={ep.id} className="rounded-md border bg-card overflow-hidden">
+                              <div className="px-3 py-2.5 space-y-1.5">
+                                {/* Episode header */}
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+                                  <Calendar className="h-3 w-3 shrink-0" />
+                                  <span>{format(new Date(ep.createdAt), "MMM d, yyyy · HH:mm")}</span>
+                                  {ep.durationSeconds && <span>· {fmtDur(ep.durationSeconds)}</span>}
+                                  {/* insight_facts badges */}
+                                  {epFacts.length > 0 && (
+                                    <div className="flex items-center gap-1 ml-auto flex-wrap">
+                                      <span className="text-[10px] text-muted-foreground/60">insight_facts:</span>
+                                      {epFacts.map(f => (
+                                        <Badge key={f.id} className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary border-transparent font-mono">
+                                          {f.key}
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {ep.sentences.length > 0 && (
+                                    <button
+                                      onClick={() => toggleSentences(ep.id)}
+                                      className={`flex items-center gap-1 text-[11px] transition-colors shrink-0 ${sentOpen ? "text-emerald-600" : "text-muted-foreground hover:text-foreground"}`}
+                                    >
+                                      <MessageSquare className="h-3 w-3" />
+                                      {ep.sentences.length} sentences
+                                      {sentOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                                    </button>
+                                  )}
+                                </div>
+                                {ep.summary && <p className="text-sm">{ep.summary}</p>}
                               </div>
-                              <button
-                                onClick={() => setTO(transcriptOpen === String(entry.id) ? null : String(entry.id))}
-                                className="text-muted-foreground hover:text-foreground text-xs underline-offset-2 hover:underline"
-                              >
-                                {transcriptOpen === String(entry.id) ? "Hide transcript" : "View transcript"}
-                              </button>
+
+                              {/* L2 sentence timeline (NEXT edges) */}
+                              {sentOpen && ep.sentences.length > 0 && (
+                                <div className="border-t">
+                                  <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/5 border-b">
+                                    <span className="text-[11px] font-mono font-bold bg-emerald-500/10 text-emerald-600 px-1.5 py-0.5 rounded">L2</span>
+                                    <span className="text-[11px] text-muted-foreground">Sentences — NEXT chain ({ep.sentences.length} nodes)</span>
+                                  </div>
+                                  <div className="divide-y">
+                                    {ep.sentences.map((s, i) => {
+                                      const isSource = d.facts.some(f => f.sourceSentenceIds.includes(s.id));
+                                      return (
+                                        <div key={s.id}>
+                                          <div className={`flex items-start gap-2 px-3 py-2 ${isSource ? "bg-primary/5" : ""}`}>
+                                            <span className="text-[10px] font-mono text-muted-foreground/50 pt-0.5 w-5 shrink-0 select-none">s{s.sequenceNum}</span>
+                                            <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 mt-0.5 font-medium ${
+                                              s.speaker === "caller"
+                                                ? "bg-blue-500/10 text-blue-600"
+                                                : "bg-muted text-muted-foreground"
+                                            }`}>
+                                              {s.speaker}
+                                            </span>
+                                            <span className="text-xs text-foreground/80 flex-1 leading-relaxed">{s.text}</span>
+                                            {isSource && (
+                                              <span className="text-[10px] text-primary/60 shrink-0 mt-0.5 font-mono">fact_source</span>
+                                            )}
+                                          </div>
+                                          {i < ep.sentences.length - 1 && (
+                                            <div className="flex items-center gap-1 px-3 py-0.5 bg-muted/20">
+                                              <ArrowRight className="h-2.5 w-2.5 text-muted-foreground/30" />
+                                              <span className="text-[9px] font-mono text-muted-foreground/25">NEXT</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
                             </div>
-                            {entry.summary && <p className="text-sm">{entry.summary}</p>}
-                            {transcriptOpen === String(entry.id) && (
-                              <div className="mt-2 rounded bg-muted/60 p-3 font-mono text-xs whitespace-pre-wrap max-h-48 overflow-y-auto leading-relaxed text-muted-foreground">
-                                {entry.transcript}
-                              </div>
-                            )}
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}

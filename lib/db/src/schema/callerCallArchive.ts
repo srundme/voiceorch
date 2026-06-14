@@ -2,9 +2,11 @@ import { pgTable, serial, integer, text, boolean, timestamp, index } from "drizz
 import { agentsTable } from "./agents";
 
 /**
- * Full transcript archive — one row per call, never deleted.
- * Provides the raw material for retrieval-augmented memory:
- * future calls can search/fetch past transcripts to recall specific details.
+ * Episode nodes — L1 in the Graphiti-style memory graph.
+ *
+ * One row per call, never deleted.
+ * insight_fact_ids tracks which L0 fact nodes were synthesized from this episode
+ * (insight_facts edges: L0→L1 in graph notation).
  */
 export const callerCallArchiveTable = pgTable("caller_call_archive", {
   id:              serial("id").primaryKey(),
@@ -15,6 +17,8 @@ export const callerCallArchiveTable = pgTable("caller_call_archive", {
   summary:         text("summary"),
   durationSeconds: integer("duration_seconds"),
   factsExtracted:  boolean("facts_extracted").default(false).notNull(),
+  /** Comma-separated caller_facts.id values — insight_facts edges (L1→L0) */
+  insightFactIds:  text("insight_fact_ids").notNull().default(""),
   createdAt:       timestamp("created_at").defaultNow().notNull(),
 }, (t) => [
   index("caller_call_archive_lookup_idx").on(t.agentId, t.phoneNumber),

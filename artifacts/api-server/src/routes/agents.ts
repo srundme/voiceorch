@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, and, count, desc } from "drizzle-orm";
-import { db, agentsTable, schedulingCalendarsTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable } from "@workspace/db";
+import { eq, and, count, desc, isNull, inArray } from "drizzle-orm";
+import { db, agentsTable, schedulingCalendarsTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callerSentencesTable } from "@workspace/db";
 import {
   CreateAgentBody,
   UpdateAgentBody,
@@ -240,7 +240,10 @@ router.get("/agents/:id/caller-memory", requireAuth, async (req, res): Promise<v
   })));
 });
 
-// Get all facts + archive for a specific caller
+// Get graph-structured memory for a specific caller:
+//   L0 facts with supersession chains + fact_sources provenance
+//   L1 episodes with insight_fact_ids
+//   L2 sentences with NEXT-edge ordering
 router.get("/agents/:id/caller-memory/:phone", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const agentId = parseInt(String(req.params["id"] ?? ""), 10);
@@ -252,19 +255,83 @@ router.get("/agents/:id/caller-memory/:phone", requireAuth, async (req, res): Pr
     .where(and(eq(agentsTable.id, agentId), eq(agentsTable.userId, clerkId)));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
 
-  const [facts, archive] = await Promise.all([
+  // Fetch all fact rows (current + superseded) to build chains
+  const [allFacts, allEpisodes] = await Promise.all([
     db.select().from(callerFactsTable)
       .where(and(eq(callerFactsTable.agentId, agentId), eq(callerFactsTable.phoneNumber, phoneNumber)))
       .orderBy(desc(callerFactsTable.createdAt)),
     db.select().from(callerCallArchiveTable)
       .where(and(eq(callerCallArchiveTable.agentId, agentId), eq(callerCallArchiveTable.phoneNumber, phoneNumber)))
-      .orderBy(desc(callerCallArchiveTable.createdAt)),
+      .orderBy(desc(callerCallArchiveTable.createdAt))
+      .limit(20),
   ]);
 
-  res.json({ facts, archive });
+  // Build supersession chains: predecessorMap[targetId] = facts that were superseded by targetId
+  const predecessorMap = new Map<number, typeof allFacts>();
+  for (const f of allFacts) {
+    if (f.supersededById !== null) {
+      if (!predecessorMap.has(f.supersededById)) predecessorMap.set(f.supersededById, []);
+      predecessorMap.get(f.supersededById)!.push(f);
+    }
+  }
+
+  function buildHistory(factId: number): Array<{ id: number; value: string; confidence: number; createdAt: Date }> {
+    const preds = predecessorMap.get(factId) ?? [];
+    const older = preds.flatMap(p => buildHistory(p.id));
+    return [...older, ...preds.map(p => ({ id: p.id, value: p.value, confidence: p.confidence, createdAt: p.createdAt }))]
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  }
+
+  const parseSentenceIds = (raw: string) =>
+    raw.split(",").map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+
+  // Current facts (non-superseded) with their history chains
+  const currentFacts = allFacts
+    .filter(f => f.supersededById === null)
+    .map(f => ({
+      id:                f.id,
+      key:               f.key,
+      value:             f.value,
+      confidence:        f.confidence,
+      sourceCallId:      f.sourceCallId,
+      sourceSentenceIds: parseSentenceIds(f.sourceSentenceIds),
+      createdAt:         f.createdAt,
+      history:           buildHistory(f.id),
+    }));
+
+  // Fetch L2 sentences for all episodes
+  const episodeIds = allEpisodes.map(e => e.id);
+  const sentences = episodeIds.length > 0
+    ? await db.select().from(callerSentencesTable)
+        .where(inArray(callerSentencesTable.episodeId, episodeIds))
+        .orderBy(callerSentencesTable.episodeId, callerSentencesTable.sequenceNum)
+    : [];
+
+  const sentencesByEpisode = new Map<number, typeof sentences>();
+  for (const s of sentences) {
+    if (!sentencesByEpisode.has(s.episodeId)) sentencesByEpisode.set(s.episodeId, []);
+    sentencesByEpisode.get(s.episodeId)!.push(s);
+  }
+
+  const episodes = allEpisodes.map(ep => ({
+    id:              ep.id,
+    callId:          ep.callId,
+    summary:         ep.summary,
+    durationSeconds: ep.durationSeconds,
+    createdAt:       ep.createdAt,
+    insightFactIds:  parseSentenceIds(ep.insightFactIds),  // reuse parser — same format
+    sentences:       (sentencesByEpisode.get(ep.id) ?? []).map(s => ({
+      id:          s.id,
+      sequenceNum: s.sequenceNum,
+      speaker:     s.speaker,
+      text:        s.text,
+    })),
+  }));
+
+  res.json({ facts: currentFacts, episodes });
 });
 
-// Delete a specific fact row
+// Delete an entire fact key (current + entire supersession chain) for a caller
 router.delete("/agents/:id/caller-memory/:phone/facts/:factId", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const agentId = parseInt(String(req.params["id"] ?? ""), 10);
@@ -277,12 +344,24 @@ router.delete("/agents/:id/caller-memory/:phone/facts/:factId", requireAuth, asy
     .where(and(eq(agentsTable.id, agentId), eq(agentsTable.userId, clerkId)));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
 
-  await db.delete(callerFactsTable)
+  // Find the key for this fact, then delete the entire supersession chain
+  const [target] = await db.select({ key: callerFactsTable.key })
+    .from(callerFactsTable)
     .where(and(
       eq(callerFactsTable.id, factId),
       eq(callerFactsTable.agentId, agentId),
       eq(callerFactsTable.phoneNumber, phoneNumber),
     ));
+
+  if (target) {
+    // Cascade: delete all versions of this fact key (entire graph chain)
+    await db.delete(callerFactsTable)
+      .where(and(
+        eq(callerFactsTable.agentId, agentId),
+        eq(callerFactsTable.phoneNumber, phoneNumber),
+        eq(callerFactsTable.key, target.key),
+      ));
+  }
   res.status(204).end();
 });
 

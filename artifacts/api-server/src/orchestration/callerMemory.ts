@@ -1,27 +1,36 @@
 /**
- * Three-layer caller memory — never forgets
+ * Graphiti-style three-layer caller memory — never forgets
  * ─────────────────────────────────────────────────────────────────
  *
- * Layer 1 — caller_profiles   (summary string, call count, drop tracking)
- *            Unchanged from before; kept for backward compat.
+ * L0 — caller_facts      (atomic fact nodes)
+ *       Conflict resolution: superseded_by edges (old fact → new fact)
+ *       Provenance:          fact_sources edges  (fact → source sentences)
+ *       "Current" facts: WHERE superseded_by_id IS NULL
  *
- * Layer 2 — caller_facts      (structured key/value facts, append-only)
- *            One row per extracted fact. Never overwritten.
- *            Most-recent row per key = current best-known value.
+ * L1 — caller_call_archive  (episode nodes)
+ *       Synthesis:   insight_facts edges (episode → facts extracted from it)
+ *       One row per call, never deleted.
  *
- * Layer 3 — caller_call_archive  (full transcript per call, never deleted)
- *            Loaded at call-start to give the agent verbatim recall of
- *            what happened in the last N conversations.
+ * L2 — caller_sentences  (sentence nodes)
+ *       Sequential utterances within an episode, ordered by sequence_num.
+ *       NEXT edges = sequence_num ordering within episode_id.
  *
- * Integration points (both session.ts and webcall.ts):
+ * Integration (both session.ts and webcall.ts):
  *   Call start  → loadCallerContext()  + injectEnhancedMemory()
- *   Mid-call    → latchCallerName()    (unchanged)
- *              → latchCallerFact()     (new — real-time fact detection)
- *   Call end    → updateCallerProfile() (now also archives + extracts facts)
+ *   Mid-call    → latchCallerName()    (real-time name detection)
+ *              → latchCallerFact()     (real-time pattern-based facts)
+ *   Call end    → updateCallerProfile() (archives + LLM extraction + supersession)
  */
 
-import { db, callerProfilesTable, scheduledCallbacksTable, callerFactsTable, callerCallArchiveTable } from "@workspace/db";
-import { and, eq, desc, sql } from "drizzle-orm";
+import {
+  db,
+  callerProfilesTable,
+  scheduledCallbacksTable,
+  callerFactsTable,
+  callerCallArchiveTable,
+  callerSentencesTable,
+} from "@workspace/db";
+import { and, eq, desc, isNull, inArray, sql } from "drizzle-orm";
 import type { ConversationTurn } from "./types.js";
 import type { createLLMAdapter } from "./adapters/llm/index.js";
 import { logger } from "../lib/logger.js";
@@ -43,10 +52,15 @@ export interface CallerProfile {
 }
 
 export interface CallerFact {
+  id: number;
   key: string;
   value: string;
   confidence: number;
   sourceCallId: number | null;
+  /** L2 sentence IDs this fact was sourced from (fact_sources provenance) */
+  sourceSentenceIds: number[];
+  /** Non-null if this fact has been superseded (points to the newer fact's id) */
+  supersededById: number | null;
   createdAt: Date;
 }
 
@@ -60,7 +74,7 @@ export interface CallerCallRecord {
 
 export interface CallerContext {
   profile: CallerProfile | null;
-  facts: CallerFact[];         // most-recent per key
+  facts: CallerFact[];         // only current (non-superseded) facts
   recentCalls: CallerCallRecord[];  // last 5 archived calls
 }
 
@@ -87,6 +101,10 @@ function daysSinceLabel(d: Date | null): string | null {
   return `${Math.floor(days / 365)} year${Math.floor(days / 365) > 1 ? "s" : ""} ago`;
 }
 
+function parseSentenceIds(raw: string): number[] {
+  return raw.split(",").map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+}
+
 // ── Layer 1 compat: load just the profile row ─────────────────────────────────
 
 export async function loadCallerProfile(
@@ -100,24 +118,28 @@ export async function loadCallerProfile(
   return row ?? null;
 }
 
-// ── Layer 1+2+3: load full context ────────────────────────────────────────────
+// ── L0+L1+L2: load full context ───────────────────────────────────────────────
 
 export async function loadCallerContext(
   agentId: number,
   phoneNumber: string,
 ): Promise<CallerContext> {
-  const [profile, allFacts, recentCalls] = await Promise.all([
-    // Layer 1
+  const [profile, currentFacts, recentCalls] = await Promise.all([
+    // L1 profile
     loadCallerProfile(agentId, phoneNumber),
 
-    // Layer 2 — all fact rows; we'll deduplicate to most-recent per key in memory
+    // L0 — only CURRENT facts (WHERE superseded_by_id IS NULL)
     db
       .select()
       .from(callerFactsTable)
-      .where(and(eq(callerFactsTable.agentId, agentId), eq(callerFactsTable.phoneNumber, phoneNumber)))
+      .where(and(
+        eq(callerFactsTable.agentId, agentId),
+        eq(callerFactsTable.phoneNumber, phoneNumber),
+        isNull(callerFactsTable.supersededById),
+      ))
       .orderBy(desc(callerFactsTable.createdAt)),
 
-    // Layer 3 — last 5 call archives
+    // L1 episodes — last 5
     db
       .select({
         id:              callerCallArchiveTable.id,
@@ -135,23 +157,18 @@ export async function loadCallerContext(
       .limit(5),
   ]);
 
-  // Deduplicate facts: keep most-recent row per key
-  const factsByKey = new Map<string, CallerFact>();
-  for (const row of allFacts) {
-    if (!factsByKey.has(row.key)) {
-      factsByKey.set(row.key, {
-        key:          row.key,
-        value:        row.value,
-        confidence:   row.confidence,
-        sourceCallId: row.sourceCallId,
-        createdAt:    row.createdAt,
-      });
-    }
-  }
-
   return {
     profile,
-    facts: Array.from(factsByKey.values()),
+    facts: currentFacts.map(r => ({
+      id:                r.id,
+      key:               r.key,
+      value:             r.value,
+      confidence:        r.confidence,
+      sourceCallId:      r.sourceCallId,
+      sourceSentenceIds: parseSentenceIds(r.sourceSentenceIds),
+      supersededById:    r.supersededById,
+      createdAt:         r.createdAt,
+    })),
     recentCalls: recentCalls.map(r => ({
       id:              r.id,
       callId:          r.callId,
@@ -171,14 +188,13 @@ export function injectCallerMemory(systemPrompt: string, profile: CallerProfile)
   return injectEnhancedMemory(systemPrompt, ctx);
 }
 
-// ── Enhanced memory injection (all 3 layers) ──────────────────────────────────
+// ── Enhanced memory injection (all layers) ────────────────────────────────────
 
 export function injectEnhancedMemory(systemPrompt: string, ctx: CallerContext): string {
   const { profile, facts, recentCalls } = ctx;
 
   const lines: string[] = ["=== CALLER MEMORY — NEVER FORGETS ==="];
 
-  // ── Header: name + call count + last call ────────────────────────────────
   const namePart = profile?.name ?? facts.find(f => f.key === "name")?.value ?? "unknown";
   const callCount = profile?.callCount ?? 0;
   const lastCallLabel = daysSinceLabel(profile?.lastCalledAt ?? null);
@@ -194,7 +210,7 @@ export function injectEnhancedMemory(systemPrompt: string, ctx: CallerContext): 
   if (isRecentDrop) headerParts.push("⚠ DROPPED");
   lines.push(headerParts.join("  |  "));
 
-  // ── Layer 2: structured facts ────────────────────────────────────────────
+  // L0: current (non-superseded) structured facts
   const displayFacts = facts.filter(f => f.key !== "name" && f.confidence >= 0.5);
   if (displayFacts.length > 0) {
     lines.push("");
@@ -204,12 +220,11 @@ export function injectEnhancedMemory(systemPrompt: string, ctx: CallerContext): 
       lines.push(`• ${f.key}: ${f.value}${age ? `  [${age}]` : ""}`);
     }
   } else if (profile?.summary) {
-    // Fall back to Layer 1 summary if no structured facts yet
     lines.push("");
     lines.push(`Prior context: ${profile.summary}`);
   }
 
-  // ── Layer 3: recent call summaries ───────────────────────────────────────
+  // L1: recent episode summaries
   const callsWithSummary = recentCalls.filter(c => c.summary);
   if (callsWithSummary.length > 0) {
     lines.push("");
@@ -220,7 +235,6 @@ export function injectEnhancedMemory(systemPrompt: string, ctx: CallerContext): 
     }
   }
 
-  // ── Behavioural instruction ──────────────────────────────────────────────
   lines.push("");
   if (isRecentDrop) {
     lines.push(
@@ -241,7 +255,78 @@ export function injectEnhancedMemory(systemPrompt: string, ctx: CallerContext): 
   return `${lines.join("\n")}\n\n${systemPrompt}`;
 }
 
-// ── Archive a completed call ───────────────────────────────────────────────────
+// ── Graph helper: supersede or insert a fact (L0 conflict resolution) ─────────
+
+/**
+ * Insert a new fact node, superseding any existing current fact with the same key.
+ *
+ * - If the key doesn't exist: plain insert (no supersession).
+ * - If the key exists with the SAME value: no-op (returns existing id).
+ * - If the key exists with a DIFFERENT value: insert new node, draw
+ *   superseded_by edge from old → new.
+ *
+ * Returns the id of the current (live) fact row.
+ */
+async function supersedeFact(opts: {
+  agentId: number;
+  phoneNumber: string;
+  key: string;
+  value: string;
+  confidence: number;
+  sourceCallId: number;
+  sourceSentenceIds?: number[];
+}): Promise<number | null> {
+  const { agentId, phoneNumber, key, value, confidence, sourceCallId, sourceSentenceIds = [] } = opts;
+
+  try {
+    // Find current (non-superseded) fact with this key
+    const [existing] = await db
+      .select({ id: callerFactsTable.id, value: callerFactsTable.value })
+      .from(callerFactsTable)
+      .where(and(
+        eq(callerFactsTable.agentId, agentId),
+        eq(callerFactsTable.phoneNumber, phoneNumber),
+        eq(callerFactsTable.key, key),
+        isNull(callerFactsTable.supersededById),
+      ))
+      .orderBy(desc(callerFactsTable.createdAt))
+      .limit(1);
+
+    // Same value → no-op
+    if (existing && existing.value === value) return existing.id;
+
+    // Insert new fact node
+    const [newRow] = await db
+      .insert(callerFactsTable)
+      .values({
+        agentId,
+        phoneNumber,
+        key,
+        value:             value.slice(0, 512),
+        confidence:        Math.min(1, Math.max(0, confidence)),
+        sourceCallId,
+        sourceSentenceIds: sourceSentenceIds.join(","),
+      })
+      .returning({ id: callerFactsTable.id });
+
+    if (!newRow) return null;
+
+    // Draw superseded_by edge: old → new
+    if (existing) {
+      await db
+        .update(callerFactsTable)
+        .set({ supersededById: newRow.id })
+        .where(eq(callerFactsTable.id, existing.id));
+    }
+
+    return newRow.id;
+  } catch (err) {
+    logger.warn({ err, agentId, phoneNumber, key }, "supersedeFact DB error");
+    return null;
+  }
+}
+
+// ── Archive a completed call as an episode (L1) + store sentences (L2) ────────
 
 export async function archiveCall(opts: {
   agentId: number;
@@ -251,7 +336,8 @@ export async function archiveCall(opts: {
   summary: string | null;
   durationSeconds: number | null;
   factsExtracted?: boolean;
-}): Promise<number | null> {
+  sentences?: Array<{ speaker: "agent" | "caller"; text: string }>;
+}): Promise<{ archiveId: number | null; sentenceIds: number[] }> {
   try {
     const [row] = await db
       .insert(callerCallArchiveTable)
@@ -263,12 +349,31 @@ export async function archiveCall(opts: {
         summary:         opts.summary,
         durationSeconds: opts.durationSeconds,
         factsExtracted:  opts.factsExtracted ?? false,
+        insightFactIds:  "",
       })
       .returning({ id: callerCallArchiveTable.id });
-    return row?.id ?? null;
+
+    const archiveId = row?.id ?? null;
+    let sentenceIds: number[] = [];
+
+    // Insert L2 sentence nodes with NEXT-edge ordering
+    if (archiveId && opts.sentences && opts.sentences.length > 0) {
+      const inserted = await db
+        .insert(callerSentencesTable)
+        .values(opts.sentences.map((s, i) => ({
+          episodeId:   archiveId,
+          sequenceNum: i + 1,
+          speaker:     s.speaker,
+          text:        s.text.slice(0, 4000),
+        })))
+        .returning({ id: callerSentencesTable.id });
+      sentenceIds = inserted.map(r => r.id);
+    }
+
+    return { archiveId, sentenceIds };
   } catch (err) {
     logger.warn({ err, agentId: opts.agentId, phoneNumber: opts.phoneNumber }, "archiveCall DB write failed");
-    return null;
+    return { archiveId: null, sentenceIds: [] };
   }
 }
 
@@ -335,7 +440,7 @@ async function runLLMExtraction(opts: {
   return JSON.parse(jsonStr) as ExtractedLLMResult;
 }
 
-// ── updateCallerProfile — enhanced, backward-compatible ───────────────────────
+// ── updateCallerProfile — enhanced with graph edges ───────────────────────────
 
 export async function updateCallerProfile(opts: {
   agentId: number;
@@ -382,36 +487,48 @@ export async function updateCallerProfile(opts: {
 
   if (history.length < 2) return;
 
-  // ── Phase 2: archive full transcript ──────────────────────────────────────
-  // (runs before LLM extraction so the archive row exists even if extraction fails)
-  const archiveId = await archiveCall({
+  // ── Phase 2: archive episode (L1) + sentences (L2) ────────────────────────
+  const parsedSentences = history.map(t => ({
+    speaker: (t.role === "user" ? "caller" : "agent") as "caller" | "agent",
+    text:    t.content,
+  }));
+
+  const { archiveId, sentenceIds } = await archiveCall({
     agentId, phoneNumber, callId,
     transcript,
-    summary:         null,   // filled in after LLM extraction in Phase 3
+    summary:         null,
     durationSeconds: durationSeconds ?? null,
     factsExtracted:  false,
+    sentences:       parsedSentences,
   });
 
-  // ── Phase 3: LLM extraction (best-effort, never blocks Phase 1) ──────────
+  // ── Phase 3: LLM extraction (best-effort) ─────────────────────────────────
   const priorContext = existing?.summary
     ? `Prior context from previous calls: ${existing.summary}\n\n`
     : "";
 
-  // Load existing facts to pass as context to the LLM
+  // Load current (non-superseded) facts for LLM context
   let priorFacts: CallerFact[] = [];
   try {
     const rows = await db
       .select()
       .from(callerFactsTable)
-      .where(and(eq(callerFactsTable.agentId, agentId), eq(callerFactsTable.phoneNumber, phoneNumber)))
+      .where(and(
+        eq(callerFactsTable.agentId, agentId),
+        eq(callerFactsTable.phoneNumber, phoneNumber),
+        isNull(callerFactsTable.supersededById),
+      ))
       .orderBy(desc(callerFactsTable.createdAt));
-    const seen = new Set<string>();
-    for (const r of rows) {
-      if (!seen.has(r.key)) {
-        seen.add(r.key);
-        priorFacts.push({ key: r.key, value: r.value, confidence: r.confidence, sourceCallId: r.sourceCallId, createdAt: r.createdAt });
-      }
-    }
+    priorFacts = rows.map(r => ({
+      id:                r.id,
+      key:               r.key,
+      value:             r.value,
+      confidence:        r.confidence,
+      sourceCallId:      r.sourceCallId,
+      sourceSentenceIds: parseSentenceIds(r.sourceSentenceIds),
+      supersededById:    r.supersededById,
+      createdAt:         r.createdAt,
+    }));
   } catch { /* non-fatal */ }
 
   const MAX_ATTEMPTS = 3;
@@ -437,40 +554,45 @@ export async function updateCallerProfile(opts: {
     return;
   }
 
-  // ── Phase 3a: save structured facts to caller_facts ───────────────────────
+  // ── Phase 3a: save L0 facts with supersession + fact_sources provenance ───
   const validFacts = (extracted.facts ?? []).filter(
     f => f.key && f.value && typeof f.confidence === "number" && f.confidence >= 0.7,
   );
 
-  if (validFacts.length > 0) {
-    try {
-      await db.insert(callerFactsTable).values(
-        validFacts.map(f => ({
-          agentId,
-          phoneNumber,
-          key:          f.key.toLowerCase().replace(/\s+/g, "_").slice(0, 64),
-          value:        String(f.value).slice(0, 512),
-          confidence:   Math.min(1, Math.max(0, f.confidence)),
-          sourceCallId: callId,
-        })),
-      );
-      logger.info({ agentId, phoneNumber, callId, factCount: validFacts.length }, "Caller facts saved");
-    } catch (factsErr) {
-      logger.warn({ agentId, phoneNumber, callId, factsErr }, "Caller facts DB write failed");
-    }
+  const newFactIds: number[] = [];
+  for (const f of validFacts) {
+    const normKey = f.key.toLowerCase().replace(/\s+/g, "_").slice(0, 64);
+    const factId = await supersedeFact({
+      agentId,
+      phoneNumber,
+      key:               normKey,
+      value:             String(f.value),
+      confidence:        f.confidence,
+      sourceCallId:      callId,
+      sourceSentenceIds: sentenceIds,  // fact_sources: all sentences in this episode
+    });
+    if (factId !== null) newFactIds.push(factId);
   }
 
-  // ── Phase 3b: update archive row with summary + factsExtracted flag ───────
-  if (archiveId && extracted.summary) {
+  if (newFactIds.length > 0) {
+    logger.info({ agentId, phoneNumber, callId, factCount: newFactIds.length }, "Caller facts saved (with supersession)");
+  }
+
+  // ── Phase 3b: update episode with summary + insight_fact_ids ─────────────
+  if (archiveId) {
     try {
       await db
         .update(callerCallArchiveTable)
-        .set({ summary: extracted.summary, factsExtracted: validFacts.length > 0 })
+        .set({
+          summary:        extracted.summary ?? null,
+          factsExtracted: newFactIds.length > 0,
+          insightFactIds: newFactIds.join(","),
+        })
         .where(eq(callerCallArchiveTable.id, archiveId));
     } catch { /* non-fatal */ }
   }
 
-  // ── Phase 3c: update caller_profiles summary (Layer 1 backward compat) ───
+  // ── Phase 3c: update profile summary (L1 backward compat) ────────────────
   const newName    = extracted.name    || existing?.name    || null;
   const newSummary = extracted.summary || existing?.summary || null;
 
@@ -542,13 +664,7 @@ export async function latchCallerName(opts: {
   }
 }
 
-// ── Real-time fact latch (new) ────────────────────────────────────────────────
-
-/**
- * Pattern-based detection of key facts stated mid-call.
- * Runs on every user utterance; immediately persists to caller_facts
- * so facts are saved even if the call drops before post-call LLM extraction.
- */
+// ── Real-time fact latch — uses supersession graph ────────────────────────────
 
 interface FactPattern {
   key: string;
@@ -594,7 +710,7 @@ const FACT_PATTERNS: FactPattern[] = [
       /\bi live in ([A-Z][a-zA-Z\s]{2,30}?)(?:\.|,|$)/,
     ],
     extract: m => m[1]!.trim(),
-    confidence: 0.8,
+    confidence: 0.85,
   },
   {
     key: "occupation",
@@ -617,20 +733,24 @@ const FACT_PATTERNS: FactPattern[] = [
   },
 ];
 
+/**
+ * Pattern-based fact detection on every user utterance.
+ * Uses supersedeFact so changing facts are properly tracked in the graph.
+ * Returns an updated map of (key → value) for the current call session.
+ */
 export async function latchCallerFact(opts: {
   agentId: number;
   phoneNumber: string;
   transcript: string;
   callId: number;
-  existingFacts: Map<string, string>;  // key → current known value (to skip re-writing same fact)
+  existingFacts: Map<string, string>;
 }): Promise<Map<string, string>> {
   const { agentId, phoneNumber, transcript, callId, existingFacts } = opts;
   const updated = new Map(existingFacts);
 
-  const toInsert: Array<{ agentId: number; phoneNumber: string; key: string; value: string; confidence: number; sourceCallId: number }> = [];
-
   for (const fp of FACT_PATTERNS) {
-    if (updated.has(fp.key)) continue;  // already know this fact
+    // Within-call dedup: skip if already detected this call
+    if (updated.has(fp.key)) continue;
 
     for (const pattern of fp.patterns) {
       const match = transcript.match(pattern);
@@ -640,18 +760,21 @@ export async function latchCallerFact(opts: {
       try { value = fp.extract(match).trim(); } catch { continue; }
       if (!value || value.length > 200) continue;
 
-      updated.set(fp.key, value);
-      toInsert.push({ agentId, phoneNumber, key: fp.key, value, confidence: fp.confidence, sourceCallId: callId });
-      break;
-    }
-  }
+      // Use supersedeFact — handles insert vs supersession automatically
+      const factId = await supersedeFact({
+        agentId, phoneNumber,
+        key:          fp.key,
+        value,
+        confidence:   fp.confidence,
+        sourceCallId: callId,
+        sourceSentenceIds: [],  // sentences not yet stored at this point
+      });
 
-  if (toInsert.length > 0) {
-    try {
-      await db.insert(callerFactsTable).values(toInsert);
-      logger.info({ callId, agentId, phoneNumber, keys: toInsert.map(r => r.key) }, "Caller facts latched in real-time");
-    } catch (err) {
-      logger.warn({ callId, agentId, phoneNumber, err }, "Real-time caller fact latch DB write failed");
+      if (factId !== null) {
+        updated.set(fp.key, value);
+        logger.info({ callId, agentId, phoneNumber, key: fp.key, value }, "Caller fact latched in real-time");
+      }
+      break;
     }
   }
 
@@ -693,22 +816,32 @@ export async function detectCallbackRequest(opts: {
 
   let extracted: { callbackRequested?: boolean; delayMinutes?: number | null } = {};
   try {
-    const jsonStr = raw.replace(/```(?:json)?\s*/gi, "").replace(/```\s*/g, "").trim();
+    const jsonStr = raw
+      .replace(/<think>[\s\S]*?<\/think>/g, "")
+      .replace(/```(?:json)?\s*/g, "")
+      .replace(/\s*```\s*/g, "")
+      .trim();
     extracted = JSON.parse(jsonStr) as typeof extracted;
   } catch {
+    logger.warn({ callId, agentId }, "detectCallbackRequest JSON parse failed");
     return;
   }
 
-  if (!extracted.callbackRequested || !extracted.delayMinutes || extracted.delayMinutes <= 0) return;
+  if (!extracted.callbackRequested || !extracted.delayMinutes || extracted.delayMinutes < 1) return;
 
   const scheduledAt = new Date(Date.now() + extracted.delayMinutes * 60_000);
 
-  await db.insert(scheduledCallbacksTable).values({
-    agentId, toNumber, userId: userId ?? null, scheduledAt,
-    createdFromCallId: callId,
-    campaignLeadId:    campaignLeadId ?? null,
-    status: "pending",
-  });
-
-  logger.info({ callId, agentId, toNumber, delayMinutes: extracted.delayMinutes, scheduledAt }, "Scheduled callback registered");
+  try {
+    await db.insert(scheduledCallbacksTable).values({
+      agentId,
+      userId:              userId ?? null,
+      toNumber:            toNumber,
+      scheduledAt,
+      createdFromCallId:   callId ?? null,
+      campaignLeadId:      campaignLeadId ?? null,
+    });
+    logger.info({ callId, agentId, toNumber, delayMinutes: extracted.delayMinutes, scheduledAt }, "Callback scheduled");
+  } catch (err) {
+    logger.warn({ callId, agentId, toNumber, err }, "Callback schedule DB write failed");
+  }
 }
