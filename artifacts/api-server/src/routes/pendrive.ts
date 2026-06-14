@@ -421,9 +421,12 @@ router.post("/pendrive/archive", requireAuth, async (req, res): Promise<void> =>
 });
 
 // ── GET /pendrive/bolna-config ────────────────────────────────────────────────
+// No auth required — matches webhook TEST_MODE_USER_ID pattern
 
-router.get("/pendrive/bolna-config", requireAuth, async (req, res): Promise<void> => {
-  const userId = (req as any).clerkUserId as string;
+const BOLNA_TEST_USER_ID = "test-user";
+
+router.get("/pendrive/bolna-config", async (req, res): Promise<void> => {
+  const userId = ((req as any).clerkUserId as string | undefined) ?? BOLNA_TEST_USER_ID;
   const key = `pendrive_bolna_config_${userId}`;
   const [row] = await db
     .select({ value: platformSettingsTable.value })
@@ -449,8 +452,8 @@ router.get("/pendrive/bolna-config", requireAuth, async (req, res): Promise<void
 
 // ── POST /pendrive/bolna-config ───────────────────────────────────────────────
 
-router.post("/pendrive/bolna-config", requireAuth, async (req, res): Promise<void> => {
-  const userId = (req as any).clerkUserId as string;
+router.post("/pendrive/bolna-config", async (req, res): Promise<void> => {
+  const userId = ((req as any).clerkUserId as string | undefined) ?? BOLNA_TEST_USER_ID;
   const { apiKey, agentId } = req.body as { apiKey?: string; agentId?: string };
 
   if (!apiKey?.trim() || !agentId?.trim()) {
@@ -472,8 +475,8 @@ router.post("/pendrive/bolna-config", requireAuth, async (req, res): Promise<voi
 
 // ── DELETE /pendrive/bolna-config ─────────────────────────────────────────────
 
-router.delete("/pendrive/bolna-config", requireAuth, async (req, res): Promise<void> => {
-  const userId = (req as any).clerkUserId as string;
+router.delete("/pendrive/bolna-config", async (req, res): Promise<void> => {
+  const userId = ((req as any).clerkUserId as string | undefined) ?? BOLNA_TEST_USER_ID;
   const key = `pendrive_bolna_config_${userId}`;
   await db.delete(platformSettingsTable).where(eq(platformSettingsTable.key, key));
   res.json({ ok: true });
