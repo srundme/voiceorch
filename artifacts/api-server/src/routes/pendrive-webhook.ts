@@ -200,8 +200,8 @@ async function fetchBolnaPhone(apiKey: string, agentId: string, executionId: str
 async function pushMemoryToBolnaAgent(apiKey: string, agentId: string, memoryBlock: string): Promise<void> {
   const base = "https://api.bolna.ai";
 
-  // 1. Fetch current agent
-  const getRes = await fetch(`${base}/agent/${agentId}`, {
+  // 1. Fetch current agent (V2 endpoint)
+  const getRes = await fetch(`${base}/v2/agent/${agentId}`, {
     headers: { Authorization: `Bearer ${apiKey}` },
   });
   if (!getRes.ok) {
@@ -210,8 +210,8 @@ async function pushMemoryToBolnaAgent(apiKey: string, agentId: string, memoryBlo
   }
   const agent = await getRes.json() as any;
 
-  // 2. Bolna GET returns: agent_prompts.task_1.system_prompt (the real system prompt)
-  //    Bolna PUT expects: { agent_config: { agent_name, tasks, agent_task } }
+  // 2. Real system prompt lives at agent_prompts.task_1.system_prompt (GET shape)
+  //    PUT shape: { agent_config: { agent_name, tasks, agent_task }, agent_prompts: { task_1: { system_prompt } } }
   const currentPrompt: string = agent?.agent_prompts?.task_1?.system_prompt ?? "";
 
   // 3. Strip previous Pendrive block if present, append fresh one
@@ -224,16 +224,19 @@ async function pushMemoryToBolnaAgent(apiKey: string, agentId: string, memoryBlo
     memoryBlock + "\n" +
     PENDRIVE_MARKER_END;
 
-  // 4. PUT uses a different shape from GET: wrap in agent_config
+  // 4. V2 PUT: agent_config holds required scaffolding; agent_prompts holds the real prompt
   const putBody = {
     agent_config: {
       agent_name: agent.agent_name,
       tasks:      agent.tasks,
-      agent_task: newPrompt,
+      agent_task: "",
+    },
+    agent_prompts: {
+      task_1: { system_prompt: newPrompt },
     },
   };
 
-  const putRes = await fetch(`${base}/agent/${agentId}`, {
+  const putRes = await fetch(`${base}/v2/agent/${agentId}`, {
     method: "PUT",
     headers: {
       Authorization: `Bearer ${apiKey}`,
