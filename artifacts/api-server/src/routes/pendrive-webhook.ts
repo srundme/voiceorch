@@ -173,6 +173,30 @@ async function getBolnaConfig(userId: string): Promise<{ apiKey: string; agentId
   }
 }
 
+/**
+ * Fetch the destination phone number from Bolna's execution API.
+ * Uses telephony_data.to_number which is populated for all outbound calls.
+ * Endpoint: GET https://api.bolna.ai/agent/{agent_id}/execution/{execution_id}
+ */
+async function fetchBolnaPhone(apiKey: string, agentId: string, executionId: string): Promise<string | null> {
+  try {
+    const res = await fetch(`https://api.bolna.ai/agent/${agentId}/execution/${executionId}`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (!res.ok) {
+      logger.warn({ agentId, executionId, status: res.status }, "Bolna: execution fetch failed");
+      return null;
+    }
+    const data = await res.json() as any;
+    const phone = data?.telephony_data?.to_number ?? data?.context_details?.phone ?? null;
+    if (phone) logger.info({ agentId, executionId, phone }, "Bolna: resolved phone from execution API");
+    return phone ?? null;
+  } catch (err) {
+    logger.warn({ err, agentId, executionId }, "Bolna: execution fetch threw");
+    return null;
+  }
+}
+
 async function pushMemoryToBolnaAgent(apiKey: string, agentId: string, memoryBlock: string): Promise<void> {
   const base = "https://api.bolna.dev";
 
@@ -332,10 +356,20 @@ router.post("/pendrive/webhook", async (req: Request, res: Response): Promise<vo
 
   const event = parseEvent(req.body);
 
-  // Allow ?phone= query param to override/supply phone number (useful for Bolna which doesn't include it in payload)
+  // Allow ?phone= query param to override/supply phone number (manual fallback)
   const queryPhone = (req.query["phone"] as string | undefined)?.trim() || null;
   if (queryPhone && !event.phoneNumber) {
     (event as any).phoneNumber = queryPhone;
+  }
+
+  // For Bolna: auto-resolve phone via execution API (telephony_data.to_number)
+  // This handles all outbound calls regardless of which number was dialed — zero manual config
+  if (!event.phoneNumber && event.platform === "bolna" && event.agentId && req.body?.id) {
+    const bolna = await getBolnaConfig(userId);
+    if (bolna) {
+      const resolved = await fetchBolnaPhone(bolna.apiKey, event.agentId, req.body.id as string);
+      if (resolved) (event as any).phoneNumber = resolved;
+    }
   }
 
   logger.info({ eventType: event.type, platform: event.platform, phone: event.phoneNumber ?? "none", hasTranscript: !!event.transcript }, "Pendrive webhook: event parsed");

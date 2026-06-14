@@ -258,12 +258,12 @@ export default function ApiKeys() {
             </div>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground mb-1.5 font-medium">Bolna — append <code className="text-foreground">?phone=CALLER_NUMBER</code> so Pendrive can identify the caller</p>
+            <p className="text-xs text-muted-foreground mb-1.5 font-medium">Bolna — same URL, phone auto-resolved per call via Bolna execution API</p>
             <div className="flex items-center gap-2">
               <code className="flex-1 rounded bg-background/60 px-3 py-2 text-xs font-mono text-foreground border border-border/50 truncate">
-                POST {webhookUrl}?phone=%2B91XXXXXXXXXX
+                POST {webhookUrl}
               </code>
-              <Button variant="outline" size="sm" className="shrink-0" onClick={() => { navigator.clipboard.writeText(`${webhookUrl}?phone=%2B91XXXXXXXXXX`); }}>
+              <Button variant="outline" size="sm" className="shrink-0" onClick={() => { navigator.clipboard.writeText(webhookUrl); }}>
                 <Copy className="h-3.5 w-3.5" />
               </Button>
             </div>
