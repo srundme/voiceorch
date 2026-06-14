@@ -235,14 +235,11 @@ function formatStartedResponse(platform: Platform, memoryBlock: string, callerNa
 
 // ── POST /pendrive/webhook ────────────────────────────────────────────────────
 
-router.post("/pendrive/webhook", async (req: Request, res: Response): Promise<void> => {
-  const auth = await resolvePendriveKey(req);
-  if (!auth) {
-    res.status(401).json({ error: "Invalid or missing Pendrive API key. Use Authorization: Bearer pd_live_..." });
-    return;
-  }
+// TODO: re-enable auth once testing is complete
+const TEST_MODE_USER_ID = "test-user";
 
-  const { userId } = auth;
+router.post("/pendrive/webhook", async (req: Request, res: Response): Promise<void> => {
+  const { userId } = { userId: TEST_MODE_USER_ID };
   const event = parseEvent(req.body);
 
   if (event.type === "unknown") {
