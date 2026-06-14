@@ -224,12 +224,14 @@ async function pushMemoryToBolnaAgent(apiKey: string, agentId: string, memoryBlo
     memoryBlock + "\n" +
     PENDRIVE_MARKER_END;
 
-  // 4. V2 PUT: agent_config holds required scaffolding; agent_prompts holds the real prompt
-  const putBody = {
+  // 4. V2 PUT: agent_config holds required scaffolding; agent_prompts holds the real prompt.
+  //    IMPORTANT: include webhook_url or Bolna will null it out and stop sending events.
+  const putBody: Record<string, unknown> = {
     agent_config: {
-      agent_name: agent.agent_name,
-      tasks:      agent.tasks,
-      agent_task: "",
+      agent_name:  agent.agent_name,
+      tasks:       agent.tasks,
+      agent_task:  "",
+      webhook_url: agent.webhook_url ?? null,
     },
     agent_prompts: {
       task_1: { system_prompt: newPrompt },
@@ -399,21 +401,20 @@ router.post("/pendrive/webhook", async (req: Request, res: Response): Promise<vo
 
       logger.info({ agentId, phone: event.phoneNumber, platform: event.platform, callCount: ctx.profile?.callCount ?? 0 }, "Pendrive webhook: call.started — memory served");
 
-      // Push THIS caller's memory to Bolna immediately (fire-and-forget).
-      // Always push even for unknown callers — an empty block clears any stale
-      // memory from the previous call so unknown callers don't get a wrong name.
-      // Bolna plays a static welcome message first; the first LLM turn happens only after
-      // the caller speaks — so this injection lands in time for the real conversation.
+      // Push THIS caller's memory SYNCHRONOUSLY before responding to Bolna.
+      // Bolna waits for our webhook response before loading the LLM context,
+      // so by holding the response until the push completes, the memory is
+      // guaranteed to be in the system prompt before the first LLM turn.
       if (event.platform === "bolna") {
-        getBolnaConfig(userId).then(bolna => {
+        try {
+          const bolna = await getBolnaConfig(userId);
           if (bolna) {
-            pushMemoryToBolnaAgent(bolna.apiKey, bolna.agentId, memoryBlock).then(() => {
-              logger.info({ agentId, phone: event.phoneNumber, hasMemory: !!memoryBlock.trim() }, "Pendrive: caller memory injected on call.started ✓");
-            }).catch(err => {
-              logger.warn({ err }, "Pendrive: Bolna call.started inject failed (non-blocking)");
-            });
+            await pushMemoryToBolnaAgent(bolna.apiKey, bolna.agentId, memoryBlock);
+            logger.info({ agentId, phone: event.phoneNumber, hasMemory: !!memoryBlock.trim() }, "Pendrive: caller memory injected (sync) ✓");
           }
-        }).catch(() => {});
+        } catch (err) {
+          logger.warn({ err }, "Pendrive: Bolna sync inject failed — continuing");
+        }
       }
 
       res.json(formatStartedResponse(event.platform, memoryBlock, callerName));
