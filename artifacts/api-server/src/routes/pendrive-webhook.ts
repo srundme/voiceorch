@@ -140,6 +140,81 @@ function parseEvent(body: any): ParsedEvent {
   return { type: "unknown", phoneNumber: phone, agentId: null, transcript: null, durationSeconds: null, platform: "generic" };
 }
 
+// ── Bolna API auto-injection ──────────────────────────────────────────────────
+
+const PENDRIVE_MARKER_START = "\n\n<!-- PENDRIVE:START -->";
+const PENDRIVE_MARKER_END   = "<!-- PENDRIVE:END -->";
+
+async function getBolnaConfig(userId: string): Promise<{ apiKey: string; agentId: string } | null> {
+  const key = `pendrive_bolna_config_${userId}`;
+  const [row] = await db
+    .select({ value: platformSettingsTable.value })
+    .from(platformSettingsTable)
+    .where(eq(platformSettingsTable.key, key));
+  if (!row?.value) return null;
+  try {
+    return JSON.parse(row.value) as { apiKey: string; agentId: string };
+  } catch {
+    return null;
+  }
+}
+
+async function pushMemoryToBolnaAgent(apiKey: string, agentId: string, memoryBlock: string): Promise<void> {
+  const base = "https://api.bolna.dev";
+
+  // 1. Fetch current agent
+  const getRes = await fetch(`${base}/agent/${agentId}`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+  if (!getRes.ok) {
+    logger.warn({ agentId, status: getRes.status }, "Bolna: GET agent failed");
+    return;
+  }
+  const agent = await getRes.json() as any;
+
+  // 2. Find the system prompt field (Bolna uses agent_config.agent_task)
+  const currentPrompt: string =
+    agent?.agent_config?.agent_task ??
+    agent?.agent_prompts?.task_description ??
+    "";
+
+  // 3. Strip previous Pendrive block if present, append fresh one
+  const stripped = currentPrompt
+    .replace(new RegExp(`${PENDRIVE_MARKER_START}[\\s\\S]*?${PENDRIVE_MARKER_END}`, "g"), "")
+    .trimEnd();
+
+  const newPrompt = stripped +
+    PENDRIVE_MARKER_START + "\n" +
+    memoryBlock + "\n" +
+    PENDRIVE_MARKER_END;
+
+  // 4. Patch the agent — try common field locations
+  const patch: any = { ...agent };
+  if (patch?.agent_config?.agent_task !== undefined) {
+    patch.agent_config = { ...patch.agent_config, agent_task: newPrompt };
+  } else if (patch?.agent_prompts?.task_description !== undefined) {
+    patch.agent_prompts = { ...patch.agent_prompts, task_description: newPrompt };
+  } else {
+    patch.agent_config = { ...(patch.agent_config ?? {}), agent_task: newPrompt };
+  }
+
+  const putRes = await fetch(`${base}/agent/${agentId}`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(patch),
+  });
+
+  if (!putRes.ok) {
+    const body = await putRes.text().catch(() => "");
+    logger.warn({ agentId, status: putRes.status, body }, "Bolna: PUT agent failed");
+  } else {
+    logger.info({ agentId }, "Bolna: memory injected into agent system prompt");
+  }
+}
+
 // ── Managed LLM key ───────────────────────────────────────────────────────────
 
 async function getManagedLlmKey(): Promise<string | null> {
@@ -266,6 +341,17 @@ router.post("/pendrive/webhook", async (req: Request, res: Response): Promise<vo
       const callerName = ctx.profile?.name ?? ctx.facts.find(f => f.key === "name")?.value ?? null;
 
       logger.info({ agentId, phone: event.phoneNumber, platform: event.platform, callCount: ctx.profile?.callCount ?? 0 }, "Pendrive webhook: call.started — memory served");
+
+      // Auto-push memory into Bolna agent system prompt if configured (fire-and-forget)
+      if (memoryBlock.trim()) {
+        getBolnaConfig(userId).then(bolna => {
+          if (bolna) {
+            pushMemoryToBolnaAgent(bolna.apiKey, bolna.agentId, memoryBlock).catch(err => {
+              logger.warn({ err }, "Pendrive: Bolna auto-inject failed (non-blocking)");
+            });
+          }
+        }).catch(() => {});
+      }
 
       res.json(formatStartedResponse(event.platform, memoryBlock, callerName));
     } catch (err) {

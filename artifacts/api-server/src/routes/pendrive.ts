@@ -420,4 +420,63 @@ router.post("/pendrive/archive", requireAuth, async (req, res): Promise<void> =>
   res.json({ ok: true, factsExtracted: factsCount, episodeId });
 });
 
+// ── GET /pendrive/bolna-config ────────────────────────────────────────────────
+
+router.get("/pendrive/bolna-config", requireAuth, async (req, res): Promise<void> => {
+  const userId = (req as any).clerkUserId as string;
+  const key = `pendrive_bolna_config_${userId}`;
+  const [row] = await db
+    .select({ value: platformSettingsTable.value })
+    .from(platformSettingsTable)
+    .where(eq(platformSettingsTable.key, key));
+
+  if (!row?.value) {
+    res.json({ configured: false, agentId: null, apiKeyHint: null });
+    return;
+  }
+
+  try {
+    const config = JSON.parse(row.value) as { apiKey: string; agentId: string };
+    res.json({
+      configured: true,
+      agentId: config.agentId,
+      apiKeyHint: config.apiKey ? `...${config.apiKey.slice(-6)}` : null,
+    });
+  } catch {
+    res.json({ configured: false, agentId: null, apiKeyHint: null });
+  }
+});
+
+// ── POST /pendrive/bolna-config ───────────────────────────────────────────────
+
+router.post("/pendrive/bolna-config", requireAuth, async (req, res): Promise<void> => {
+  const userId = (req as any).clerkUserId as string;
+  const { apiKey, agentId } = req.body as { apiKey?: string; agentId?: string };
+
+  if (!apiKey?.trim() || !agentId?.trim()) {
+    res.status(400).json({ error: "apiKey and agentId are required" });
+    return;
+  }
+
+  const key = `pendrive_bolna_config_${userId}`;
+  const value = JSON.stringify({ apiKey: apiKey.trim(), agentId: agentId.trim() });
+
+  await db
+    .insert(platformSettingsTable)
+    .values({ key, value })
+    .onConflictDoUpdate({ target: platformSettingsTable.key, set: { value } });
+
+  req.log.info({ userId, agentId: agentId.trim() }, "Pendrive: Bolna config saved");
+  res.json({ ok: true, agentId: agentId.trim(), apiKeyHint: `...${apiKey.trim().slice(-6)}` });
+});
+
+// ── DELETE /pendrive/bolna-config ─────────────────────────────────────────────
+
+router.delete("/pendrive/bolna-config", requireAuth, async (req, res): Promise<void> => {
+  const userId = (req as any).clerkUserId as string;
+  const key = `pendrive_bolna_config_${userId}`;
+  await db.delete(platformSettingsTable).where(eq(platformSettingsTable.key, key));
+  res.json({ ok: true });
+});
+
 export default router;

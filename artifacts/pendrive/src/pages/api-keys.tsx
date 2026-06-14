@@ -1,15 +1,31 @@
-import { useState, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useListPendriveApiKeys, getListPendriveApiKeysQueryKey, useCreatePendriveApiKey, useDeletePendriveApiKey } from "@workspace/api-client-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Key, Copy, Check, Trash2, Plus, AlertCircle, Webhook, Zap } from "lucide-react";
+import { Key, Copy, Check, Trash2, Plus, AlertCircle, Webhook, Zap, Bot, Eye, EyeOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
+const SESSION_KEY = "voiceorch:session";
+function getSessionToken() { return localStorage.getItem(SESSION_KEY); }
+
+async function apiFetch(path: string, options?: RequestInit) {
+  const token = getSessionToken();
+  const basePath = import.meta.env.BASE_URL.replace(/\/$/, "").replace(/\/pendrive.*/, "");
+  return fetch(`${basePath}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options?.headers ?? {}),
+    },
+  });
+}
 
 export default function ApiKeys() {
   const { toast } = useToast();
@@ -23,6 +39,56 @@ export default function ApiKeys() {
   const [newKeyName, setNewKeyName] = useState("");
   const [createdKey, setCreatedKey] = useState<{name: string, plainKey: string} | null>(null);
   const [copied, setCopied] = useState(false);
+
+  // Bolna integration state
+  const [bolnaApiKey, setBolnaApiKey] = useState("");
+  const [bolnaAgentId, setBolnaAgentId] = useState("");
+  const [bolnaConfigured, setBolnaConfigured] = useState<{ agentId: string; apiKeyHint: string } | null>(null);
+  const [boolnaLoading, setBolnaLoading] = useState(false);
+  const [showBolnaKey, setShowBolnaKey] = useState(false);
+
+  useEffect(() => {
+    apiFetch("/api/pendrive/bolna-config")
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.configured) {
+          setBolnaConfigured({ agentId: data.agentId, apiKeyHint: data.apiKeyHint });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const saveBolnaConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!bolnaApiKey.trim() || !bolnaAgentId.trim()) return;
+    setBolnaLoading(true);
+    try {
+      const res = await apiFetch("/api/pendrive/bolna-config", {
+        method: "POST",
+        body: JSON.stringify({ apiKey: bolnaApiKey.trim(), agentId: bolnaAgentId.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setBolnaConfigured({ agentId: data.agentId, apiKeyHint: data.apiKeyHint });
+        setBolnaApiKey("");
+        toast({ title: "Bolna connected!", description: "Memory will auto-inject on every call." });
+      } else {
+        toast({ title: "Error", description: data.error ?? "Failed to save", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Error", description: "Network error", variant: "destructive" });
+    } finally {
+      setBolnaLoading(false);
+    }
+  };
+
+  const removeBolnaConfig = async () => {
+    await apiFetch("/api/pendrive/bolna-config", { method: "DELETE" });
+    setBolnaConfigured(null);
+    setBolnaAgentId("");
+    setBolnaApiKey("");
+    toast({ title: "Bolna disconnected" });
+  };
 
   const createMutation = useCreatePendriveApiKey({
     mutation: {
@@ -193,6 +259,80 @@ export default function ApiKeys() {
             <div className="flex items-center gap-1.5"><Zap className="h-3.5 w-3.5 text-blue-500" /><span>call.started → returns memory block</span></div>
             <div className="flex items-center gap-1.5"><Zap className="h-3.5 w-3.5 text-green-500" /><span>call.ended → archives transcript async</span></div>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-orange-500/20 bg-orange-500/5">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Bot className="h-5 w-5 text-orange-500" />
+              <CardTitle className="text-base">Bolna Auto-Inject</CardTitle>
+              {bolnaConfigured
+                ? <Badge className="bg-green-500/20 text-green-400 border-green-500/30">Connected</Badge>
+                : <Badge variant="outline" className="text-muted-foreground">Not configured</Badge>
+              }
+            </div>
+            {bolnaConfigured && (
+              <Button variant="ghost" size="sm" onClick={removeBolnaConfig} className="text-muted-foreground hover:text-destructive">
+                <Trash2 className="h-3.5 w-3.5 mr-1" /> Disconnect
+              </Button>
+            )}
+          </div>
+          <CardDescription>
+            Pendrive will silently patch your Bolna agent's system prompt with caller memory on every call — no variables, no prompt changes needed.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {bolnaConfigured ? (
+            <div className="space-y-2 text-sm">
+              <div className="flex items-center gap-3 rounded bg-background/60 border border-border/50 px-3 py-2">
+                <span className="text-muted-foreground w-20 shrink-0">Agent ID</span>
+                <code className="text-foreground font-mono">{bolnaConfigured.agentId}</code>
+              </div>
+              <div className="flex items-center gap-3 rounded bg-background/60 border border-border/50 px-3 py-2">
+                <span className="text-muted-foreground w-20 shrink-0">API Key</span>
+                <code className="text-foreground font-mono">{bolnaConfigured.apiKeyHint}</code>
+              </div>
+              <p className="text-xs text-muted-foreground pt-1">
+                ✅ On every <code>call.started</code>, Pendrive will fetch memory for the caller and push it into your agent's system prompt via the Bolna API.
+              </p>
+            </div>
+          ) : (
+            <form onSubmit={saveBolnaConfig} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Bolna Agent ID</Label>
+                  <Input
+                    placeholder="agent_abc123..."
+                    value={bolnaAgentId}
+                    onChange={e => setBolnaAgentId(e.target.value)}
+                    className="font-mono text-xs h-8"
+                  />
+                  <p className="text-xs text-muted-foreground">From Bolna → Agent → Agent ID button</p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Bolna API Key</Label>
+                  <div className="relative">
+                    <Input
+                      type={showBolnaKey ? "text" : "password"}
+                      placeholder="Your Bolna API key"
+                      value={bolnaApiKey}
+                      onChange={e => setBolnaApiKey(e.target.value)}
+                      className="font-mono text-xs h-8 pr-8"
+                    />
+                    <button type="button" className="absolute right-2 top-1.5 text-muted-foreground hover:text-foreground" onClick={() => setShowBolnaKey(v => !v)}>
+                      {showBolnaKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Bolna → Settings → API Key</p>
+                </div>
+              </div>
+              <Button type="submit" size="sm" disabled={!bolnaApiKey.trim() || !bolnaAgentId.trim() || boolnaLoading}>
+                {boolnaLoading ? "Connecting..." : "Connect Bolna Agent"}
+              </Button>
+            </form>
+          )}
         </CardContent>
       </Card>
 
