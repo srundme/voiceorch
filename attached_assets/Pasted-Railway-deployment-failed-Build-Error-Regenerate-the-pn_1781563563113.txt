@@ -1,0 +1,35 @@
+Railway deployment failed — Build Error
+
+Regenerate the pnpm-lock.yaml file by running `pnpm install` locally and committing the result. The build fails because gsap@^3.15.0 was removed from artifacts/dashboard/package.json but the lockfile was never updated, causing pnpm install --frozen-lockfile to reject the mismatch. No changes have been pushed to main since the failed commit, so the issue is still present.
+
+Repository: https://github.com/srundme/voiceorch
+Branch: main · Commit: 1427745 — feat: Custom Function (webhook) tool support for agent config
+
+- Add preToolMessage + parameters fields to WebhookTool type
+- buildToolDefs uses custom JSON Schema params when provided
+- Dashboard: "Custom Function" button, full webhook form (url, method, secret, preToolMessage, parameters editor with type/required per param)
+Root directory: /
+Deployment ID: ea134e7f-1c38-4099-96a0-a471bc8e8a0b
+Service ID: 58134806-7857-4eff-842e-d26a3f3ba0db
+Environment ID: c2f619a2-8e13-4d0b-9d26-89834a0cbe01
+
+---
+
+## Problem
+The Dockerfile build fails at `pnpm install --frozen-lockfile` in the builder stage (step 12/17) with:
+```
+ERR_PNPM_OUTDATED_LOCKFILE  Cannot install with "frozen-lockfile" because pnpm-lock.yaml is not up to date with <ROOT>/artifacts/dashboard/package.json
+specifiers in the lockfile don't match specifiers in package.json:
+* 1 dependencies were removed: gsap@^3.15.0
+```
+The SNAPSHOT_CODE stage succeeded but BUILD_IMAGE failed. Build config comes from `artifacts/api-server/railway.json` which specifies `builder: DOCKERFILE` with `dockerfilePath: Dockerfile`. The Dockerfile runs `pnpm install --frozen-lockfile` in both the builder and production stages.
+
+## Diagnosis
+The `gsap@^3.15.0` dependency was removed from `artifacts/dashboard/package.json` in a prior commit, but `pnpm-lock.yaml` was never regenerated to reflect this removal. The current HEAD of `artifacts/dashboard/package.json` contains no `gsap` entry in either `dependencies` or `devDependencies`. The lockfile still contains the stale `gsap` specifier for the dashboard workspace package. pnpm's `--frozen-lockfile` flag strictly enforces that the lockfile matches all workspace package.json files and exits with code 1 when a mismatch is detected. The triggering commit (1427745c) only modified `types.ts`, `tool-executor.ts`, and `edit.tsx` — it did not touch `package.json` or `pnpm-lock.yaml`. No commits have been pushed to main after the failed deployment.
+
+## Fix
+1. Locally, at the repo root, run: `pnpm install`
+2. This regenerates `pnpm-lock.yaml`, removing the stale `gsap@^3.15.0` entry for the dashboard workspace package.
+3. Commit the updated `pnpm-lock.yaml` and push to main.
+
+This fix cannot be automated via file edits alone — `pnpm-lock.yaml` is a generated artifact that must be produced by running the package manager.
