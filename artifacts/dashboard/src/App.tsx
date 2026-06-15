@@ -260,9 +260,11 @@ function AppRoutes() {
     return <SnapServeLoader />;
   }
 
-  // Redirect new users to onboarding (except if they're already there)
+  // Redirect new users to onboarding (except if they're already there).
+  // Use === false (not falsy) so a failed/pending query (data=undefined) never
+  // incorrectly triggers the redirect — only an explicit "completed: false" does.
   const onOnboardingPage = location.startsWith("/app/onboarding");
-  if (!onboardingStatus?.completed && !onOnboardingPage) {
+  if (onboardingStatus?.completed === false && !onOnboardingPage) {
     return <Redirect to="/app/onboarding" />;
   }
 
