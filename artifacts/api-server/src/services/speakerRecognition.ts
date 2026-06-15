@@ -262,6 +262,67 @@ function toWav8k(pcm8k: Buffer): Buffer {
   return pcmToWav(pcm8k, 8000, 1, 16);
 }
 
+// ── Azure connectivity test ───────────────────────────────────────────────────
+
+/**
+ * Smoke-test the Azure Speaker Recognition API with the configured credentials.
+ * Creates a temporary profile then immediately deletes it to verify end-to-end access.
+ *
+ * Returns { ok: true } on success, or { ok: false, status, error } on failure.
+ * Intended for startup health-check and admin diagnostics only.
+ */
+export async function testAzureConnection(): Promise<
+  | { ok: true; region: string }
+  | { ok: false; region: string | null; status?: number; error: string }
+> {
+  let creds: { key: string; region: string } | null;
+  try {
+    creds = await getAzureCreds();
+  } catch (err) {
+    return { ok: false, region: null, error: `DB lookup failed: ${String(err)}` };
+  }
+
+  if (!creds) {
+    return { ok: false, region: null, error: "No managed_azure_speech_key configured in platform_settings" };
+  }
+
+  const { key, region } = creds;
+
+  // Step 1: create a test profile
+  let profileId: string;
+  try {
+    const createRes = await fetch(`${baseUrl(region)}/profiles`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Ocp-Apim-Subscription-Key": key,
+      },
+      body: JSON.stringify({ locale: "en-us" }),
+    });
+    if (!createRes.ok) {
+      const body = await createRes.text();
+      return { ok: false, region, status: createRes.status, error: `createProfile ${createRes.status}: ${body}` };
+    }
+    const json = await createRes.json() as { profileId?: string };
+    profileId = json.profileId ?? "";
+    if (!profileId) {
+      return { ok: false, region, error: "createProfile returned no profileId" };
+    }
+  } catch (err) {
+    return { ok: false, region, error: `Network error on createProfile: ${String(err)}` };
+  }
+
+  // Step 2: clean up the test profile (best-effort)
+  try {
+    await fetch(`${baseUrl(region)}/profiles/${profileId}`, {
+      method: "DELETE",
+      headers: { "Ocp-Apim-Subscription-Key": key },
+    });
+  } catch { /* non-fatal */ }
+
+  return { ok: true, region };
+}
+
 // ── Public VoiceIntelSession ──────────────────────────────────────────────────
 
 export interface VoiceIdResult {

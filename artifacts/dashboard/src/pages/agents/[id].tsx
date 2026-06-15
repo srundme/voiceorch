@@ -931,7 +931,9 @@ function VoiceIntelTab({ agentId }: { agentId: number }) {
             <Fingerprint className="h-10 w-10 text-muted-foreground/40" />
             <p className="font-medium text-muted-foreground">No voice prints yet</p>
             <p className="text-sm text-muted-foreground/70 max-w-xs">
-              Voice prints are created automatically after each call once Azure Speaker Recognition keys are configured.
+              Voice prints enroll automatically at the end of each call (minimum 5 s of audio).
+              Requires an Azure <strong>multi-service Cognitive Services</strong> key — a single-service Speech key returns 401 on the Speaker Recognition API.
+              Check Admin → Managed Keys → STT → Test Speaker Recognition to verify connectivity.
             </p>
           </CardContent>
         </Card>

@@ -124,6 +124,21 @@ export function usePlatformFailedCallsByReason() {
   });
 }
 
+// Azure Speaker Recognition connectivity check
+export type AzureSpeakerCheckResult =
+  | { ok: true; region: string; message: string }
+  | { ok: false; region: string | null; status: number | null; error: string };
+
+export function useAzureSpeakerCheck(enabled: boolean) {
+  return useQuery({
+    queryKey: ["admin", "azure-speaker-check"],
+    queryFn: () => adminFetch<AzureSpeakerCheckResult>("/azure-speaker-check"),
+    enabled,
+    staleTime: 0,
+    retry: false,
+  });
+}
+
 // Managed Keys
 export function useManagedKeys() {
   return useQuery({

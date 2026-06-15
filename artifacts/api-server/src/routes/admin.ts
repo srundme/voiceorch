@@ -1224,4 +1224,20 @@ router.post("/admin/family/provision", async (req, res): Promise<void> => {
   }
 });
 
+// ── Azure Speaker Recognition connectivity check ──────────────────────────────
+
+router.get("/admin/azure-speaker-check", async (_req, res): Promise<void> => {
+  try {
+    const { testAzureConnection } = await import("../services/speakerRecognition.js");
+    const result = await testAzureConnection();
+    if (result.ok) {
+      res.json({ ok: true, region: result.region, message: "Azure Speaker Recognition API is reachable and the key has profile-create access." });
+    } else {
+      res.status(200).json({ ok: false, region: result.region ?? null, status: result.status ?? null, error: result.error });
+    }
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err) });
+  }
+});
+
 export default router;

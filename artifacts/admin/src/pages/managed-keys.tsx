@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { useManagedKeys, useSaveManagedKeys } from "@/hooks/use-admin-api";
+import { useManagedKeys, useSaveManagedKeys, useAzureSpeakerCheck } from "@/hooks/use-admin-api";
 import {
   Accordion,
   AccordionContent,
@@ -26,8 +26,12 @@ import {
   Mic,
   Volume2,
   Phone,
+  CheckCircle2,
+  XCircle,
+  FlaskConical,
   type LucideIcon,
 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { formatApiError } from "@/lib/format-api-error";
 import { cn } from "@/lib/utils";
 
@@ -141,7 +145,7 @@ const CATEGORIES: Category[] = [
       {
         key: "managed_azure_speech_key",
         label: "Azure Speech Key",
-        description: "Azure Cognitive Services key for Azure STT and Azure TTS.",
+        description: "Azure Cognitive Services key for Azure STT, TTS, and Speaker Recognition (voice prints). Must be a multi-service Cognitive Services key — a single-service Speech key will NOT work for voice prints (401 on Speaker Recognition API).",
         placeholder: "...",
       },
       {
@@ -204,10 +208,18 @@ export default function ManagedKeys() {
   const { data: currentKeys, isLoading, refetch } = useManagedKeys();
   const { mutate: saveKeys, isPending } = useSaveManagedKeys();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [formValues, setFormValues] = useState<Record<string, string>>({});
   const [openSections, setOpenSections] = useState<string[]>(["llm"]);
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const [runSpeakerCheck, setRunSpeakerCheck] = useState(false);
+  const { data: speakerCheckResult, isFetching: speakerCheckFetching } = useAzureSpeakerCheck(runSpeakerCheck);
+
+  function handleTestSpeakerRecognition() {
+    queryClient.removeQueries({ queryKey: ["admin", "azure-speaker-check"] });
+    setRunSpeakerCheck(true);
+  }
 
   function handleChange(key: string, value: string) {
     setFormValues(prev => ({ ...prev, [key]: value }));
@@ -340,6 +352,45 @@ export default function ManagedKeys() {
                   </div>
                 </AccordionTrigger>
                 <AccordionContent className="px-5 pb-5 pt-0">
+                  {category.id === "stt" && (
+                    <div className="mb-3 rounded-lg border bg-muted/10 p-4 flex flex-wrap items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium">Azure Speaker Recognition</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Voice prints use the Speaker Recognition API — requires a multi-service Cognitive Services key, not a single-service Speech key.
+                        </p>
+                      </div>
+                      {speakerCheckResult && !speakerCheckFetching && (
+                        <div className={cn(
+                          "flex items-center gap-1.5 text-xs rounded-md px-2.5 py-1.5 border",
+                          speakerCheckResult.ok
+                            ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
+                            : "bg-red-500/10 text-red-600 border-red-500/30"
+                        )}>
+                          {speakerCheckResult.ok
+                            ? <><CheckCircle2 className="h-3.5 w-3.5" /> OK ({speakerCheckResult.region})</>
+                            : <><XCircle className="h-3.5 w-3.5" /> {(speakerCheckResult as any).status ? `HTTP ${(speakerCheckResult as any).status}` : "Error"}</>
+                          }
+                        </div>
+                      )}
+                      {speakerCheckResult && !speakerCheckResult.ok && !speakerCheckFetching && (
+                        <p className="w-full text-xs text-red-600/80 font-mono break-all">{(speakerCheckResult as any).error}</p>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5 shrink-0"
+                        onClick={handleTestSpeakerRecognition}
+                        disabled={speakerCheckFetching}
+                      >
+                        {speakerCheckFetching
+                          ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          : <FlaskConical className="h-3.5 w-3.5" />
+                        }
+                        Test Speaker Recognition
+                      </Button>
+                    </div>
+                  )}
                   <div className="rounded-lg border bg-muted/10 divide-y divide-border">
                     <div className="hidden md:grid grid-cols-12 gap-4 px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                       <div className="col-span-3">Provider</div>
