@@ -31,11 +31,11 @@ const SAMPLE_BYTES = BITS / 8;
  */
 const TARGET_BYTES = 2 * SAMPLE_RATE * SAMPLE_BYTES;
 
-// Call the gender service directly on its bound port. Both the api-server and
-// the gender service run on the same VM in both dev and production, so
-// localhost:5000 is always reachable. The shared proxy (port 80) is NOT
-// available as a localhost listener inside the production container.
-const GENDER_SERVICE_URL = "http://localhost:5000/voice-analysis/gender";
+// Resolve the gender-service base URL from the environment so the same binary
+// works in dev (same-VM localhost) and on Railway (separate container with a
+// GENDER_SERVICE_URL env var set to the internal service hostname).
+const _GENDER_BASE = (process.env["GENDER_SERVICE_URL"] ?? "http://localhost:5000").replace(/\/$/, "");
+const GENDER_SERVICE_URL = `${_GENDER_BASE}/voice-analysis/gender`;
 
 // ── WAV builder ──────────────────────────────────────────────────────────────
 
