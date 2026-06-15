@@ -231,6 +231,15 @@ export class VoiceIntelSession {
     this.callerPhone = callerPhone;
   }
 
+  /**
+   * True once the reference embedding has been extracted from the caller's audio.
+   * Used by webcall.ts to know when to relax the !speaking gate and allow all
+   * frames through so speaker-change windows can accumulate quickly enough.
+   */
+  hasOwnEmbedding(): boolean {
+    return this.ownEmbedding !== null;
+  }
+
   // ── Audio ingestion ─────────────────────────────────────────────────────────
 
   /**
