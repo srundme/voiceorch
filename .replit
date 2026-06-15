@@ -20,6 +20,10 @@ author = "agent"
 task = "workflow.run"
 args = "artifacts/gender-service: Voice Analysis"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "artifacts/mockup-sandbox: Component Preview Server"
+
 [[workflows.workflow]]
 name = "artifacts/gender-service: Voice Analysis"
 author = "agent"
@@ -31,6 +35,19 @@ waitForPort = 5000
 
 [workflows.workflow.metadata]
 outputType = "console"
+
+[[workflows.workflow]]
+name = "artifacts/mockup-sandbox: Component Preview Server"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "webview"
+isCanvasWorkflow = true
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "PORT=8081 BASE_PATH=/__mockup pnpm --filter @workspace/mockup-sandbox run dev"
+waitForPort = 8081
 
 [agent]
 stack = "PNPM_WORKSPACE"
