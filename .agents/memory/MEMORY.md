@@ -8,3 +8,4 @@
 - [Radix UI Select empty-value constraint](radix-select-empty-value.md) — SelectItem value="" crashes; use __none__ sentinel + bidirectional conversion in onChange/value
 - [Azure STT streaming protocol](azure-stt-protocol.md) — every frame (text + binary) must include X-RequestId header; omitting it causes 1002 close; batch confidence filter is too aggressive for Indic languages — rely on RecognitionStatus=Success instead
 - [Voice Intel audio tap pattern](voice-intel-audio-tap.md) — callerAudioTap on SessionConfig feeds VoiceIntelSession; webcall uses separate downsample16to8 tap at same point as gender detector
+- [GitHub push required after every edit](github-push-required.md) — all file edits must be pushed to srundme/voiceorch main branch via GitHub API; Railway deploys from GitHub
