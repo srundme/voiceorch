@@ -1,5 +1,3 @@
-CREATE EXTENSION IF NOT EXISTS vector;
-
 CREATE TABLE "users" (
         "id" serial PRIMARY KEY NOT NULL,
         "clerk_id" text NOT NULL,
@@ -65,7 +63,7 @@ CREATE TABLE "kb_chunks" (
         "chunk_index" integer NOT NULL,
         "content" text NOT NULL,
         "token_count" integer,
-        "embedding" vector(768),
+        "embedding" text,
         "metadata" json,
         "created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
