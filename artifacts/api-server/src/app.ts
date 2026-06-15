@@ -1,6 +1,8 @@
 import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
+import path from "path";
+import { existsSync } from "fs";
 import { attachSession } from "./middlewares/session.js";
 import router from "./routes";
 import { logger } from "./lib/logger";
@@ -56,5 +58,24 @@ app.use((req, res, next) => {
 });
 
 app.use("/api", router);
+
+// Serve the built React SPA when FRONTEND_DIST_PATH is set (production / Railway)
+const frontendDistPath = process.env["FRONTEND_DIST_PATH"];
+if (frontendDistPath) {
+  const distAbs = path.isAbsolute(frontendDistPath)
+    ? frontendDistPath
+    : path.join(process.cwd(), frontendDistPath);
+
+  if (existsSync(distAbs)) {
+    logger.info({ distAbs }, "Serving frontend static files");
+    app.use(express.static(distAbs));
+    // SPA fallback — send index.html for any non-/api route not matched by static
+    app.get(/^\/(?!api).*/, (_req, res) => {
+      res.sendFile(path.join(distAbs, "index.html"));
+    });
+  } else {
+    logger.warn({ distAbs, FRONTEND_DIST_PATH: frontendDistPath }, "FRONTEND_DIST_PATH set but directory not found — skipping static serving");
+  }
+}
 
 export default app;
