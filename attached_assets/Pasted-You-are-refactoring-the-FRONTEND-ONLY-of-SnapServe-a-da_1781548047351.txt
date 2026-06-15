@@ -1,0 +1,106 @@
+You are refactoring the FRONTEND ONLY of SnapServe, a dark-themed B2B voice-agent
+orchestration dashboard (React SPA).
+
+FIRST: detect the existing stack (router, styling system, component lib, state) by
+reading the codebase. Match it exactly. Do not introduce a new styling system or
+router. If anything is ambiguous, follow the existing patterns in the repo.
+
+HARD CONSTRAINTS — do not violate:
+- Do NOT change backend code, API routes, or request/response contracts. All
+  existing /api/* calls stay identical.
+- Do NOT change the existing color palette or theme variables. Reuse the current
+  dark CSS variables exactly. You may ADD spacing/radius/type tokens, not recolor.
+- Keep all existing route paths working. You may add redirects, not break URLs.
+- Preserve all functionality. This is a UI/UX/IA refactor, not a rewrite.
+
+GOAL: Modernize IA and the build→test→observe loop to Vapi/Bolna polish, and
+surface our differentiator (persistent cross-call caller memory).
+
+==================== PHASE 1: SHELL, NAV, TOKENS ====================
+1. Collapse the 17-item sidebar into:
+   OVERVIEW: Command Center
+   WORK: Agents, Campaigns, Scheduling, Memory/CRM
+   OBSERVE: Call Logs (merge old Call Log + Activity into one tabbed page)
+   SETTINGS drawer/section: Providers, Voices, Phone Numbers, Verification (KYC),
+   API Keys, Webhooks, Wallet, Usage, General.
+   Labels VISIBLE by default on desktop; collapse is an opt-in toggle persisted to
+   localStorage. Voices and Knowledge are NO LONGER top-level nav items.
+2. Persistent topbar: global ⌘K search, wallet balance chip (color state
+   green/amber/red + thin credit bar), notification bell fed by
+   GET /api/command-center/activity-stream, user menu.
+3. Tokens: spacing scale (4/8/12/16/24/32), radius, type scale. Use tabular-nums
+   for ALL numeric table cells. Comfortable/compact density toggle persisted to
+   localStorage. Motion 150-200ms; reserve pulsing for genuine live states only.
+4. Thin breadcrumb bar component for any remaining deep pages.
+
+==================== PHASE 2: AGENT STUDIO (split view) ====================
+Rebuild /app/agents/:id/edit as a two-panel Studio.
+LEFT panel (config):
+- Topbar strip: agent name, status badge, version label, Publish button.
+- VOICE PIPELINE shown as a horizontal flow: ASR -> LLM -> TTS -> Telephony, each
+  tile with provider name and a per-stage latency label, plus a round-trip total.
+  - ASR / LLM / TTS tiles: green check when configured; if unset show inline
+    "add key" (opens provider key entry in place, no page navigation).
+  - TELEPHONY tile is DIFFERENT: it is a MANAGED number, not a user API key. When a
+    managed number is assigned (GET /api/phone-numbers) show it green as
+    "Managed" with the number. If none assigned, the action is "Get a number"
+    (provision flow), NOT "add key".
+- System prompt editor with auto-generate affordance; agent variables rendered as
+  inline pills (e.g. {{lead_name}}) from /api/agent-variables.
+- Tools the agent can call, as toggles: Book appointment, Transfer to human,
+  Search knowledge base.
+- Knowledge base attach (fold the old Knowledge page in here) + Voice picker with
+  inline preview (fold the old Voices page in here).
+RIGHT panel (docked, always visible): TEST CALL via browser mic.
+- WebSocket /api/webcall + SSE /api/webcall-notify. Live status with ticking timer,
+  animated waveform, streaming transcript bubbles (agent/caller) with per-turn
+  latency badges and a tool-call badge when the agent invokes a tool.
+- A small strip: latency / turns / cost. End + Restart buttons.
+- "Memory captured" section: chips of facts extracted this call, with a count.
+- IMPORTANT: the test call is browser-mic only — it needs NO destination
+  verification and NO telephony provider. A new user can test immediately.
+Retire /app/test-simulator; redirect it into the Studio.
+
+==================== PHASE 3: DRAWERS FOR DETAIL VIEWS ====================
+Convert these full-page details into right-side slide-over drawers that open OVER
+the parent table (parent stays mounted):
+- Call detail (/app/calls/:id), Lead profile, Campaign batch detail, Booking detail.
+Each drawer has its own header with close + an "open full page" fallback link.
+
+==================== PHASE 4: MEMORY / CRM (differentiator) ====================
+New top-level /app/memory:
+- Cross-agent table of caller profiles: phone, name, call count, last seen, agent,
+  key-facts preview. Filter by agent.
+- Click a caller -> drawer with a MEMORY GRAPH: central caller node branching to
+  Facts, Past Call Episodes (summaries), and Verbatim Sentences. Use the existing
+  /api/agents/:id/caller-memory/:phone data shape.
+
+==================== PHASE 5: TELEPHONY, NUMBERS & KYC ====================
+Build a unified telephony surface (used by the Studio tile and the Phone Numbers /
+Verification pages — single source of truth).
+- OUTBOUND (managed) number: provisioned by SnapServe (Vobiz). Show number +
+  "Managed" active state from GET /api/phone-numbers. Provision action if none.
+- VERIFIED DESTINATIONS: the numbers a user may call. Each row shows verified /
+  pending state. Pending rows show inline OTP entry with a countdown:
+  POST /api/calls/send-destination-otp then POST /api/calls/verify-destination-otp.
+  "Add & verify a number" affordance. Show an "N of M verified" counter.
+- KYC gating: read GET /api/kyc. If unverified, calls are restricted to verified
+  destinations and show the "Complete KYC to call any number" note linking to
+  /app/kyc. If verified, HIDE per-number verification and just show the managed line.
+- Verification (/app/kyc): unverified -> pending -> verified states, submit form.
+
+==================== PHASE 6: POLISH ====================
+- Command Center: Live/Pause toggle, manual refresh, "updated Ns ago" stamp.
+- Campaigns: reduce 7 tabs to 3 — Overview, Leads & Batches, Activity (Callbacks/
+  Bookings/Transfers/Incoming become FILTERS on the Activity tab).
+- Scheduling: one hub page with internal tabs (Bookings/Calendars/Event Types/
+  Availability). Settings calendar tab deep-links here instead of duplicating data.
+- Onboarding: after completion, land on Command Center with an empty-state checklist
+  (Add provider keys -> Create agent -> Test in Studio -> Get number / verify -> 
+  Launch campaign) until each step is done.
+- New-user flow: offer "Start with managed defaults" using the $5 signup credit so
+  an agent can be tested in the Studio before any provider keys are added.
+
+Keep everything dense, fast, keyboard-navigable, and consistent with the existing
+dark theme. Build phase by phase; do not start a later phase until the prior one
+compiles and routes work.

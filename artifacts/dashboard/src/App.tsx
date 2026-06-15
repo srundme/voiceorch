@@ -56,6 +56,7 @@ import TransfersPage from "@/pages/transfers";
 import VoicesPage from "@/pages/voices";
 import TestSimulatorPage from "@/pages/test-simulator";
 import CommandCenterPage from "@/pages/command-center/index";
+import MemoryPage from "@/pages/memory/index";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -281,7 +282,8 @@ function AppRoutes() {
         <Route path="/app/knowledge-bases" component={KnowledgeBasePage} />
         <Route path="/app/providers" component={ProvidersList} />
         <Route path="/app/wallet" component={WalletPage} />
-        <Route path="/app/activity" component={ActivityPage} />
+        <Route path="/app/memory" component={MemoryPage} />
+        <Route path="/app/activity" component={() => <Redirect to="/app/calls" />} />
         <Route path="/app/phone-numbers" component={PhoneNumbersPage} />
         <Route path="/app/webhooks" component={WebhooksPage} />
         <Route path="/app/analytics/agents/:id" component={AgentAnalyticsPage} />
