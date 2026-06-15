@@ -11,7 +11,6 @@ import { toReadableError } from "../utils.js";
 import { logger } from "../../lib/logger.js";
 import { RecordingBuffer } from "../recorder.js";
 import type { ConversationTurn, STTConfig, StreamSTT } from "../types.js";
-import { DEFAULT_GOODBYE_MESSAGE } from "../types.js";
 import { decryptKey } from "../../lib/crypto.js";
 import { loadCallerContext, injectEnhancedMemory, updateCallerProfile, latchCallerName, latchCallerFact, detectCallbackRequest } from "../callerMemory.js";
 
