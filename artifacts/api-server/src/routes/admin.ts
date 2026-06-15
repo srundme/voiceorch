@@ -1224,24 +1224,4 @@ router.post("/admin/family/provision", async (req, res): Promise<void> => {
   }
 });
 
-// ── Local Speaker Recognition (ECAPA-TDNN) connectivity check ────────────────
-
-router.get("/admin/azure-speaker-check", async (_req, res): Promise<void> => {
-  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
-  res.setHeader("Pragma", "no-cache");
-  res.setHeader("Expires", "0");
-  res.setHeader("ETag", `"${Date.now()}"`);
-  try {
-    const { testAzureConnection } = await import("../services/speakerRecognition.js");
-    const result = await testAzureConnection();
-    if (result.ok) {
-      res.json({ ok: true, region: result.region, message: "Local ECAPA-TDNN speaker recognition model is loaded and ready." });
-    } else {
-      res.status(200).json({ ok: false, region: result.region ?? null, status: result.status ?? null, error: result.error });
-    }
-  } catch (err) {
-    res.status(500).json({ ok: false, error: String(err) });
-  }
-});
-
 export default router;
