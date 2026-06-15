@@ -406,6 +406,25 @@ export async function handleWebCallWebSocket(
 
   // ── Voice intelligence — speaker recognition for webcall path ────────────
   const voiceIntel = new VoiceIntelSession(agentId, webcallIdentifier);
+
+  // Queued system note injected into the next LLM turn when a voice change is detected.
+  // Cleared after one use so it fires only once per change event.
+  let speakerChangeNote: string | null = null;
+  // Set true when any speaker change fires — prevents corrupting the original
+  // caller's voice-print embedding with a different person's audio.
+  let speakerChangeDetected = false;
+
+  voiceIntel.onSpeakerChange = () => {
+    speakerChangeDetected = true;
+    speakerChangeNote = [
+      "[VOICE ALERT] Your voice-analysis system has detected that the person speaking is NO LONGER the same caller who started this call.",
+      "React immediately and naturally — do NOT continue as if speaking with the original caller.",
+      "Say something like: \"Hmm, that doesn't quite sound like the same voice — who am I speaking with now?\"",
+      "Once they introduce themselves, greet them warmly and help them with whatever they need.",
+    ].join(" ");
+    logger.info({ callId, agentId }, "Webcall: speaker change detected — queuing voice-alert for next LLM turn");
+  };
+
   let webcallProfile: import("../callerMemory.js").CallerProfile | null = null;
   let webcallLatchedFacts = new Map<string, string>();
   let systemPrompt = agent.generatedPrompt ?? agent.systemPrompt ?? "";
@@ -849,6 +868,12 @@ export async function handleWebCallWebSocket(
       const agentTimezone = (agentCfg["timezone"] as string | undefined) || "Asia/Kolkata";
       const dtInjection = buildDatetimeInjection(agentTimezone);
       systemPromptForTurn = `${dtInjection}\n\n${systemPromptForTurn}`;
+
+      // Inject speaker-change alert once — consumed on first LLM turn after detection
+      if (speakerChangeNote) {
+        systemPromptForTurn += `\n\n${speakerChangeNote}`;
+        speakerChangeNote = null;
+      }
       const detectedGender = genderDetector?.gender ?? null;
       if (detectedGender === "male") {
         systemPromptForTurn += `\n\n[CALLER GENDER] The caller has been identified as male. Always address them respectfully as "${maleSal}" when appropriate (e.g. "Yes, ${maleSal}", "Of course, ${maleSal}"). Never use "${femaleSal}".`;
@@ -1764,10 +1789,14 @@ export async function handleWebCallWebSocket(
 
     // ── Post-call webcall memory update + callback detection (fire-and-forget) ─
     // ── Voice intelligence — enroll caller's voice print (fire-and-forget) ──
-    if (webcallIdentifier) {
+    // Skip enrollment if a speaker change was detected — the mixed audio would
+    // corrupt the original caller's voice-print embedding.
+    if (webcallIdentifier && !speakerChangeDetected) {
       void voiceIntel.enroll(webcallIdentifier).catch((err) => {
         logger.warn({ callId, err }, "Voice intelligence: webcall enrollment failed (non-fatal)");
       });
+    } else if (speakerChangeDetected) {
+      logger.info({ callId }, "Webcall: skipping voice enrollment — speaker change detected this call");
     }
 
     if (webcallIdentifier && history.length >= 2) {
