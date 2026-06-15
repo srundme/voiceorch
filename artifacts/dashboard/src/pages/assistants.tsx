@@ -11,6 +11,7 @@ import {
   PhoneForwarded, Globe, CalendarPlus, CalendarClock, CalendarX, CalendarCheck, Wrench,
   ChevronRight, ChevronUp, GitBranch, MessageSquare, LayoutGrid, Workflow,
   Play, Pause, Brain, ArrowRight, History, Archive, Calendar,
+  Fingerprint, ShieldCheck, ShieldAlert, Clock3, AlertCircle,
 } from "lucide-react";
 import {
   useListAgents,
@@ -1341,6 +1342,146 @@ function CallerMemoryPanel({ agentId }: { agentId: number }) {
 
 /* ── AgentConfigPanel ────────────────────────────────────────────────────── */
 
+/* ── VoiceIntelPanel ─────────────────────────────────────────────────────── */
+
+interface VoicePrintRow {
+  id: number;
+  phoneNumber: string;
+  enrollmentStatus: string;
+  enrollmentSpeechSeconds: number | null;
+  lastIdentifiedAt: string | null;
+  lastConfidenceScore: number | null;
+  createdAt: string;
+}
+
+function VoiceIntelPanel({ agentId }: { agentId: number }) {
+  const { getToken } = useAuth();
+  const [prints, setPrints]   = useState<VoicePrintRow[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [deleting, setDel]    = useState<number | null>(null);
+  const { toast } = useToast();
+
+  const authHeaders = useCallback(async (): Promise<Record<string, string>> => {
+    const token = await getToken();
+    return token ? { "Authorization": `Bearer ${token}` } : {};
+  }, [getToken]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const h = await authHeaders();
+        const r = await fetch(`/api/agents/${agentId}/voice-prints`, { headers: h });
+        if (r.ok) setPrints(await r.json() as VoicePrintRow[]);
+      } catch { /* ignore */ } finally { setLoading(false); }
+    })();
+  }, [agentId, authHeaders]);
+
+  const deletePrint = async (id: number) => {
+    setDel(id);
+    try {
+      const h = await authHeaders();
+      const r = await fetch(`/api/agents/${agentId}/voice-prints/${id}`, { method: "DELETE", headers: h });
+      if (r.ok) {
+        setPrints(prev => prev ? prev.filter(p => p.id !== id) : prev);
+        toast({ title: "Voice print deleted" });
+      } else {
+        toast({ title: "Failed to delete", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Failed to delete", variant: "destructive" });
+    } finally { setDel(null); }
+  };
+
+  const statusBadge = (status: string) => {
+    if (status === "Enrolled") return (
+      <Badge className="gap-1 bg-emerald-500/15 text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/20 text-[10px] px-1.5 py-0">
+        <ShieldCheck className="h-2.5 w-2.5" />Enrolled
+      </Badge>
+    );
+    if (status === "Enrolling") return (
+      <Badge variant="outline" className="gap-1 text-amber-500 border-amber-500/40 text-[10px] px-1.5 py-0">
+        <Clock3 className="h-2.5 w-2.5" />Enrolling
+      </Badge>
+    );
+    return (
+      <Badge variant="outline" className="gap-1 text-muted-foreground text-[10px] px-1.5 py-0">
+        <ShieldAlert className="h-2.5 w-2.5" />Pending
+      </Badge>
+    );
+  };
+
+  if (loading) return (
+    <div className="space-y-3 p-5">
+      {[1,2,3].map(i => <Skeleton key={i} className="h-14 w-full" />)}
+    </div>
+  );
+
+  if (!prints || prints.length === 0) return (
+    <div className="flex flex-col items-center justify-center py-24 text-center gap-3 px-5">
+      <Fingerprint className="h-10 w-10 text-muted-foreground/25" />
+      <p className="text-sm font-medium text-muted-foreground/60">No voice prints yet</p>
+      <p className="text-xs text-muted-foreground/40 max-w-[260px]">
+        Voice prints are created automatically after calls once Azure Speaker Recognition keys are configured in Admin → Managed Keys.
+      </p>
+    </div>
+  );
+
+  return (
+    <div className="p-5 space-y-3">
+      <div className="space-y-1 mb-4">
+        <h3 className="text-sm font-semibold flex items-center gap-2">
+          <Fingerprint className="h-3.5 w-3.5 text-primary" />
+          Voice Prints
+        </h3>
+        <p className="text-xs text-muted-foreground/60">
+          Azure Speaker Recognition identifies callers by voice across different numbers. Target: 60 s of speech per print.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        {prints.map(p => (
+          <div key={p.id} className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm">
+            <Fingerprint className="h-4 w-4 text-muted-foreground/50 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-mono text-xs text-foreground">{p.phoneNumber}</span>
+                {statusBadge(p.enrollmentStatus)}
+              </div>
+              <div className="flex items-center gap-3 mt-0.5 text-[10px] text-muted-foreground/50">
+                <span><Clock3 className="inline h-2.5 w-2.5 mr-0.5" />{p.enrollmentSpeechSeconds ? `${Math.round(p.enrollmentSpeechSeconds)}s speech` : "0s speech"}</span>
+                {p.lastConfidenceScore != null && (
+                  <span className={p.lastConfidenceScore >= 0.7 ? "text-emerald-500" : p.lastConfidenceScore >= 0.5 ? "text-amber-500" : "text-destructive/70"}>
+                    {Math.round(p.lastConfidenceScore * 100)}% confidence
+                  </span>
+                )}
+                {p.lastIdentifiedAt && (
+                  <span>last matched {new Date(p.lastIdentifiedAt).toLocaleDateString()}</span>
+                )}
+              </div>
+            </div>
+            <button
+              className="text-muted-foreground/30 hover:text-destructive transition-colors shrink-0 disabled:opacity-40"
+              disabled={deleting === p.id}
+              onClick={() => void deletePrint(p.id)}
+            >
+              {deleting === p.id
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : <X className="h-3.5 w-3.5" />}
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex items-start gap-2 text-[10px] text-muted-foreground/40 bg-muted/20 rounded-lg p-3 mt-4">
+        <AlertCircle className="h-3 w-3 mt-0.5 shrink-0" />
+        <span>Requires <strong className="text-muted-foreground/60">managed_azure_speech_key</strong> and <strong className="text-muted-foreground/60">managed_azure_speech_region</strong> in Admin → Managed Keys.</span>
+      </div>
+    </div>
+  );
+}
+
+/* ── AgentConfigPanel ─────────────────────────────────────────────────────── */
+
 function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number; onDeleted: () => void; initialTab?: string }) {
   const queryClient = useQueryClient();
   const { getToken, userId: callerUserId } = useAuth();
@@ -1749,6 +1890,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
     { value: "test",      label: "Test",      icon: PlayCircle },
     { value: "logs",      label: "Logs",      icon: AlignLeft },
     { value: "memory",    label: "Memory",    icon: Brain },
+    { value: "voice-intel", label: "Voice Prints", icon: Fingerprint },
   ];
 
   return (
@@ -3084,6 +3226,10 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
           {/* ═══ MEMORY ══════════════════════════════════════════════════ */}
           {activeTab === "memory" && (
             <CallerMemoryPanel agentId={agentId} />
+          )}
+
+          {activeTab === "voice-intel" && (
+            <VoiceIntelPanel agentId={agentId} />
           )}
 
         </div>
