@@ -39,7 +39,7 @@ export function CreateAgentDialog({ open, onClose, onCreated }: Props) {
           llmProvider:       "qwen",
           llmModel:          "qwen/qwen3-32b",
           ttsProvider:       "cartesia",
-          ttsModel:          "sonic-3",
+          ttsModel:          "sonic-3.5",
           telephonyProvider: "vobiz",
           systemPrompt:      "You are a helpful AI voice assistant.",
           maxDuration:       600,

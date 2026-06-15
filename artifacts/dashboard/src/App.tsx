@@ -12,7 +12,6 @@ import { ThemeSync } from "@/components/theme-sync";
 import { Layout } from "@/components/layout";
 import { SnapServeLoader } from "@/components/logo";
 import { VoiceAssistant } from "@/components/VoiceAssistant";
-import LandingPage from "@/pages/landing";
 import AssistantsPage from "@/pages/assistants";
 import Dashboard from "@/pages/dashboard";
 import AgentsList from "@/pages/agents/index";
@@ -57,6 +56,7 @@ import TransfersPage from "@/pages/transfers";
 import VoicesPage from "@/pages/voices";
 import TestSimulatorPage from "@/pages/test-simulator";
 import CommandCenterPage from "@/pages/command-center/index";
+import MemoryPage from "@/pages/memory/index";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -135,34 +135,53 @@ function SignInPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
-      <div className="w-[420px] max-w-full rounded-2xl border border-zinc-800 bg-zinc-950/80 p-10 backdrop-blur-xl">
-        <div className="flex flex-col items-center text-center">
-          <img src={`${basePath}/logo.svg`} alt="SnapServe" className="mb-6 h-10 w-10" />
-          <h1 className="text-xl font-semibold text-white">
+    <div style={{ minHeight: "100vh", background: "#0e0f14", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" }}>
+      <div style={{ width: 440, maxWidth: "100%", background: "#161720", borderRadius: 20, padding: "40px 36px 36px", boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }}>
+
+        {/* Icon */}
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 24 }}>
+          <div style={{ width: 52, height: 52, borderRadius: 14, background: "#162a1e", border: "1px solid rgba(74,222,128,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="13" cy="13" r="5" stroke="#4ade80" strokeWidth="1.6"/>
+              <line x1="13" y1="2" x2="13" y2="7" stroke="#4ade80" strokeWidth="1.6" strokeLinecap="round"/>
+              <line x1="13" y1="19" x2="13" y2="24" stroke="#4ade80" strokeWidth="1.6" strokeLinecap="round"/>
+              <line x1="2" y1="13" x2="7" y2="13" stroke="#4ade80" strokeWidth="1.6" strokeLinecap="round"/>
+              <line x1="19" y1="13" x2="24" y2="13" stroke="#4ade80" strokeWidth="1.6" strokeLinecap="round"/>
+              <circle cx="13" cy="13" r="1.8" fill="#4ade80"/>
+            </svg>
+          </div>
+        </div>
+
+        {/* Heading */}
+        <div style={{ textAlign: "center", marginBottom: 28 }}>
+          <h1 style={{ fontWeight: 700, fontSize: "1.25rem", color: "#fff", letterSpacing: "-0.3px", marginBottom: 8 }}>
             {mode === "login" ? "Welcome back" : "Create your account"}
           </h1>
-          <p className="mt-2 text-sm text-zinc-400">
+          <p style={{ fontSize: "0.875rem", color: "#5a5c6e", lineHeight: 1.5 }}>
             {mode === "login"
               ? "Sign in to manage your voice agents."
               : "New here? You'll get $5 free credit to start building."}
           </p>
         </div>
 
+        {/* Error */}
         {error && (
-          <div className="mt-6 rounded-lg border border-red-900/50 bg-red-950/40 px-4 py-3 text-sm text-red-300">
+          <div style={{ marginBottom: 16, padding: "10px 14px", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 10, fontSize: "0.8rem", color: "#fca5a5" }}>
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="mt-8 flex flex-col gap-3">
+        {/* Form */}
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {mode === "register" && (
             <input
               type="text"
               placeholder="Your name (optional)"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm text-white placeholder-zinc-500 outline-none focus:border-zinc-500"
+              style={{ width: "100%", background: "#1f2030", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, padding: "14px 16px", fontSize: "0.9rem", color: "#fff", outline: "none", transition: "border-color .15s" }}
+              onFocus={e => { e.currentTarget.style.borderColor = "rgba(74,222,128,0.3)"; }}
+              onBlur={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)"; }}
             />
           )}
           <input
@@ -171,7 +190,9 @@ function SignInPage() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm text-white placeholder-zinc-500 outline-none focus:border-zinc-500"
+            style={{ width: "100%", background: "#1f2030", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, padding: "14px 16px", fontSize: "0.9rem", color: "#fff", outline: "none", transition: "border-color .15s" }}
+            onFocus={e => { e.currentTarget.style.borderColor = "rgba(74,222,128,0.3)"; }}
+            onBlur={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)"; }}
           />
           <input
             type="password"
@@ -180,24 +201,29 @@ function SignInPage() {
             minLength={8}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm text-white placeholder-zinc-500 outline-none focus:border-zinc-500"
+            style={{ width: "100%", background: "#1f2030", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, padding: "14px 16px", fontSize: "0.9rem", color: "#fff", outline: "none", transition: "border-color .15s" }}
+            onFocus={e => { e.currentTarget.style.borderColor = "rgba(74,222,128,0.3)"; }}
+            onBlur={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)"; }}
           />
-          <Button
+          <button
             type="submit"
             disabled={loading}
-            className="mt-2 w-full bg-white font-semibold text-zinc-900 hover:bg-zinc-100 disabled:opacity-60"
+            style={{ marginTop: 6, width: "100%", background: loading ? "#d4d4d4" : "#fff", color: "#0e0f14", fontWeight: 700, fontSize: "0.9rem", padding: "14px 0", borderRadius: 12, border: "none", cursor: loading ? "not-allowed" : "pointer", transition: "background .15s", letterSpacing: "-0.1px" }}
+            onMouseEnter={e => { if (!loading) e.currentTarget.style.background = "#e8e8e8"; }}
+            onMouseLeave={e => { if (!loading) e.currentTarget.style.background = "#fff"; }}
           >
             {loading ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}
-          </Button>
+          </button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-zinc-500">
+        {/* Footer */}
+        <p style={{ marginTop: 22, textAlign: "center", fontSize: "0.85rem", color: "#44475a" }}>
           {mode === "login" ? (
             <>
               No account?{" "}
               <button
                 onClick={() => { setMode("register"); setError(null); }}
-                className="text-zinc-300 underline underline-offset-2 hover:text-white"
+                style={{ background: "none", border: "none", color: "#a0a3b8", cursor: "pointer", fontSize: "0.85rem", textDecoration: "underline", textUnderlineOffset: 3, padding: 0 }}
               >
                 Sign up free
               </button>
@@ -207,7 +233,7 @@ function SignInPage() {
               Already have an account?{" "}
               <button
                 onClick={() => { setMode("login"); setError(null); }}
-                className="text-zinc-300 underline underline-offset-2 hover:text-white"
+                style={{ background: "none", border: "none", color: "#a0a3b8", cursor: "pointer", fontSize: "0.85rem", textDecoration: "underline", textUnderlineOffset: 3, padding: 0 }}
               >
                 Sign in
               </button>
@@ -222,7 +248,7 @@ function SignInPage() {
 function HomeRedirect() {
   const { isLoaded, isSignedIn } = useAuth();
   if (!isLoaded) return <SnapServeLoader />;
-  return isSignedIn ? <Redirect to="/app" /> : <LandingPage />;
+  return <Redirect to={isSignedIn ? "/app" : "/sign-in"} />;
 }
 
 function AppRoutes() {
@@ -256,7 +282,8 @@ function AppRoutes() {
         <Route path="/app/knowledge-bases" component={KnowledgeBasePage} />
         <Route path="/app/providers" component={ProvidersList} />
         <Route path="/app/wallet" component={WalletPage} />
-        <Route path="/app/activity" component={ActivityPage} />
+        <Route path="/app/memory" component={MemoryPage} />
+        <Route path="/app/activity" component={() => <Redirect to="/app/calls" />} />
         <Route path="/app/phone-numbers" component={PhoneNumbersPage} />
         <Route path="/app/webhooks" component={WebhooksPage} />
         <Route path="/app/analytics/agents/:id" component={AgentAnalyticsPage} />

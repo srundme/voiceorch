@@ -225,7 +225,8 @@ const ASR_LANGUAGES: Record<string, { value: string; label: string }[]> = {
 };
 const TTS_MODELS: Record<string, { value: string; label: string }[]> = {
   cartesia: [
-    { value: "sonic-3",     label: "Sonic 3 (latest)" },
+    { value: "sonic-3.5",   label: "Sonic 3.5 ✦ New — 42 languages, lowest latency" },
+    { value: "sonic-3",     label: "Sonic 3" },
     { value: "sonic-2",     label: "Sonic 2 (stable)" },
     { value: "sonic-turbo", label: "Sonic Turbo (fast)" },
   ],
@@ -1752,7 +1753,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
     setAsrAutoFallback(agent.asrAutoFallback ?? true);
     setAsrFallbackProviders(((agent as unknown as Record<string,unknown>).asrFallbackProviders as Array<{provider: string; model: string}> | null | undefined) ?? []);
     setTtsProvider(agent.ttsProvider ?? "");
-    setTtsModel(agent.ttsModel ?? (agent.ttsProvider === "cartesia" ? "sonic-2" : ""));
+    setTtsModel(agent.ttsModel ?? (agent.ttsProvider === "cartesia" ? "sonic-3.5" : ""));
     setTtsVoice((agent as unknown as Record<string, unknown>).ttsVoice as string ?? "");
     setTelephony(agent.telephonyProvider ?? "");
     setBackchannelingEnabled(agent.backchannelingEnabled ?? true);
@@ -2044,7 +2045,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                   <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50">Voice</p>
                   <div>
                     <p className="text-[10px] text-muted-foreground/60 mb-1">TTS Provider</p>
-                    <Select value={ttsProvider} onValueChange={v => { mark(setTtsProvider)(v); setTtsModel(v === "cartesia" ? "sonic-2" : (TTS_MODELS[v]?.[0]?.value ?? "")); setTtsVoice(""); }}>
+                    <Select value={ttsProvider} onValueChange={v => { mark(setTtsProvider)(v); setTtsModel(v === "cartesia" ? "sonic-3.5" : (TTS_MODELS[v]?.[0]?.value ?? "")); setTtsVoice(""); }}>
                       <SelectTrigger className="h-8 text-xs border"><SelectValue /></SelectTrigger>
                       <SelectContent className="bg-card border-border">
                         {TTS_PROVIDERS.map(p => <SelectItem key={`tts-${p.value}`} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}
@@ -2312,7 +2313,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">Provider</p>
-                    <Select value={ttsProvider} onValueChange={v => { mark(setTtsProvider)(v); setTtsModel(v === "cartesia" ? "sonic-2" : (TTS_MODELS[v]?.[0]?.value ?? "")); setTtsVoice(""); }}>
+                    <Select value={ttsProvider} onValueChange={v => { mark(setTtsProvider)(v); setTtsModel(v === "cartesia" ? "sonic-3.5" : (TTS_MODELS[v]?.[0]?.value ?? "")); setTtsVoice(""); }}>
                       <SelectTrigger className="h-7 text-xs bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
                       <SelectContent className="bg-card border-border">{TTS_PROVIDERS.map(p => <SelectItem key={`tts-${p.value}`} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}</SelectContent>
                     </Select>
@@ -2758,7 +2759,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                     <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50">TTS / Synthesizer</p>
                     <div className="grid grid-cols-2 gap-3">
                       <div><p className="text-xs text-muted-foreground mb-1">Provider</p>
-                        <Select value={ttsProvider} onValueChange={v => { mark(setTtsProvider)(v); setTtsModel(v === "cartesia" ? "sonic-2" : (TTS_MODELS[v]?.[0]?.value ?? "")); setTtsVoice(""); }}>
+                        <Select value={ttsProvider} onValueChange={v => { mark(setTtsProvider)(v); setTtsModel(v === "cartesia" ? "sonic-3.5" : (TTS_MODELS[v]?.[0]?.value ?? "")); setTtsVoice(""); }}>
                           <SelectTrigger className="h-7 text-xs bg-muted border-border text-foreground"><SelectValue /></SelectTrigger>
                           <SelectContent className="bg-card border-border">{TTS_PROVIDERS.map(p => <SelectItem key={`tts-${p.value}`} value={p.value} className="text-foreground text-xs">{p.label}</SelectItem>)}</SelectContent>
                         </Select>

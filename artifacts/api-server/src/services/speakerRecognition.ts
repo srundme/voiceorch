@@ -2,10 +2,14 @@
  * Azure Speaker Recognition integration — voice fingerprinting, cross-number
  * caller identity, and mid-call speaker change detection.
  *
- * Azure Cognitive Services Speaker Recognition (text-independent):
+ * Azure Cognitive Services Speaker Recognition v2.0 (text-independent):
  *   - Profile create / enroll / identify endpoints
  *   - Identification is async → we poll with a configurable timeout
  *   - Requires WAV audio (PCM 16-bit, mono, 8 kHz or 16 kHz)
+ *
+ * NOTE: The v1.0 "cognitiveservices/v1.0" endpoint was retired by Microsoft.
+ *       This file uses the v2.0 text-independent API.
+ *       v2.0 base: https://{region}.api.cognitive.microsoft.com/speaker/identification/v2.0/text-independent
  *
  * Usage flow:
  *   1. At call start: buffer caller audio for IDENT_BUFFER_SECONDS
@@ -56,15 +60,19 @@ async function getAzureCreds(): Promise<{ key: string; region: string } | null> 
   return { key, region };
 }
 
-// ── Azure REST helpers ────────────────────────────────────────────────────────
+// ── Azure REST helpers (v2.0) ─────────────────────────────────────────────────
 
+/**
+ * v2.0 base URL.
+ * All speaker recognition paths are relative to this.
+ */
 function baseUrl(region: string): string {
-  return `https://${region}.api.cognitive.microsoft.com/speaker/identification/cognitiveservices/v1.0`;
+  return `https://${region}.api.cognitive.microsoft.com/speaker/identification/v2.0/text-independent`;
 }
 
 /** Create a new text-independent identification profile. Returns the Azure profile ID. */
 async function createAzureProfile(key: string, region: string): Promise<string> {
-  const res = await fetch(`${baseUrl(region)}/identificationProfiles`, {
+  const res = await fetch(`${baseUrl(region)}/profiles`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -76,18 +84,20 @@ async function createAzureProfile(key: string, region: string): Promise<string> 
     const body = await res.text();
     throw new Error(`Azure createProfile ${res.status}: ${body}`);
   }
-  const json = await res.json() as { identificationProfileId: string };
-  return json.identificationProfileId;
+  // v2.0 response uses "profileId" (v1.0 used "identificationProfileId")
+  const json = await res.json() as { profileId: string };
+  return json.profileId;
 }
 
-/** Enroll WAV audio into a profile. Returns the updated enrollment status. */
+/** Enroll WAV audio into a profile. Returns the updated enrollment status and speech seconds. */
 async function enrollAzureProfile(
   profileId: string,
   wavAudio: Buffer,
   key: string,
   region: string,
 ): Promise<{ status: string; speechSeconds: number }> {
-  const url = `${baseUrl(region)}/identificationProfiles/${profileId}/enroll?shortAudio=true`;
+  // v2.0: POST /profiles/{profileId}/enrollments (no shortAudio param — always async 202)
+  const url = `${baseUrl(region)}/profiles/${profileId}/enrollments`;
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -97,28 +107,30 @@ async function enrollAzureProfile(
     body: wavAudio,
   });
 
-  if (res.status === 200) {
-    const json = await res.json() as {
-      enrollmentStatus: string;
-      enrollmentsLength: number;
-    };
-    return {
-      status: json.enrollmentStatus ?? "Enrolling",
-      speechSeconds: json.enrollmentsLength ?? 0,
-    };
-  }
-
   if (res.status === 202) {
     const opUrl = res.headers.get("Operation-Location");
     if (opUrl) {
       const result = await pollOperation(opUrl, key, IDENT_POLL_TIMEOUT_MS);
+      // v2.0 poll result: processingResult.enrollmentStatus, processingResult.enrollmentsSpeechLength (seconds)
       const pr = result?.["processingResult"] as Record<string, unknown> | undefined;
       return {
         status:       (pr?.["enrollmentStatus"] as string | undefined) ?? "Enrolling",
-        speechSeconds: (pr?.["enrollmentsLength"] as number | undefined) ?? 0,
+        speechSeconds: (pr?.["enrollmentsSpeechLength"] as number | undefined) ?? 0,
       };
     }
     return { status: "Enrolling", speechSeconds: 0 };
+  }
+
+  if (res.status === 200) {
+    // Synchronous response (some regions/configs may still return 200)
+    const json = await res.json() as {
+      enrollmentStatus: string;
+      enrollmentsSpeechLength: number;
+    };
+    return {
+      status:       json.enrollmentStatus ?? "Enrolling",
+      speechSeconds: json.enrollmentsSpeechLength ?? 0,
+    };
   }
 
   const body = await res.text();
@@ -128,6 +140,9 @@ async function enrollAzureProfile(
 /**
  * Submit audio for text-independent speaker identification against a set of profiles.
  * Returns the matched profile ID and confidence, or null if not matched / no profiles.
+ *
+ * v2.0 endpoint: POST /profiles:identifySingleSpeaker?profileIds={ids}
+ * Poll result: processingResult.identifiedProfile.profileId + .score (float 0–1)
  */
 async function identifyAzureSpeaker(
   profileIds: string[],
@@ -138,7 +153,8 @@ async function identifyAzureSpeaker(
   if (profileIds.length === 0) return null;
 
   const idList = profileIds.join(",");
-  const url = `${baseUrl(region)}/identify?identificationProfileIds=${encodeURIComponent(idList)}&shortAudio=true`;
+  // v2.0: POST /profiles:identifySingleSpeaker?profileIds=...
+  const url = `${baseUrl(region)}/profiles:identifySingleSpeaker?profileIds=${encodeURIComponent(idList)}`;
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -160,14 +176,18 @@ async function identifyAzureSpeaker(
   const result = await pollOperation(opUrl, key, IDENT_POLL_TIMEOUT_MS);
   if (!result?.processingResult) return null;
 
-  const { identifiedProfileId, confidence } = result.processingResult as {
-    identifiedProfileId: string;
-    confidence: string;
-  };
+  // v2.0 poll result shape:
+  // { processingResult: { identifiedProfile: { profileId: "...", score: 0.82 } } }
+  const pr = result.processingResult as Record<string, unknown>;
+  const identified = pr["identifiedProfile"] as Record<string, unknown> | undefined;
+  if (!identified) return null;
 
-  const score = parseFloat(confidence as string);
-  if (!identifiedProfileId || isNaN(score) || score < IDENT_MIN_CONFIDENCE) return null;
-  return { profileId: identifiedProfileId, confidence: score };
+  const profileId = identified["profileId"] as string | undefined;
+  const rawScore  = identified["score"];
+  const score     = typeof rawScore === "number" ? rawScore : parseFloat(String(rawScore ?? "0"));
+
+  if (!profileId || isNaN(score) || score < IDENT_MIN_CONFIDENCE) return null;
+  return { profileId, confidence: score };
 }
 
 /** Poll an Azure async operation URL until succeeded/failed or timeout. */
