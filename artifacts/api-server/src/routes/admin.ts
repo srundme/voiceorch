@@ -1227,6 +1227,7 @@ router.post("/admin/family/provision", async (req, res): Promise<void> => {
 // ── Azure Speaker Recognition connectivity check ──────────────────────────────
 
 router.get("/admin/azure-speaker-check", async (_req, res): Promise<void> => {
+  res.setHeader("Cache-Control", "no-store");
   try {
     const { testAzureConnection } = await import("../services/speakerRecognition.js");
     const result = await testAzureConnection();
