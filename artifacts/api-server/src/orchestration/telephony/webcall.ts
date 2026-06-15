@@ -1853,18 +1853,19 @@ export async function handleWebCallWebSocket(
     // call recordings.
     if (!speaking) recording.addCallerChunk(data as Buffer);
 
-    // Feed all frames to gender detector + voice intelligence (browser sends 16 kHz → downsample to 8 kHz)
-    const pcm8kForIntel = downsample16to8(data as Buffer);
+    // Gender detector needs 8 kHz (trained on telephony-band audio)
+    const pcm8kForGender = downsample16to8(data as Buffer);
     // Same !speaking gate for gender: agent TTS echo through the mic sounds female
     // (Cartesia/ElevenLabs voice) and overwhelms the gender classifier when the
     // agent talks for long stretches, flipping "Sir" → "Ma'am".
-    if (genderDetector && !speaking) genderDetector.addSpeechChunk(pcm8kForIntel);
-    // Only feed caller-mic audio into voice intelligence when the agent is NOT
-    // playing TTS. Both the reference embedding (first 8 s of caller audio) and
-    // all subsequent speaker-change windows must use the same audio domain
-    // (caller-only, no echo). Mixing echo-free reference with echo-contaminated
-    // windows makes same-speaker similarity drop to 0.18, causing false positives.
-    if (!speaking) voiceIntel.addChunk(pcm8kForIntel);
+    if (genderDetector && !speaking) genderDetector.addSpeechChunk(pcm8kForGender);
+    // Voice intelligence (ECAPA-TDNN speaker recognition) needs 16 kHz.
+    // Pass the raw browser audio directly — do NOT downsample first.
+    // Previously we passed 8 kHz audio, which the gender service then upsampled
+    // back to 16 kHz for ECAPA. That 16→8→16 round-trip is lossy and caused
+    // same-speaker cosine similarity to collapse to ~0.18, making detection
+    // unreliable. Sending 16 kHz natively gives ECAPA the full signal.
+    if (!speaking) voiceIntel.addChunk(data as Buffer);
 
     const rms = rmsEnergy(data);
 

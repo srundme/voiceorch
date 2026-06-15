@@ -182,9 +182,14 @@ export async function testAzureConnection(): Promise<
 
 // ── Audio conversion ──────────────────────────────────────────────────────────
 
-/** Convert raw PCM8k (LINEAR16) to a proper WAV buffer for the embedding endpoint. */
-function toWav8k(pcm8k: Buffer): Buffer {
-  return pcmToWav(pcm8k, 8000, 1, 16);
+/**
+ * Wrap raw PCM 16 kHz LINEAR16 in a WAV header for the embedding endpoint.
+ * We pass 16 kHz directly — the gender service resamples to 16 kHz internally,
+ * so sending 16 kHz skips the lossy 16→8→16 round-trip that was destroying
+ * speaker information and causing same-speaker cosine similarity of only 0.18.
+ */
+function toWav16k(pcm16k: Buffer): Buffer {
+  return pcmToWav(pcm16k, 16000, 1, 16);
 }
 
 // ── Public VoiceIntelSession ──────────────────────────────────────────────────
@@ -206,7 +211,7 @@ export interface VoiceIdResult {
  *   pipeline config: callerAudioTap = (buf) => vi.addChunk(buf)
  *   at call end: await vi.finalise(callerPhone)
  *
- * Usage (webcall path): same, but drive addChunk from webcall's pcm8k tap.
+ * Usage (webcall path): pass raw 16 kHz browser PCM directly — skip the downsample step.
  */
 export class VoiceIntelSession {
   private readonly agentId: number;
@@ -252,12 +257,13 @@ export class VoiceIntelSession {
   // ── Audio ingestion ─────────────────────────────────────────────────────────
 
   /**
-   * Feed a raw 8 kHz LINEAR16 PCM chunk from the caller.
-   * Telephony adapters pass linear16 PCM directly; mulaw callers must decode first.
+   * Feed a raw 16 kHz LINEAR16 PCM chunk from the caller.
+   * Webcall: pass `data` (the 16 kHz browser audio) directly — do NOT downsample first.
+   * Telephony/mulaw callers: decode mulaw → 8 kHz, then upsample to 16 kHz, or use addMulaw().
    */
-  addChunk(pcm8k: Buffer): void {
-    this.chunks.push(pcm8k);
-    const chunkSec = pcm8k.length / (8000 * 2);
+  addChunk(pcm16k: Buffer): void {
+    this.chunks.push(pcm16k);
+    const chunkSec = pcm16k.length / (16000 * 2);
     this.totalSeconds += chunkSec;
 
     // Fire identification once after enough audio has accumulated
@@ -268,7 +274,7 @@ export class VoiceIntelSession {
 
     // Speaker-change detection window (only once we have own embedding)
     if (this.ownEmbedding) {
-      this.changeWindowChunks.push(pcm8k);
+      this.changeWindowChunks.push(pcm16k);
       this.changeWindowSeconds += chunkSec;
       if (this.changeWindowSeconds >= CHANGE_WINDOW_SECONDS) {
         const window = Buffer.concat(this.changeWindowChunks);
@@ -303,7 +309,7 @@ export class VoiceIntelSession {
       // Using the live audio (same mic, same room) as the reference for
       // speaker-change detection is far more accurate than a stored embedding
       // from a previous call where room/mic conditions may differ.
-      const wav = toWav8k(Buffer.concat(this.chunks));
+      const wav = toWav16k(Buffer.concat(this.chunks));
       const queryEmbedding = await extractEmbedding(wav);
 
       // Set own embedding from fresh audio — overrides any stored embedding.
@@ -369,7 +375,7 @@ export class VoiceIntelSession {
   private async checkSpeakerChange(window: Buffer): Promise<void> {
     if (!this.ownEmbedding) return;
     try {
-      const wav = toWav8k(window);
+      const wav = toWav16k(window);
       const windowEmbedding = await extractEmbedding(wav);
       const sim = cosineSim(windowEmbedding, this.ownEmbedding);
       logger.debug({ agentId: this.agentId, similarity: sim, threshold: CHANGE_MIN_CONFIDENCE, lowWindows: this.changeLowWindows }, "Voice intel: speaker-change window similarity");
@@ -425,7 +431,7 @@ export class VoiceIntelSession {
       const profileId = await upsertVoicePrint(this.agentId, phoneNumber);
 
       // Extract embedding from this call's audio
-      const wav = toWav8k(Buffer.concat(this.chunks));
+      const wav = toWav16k(Buffer.concat(this.chunks));
       const newEmbedding = await extractEmbedding(wav);
 
       // Blend with existing embedding if one is stored
