@@ -1224,19 +1224,18 @@ router.post("/admin/family/provision", async (req, res): Promise<void> => {
   }
 });
 
-// ── Azure Speaker Recognition connectivity check ──────────────────────────────
+// ── Local Speaker Recognition (ECAPA-TDNN) connectivity check ────────────────
 
 router.get("/admin/azure-speaker-check", async (_req, res): Promise<void> => {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
   res.setHeader("Pragma", "no-cache");
   res.setHeader("Expires", "0");
-  // Force a unique ETag so Express never returns 304 for this live-probe endpoint.
   res.setHeader("ETag", `"${Date.now()}"`);
   try {
     const { testAzureConnection } = await import("../services/speakerRecognition.js");
     const result = await testAzureConnection();
     if (result.ok) {
-      res.json({ ok: true, region: result.region, message: "Azure Speaker Recognition API is reachable and the key has profile-create access." });
+      res.json({ ok: true, region: result.region, message: "Local ECAPA-TDNN speaker recognition model is loaded and ready." });
     } else {
       res.status(200).json({ ok: false, region: result.region ?? null, status: result.status ?? null, error: result.error });
     }

@@ -156,9 +156,9 @@ const CATEGORIES: Category[] = [
       },
       {
         key: "managed_azure_speaker_region",
-        label: "Azure Speaker Recognition Region",
-        description: "Azure region for voice print / Speaker Recognition API. Must be a region that supports Speaker Recognition v2.0 (e.g. westus, eastus). Defaults to westus if not set. Can differ from the STT region.",
-        placeholder: "westus",
+        label: "Speaker Recognition Region (unused)",
+        description: "Legacy field — speaker recognition now runs locally via the ECAPA-TDNN model (SpeechBrain). No cloud key or region required. This field is kept for reference only.",
+        placeholder: "local",
       },
     ],
   },

@@ -25,12 +25,13 @@ import httpx
 import uvicorn
 from contextlib import asynccontextmanager
 from fastapi import APIRouter, FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from typing import List
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 
 async def _bg_warmup() -> None:
-    """Import librosa and wav2vec2 model in threads so the first real request is not slow.
+    """Import librosa, wav2vec2, and ECAPA-TDNN models in threads so the first real request is not slow.
 
     Uses asyncio.create_task() (called from lifespan) so uvicorn completes
     startup immediately — this coroutine runs fully in the background.
@@ -50,6 +51,14 @@ async def _bg_warmup() -> None:
         except Exception:
             pass
     await loop.run_in_executor(concurrent.futures.ThreadPoolExecutor(max_workers=1), _load_ml_v2)
+
+    def _load_speaker():
+        try:
+            from speaker_recognition import warmup  # noqa: PLC0415
+            warmup()  # downloads ECAPA-TDNN weights from HuggingFace if not cached
+        except Exception:
+            pass
+    await loop.run_in_executor(concurrent.futures.ThreadPoolExecutor(max_workers=1), _load_speaker)
 
 
 @asynccontextmanager
@@ -258,6 +267,86 @@ async def detect_gender_ml_v2_upload(file: UploadFile = File(...)):
         "confidence": result.get("confidence", 0.0),
         "processing_time_ms": processing_time_ms,
     }
+
+
+# ── Speaker Recognition — ECAPA-TDNN (SpeechBrain) ───────────────────────────
+
+
+class SpeakerVerifyRequest(BaseModel):
+    reference_embedding: List[float]
+
+
+@router.post("/speaker/embed")
+async def speaker_embed(file: UploadFile = File(...)):
+    """
+    Extract a 192-dim ECAPA-TDNN speaker embedding from an uploaded audio file.
+
+    Accepts: WAV, FLAC, OGG, or any format soundfile can read.
+    Audio is resampled to 16 kHz mono automatically.
+
+    Returns:
+        {
+            "embedding": [float, ...],   // 192-dimensional d-vector
+            "duration_seconds": float
+        }
+    """
+    import time  # noqa: PLC0415
+    audio_bytes = await file.read()
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="Empty audio file")
+    t0 = time.monotonic()
+    try:
+        from speaker_recognition import extract_embedding  # noqa: PLC0415
+        embedding = extract_embedding(audio_bytes)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Embedding extraction failed: {exc}")
+    processing_ms = int((time.monotonic() - t0) * 1000)
+    return {"embedding": embedding, "processing_ms": processing_ms}
+
+
+@router.post("/speaker/verify")
+async def speaker_verify(file: UploadFile = File(...), reference_embedding: str = ""):
+    """
+    Compare an audio file's speaker embedding against a reference embedding.
+
+    Multipart form fields:
+      - file: audio file (WAV / FLAC / OGG)
+      - reference_embedding: JSON string of the reference float[] embedding
+
+    Returns:
+        {
+            "similarity": float,  // cosine similarity, −1 to 1
+            "embedding":  [float, ...]  // embedding of the uploaded audio
+        }
+    """
+    import json  # noqa: PLC0415
+    audio_bytes = await file.read()
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="Empty audio file")
+    if not reference_embedding:
+        raise HTTPException(status_code=400, detail="reference_embedding is required")
+    try:
+        ref = json.loads(reference_embedding)
+    except Exception:
+        raise HTTPException(status_code=400, detail="reference_embedding must be a JSON float array")
+    try:
+        from speaker_recognition import extract_embedding, cosine_similarity  # noqa: PLC0415
+        embedding = extract_embedding(audio_bytes)
+        similarity = cosine_similarity(embedding, ref)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Speaker verification failed: {exc}")
+    return {"similarity": similarity, "embedding": embedding}
+
+
+@router.get("/speaker/health")
+async def speaker_health():
+    """Check if the ECAPA-TDNN speaker recognition model is loaded."""
+    try:
+        from speaker_recognition import _model  # noqa: PLC0415
+        loaded = _model is not None
+    except Exception:
+        loaded = False
+    return {"model": "speechbrain/spkrec-ecapa-voxceleb", "loaded": loaded}
 
 
 # ── Register router & run ─────────────────────────────────────────────────────

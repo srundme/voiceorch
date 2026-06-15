@@ -9,4 +9,4 @@
 - [Azure STT streaming protocol](azure-stt-protocol.md) — every frame (text + binary) must include X-RequestId header; omitting it causes 1002 close; batch confidence filter is too aggressive for Indic languages — rely on RecognitionStatus=Success instead
 - [Voice Intel audio tap pattern](voice-intel-audio-tap.md) — callerAudioTap on SessionConfig feeds VoiceIntelSession; webcall uses separate downsample16to8 tap at same point as gender detector
 - [GitHub push required after every edit](github-push-required.md) — all file edits must be pushed to srundme/voiceorch main branch via GitHub API; Railway deploys from GitHub
-- [Azure Speaker Recognition key requirement](azure-speaker-recognition-key.md) — voice prints require a multi-service Cognitive Services key; single-service Speech key returns 401 on Speaker Recognition API
+- [Local ECAPA-TDNN speaker recognition](ecapa-tdnn-speaker.md) — Azure Speaker Recognition replaced by SpeechBrain ECAPA-TDNN; runs in gender-service on port 5000; embeddings stored as JSON text in voice_prints.embedding

@@ -7,3 +7,4 @@ httpx>=0.24.0
 python-multipart>=0.0.6
 transformers>=4.30.0
 torch>=2.0.0
+speechbrain>=1.0.0
