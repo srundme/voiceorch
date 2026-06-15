@@ -38,7 +38,7 @@ interface AuthState {
   userId: string | null;
   user: SessionUser | null;
   getToken: () => Promise<string | null>;
-  signIn: () => void;
+  signIn: (token?: string) => void;
   signOut: () => void;
 }
 
@@ -102,12 +102,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return null;
   }, [token]);
 
-  const signIn = useCallback(() => {
-    const origin = window.location.origin;
-    // The API is always served at /api via the shared proxy (independent of the
-    // dashboard base path), so do NOT prefix basePath here.
-    window.location.href =
-      `/api/auth/google/connect?returnOrigin=${encodeURIComponent(origin)}`;
+  const signIn = useCallback((token?: string) => {
+    if (token && decode(token)) {
+      localStorage.setItem(TOKEN_KEY, token);
+      setToken(token);
+    } else {
+      window.location.href = `${basePath}/sign-in`;
+    }
   }, []);
 
   const signOut = useCallback(() => {
