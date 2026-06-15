@@ -1,3 +1,4 @@
+// trigger rebuild — dashboard sign-in fix (navigate to /app after login)
 import http from "http";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
