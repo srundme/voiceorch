@@ -78,3 +78,9 @@ id = "Xd5jNK0H8RG0hScbnCB4X"
 uri = "file://artifacts/pendrive/PENDRIVE.md"
 type = "text"
 title = "Pendrive — Architecture & How It Works"
+
+[[outputs]]
+id = "KncOJ_mE2qmPsM-NefeSq"
+uri = "file://SNAPSERVE_FEATURE_AUDIT.md"
+type = "text"
+title = "SnapServe Feature Audit & GTM Review"
