@@ -84,11 +84,20 @@ interface AzureHypothesisBody {
  * Language comes from STTConfig.language; falls back to extraConfig.language
  * then "en-US".
  */
+/**
+ * On the v1 conversation endpoint the `model` query param is interpreted as a
+ * custom Speech deployment ID — a GUID — NOT a base-model label. Azure derives
+ * the correct base model from the `language` locale automatically, so we must
+ * never forward label-style model strings (e.g. "en-US-standard"). Only a
+ * genuine GUID is accepted, and it is passed via `endpointId`.
+ */
+const GUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export class AzureSTT implements STTAdapter {
   private readonly key: string;
   private readonly region: string;
   private readonly language: string;
-  private readonly model: string | null;
   private readonly endpointId: string | null;
   private readonly cfg: STTConfig;
 
@@ -99,7 +108,6 @@ export class AzureSTT implements STTAdapter {
     cfg: STTConfig,
   ) {
     this.key = apiKey;
-    this.model = model;
     this.cfg = cfg;
 
     const extra = extraConfig
@@ -111,8 +119,14 @@ export class AzureSTT implements STTAdapter {
       : {};
 
     this.region = extra.region ?? "eastus";
-    this.endpointId = extra.endpointId ?? null;
     this.language = cfg.language ?? extra.language ?? "en-US";
+
+    // A custom deployment is only honored when a real GUID is supplied — either
+    // explicitly via extraConfig.endpointId or as a GUID-shaped asrModel.
+    // Base-model labels from the model picker are ignored (Azure auto-selects
+    // the base model from `language`).
+    const guidModel = model && GUID_RE.test(model.trim()) ? model.trim() : null;
+    this.endpointId = extra.endpointId ?? guidModel ?? null;
   }
 
   // ── Batch REST ────────────────────────────────────────────────────────────
@@ -121,7 +135,6 @@ export class AzureSTT implements STTAdapter {
     const wav = pcmToWav(audioBuffer, sampleRate);
 
     const params = new URLSearchParams({ language: this.language, format: "detailed" });
-    if (this.model) params.set("model", this.model);
     if (this.endpointId) params.set("endpointId", this.endpointId);
 
     const url =
@@ -175,7 +188,6 @@ export class AzureSTT implements STTAdapter {
     onClose?: () => void,
   ): StreamSTT {
     const params = new URLSearchParams({ language: this.language, format: "detailed" });
-    if (this.model) params.set("model", this.model);
     if (this.endpointId) params.set("endpointId", this.endpointId);
 
     const wsUrl =
