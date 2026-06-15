@@ -1,84 +1,149 @@
 /**
- * Standalone Google login routes.
+ * Email + password authentication routes.
  *
- *   GET /api/auth/google/connect  — redirect to the Google consent screen
- *   GET /api/auth/google/callback — exchange the code, issue a platform session
- *                                   token, and bounce back to the dashboard
+ *   POST /api/auth/register  — create account, returns { token }
+ *   POST /api/auth/login     — sign in, returns { token }
  *
- * No Clerk involved. The session token is delivered to the SPA in the URL
- * fragment (#session=<jwt>) so it never appears in server logs or the Referer
- * header; the frontend captures it on load and stores it in localStorage.
+ * The session token is an HS256 JWT. The frontend stores it in
+ * localStorage["voiceorch:session"] and sends it as Authorization: Bearer <token>.
  */
 import { Router, type IRouter } from "express";
-import { getLoginAuthUrl, exchangeLoginCode } from "../services/auth/google-login.js";
+import { scrypt, randomBytes, timingSafeEqual } from "node:crypto";
+import { promisify } from "node:util";
+import { db } from "@workspace/db";
+import { usersTable, walletTransactionsTable } from "@workspace/db/schema";
+import { eq } from "drizzle-orm";
 import { createSessionToken } from "../lib/session.js";
-import { isTrustedOrigin, dashboardBase, deriveRedirectUri } from "../lib/oauth-redirect.js";
 import { logger } from "../lib/logger.js";
-import * as agnost from "agnostai";
 
 const router: IRouter = Router();
+const scryptAsync = promisify(scrypt);
 
-const CALLBACK_PATH = "/api/auth/google/callback";
+const FREE_CREDIT_CENTS = 500;
 
-// ── Redirect to Google consent ───────────────────────────────────────────────
+async function hashPassword(password: string): Promise<string> {
+  const salt = randomBytes(16).toString("hex");
+  const buf = (await scryptAsync(password, salt, 64)) as Buffer;
+  return `${salt}:${buf.toString("hex")}`;
+}
 
-router.get("/auth/google/connect", (req, res): void => {
-  if (!process.env["GOOGLE_CLIENT_ID"] || !process.env["GOOGLE_CLIENT_SECRET"]) {
-    res.status(503).json({ error: "Google login is not configured on this platform." });
-    return;
-  }
+async function verifyPassword(password: string, stored: string): Promise<boolean> {
+  const [salt, hash] = stored.split(":");
+  if (!salt || !hash) return false;
+  const buf = (await scryptAsync(password, salt, 64)) as Buffer;
+  const expected = Buffer.from(hash, "hex");
+  if (buf.length !== expected.length) return false;
+  return timingSafeEqual(buf, expected);
+}
 
-  const returnOrigin = req.query["returnOrigin"] as string | undefined;
-  const redirectUri = deriveRedirectUri(req, CALLBACK_PATH);
-  const state = JSON.stringify(
-    returnOrigin && isTrustedOrigin(returnOrigin) ? { returnOrigin } : {},
-  );
-  res.redirect(getLoginAuthUrl(state, redirectUri));
-});
+function generateApiKey() {
+  return `vok_${randomBytes(24).toString("hex")}`;
+}
+function generateOrgKey() {
+  return `voo_${randomBytes(24).toString("hex")}`;
+}
 
-// ── OAuth callback — issues the platform session token ──────────────────────
+// ── Register ──────────────────────────────────────────────────────────────────
 
-router.get("/auth/google/callback", async (req, res): Promise<void> => {
-  const { code, error, state: rawState } = req.query as {
-    code?: string;
-    error?: string;
-    state?: string;
+router.post("/auth/register", async (req, res): Promise<void> => {
+  const { email, password, name } = req.body as {
+    email?: string;
+    password?: string;
+    name?: string;
   };
 
-  let returnOrigin: string | undefined;
-  if (rawState) {
-    try {
-      const parsed = JSON.parse(rawState) as { returnOrigin?: string };
-      returnOrigin = parsed.returnOrigin;
-    } catch {
-      /* ignore malformed state */
-    }
+  if (!email || !password) {
+    res.status(400).json({ error: "Email and password are required." });
+    return;
   }
-  const base = returnOrigin && isTrustedOrigin(returnOrigin) ? returnOrigin : dashboardBase();
-
-  if (error || !code) {
-    logger.warn({ error }, "Google login callback error or missing code");
-    res.redirect(`${base}/sign-in?auth_error=1`);
+  if (password.length < 8) {
+    res.status(400).json({ error: "Password must be at least 8 characters." });
     return;
   }
 
+  const normalizedEmail = email.trim().toLowerCase();
+  const sub = `email:${normalizedEmail}`;
+
   try {
-    const redirectUri = deriveRedirectUri(req, CALLBACK_PATH);
-    const profile = await exchangeLoginCode(code, redirectUri);
-    const token = createSessionToken({
-      sub: profile.sub,
-      email: profile.email,
-      name: profile.name,
+    const [existing] = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(eq(usersTable.clerkId, sub));
+
+    if (existing) {
+      res.status(409).json({ error: "An account with that email already exists." });
+      return;
+    }
+
+    const passwordHash = await hashPassword(password);
+
+    const [user] = await db
+      .insert(usersTable)
+      .values({
+        clerkId: sub,
+        email: normalizedEmail,
+        name: (name ?? "").trim() || normalizedEmail.split("@")[0],
+        passwordHash,
+        walletBalanceCents: FREE_CREDIT_CENTS,
+        freeCreditsGranted: true,
+        apiKey: generateApiKey(),
+        orgKey: generateOrgKey(),
+      })
+      .returning();
+
+    await db.insert(walletTransactionsTable).values({
+      userId: user.id,
+      type: "free_credit",
+      amountCents: FREE_CREDIT_CENTS,
+      description: "Welcome credit — $5.00 free to get started",
+      status: "completed",
     });
-    agnost.identify(profile.sub, {
-      email: profile.email ?? "",
-      name: profile.name ?? "",
-    });
-    logger.info({ sub: profile.sub, email: profile.email }, "User signed in via Google");
-    res.redirect(`${base}/app#session=${encodeURIComponent(token)}`);
+
+    const token = createSessionToken({ sub, email: normalizedEmail, name: user.name });
+    logger.info({ sub, email: normalizedEmail }, "User registered");
+    res.json({ token });
   } catch (err) {
-    logger.warn({ err }, "Failed to exchange Google login code");
-    res.redirect(`${base}/sign-in?auth_error=1`);
+    logger.error({ err }, "Registration error");
+    res.status(500).json({ error: "Registration failed. Please try again." });
+  }
+});
+
+// ── Login ─────────────────────────────────────────────────────────────────────
+
+router.post("/auth/login", async (req, res): Promise<void> => {
+  const { email, password } = req.body as { email?: string; password?: string };
+
+  if (!email || !password) {
+    res.status(400).json({ error: "Email and password are required." });
+    return;
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+  const sub = `email:${normalizedEmail}`;
+
+  try {
+    const [user] = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.clerkId, sub));
+
+    if (!user || !user.passwordHash) {
+      res.status(401).json({ error: "Invalid email or password." });
+      return;
+    }
+
+    const ok = await verifyPassword(password, user.passwordHash);
+    if (!ok) {
+      res.status(401).json({ error: "Invalid email or password." });
+      return;
+    }
+
+    const token = createSessionToken({ sub, email: user.email, name: user.name });
+    logger.info({ sub, email: normalizedEmail }, "User signed in");
+    res.json({ token });
+  } catch (err) {
+    logger.error({ err }, "Login error");
+    res.status(500).json({ error: "Sign in failed. Please try again." });
   }
 });
 

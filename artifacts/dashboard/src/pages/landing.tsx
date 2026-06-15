@@ -41,8 +41,8 @@ export default function LandingPage() {
         </div>
 
         <div className="flex items-center gap-5">
-          <button onClick={signIn} className="text-[0.875rem] font-medium text-[var(--text-muted)] bg-transparent border-none cursor-pointer transition-colors hover:text-white">Sign in</button>
-          <button onClick={signIn} className="inline-flex items-center gap-1.5 bg-white text-black text-[0.875rem] font-semibold font-[var(--font-sans)] px-5 py-2 rounded-full border-none cursor-pointer transition-opacity hover:opacity-90 hover:shadow-[0_0_16px_rgba(255,255,255,0.15)]">Get started &rarr;</button>
+          <button onClick={() => signIn()} className="text-[0.875rem] font-medium text-[var(--text-muted)] bg-transparent border-none cursor-pointer transition-colors hover:text-white">Sign in</button>
+          <button onClick={() => signIn()} className="inline-flex items-center gap-1.5 bg-white text-black text-[0.875rem] font-semibold font-[var(--font-sans)] px-5 py-2 rounded-full border-none cursor-pointer transition-opacity hover:opacity-90 hover:shadow-[0_0_16px_rgba(255,255,255,0.15)]">Get started &rarr;</button>
         </div>
       </nav>
 
@@ -67,7 +67,7 @@ export default function LandingPage() {
         </p>
 
         <div className="flex items-center gap-4 flex-wrap mb-5">
-          <button onClick={signIn} className="inline-flex items-center gap-2 bg-white text-black text-[0.95rem] font-semibold font-[var(--font-sans)] px-7 py-4 rounded-full border-none cursor-pointer transition-opacity hover:opacity-90 hover:shadow-[0_0_24px_rgba(255,255,255,0.18)]">Start building free &rarr;</button>
+          <button onClick={() => signIn()} className="inline-flex items-center gap-2 bg-white text-black text-[0.95rem] font-semibold font-[var(--font-sans)] px-7 py-4 rounded-full border-none cursor-pointer transition-opacity hover:opacity-90 hover:shadow-[0_0_24px_rgba(255,255,255,0.18)]">Start building free &rarr;</button>
           <a href="#features" className="inline-flex items-center gap-2 bg-transparent text-white text-[0.95rem] font-medium font-[var(--font-sans)] px-7 py-4 rounded-full border border-[var(--border-strong)] no-underline transition-all hover:border-[rgba(255,255,255,0.35)] hover:bg-[rgba(255,255,255,0.04)]">See features</a>
         </div>
 
@@ -134,7 +134,7 @@ export default function LandingPage() {
             <p className="text-[var(--text-muted)] text-base leading-[1.65] mb-8">
               Add your provider API keys, configure your agent's voice and prompt, then hit the API. SnapServe handles the WebSocket orchestration, fallback logic, and memory persistence automatically.
             </p>
-            <button onClick={signIn} className="inline-flex items-center gap-2 bg-white text-black text-[0.95rem] font-semibold font-[var(--font-sans)] px-7 py-4 rounded-full border-none cursor-pointer transition-opacity hover:opacity-90 hover:shadow-[0_0_24px_rgba(255,255,255,0.18)]">View API docs &rarr;</button>
+            <button onClick={() => signIn()} className="inline-flex items-center gap-2 bg-white text-black text-[0.95rem] font-semibold font-[var(--font-sans)] px-7 py-4 rounded-full border-none cursor-pointer transition-opacity hover:opacity-90 hover:shadow-[0_0_24px_rgba(255,255,255,0.18)]">View API docs &rarr;</button>
           </div>
 
           <div className="bg-[#0e0e0e] border border-[var(--border-strong)] rounded-[14px] overflow-hidden">
@@ -180,7 +180,7 @@ export default function LandingPage() {
               <li className="text-[0.875rem] text-[var(--text-muted)] flex items-center gap-2"><span className="w-[5px] h-[5px] rounded-full bg-[rgba(255,255,255,0.25)] shrink-0" />Up to 10 concurrent calls</li>
               <li className="text-[0.875rem] text-[var(--text-muted)] flex items-center gap-2"><span className="w-[5px] h-[5px] rounded-full bg-[rgba(255,255,255,0.25)] shrink-0" />Email support</li>
             </ul>
-            <button onClick={signIn} className="block text-center w-full py-3 px-6 rounded-full text-[0.875rem] font-semibold border border-[var(--border-strong)] text-white bg-transparent cursor-pointer transition-all hover:bg-[rgba(255,255,255,0.06)] hover:border-[rgba(255,255,255,0.35)] mt-auto">Start free</button>
+            <button onClick={() => signIn()} className="block text-center w-full py-3 px-6 rounded-full text-[0.875rem] font-semibold border border-[var(--border-strong)] text-white bg-transparent cursor-pointer transition-all hover:bg-[rgba(255,255,255,0.06)] hover:border-[rgba(255,255,255,0.35)] mt-auto">Start free</button>
           </div>
 
           <div className="bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.3)] rounded-2xl p-8 flex flex-col gap-6">
@@ -195,7 +195,7 @@ export default function LandingPage() {
               <li className="text-[0.875rem] text-[var(--text-muted)] flex items-center gap-2"><span className="w-[5px] h-[5px] rounded-full bg-[rgba(255,255,255,0.25)] shrink-0" />Smart SIP escalation</li>
               <li className="text-[0.875rem] text-[var(--text-muted)] flex items-center gap-2"><span className="w-[5px] h-[5px] rounded-full bg-[rgba(255,255,255,0.25)] shrink-0" />Up to 500 concurrent calls</li>
             </ul>
-            <button onClick={signIn} className="block text-center w-full py-3 px-6 rounded-full text-[0.875rem] font-semibold border border-white bg-white text-black cursor-pointer transition-all hover:bg-[rgba(255,255,255,0.9)] mt-auto">Get started</button>
+            <button onClick={() => signIn()} className="block text-center w-full py-3 px-6 rounded-full text-[0.875rem] font-semibold border border-white bg-white text-black cursor-pointer transition-all hover:bg-[rgba(255,255,255,0.9)] mt-auto">Get started</button>
           </div>
 
           <div className="bg-[var(--bg-subtle)] border border-[var(--border)] rounded-2xl p-8 flex flex-col gap-6 transition-colors hover:border-[var(--border-strong)]">
