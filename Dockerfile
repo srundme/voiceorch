@@ -4,6 +4,7 @@ WORKDIR /workspace
 RUN npm install -g pnpm@10
 
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
+COPY tsconfig.base.json tsconfig.json ./
 COPY lib/db/package.json ./lib/db/
 COPY lib/api-spec/package.json ./lib/api-spec/
 COPY lib/api-zod/package.json ./lib/api-zod/
