@@ -362,6 +362,8 @@ export class OrchestrationPipeline {
     const pcm8k = decodeMulaw(mulawChunk);
     // Record raw caller audio (before noise cancellation)
     this.recording.addCallerChunk(pcm8k);
+    // Voice-intelligence tap — runs outside the main audio pipeline
+    this.config.callerAudioTap?.(pcm8k);
     processAudioIn(callId, mulawChunk, this.agent.noiseCancellationEnabled)
       .then((result) => this.handleProcessedAudio(result))
       .catch((err) => logger.error({ callId: this.config.callId, err }, "Audio worker error (mulaw)"));
@@ -373,6 +375,8 @@ export class OrchestrationPipeline {
     const callId = String(this.config.callId);
     // Record raw caller audio (before noise cancellation)
     this.recording.addCallerChunk(pcm8k);
+    // Voice-intelligence tap — runs outside the main audio pipeline
+    this.config.callerAudioTap?.(pcm8k);
     processRawPcm8kIn(callId, pcm8k, this.agent.noiseCancellationEnabled)
       .then((result) => this.handleProcessedAudio(result))
       .catch((err) => logger.error({ callId: this.config.callId, err }, "Audio worker error (pcm8k)"));

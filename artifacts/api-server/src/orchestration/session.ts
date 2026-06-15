@@ -26,6 +26,7 @@ import {
   type CallerProfile,
   type CallerContext,
 } from "./callerMemory.js";
+import { VoiceIntelSession } from "../services/speakerRecognition.js";
 
 interface MetricsAcc {
   sttTotal: number;
@@ -51,6 +52,8 @@ interface ActiveSession {
   // Dropped-call detection: true when pipeline triggered the end (phrase/timeout/tool)
   // false means WS just closed — i.e. call was likely dropped mid-conversation
   naturalEndTriggered: boolean;
+  // Voice intelligence — speaker recognition across calls / numbers
+  voiceIntel: VoiceIntelSession;
 }
 
 const sessions = new Map<string, ActiveSession>();
@@ -397,6 +400,9 @@ export async function createSession(params: {
   const sessionId = `${params.telephonyProvider}-${callRecord.id}-${Date.now()}`;
   const redisTtl = (agentConfig.maxDuration ?? 600) + 600; // maxDuration + 10 min buffer
 
+  // ── Voice intelligence — speaker recognition across calls / numbers ──────
+  const voiceIntel = new VoiceIntelSession(params.agentId, callerPhone);
+
   const pipeline = new OrchestrationPipeline({
     callId: callRecord.id,
     agentConfig,
@@ -406,6 +412,7 @@ export async function createSession(params: {
     campaignLeadId: params.campaignLeadId ?? null,
     onAudioOut: params.onAudioOut,
     rawPcmOutput: params.telephonyProvider === "vobiz",
+    callerAudioTap: (pcm8k) => voiceIntel.addChunk(pcm8k),
     onTranscript: (speaker, text) => {
       logger.debug({ callId: callRecord.id, speaker, text: text.slice(0, 80) }, "Transcript");
       if (speaker === "user" && callerPhone) {
@@ -573,6 +580,7 @@ export async function createSession(params: {
     agentLlmProvider: agent.llmProvider,
     agentLlmModel:    agent.llmModel ?? "",
     campaignLeadId:   params.campaignLeadId ?? null,
+    voiceIntel,
   });
 
   // Persist initial session metadata to Redis
@@ -974,6 +982,13 @@ export async function endSession(sessionId: string): Promise<void> {
             });
           }
         })();
+
+        // ── Voice intelligence — enroll caller's voice print (fire-and-forget) ──
+        if (session.callerPhone) {
+          void session.voiceIntel.enroll(session.callerPhone).catch((err) => {
+            logger.warn({ sessionId, err }, "Voice intelligence: post-call enrollment failed (non-fatal)");
+          });
+        }
 
         // ── Post-call caller memory update + callback detection (fire-and-forget) ──
         if (session.callerPhone && transcript && transcript.length > 50) {

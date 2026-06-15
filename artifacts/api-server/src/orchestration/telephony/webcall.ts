@@ -13,6 +13,7 @@ import { RecordingBuffer } from "../recorder.js";
 import type { ConversationTurn, STTConfig, StreamSTT } from "../types.js";
 import { decryptKey } from "../../lib/crypto.js";
 import { loadCallerContext, injectEnhancedMemory, updateCallerProfile, latchCallerName, latchCallerFact, detectCallbackRequest } from "../callerMemory.js";
+import { VoiceIntelSession } from "../../services/speakerRecognition.js";
 import { GenderDetector } from "../genderDetector.js";
 import { GenderDetectorML } from "../genderDetectorML.js";
 import { GenderDetectorMLv2 } from "../genderDetectorMLv2.js";
@@ -401,6 +402,9 @@ export async function handleWebCallWebSocket(
   // Use "webcall:<userId>" as a stable identifier since there's no phone number.
   // This gives logged-in users the same cross-call memory that telephony callers get.
   const webcallIdentifier = callerUserId ? `webcall:${callerUserId}` : null;
+
+  // ── Voice intelligence — speaker recognition for webcall path ────────────
+  const voiceIntel = new VoiceIntelSession(agentId, webcallIdentifier);
   let webcallProfile: import("../callerMemory.js").CallerProfile | null = null;
   let webcallLatchedFacts = new Map<string, string>();
   let systemPrompt = agent.generatedPrompt ?? agent.systemPrompt ?? "";
@@ -1751,6 +1755,13 @@ export async function handleWebCallWebSocket(
     }
 
     // ── Post-call webcall memory update + callback detection (fire-and-forget) ─
+    // ── Voice intelligence — enroll caller's voice print (fire-and-forget) ──
+    if (webcallIdentifier) {
+      void voiceIntel.enroll(webcallIdentifier).catch((err) => {
+        logger.warn({ callId, err }, "Voice intelligence: webcall enrollment failed (non-fatal)");
+      });
+    }
+
     if (webcallIdentifier && history.length >= 2) {
       void updateCallerProfile({
         agentId,
@@ -1805,8 +1816,10 @@ export async function handleWebCallWebSocket(
     // call recordings.
     if (!speaking) recording.addCallerChunk(data as Buffer);
 
-    // Feed all frames to gender detector (browser sends 16 kHz → downsample to 8 kHz)
-    if (genderDetector) genderDetector.addSpeechChunk(downsample16to8(data as Buffer));
+    // Feed all frames to gender detector + voice intelligence (browser sends 16 kHz → downsample to 8 kHz)
+    const pcm8kForIntel = downsample16to8(data as Buffer);
+    if (genderDetector) genderDetector.addSpeechChunk(pcm8kForIntel);
+    voiceIntel.addChunk(pcm8kForIntel);
 
     const rms = rmsEnergy(data);
 

@@ -323,6 +323,10 @@ export interface SessionConfig {
   onCallTransfer?: (transferTo: string, summary?: string) => void;
   onBargeIn?: () => void;
   onMetrics?: (metrics: PipelineMetrics) => void;
+  /** Called with every raw 8 kHz LINEAR16 PCM chunk arriving from the caller.
+   *  Used by the voice-intelligence layer to buffer audio for speaker recognition
+   *  without touching the core pipeline internals. */
+  callerAudioTap?: (pcm8k: Buffer) => void;
   /** Called after every completed turn with the full conversation history — used to persist to Redis */
   onConversationUpdate?: (history: ConversationTurn[]) => void;
   /** Called when a fatal pipeline error occurs (STT/LLM/TTS failure) so the caller can fail the session with a human-readable reason */
