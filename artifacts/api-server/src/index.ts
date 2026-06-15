@@ -16,7 +16,7 @@ import { handleTwilioWebSocket } from "./orchestration/telephony/twilio.js";
 import { handlePlivoWebSocket } from "./orchestration/telephony/plivo.js";
 import { handleVobizWebSocket } from "./orchestration/telephony/vobiz.js";
 import { handleWebCallWebSocket } from "./orchestration/telephony/webcall.js";
-import { testAzureConnection } from "./services/speakerRecognition.js";
+
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { db } from "@workspace/db";
 import { platformSettingsTable, agentsTable } from "@workspace/db";
@@ -133,17 +133,6 @@ server.listen(port, () => {
       void seedManagedKeyFromEnv("managed_sarvam_key",   "SARVAM_API_KEY");
       void seedManagedKeyFromEnv("managed_cartesia_key", "CARTESIA_API_KEY");
       void migrateSaarikaToSaaras();
-      // Smoke-test Azure Speaker Recognition at startup so misconfiguration is
-      // immediately visible in the server log rather than buried in call-end WARN.
-      void testAzureConnection().then((r) => {
-        if (r.ok) {
-          logger.info({ region: r.region }, "Azure Speaker Recognition: connectivity OK");
-        } else {
-          logger.warn({ region: r.region, status: (r as { status?: number }).status, error: r.error }, "Azure Speaker Recognition: connectivity FAILED — voice prints will not enroll");
-        }
-      }).catch((err: unknown) => {
-        logger.warn({ err }, "Azure Speaker Recognition: startup probe threw");
-      });
       startCallbackPoller();
       startSpikeChecker();
       startAlertSweep();

@@ -835,172 +835,6 @@ function CallerMemoryTab({ agentId }: { agentId: number }) {
   );
 }
 
-/* ── Voice Intelligence Tab ───────────────────────────────────────────────── */
-
-interface VoicePrintRow {
-  id: number;
-  phoneNumber: string;
-  enrollmentStatus: string;
-  enrollmentSpeechSeconds: number | null;
-  lastIdentifiedAt: string | null;
-  lastConfidenceScore: number | null;
-  createdAt: string;
-}
-
-function VoiceIntelTab({ agentId }: { agentId: number }) {
-  const { getToken } = useAuth();
-  const [prints, setPrints]   = useState<VoicePrintRow[] | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [deleting, setDel]    = useState<number | null>(null);
-  const { toast } = useToast();
-
-  const authHeaders = useCallback(async (): Promise<Record<string, string>> => {
-    const token = await getToken();
-    return token ? { "Authorization": `Bearer ${token}` } : {};
-  }, [getToken]);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const h = await authHeaders();
-      const r = await fetch(`/api/agents/${agentId}/voice-prints`, { headers: h });
-      if (r.ok) setPrints(await r.json() as VoicePrintRow[]);
-    } catch { /* ignore */ } finally { setLoading(false); }
-  }, [agentId, authHeaders]);
-
-  useEffect(() => { void load(); }, [load]);
-
-  const deletePrint = async (id: number) => {
-    setDel(id);
-    try {
-      const h = await authHeaders();
-      const r = await fetch(`/api/agents/${agentId}/voice-prints/${id}`, { method: "DELETE", headers: h });
-      if (r.ok) {
-        setPrints(prev => prev ? prev.filter(p => p.id !== id) : prev);
-        toast({ title: "Voice print deleted" });
-      } else {
-        toast({ title: "Failed to delete", variant: "destructive" });
-      }
-    } catch {
-      toast({ title: "Failed to delete", variant: "destructive" });
-    } finally { setDel(null); }
-  };
-
-  const statusBadge = (status: string) => {
-    if (status === "Enrolled") return (
-      <Badge className="gap-1 bg-emerald-500/15 text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/20">
-        <ShieldCheck className="h-3 w-3" />Enrolled
-      </Badge>
-    );
-    if (status === "Enrolling") return (
-      <Badge variant="outline" className="gap-1 text-amber-600 border-amber-500/40">
-        <Clock3 className="h-3 w-3" />Enrolling
-      </Badge>
-    );
-    return (
-      <Badge variant="outline" className="gap-1 text-muted-foreground">
-        <ShieldAlert className="h-3 w-3" />Pending
-      </Badge>
-    );
-  };
-
-  if (loading) return (
-    <div className="space-y-2 p-6">
-      {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
-    </div>
-  );
-
-  return (
-    <div className="p-6 space-y-4">
-      <div className="flex items-start justify-between">
-        <div>
-          <h3 className="font-semibold flex items-center gap-2">
-            <Fingerprint className="h-4 w-4 text-primary" />
-            Voice Prints
-          </h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            Azure Speaker Recognition — callers are identified by voice even from different phone numbers.
-            Enrollment builds progressively across calls (target: 60 s of clean speech).
-          </p>
-        </div>
-      </div>
-
-      {(!prints || prints.length === 0) ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12 text-center gap-3">
-            <Fingerprint className="h-10 w-10 text-muted-foreground/40" />
-            <p className="font-medium text-muted-foreground">No voice prints yet</p>
-            <p className="text-sm text-muted-foreground/70 max-w-xs">
-              Voice prints enroll automatically at the end of each call (minimum 5 s of audio).
-              Requires an Azure <strong>multi-service Cognitive Services</strong> key — a single-service Speech key returns 401 on the Speaker Recognition API.
-              Check Admin → Managed Keys → STT → Test Speaker Recognition to verify connectivity.
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Phone / Identifier</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Speech</TableHead>
-                <TableHead>Confidence</TableHead>
-                <TableHead>Last Matched</TableHead>
-                <TableHead>Enrolled</TableHead>
-                <TableHead className="w-10" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {prints.map(p => (
-                <TableRow key={p.id}>
-                  <TableCell className="font-mono text-sm">{p.phoneNumber}</TableCell>
-                  <TableCell>{statusBadge(p.enrollmentStatus)}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {p.enrollmentSpeechSeconds ? `${Math.round(p.enrollmentSpeechSeconds)}s` : "—"}
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    {p.lastConfidenceScore != null ? (
-                      <span className={p.lastConfidenceScore >= 0.7 ? "text-emerald-600 font-medium" : p.lastConfidenceScore >= 0.5 ? "text-amber-600" : "text-destructive"}>
-                        {Math.round(p.lastConfidenceScore * 100)}%
-                      </span>
-                    ) : "—"}
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {p.lastIdentifiedAt ? format(parseISO(p.lastIdentifiedAt), "dd MMM, HH:mm") : "—"}
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {format(parseISO(p.createdAt), "dd MMM yyyy")}
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                      disabled={deleting === p.id}
-                      onClick={() => void deletePrint(p.id)}
-                    >
-                      {deleting === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Card>
-      )}
-
-      <div className="flex items-start gap-2 text-xs text-muted-foreground bg-muted/40 rounded-lg p-3">
-        <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-        <span>
-          Requires <strong>managed_azure_speech_key</strong> and <strong>managed_azure_speech_region</strong> to be set in Admin → Managed Keys.
-          Identification activates after 60 s of enrolled speech is accumulated across calls.
-        </span>
-      </div>
-    </div>
-  );
-}
-
 /* ── Agent Detail Page ────────────────────────────────────────────────────── */
 
 export default function AgentDetail() {
@@ -1189,9 +1023,6 @@ export default function AgentDetail() {
           <TabsTrigger value="memory"        className={tabClass}>
             <Brain className="h-3.5 w-3.5 mr-1.5" />Caller Memory
           </TabsTrigger>
-          <TabsTrigger value="voice"         className={tabClass}>
-            <Fingerprint className="h-3.5 w-3.5 mr-1.5" />Voice Intelligence
-          </TabsTrigger>
         </TabsList>
 
         <div className="mt-6 flex-1 overflow-auto">
@@ -1342,9 +1173,6 @@ export default function AgentDetail() {
             <CallerMemoryTab agentId={agent.id} />
           </TabsContent>
 
-          <TabsContent value="voice" className="m-0">
-            <VoiceIntelTab agentId={agent.id} />
-          </TabsContent>
         </div>
       </Tabs>
     </div>

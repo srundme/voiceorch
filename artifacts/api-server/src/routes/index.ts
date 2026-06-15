@@ -38,7 +38,7 @@ import leadWorkspaceRouter from "./lead-workspace.js";
 import platformAnalyticsRouter from "./platform-analytics.js";
 import searchRouter from "./search.js";
 import agentVariablesRouter from "./agent-variables.js";
-import voiceIntelRouter from "./voice-intel.js";
+
 import batchImportRunsRouter from "./batch-import-runs.js";
 import schedulingRouter from "./scheduling/index.js";
 import kycRouter from "./kyc.js";
@@ -125,5 +125,5 @@ router.use(callTransfersRouter);
 router.use(billingRouter);
 router.use(webcallNotifyRouter);
 router.use(testToolRouter);
-router.use(voiceIntelRouter);
+
 export default router;

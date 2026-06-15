@@ -25,12 +25,13 @@ import httpx
 import uvicorn
 from contextlib import asynccontextmanager
 from fastapi import APIRouter, FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from typing import List
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 
 async def _bg_warmup() -> None:
-    """Import librosa and wav2vec2 model in threads so the first real request is not slow.
+    """Import librosa, wav2vec2, and ECAPA-TDNN models in threads so the first real request is not slow.
 
     Uses asyncio.create_task() (called from lifespan) so uvicorn completes
     startup immediately — this coroutine runs fully in the background.
@@ -50,6 +51,8 @@ async def _bg_warmup() -> None:
         except Exception:
             pass
     await loop.run_in_executor(concurrent.futures.ThreadPoolExecutor(max_workers=1), _load_ml_v2)
+
+
 
 
 @asynccontextmanager
@@ -258,6 +261,7 @@ async def detect_gender_ml_v2_upload(file: UploadFile = File(...)):
         "confidence": result.get("confidence", 0.0),
         "processing_time_ms": processing_time_ms,
     }
+
 
 
 # ── Register router & run ─────────────────────────────────────────────────────
