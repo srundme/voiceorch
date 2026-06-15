@@ -12,7 +12,6 @@ import { ThemeSync } from "@/components/theme-sync";
 import { Layout } from "@/components/layout";
 import { SnapServeLoader } from "@/components/logo";
 import { VoiceAssistant } from "@/components/VoiceAssistant";
-import LandingPage from "@/pages/landing";
 import AssistantsPage from "@/pages/assistants";
 import Dashboard from "@/pages/dashboard";
 import AgentsList from "@/pages/agents/index";
@@ -248,7 +247,7 @@ function SignInPage() {
 function HomeRedirect() {
   const { isLoaded, isSignedIn } = useAuth();
   if (!isLoaded) return <SnapServeLoader />;
-  return isSignedIn ? <Redirect to="/app" /> : <LandingPage />;
+  return <Redirect to={isSignedIn ? "/app" : "/sign-in"} />;
 }
 
 function AppRoutes() {
