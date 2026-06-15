@@ -1,25 +1,28 @@
 /**
- * Azure Speaker Recognition integration — voice fingerprinting, cross-number
- * caller identity, and mid-call speaker change detection.
+ * Local speaker recognition — voice fingerprinting, cross-number caller identity,
+ * and mid-call speaker change detection.
  *
- * Azure Cognitive Services Speaker Recognition v2.0 (text-independent):
- *   - Profile create / enroll / identify endpoints
- *   - Identification is async → we poll with a configurable timeout
- *   - Requires WAV audio (PCM 16-bit, mono, 8 kHz or 16 kHz)
+ * Replaces Azure Speaker Recognition (Limited Access / blocked) with a local
+ * SpeechBrain ECAPA-TDNN model running inside the gender-service (port 5000).
  *
- * NOTE: The v1.0 "cognitiveservices/v1.0" endpoint was retired by Microsoft.
- *       This file uses the v2.0 text-independent API.
- *       v2.0 base: https://{region}.api.cognitive.microsoft.com/speaker/identification/v2.0/text-independent
+ * Model: speechbrain/spkrec-ecapa-voxceleb — 192-dim d-vector embeddings.
+ * No external API keys or cloud access required.
+ *
+ * Endpoints used:
+ *   POST /voice-analysis/speaker/embed  → { embedding: number[] }
  *
  * Usage flow:
  *   1. At call start: buffer caller audio for IDENT_BUFFER_SECONDS
- *   2. Submit identification against all profiles for this agent
- *   3. If matched with confidence ≥ IDENT_MIN_CONFIDENCE → cross-number identity found
- *   4. At call end: if this caller has < ENROLL_TARGET_SECONDS enrolled, enroll from call audio
+ *   2. Extract embedding and compare (cosine similarity) against all enrolled
+ *      profiles for this agent → cross-number identity match
+ *   3. At call end: enroll by averaging new embedding into stored profile
+ *   4. Speaker-change detection: compare each 5-second window against stored
+ *      own embedding; two consecutive low-score windows = change event
  */
 
-import { and, eq, inArray } from "drizzle-orm";
-import { db, platformSettingsTable, voicePrintsTable } from "@workspace/db";
+import { randomUUID } from "crypto";
+import { and, eq } from "drizzle-orm";
+import { db, voicePrintsTable } from "@workspace/db";
 import { pcmToWav, decodeMulaw } from "../orchestration/audio.js";
 import { logger } from "../lib/logger.js";
 
@@ -27,300 +30,152 @@ import { logger } from "../lib/logger.js";
 
 /** Seconds of caller audio to buffer before attempting identification */
 const IDENT_BUFFER_SECONDS = 8;
-/** Minimum confidence score (0–1) to accept a cross-number voice match */
+/** Minimum cosine similarity (0–1) to accept a cross-number voice match */
 const IDENT_MIN_CONFIDENCE = 0.5;
 /** Target enrolled seconds — stop enrolling once this is reached */
 const ENROLL_TARGET_SECONDS = 60;
-/** Minimum seconds of new audio to bother sending for enrollment */
+/** Minimum seconds of new audio to bother embedding for enrollment */
 const ENROLL_MIN_NEW_SECONDS = 5;
-/** How long to poll for async identification result (ms) */
-const IDENT_POLL_TIMEOUT_MS = 15_000;
-/** Polling interval (ms) */
-const IDENT_POLL_INTERVAL_MS = 1_000;
 /** Seconds of caller audio window for mid-call speaker change verification */
 const CHANGE_WINDOW_SECONDS = 5;
-/** Confidence below this triggers a speaker-change flag */
-const CHANGE_MIN_CONFIDENCE = 0.4;
+/**
+ * Cosine similarity below this for 2+ consecutive windows → speaker change.
+ * Lowered from 0.4: same-room/same-mic conditions make different-speaker
+ * similarities higher than expected; 0.3 gives cleaner separation.
+ */
+const CHANGE_MIN_CONFIDENCE = 0.3;
+/** Weight given to the existing averaged embedding vs new enrollment audio */
+const ENROLL_BLEND_WEIGHT = 0.7;
 
-// ── Azure credentials ─────────────────────────────────────────────────────────
+// ── Voice service ────────────────────────────────────────────────────────────
 
-async function getAzureCreds(): Promise<{ key: string; region: string } | null> {
-  const rows = await db
-    .select()
-    .from(platformSettingsTable)
-    .where(
-      inArray(platformSettingsTable.key, [
-        "managed_azure_speech_key",
-        "managed_azure_speech_region",
-      ])
-    );
-  const key    = rows.find(r => r.key === "managed_azure_speech_key")?.value;
-  const region = rows.find(r => r.key === "managed_azure_speech_region")?.value ?? "eastus";
-  if (!key) return null;
-  return { key, region };
-}
-
-// ── Azure REST helpers (v2.0) ─────────────────────────────────────────────────
+const VOICE_SERVICE_BASE = "http://localhost:5000";
 
 /**
- * v2.0 base URL.
- * All speaker recognition paths are relative to this.
+ * POST audio bytes to the local ECAPA-TDNN endpoint and return the 192-dim embedding.
+ * Audio must be a valid WAV buffer (PCM 8 kHz or 16 kHz mono).
  */
-function baseUrl(region: string): string {
-  return `https://${region}.api.cognitive.microsoft.com/speaker/identification/v2.0/text-independent`;
-}
+async function extractEmbedding(wavBuffer: Buffer): Promise<number[]> {
+  const boundary = `VPrint${Date.now()}`;
+  const header = Buffer.from(
+    `--${boundary}\r\n` +
+    `Content-Disposition: form-data; name="file"; filename="audio.wav"\r\n` +
+    `Content-Type: audio/wav\r\n\r\n`,
+  );
+  const footer = Buffer.from(`\r\n--${boundary}--\r\n`);
+  const body = Buffer.concat([header, wavBuffer, footer]);
 
-/** Create a new text-independent identification profile. Returns the Azure profile ID. */
-async function createAzureProfile(key: string, region: string): Promise<string> {
-  const res = await fetch(`${baseUrl(region)}/profiles`, {
+  const res = await fetch(`${VOICE_SERVICE_BASE}/voice-analysis/speaker/embed`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Ocp-Apim-Subscription-Key": key,
-    },
-    body: JSON.stringify({ locale: "en-us" }),
+    headers: { "Content-Type": `multipart/form-data; boundary=${boundary}` },
+    body,
   });
+
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Azure createProfile ${res.status}: ${body}`);
+    const text = await res.text();
+    throw new Error(`speaker embed ${res.status}: ${text}`);
   }
-  // v2.0 response uses "profileId" (v1.0 used "identificationProfileId")
-  const json = await res.json() as { profileId: string };
-  return json.profileId;
+  const json = await res.json() as { embedding: number[] };
+  return json.embedding;
 }
 
-/** Enroll WAV audio into a profile. Returns the updated enrollment status and speech seconds. */
-async function enrollAzureProfile(
-  profileId: string,
-  wavAudio: Buffer,
-  key: string,
-  region: string,
-): Promise<{ status: string; speechSeconds: number }> {
-  // v2.0: POST /profiles/{profileId}/enrollments (no shortAudio param — always async 202)
-  const url = `${baseUrl(region)}/profiles/${profileId}/enrollments`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/octet-stream",
-      "Ocp-Apim-Subscription-Key": key,
-    },
-    body: wavAudio,
-  });
+// ── Math helpers ─────────────────────────────────────────────────────────────
 
-  if (res.status === 202) {
-    const opUrl = res.headers.get("Operation-Location");
-    if (opUrl) {
-      const result = await pollOperation(opUrl, key, IDENT_POLL_TIMEOUT_MS);
-      // v2.0 poll result: processingResult.enrollmentStatus, processingResult.enrollmentsSpeechLength (seconds)
-      const pr = result?.["processingResult"] as Record<string, unknown> | undefined;
-      return {
-        status:       (pr?.["enrollmentStatus"] as string | undefined) ?? "Enrolling",
-        speechSeconds: (pr?.["enrollmentsSpeechLength"] as number | undefined) ?? 0,
-      };
-    }
-    return { status: "Enrolling", speechSeconds: 0 };
+function cosineSim(a: number[], b: number[]): number {
+  let dot = 0, na = 0, nb = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i]! * b[i]!;
+    na  += a[i]! * a[i]!;
+    nb  += b[i]! * b[i]!;
   }
-
-  if (res.status === 200) {
-    // Synchronous response (some regions/configs may still return 200)
-    const json = await res.json() as {
-      enrollmentStatus: string;
-      enrollmentsSpeechLength: number;
-    };
-    return {
-      status:       json.enrollmentStatus ?? "Enrolling",
-      speechSeconds: json.enrollmentsSpeechLength ?? 0,
-    };
-  }
-
-  const body = await res.text();
-  throw new Error(`Azure enroll ${res.status}: ${body}`);
+  const denom = Math.sqrt(na) * Math.sqrt(nb);
+  return denom === 0 ? 0 : dot / denom;
 }
 
 /**
- * Submit audio for text-independent speaker identification against a set of profiles.
- * Returns the matched profile ID and confidence, or null if not matched / no profiles.
- *
- * v2.0 endpoint: POST /profiles:identifySingleSpeaker?profileIds={ids}
- * Poll result: processingResult.identifiedProfile.profileId + .score (float 0–1)
+ * Weighted blend of an existing enrolled embedding with a new one.
+ * Keeps more of the accumulated history (existingWeight = 0.7 by default).
  */
-async function identifyAzureSpeaker(
-  profileIds: string[],
-  wavAudio: Buffer,
-  key: string,
-  region: string,
-): Promise<{ profileId: string; confidence: number } | null> {
-  if (profileIds.length === 0) return null;
-
-  const idList = profileIds.join(",");
-  // v2.0: POST /profiles:identifySingleSpeaker?profileIds=...
-  const url = `${baseUrl(region)}/profiles:identifySingleSpeaker?profileIds=${encodeURIComponent(idList)}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/octet-stream",
-      "Ocp-Apim-Subscription-Key": key,
-    },
-    body: wavAudio,
-  });
-
-  if (res.status !== 202) {
-    const body = await res.text();
-    logger.warn({ status: res.status, body }, "Azure speaker identify unexpected status");
-    return null;
-  }
-
-  const opUrl = res.headers.get("Operation-Location");
-  if (!opUrl) return null;
-
-  const result = await pollOperation(opUrl, key, IDENT_POLL_TIMEOUT_MS);
-  if (!result?.processingResult) return null;
-
-  // v2.0 poll result shape:
-  // { processingResult: { identifiedProfile: { profileId: "...", score: 0.82 } } }
-  const pr = result.processingResult as Record<string, unknown>;
-  const identified = pr["identifiedProfile"] as Record<string, unknown> | undefined;
-  if (!identified) return null;
-
-  const profileId = identified["profileId"] as string | undefined;
-  const rawScore  = identified["score"];
-  const score     = typeof rawScore === "number" ? rawScore : parseFloat(String(rawScore ?? "0"));
-
-  if (!profileId || isNaN(score) || score < IDENT_MIN_CONFIDENCE) return null;
-  return { profileId, confidence: score };
+function blendEmbeddings(existing: number[], incoming: number[], existingWeight = ENROLL_BLEND_WEIGHT): number[] {
+  return existing.map((v, i) => v * existingWeight + incoming[i]! * (1 - existingWeight));
 }
 
-/** Poll an Azure async operation URL until succeeded/failed or timeout. */
-async function pollOperation(
-  opUrl: string,
-  key: string,
-  timeoutMs: number,
-): Promise<Record<string, unknown> | null> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    await sleep(IDENT_POLL_INTERVAL_MS);
-    const res = await fetch(opUrl, {
-      headers: { "Ocp-Apim-Subscription-Key": key },
-    });
-    if (!res.ok) break;
-    const json = await res.json() as Record<string, unknown>;
-    const status = (json["status"] as string | undefined)?.toLowerCase();
-    if (status === "succeeded") return json;
-    if (status === "failed") return null;
-    // "running" → keep polling
-  }
-  return null;
+// ── DB helpers ───────────────────────────────────────────────────────────────
+
+function parseEmbedding(raw: string | null | undefined): number[] | null {
+  if (!raw) return null;
+  try { return JSON.parse(raw) as number[]; } catch { return null; }
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise(r => setTimeout(r, ms));
-}
-
-// ── DB helpers ────────────────────────────────────────────────────────────────
-
-async function findPrintByAzureProfileId(azureProfileId: string) {
-  const [row] = await db
+async function upsertVoicePrint(agentId: number, phoneNumber: string): Promise<string> {
+  const existing = await db
     .select()
     .from(voicePrintsTable)
-    .where(eq(voicePrintsTable.azureProfileId, azureProfileId));
-  return row ?? null;
-}
+    .where(and(eq(voicePrintsTable.agentId, agentId), eq(voicePrintsTable.phoneNumber, phoneNumber)));
 
-async function upsertVoicePrint(
-  agentId: number,
-  phoneNumber: string,
-  azureProfileId: string,
-): Promise<void> {
+  if (existing[0]) return existing[0].azureProfileId;
+
+  const profileId = randomUUID();
   await db
     .insert(voicePrintsTable)
-    .values({ agentId, phoneNumber, azureProfileId })
+    .values({ agentId, phoneNumber, azureProfileId: profileId })
     .onConflictDoNothing();
+  return profileId;
 }
 
-async function markEnrolled(
-  azureProfileId: string,
-  status: string,
-  speechSeconds: number,
-  confidence?: number,
+async function updateEnrollment(
+  profileId: string,
+  embedding: number[],
+  newSpeechSeconds: number,
+  currentSeconds: number,
 ): Promise<void> {
+  const total = currentSeconds + newSpeechSeconds;
   await db
     .update(voicePrintsTable)
     .set({
-      enrollmentStatus:        status,
-      enrollmentSpeechSeconds: speechSeconds,
-      lastIdentifiedAt:        confidence !== undefined ? new Date() : undefined,
-      lastConfidenceScore:     confidence ?? undefined,
+      enrollmentStatus:        "Enrolled",
+      enrollmentSpeechSeconds: total,
+      embedding:               JSON.stringify(embedding),
       updatedAt:               new Date(),
     })
-    .where(eq(voicePrintsTable.azureProfileId, azureProfileId));
+    .where(eq(voicePrintsTable.azureProfileId, profileId));
 }
 
-// ── Audio conversion ──────────────────────────────────────────────────────────
-
-/** Convert raw PCM8k (LINEAR16) to a proper WAV buffer for Azure. */
-function toWav8k(pcm8k: Buffer): Buffer {
-  return pcmToWav(pcm8k, 8000, 1, 16);
-}
-
-// ── Azure connectivity test ───────────────────────────────────────────────────
+// ── Health / connectivity test ───────────────────────────────────────────────
 
 /**
- * Smoke-test the Azure Speaker Recognition API with the configured credentials.
- * Creates a temporary profile then immediately deletes it to verify end-to-end access.
+ * Test connectivity to the local ECAPA-TDNN speaker recognition service.
+ * Returns { ok: true } when the gender-service is up and the model is loaded,
+ * or { ok: false, error } when unreachable or model not yet warmed up.
  *
- * Returns { ok: true } on success, or { ok: false, status, error } on failure.
- * Intended for startup health-check and admin diagnostics only.
+ * (Previously tested Azure Speaker Recognition — replaced by local model.)
  */
 export async function testAzureConnection(): Promise<
   | { ok: true; region: string }
   | { ok: false; region: string | null; status?: number; error: string }
 > {
-  let creds: { key: string; region: string } | null;
   try {
-    creds = await getAzureCreds();
-  } catch (err) {
-    return { ok: false, region: null, error: `DB lookup failed: ${String(err)}` };
-  }
-
-  if (!creds) {
-    return { ok: false, region: null, error: "No managed_azure_speech_key configured in platform_settings" };
-  }
-
-  const { key, region } = creds;
-
-  // Step 1: create a test profile
-  let profileId: string;
-  try {
-    const createRes = await fetch(`${baseUrl(region)}/profiles`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Ocp-Apim-Subscription-Key": key,
-      },
-      body: JSON.stringify({ locale: "en-us" }),
+    const res = await fetch(`${VOICE_SERVICE_BASE}/voice-analysis/speaker/health`, {
+      signal: AbortSignal.timeout(5_000),
     });
-    if (!createRes.ok) {
-      const body = await createRes.text();
-      return { ok: false, region, status: createRes.status, error: `createProfile ${createRes.status}: ${body}` };
+    if (!res.ok) {
+      return { ok: false, region: null, status: res.status, error: `Health check HTTP ${res.status}` };
     }
-    const json = await createRes.json() as { profileId?: string };
-    profileId = json.profileId ?? "";
-    if (!profileId) {
-      return { ok: false, region, error: "createProfile returned no profileId" };
+    const json = await res.json() as { model: string; loaded: boolean };
+    if (!json.loaded) {
+      return { ok: false, region: "local", error: "Model still loading — try again in ~30 s after first start" };
     }
+    return { ok: true, region: "local (ECAPA-TDNN)" };
   } catch (err) {
-    return { ok: false, region, error: `Network error on createProfile: ${String(err)}` };
+    return { ok: false, region: null, error: `Gender service unreachable: ${String(err)}` };
   }
+}
 
-  // Step 2: clean up the test profile (best-effort)
-  try {
-    await fetch(`${baseUrl(region)}/profiles/${profileId}`, {
-      method: "DELETE",
-      headers: { "Ocp-Apim-Subscription-Key": key },
-    });
-  } catch { /* non-fatal */ }
+// ── Audio conversion ──────────────────────────────────────────────────────────
 
-  return { ok: true, region };
+/** Convert raw PCM8k (LINEAR16) to a proper WAV buffer for the embedding endpoint. */
+function toWav8k(pcm8k: Buffer): Buffer {
+  return pcmToWav(pcm8k, 8000, 1, 16);
 }
 
 // ── Public VoiceIntelSession ──────────────────────────────────────────────────
@@ -328,7 +183,7 @@ export async function testAzureConnection(): Promise<
 export interface VoiceIdResult {
   /** Phone number of the matched known caller */
   matchedPhone: string;
-  /** Azure confidence score (0–1) */
+  /** Cosine similarity score (0–1) */
   confidence: number;
   /** Display name if available */
   name: string | null;
@@ -365,11 +220,14 @@ export class VoiceIntelSession {
   /** Callback fired when a likely speaker change is detected */
   onSpeakerChange?: () => void;
 
-  /** Azure profile ID for the current caller (set after first enroll) */
-  private ownAzureProfileId: string | null = null;
+  /**
+   * The caller's own stored ECAPA embedding (set during runIdentification).
+   * Used for mid-call speaker-change detection.
+   */
+  private ownEmbedding: number[] | null = null;
 
   constructor(agentId: number, callerPhone: string | null) {
-    this.agentId  = agentId;
+    this.agentId     = agentId;
     this.callerPhone = callerPhone;
   }
 
@@ -384,20 +242,20 @@ export class VoiceIntelSession {
     const chunkSec = pcm8k.length / (8000 * 2);
     this.totalSeconds += chunkSec;
 
-    // Fire identification once
+    // Fire identification once after enough audio has accumulated
     if (!this.identFired && this.totalSeconds >= IDENT_BUFFER_SECONDS) {
-      this.identFired = true;
+      this.identFired  = true;
       this.identPromise = this.runIdentification();
     }
 
-    // Speaker-change window
-    if (this.ownAzureProfileId) {
+    // Speaker-change detection window (only once we have own embedding)
+    if (this.ownEmbedding) {
       this.changeWindowChunks.push(pcm8k);
       this.changeWindowSeconds += chunkSec;
       if (this.changeWindowSeconds >= CHANGE_WINDOW_SECONDS) {
         const window = Buffer.concat(this.changeWindowChunks);
-        this.changeWindowChunks = [];
-        this.changeWindowSeconds = 0;
+        this.changeWindowChunks   = [];
+        this.changeWindowSeconds  = 0;
         void this.checkSpeakerChange(window);
       }
     }
@@ -412,10 +270,7 @@ export class VoiceIntelSession {
 
   private async runIdentification(): Promise<void> {
     try {
-      const creds = await getAzureCreds();
-      if (!creds) return;
-
-      // Fetch all enrolled profiles for this agent
+      // Fetch all enrolled profiles for this agent that have a stored embedding
       const prints = await db
         .select()
         .from(voicePrintsTable)
@@ -426,41 +281,60 @@ export class VoiceIntelSession {
           )
         );
 
+      // Always extract a fresh embedding from THIS call's first 8 s of audio.
+      // Using the live audio (same mic, same room) as the reference for
+      // speaker-change detection is far more accurate than a stored embedding
+      // from a previous call where room/mic conditions may differ.
+      const wav = toWav8k(Buffer.concat(this.chunks));
+      const queryEmbedding = await extractEmbedding(wav);
+
+      // Set own embedding from fresh audio — overrides any stored embedding.
+      // This is the reference we compare every 5-second window against.
+      this.ownEmbedding = queryEmbedding;
+
       if (prints.length === 0) return;
 
-      // Exclude the current caller's own profile from identification
-      // (no need to match someone to themselves)
-      const own = prints.find(p => p.phoneNumber === this.callerPhone);
-      this.ownAzureProfileId = own?.azureProfileId ?? null;
+      // Candidates = enrolled callers other than the current one
       const candidates = prints.filter(p => p.phoneNumber !== this.callerPhone);
       if (candidates.length === 0) return;
 
-      const wav = toWav8k(Buffer.concat(this.chunks));
-      const match = await identifyAzureSpeaker(
-        candidates.map(p => p.azureProfileId),
-        wav,
-        creds.key,
-        creds.region,
-      );
-      if (!match) return;
+      // Only candidates with a stored embedding can be compared
+      const withEmbeddings = candidates
+        .map(p => ({ print: p, embedding: parseEmbedding(p.embedding) }))
+        .filter((x): x is { print: typeof prints[0]; embedding: number[] } => x.embedding !== null);
 
-      const matched = await findPrintByAzureProfileId(match.profileId);
-      if (!matched) return;
+      if (withEmbeddings.length === 0) return;
+
+      // Find best cosine similarity match
+      let best: { print: typeof prints[0]; similarity: number } | null = null;
+      for (const { print, embedding } of withEmbeddings) {
+        const sim = cosineSim(queryEmbedding, embedding);
+        if (!best || sim > best.similarity) {
+          best = { print, similarity: sim };
+        }
+      }
+
+      if (!best || best.similarity < IDENT_MIN_CONFIDENCE) return;
 
       this.identResult = {
-        matchedPhone: matched.phoneNumber,
-        confidence:   match.confidence,
+        matchedPhone: best.print.phoneNumber,
+        confidence:   best.similarity,
         name:         null,
       };
 
       await db
         .update(voicePrintsTable)
-        .set({ lastIdentifiedAt: new Date(), lastConfidenceScore: match.confidence, updatedAt: new Date() })
-        .where(eq(voicePrintsTable.azureProfileId, match.profileId));
+        .set({ lastIdentifiedAt: new Date(), lastConfidenceScore: best.similarity, updatedAt: new Date() })
+        .where(eq(voicePrintsTable.id, best.print.id));
 
       logger.info(
-        { agentId: this.agentId, callerPhone: this.callerPhone, matchedPhone: matched.phoneNumber, confidence: match.confidence },
-        "Voice intelligence: cross-number identity match"
+        {
+          agentId:      this.agentId,
+          callerPhone:  this.callerPhone,
+          matchedPhone: best.print.phoneNumber,
+          confidence:   best.similarity,
+        },
+        "Voice intelligence: cross-number identity match",
       );
     } catch (err) {
       logger.warn({ agentId: this.agentId, err }, "Voice intelligence: identification failed");
@@ -475,26 +349,18 @@ export class VoiceIntelSession {
   // ── Speaker change detection ────────────────────────────────────────────────
 
   private async checkSpeakerChange(window: Buffer): Promise<void> {
-    if (!this.ownAzureProfileId) return;
+    if (!this.ownEmbedding) return;
     try {
-      const creds = await getAzureCreds();
-      if (!creds) return;
-
       const wav = toWav8k(window);
-      // Run identification against own profile only — effectively a quick 1:1 verify
-      const match = await identifyAzureSpeaker(
-        [this.ownAzureProfileId],
-        wav,
-        creds.key,
-        creds.region,
-      );
+      const windowEmbedding = await extractEmbedding(wav);
+      const sim = cosineSim(windowEmbedding, this.ownEmbedding);
+      logger.debug({ agentId: this.agentId, similarity: sim, threshold: CHANGE_MIN_CONFIDENCE, lowWindows: this.changeLowWindows }, "Voice intel: speaker-change window similarity");
 
-      const score = match?.confidence ?? 0;
-      if (score < CHANGE_MIN_CONFIDENCE) {
+      if (sim < CHANGE_MIN_CONFIDENCE) {
         this.changeLowWindows++;
         if (this.changeLowWindows >= 2) {
           this.changeLowWindows = 0;
-          logger.info({ agentId: this.agentId, score }, "Voice intelligence: speaker change detected");
+          logger.info({ agentId: this.agentId, similarity: sim }, "Voice intelligence: speaker change detected");
           this.onSpeakerChange?.();
         }
       } else {
@@ -510,20 +376,17 @@ export class VoiceIntelSession {
   /**
    * Enroll accumulated audio for the given phone number.
    * Call at the end of a call to progressively build up voice prints.
-   * Safe to call even if audio is too short — it will skip if below minimum.
+   * Safe to call even if audio is too short — skips if below minimum.
+   *
+   * Subsequent enrollments blend the new embedding with the stored one so the
+   * profile improves with each call rather than being overwritten.
    */
   async enroll(phoneNumber: string): Promise<void> {
     if (this.totalSeconds < ENROLL_MIN_NEW_SECONDS) return;
 
     try {
-      const creds = await getAzureCreds();
-      if (!creds) {
-        logger.debug({ agentId: this.agentId }, "Voice intelligence: no Azure creds, skipping enroll");
-        return;
-      }
-
       // Look up or create the voice print row
-      let [print] = await db
+      const existing = await db
         .select()
         .from(voicePrintsTable)
         .where(
@@ -532,37 +395,42 @@ export class VoiceIntelSession {
             eq(voicePrintsTable.phoneNumber, phoneNumber),
           )
         );
+      const print = existing[0];
 
-      let azureProfileId: string;
-      if (print) {
-        azureProfileId = print.azureProfileId;
-        // Already fully enrolled — no need to keep enrolling
-        if ((print.enrollmentSpeechSeconds ?? 0) >= ENROLL_TARGET_SECONDS) return;
-      } else {
-        azureProfileId = await createAzureProfile(creds.key, creds.region);
-        await upsertVoicePrint(this.agentId, phoneNumber, azureProfileId);
-        // Re-fetch the row after insert
-        const rows = await db
-          .select()
-          .from(voicePrintsTable)
-          .where(eq(voicePrintsTable.azureProfileId, azureProfileId));
-        print = rows[0];
+      // Already fully enrolled — no need to keep blending
+      if (print && (print.enrollmentSpeechSeconds ?? 0) >= ENROLL_TARGET_SECONDS) return;
+
+      // Get or create the profile row
+      const profileId = await upsertVoicePrint(this.agentId, phoneNumber);
+
+      // Extract embedding from this call's audio
+      const wav = toWav8k(Buffer.concat(this.chunks));
+      const newEmbedding = await extractEmbedding(wav);
+
+      // Blend with existing embedding if one is stored
+      const existingEmbedding = parseEmbedding(print?.embedding);
+      const finalEmbedding = existingEmbedding
+        ? blendEmbeddings(existingEmbedding, newEmbedding)
+        : newEmbedding;
+
+      // Also keep this in memory for speaker-change detection this call
+      if (phoneNumber === this.callerPhone) {
+        this.ownEmbedding = finalEmbedding;
       }
 
-      const wav = toWav8k(Buffer.concat(this.chunks));
-      const result = await enrollAzureProfile(azureProfileId, wav, creds.key, creds.region);
-
-      await markEnrolled(azureProfileId, result.status, result.speechSeconds);
+      const currentSeconds = print?.enrollmentSpeechSeconds ?? 0;
+      await updateEnrollment(profileId, finalEmbedding, this.totalSeconds, currentSeconds);
 
       logger.info(
         {
-          agentId: this.agentId,
+          agentId:     this.agentId,
           phoneNumber,
-          azureProfileId,
-          enrollmentStatus: result.status,
-          speechSeconds:    result.speechSeconds,
+          profileId,
+          addedSeconds: this.totalSeconds,
+          totalSeconds: currentSeconds + this.totalSeconds,
+          firstEnroll:  !existingEmbedding,
         },
-        "Voice intelligence: enrollment updated"
+        "Voice intelligence: enrollment updated",
       );
     } catch (err) {
       logger.warn({ agentId: this.agentId, phoneNumber, err }, "Voice intelligence: enrollment failed (non-fatal)");

@@ -128,7 +128,7 @@ const ASR_MODELS: Record<string, { value: string; label: string }[]> = {
     { value: "whisper-large",   label: "Whisper Large" },
     { value: "flux",            label: "Flux General English" },
   ],
-  azure:      [{ value: "en-US-standard", label: "en-US-standard" }, { value: "en-US-enhanced", label: "en-US-enhanced" }, { value: "en-IN-standard", label: "en-IN-standard" }],
+  azure:      [{ value: "en-US-standard", label: "Auto (base model from language)" }, { value: "en-US-enhanced", label: "Auto — enhanced (base model from language)" }, { value: "en-IN-standard", label: "Auto — Indic (base model from language)" }],
   assemblyai: [{ value: "best", label: "Best" }, { value: "nano", label: "Nano (fast)" }],
   sarvam:     [{ value: "saaras:v3", label: "Saaras v3 — real-time streaming (recommended)" }, { value: "saarika:v2.5", label: "Saarika v2.5 — batch (accurate)" }, { value: "saarika:flash", label: "Saarika Flash — batch (fast, deprecated)" }],
   cartesia:   [{ value: "sonic-english", label: "Sonic English" }],
@@ -1422,7 +1422,7 @@ function VoiceIntelPanel({ agentId }: { agentId: number }) {
       <Fingerprint className="h-10 w-10 text-muted-foreground/25" />
       <p className="text-sm font-medium text-muted-foreground/60">No voice prints yet</p>
       <p className="text-xs text-muted-foreground/40 max-w-[260px]">
-        Voice prints are created automatically after calls once Azure Speaker Recognition keys are configured in Admin → Managed Keys.
+        Voice prints are built automatically after each call using the local ECAPA-TDNN speaker model — no external keys required.
       </p>
     </div>
   );
@@ -1435,7 +1435,7 @@ function VoiceIntelPanel({ agentId }: { agentId: number }) {
           Voice Prints
         </h3>
         <p className="text-xs text-muted-foreground/60">
-          Azure Speaker Recognition identifies callers by voice across different numbers. Target: 60 s of speech per print.
+          Local ECAPA-TDNN model identifies callers by voice across different numbers. Target: 60 s of speech per print.
         </p>
       </div>
 
@@ -1475,7 +1475,7 @@ function VoiceIntelPanel({ agentId }: { agentId: number }) {
 
       <div className="flex items-start gap-2 text-[10px] text-muted-foreground/40 bg-muted/20 rounded-lg p-3 mt-4">
         <AlertCircle className="h-3 w-3 mt-0.5 shrink-0" />
-        <span>Requires <strong className="text-muted-foreground/60">managed_azure_speech_key</strong> and <strong className="text-muted-foreground/60">managed_azure_speech_region</strong> in Admin → Managed Keys.</span>
+        <span>Voice prints are built automatically from each call — no external keys required. The local ECAPA-TDNN model runs on the server.</span>
       </div>
     </div>
   );
