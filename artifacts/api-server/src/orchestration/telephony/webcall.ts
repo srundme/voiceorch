@@ -11,6 +11,7 @@ import { toReadableError } from "../utils.js";
 import { logger } from "../../lib/logger.js";
 import { RecordingBuffer } from "../recorder.js";
 import type { ConversationTurn, STTConfig, StreamSTT } from "../types.js";
+import { DEFAULT_GOODBYE_MESSAGE } from "../types.js";
 import { decryptKey } from "../../lib/crypto.js";
 import { loadCallerContext, injectEnhancedMemory, updateCallerProfile, latchCallerName, latchCallerFact, detectCallbackRequest } from "../callerMemory.js";
 import { VoiceIntelSession } from "../../services/speakerRecognition.js";
@@ -405,6 +406,25 @@ export async function handleWebCallWebSocket(
 
   // ── Voice intelligence — speaker recognition for webcall path ────────────
   const voiceIntel = new VoiceIntelSession(agentId, webcallIdentifier);
+
+  // Queued system note injected into the next LLM turn when a voice change is detected.
+  // Cleared after one use so it fires only once per change event.
+  let speakerChangeNote: string | null = null;
+  // Set true when any speaker change fires — prevents corrupting the original
+  // caller's voice-print embedding with a different person's audio.
+  let speakerChangeDetected = false;
+
+  voiceIntel.onSpeakerChange = () => {
+    speakerChangeDetected = true;
+    speakerChangeNote = [
+      "[VOICE ALERT] Your voice-analysis system has detected that the person speaking is NO LONGER the same caller who started this call.",
+      "React immediately and naturally — do NOT continue as if speaking with the original caller.",
+      "Say something like: \"Hmm, that doesn't quite sound like the same voice — who am I speaking with now?\"",
+      "Once they introduce themselves, greet them warmly and help them with whatever they need.",
+    ].join(" ");
+    logger.info({ callId, agentId }, "Webcall: speaker change detected — queuing voice-alert for next LLM turn");
+  };
+
   let webcallProfile: import("../callerMemory.js").CallerProfile | null = null;
   let webcallLatchedFacts = new Map<string, string>();
   let systemPrompt = agent.generatedPrompt ?? agent.systemPrompt ?? "";
@@ -699,7 +719,9 @@ export async function handleWebCallWebSocket(
             const goodbyeText =
               endCallTool?.type === "end_call" && endCallTool.goodbyeMessage?.trim()
                 ? endCallTool.goodbyeMessage
-                : matchedPhrase;
+                : DEFAULT_GOODBYE_MESSAGE;
+            history.push({ role: "assistant", content: goodbyeText });
+            send({ type: "transcript", speaker: "agent", text: goodbyeText });
             try {
               const { audio } = await tts.synthesize(goodbyeText);
               if (!closed) {
@@ -846,6 +868,12 @@ export async function handleWebCallWebSocket(
       const agentTimezone = (agentCfg["timezone"] as string | undefined) || "Asia/Kolkata";
       const dtInjection = buildDatetimeInjection(agentTimezone);
       systemPromptForTurn = `${dtInjection}\n\n${systemPromptForTurn}`;
+
+      // Inject speaker-change alert once — consumed on first LLM turn after detection
+      if (speakerChangeNote) {
+        systemPromptForTurn += `\n\n${speakerChangeNote}`;
+        speakerChangeNote = null;
+      }
       const detectedGender = genderDetector?.gender ?? null;
       if (detectedGender === "male") {
         systemPromptForTurn += `\n\n[CALLER GENDER] The caller has been identified as male. Always address them respectfully as "${maleSal}" when appropriate (e.g. "Yes, ${maleSal}", "Of course, ${maleSal}"). Never use "${femaleSal}".`;
@@ -1063,24 +1091,27 @@ export async function handleWebCallWebSocket(
         // Handle built-in end_call
         if (triggeredToolName === "end_call") {
           const endTool = agentTools.find((t) => t.type === "end_call" && t.name === triggeredToolName);
-          const goodbye = endTool && endTool.type === "end_call" ? (endTool.goodbyeMessage ?? "") : "";
-          if (goodbye.trim()) {
-            try {
-              const { audio } = await tts.synthesize(goodbye);
-              if (!closed) {
-                sendStatus("speaking");
-                speaking = true;
-                speakingStartedAt = Date.now();
-                for (let j = 0; j < audio.length; j += AUDIO_CHUNK_BYTES) {
-                  if (closed || interrupted) break;
-                  sendSpeechAudio(audio.slice(j, j + AUDIO_CHUNK_BYTES));
-                  await new Promise<void>((r) => setTimeout(r, 40));
-                }
-                speaking = false;
-                speakingEndedAt = Date.now();
+          const configured = endTool && endTool.type === "end_call" ? (endTool.goodbyeMessage ?? "") : "";
+          // Always speak a closing line — fall back to a sensible default so the
+          // call never drops silently — and record it to the transcript.
+          const goodbye = configured.trim() ? configured.trim() : DEFAULT_GOODBYE_MESSAGE;
+          history.push({ role: "assistant", content: goodbye });
+          send({ type: "transcript", speaker: "agent", text: goodbye });
+          try {
+            const { audio } = await tts.synthesize(goodbye);
+            if (!closed) {
+              sendStatus("speaking");
+              speaking = true;
+              speakingStartedAt = Date.now();
+              for (let j = 0; j < audio.length; j += AUDIO_CHUNK_BYTES) {
+                if (closed || interrupted) break;
+                sendSpeechAudio(audio.slice(j, j + AUDIO_CHUNK_BYTES));
+                await new Promise<void>((r) => setTimeout(r, 40));
               }
-            } catch { /* ignore TTS errors on goodbye */ }
-          }
+              speaking = false;
+              speakingEndedAt = Date.now();
+            }
+          } catch { /* ignore TTS errors on goodbye */ }
           if (!closed) void hangup("normal");
           processing = false;
           return;
@@ -1160,19 +1191,20 @@ export async function handleWebCallWebSocket(
 
             if (fnName === "end_call") {
               const endTool = agentTools.find((t) => t.type === "end_call" && t.name === fnName);
-              const goodbye = endTool && endTool.type === "end_call" ? (endTool.goodbyeMessage ?? "") : "";
-              if (goodbye.trim()) {
-                try {
-                  const { audio } = await tts.synthesize(goodbye);
-                  if (!closed) {
-                    for (let j = 0; j < audio.length; j += AUDIO_CHUNK_BYTES) {
-                      if (closed || interrupted) break;
-                      sendSpeechAudio(audio.slice(j, j + AUDIO_CHUNK_BYTES));
-                      await new Promise<void>((r) => setTimeout(r, 40));
-                    }
+              const configured = endTool && endTool.type === "end_call" ? (endTool.goodbyeMessage ?? "") : "";
+              const goodbye = configured.trim() ? configured.trim() : DEFAULT_GOODBYE_MESSAGE;
+              history.push({ role: "assistant", content: goodbye });
+              send({ type: "transcript", speaker: "agent", text: goodbye });
+              try {
+                const { audio } = await tts.synthesize(goodbye);
+                if (!closed) {
+                  for (let j = 0; j < audio.length; j += AUDIO_CHUNK_BYTES) {
+                    if (closed || interrupted) break;
+                    sendSpeechAudio(audio.slice(j, j + AUDIO_CHUNK_BYTES));
+                    await new Promise<void>((r) => setTimeout(r, 40));
                   }
-                } catch { /* ignore */ }
-              }
+                }
+              } catch { /* ignore */ }
               if (!closed) void hangup("normal");
               processing = false;
               return;
@@ -1329,19 +1361,20 @@ export async function handleWebCallWebSocket(
             // Built-in end_call
             if (fnName === "end_call") {
               const endTool = agentTools.find((t) => t.type === "end_call" && t.name === fnName);
-              const goodbye = endTool && endTool.type === "end_call" ? (endTool.goodbyeMessage ?? "") : "";
-              if (goodbye.trim()) {
-                try {
-                  const { audio } = await tts.synthesize(goodbye);
-                  if (!closed) {
-                    for (let j = 0; j < audio.length; j += AUDIO_CHUNK_BYTES) {
-                      if (closed || interrupted) break;
-                      sendSpeechAudio(audio.slice(j, j + AUDIO_CHUNK_BYTES));
-                      await new Promise<void>((r) => setTimeout(r, 40));
-                    }
+              const configured = endTool && endTool.type === "end_call" ? (endTool.goodbyeMessage ?? "") : "";
+              const goodbye = configured.trim() ? configured.trim() : DEFAULT_GOODBYE_MESSAGE;
+              history.push({ role: "assistant", content: goodbye });
+              send({ type: "transcript", speaker: "agent", text: goodbye });
+              try {
+                const { audio } = await tts.synthesize(goodbye);
+                if (!closed) {
+                  for (let j = 0; j < audio.length; j += AUDIO_CHUNK_BYTES) {
+                    if (closed || interrupted) break;
+                    sendSpeechAudio(audio.slice(j, j + AUDIO_CHUNK_BYTES));
+                    await new Promise<void>((r) => setTimeout(r, 40));
                   }
-                } catch { /* ignore */ }
-              }
+                }
+              } catch { /* ignore */ }
               if (!closed) void hangup("normal");
               processing = false;
               return;
@@ -1756,10 +1789,14 @@ export async function handleWebCallWebSocket(
 
     // ── Post-call webcall memory update + callback detection (fire-and-forget) ─
     // ── Voice intelligence — enroll caller's voice print (fire-and-forget) ──
-    if (webcallIdentifier) {
+    // Skip enrollment if a speaker change was detected — the mixed audio would
+    // corrupt the original caller's voice-print embedding.
+    if (webcallIdentifier && !speakerChangeDetected) {
       void voiceIntel.enroll(webcallIdentifier).catch((err) => {
         logger.warn({ callId, err }, "Voice intelligence: webcall enrollment failed (non-fatal)");
       });
+    } else if (speakerChangeDetected) {
+      logger.info({ callId }, "Webcall: skipping voice enrollment — speaker change detected this call");
     }
 
     if (webcallIdentifier && history.length >= 2) {
@@ -1819,7 +1856,11 @@ export async function handleWebCallWebSocket(
     // Feed all frames to gender detector + voice intelligence (browser sends 16 kHz → downsample to 8 kHz)
     const pcm8kForIntel = downsample16to8(data as Buffer);
     if (genderDetector) genderDetector.addSpeechChunk(pcm8kForIntel);
-    voiceIntel.addChunk(pcm8kForIntel);
+    // Gate voice intelligence on !speaking — prevents TTS echo (agent welcome message
+    // picked up by the browser mic) from being fed into the caller's reference embedding.
+    // Without this gate, the first 8-second reference is contaminated with robot-voice audio,
+    // making ALL subsequent windows score near-zero similarity and triggering false positives.
+    if (!speaking) voiceIntel.addChunk(pcm8kForIntel);
 
     const rms = rmsEnergy(data);
 
