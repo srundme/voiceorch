@@ -14,6 +14,7 @@ import { processAudioIn, processRawPcm8kIn, destroyAudioSession } from "./audioP
 import { RecordingBuffer } from "./recorder.js";
 import type { AudioProcessResult } from "./audioPool.js";
 import type { AgentConfig, AgentTool, ConversationTurn, LLMUsage, SessionConfig, StreamSTT, ToolDefinition } from "./types.js";
+import { DEFAULT_GOODBYE_MESSAGE } from "./types.js";
 import { retrieveKbContext } from "./kb-retrieval.js";
 import { logger } from "../lib/logger.js";
 import { format, addMinutes } from "date-fns";
@@ -763,11 +764,16 @@ export class OrchestrationPipeline {
       // Built-in end_call: always available even if not explicitly in agent tools
       if (toolName === "end_call") {
         logger.info({ callId: this.config.callId }, "Built-in end_call invoked by LLM");
-        // Speak configured goodbye message (if any) before hanging up
+        // Speak the configured goodbye message, or a sensible default, before
+        // hanging up — never drop the connection silently.
         const endCallTool = this.agent.tools.find(t => t.type === "end_call");
-        if (endCallTool?.type === "end_call" && endCallTool.goodbyeMessage?.trim()) {
-          await this.speakRaw(endCallTool.goodbyeMessage);
-        }
+        const goodbye =
+          endCallTool?.type === "end_call" && endCallTool.goodbyeMessage?.trim()
+            ? endCallTool.goodbyeMessage
+            : DEFAULT_GOODBYE_MESSAGE;
+        this.conversationHistory.push({ role: "assistant", content: goodbye });
+        this.config.onTranscript("agent", goodbye);
+        await this.speakRaw(goodbye);
         this.config.onCallEnd();
         return undefined;
       }
@@ -870,8 +876,11 @@ export class OrchestrationPipeline {
 
   private async executeEndCall(tool: AgentTool & { type: "end_call" }): Promise<void> {
     logger.info({ callId: this.config.callId }, "End Call tool invoked by LLM");
-    if (tool.goodbyeMessage?.trim()) {
-      await this.speakRaw(tool.goodbyeMessage);
+    {
+      const goodbye = tool.goodbyeMessage?.trim() ? tool.goodbyeMessage : DEFAULT_GOODBYE_MESSAGE;
+      this.conversationHistory.push({ role: "assistant", content: goodbye });
+      this.config.onTranscript("agent", goodbye);
+      await this.speakRaw(goodbye);
     }
     this.config.onCallEnd();
   }
@@ -1145,7 +1154,9 @@ export class OrchestrationPipeline {
         const goodbyeText =
           endCallTool?.type === "end_call" && endCallTool.goodbyeMessage?.trim()
             ? endCallTool.goodbyeMessage
-            : matchedPhrase;
+            : DEFAULT_GOODBYE_MESSAGE;
+        this.conversationHistory.push({ role: "assistant", content: goodbyeText });
+        this.config.onTranscript("agent", goodbyeText);
         await this.speakRaw(goodbyeText);
         this.config.onCallEnd();
         return;

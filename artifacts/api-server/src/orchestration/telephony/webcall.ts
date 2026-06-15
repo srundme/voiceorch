@@ -11,6 +11,7 @@ import { toReadableError } from "../utils.js";
 import { logger } from "../../lib/logger.js";
 import { RecordingBuffer } from "../recorder.js";
 import type { ConversationTurn, STTConfig, StreamSTT } from "../types.js";
+import { DEFAULT_GOODBYE_MESSAGE } from "../types.js";
 import { decryptKey } from "../../lib/crypto.js";
 import { loadCallerContext, injectEnhancedMemory, updateCallerProfile, latchCallerName, latchCallerFact, detectCallbackRequest } from "../callerMemory.js";
 import { VoiceIntelSession } from "../../services/speakerRecognition.js";
@@ -699,7 +700,9 @@ export async function handleWebCallWebSocket(
             const goodbyeText =
               endCallTool?.type === "end_call" && endCallTool.goodbyeMessage?.trim()
                 ? endCallTool.goodbyeMessage
-                : matchedPhrase;
+                : DEFAULT_GOODBYE_MESSAGE;
+            history.push({ role: "assistant", content: goodbyeText });
+            send({ type: "transcript", speaker: "agent", text: goodbyeText });
             try {
               const { audio } = await tts.synthesize(goodbyeText);
               if (!closed) {
@@ -1063,24 +1066,27 @@ export async function handleWebCallWebSocket(
         // Handle built-in end_call
         if (triggeredToolName === "end_call") {
           const endTool = agentTools.find((t) => t.type === "end_call" && t.name === triggeredToolName);
-          const goodbye = endTool && endTool.type === "end_call" ? (endTool.goodbyeMessage ?? "") : "";
-          if (goodbye.trim()) {
-            try {
-              const { audio } = await tts.synthesize(goodbye);
-              if (!closed) {
-                sendStatus("speaking");
-                speaking = true;
-                speakingStartedAt = Date.now();
-                for (let j = 0; j < audio.length; j += AUDIO_CHUNK_BYTES) {
-                  if (closed || interrupted) break;
-                  sendSpeechAudio(audio.slice(j, j + AUDIO_CHUNK_BYTES));
-                  await new Promise<void>((r) => setTimeout(r, 40));
-                }
-                speaking = false;
-                speakingEndedAt = Date.now();
+          const configured = endTool && endTool.type === "end_call" ? (endTool.goodbyeMessage ?? "") : "";
+          // Always speak a closing line — fall back to a sensible default so the
+          // call never drops silently — and record it to the transcript.
+          const goodbye = configured.trim() ? configured.trim() : DEFAULT_GOODBYE_MESSAGE;
+          history.push({ role: "assistant", content: goodbye });
+          send({ type: "transcript", speaker: "agent", text: goodbye });
+          try {
+            const { audio } = await tts.synthesize(goodbye);
+            if (!closed) {
+              sendStatus("speaking");
+              speaking = true;
+              speakingStartedAt = Date.now();
+              for (let j = 0; j < audio.length; j += AUDIO_CHUNK_BYTES) {
+                if (closed || interrupted) break;
+                sendSpeechAudio(audio.slice(j, j + AUDIO_CHUNK_BYTES));
+                await new Promise<void>((r) => setTimeout(r, 40));
               }
-            } catch { /* ignore TTS errors on goodbye */ }
-          }
+              speaking = false;
+              speakingEndedAt = Date.now();
+            }
+          } catch { /* ignore TTS errors on goodbye */ }
           if (!closed) void hangup("normal");
           processing = false;
           return;
@@ -1160,19 +1166,20 @@ export async function handleWebCallWebSocket(
 
             if (fnName === "end_call") {
               const endTool = agentTools.find((t) => t.type === "end_call" && t.name === fnName);
-              const goodbye = endTool && endTool.type === "end_call" ? (endTool.goodbyeMessage ?? "") : "";
-              if (goodbye.trim()) {
-                try {
-                  const { audio } = await tts.synthesize(goodbye);
-                  if (!closed) {
-                    for (let j = 0; j < audio.length; j += AUDIO_CHUNK_BYTES) {
-                      if (closed || interrupted) break;
-                      sendSpeechAudio(audio.slice(j, j + AUDIO_CHUNK_BYTES));
-                      await new Promise<void>((r) => setTimeout(r, 40));
-                    }
+              const configured = endTool && endTool.type === "end_call" ? (endTool.goodbyeMessage ?? "") : "";
+              const goodbye = configured.trim() ? configured.trim() : DEFAULT_GOODBYE_MESSAGE;
+              history.push({ role: "assistant", content: goodbye });
+              send({ type: "transcript", speaker: "agent", text: goodbye });
+              try {
+                const { audio } = await tts.synthesize(goodbye);
+                if (!closed) {
+                  for (let j = 0; j < audio.length; j += AUDIO_CHUNK_BYTES) {
+                    if (closed || interrupted) break;
+                    sendSpeechAudio(audio.slice(j, j + AUDIO_CHUNK_BYTES));
+                    await new Promise<void>((r) => setTimeout(r, 40));
                   }
-                } catch { /* ignore */ }
-              }
+                }
+              } catch { /* ignore */ }
               if (!closed) void hangup("normal");
               processing = false;
               return;
@@ -1329,19 +1336,20 @@ export async function handleWebCallWebSocket(
             // Built-in end_call
             if (fnName === "end_call") {
               const endTool = agentTools.find((t) => t.type === "end_call" && t.name === fnName);
-              const goodbye = endTool && endTool.type === "end_call" ? (endTool.goodbyeMessage ?? "") : "";
-              if (goodbye.trim()) {
-                try {
-                  const { audio } = await tts.synthesize(goodbye);
-                  if (!closed) {
-                    for (let j = 0; j < audio.length; j += AUDIO_CHUNK_BYTES) {
-                      if (closed || interrupted) break;
-                      sendSpeechAudio(audio.slice(j, j + AUDIO_CHUNK_BYTES));
-                      await new Promise<void>((r) => setTimeout(r, 40));
-                    }
+              const configured = endTool && endTool.type === "end_call" ? (endTool.goodbyeMessage ?? "") : "";
+              const goodbye = configured.trim() ? configured.trim() : DEFAULT_GOODBYE_MESSAGE;
+              history.push({ role: "assistant", content: goodbye });
+              send({ type: "transcript", speaker: "agent", text: goodbye });
+              try {
+                const { audio } = await tts.synthesize(goodbye);
+                if (!closed) {
+                  for (let j = 0; j < audio.length; j += AUDIO_CHUNK_BYTES) {
+                    if (closed || interrupted) break;
+                    sendSpeechAudio(audio.slice(j, j + AUDIO_CHUNK_BYTES));
+                    await new Promise<void>((r) => setTimeout(r, 40));
                   }
-                } catch { /* ignore */ }
-              }
+                }
+              } catch { /* ignore */ }
               if (!closed) void hangup("normal");
               processing = false;
               return;

@@ -39,6 +39,13 @@ export interface EndCallTool {
   goodbyeMessage?: string;
 }
 
+/**
+ * Sensible default farewell spoken when a call is ended by the AI (built-in
+ * end_call tool or an end-call phrase) and the agent has no custom
+ * `goodbyeMessage` configured. Prevents calls from dropping silently.
+ */
+export const DEFAULT_GOODBYE_MESSAGE = "Thank you for calling. Have a great day. Goodbye!";
+
 export interface CalComTool {
   type: "cal_com";
   name: string;
