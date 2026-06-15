@@ -59,6 +59,23 @@ app.use((req, res, next) => {
 
 app.use("/api", router);
 
+// Serve admin panel at /admin-ui/ when ADMIN_DIST_PATH is set (production / Railway)
+const adminDistPath = process.env["ADMIN_DIST_PATH"];
+if (adminDistPath) {
+  const adminAbs = path.isAbsolute(adminDistPath)
+    ? adminDistPath
+    : path.join(process.cwd(), adminDistPath);
+  if (existsSync(adminAbs)) {
+    logger.info({ adminAbs }, "Serving admin panel at /admin-ui/");
+    app.use("/admin-ui", express.static(adminAbs));
+    app.get(/^\/admin-ui(\/.*)?$/, (_req, res) => {
+      res.sendFile(path.join(adminAbs, "index.html"));
+    });
+  } else {
+    logger.warn({ adminAbs }, "ADMIN_DIST_PATH set but directory not found — skipping admin static serving");
+  }
+}
+
 // Serve the built React SPA when FRONTEND_DIST_PATH is set (production / Railway)
 const frontendDistPath = process.env["FRONTEND_DIST_PATH"];
 if (frontendDistPath) {
@@ -69,8 +86,8 @@ if (frontendDistPath) {
   if (existsSync(distAbs)) {
     logger.info({ distAbs }, "Serving frontend static files");
     app.use(express.static(distAbs));
-    // SPA fallback — send index.html for any non-/api route not matched by static
-    app.get(/^\/(?!api).*/, (_req, res) => {
+    // SPA fallback — send index.html for any non-/api and non-/admin-ui route
+    app.get(/^\/(?!api|admin-ui).*/, (_req, res) => {
       res.sendFile(path.join(distAbs, "index.html"));
     });
   } else {
