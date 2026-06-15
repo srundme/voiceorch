@@ -15,6 +15,7 @@ import { handleTwilioWebSocket } from "./orchestration/telephony/twilio.js";
 import { handlePlivoWebSocket } from "./orchestration/telephony/plivo.js";
 import { handleVobizWebSocket } from "./orchestration/telephony/vobiz.js";
 import { handleWebCallWebSocket } from "./orchestration/telephony/webcall.js";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { db } from "@workspace/db";
 import { platformSettingsTable, agentsTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
@@ -111,6 +112,16 @@ async function seedManagedKeyFromEnv(dbKey: string, envVar: string): Promise<voi
 const agnostApiKey = process.env["AGNOST_API_KEY"] ?? "";
 if (agnostApiKey) {
   agnost.init(agnostApiKey, { debug: process.env["NODE_ENV"] !== "production" });
+}
+
+// Run DB migrations before accepting traffic so tables always exist.
+const migrationsFolder = join(dirname(fileURLToPath(import.meta.url)), "../../../lib/db/drizzle");
+try {
+  await migrate(db, { migrationsFolder });
+  logger.info({ migrationsFolder }, "DB migrations applied");
+} catch (err) {
+  logger.error({ err }, "DB migration failed — check DATABASE_URL and schema");
+  process.exit(1);
 }
 
 server.listen(port, () => {
