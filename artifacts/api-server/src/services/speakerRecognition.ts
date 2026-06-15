@@ -52,12 +52,19 @@ async function getAzureCreds(): Promise<{ key: string; region: string } | null> 
       inArray(platformSettingsTable.key, [
         "managed_azure_speech_key",
         "managed_azure_speech_region",
+        "managed_azure_speaker_region",
       ])
     );
-  const key    = rows.find(r => r.key === "managed_azure_speech_key")?.value;
-  const region = rows.find(r => r.key === "managed_azure_speech_region")?.value ?? "eastus";
+  const key = rows.find(r => r.key === "managed_azure_speech_key")?.value;
+  // Speaker Recognition uses its own region setting (defaults to "westus").
+  // Azure Speaker Recognition v2.0 is NOT available in all regions (e.g. centralindia).
+  // The multi-service key works across regions — so the STT region and Speaker
+  // Recognition region can differ.
+  const speakerRegion =
+    rows.find(r => r.key === "managed_azure_speaker_region")?.value ??
+    "westus";
   if (!key) return null;
-  return { key, region };
+  return { key, region: speakerRegion };
 }
 
 // ── Azure REST helpers (v2.0) ─────────────────────────────────────────────────

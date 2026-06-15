@@ -151,8 +151,14 @@ const CATEGORIES: Category[] = [
       {
         key: "managed_azure_speech_region",
         label: "Azure Speech Region",
-        description: "Azure region for Speech Services (e.g. eastus, westeurope). Required with Azure Speech Key.",
+        description: "Azure region for Speech-to-Text transcription (e.g. centralindia, eastus). Required with Azure Speech Key.",
         placeholder: "eastus",
+      },
+      {
+        key: "managed_azure_speaker_region",
+        label: "Azure Speaker Recognition Region",
+        description: "Azure region for voice print / Speaker Recognition API. Must be a region that supports Speaker Recognition v2.0 (e.g. westus, eastus). Defaults to westus if not set. Can differ from the STT region.",
+        placeholder: "westus",
       },
     ],
   },

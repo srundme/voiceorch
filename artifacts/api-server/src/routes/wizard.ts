@@ -677,6 +677,7 @@ const MANAGED_KEY_NAMES = [
   "managed_assemblyai_key",
   "managed_azure_speech_key",
   "managed_azure_speech_region",
+  "managed_azure_speaker_region",
   // TTS
   "managed_cartesia_key",
   "managed_elevenlabs_key",
