@@ -84,3 +84,9 @@ id = "KncOJ_mE2qmPsM-NefeSq"
 uri = "file://SNAPSERVE_FEATURE_AUDIT.md"
 type = "text"
 title = "SnapServe Feature Audit & GTM Review"
+
+[[outputs]]
+id = "xqbjqnHGiGSdtUB6BwMgw"
+uri = "file://.local/outputs/SnapServe-Pitch-Deck.pptx"
+type = "slides"
+title = "SnapServe Pitch Deck (PPTX)"
