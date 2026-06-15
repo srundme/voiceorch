@@ -1,59 +1,51 @@
 export default function Slide10() {
   return (
-    <div className="w-screen h-screen overflow-hidden relative bg-bg">
-      {/* Amber bar motif */}
-      <div className="absolute top-[6.5vh] left-[7vw] h-[0.3vh] w-[8vw] bg-primary" />
-      <p className="absolute top-[6vh] right-[7vw] font-body text-[2.2vw] text-muted opacity-40">10 / 12</p>
+    <div className="w-screen h-screen overflow-hidden relative bg-bg flex">
+      {/* Amber bar motif + slide counter */}
+      <div className="absolute top-[6vh] left-[7vw] h-[0.3vh] w-[8vw] bg-primary" />
+      <p className="absolute top-[5.5vh] right-[7vw] font-body text-[2.2vw] text-muted opacity-40">10 / 12</p>
 
-      {/* Headline */}
-      <div className="absolute top-[11vh] left-[7vw]">
-        <p className="font-body font-medium text-[2.2vw] uppercase tracking-[0.35em] text-primary mb-[1.5vh]">
-          Business Model
-        </p>
-        <h2 className="font-display font-black text-[5.5vw] leading-tight tracking-tight text-text">
-          BYOK Orchestration
-        </h2>
-      </div>
-
-      {/* Left column — how it works */}
-      <div className="absolute left-[7vw] top-[33vh]" style={{ width: '43vw' }}>
-        <p className="font-body text-[3vw] text-muted leading-relaxed mb-[4vh]">
-          Businesses plug in their own API keys for every AI provider. We charge only for orchestration — not per-minute AI costs.
-        </p>
-
-        <div className="space-y-[3vh]">
-          <div className="flex items-start gap-[1.5vw]">
-            <div className="w-[0.5vw] h-[0.5vw] rounded-full bg-primary mt-[1.5vh] shrink-0" />
-            <p className="font-body text-[3vw] text-text leading-relaxed">Flat monthly orchestration fee per active agent</p>
+      {/* Left column */}
+      <div className="flex flex-col pl-[7vw] pr-[3vw] w-[54%] overflow-hidden" style={{ paddingTop: '11vh', paddingBottom: '8vh', gap: '2.5vh' }}>
+        <p className="font-body font-medium text-[2.2vw] uppercase tracking-[0.35em] text-primary">Business Model</p>
+        <h2 className="font-display font-black text-[4vw] leading-none tracking-tighter text-text">BYOK Orchestration</h2>
+        <p className="font-body text-[2.7vw] text-muted leading-snug">Businesses use their own API keys. We charge for orchestration — not per-minute AI cost.</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.8vh' }}>
+          <div className="flex items-center gap-[1.2vw]">
+            <div className="w-[0.45vw] h-[0.45vw] rounded-full bg-primary shrink-0" />
+            <p className="font-body text-[2.7vw] text-text">Flat monthly fee per active agent</p>
           </div>
-          <div className="flex items-start gap-[1.5vw]">
-            <div className="w-[0.5vw] h-[0.5vw] rounded-full bg-primary mt-[1.5vh] shrink-0" />
-            <p className="font-body text-[3vw] text-text leading-relaxed">No markup on AI provider costs — no lock-in</p>
+          <div className="flex items-center gap-[1.2vw]">
+            <div className="w-[0.45vw] h-[0.45vw] rounded-full bg-primary shrink-0" />
+            <p className="font-body text-[2.7vw] text-text">Zero markup on AI provider costs</p>
           </div>
-          <div className="flex items-start gap-[1.5vw]">
-            <div className="w-[0.5vw] h-[0.5vw] rounded-full bg-primary mt-[1.5vh] shrink-0" />
-            <p className="font-body text-[3vw] text-text leading-relaxed">Enterprise: custom pricing per million minutes</p>
+          <div className="flex items-center gap-[1.2vw]">
+            <div className="w-[0.45vw] h-[0.45vw] rounded-full bg-primary shrink-0" />
+            <p className="font-body text-[2.7vw] text-text">Enterprise: custom per-million-minute pricing</p>
           </div>
         </div>
       </div>
 
-      {/* Right column — pricing comparison */}
-      <div className="absolute right-[7vw] top-[30vh]" style={{ width: '34vw' }}>
+      {/* Divider */}
+      <div className="absolute left-[54%] top-[11vh] bottom-[8vh] w-[0.15vw] bg-border-line" />
 
-        <p className="font-body font-medium text-[2.5vw] uppercase tracking-wider text-muted mb-[2.5vh]">vs. per-minute platforms</p>
+      {/* Right column */}
+      <div className="flex flex-col pl-[5vw] pr-[7vw] w-[46%] overflow-hidden" style={{ paddingTop: '12vh', paddingBottom: '8vh', gap: '2.5vh' }}>
+        <p className="font-body font-medium text-[2.2vw] uppercase tracking-wider text-muted">vs. per-minute platforms</p>
 
-        <div className="bg-surface rounded-[1vw] p-[3vw] mb-[2.5vh]" style={{ border: '1px solid #22223A' }}>
-          <p className="font-body text-[2.5vw] text-muted mb-[1vh]">Vapi equivalent usage</p>
-          <p className="font-display font-black text-[6vw] text-muted leading-none tracking-tighter line-through opacity-60">$$$</p>
-          <p className="font-body text-[2.5vw] text-muted mt-[1vh]">AI cost markups on every minute</p>
+        <div className="bg-surface rounded-[1vw] px-[2.5vw] py-[2vh]" style={{ border: '1px solid #22223A' }}>
+          <p className="font-body text-[2.3vw] text-muted mb-[1vh]">Vapi equivalent usage</p>
+          <p className="font-display font-black leading-none" style={{ fontSize: '4.5vw', color: '#6B6B80', textDecoration: 'line-through' }}>$$$</p>
+          <p className="font-body text-[2.3vw] text-muted mt-[1vh]">AI cost markups on every minute</p>
         </div>
 
-        <div className="rounded-[1vw] p-[3vw]" style={{ background: '#F0A500' }}>
-          <p className="font-body text-[2.5vw] text-bg mb-[1vh] opacity-70">SnapServe equivalent usage</p>
-          <p className="font-display font-black text-[6vw] text-bg leading-none tracking-tighter">60–80%</p>
-          <p className="font-body text-[2.5vw] text-bg mt-[1vh] opacity-70">lower total cost of operation</p>
+        <div className="rounded-[1vw] px-[2.5vw] py-[2vh]" style={{ background: '#F0A500' }}>
+          <p className="font-body text-[2.3vw] text-bg opacity-70 mb-[1vh]">SnapServe equivalent usage</p>
+          <p className="font-display font-black leading-none text-bg" style={{ fontSize: '5.5vw' }}>
+            <span style={{ whiteSpace: 'nowrap' }}>60–80%</span>
+          </p>
+          <p className="font-body text-[2.3vw] text-bg mt-[1vh] opacity-70">lower total cost of operation</p>
         </div>
-
       </div>
     </div>
   );
