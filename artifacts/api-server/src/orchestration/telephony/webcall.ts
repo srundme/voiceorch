@@ -1856,7 +1856,11 @@ export async function handleWebCallWebSocket(
     // Feed all frames to gender detector + voice intelligence (browser sends 16 kHz → downsample to 8 kHz)
     const pcm8kForIntel = downsample16to8(data as Buffer);
     if (genderDetector) genderDetector.addSpeechChunk(pcm8kForIntel);
-    voiceIntel.addChunk(pcm8kForIntel);
+    // Gate voice intelligence on !speaking — prevents TTS echo (agent welcome message
+    // picked up by the browser mic) from being fed into the caller's reference embedding.
+    // Without this gate, the first 8-second reference is contaminated with robot-voice audio,
+    // making ALL subsequent windows score near-zero similarity and triggering false positives.
+    if (!speaking) voiceIntel.addChunk(pcm8kForIntel);
 
     const rms = rmsEnergy(data);
 
