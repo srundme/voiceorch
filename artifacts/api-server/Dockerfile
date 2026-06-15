@@ -1,3 +1,4 @@
+# Build: 2026-06-15 — remove pgvector, add admin panel at /admin-ui/
 FROM node:22-slim AS builder
 WORKDIR /workspace
 
