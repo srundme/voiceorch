@@ -207,7 +207,15 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
           },
         };
       }
-      // Generic fallback for call_transfer, webhook, send_sms, end_call, cal_com
+      // Webhook: use caller-defined parameters if provided
+      if (t.type === "webhook" && t.parameters) {
+        return {
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters,
+        };
+      }
+      // Generic fallback for call_transfer, webhook (no params), send_sms, end_call, cal_com
       return {
         name: t.name,
         description: t.description,

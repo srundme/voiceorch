@@ -23,6 +23,14 @@ export interface WebhookTool {
   method: "GET" | "POST";
   headers?: Record<string, string>;
   secret?: string;
+  /** Optional sentence the agent speaks before invoking this tool (dead-air filler) */
+  preToolMessage?: string;
+  /** JSON Schema describing the arguments the LLM should pass to this tool */
+  parameters?: {
+    type: "object";
+    properties: Record<string, { type: string; description?: string }>;
+    required?: string[];
+  };
 }
 
 export interface SendSmsTool {

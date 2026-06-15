@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { Link, useLocation, useParams } from "wouter";
-import { ArrowLeft, Save, Bot, Plus, Trash2, PhoneForwarded, ClipboardList } from "lucide-react";
+import { ArrowLeft, Save, Bot, Plus, Trash2, PhoneForwarded, ClipboardList, Webhook, ChevronDown, ChevronUp } from "lucide-react";
 import {
   useGetAgent,
   useUpdateAgent,
@@ -88,11 +88,21 @@ export const agentFormSchema = z.object({
   bargeInMinFrames:       z.number().min(1).max(20).optional(),
   timezone:               z.string().optional(),
   tools: z.array(z.object({
-    type: z.literal("call_transfer"),
+    type: z.enum(["call_transfer", "webhook"]),
     name: z.string().min(1, "Function name required"),
     description: z.string().min(1, "Description required"),
-    transferTo: z.string().min(1, "Phone number required"),
+    transferTo: z.string().optional(),
     warmHandoffMessage: z.string().optional(),
+    url: z.string().optional(),
+    method: z.enum(["GET", "POST"]).optional(),
+    secret: z.string().optional(),
+    preToolMessage: z.string().optional(),
+    parameters: z.array(z.object({
+      paramName: z.string().min(1, "Name required"),
+      dataType: z.enum(["string", "number", "boolean"]),
+      paramDescription: z.string().optional(),
+      required: z.boolean().optional(),
+    })).optional(),
   })).optional(),
   dispositionSchema: z.array(z.object({
     key: z.string().min(1, "Key required"),
@@ -126,8 +136,24 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   if (bargeInEnergyThreshold != null && bargeInEnergyThreshold !== 1200) agentConfig["bargeInEnergyThreshold"] = bargeInEnergyThreshold;
   if (bargeInMinFrames != null && bargeInMinFrames !== 4) agentConfig["bargeInMinFrames"] = bargeInMinFrames;
   if (timezone) agentConfig["timezone"] = timezone;
+
+  const serializedTools = (rest.tools ?? []).map((t) => {
+    if (t.type !== "webhook") return t;
+    const { parameters, ...toolRest } = t;
+    const paramList = parameters ?? [];
+    const jsonSchema = paramList.length > 0 ? {
+      type: "object" as const,
+      properties: Object.fromEntries(
+        paramList.map((p) => [p.paramName, { type: p.dataType, ...(p.paramDescription ? { description: p.paramDescription } : {}) }])
+      ),
+      required: paramList.filter((p) => p.required).map((p) => p.paramName),
+    } : undefined;
+    return { ...toolRest, ...(jsonSchema ? { parameters: jsonSchema } : {}) };
+  });
+
   return {
     ...rest,
+    tools: serializedTools,
     asrLanguage: rest.asrLanguage || null,
     ...(Object.keys(agentConfig).length > 0 ? { agentConfig } : {}),
     dispositionSchema: (rest.dispositionSchema ?? []).map(f => ({
@@ -156,6 +182,74 @@ function ModelSelect({
         {options.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
       </SelectContent>
     </Select>
+  );
+}
+
+/* ── Webhook parameter editor ─────────────────────────────────────────────── */
+
+import type { Control } from "react-hook-form";
+
+function WebhookParamsEditor({ control, toolIndex }: { control: Control<AgentFormValues>; toolIndex: number }) {
+  const { fields, append, remove } = useFieldArray({
+    control,
+    name: `tools.${toolIndex}.parameters` as any,
+  });
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium text-muted-foreground">Parameters (LLM arguments)</span>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-6 text-xs px-2"
+          onClick={() => append({ paramName: "", dataType: "string", paramDescription: "", required: false })}
+        >
+          <Plus className="h-3 w-3 mr-1" /> Add Param
+        </Button>
+      </div>
+      {fields.length === 0 && (
+        <p className="text-[10px] text-muted-foreground italic">No parameters — the LLM will pass a generic reason string.</p>
+      )}
+      {fields.map((param, pIdx) => (
+        <div key={param.id} className="grid grid-cols-[1fr_100px_1fr_60px_24px] gap-2 items-start">
+          <FormField control={control} name={`tools.${toolIndex}.parameters.${pIdx}.paramName` as any} render={({ field: f }) => (
+            <FormItem className="space-y-0">
+              <FormControl><Input placeholder="param_name" className="h-7 text-xs" {...f} /></FormControl>
+              <FormMessage className="text-[10px]" />
+            </FormItem>
+          )} />
+          <FormField control={control} name={`tools.${toolIndex}.parameters.${pIdx}.dataType` as any} render={({ field: f }) => (
+            <FormItem className="space-y-0">
+              <Select value={f.value ?? "string"} onValueChange={f.onChange}>
+                <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="string">string</SelectItem>
+                  <SelectItem value="number">number</SelectItem>
+                  <SelectItem value="boolean">boolean</SelectItem>
+                </SelectContent>
+              </Select>
+            </FormItem>
+          )} />
+          <FormField control={control} name={`tools.${toolIndex}.parameters.${pIdx}.paramDescription` as any} render={({ field: f }) => (
+            <FormItem className="space-y-0">
+              <FormControl><Input placeholder="Description for LLM" className="h-7 text-xs" {...f} /></FormControl>
+            </FormItem>
+          )} />
+          <FormField control={control} name={`tools.${toolIndex}.parameters.${pIdx}.required` as any} render={({ field: f }) => (
+            <FormItem className="space-y-0 flex items-center gap-1 pt-1">
+              <FormControl>
+                <Switch checked={!!f.value} onCheckedChange={f.onChange} className="scale-75 origin-left" />
+              </FormControl>
+              <span className="text-[10px] text-muted-foreground">req</span>
+            </FormItem>
+          )} />
+          <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => remove(pIdx)}>
+            <Trash2 className="h-3 w-3" />
+          </Button>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -829,61 +923,147 @@ export default function AgentEdit() {
                   <CardTitle className="flex items-center gap-2"><PhoneForwarded className="h-4 w-4" /> Tools</CardTitle>
                   <CardDescription>Actions the LLM can trigger mid-call. The agent decides when to use them based on the conversation.</CardDescription>
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => appendTool({ type: "call_transfer", name: "transfer_to_human", description: "Transfer the call to a human agent when the caller requests it or the issue cannot be resolved automatically.", transferTo: "", warmHandoffMessage: "" })}
-                >
-                  <Plus className="h-4 w-4 mr-1" /> Add Tool
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => appendTool({ type: "call_transfer", name: "transfer_to_human", description: "Transfer the call to a human agent when the caller requests it or the issue cannot be resolved automatically.", transferTo: "", warmHandoffMessage: "" })}
+                  >
+                    <PhoneForwarded className="h-4 w-4 mr-1" /> Call Transfer
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => appendTool({ type: "webhook", name: "custom_action", description: "Invoke this when the caller requests a specific action.", url: "", method: "POST", secret: "", preToolMessage: "One moment, let me take care of that for you.", parameters: [] })}
+                  >
+                    <Webhook className="h-4 w-4 mr-1" /> Custom Function
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             {toolFields.length > 0 && (
               <CardContent className="space-y-4">
-                {toolFields.map((field, index) => (
-                  <div key={field.id} className="border rounded-md p-4 bg-muted/20 space-y-3 relative">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Call Transfer</span>
-                      <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => removeTool(index)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                {toolFields.map((field, index) => {
+                  const toolType = form.watch(`tools.${index}.type`);
+                  return (
+                    <div key={field.id} className="border rounded-md p-4 bg-muted/20 space-y-3 relative">
+                      <div className="flex items-center justify-between mb-1">
+                        {toolType === "webhook" ? (
+                          <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                            <Webhook className="h-3 w-3" /> Custom Function
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                            <PhoneForwarded className="h-3 w-3" /> Call Transfer
+                          </span>
+                        )}
+                        <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => removeTool(index)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+
+                      {toolType === "webhook" ? (
+                        /* ── Webhook / Custom Function fields ── */
+                        <>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <FormField control={form.control} name={`tools.${index}.name`} render={({ field: f }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs">Function Name</FormLabel>
+                                <FormControl><Input placeholder="e.g. check_order_status" {...f} /></FormControl>
+                                <FormDescription className="text-[10px]">snake_case — the LLM calls this by name</FormDescription>
+                                <FormMessage />
+                              </FormItem>
+                            )} />
+                            <FormField control={form.control} name={`tools.${index}.preToolMessage`} render={({ field: f }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs">Pre-call Message (optional)</FormLabel>
+                                <FormControl><Input placeholder="One moment, let me check that for you." {...f} /></FormControl>
+                                <FormDescription className="text-[10px]">Spoken aloud before the function is called</FormDescription>
+                              </FormItem>
+                            )} />
+                          </div>
+                          <FormField control={form.control} name={`tools.${index}.description`} render={({ field: f }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs">Description (shown to LLM)</FormLabel>
+                              <FormControl><Textarea className="min-h-[60px] text-sm" placeholder="Invoke this when the caller asks about their order status or wants to track a delivery." {...f} /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+                          <div className="grid grid-cols-[1fr_120px] gap-3">
+                            <FormField control={form.control} name={`tools.${index}.url`} render={({ field: f }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs">Endpoint URL</FormLabel>
+                                <FormControl><Input placeholder="https://your-api.com/webhook" {...f} /></FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )} />
+                            <FormField control={form.control} name={`tools.${index}.method`} render={({ field: f }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs">HTTP Method</FormLabel>
+                                <Select value={f.value ?? "POST"} onValueChange={f.onChange}>
+                                  <SelectTrigger><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="POST">POST</SelectItem>
+                                    <SelectItem value="GET">GET</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </FormItem>
+                            )} />
+                          </div>
+                          <FormField control={form.control} name={`tools.${index}.secret`} render={({ field: f }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs">Secret — X-Webhook-Secret (optional)</FormLabel>
+                              <FormControl><Input placeholder="optional-shared-secret" type="password" {...f} /></FormControl>
+                              <FormDescription className="text-[10px]">Sent as the X-Webhook-Secret header so your server can verify requests</FormDescription>
+                            </FormItem>
+                          )} />
+                          <div className="border-t pt-3 mt-1">
+                            <WebhookParamsEditor control={form.control} toolIndex={index} />
+                          </div>
+                        </>
+                      ) : (
+                        /* ── Call Transfer fields ── */
+                        <>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <FormField control={form.control} name={`tools.${index}.name`} render={({ field: f }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs">Function Name</FormLabel>
+                                <FormControl><Input placeholder="e.g. transfer_to_human" {...f} /></FormControl>
+                                <FormDescription className="text-[10px]">snake_case, no spaces — used by the LLM to call this tool</FormDescription>
+                                <FormMessage />
+                              </FormItem>
+                            )} />
+                            <FormField control={form.control} name={`tools.${index}.transferTo`} render={({ field: f }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs">Transfer To (phone number)</FormLabel>
+                                <FormControl><Input placeholder="+12125551234" {...f} /></FormControl>
+                                <FormDescription className="text-[10px]">E.164 format — the human agent's number</FormDescription>
+                                <FormMessage />
+                              </FormItem>
+                            )} />
+                          </div>
+                          <FormField control={form.control} name={`tools.${index}.description`} render={({ field: f }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs">Description (shown to LLM)</FormLabel>
+                              <FormControl><Textarea className="min-h-[60px] text-sm" placeholder="Transfer the call to a human agent when the caller is frustrated or the issue cannot be resolved automatically." {...f} /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+                          <FormField control={form.control} name={`tools.${index}.warmHandoffMessage`} render={({ field: f }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs">Warm Handoff Message (optional)</FormLabel>
+                              <FormControl><Input placeholder="e.g. I'm connecting you with a specialist now. Please hold for a moment." {...f} /></FormControl>
+                              <FormDescription className="text-[10px]">Spoken to the caller before the transfer happens</FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+                        </>
+                      )}
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <FormField control={form.control} name={`tools.${index}.name`} render={({ field: f }) => (
-                        <FormItem>
-                          <FormLabel className="text-xs">Function Name</FormLabel>
-                          <FormControl><Input placeholder="e.g. transfer_to_human" {...f} /></FormControl>
-                          <FormDescription className="text-[10px]">snake_case, no spaces — used by the LLM to call this tool</FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-                      <FormField control={form.control} name={`tools.${index}.transferTo`} render={({ field: f }) => (
-                        <FormItem>
-                          <FormLabel className="text-xs">Transfer To (phone number)</FormLabel>
-                          <FormControl><Input placeholder="+12125551234" {...f} /></FormControl>
-                          <FormDescription className="text-[10px]">E.164 format — the human agent's number</FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-                    </div>
-                    <FormField control={form.control} name={`tools.${index}.description`} render={({ field: f }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs">Description (shown to LLM)</FormLabel>
-                        <FormControl><Textarea className="min-h-[60px] text-sm" placeholder="Transfer the call to a human agent when the caller is frustrated or the issue cannot be resolved automatically." {...f} /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name={`tools.${index}.warmHandoffMessage`} render={({ field: f }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs">Warm Handoff Message (optional)</FormLabel>
-                        <FormControl><Input placeholder="e.g. I'm connecting you with a specialist now. Please hold for a moment." {...f} /></FormControl>
-                        <FormDescription className="text-[10px]">Spoken to the caller before the transfer happens</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                  </div>
-                ))}
+                  );
+                })}
               </CardContent>
             )}
           </Card>
