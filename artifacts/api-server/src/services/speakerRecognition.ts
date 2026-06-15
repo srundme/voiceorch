@@ -28,8 +28,12 @@ import { logger } from "../lib/logger.js";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-/** Seconds of caller audio to buffer before attempting identification */
-const IDENT_BUFFER_SECONDS = 8;
+/**
+ * Seconds of caller-only audio to buffer before extracting the reference embedding.
+ * ECAPA works well from 5 s — reducing from 8 s so the reference is ready sooner
+ * and speaker-change detection can start firing within the first ~30 s of a call.
+ */
+const IDENT_BUFFER_SECONDS = 5;
 /** Minimum cosine similarity (0–1) to accept a cross-number voice match */
 const IDENT_MIN_CONFIDENCE = 0.5;
 /** Target enrolled seconds — stop enrolling once this is reached */
@@ -372,7 +376,10 @@ export class VoiceIntelSession {
 
       if (sim < CHANGE_MIN_CONFIDENCE) {
         this.changeLowWindows++;
-        if (this.changeLowWindows >= 2) {
+        // Fire on first window that drops below threshold — the clean same-session
+        // reference gives a big enough gap (same-speaker ~0.6+, different ~0.2)
+        // that a single window is reliable. No need to wait for 2 consecutive.
+        if (this.changeLowWindows >= 1) {
           this.changeLowWindows = 0;
           logger.info({ agentId: this.agentId, similarity: sim }, "Voice intelligence: speaker change detected");
           this.onSpeakerChange?.();
