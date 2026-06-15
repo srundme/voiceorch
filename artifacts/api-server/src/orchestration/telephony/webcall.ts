@@ -1855,15 +1855,16 @@ export async function handleWebCallWebSocket(
 
     // Feed all frames to gender detector + voice intelligence (browser sends 16 kHz → downsample to 8 kHz)
     const pcm8kForIntel = downsample16to8(data as Buffer);
-    if (genderDetector) genderDetector.addSpeechChunk(pcm8kForIntel);
-    // Reference-building phase: only feed caller audio when the agent is silent,
-    // so TTS echo (agent voice picked up by the mic during the welcome message)
-    // cannot contaminate the 8-second reference embedding.
-    // Once the reference is built (hasOwnEmbedding), open the gate — all frames
-    // are allowed through so speaker-change windows accumulate fast enough even
-    // when the agent is talking a lot. Echo in both Karthik's and the friend's
-    // windows is equal, so it doesn't skew the similarity comparison.
-    if (!speaking || voiceIntel.hasOwnEmbedding()) voiceIntel.addChunk(pcm8kForIntel);
+    // Same !speaking gate for gender: agent TTS echo through the mic sounds female
+    // (Cartesia/ElevenLabs voice) and overwhelms the gender classifier when the
+    // agent talks for long stretches, flipping "Sir" → "Ma'am".
+    if (genderDetector && !speaking) genderDetector.addSpeechChunk(pcm8kForIntel);
+    // Only feed caller-mic audio into voice intelligence when the agent is NOT
+    // playing TTS. Both the reference embedding (first 8 s of caller audio) and
+    // all subsequent speaker-change windows must use the same audio domain
+    // (caller-only, no echo). Mixing echo-free reference with echo-contaminated
+    // windows makes same-speaker similarity drop to 0.18, causing false positives.
+    if (!speaking) voiceIntel.addChunk(pcm8kForIntel);
 
     const rms = rmsEnergy(data);
 

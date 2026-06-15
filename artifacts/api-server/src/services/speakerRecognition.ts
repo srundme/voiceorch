@@ -36,8 +36,13 @@ const IDENT_MIN_CONFIDENCE = 0.5;
 const ENROLL_TARGET_SECONDS = 60;
 /** Minimum seconds of new audio to bother embedding for enrollment */
 const ENROLL_MIN_NEW_SECONDS = 5;
-/** Seconds of caller audio window for mid-call speaker change verification */
-const CHANGE_WINDOW_SECONDS = 5;
+/**
+ * Seconds of *caller-only* audio per speaker-change window.
+ * Kept at 3 s (not 5) because the !speaking gate means wall-clock time to fill
+ * a window is ~3× longer — 3 s of caller speech ≈ 10–15 s of real time when
+ * the agent is actively talking. Shorter windows → faster detection.
+ */
+const CHANGE_WINDOW_SECONDS = 3;
 /**
  * Cosine similarity below this for 2+ consecutive windows → speaker change.
  * Lowered from 0.4: same-room/same-mic conditions make different-speaker
