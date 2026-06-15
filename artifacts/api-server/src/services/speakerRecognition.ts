@@ -38,8 +38,12 @@ const ENROLL_TARGET_SECONDS = 60;
 const ENROLL_MIN_NEW_SECONDS = 5;
 /** Seconds of caller audio window for mid-call speaker change verification */
 const CHANGE_WINDOW_SECONDS = 5;
-/** Similarity below this triggers a speaker-change flag */
-const CHANGE_MIN_CONFIDENCE = 0.4;
+/**
+ * Cosine similarity below this for 2+ consecutive windows → speaker change.
+ * Lowered from 0.4: same-room/same-mic conditions make different-speaker
+ * similarities higher than expected; 0.3 gives cleaner separation.
+ */
+const CHANGE_MIN_CONFIDENCE = 0.3;
 /** Weight given to the existing averaged embedding vs new enrollment audio */
 const ENROLL_BLEND_WEIGHT = 0.7;
 
@@ -277,13 +281,18 @@ export class VoiceIntelSession {
           )
         );
 
-      if (prints.length === 0) return;
+      // Always extract a fresh embedding from THIS call's first 8 s of audio.
+      // Using the live audio (same mic, same room) as the reference for
+      // speaker-change detection is far more accurate than a stored embedding
+      // from a previous call where room/mic conditions may differ.
+      const wav = toWav8k(Buffer.concat(this.chunks));
+      const queryEmbedding = await extractEmbedding(wav);
 
-      // Load own stored embedding for speaker-change detection
-      const ownPrint = prints.find(p => p.phoneNumber === this.callerPhone);
-      if (ownPrint) {
-        this.ownEmbedding = parseEmbedding(ownPrint.embedding);
-      }
+      // Set own embedding from fresh audio — overrides any stored embedding.
+      // This is the reference we compare every 5-second window against.
+      this.ownEmbedding = queryEmbedding;
+
+      if (prints.length === 0) return;
 
       // Candidates = enrolled callers other than the current one
       const candidates = prints.filter(p => p.phoneNumber !== this.callerPhone);
@@ -295,9 +304,6 @@ export class VoiceIntelSession {
         .filter((x): x is { print: typeof prints[0]; embedding: number[] } => x.embedding !== null);
 
       if (withEmbeddings.length === 0) return;
-
-      const wav = toWav8k(Buffer.concat(this.chunks));
-      const queryEmbedding = await extractEmbedding(wav);
 
       // Find best cosine similarity match
       let best: { print: typeof prints[0]; similarity: number } | null = null;
@@ -348,6 +354,7 @@ export class VoiceIntelSession {
       const wav = toWav8k(window);
       const windowEmbedding = await extractEmbedding(wav);
       const sim = cosineSim(windowEmbedding, this.ownEmbedding);
+      logger.debug({ agentId: this.agentId, similarity: sim, threshold: CHANGE_MIN_CONFIDENCE, lowWindows: this.changeLowWindows }, "Voice intel: speaker-change window similarity");
 
       if (sim < CHANGE_MIN_CONFIDENCE) {
         this.changeLowWindows++;

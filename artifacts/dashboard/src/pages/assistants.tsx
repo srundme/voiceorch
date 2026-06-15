@@ -1435,7 +1435,7 @@ function VoiceIntelPanel({ agentId }: { agentId: number }) {
           Voice Prints
         </h3>
         <p className="text-xs text-muted-foreground/60">
-          Azure Speaker Recognition identifies callers by voice across different numbers. Target: 60 s of speech per print.
+          Local ECAPA-TDNN model identifies callers by voice across different numbers. Target: 60 s of speech per print.
         </p>
       </div>
 
@@ -1475,7 +1475,7 @@ function VoiceIntelPanel({ agentId }: { agentId: number }) {
 
       <div className="flex items-start gap-2 text-[10px] text-muted-foreground/40 bg-muted/20 rounded-lg p-3 mt-4">
         <AlertCircle className="h-3 w-3 mt-0.5 shrink-0" />
-        <span>Requires <strong className="text-muted-foreground/60">managed_azure_speech_key</strong> and <strong className="text-muted-foreground/60">managed_azure_speech_region</strong> in Admin → Managed Keys.</span>
+        <span>Voice prints are built automatically from each call — no external keys required. The local ECAPA-TDNN model runs on the server.</span>
       </div>
     </div>
   );
