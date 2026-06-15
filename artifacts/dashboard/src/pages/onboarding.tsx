@@ -442,11 +442,13 @@ export default function OnboardingPage() {
     priorPlatforms: [],
   });
 
-  // Redirect if already completed
+  // Redirect if already completed; only start questions on explicit completed=false.
+  // If the query is in error state (data=undefined), keep showing the loader
+  // rather than jumping straight into the questionnaire.
   useEffect(() => {
     if (!statusLoading && status?.completed) {
       setLocation("/app");
-    } else if (!statusLoading) {
+    } else if (!statusLoading && status?.completed === false) {
       setStep(1);
     }
   }, [status, statusLoading, setLocation]);

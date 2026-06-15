@@ -97,10 +97,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const getToken = useCallback(async (): Promise<string | null> => {
-    const t = token ?? localStorage.getItem(TOKEN_KEY);
+    // Always read from localStorage — stable reference (no [token] dep).
+    // This prevents AuthTokenSync from clearing _authTokenGetter on each login,
+    // which would cause onboarding-status fetches to fire unauthenticated.
+    const t = localStorage.getItem(TOKEN_KEY);
     if (t && decode(t)) return t;
     return null;
-  }, [token]);
+  }, []);
 
   const signIn = useCallback((token?: string) => {
     if (token && decode(token)) {
