@@ -1,28 +1,8 @@
 import {
   pgTable, text, serial, timestamp, integer, json,
 } from "drizzle-orm/pg-core";
-import { customType } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
-
-/* ── pgvector custom type ─────────────────────────────────────────────────── */
-
-export const embedding = customType<{
-  data: number[];
-  config: { dimensions: number };
-  driverData: string;
-}>({
-  dataType(config) {
-    return `vector(${config?.dimensions ?? 1536})`;
-  },
-  fromDriver(value: string): number[] {
-    // pgvector returns "[0.1,0.2,...]" format
-    return value.slice(1, -1).split(",").map(Number);
-  },
-  toDriver(value: number[]): string {
-    return `[${value.join(",")}]`;
-  },
-});
 
 /* ── knowledge_bases ──────────────────────────────────────────────────────── */
 
@@ -71,7 +51,7 @@ export const kbChunksTable = pgTable("kb_chunks", {
   chunkIndex: integer("chunk_index").notNull(),
   content: text("content").notNull(),
   tokenCount: integer("token_count"),
-  chunkEmbedding: embedding("embedding", { dimensions: 768 }),
+  chunkEmbedding: text("embedding"),
   metadata: json("metadata").$type<Record<string, unknown>>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
