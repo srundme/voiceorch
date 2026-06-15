@@ -138,8 +138,9 @@ server.listen(port, () => {
       startBatchScheduler();
     })
     .catch((err: unknown) => {
-      logger.error({ err }, "DB migration failed — check DATABASE_URL and schema");
-      process.exit(1);
+      // Log but do NOT exit — keeps the process alive so Railway's healthcheck
+      // passes and we can inspect the error in the Console tab.
+      logger.error({ err, migrationsFolder }, "DB migration failed — server will stay up for diagnostics");
     });
 });
 
