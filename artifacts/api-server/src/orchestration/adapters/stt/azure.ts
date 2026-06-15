@@ -94,12 +94,41 @@ interface AzureHypothesisBody {
 const GUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// Short ISO-639-1 codes → full IETF BCP-47 locales that Azure accepts.
+// Azure requires full locale tags (e.g. "hi-IN") on the STT endpoint;
+// bare language codes ("hi", "en") are silently mis-handled.
+const LOCALE_MAP: Record<string, string> = {
+  "hi": "hi-IN", "en": "en-IN", "ta": "ta-IN", "te": "te-IN",
+  "kn": "kn-IN", "ml": "ml-IN", "mr": "mr-IN", "bn": "bn-IN",
+  "gu": "gu-IN", "pa": "pa-IN", "or": "or-IN", "ur": "ur-IN",
+  "fr": "fr-FR", "de": "de-DE", "es": "es-ES", "pt": "pt-BR",
+  "it": "it-IT", "ja": "ja-JP", "ko": "ko-KR", "zh": "zh-CN",
+  "ar": "ar-EG", "ru": "ru-RU",
+};
+
+// Indic primary locales that benefit from Hindi+English LID candidates.
+const INDIC_LOCALES = new Set([
+  "hi-IN", "ta-IN", "te-IN", "kn-IN", "ml-IN", "mr-IN",
+  "bn-IN", "gu-IN", "pa-IN", "or-IN", "ur-IN",
+]);
+
+/** Expand a short code ("hi") or already-full locale ("hi-IN") to the
+ *  canonical IETF tag Azure requires. */
+function normalizeLocale(lang: string): string {
+  if (!lang) return "en-IN";
+  // Already has a region tag (e.g. "hi-IN", "en-US")
+  if (lang.includes("-")) return lang;
+  return LOCALE_MAP[lang.toLowerCase()] ?? `${lang}-${lang.toUpperCase()}`;
+}
+
 export class AzureSTT implements STTAdapter {
   private readonly key: string;
   private readonly region: string;
   private readonly language: string;
   private readonly endpointId: string | null;
   private readonly cfg: STTConfig;
+  /** Extra candidate locales for Azure LID (multi-language detection). */
+  private readonly candidateLocales: string[];
 
   constructor(
     apiKey: string,
@@ -115,11 +144,26 @@ export class AzureSTT implements STTAdapter {
           region?: string;
           language?: string;
           endpointId?: string;
+          candidateLocales?: string[];
         })
       : {};
 
     this.region = extra.region ?? "eastus";
-    this.language = cfg.language ?? extra.language ?? "en-US";
+    const rawLang = cfg.language ?? extra.language ?? "en-IN";
+    this.language = normalizeLocale(rawLang);
+
+    // For Indic locales, automatically add English (India) as a candidate so
+    // code-switched Hinglish / Tamil-English speech is recognized correctly.
+    // Custom candidateLocales in extraConfig override this default.
+    if (extra.candidateLocales) {
+      this.candidateLocales = extra.candidateLocales.map(normalizeLocale);
+    } else if (INDIC_LOCALES.has(this.language)) {
+      this.candidateLocales = [this.language, "en-IN"].filter(
+        (l, i, arr) => arr.indexOf(l) === i,
+      );
+    } else {
+      this.candidateLocales = [];
+    }
 
     // A custom deployment is only honored when a real GUID is supplied — either
     // explicitly via extraConfig.endpointId or as a GUID-shaped asrModel.
@@ -131,11 +175,23 @@ export class AzureSTT implements STTAdapter {
 
   // ── Batch REST ────────────────────────────────────────────────────────────
 
+  /** Build shared URL params for both batch and streaming endpoints. */
+  private buildParams(): URLSearchParams {
+    const params = new URLSearchParams({ language: this.language, format: "detailed" });
+    if (this.endpointId) params.set("endpointId", this.endpointId);
+    // Language identification: enable when multiple candidate locales are set.
+    // This lets Azure handle code-switching (e.g. Hinglish = hi-IN + en-IN).
+    if (this.candidateLocales.length > 1) {
+      params.set("lidEnabled", "true");
+      params.set("candidateLocales", this.candidateLocales.join(","));
+    }
+    return params;
+  }
+
   async transcribe(audioBuffer: Buffer, sampleRate = 16000): Promise<string> {
     const wav = pcmToWav(audioBuffer, sampleRate);
 
-    const params = new URLSearchParams({ language: this.language, format: "detailed" });
-    if (this.endpointId) params.set("endpointId", this.endpointId);
+    const params = this.buildParams();
 
     const url =
       `https://${this.region}.stt.speech.microsoft.com/speech/recognition/` +
@@ -187,8 +243,7 @@ export class AzureSTT implements STTAdapter {
     onTranscript: (text: string, isFinal: boolean) => void,
     onClose?: () => void,
   ): StreamSTT {
-    const params = new URLSearchParams({ language: this.language, format: "detailed" });
-    if (this.endpointId) params.set("endpointId", this.endpointId);
+    const params = this.buildParams();
 
     const wsUrl =
       `wss://${this.region}.stt.speech.microsoft.com/speech/recognition/` +
@@ -259,6 +314,7 @@ export class AzureSTT implements STTAdapter {
         {
           region: this.region,
           language: this.language,
+          candidateLocales: this.candidateLocales,
           keyterms: this.cfg.keyterms.length,
           hasEndpointId: !!this.endpointId,
         },
