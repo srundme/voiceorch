@@ -1422,7 +1422,7 @@ function VoiceIntelPanel({ agentId }: { agentId: number }) {
       <Fingerprint className="h-10 w-10 text-muted-foreground/25" />
       <p className="text-sm font-medium text-muted-foreground/60">No voice prints yet</p>
       <p className="text-xs text-muted-foreground/40 max-w-[260px]">
-        Voice prints are created automatically after calls once Azure Speaker Recognition keys are configured in Admin → Managed Keys.
+        Voice prints are built automatically after each call using the local ECAPA-TDNN speaker model — no external keys required.
       </p>
     </div>
   );
