@@ -81,5 +81,7 @@
     "wouter": "^3.3.5",
     "zod": "catalog:"
   },
-  "dependencies": {}
+  "dependencies": {
+    "gsap": "^3.15.0"
+  }
 }

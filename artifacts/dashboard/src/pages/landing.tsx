@@ -1,711 +1,593 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { Link } from "wouter";
 import { useAuth } from "@/lib/auth";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 
-/* ─── Animated SVG Wave ──────────────────────────────────────────────────── */
-function WaveLeft() {
-  return (
-    <svg viewBox="0 0 900 220" fill="none" xmlns="http://www.w3.org/2000/svg"
-      className="absolute left-0 top-1/2 -translate-y-1/2 w-[55%] opacity-30 pointer-events-none select-none">
-      <path className="wave-path-1"
-        d="M0,110 C60,60 120,160 200,110 C280,60 340,160 420,110 C500,60 560,160 640,110 C720,60 780,160 860,110 C900,90 900,110 900,110"
-        stroke="rgba(255,255,255,0.35)" strokeWidth="1.5" fill="none" />
-      <path className="wave-path-2"
-        d="M0,130 C70,80 130,180 210,130 C290,80 350,180 430,130 C510,80 570,180 650,130 C730,80 790,180 870,130 C900,118 900,130 900,130"
-        stroke="rgba(255,255,255,0.15)" strokeWidth="1" fill="none" />
-      <path className="wave-path-3"
-        d="M0,95 C50,50 110,145 190,95 C270,45 330,145 410,95 C490,45 550,145 630,95 C710,45 770,145 850,95 C890,77 900,95 900,95"
-        stroke="rgba(255,255,255,0.08)" strokeWidth="0.8" fill="none" />
-    </svg>
-  );
-}
+gsap.registerPlugin(ScrollTrigger);
 
-function WaveRight() {
-  return (
-    <svg viewBox="0 0 900 220" fill="none" xmlns="http://www.w3.org/2000/svg"
-      className="absolute right-0 top-1/2 -translate-y-1/2 w-[55%] opacity-50 pointer-events-none select-none" style={{ transform: "translateY(-50%) scaleX(-1)" }}>
-      <path className="wave-path-1"
-        d="M0,110 C60,60 120,160 200,110 C280,60 340,160 420,110 C500,60 560,160 640,110 C720,60 780,160 860,110 C900,90 900,110 900,110"
-        stroke="rgba(249,115,22,0.6)" strokeWidth="2" fill="none" />
-      <path className="wave-path-2"
-        d="M0,130 C70,80 130,180 210,130 C290,80 350,180 430,130 C510,80 570,180 650,130 C730,80 790,180 870,130 C900,118 900,130 900,130"
-        stroke="rgba(249,115,22,0.3)" strokeWidth="1.2" fill="none" />
-      <path className="wave-path-3"
-        d="M0,95 C50,50 110,145 190,95 C270,45 330,145 410,95 C490,45 550,145 630,95 C710,45 770,145 850,95 C890,77 900,95 900,95"
-        stroke="rgba(251,146,60,0.18)" strokeWidth="0.8" fill="none" />
-    </svg>
-  );
-}
+/* ─────────────────────────────────────────────────────────────────────────── */
+/*  DATA                                                                        */
+/* ─────────────────────────────────────────────────────────────────────────── */
 
-/* ─── Scroll reveal hook ─────────────────────────────────────────────────── */
-function useReveal(threshold = 0.15) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setVisible(true); obs.disconnect(); } }, { threshold });
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [threshold]);
-  return { ref, visible };
-}
-
-/* ─── Fanned feature cards ───────────────────────────────────────────────── */
-const UNIQUE_FEATURES = [
-  { icon: "🧠", label: "Persistent\nCaller Memory", color: "#f97316", bg: "linear-gradient(145deg,#f97316,#ea580c)" },
-  { icon: "🔄", label: "Auto-Redial\nOn Drop", color: "#fb923c", bg: "linear-gradient(145deg,#fb923c,#f97316)" },
-  { icon: "⚧", label: "Gender\nDetection", color: "#fdba74", bg: "linear-gradient(145deg,#fdba74,#fb923c)" },
-  { icon: "🎙️", label: "Voice\nPrints", color: "#e5c9b0", bg: "linear-gradient(145deg,#d4a97a,#e2b98c)" },
-  { icon: "📅", label: "Native\nScheduling", color: "#a8a8a8", bg: "linear-gradient(145deg,#6b6b6b,#888)" },
+const DIFFERENTIATORS = [
+  {
+    tag: "01 — MEMORY",
+    headline: "Your agent never\nforgets a caller.",
+    body: "Every call extracts structured facts, episode summaries, and verbatim quotes into a 3-layer memory graph. The next call starts with full context — no repeated intros, no forgotten promises.",
+    accent: "#a855f7",
+    glow: "rgba(168,85,247,0.15)",
+    detail: ["Facts extracted per call", "Episode summaries archived", "Verbatim sentences preserved"],
+    icon: "🧠",
+  },
+  {
+    tag: "02 — RESILIENCE",
+    headline: "Call drops mid-\nconversation? We redial.",
+    body: "Network blip, bad signal, accidental hang-up — SnapServe detects the drop in under 200 ms and automatically redials, resuming with full conversation context. Zero leads lost to bad connections.",
+    accent: "#06b6d4",
+    glow: "rgba(6,182,212,0.15)",
+    detail: ["<200ms drop detection", "Auto-redial with context", "Seamless resume for caller"],
+    icon: "🔄",
+  },
+  {
+    tag: "03 — IDENTITY",
+    headline: "Voice prints.\nGender detection.",
+    body: "Identify returning callers by their voice signature — even from a different number. Real-time gender analysis shapes tone and vocabulary. No other voice AI platform ships both together.",
+    accent: "#f59e0b",
+    glow: "rgba(245,158,11,0.15)",
+    detail: ["Azure Speaker Recognition", "Real-time gender analysis", "Cross-number caller ID"],
+    icon: "🎙️",
+  },
+  {
+    tag: "04 — CAMPAIGNS",
+    headline: "Upload 10,000 leads.\nWatch them get called.",
+    body: "Full outbound campaign engine — CSV import, batch management, retry logic, DNC filtering, live queue monitoring, disposition tracking, and callback scheduling. Not an API you glue together. A platform.",
+    accent: "#22c55e",
+    glow: "rgba(34,197,94,0.15)",
+    detail: ["CSV batch import", "Smart retry + DNC", "Live command center"],
+    icon: "📞",
+  },
+  {
+    tag: "05 — SCHEDULING",
+    headline: "Agent books the\nmeeting mid-call.",
+    body: "Built-in booking engine with Google Calendar sync, availability windows, timezone awareness, and double-booking prevention. The agent books the appointment before the call ends — no Cal.com, no Zapier, no third party.",
+    accent: "#ec4899",
+    glow: "rgba(236,72,153,0.15)",
+    detail: ["Books during the call", "Google Calendar sync", "No third-party needed"],
+    icon: "📅",
+  },
 ];
 
-const CARD_TRANSFORMS = [
-  { rotate: "-12deg", translateX: "-180px", translateY: "8px", z: 1, opacity: 1, scale: 1.05 },
-  { rotate: "-6deg",  translateX: "-80px",  translateY: "4px", z: 2, opacity: 0.92, scale: 1.02 },
-  { rotate: "0deg",   translateX: "0px",    translateY: "0px", z: 3, opacity: 0.85, scale: 1 },
-  { rotate: "6deg",   translateX: "80px",   translateY: "4px", z: 2, opacity: 0.65, scale: 0.97 },
-  { rotate: "12deg",  translateX: "180px",  translateY: "8px", z: 1, opacity: 0.45, scale: 0.94 },
-];
-
-function FanCards() {
-  const { ref, visible } = useReveal(0.1);
-  return (
-    <div ref={ref} className="relative flex justify-center items-center" style={{ height: 340, perspective: "1000px" }}>
-      {UNIQUE_FEATURES.map((f, i) => {
-        const t = CARD_TRANSFORMS[i]!;
-        return (
-          <div key={f.label}
-            style={{
-              position: "absolute",
-              width: 180,
-              height: 220,
-              borderRadius: 20,
-              background: f.bg,
-              zIndex: t.z,
-              transform: visible
-                ? `translateX(${t.translateX}) translateY(${t.translateY}) rotate(${t.rotate}) scale(${t.scale})`
-                : `translateX(0px) translateY(60px) rotate(0deg) scale(0.85)`,
-              opacity: visible ? t.opacity : 0,
-              transition: `transform 0.8s cubic-bezier(0.34,1.2,0.64,1) ${i * 0.07}s, opacity 0.6s ease ${i * 0.07}s`,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 16,
-              boxShadow: i === 0 ? "0 20px 60px rgba(249,115,22,0.4)" : "0 10px 40px rgba(0,0,0,0.5)",
-              cursor: "default",
-            }}>
-            <div style={{ fontSize: 42, lineHeight: 1 }}>{f.icon}</div>
-            <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, fontWeight: 700, color: "#fff", textAlign: "center", lineHeight: 1.4, whiteSpace: "pre-line", opacity: 0.95, letterSpacing: 0 }}>
-              {f.label}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-/* ─── Memory diagram ─────────────────────────────────────────────────────── */
-function MemoryDiagram() {
-  const { ref, visible } = useReveal(0.1);
-  const nodes = [
-    { label: "Caller rings", sub: "phone or webcall", icon: "📞" },
-    { label: "Voice Analysis", sub: "gender + voice print", icon: "🎙️" },
-    { label: "Memory Lookup", sub: "facts · episodes · quotes", icon: "🧠", accent: true },
-    { label: "LLM Response", sub: "context-aware reply", icon: "⚡" },
-    { label: "Booking / Transfer", sub: "action taken mid-call", icon: "📅" },
-  ];
-  return (
-    <div ref={ref} className="flex flex-col items-center gap-6 overflow-x-auto py-4">
-      <div className="flex items-center gap-0 min-w-max">
-        {nodes.map((n, i) => (
-          <div key={n.label} className="flex items-center">
-            {/* Node */}
-            <div style={{
-              opacity: visible ? 1 : 0,
-              transform: visible ? "translateY(0)" : "translateY(30px)",
-              transition: `all 0.6s ease ${i * 0.12}s`,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: 10,
-            }}>
-              <div style={{
-                width: 88, height: 88,
-                borderRadius: 18,
-                background: n.accent ? "linear-gradient(145deg,#f97316,#ea580c)" : "rgba(255,255,255,0.04)",
-                border: n.accent ? "none" : "1px solid rgba(255,255,255,0.1)",
-                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                gap: 4,
-                boxShadow: n.accent ? "0 0 40px rgba(249,115,22,0.35)" : "none",
-              }}>
-                <span style={{ fontSize: 26 }}>{n.icon}</span>
-              </div>
-              <div style={{ textAlign: "center" }}>
-                <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 600, color: n.accent ? "#f97316" : "#fff", letterSpacing: 0 }}>{n.label}</div>
-                <div style={{ fontSize: 10, color: "#555", marginTop: 2 }}>{n.sub}</div>
-              </div>
-            </div>
-            {/* Arrow */}
-            {i < nodes.length - 1 && (
-              <div style={{
-                opacity: visible ? 1 : 0,
-                transition: `opacity 0.4s ease ${i * 0.12 + 0.3}s`,
-                display: "flex", alignItems: "center", padding: "0 8px",
-              }}>
-                <div style={{ height: 1, width: 40, background: "rgba(249,115,22,0.3)" }} />
-                <div style={{ width: 0, height: 0, borderTop: "5px solid transparent", borderBottom: "5px solid transparent", borderLeft: "7px solid rgba(249,115,22,0.5)" }} />
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-      {/* Memory store detail */}
-      <div style={{
-        opacity: visible ? 1 : 0,
-        transform: visible ? "translateY(0)" : "translateY(20px)",
-        transition: "all 0.6s ease 0.7s",
-        display: "flex", gap: 12, marginTop: 8,
-      }}>
-        {["🗂️ Facts\nextracted per call", "📖 Episodes\ncall summaries", "💬 Sentences\nverbatim quotes"].map((item) => {
-          const [icon, ...rest] = item.split(" ");
-          const text = rest.join(" ");
-          return (
-            <div key={text} style={{
-              background: "rgba(249,115,22,0.06)",
-              border: "1px solid rgba(249,115,22,0.2)",
-              borderRadius: 12,
-              padding: "12px 18px",
-              textAlign: "center",
-              minWidth: 140,
-            }}>
-              <div style={{ fontSize: 20, marginBottom: 4 }}>{icon}</div>
-              <div style={{ fontSize: 11, color: "#aaa", lineHeight: 1.5, whiteSpace: "pre-line" }}>{text}</div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-/* ─── Stats ──────────────────────────────────────────────────────────────── */
 const STATS = [
-  { value: "3-layer", label: "Memory Architecture" },
-  { value: "<100ms", label: "Pipeline Latency" },
-  { value: "20+", label: "Providers Supported" },
-  { value: "99.9%", label: "Platform Uptime" },
+  { value: 3, suffix: "-layer", label: "Memory Architecture" },
+  { value: 200, suffix: "ms", label: "Drop Detection Speed", prefix: "<" },
+  { value: 20, suffix: "+", label: "Providers Supported" },
+  { value: 99.9, suffix: "%", label: "Platform Uptime" },
 ];
 
-/* ─── Comparison table ───────────────────────────────────────────────────── */
-const COMPARE_ROWS = [
-  { feature: "Persistent Caller Memory",      bolna: false, snap: true },
-  { feature: "Structured Fact Extraction",    bolna: false, snap: true },
-  { feature: "Auto-Redial on Mid-Call Drop",  bolna: false, snap: true },
-  { feature: "Voice Prints (Speaker ID)",     bolna: false, snap: true },
-  { feature: "Gender Detection",              bolna: false, snap: true },
-  { feature: "Native Booking Engine",         bolna: false, snap: true },
-  { feature: "AI Books Appointment Mid-Call", bolna: false, snap: true },
-  { feature: "Real-Time Command Center",      bolna: false, snap: true },
-  { feature: "Indian Telephony (Vobiz)",      bolna: false, snap: true },
-  { feature: "Campaign Engine + Batches",     bolna: "partial", snap: true },
-  { feature: "Bring Your Own Provider Keys",  bolna: true,  snap: true },
-  { feature: "Knowledge Base",                bolna: true,  snap: true },
+const COMPARE = [
+  { f: "Persistent Caller Memory",      bolna: false },
+  { f: "Structured Fact Extraction",    bolna: false },
+  { f: "Auto-Redial on Mid-Call Drop",  bolna: false },
+  { f: "Voice Prints (Speaker ID)",     bolna: false },
+  { f: "Gender Detection",              bolna: false },
+  { f: "Native Booking Engine",         bolna: false },
+  { f: "AI Books Appointment Mid-Call", bolna: false },
+  { f: "Real-Time Command Center",      bolna: false },
+  { f: "Indian Telephony (Vobiz)",      bolna: false },
+  { f: "Campaign Engine + Batches",     bolna: "partial" },
+  { f: "Bring Your Own Provider Keys",  bolna: true },
+  { f: "Knowledge Base",                bolna: true },
 ];
 
-function CheckMark({ val }: { val: boolean | "partial" }) {
-  if (val === true) return (
-    <div style={{ width: 28, height: 28, borderRadius: "50%", background: "rgba(249,115,22,0.15)", border: "1px solid rgba(249,115,22,0.4)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto" }}>
-      <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 7l3 3 6-6" stroke="#f97316" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-    </div>
-  );
-  if (val === "partial") return (
-    <div style={{ width: 28, height: 28, borderRadius: "50%", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.12)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto" }}>
-      <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 6h6" stroke="#666" strokeWidth="1.8" strokeLinecap="round"/></svg>
-    </div>
-  );
-  return (
-    <div style={{ width: 28, height: 28, borderRadius: "50%", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto" }}>
-      <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 3l6 6M9 3l-6 6" stroke="#333" strokeWidth="1.6" strokeLinecap="round"/></svg>
-    </div>
-  );
-}
+/* ─────────────────────────────────────────────────────────────────────────── */
+/*  COMPONENT                                                                   */
+/* ─────────────────────────────────────────────────────────────────────────── */
 
-/* ─── Main component ─────────────────────────────────────────────────────── */
 export default function LandingPage() {
   const { signIn } = useAuth();
-  const heroRef = useRef<HTMLDivElement>(null);
+  const rootRef   = useRef<HTMLDivElement>(null);
+  const heroRef   = useRef<HTMLDivElement>(null);
+  const orbRef    = useRef<HTMLDivElement>(null);
+  const statsRef  = useRef<HTMLDivElement>(null);
+  const countersRef = useRef<HTMLSpanElement[]>([]);
+
+  /* GSAP setup */
+  useEffect(() => {
+    const ctx = gsap.context(() => {
+
+      /* ── Hero entrance ─────────────────────────────────────────────────── */
+      gsap.from(".hero-badge",   { y: 20, opacity: 0, duration: 0.7, ease: "power3.out", delay: 0.1 });
+      gsap.from(".hero-h1 span",{
+        y: 80, opacity: 0, duration: 1, ease: "power4.out", delay: 0.2, stagger: 0.12,
+      });
+      gsap.from(".hero-sub",    { y: 30, opacity: 0, duration: 0.9, ease: "power3.out", delay: 0.65 });
+      gsap.from(".hero-ctas",   { y: 24, opacity: 0, duration: 0.8, ease: "power3.out", delay: 0.8 });
+      gsap.from(".hero-note",   { opacity: 0, duration: 0.6, delay: 1.1 });
+
+      /* ── Orb parallax ──────────────────────────────────────────────────── */
+      gsap.to(".hero-orb", {
+        y: -120,
+        ease: "none",
+        scrollTrigger: { trigger: heroRef.current, start: "top top", end: "bottom top", scrub: true },
+      });
+
+      /* ── Differentiator cards ──────────────────────────────────────────── */
+      gsap.utils.toArray<HTMLElement>(".diff-card").forEach((card, i) => {
+        gsap.from(card, {
+          y: 70,
+          opacity: 0,
+          duration: 0.9,
+          ease: "power3.out",
+          scrollTrigger: { trigger: card, start: "top 82%", toggleActions: "play none none none" },
+        });
+      });
+
+      /* ── Stats counters ────────────────────────────────────────────────── */
+      gsap.utils.toArray<HTMLSpanElement>(".stat-num").forEach((el, i) => {
+        const stat = STATS[i]!;
+        const obj  = { val: 0 };
+        ScrollTrigger.create({
+          trigger: el,
+          start: "top 85%",
+          onEnter: () => {
+            gsap.to(obj, {
+              val: stat.value,
+              duration: 1.6,
+              ease: "power2.out",
+              onUpdate() {
+                el.textContent = stat.value % 1 !== 0
+                  ? obj.val.toFixed(1)
+                  : Math.round(obj.val).toString();
+              },
+            });
+          },
+          once: true,
+        });
+      });
+
+      /* ── Section reveals ───────────────────────────────────────────────── */
+      gsap.utils.toArray<HTMLElement>(".reveal").forEach(el => {
+        gsap.from(el, {
+          y: 40, opacity: 0, duration: 0.8, ease: "power3.out",
+          scrollTrigger: { trigger: el, start: "top 86%", toggleActions: "play none none none" },
+        });
+      });
+
+    }, rootRef);
+
+    return () => ctx.revert();
+  }, []);
 
   return (
-    <div style={{ minHeight: "100vh", background: "#080808", color: "#fff", fontFamily: "'Inter', sans-serif", overflowX: "hidden", WebkitFontSmoothing: "antialiased" }}>
+    <div ref={rootRef} style={{ background: "#000", color: "#fff", fontFamily: "'Inter',sans-serif", overflowX: "hidden", WebkitFontSmoothing: "antialiased", MozOsxFontSmoothing: "grayscale" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Space+Grotesk:wght@400;500;600;700;800&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Cal+Sans&display=swap');
 
-        @keyframes wave1 {
-          0%   { d: path("M0,110 C60,60 120,160 200,110 C280,60 340,160 420,110 C500,60 560,160 640,110 C720,60 780,160 860,110 C900,90 900,110 900,110"); }
-          50%  { d: path("M0,110 C60,155 120,70 200,110 C280,155 340,70 420,110 C500,155 560,70 640,110 C720,155 780,70 860,110 C900,128 900,110 900,110"); }
-          100% { d: path("M0,110 C60,60 120,160 200,110 C280,60 340,160 420,110 C500,60 560,160 640,110 C720,60 780,160 860,110 C900,90 900,110 900,110"); }
-        }
-        .wave-path-1 { animation: wave1 6s ease-in-out infinite; }
-        .wave-path-2 { animation: wave1 8s ease-in-out infinite reverse; }
-        .wave-path-3 { animation: wave1 5s ease-in-out infinite 1s; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
 
-        @keyframes pulse-ring {
-          0%   { transform: scale(1); opacity: 0.5; }
-          100% { transform: scale(2.2); opacity: 0; }
+        /* Grid overlay */
+        .grid-bg {
+          background-image:
+            linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+          background-size: 60px 60px;
         }
-        .pulse-ring { animation: pulse-ring 2.2s cubic-bezier(0.215,0.61,0.355,1) infinite; }
-        .pulse-ring-2 { animation: pulse-ring 2.2s cubic-bezier(0.215,0.61,0.355,1) 0.7s infinite; }
 
-        @keyframes float-up {
-          from { opacity: 0; transform: translateY(28px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-        .hero-reveal { animation: float-up 0.9s cubic-bezier(0.16,1,0.3,1) both; }
-        .hero-reveal-1 { animation-delay: 0.05s; }
-        .hero-reveal-2 { animation-delay: 0.18s; }
-        .hero-reveal-3 { animation-delay: 0.32s; }
-        .hero-reveal-4 { animation-delay: 0.46s; }
-        .hero-reveal-5 { animation-delay: 0.6s; }
+        /* Gradient text */
+        .grad-purple { background: linear-gradient(135deg, #a855f7, #c084fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        .grad-cyan   { background: linear-gradient(135deg, #06b6d4, #67e8f9); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        .grad-white  { background: linear-gradient(180deg, #fff 60%, rgba(255,255,255,0.55)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
 
-        @keyframes ticker {
-          0%   { transform: translateX(0); }
-          100% { transform: translateX(-50%); }
-        }
-        .ticker-track { animation: ticker 18s linear infinite; display: flex; width: max-content; }
-        .ticker-track:hover { animation-play-state: paused; }
+        /* Ticker */
+        @keyframes ticker { from { transform: translateX(0) } to { transform: translateX(-50%) } }
+        .ticker-inner { animation: ticker 22s linear infinite; display: flex; width: max-content; }
+
+        /* Glow pulse */
+        @keyframes orb-pulse { 0%,100% { opacity:0.55; transform:scale(1) } 50% { opacity:0.75; transform:scale(1.06) } }
+        .orb-anim { animation: orb-pulse 6s ease-in-out infinite; }
+
+        /* Btn hover */
+        .btn-primary:hover { opacity:.9; box-shadow: 0 0 40px rgba(168,85,247,.45); }
+        .btn-ghost:hover   { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.3); }
+        .nav-link:hover    { color:#fff; }
+
+        /* Compare row */
+        .cmp-row:hover { background: rgba(255,255,255,.018); }
+
+        /* Feature card hover */
+        .diff-card:hover .diff-inner { border-color: rgba(255,255,255,.12); }
       `}</style>
 
-      {/* ── NAV ───────────────────────────────────────────────────────────── */}
-      <nav style={{
-        position: "fixed", top: 0, left: 0, right: 0, zIndex: 50,
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "0 40px", height: 60,
-        background: "rgba(8,8,8,0.88)", backdropFilter: "blur(16px)",
-        borderBottom: "1px solid rgba(255,255,255,0.07)",
-      }}>
-        <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 3, width: 22 }}>
-            <div style={{ height: 5, borderRadius: 3, width: 13, background: "#fff" }} />
-            <div style={{ height: 5, borderRadius: 3, width: 17, background: "#555" }} />
-            <div style={{ height: 5, borderRadius: 3, width: 13, background: "#333" }} />
-          </div>
-          <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: "1.05rem", fontWeight: 700, color: "#fff", letterSpacing: "-0.3px" }}>
-            SnapServe <span style={{ color: "#555", fontWeight: 400 }}>AI</span>
-          </span>
+      {/* ── NAV ─────────────────────────────────────────────────────────── */}
+      <nav style={{ position: "fixed", inset: "0 0 auto", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 32px", height: 58, background: "rgba(0,0,0,0.8)", backdropFilter: "blur(20px)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+        <Link href="/" style={{ display: "flex", alignItems: "center", gap: 9, textDecoration: "none" }}>
+          <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
+            <rect width="26" height="26" rx="7" fill="#a855f7"/>
+            <rect x="4" y="7" width="3" height="12" rx="1.5" fill="white" opacity=".9"/>
+            <rect x="9" y="4" width="3" height="18" rx="1.5" fill="white"/>
+            <rect x="14" y="9" width="3" height="8" rx="1.5" fill="white" opacity=".8"/>
+            <rect x="19" y="5" width="3" height="16" rx="1.5" fill="white" opacity=".9"/>
+          </svg>
+          <span style={{ fontWeight: 700, fontSize: 15, letterSpacing: "-0.4px", color: "#fff" }}>SnapServe <span style={{ color: "#555", fontWeight: 400 }}>AI</span></span>
         </Link>
 
-        <div style={{ display: "flex", gap: 36 }} className="hidden md:flex">
-          {["#features", "#how-it-works", "#compare", "#pricing"].map((h, i) => (
-            <a key={h} href={h} style={{ fontSize: "0.875rem", color: "#666", textDecoration: "none", transition: "color 0.2s" }}
-              onMouseEnter={e => (e.currentTarget.style.color = "#fff")}
-              onMouseLeave={e => (e.currentTarget.style.color = "#666")}>
-              {["Features", "How it works", "vs Bolna", "Pricing"][i]}
-            </a>
+        <div style={{ display: "flex", gap: 32 }}>
+          {[["#features","Features"],["#compare","vs Bolna"],["#pricing","Pricing"]].map(([h,l]) => (
+            <a key={h} href={h} className="nav-link" style={{ fontSize: 13.5, color: "#555", textDecoration: "none", transition: "color .15s", fontWeight: 500 }}>{l}</a>
           ))}
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-          <Link href="/sign-in" style={{ fontSize: "0.875rem", color: "#666", textDecoration: "none", transition: "color 0.2s" }}
-            onMouseEnter={e => (e.currentTarget.style.color = "#fff")}
-            onMouseLeave={e => (e.currentTarget.style.color = "#666")}>
-            Sign in
-          </Link>
-          <Link href="/sign-up" style={{
-            display: "inline-flex", alignItems: "center", gap: 6,
-            background: "#f97316", color: "#fff",
-            fontSize: "0.875rem", fontWeight: 600,
-            padding: "9px 20px", borderRadius: 100, textDecoration: "none",
-            transition: "opacity 0.2s, box-shadow 0.2s",
-            boxShadow: "0 0 0 rgba(249,115,22,0)",
-          }}
-            onMouseEnter={e => { e.currentTarget.style.opacity = "0.9"; e.currentTarget.style.boxShadow = "0 0 20px rgba(249,115,22,0.35)"; }}
-            onMouseLeave={e => { e.currentTarget.style.opacity = "1"; e.currentTarget.style.boxShadow = "0 0 0 rgba(249,115,22,0)"; }}>
-            Try for free →
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <Link href="/sign-in" className="nav-link" style={{ fontSize: 13.5, color: "#555", textDecoration: "none", transition: "color .15s", fontWeight: 500 }}>Sign in</Link>
+          <Link href="/sign-up" className="btn-primary" style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#a855f7", color: "#fff", fontSize: 13.5, fontWeight: 600, padding: "8px 18px", borderRadius: 8, textDecoration: "none", transition: "opacity .2s, box-shadow .2s", letterSpacing: "-0.1px" }}>
+            Get started →
           </Link>
         </div>
       </nav>
 
-      {/* ── HERO ──────────────────────────────────────────────────────────── */}
-      <section ref={heroRef} style={{ position: "relative", minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "120px 24px 80px", overflow: "hidden" }}>
-        <WaveLeft />
-        <WaveRight />
+      {/* ── HERO ─────────────────────────────────────────────────────────── */}
+      <section ref={heroRef} className="grid-bg" style={{ position: "relative", minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "120px 24px 100px", overflow: "hidden" }}>
 
-        {/* Center logo + pulse rings */}
-        <div className="hero-reveal hero-reveal-1" style={{ position: "relative", marginBottom: 40 }}>
-          <div className="pulse-ring" style={{ position: "absolute", inset: -20, borderRadius: "50%", border: "1px solid rgba(249,115,22,0.35)" }} />
-          <div className="pulse-ring-2" style={{ position: "absolute", inset: -20, borderRadius: "50%", border: "1px solid rgba(249,115,22,0.2)" }} />
-          <div style={{
-            width: 88, height: 88, borderRadius: 22,
-            background: "linear-gradient(145deg,#f97316,#ea580c)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            boxShadow: "0 0 60px rgba(249,115,22,0.4), 0 0 120px rgba(249,115,22,0.15)",
-            position: "relative", zIndex: 1,
-          }}>
-            <svg width="44" height="44" viewBox="0 0 44 44" fill="none">
-              <rect x="6" y="10" width="4" height="24" rx="2" fill="white" opacity="0.9"/>
-              <rect x="14" y="6" width="4" height="32" rx="2" fill="white"/>
-              <rect x="22" y="13" width="4" height="18" rx="2" fill="white" opacity="0.8"/>
-              <rect x="30" y="8" width="4" height="28" rx="2" fill="white" opacity="0.9"/>
-              <rect x="38" y="16" width="4" height="12" rx="2" fill="white" opacity="0.5"/>
-            </svg>
+        {/* Gradient vignette over grid */}
+        <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 80% 60% at 50% 50%, rgba(0,0,0,0) 0%, #000 100%)", pointerEvents: "none" }} />
+
+        {/* Orbs */}
+        <div className="hero-orb orb-anim" style={{ position: "absolute", top: "15%", left: "50%", transform: "translateX(-50%)", width: 700, height: 700, borderRadius: "50%", background: "radial-gradient(circle, rgba(168,85,247,0.18) 0%, rgba(168,85,247,0.04) 50%, transparent 70%)", pointerEvents: "none", zIndex: 0 }} />
+        <div style={{ position: "absolute", top: "30%", left: "20%", width: 400, height: 400, borderRadius: "50%", background: "radial-gradient(circle, rgba(6,182,212,0.06) 0%, transparent 70%)", pointerEvents: "none", zIndex: 0 }} />
+
+        <div style={{ position: "relative", zIndex: 1, maxWidth: 900 }}>
+          {/* Badge */}
+          <div className="hero-badge" style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "rgba(168,85,247,0.1)", border: "1px solid rgba(168,85,247,0.3)", borderRadius: 100, padding: "6px 16px", marginBottom: 36 }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#a855f7", display: "inline-block", boxShadow: "0 0 8px #a855f7" }} />
+            <span style={{ fontSize: 12, color: "#c084fc", fontWeight: 600, letterSpacing: "0.06em" }}>BETA · NOW LIVE</span>
           </div>
+
+          {/* Headline */}
+          <h1 className="hero-h1" style={{ fontWeight: 800, lineHeight: 1.03, letterSpacing: "-4px", marginBottom: 28, overflow: "hidden" }}>
+            <span className="grad-white" style={{ display: "block", fontSize: "clamp(3.5rem,8vw,7rem)", fontFamily: "Inter,sans-serif" }}>The Voice AI</span>
+            <span className="grad-purple" style={{ display: "block", fontSize: "clamp(3.5rem,8vw,7rem)", fontFamily: "Inter,sans-serif" }}>Platform That</span>
+            <span className="grad-white" style={{ display: "block", fontSize: "clamp(3.5rem,8vw,7rem)", fontFamily: "Inter,sans-serif" }}>Remembers</span>
+          </h1>
+
+          <p className="hero-sub" style={{ fontSize: "clamp(1rem,1.8vw,1.2rem)", color: "#555", lineHeight: 1.7, maxWidth: 500, margin: "0 auto 44px", fontWeight: 400 }}>
+            SnapServe builds a living memory of every caller — facts, history, voice print — so your agent already knows them next time.
+          </p>
+
+          {/* CTAs */}
+          <div className="hero-ctas" style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap", marginBottom: 20 }}>
+            <Link href="/sign-up" className="btn-primary" style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#a855f7", color: "#fff", fontSize: 15, fontWeight: 700, padding: "14px 28px", borderRadius: 10, textDecoration: "none", transition: "opacity .2s, box-shadow .2s", letterSpacing: "-0.2px" }}>
+              Start building free
+            </Link>
+            <a href="#features" className="btn-ghost" style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.04)", color: "#fff", fontSize: 15, fontWeight: 500, padding: "14px 28px", borderRadius: 10, textDecoration: "none", border: "1px solid rgba(255,255,255,0.1)", transition: "background .2s, border-color .2s" }}>
+              See what's different
+            </a>
+          </div>
+
+          <p className="hero-note" style={{ fontSize: 12, color: "#333", letterSpacing: "0.02em" }}>$5 free credit · No card required</p>
         </div>
 
-        <div className="hero-reveal hero-reveal-2" style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "rgba(249,115,22,0.08)", border: "1px solid rgba(249,115,22,0.25)", borderRadius: 100, padding: "6px 16px", marginBottom: 28 }}>
-          <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#f97316", boxShadow: "0 0 8px rgba(249,115,22,0.8)", display: "inline-block" }} className="pulse-ring" />
-          <span style={{ fontSize: "0.78rem", color: "#f97316", fontWeight: 500, letterSpacing: "0.05em" }}>Beta · Now live</span>
-        </div>
-
-        <h1 className="hero-reveal hero-reveal-3" style={{
-          fontFamily: "'Space Grotesk',sans-serif",
-          fontSize: "clamp(2.8rem,6.5vw,5.5rem)",
-          fontWeight: 800, lineHeight: 1.06,
-          letterSpacing: "-2.5px",
-          marginBottom: 22, maxWidth: 800,
-        }}>
-          The Voice AI<br />
-          <span style={{ color: "#2e2e2e" }}>Platform That</span><br />
-          Remembers
-        </h1>
-
-        <p className="hero-reveal hero-reveal-4" style={{ fontSize: "clamp(0.95rem,1.5vw,1.1rem)", color: "#666", lineHeight: 1.7, maxWidth: 520, marginBottom: 40 }}>
-          SnapServe builds a living memory of every caller — facts, history, voice print — so your AI agent already knows them the next time they call.
-        </p>
-
-        <div className="hero-reveal hero-reveal-4" style={{ display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "center", marginBottom: 18 }}>
-          <Link href="/sign-up" style={{
-            display: "inline-flex", alignItems: "center", gap: 8,
-            background: "#f97316", color: "#fff",
-            fontSize: "0.95rem", fontWeight: 700,
-            padding: "14px 28px", borderRadius: 100, textDecoration: "none",
-            boxShadow: "0 0 0 rgba(249,115,22,0)", transition: "all 0.2s",
-          }}
-            onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 0 30px rgba(249,115,22,0.45)"; }}
-            onMouseLeave={e => { e.currentTarget.style.boxShadow = "0 0 0 rgba(249,115,22,0)"; }}>
-            Start building free →
-          </Link>
-          <a href="#features" style={{
-            display: "inline-flex", alignItems: "center", gap: 8,
-            background: "transparent", color: "#fff",
-            fontSize: "0.95rem", fontWeight: 500,
-            padding: "14px 28px", borderRadius: 100, textDecoration: "none",
-            border: "1px solid rgba(255,255,255,0.15)", transition: "border-color 0.2s",
-          }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.35)"; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.15)"; }}>
-            See what's different
-          </a>
-        </div>
-
-        <p className="hero-reveal hero-reveal-5" style={{ fontSize: "0.8rem", color: "#333" }}>$5 free credit · No card required</p>
+        {/* Bottom gradient fade */}
+        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 200, background: "linear-gradient(to bottom, transparent, #000)", pointerEvents: "none" }} />
       </section>
 
-      {/* ── TICKER ────────────────────────────────────────────────────────── */}
-      <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", borderBottom: "1px solid rgba(255,255,255,0.06)", padding: "14px 0", overflow: "hidden", background: "rgba(255,255,255,0.015)" }}>
-        <div className="ticker-track">
-          {[...Array(2)].map((_, ri) =>
-            ["Caller Memory", "Voice Prints", "Auto-Redial", "Gender Detection", "Campaign Engine", "Native Scheduling", "BYOP", "Live Command Center", "Indian Telephony", "Bolna doesn't have this →"].map((item, i) => (
-              <span key={`${ri}-${i}`} style={{ fontSize: "0.75rem", color: item.includes("→") ? "#f97316" : "#333", fontWeight: item.includes("→") ? 600 : 400, letterSpacing: "0.08em", textTransform: "uppercase", padding: "0 40px", whiteSpace: "nowrap" }}>
-                {item}
+      {/* ── TICKER ──────────────────────────────────────────────────────── */}
+      <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)", borderBottom: "1px solid rgba(255,255,255,0.05)", padding: "13px 0", overflow: "hidden" }}>
+        <div className="ticker-inner">
+          {Array.from({ length: 2 }, (_, ri) =>
+            ["Caller Memory", "Auto-Redial", "Voice Prints", "Gender Detection", "Campaign Engine", "Native Scheduling", "BYOP", "Live Command Center", "Indian Telephony", "Bolna doesn't have this"].map((item, i) => (
+              <span key={`${ri}-${i}`} style={{ fontSize: 11, color: item === "Bolna doesn't have this" ? "#a855f7" : "#2a2a2a", fontWeight: item === "Bolna doesn't have this" ? 700 : 500, letterSpacing: "0.12em", textTransform: "uppercase", padding: "0 36px", whiteSpace: "nowrap" }}>
+                {item} {item !== "Bolna doesn't have this" && <span style={{ color: "#1a1a1a", marginLeft: 36 }}>·</span>}
               </span>
             ))
           )}
         </div>
       </div>
 
-      {/* ── UNIQUE FEATURES (FAN CARDS) ───────────────────────────────────── */}
-      <section id="features" style={{ padding: "100px 40px", maxWidth: 1100, margin: "0 auto" }}>
-        <div style={{ textAlign: "center", marginBottom: 24 }}>
-          <p style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", color: "#f97316", marginBottom: 14 }}>5 things Bolna doesn't have</p>
-          <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: "clamp(1.8rem,3.5vw,2.8rem)", fontWeight: 800, letterSpacing: "-1.5px", marginBottom: 14 }}>
-            What we built that<br />no one else did
+      {/* ── 5 DIFFERENTIATORS ───────────────────────────────────────────── */}
+      <section id="features" style={{ padding: "120px 24px", maxWidth: 1100, margin: "0 auto" }}>
+        <div className="reveal" style={{ textAlign: "center", marginBottom: 80 }}>
+          <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#a855f7", marginBottom: 16 }}>Exclusive features</p>
+          <h2 style={{ fontWeight: 800, fontSize: "clamp(2rem,4vw,3.2rem)", letterSpacing: "-2px", lineHeight: 1.1, marginBottom: 16 }}>
+            5 things Bolna doesn't have
           </h2>
-          <p style={{ color: "#555", fontSize: "1rem", maxWidth: 480, margin: "0 auto" }}>
-            These five capabilities are exclusive to SnapServe. You won't find them bundled together anywhere else.
-          </p>
+          <p style={{ color: "#444", fontSize: "1rem", maxWidth: 440, margin: "0 auto" }}>Built from scratch. Not on a roadmap. Shipped today.</p>
         </div>
 
-        <FanCards />
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(320px,1fr))", gap: 1, border: "1px solid rgba(255,255,255,0.07)", borderRadius: 20, overflow: "hidden" }}>
+          {DIFFERENTIATORS.map((d, i) => (
+            <div key={d.tag} className="diff-card" style={{ position: "relative" }}>
+              <div className="diff-inner" style={{ height: "100%", padding: "36px 32px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", transition: "border-color .2s", display: "flex", flexDirection: "column", gap: 20 }}>
+                {/* Glow spot */}
+                <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1, background: `linear-gradient(90deg, transparent, ${d.accent}60, transparent)` }} />
 
-        {/* Feature labels row */}
-        <div style={{ display: "flex", justifyContent: "center", gap: 12, marginTop: 48, flexWrap: "wrap" }}>
-          {UNIQUE_FEATURES.map((f, i) => (
-            <div key={f.label} style={{
-              background: "rgba(255,255,255,0.03)",
-              border: "1px solid rgba(255,255,255,0.08)",
-              borderRadius: 12, padding: "14px 20px",
-              display: "flex", alignItems: "center", gap: 10,
-              transition: "border-color 0.2s",
-            }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(249,115,22,0.3)"; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; }}>
-              <span style={{ fontSize: 20 }}>{f.icon}</span>
-              <div>
-                <div style={{ fontSize: "0.82rem", fontWeight: 600, color: "#fff", lineHeight: 1.3 }}>{f.label.replace("\n", " ")}</div>
-                <div style={{ fontSize: "0.72rem", color: "#444", marginTop: 2 }}>
-                  {["Across all calls", "Zero lost leads", "Real-time analysis", "Cross-call ID", "Mid-call booking"][i]}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: d.accent }}>{d.tag}</span>
+                  <span style={{ fontSize: 28 }}>{d.icon}</span>
                 </div>
+
+                <h3 style={{ fontWeight: 800, fontSize: "1.4rem", letterSpacing: "-0.8px", lineHeight: 1.2, whiteSpace: "pre-line", color: "#fff" }}>{d.headline}</h3>
+
+                <p style={{ fontSize: "0.875rem", color: "#555", lineHeight: 1.7, flex: 1 }}>{d.body}</p>
+
+                <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: 8 }}>
+                  {d.detail.map(dt => (
+                    <li key={dt} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: "0.8rem", color: "#444" }}>
+                      <span style={{ width: 18, height: 18, borderRadius: "50%", background: `${d.accent}18`, border: `1px solid ${d.accent}40`, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M1.5 4.5l2 2 4-4" stroke={d.accent} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      </span>
+                      {dt}
+                    </li>
+                  ))}
+                </ul>
               </div>
             </div>
           ))}
         </div>
       </section>
 
-      {/* ── MEMORY ARCHITECTURE ───────────────────────────────────────────── */}
-      <section id="how-it-works" style={{ padding: "80px 40px", background: "rgba(255,255,255,0.015)", borderTop: "1px solid rgba(255,255,255,0.06)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-        <div style={{ maxWidth: 1000, margin: "0 auto" }}>
-          <div style={{ textAlign: "center", marginBottom: 56 }}>
-            <p style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", color: "#f97316", marginBottom: 14 }}>CALLER MEMORY</p>
-            <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: "clamp(1.8rem,3.5vw,2.8rem)", fontWeight: 800, letterSpacing: "-1.5px", marginBottom: 14 }}>
-              Your agent remembers.<br/>Every call. Every caller.
+      {/* ── MEMORY ARCHITECTURE ─────────────────────────────────────────── */}
+      <section style={{ background: "#050505", borderTop: "1px solid rgba(255,255,255,0.05)", borderBottom: "1px solid rgba(255,255,255,0.05)", padding: "100px 24px" }}>
+        <div style={{ maxWidth: 900, margin: "0 auto" }}>
+          <div className="reveal" style={{ textAlign: "center", marginBottom: 64 }}>
+            <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#a855f7", marginBottom: 16 }}>Memory architecture</p>
+            <h2 style={{ fontWeight: 800, fontSize: "clamp(2rem,4vw,3rem)", letterSpacing: "-2px", lineHeight: 1.1, marginBottom: 14 }}>
+              3 layers. Every call.<br />Zero configuration.
             </h2>
-            <p style={{ color: "#555", fontSize: "1rem", maxWidth: 460, margin: "0 auto" }}>
-              3-layer memory architecture built into every call — no setup, no configuration.
-            </p>
+            <p style={{ color: "#444", fontSize: "0.95rem", maxWidth: 420, margin: "0 auto" }}>SnapServe extracts, stores, and retrieves caller context automatically on every call.</p>
           </div>
-          <MemoryDiagram />
+
+          {/* Pipeline row */}
+          <div className="reveal" style={{ display: "flex", alignItems: "stretch", gap: 0, overflowX: "auto", paddingBottom: 8 }}>
+            {[
+              { label: "Caller Rings",      sub: "phone or webcall",           color: "#6b7280", icon: "📞" },
+              { label: "Voice Analysis",    sub: "gender · voice print",        color: "#a855f7", icon: "🎙️" },
+              { label: "Memory Query",      sub: "facts · episodes · sentences", color: "#a855f7", icon: "🧠", accent: true },
+              { label: "LLM Response",      sub: "context-aware reply",          color: "#06b6d4", icon: "⚡" },
+              { label: "Action Taken",      sub: "book · transfer · callback",   color: "#22c55e", icon: "✅" },
+            ].map((n, i, arr) => (
+              <div key={n.label} style={{ display: "flex", alignItems: "center", flex: i === 2 ? "0 0 auto" : "1 1 0" }}>
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 12, minWidth: 120 }}>
+                  <div style={{ width: 72, height: 72, borderRadius: 18, background: n.accent ? "rgba(168,85,247,0.12)" : "rgba(255,255,255,0.03)", border: n.accent ? "1px solid rgba(168,85,247,0.35)" : "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, boxShadow: n.accent ? "0 0 30px rgba(168,85,247,0.15)" : "none" }}>
+                    {n.icon}
+                  </div>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: n.accent ? "#a855f7" : "#aaa" }}>{n.label}</div>
+                    <div style={{ fontSize: 10, color: "#333", marginTop: 3 }}>{n.sub}</div>
+                  </div>
+                </div>
+                {i < arr.length - 1 && (
+                  <div style={{ display: "flex", alignItems: "center", padding: "0 4px", flexShrink: 0 }}>
+                    <div style={{ width: 32, height: 1, background: "rgba(168,85,247,0.25)" }} />
+                    <div style={{ width: 0, height: 0, borderTop: "4px solid transparent", borderBottom: "4px solid transparent", borderLeft: "5px solid rgba(168,85,247,0.4)" }} />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* 3-layer cards */}
+          <div className="reveal" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginTop: 48 }}>
+            {[
+              { title: "Facts Layer",    desc: "Structured facts extracted per call — budget, intent, family info, product interest", icon: "🗂️", color: "#a855f7" },
+              { title: "Episode Layer",  desc: "AI-written summary of each call stored as a searchable episode in the memory graph", icon: "📖", color: "#06b6d4" },
+              { title: "Sentence Layer", desc: "Verbatim notable quotes preserved word-for-word — what they actually said", icon: "💬", color: "#22c55e" },
+            ].map(c => (
+              <div key={c.title} style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 16, padding: "24px 22px", transition: "border-color .2s" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = `${c.color}50`; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.07)"; }}>
+                <div style={{ fontSize: 24, marginBottom: 12 }}>{c.icon}</div>
+                <div style={{ fontWeight: 700, fontSize: 14, color: c.color, marginBottom: 8 }}>{c.title}</div>
+                <div style={{ fontSize: 12, color: "#444", lineHeight: 1.65 }}>{c.desc}</div>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
-      {/* ── AUTO-REDIAL EXPLAINER ─────────────────────────────────────────── */}
-      <section style={{ padding: "80px 40px", maxWidth: 1100, margin: "0 auto" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 60, alignItems: "center" }}>
-          <div>
-            <p style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", color: "#f97316", marginBottom: 16 }}>AUTO-REDIAL</p>
-            <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: "clamp(1.6rem,3vw,2.4rem)", fontWeight: 800, letterSpacing: "-1px", marginBottom: 16, lineHeight: 1.15 }}>
-              Call drops mid-conversation?<br/>We call back. Automatically.
+      {/* ── STATS ───────────────────────────────────────────────────────── */}
+      <section style={{ padding: "80px 24px" }}>
+        <div style={{ maxWidth: 800, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 0 }}>
+          {STATS.map((s, i) => (
+            <div key={s.label} style={{ textAlign: "center", padding: "32px 16px", borderRight: i < STATS.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none" }}>
+              <div style={{ fontWeight: 800, fontSize: "clamp(2rem,4vw,3rem)", letterSpacing: "-2px", color: "#a855f7", marginBottom: 8, fontVariantNumeric: "tabular-nums" }}>
+                {s.prefix ?? ""}<span className="stat-num">0</span>{s.suffix}
+              </div>
+              <div style={{ fontSize: 11, color: "#333", letterSpacing: "0.04em", textTransform: "uppercase", fontWeight: 600 }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── AUTO-REDIAL DEEP DIVE ────────────────────────────────────────── */}
+      <section style={{ padding: "80px 24px", background: "#050505", borderTop: "1px solid rgba(255,255,255,0.05)", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+        <div style={{ maxWidth: 1000, margin: "0 auto", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 72, alignItems: "center" }}>
+          <div className="reveal">
+            <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#06b6d4", marginBottom: 18 }}>Auto-redial</p>
+            <h2 style={{ fontWeight: 800, fontSize: "clamp(1.8rem,3vw,2.6rem)", letterSpacing: "-1.5px", lineHeight: 1.15, marginBottom: 18 }}>
+              Lost connection.<br />Zero lost leads.
             </h2>
-            <p style={{ color: "#555", fontSize: "1rem", lineHeight: 1.7, marginBottom: 28 }}>
-              When a call disconnects unexpectedly — network drop, user hung up by mistake — SnapServe detects it and redials within seconds, with full context preserved. No lead is ever lost to a bad connection.
+            <p style={{ color: "#444", fontSize: "0.95rem", lineHeight: 1.75, marginBottom: 28 }}>
+              Network blip, accidental hang-up, bad signal — SnapServe detects the disconnect in under 200 ms and redials automatically. The caller picks up exactly where they left off.
             </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {["Drop detected in &lt;200ms", "Redial with full conversation context", "Caller picks up where they left off"].map(t => (
-                <div key={t} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ width: 20, height: 20, borderRadius: "50%", background: "rgba(249,115,22,0.12)", border: "1px solid rgba(249,115,22,0.3)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5.5l2 2 4-4" stroke="#f97316" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {["Drop detected in <200ms", "Redial with full context preserved", "Caller resumes — no re-intro needed"].map(t => (
+                <div key={t} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ width: 22, height: 22, borderRadius: "50%", background: "rgba(6,182,212,0.1)", border: "1px solid rgba(6,182,212,0.3)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5.5l2 2 4-4" stroke="#06b6d4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   </div>
-                  <span style={{ fontSize: "0.875rem", color: "#888" }} dangerouslySetInnerHTML={{ __html: t }} />
+                  <span style={{ fontSize: "0.85rem", color: "#555" }}>{t}</span>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Visual: drop → redial diagram */}
-          <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 20, padding: 32 }}>
+          {/* Timeline visual */}
+          <div className="reveal" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 20, padding: 32 }}>
             {[
-              { step: "1", label: "Call active", detail: "Agent mid-conversation with caller", color: "#22c55e", icon: "📞" },
-              { step: "2", label: "Drop detected", detail: "Connection lost · 180ms detection", color: "#ef4444", icon: "⚡" },
-              { step: "3", label: "Auto-redial", detail: "Calling back with full context", color: "#f97316", icon: "🔄" },
-              { step: "4", label: "Reconnected", detail: "Conversation resumes seamlessly", color: "#22c55e", icon: "✅" },
+              { step: "Active call",     detail: "Agent mid-conversation",              icon: "📞", color: "#22c55e" },
+              { step: "Drop detected",   detail: "180ms · connection lost",             icon: "⚡", color: "#ef4444" },
+              { step: "Auto-redial",     detail: "Calling back with full memory",       icon: "🔄", color: "#f59e0b" },
+              { step: "Reconnected",     detail: "Conversation resumes seamlessly",      icon: "✅", color: "#22c55e" },
             ].map((s, i) => (
               <div key={s.step}>
-                <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 0" }}>
-                  <div style={{ width: 36, height: 36, borderRadius: "50%", background: `${s.color}18`, border: `1px solid ${s.color}40`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                    <span style={{ fontSize: 16 }}>{s.icon}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 0" }}>
+                  <div style={{ width: 40, height: 40, borderRadius: "50%", background: `${s.color}12`, border: `1px solid ${s.color}40`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>
+                    {s.icon}
                   </div>
                   <div>
-                    <div style={{ fontSize: "0.85rem", fontWeight: 600, color: s.color }}>{s.label}</div>
-                    <div style={{ fontSize: "0.75rem", color: "#444" }}>{s.detail}</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: s.color }}>{s.step}</div>
+                    <div style={{ fontSize: 11, color: "#333", marginTop: 2 }}>{s.detail}</div>
                   </div>
                 </div>
-                {i < 3 && <div style={{ marginLeft: 18, width: 1, height: 16, background: "rgba(255,255,255,0.06)" }} />}
+                {i < 3 && <div style={{ marginLeft: 20, width: 1, height: 14, background: "rgba(255,255,255,0.04)" }} />}
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── STATS ─────────────────────────────────────────────────────────── */}
-      <section style={{ background: "rgba(249,115,22,0.04)", borderTop: "1px solid rgba(249,115,22,0.1)", borderBottom: "1px solid rgba(249,115,22,0.1)", padding: "60px 40px" }}>
-        <div style={{ maxWidth: 900, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 2 }}>
-          {STATS.map((s, i) => (
-            <div key={s.label} style={{
-              textAlign: "center", padding: "28px 16px",
-              borderRight: i < STATS.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none",
-            }}>
-              <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: "clamp(1.6rem,3vw,2.4rem)", fontWeight: 800, letterSpacing: "-1px", color: "#f97316", marginBottom: 8 }}>{s.value}</div>
-              <div style={{ fontSize: "0.8rem", color: "#444", letterSpacing: "0.02em" }}>{s.label}</div>
+      {/* ── COMPARISON ──────────────────────────────────────────────────── */}
+      <section id="compare" style={{ padding: "100px 24px" }}>
+        <div style={{ maxWidth: 860, margin: "0 auto" }}>
+          <div className="reveal" style={{ textAlign: "center", marginBottom: 60 }}>
+            <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#a855f7", marginBottom: 16 }}>vs Bolna AI</p>
+            <h2 style={{ fontWeight: 800, fontSize: "clamp(2rem,4vw,3rem)", letterSpacing: "-2px", lineHeight: 1.1, marginBottom: 12 }}>Feature by feature</h2>
+            <p style={{ color: "#444", fontSize: "0.95rem" }}>Everything Bolna is missing that SnapServe ships today.</p>
+          </div>
+
+          <div className="reveal" style={{ border: "1px solid rgba(255,255,255,0.07)", borderRadius: 20, overflow: "hidden" }}>
+            {/* Header */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 160px 160px", background: "rgba(255,255,255,0.03)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+              <div style={{ padding: "16px 24px", fontSize: 11, color: "#333", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" }}>Feature</div>
+              <div style={{ padding: "16px 24px", textAlign: "center", fontSize: 13, color: "#444", fontWeight: 600 }}>Bolna AI</div>
+              <div style={{ padding: "16px 24px", textAlign: "center", fontSize: 13, fontWeight: 700, background: "rgba(168,85,247,0.07)", borderLeft: "1px solid rgba(168,85,247,0.12)", color: "#a855f7" }}>SnapServe ✦</div>
             </div>
-          ))}
+
+            {COMPARE.map((row, i) => (
+              <div key={row.f} className="cmp-row" style={{ display: "grid", gridTemplateColumns: "1fr 160px 160px", borderBottom: i < COMPARE.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none", transition: "background .15s" }}>
+                <div style={{ padding: "13px 24px", fontSize: 13.5, color: "#555", display: "flex", alignItems: "center" }}>{row.f}</div>
+                <div style={{ padding: "13px 24px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {row.bolna === true
+                    ? <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8.5l3 3 7-7" stroke="#444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    : row.bolna === "partial"
+                    ? <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 8h8" stroke="#333" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                    : <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 3l8 8M11 3l-8 8" stroke="#222" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                  }
+                </div>
+                <div style={{ padding: "13px 24px", display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(168,85,247,0.03)", borderLeft: "1px solid rgba(168,85,247,0.07)" }}>
+                  <div style={{ width: 22, height: 22, borderRadius: "50%", background: "rgba(168,85,247,0.12)", border: "1px solid rgba(168,85,247,0.35)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5.5l2 2 4-4" stroke="#a855f7" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
-      {/* ── COMPARISON TABLE ──────────────────────────────────────────────── */}
-      <section id="compare" style={{ padding: "100px 40px", maxWidth: 900, margin: "0 auto" }}>
-        <div style={{ textAlign: "center", marginBottom: 56 }}>
-          <p style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", color: "#f97316", marginBottom: 14 }}>VS BOLNA AI</p>
-          <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: "clamp(1.8rem,3.5vw,2.8rem)", fontWeight: 800, letterSpacing: "-1.5px", marginBottom: 12 }}>
-            Feature-by-feature
-          </h2>
-          <p style={{ color: "#555", fontSize: "0.95rem" }}>Everything Bolna is missing that SnapServe ships today.</p>
-        </div>
-
-        <div style={{ border: "1px solid rgba(255,255,255,0.07)", borderRadius: 20, overflow: "hidden" }}>
-          {/* Header */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 180px 180px", background: "rgba(255,255,255,0.02)", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
-            <div style={{ padding: "18px 24px", fontSize: "0.75rem", color: "#444", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" }}>Feature</div>
-            <div style={{ padding: "18px 24px", fontSize: "0.85rem", color: "#555", fontWeight: 600, textAlign: "center" }}>Bolna AI</div>
-            <div style={{ padding: "18px 24px", fontSize: "0.85rem", color: "#f97316", fontWeight: 700, textAlign: "center", background: "rgba(249,115,22,0.06)", borderLeft: "1px solid rgba(249,115,22,0.15)" }}>SnapServe ✦</div>
+      {/* ── PRICING ─────────────────────────────────────────────────────── */}
+      <section id="pricing" style={{ padding: "80px 24px", background: "#050505", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+        <div style={{ maxWidth: 960, margin: "0 auto" }}>
+          <div className="reveal" style={{ marginBottom: 56 }}>
+            <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#a855f7", marginBottom: 16 }}>Pricing</p>
+            <h2 style={{ fontWeight: 800, fontSize: "clamp(2rem,4vw,3rem)", letterSpacing: "-2px", lineHeight: 1.1, marginBottom: 10 }}>Pay per minute.<br/>No surprises.</h2>
+            <p style={{ color: "#444", fontSize: "0.95rem" }}>Bring your own provider keys. You only pay SnapServe for orchestration.</p>
           </div>
 
-          {COMPARE_ROWS.map((row, i) => (
-            <div key={row.feature} style={{
-              display: "grid", gridTemplateColumns: "1fr 180px 180px",
-              borderBottom: i < COMPARE_ROWS.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none",
-              transition: "background 0.15s",
-            }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.015)"; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = ""; }}>
-              <div style={{ padding: "14px 24px", fontSize: "0.875rem", color: "#999", display: "flex", alignItems: "center" }}>{row.feature}</div>
-              <div style={{ padding: "14px 24px", display: "flex", alignItems: "center", justifyContent: "center" }}><CheckMark val={row.bolna} /></div>
-              <div style={{ padding: "14px 24px", display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(249,115,22,0.03)", borderLeft: "1px solid rgba(249,115,22,0.08)" }}><CheckMark val={row.snap} /></div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ── PRICING ───────────────────────────────────────────────────────── */}
-      <section id="pricing" style={{ padding: "80px 40px", background: "rgba(255,255,255,0.015)", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-        <div style={{ maxWidth: 1000, margin: "0 auto" }}>
-          <div style={{ marginBottom: 56 }}>
-            <p style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", color: "#f97316", marginBottom: 16 }}>PRICING</p>
-            <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: "clamp(2rem,4vw,3rem)", fontWeight: 800, letterSpacing: "-1.5px", marginBottom: 12 }}>Pay per minute.<br/>No surprises.</h2>
-            <p style={{ color: "#555", fontSize: "0.95rem" }}>Bring your own provider keys — you pay SnapServe for orchestration only.</p>
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16 }}>
+          <div className="reveal" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14 }}>
             {[
-              { tier: "Developer", price: "$0.08", unit: "/ min", highlight: false, features: ["Standard LLM models", "Basic voice clones", "Up to 10 concurrent calls", "Email support", "Caller memory included"] },
-              { tier: "Production", price: "$0.12", unit: "/ min", highlight: true, features: ["All premium LLM models", "Ultra-low latency voices", "500 concurrent calls", "Smart SIP escalation", "Priority support"] },
-              { tier: "Enterprise", price: "Custom", unit: "", highlight: false, features: ["Dedicated infrastructure", "Custom model fine-tuning", "Unlimited concurrency", "24/7 Slack Connect support", "SLA guarantee"] },
+              { tier: "Developer", price: "$0.08", unit: "/min", hi: false, features: ["Standard LLM models", "Basic voice clones", "10 concurrent calls", "Email support", "Caller memory included"] },
+              { tier: "Production", price: "$0.12", unit: "/min", hi: true,  features: ["All LLM models", "Ultra-low latency voices", "500 concurrent calls", "Priority support", "Smart SIP escalation"] },
+              { tier: "Enterprise", price: "Custom", unit: "",    hi: false, features: ["Dedicated infrastructure", "Custom model fine-tuning", "Unlimited concurrency", "24/7 Slack support", "SLA guarantee"] },
             ].map(plan => (
-              <div key={plan.tier} style={{
-                background: plan.highlight ? "rgba(249,115,22,0.06)" : "rgba(255,255,255,0.02)",
-                border: plan.highlight ? "1px solid rgba(249,115,22,0.3)" : "1px solid rgba(255,255,255,0.07)",
-                borderRadius: 20, padding: 28, display: "flex", flexDirection: "column", gap: 20,
-                transition: "border-color 0.2s",
-              }}
-                onMouseEnter={e => { if (!plan.highlight) (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.15)"; }}
-                onMouseLeave={e => { if (!plan.highlight) (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.07)"; }}>
+              <div key={plan.tier} style={{ position: "relative", background: plan.hi ? "rgba(168,85,247,0.07)" : "rgba(255,255,255,0.02)", border: plan.hi ? "1px solid rgba(168,85,247,0.3)" : "1px solid rgba(255,255,255,0.07)", borderRadius: 18, padding: 28, display: "flex", flexDirection: "column", gap: 22, transition: "border-color .2s" }}
+                onMouseEnter={e => { if (!plan.hi) (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.14)"; }}
+                onMouseLeave={e => { if (!plan.hi) (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.07)"; }}>
+                {plan.hi && <div style={{ position: "absolute", top: -1, left: 24, right: 24, height: 1, background: "linear-gradient(90deg, transparent, #a855f7, transparent)" }} />}
                 <div>
-                  <div style={{ fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: plan.highlight ? "#f97316" : "#444", marginBottom: 8 }}>{plan.tier}</div>
-                  <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: "2.2rem", fontWeight: 800, letterSpacing: "-1px", lineHeight: 1 }}>
-                    {plan.price}<span style={{ fontSize: "0.95rem", fontWeight: 400, color: "#444", marginLeft: 4 }}>{plan.unit}</span>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: plan.hi ? "#a855f7" : "#333", marginBottom: 10 }}>{plan.tier}</div>
+                  <div style={{ fontWeight: 800, fontSize: "2.2rem", letterSpacing: "-1.5px", lineHeight: 1 }}>
+                    {plan.price}<span style={{ fontSize: "0.9rem", fontWeight: 400, color: "#333", marginLeft: 4 }}>{plan.unit}</span>
                   </div>
                 </div>
                 <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: 10, flex: 1 }}>
                   {plan.features.map(f => (
-                    <li key={f} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: "0.85rem", color: "#666" }}>
-                      <span style={{ width: 5, height: 5, borderRadius: "50%", background: plan.highlight ? "#f97316" : "rgba(255,255,255,0.2)", flexShrink: 0, display: "inline-block" }} />
+                    <li key={f} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: "#444" }}>
+                      <span style={{ width: 4, height: 4, borderRadius: "50%", background: plan.hi ? "#a855f7" : "#333", flexShrink: 0 }} />
                       {f}
                     </li>
                   ))}
                 </ul>
-                {plan.tier === "Enterprise" ? (
-                  <a href="mailto:sales@snapserve.ai" style={{ display: "block", textAlign: "center", padding: "11px 20px", borderRadius: 100, fontSize: "0.875rem", fontWeight: 600, border: "1px solid rgba(255,255,255,0.15)", color: "#fff", textDecoration: "none", transition: "background 0.2s" }}
-                    onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = ""; }}>
-                    Contact sales
-                  </a>
-                ) : (
-                  <Link href="/sign-up" style={{
-                    display: "block", textAlign: "center", padding: "11px 20px", borderRadius: 100,
-                    fontSize: "0.875rem", fontWeight: 700, textDecoration: "none",
-                    background: plan.highlight ? "#f97316" : "transparent",
-                    color: plan.highlight ? "#fff" : "#fff",
-                    border: plan.highlight ? "none" : "1px solid rgba(255,255,255,0.15)",
-                    transition: "all 0.2s",
-                  }}
-                    onMouseEnter={e => { if (!plan.highlight) e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
-                    onMouseLeave={e => { if (!plan.highlight) e.currentTarget.style.background = "transparent"; }}>
+                {plan.tier === "Enterprise"
+                  ? <a href="mailto:sales@snapserve.ai" className="btn-ghost" style={{ display: "block", textAlign: "center", padding: "11px 0", borderRadius: 9, fontSize: 13.5, fontWeight: 600, border: "1px solid rgba(255,255,255,0.1)", color: "#fff", textDecoration: "none", transition: "background .2s, border-color .2s" }}>Contact sales</a>
+                  : <Link href="/sign-up" style={{ display: "block", textAlign: "center", padding: "11px 0", borderRadius: 9, fontSize: 13.5, fontWeight: 700, background: plan.hi ? "#a855f7" : "rgba(255,255,255,0.05)", color: "#fff", textDecoration: "none", border: plan.hi ? "none" : "1px solid rgba(255,255,255,0.08)", transition: "opacity .2s" }}
+                    onMouseEnter={e => { e.currentTarget.style.opacity = "0.85"; }}
+                    onMouseLeave={e => { e.currentTarget.style.opacity = "1"; }}>
                     Start free
                   </Link>
-                )}
+                }
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── CTA BANNER ────────────────────────────────────────────────────── */}
-      <section style={{ padding: "80px 40px" }}>
-        <div style={{
-          maxWidth: 900, margin: "0 auto",
-          background: "linear-gradient(135deg, rgba(249,115,22,0.12), rgba(234,88,12,0.06))",
-          border: "1px solid rgba(249,115,22,0.2)",
-          borderRadius: 28, padding: "60px 48px",
-          textAlign: "center",
-          position: "relative", overflow: "hidden",
-        }}>
-          <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse at 50% 0%, rgba(249,115,22,0.08) 0%, transparent 70%)", pointerEvents: "none" }} />
-          <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: "clamp(1.8rem,3.5vw,2.8rem)", fontWeight: 800, letterSpacing: "-1.5px", marginBottom: 16, position: "relative" }}>
-            Your callers deserve<br />an agent that remembers them.
-          </h2>
-          <p style={{ color: "#666", fontSize: "1rem", maxWidth: 400, margin: "0 auto 32px", position: "relative" }}>
-            Get started in minutes. $5 free credit included. No credit card required.
-          </p>
-          <Link href="/sign-up" style={{
-            display: "inline-flex", alignItems: "center", gap: 8,
-            background: "#f97316", color: "#fff",
-            fontSize: "1rem", fontWeight: 700,
-            padding: "16px 36px", borderRadius: 100, textDecoration: "none",
-            boxShadow: "0 0 40px rgba(249,115,22,0.4)",
-            transition: "box-shadow 0.2s",
-            position: "relative",
-          }}
-            onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 0 60px rgba(249,115,22,0.6)"; }}
-            onMouseLeave={e => { e.currentTarget.style.boxShadow = "0 0 40px rgba(249,115,22,0.4)"; }}>
-            Start building free →
-          </Link>
+      {/* ── CTA ─────────────────────────────────────────────────────────── */}
+      <section style={{ padding: "100px 24px" }}>
+        <div style={{ maxWidth: 760, margin: "0 auto", textAlign: "center" }}>
+          <div className="reveal" style={{ position: "relative", background: "rgba(168,85,247,0.05)", border: "1px solid rgba(168,85,247,0.18)", borderRadius: 24, padding: "72px 48px", overflow: "hidden" }}>
+            <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: 500, height: 300, borderRadius: "50%", background: "radial-gradient(ellipse, rgba(168,85,247,0.12) 0%, transparent 70%)", pointerEvents: "none" }} />
+            <h2 style={{ fontWeight: 800, fontSize: "clamp(1.8rem,4vw,3rem)", letterSpacing: "-2px", lineHeight: 1.1, marginBottom: 16, position: "relative" }}>
+              Your callers deserve an<br />agent that remembers them.
+            </h2>
+            <p style={{ color: "#444", fontSize: "0.95rem", marginBottom: 36, position: "relative" }}>
+              $5 free credit. No credit card. Takes 2 minutes.
+            </p>
+            <Link href="/sign-up" className="btn-primary" style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#a855f7", color: "#fff", fontSize: 15, fontWeight: 700, padding: "15px 36px", borderRadius: 10, textDecoration: "none", transition: "opacity .2s, box-shadow .2s", letterSpacing: "-0.2px", position: "relative", boxShadow: "0 0 40px rgba(168,85,247,0.3)" }}>
+              Start building free →
+            </Link>
+          </div>
         </div>
       </section>
 
-      {/* ── FOOTER ────────────────────────────────────────────────────────── */}
-      <footer style={{ borderTop: "1px solid rgba(255,255,255,0.06)", padding: "48px 40px" }}>
-        <div style={{ maxWidth: 1100, margin: "0 auto", display: "flex", flexDirection: "column", gap: 32 }}>
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 32 }}>
-            <div style={{ maxWidth: 260 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 3, width: 20 }}>
-                  <div style={{ height: 4, borderRadius: 2, width: 12, background: "#f97316" }} />
-                  <div style={{ height: 4, borderRadius: 2, width: 16, background: "#555" }} />
-                  <div style={{ height: 4, borderRadius: 2, width: 12, background: "#333" }} />
-                </div>
-                <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: "0.95rem", fontWeight: 700, color: "#fff" }}>
-                  SnapServe AI
-                </span>
+      {/* ── FOOTER ──────────────────────────────────────────────────────── */}
+      <footer style={{ borderTop: "1px solid rgba(255,255,255,0.05)", padding: "48px 32px" }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 36, marginBottom: 48 }}>
+            <div style={{ maxWidth: 220 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+                <svg width="22" height="22" viewBox="0 0 26 26" fill="none">
+                  <rect width="26" height="26" rx="7" fill="#a855f7"/>
+                  <rect x="4" y="7" width="3" height="12" rx="1.5" fill="white" opacity=".9"/>
+                  <rect x="9" y="4" width="3" height="18" rx="1.5" fill="white"/>
+                  <rect x="14" y="9" width="3" height="8" rx="1.5" fill="white" opacity=".8"/>
+                  <rect x="19" y="5" width="3" height="16" rx="1.5" fill="white" opacity=".9"/>
+                </svg>
+                <span style={{ fontWeight: 700, fontSize: 14, color: "#fff", letterSpacing: "-0.3px" }}>SnapServe AI</span>
               </div>
-              <p style={{ fontSize: "0.8rem", color: "#333", lineHeight: 1.6 }}>Carrier-grade voice orchestration for the AI era.</p>
+              <p style={{ fontSize: 12, color: "#2a2a2a", lineHeight: 1.65 }}>The voice orchestration platform that remembers every caller.</p>
             </div>
-
             <div style={{ display: "flex", gap: 60, flexWrap: "wrap" }}>
               {[
-                { title: "Platform", links: ["Assistants", "Campaigns", "Scheduling", "Providers", "Voices"] },
-                { title: "Developers", links: ["API Reference", "Documentation", "Status"] },
-                { title: "Company", links: ["Privacy", "Terms", "Contact"] },
+                { title: "Platform", links: ["Assistants","Campaigns","Scheduling","Providers","Voices"] },
+                { title: "Developers", links: ["API Reference","Docs","Status","Changelog"] },
+                { title: "Company", links: ["Privacy","Terms","Contact"] },
               ].map(col => (
                 <div key={col.title}>
-                  <p style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#333", marginBottom: 16 }}>{col.title}</p>
+                  <p style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "#252525", marginBottom: 16 }}>{col.title}</p>
                   <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                     {col.links.map(l => (
-                      <a key={l} href="#" style={{ fontSize: "0.8rem", color: "#444", textDecoration: "none", transition: "color 0.2s" }}
-                        onMouseEnter={e => { e.currentTarget.style.color = "#aaa"; }}
-                        onMouseLeave={e => { e.currentTarget.style.color = "#444"; }}>
-                        {l}
-                      </a>
+                      <a key={l} href="#" className="nav-link" style={{ fontSize: 13, color: "#333", textDecoration: "none", transition: "color .15s" }}>{l}</a>
                     ))}
                   </div>
                 </div>
               ))}
             </div>
           </div>
-
-          <div style={{ borderTop: "1px solid rgba(255,255,255,0.04)", paddingTop: 24, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
-            <p style={{ fontSize: "0.78rem", color: "#2a2a2a" }}>© 2026 SnapServe AI. All rights reserved.</p>
-            <p style={{ fontSize: "0.78rem", color: "#f97316", opacity: 0.5 }}>Built on open-source · Bolna inspired</p>
+          <div style={{ borderTop: "1px solid rgba(255,255,255,0.04)", paddingTop: 24, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+            <p style={{ fontSize: 12, color: "#1f1f1f" }}>© 2026 SnapServe AI. All rights reserved.</p>
+            <p style={{ fontSize: 12, color: "#a855f7", opacity: 0.4, letterSpacing: "0.04em" }}>Built on open-source</p>
           </div>
         </div>
       </footer>
