@@ -99,6 +99,7 @@ function QueryClientCacheInvalidator() {
 
 function SignInPage() {
   const { signIn } = useAuth();
+  const [, navigate] = useLocation();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -124,6 +125,7 @@ function SignInPage() {
         setError(data.error ?? "Something went wrong. Please try again.");
       } else {
         signIn(data.token);
+        navigate("/app");
       }
     } catch {
       setError("Network error. Please check your connection and try again.");
