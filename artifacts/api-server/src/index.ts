@@ -114,30 +114,33 @@ if (agnostApiKey) {
   agnost.init(agnostApiKey, { debug: process.env["NODE_ENV"] !== "production" });
 }
 
-// Run DB migrations before accepting traffic so tables always exist.
-const migrationsFolder = join(dirname(fileURLToPath(import.meta.url)), "../../../lib/db/drizzle");
-try {
-  await migrate(db, { migrationsFolder });
-  logger.info({ migrationsFolder }, "DB migrations applied");
-} catch (err) {
-  logger.error({ err }, "DB migration failed — check DATABASE_URL and schema");
-  process.exit(1);
-}
-
+// Start server first so the healthcheck probe can reach /api/healthz immediately.
+// Migrations run in the background after the port is bound.
 server.listen(port, () => {
   logger.info({ port }, "Server listening");
-  // Initialise audio pool after the server is already listening so the port is
-  // immediately available for the deployment health-check probe.
   initAudioPool(new URL(`file://${workerFile}`));
-  void seedManagedKeyFromEnv("managed_qwen_key",     "GROQ_API_KEY");
-  void seedManagedKeyFromEnv("managed_sarvam_key",   "SARVAM_API_KEY");
-  void seedManagedKeyFromEnv("managed_cartesia_key", "CARTESIA_API_KEY");
-  void migrateSaarikaToSaaras();
-  startCallbackPoller();
-  startSpikeChecker();
-  startAlertSweep();
-  startRateLimitCleanup();
-  startBatchScheduler();
+
+  // Run DB migrations after the port is open so Railway's health-check passes
+  // while the schema is being applied. Services that need tables will become
+  // available within seconds; the server gracefully exits if migration fails.
+  const migrationsFolder = join(dirname(fileURLToPath(import.meta.url)), "../../../lib/db/drizzle");
+  migrate(db, { migrationsFolder })
+    .then(() => {
+      logger.info({ migrationsFolder }, "DB migrations applied");
+      void seedManagedKeyFromEnv("managed_qwen_key",     "GROQ_API_KEY");
+      void seedManagedKeyFromEnv("managed_sarvam_key",   "SARVAM_API_KEY");
+      void seedManagedKeyFromEnv("managed_cartesia_key", "CARTESIA_API_KEY");
+      void migrateSaarikaToSaaras();
+      startCallbackPoller();
+      startSpikeChecker();
+      startAlertSweep();
+      startRateLimitCleanup();
+      startBatchScheduler();
+    })
+    .catch((err: unknown) => {
+      logger.error({ err }, "DB migration failed — check DATABASE_URL and schema");
+      process.exit(1);
+    });
 });
 
 function gracefulShutdown(signal: string) {
