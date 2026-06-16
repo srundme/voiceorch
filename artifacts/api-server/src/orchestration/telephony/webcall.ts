@@ -533,10 +533,22 @@ export async function handleWebCallWebSocket(
   // Each spoken word takes ~300ms ≈ 2–3 frames at 128ms.
   // The formula 6 × 40ms was calibrated for the telephony pipeline (40ms chunks).
   // Scale to webcall frame rate: 6 * 40ms / 128ms ≈ 2 frames per word.
-  const effectiveBargeInMinFrames = Math.max(
+  let effectiveBargeInMinFrames = Math.max(
     BARGE_IN_MIN_FRAMES,
     Math.round(wordsForInterruption * 6 * 40 / WEBCALL_FRAME_MS),
   );
+  // P1-J: Stop Speaking Plan — override barge-in min frames when configured
+  const stopSpeakingPlanCfg = agentCfg["stopSpeakingPlan"] as { numWords?: number; voiceSeconds?: number; backOffSeconds?: number } | undefined;
+  if (stopSpeakingPlanCfg) {
+    const framesFromWords = (stopSpeakingPlanCfg.numWords ?? 0) > 0
+      ? Math.round((stopSpeakingPlanCfg.numWords ?? 0) * 6 * 40 / WEBCALL_FRAME_MS)
+      : 0;
+    const framesFromTime = (stopSpeakingPlanCfg.voiceSeconds ?? 0) > 0
+      ? Math.round((stopSpeakingPlanCfg.voiceSeconds ?? 0) * 1000 / WEBCALL_FRAME_MS)
+      : 0;
+    const combined = Math.max(framesFromWords, framesFromTime);
+    if (combined > 0) effectiveBargeInMinFrames = combined;
+  }
   const incrementalDelayMs = (agentCfg["incrementalDelay"] as number | undefined) ?? 0;
   // Per-agent endpointing: how long to wait after speech ends before sending to STT.
   // Falls back to VAD_SILENCE_MS (200ms) if not configured by the user.
@@ -544,6 +556,11 @@ export async function handleWebCallWebSocket(
     (agentCfg["vadSilenceMs"] as number | undefined) ?? VAD_SILENCE_MS,
   ));
   const hangupAfterLlmCall = (agentCfg["hangupAfterLlmCall"] as boolean | undefined) ?? false;
+  // P1-I: Start Speaking Plan — content-based delay before triggering LLM response
+  const startSpeakingPlanCfg = agentCfg["startSpeakingPlan"] as {
+    waitSeconds?: number; onPunctuationSeconds?: number;
+    onNoPunctuationSeconds?: number; onNumberSeconds?: number;
+  } | undefined;
 
   // ── Ambient noise ─────────────────────────────────────────────────────────
   const ambientEnabled = (agentCfg["ambientNoiseEnabled"] as boolean | undefined) ?? false;
@@ -940,6 +957,23 @@ export async function handleWebCallWebSocket(
       const toolDefs = buildToolDefs(agentTools);
       let triggeredToolName: string | null = null;
       let triggeredToolArgs: Record<string, unknown> = {};
+
+      // P1-I: Start Speaking Plan — content-based delay before triggering LLM
+      if (startSpeakingPlanCfg && !interrupted) {
+        const lastChar = userText.trimEnd().slice(-1);
+        let spDelay = 0;
+        if (/[.?!।]/.test(lastChar)) {
+          spDelay = Math.round((startSpeakingPlanCfg.onPunctuationSeconds ?? 0) * 1000);
+        } else if (/[0-9]/.test(lastChar)) {
+          spDelay = Math.round((startSpeakingPlanCfg.onNumberSeconds ?? 0) * 1000);
+        } else {
+          spDelay = Math.round((startSpeakingPlanCfg.onNoPunctuationSeconds ?? 0) * 1000);
+        }
+        spDelay += Math.round((startSpeakingPlanCfg.waitSeconds ?? 0) * 1000);
+        if (spDelay > 0 && !interrupted) {
+          await new Promise<void>((r) => setTimeout(r, spDelay));
+        }
+      }
 
       // ── Multi-step tool calling loop ───────────────────────────────────────
       // Tool definitions stay attached on every turn so the agent can chain

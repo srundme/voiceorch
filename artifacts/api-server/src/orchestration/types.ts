@@ -249,6 +249,29 @@ export interface AgentConfig {
 
   // P1-H: Call lifecycle
   hangupAfterLlmCall: boolean;
+
+  // P1-I: Start Speaking Plan — transcript-content-based response delay
+  startSpeakingPlan: {
+    waitSeconds: number;
+    onPunctuationSeconds: number;
+    onNoPunctuationSeconds: number;
+    onNumberSeconds: number;
+  } | null;
+
+  // P1-J: Stop Speaking Plan — barge-in / interruption tuning (user-facing)
+  stopSpeakingPlan: {
+    numWords: number;
+    voiceSeconds: number;
+    backOffSeconds: number;
+  } | null;
+
+  // P1-K: Regulatory compliance (insurance / telecom)
+  compliance: {
+    irdai: boolean;
+    dpdp: boolean;
+    hipaa: boolean;
+    trai: boolean;
+  } | null;
 }
 
 export interface ProviderKey {

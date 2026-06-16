@@ -1203,14 +1203,61 @@ function VoicemailTab({ form }: { form: any }) {
 
 /* ── Tab: Advanced ──────────────────────────────────────────────────────────── */
 
+function SliderField({ form, name, label, description, min, max, step, format }: {
+  form: any; name: string; label: string; description?: string;
+  min: number; max: number; step: number; format?: (v: number) => string;
+}) {
+  return (
+    <FormField control={form.control} name={name} render={({ field }) => (
+      <FormItem>
+        <div className="flex justify-between items-center">
+          <FormLabel className="text-xs">{label}</FormLabel>
+          <span className="text-xs font-mono text-muted-foreground">
+            {format ? format(field.value ?? min) : (field.value ?? min)}
+          </span>
+        </div>
+        <FormControl>
+          <input type="range" min={min} max={max} step={step} value={field.value ?? min}
+            onChange={e => field.onChange(parseFloat(e.target.value))}
+            className="w-full h-1.5 accent-primary cursor-pointer" />
+        </FormControl>
+        {description && <FormDescription className="text-[10px]">{description}</FormDescription>}
+      </FormItem>
+    )} />
+  );
+}
+
 function AdvancedTab({ form }: { form: any }) {
   const bargeIn = form.watch("bargeInEnabled");
   const { fields: dsFields, append: dsAppend, remove: dsRemove } = useFieldArray({ control: form.control, name: "dispositionSchema" });
   return (
     <div className="p-6 overflow-y-auto h-full space-y-6">
       <div className="grid grid-cols-2 gap-6">
+        {/* ── Left column ── */}
         <div className="space-y-4">
-          <SectionDivider label="Barge-in" />
+          {/* Start Speaking Plan */}
+          <SectionDivider label="Start Speaking Plan" />
+          <p className="text-[10px] text-muted-foreground -mt-2">
+            How long the agent waits after detecting end-of-turn before responding, based on transcript content.
+          </p>
+          <SliderField form={form} name="startSpeakingWaitSecs" label="Wait Seconds"
+            description="Base extra wait before any response (0 = off)" min={0} max={5} step={0.1}
+            format={v => `${v.toFixed(1)}s`} />
+          <SliderField form={form} name="startSpeakingOnPunctuationSecs" label="After Punctuation"
+            description="Delay when utterance ends with . ? !" min={0} max={3} step={0.05}
+            format={v => `${v.toFixed(2)}s`} />
+          <SliderField form={form} name="startSpeakingOnNoPunctuationSecs" label="After No Punctuation"
+            description="Delay when utterance has no terminal punctuation" min={0} max={3} step={0.1}
+            format={v => `${v.toFixed(1)}s`} />
+          <SliderField form={form} name="startSpeakingOnNumberSecs" label="After Number"
+            description="Delay when utterance ends with a digit" min={0} max={3} step={0.05}
+            format={v => `${v.toFixed(2)}s`} />
+
+          {/* Stop Speaking Plan */}
+          <SectionDivider label="Stop Speaking Plan" />
+          <p className="text-[10px] text-muted-foreground -mt-2">
+            How much speech from the caller triggers agent interruption (barge-in).
+          </p>
           <FormField control={form.control} name="bargeInEnabled" render={({ field }) => (
             <FormItem className="flex items-center justify-between rounded-lg border border-border/50 px-3 py-2">
               <div><FormLabel className="text-sm">Allow Barge-in</FormLabel>
@@ -1220,6 +1267,15 @@ function AdvancedTab({ form }: { form: any }) {
           )} />
           {bargeIn && (
             <>
+              <SliderField form={form} name="stopSpeakingNumWords" label="Number of Words"
+                description="Min caller words before barge-in fires (0 = use frames setting)" min={0} max={10} step={1}
+                format={v => v === 0 ? "off" : `${v} word${v !== 1 ? "s" : ""}`} />
+              <SliderField form={form} name="stopSpeakingVoiceSecs" label="Voice Seconds"
+                description="Min caller voice duration to trigger interruption" min={0} max={0.5} step={0.02}
+                format={v => `${v.toFixed(2)}s`} />
+              <SliderField form={form} name="stopSpeakingBackOffSecs" label="Back-off Seconds"
+                description="Silence after TTS starts before barge-in can fire" min={0} max={10} step={0.1}
+                format={v => `${v.toFixed(1)}s`} />
               <FormField control={form.control} name="bargeInEnergyThreshold" render={({ field }) => (
                 <FormItem>
                   <div className="flex justify-between"><FormLabel className="text-xs">Energy Threshold</FormLabel>
@@ -1232,30 +1288,47 @@ function AdvancedTab({ form }: { form: any }) {
                   <FormDescription className="text-[10px]">Min RMS energy to count as speech</FormDescription>
                 </FormItem>
               )} />
-              <FormField control={form.control} name="bargeInMinFrames" render={({ field }) => (
-                <FormItem>
-                  <div className="flex justify-between"><FormLabel className="text-xs">Min Frames</FormLabel>
-                    <span className="text-xs font-mono">{field.value ?? 4} (~{((field.value ?? 4) * 20)}ms)</span></div>
-                  <FormControl>
-                    <input type="range" min={1} max={20} step={1} value={field.value ?? 4}
-                      onChange={e => field.onChange(parseInt(e.target.value))}
-                      className="w-full h-1.5 accent-primary cursor-pointer" />
-                  </FormControl>
-                </FormItem>
-              )} />
             </>
           )}
         </div>
+
+        {/* ── Right column ── */}
         <div className="space-y-4">
-          <SectionDivider label="Description" />
-          <FormField control={form.control} name="description" render={({ field }) => (
-            <FormItem>
-              <FormLabel className="text-xs">Agent Description</FormLabel>
-              <FormControl><Textarea className="min-h-[80px] text-sm resize-none" placeholder="What does this agent do?" {...field} /></FormControl>
-            </FormItem>
-          )} />
+          {/* Compliance */}
+          <SectionDivider label="Compliance" />
+          <p className="text-[10px] text-muted-foreground -mt-2">
+            Regulatory disclosures injected into the agent's system prompt at runtime. Enable the frameworks that apply to your use-case.
+          </p>
+          {([
+            { name: "complianceIrdai", label: "IRDAI", desc: "Insurance Regulatory and Development Authority of India — required for insurance advisory calls" },
+            { name: "complianceDpdp",  label: "DPDP Act", desc: "Digital Personal Data Protection Act 2023 — required when collecting personal data from callers" },
+            { name: "complianceHipaa", label: "HIPAA",   desc: "Health Insurance Portability and Accountability Act — required for healthcare-related calls" },
+            { name: "complianceTrai",  label: "TRAI",    desc: "Telecom Regulatory Authority of India — required for commercial communications; includes opt-out" },
+          ] as const).map(({ name, label, desc }) => (
+            <FormField key={name} control={form.control} name={name} render={({ field }) => (
+              <FormItem className="flex items-start justify-between rounded-lg border border-border/50 px-3 py-2 gap-3">
+                <div className="flex-1 min-w-0">
+                  <FormLabel className="text-sm font-medium">{label}</FormLabel>
+                  <FormDescription className="text-[10px] leading-relaxed">{desc}</FormDescription>
+                </div>
+                <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} className="shrink-0 mt-0.5" /></FormControl>
+              </FormItem>
+            )} />
+          ))}
+
+          <div className="pt-2 space-y-4">
+            <SectionDivider label="Description" />
+            <FormField control={form.control} name="description" render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-xs">Agent Description</FormLabel>
+                <FormControl><Textarea className="min-h-[80px] text-sm resize-none" placeholder="What does this agent do?" {...field} /></FormControl>
+              </FormItem>
+            )} />
+          </div>
         </div>
       </div>
+
+      {/* Disposition Schema — full width */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <SectionDivider label="Disposition Schema" />
@@ -1762,6 +1835,10 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       voicemailAction: "hangup",
       voicemailMessage: "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
       tools: [], dispositionSchema: [], genderDetectionEnabled: false,
+      startSpeakingWaitSecs: 0, startSpeakingOnPunctuationSecs: 0.1,
+      startSpeakingOnNoPunctuationSecs: 1.5, startSpeakingOnNumberSecs: 0.5,
+      stopSpeakingNumWords: 0, stopSpeakingVoiceSecs: 0.2, stopSpeakingBackOffSecs: 1,
+      complianceIrdai: false, complianceDpdp: false, complianceHipaa: false, complianceTrai: false,
     },
   });
 
@@ -1803,6 +1880,17 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       voicemailMessage:         (agent as any).agentConfig?.voicemailMessage ?? "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
       tools:                    (agent.tools ?? []) as AgentFormValues["tools"],
       genderDetectionEnabled:   (agent as any).agentConfig?.genderDetectionEnabled ?? false,
+      startSpeakingWaitSecs:            (agent as any).agentConfig?.startSpeakingPlan?.waitSeconds            ?? 0,
+      startSpeakingOnPunctuationSecs:   (agent as any).agentConfig?.startSpeakingPlan?.onPunctuationSeconds   ?? 0.1,
+      startSpeakingOnNoPunctuationSecs: (agent as any).agentConfig?.startSpeakingPlan?.onNoPunctuationSeconds ?? 1.5,
+      startSpeakingOnNumberSecs:        (agent as any).agentConfig?.startSpeakingPlan?.onNumberSeconds        ?? 0.5,
+      stopSpeakingNumWords:    (agent as any).agentConfig?.stopSpeakingPlan?.numWords       ?? 0,
+      stopSpeakingVoiceSecs:   (agent as any).agentConfig?.stopSpeakingPlan?.voiceSeconds   ?? 0.2,
+      stopSpeakingBackOffSecs: (agent as any).agentConfig?.stopSpeakingPlan?.backOffSeconds ?? 1,
+      complianceIrdai: (agent as any).agentConfig?.compliance?.irdai ?? false,
+      complianceDpdp:  (agent as any).agentConfig?.compliance?.dpdp  ?? false,
+      complianceHipaa: (agent as any).agentConfig?.compliance?.hipaa ?? false,
+      complianceTrai:  (agent as any).agentConfig?.compliance?.trai  ?? false,
       dispositionSchema:        ((agent as any).dispositionSchema ?? []).map((f: any) => ({
         ...f, options: Array.isArray(f.options) ? f.options.join(", ") : (f.options ?? ""),
       })) as AgentFormValues["dispositionSchema"],

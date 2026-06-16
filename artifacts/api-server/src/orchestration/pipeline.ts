@@ -174,6 +174,17 @@ export class OrchestrationPipeline {
     this.bargeInEnergyThreshold = config.agentConfig.bargeInEnergyThreshold;
     this.bargeInMinFrames       = config.agentConfig.bargeInMinFrames;
     this.bargeInEchoGraceMs     = config.agentConfig.bargeInEchoGraceMs;
+    // P1-J: Stop Speaking Plan overrides barge-in params when configured
+    if (config.agentConfig.stopSpeakingPlan) {
+      const sp = config.agentConfig.stopSpeakingPlan;
+      // numWords: 1 word ≈ 20 frames at 20ms/frame (150wpm = 2.5wps ≈ 0.4s/word = 20 frames)
+      const framesFromWords = sp.numWords > 0 ? Math.round(sp.numWords * 20) : 0;
+      // voiceSeconds: caller must speak this long before barge-in fires
+      const framesFromTime = sp.voiceSeconds > 0 ? Math.round(sp.voiceSeconds * 50) : 0; // 50 frames/s at 20ms
+      const combinedFrames = Math.max(framesFromWords, framesFromTime);
+      if (combinedFrames > 0) this.bargeInMinFrames = combinedFrames;
+      if (sp.backOffSeconds >= 0) this.bargeInEchoGraceMs = Math.round(sp.backOffSeconds * 1000);
+    }
     if (config.agentConfig.genderDetectionEnabled) {
       const gp = config.agentConfig.genderDetectionProvider;
       this.genderDetector = gp === "ml_model_v2"
@@ -1122,6 +1133,25 @@ export class OrchestrationPipeline {
     this.firstAudioSentAt = null;
 
     logger.info({ callId: this.config.callId, transcript, sttLatencyMs }, "Processing turn");
+
+    // P1-I: Start Speaking Plan — content-based delay before triggering LLM response
+    if (this.agent.startSpeakingPlan) {
+      const plan = this.agent.startSpeakingPlan;
+      const lastChar = transcript.trimEnd().slice(-1);
+      let delayMs = 0;
+      if (/[.?!।]/.test(lastChar)) {
+        delayMs = Math.round((plan.onPunctuationSeconds ?? 0) * 1000);
+      } else if (/[0-9]/.test(lastChar)) {
+        delayMs = Math.round((plan.onNumberSeconds ?? 0) * 1000);
+      } else {
+        delayMs = Math.round((plan.onNoPunctuationSeconds ?? 0) * 1000);
+      }
+      delayMs += Math.round((plan.waitSeconds ?? 0) * 1000);
+      if (delayMs > 0 && !this.bargeInRequested) {
+        await new Promise<void>((r) => setTimeout(r, delayMs));
+      }
+    }
+
     this.config.onTranscript("user", transcript);
     this.conversationHistory.push({ role: "user", content: transcript });
 

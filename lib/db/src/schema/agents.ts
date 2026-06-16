@@ -101,6 +101,26 @@ export type AgentConfig = {
   genderDetectionNeutralSalutation?: string;
   // P1-G: LLM timezone injection — IANA timezone name (e.g. "Asia/Kolkata")
   timezone?: string;
+  // P1-I: Start Speaking Plan
+  startSpeakingPlan?: {
+    waitSeconds?: number;
+    onPunctuationSeconds?: number;
+    onNoPunctuationSeconds?: number;
+    onNumberSeconds?: number;
+  };
+  // P1-J: Stop Speaking Plan
+  stopSpeakingPlan?: {
+    numWords?: number;
+    voiceSeconds?: number;
+    backOffSeconds?: number;
+  };
+  // P1-K: Regulatory compliance
+  compliance?: {
+    irdai?: boolean;
+    dpdp?: boolean;
+    hipaa?: boolean;
+    trai?: boolean;
+  };
 };
 
 export const agentsTable = pgTable("agents", {

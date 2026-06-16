@@ -116,6 +116,20 @@ export const agentFormSchema = z.object({
     options: z.string().optional(),
   })).optional(),
   genderDetectionEnabled: z.boolean().optional(),
+  // Start Speaking Plan
+  startSpeakingWaitSecs:          z.number().min(0).max(5).optional(),
+  startSpeakingOnPunctuationSecs: z.number().min(0).max(3).optional(),
+  startSpeakingOnNoPunctuationSecs: z.number().min(0).max(3).optional(),
+  startSpeakingOnNumberSecs:      z.number().min(0).max(3).optional(),
+  // Stop Speaking Plan
+  stopSpeakingNumWords:    z.number().min(0).max(10).optional(),
+  stopSpeakingVoiceSecs:   z.number().min(0).max(0.5).optional(),
+  stopSpeakingBackOffSecs: z.number().min(0).max(10).optional(),
+  // Compliance
+  complianceIrdai: z.boolean().optional(),
+  complianceDpdp:  z.boolean().optional(),
+  complianceHipaa: z.boolean().optional(),
+  complianceTrai:  z.boolean().optional(),
 }).superRefine((data, ctx) => {
   const asrErr = getModelError(data.asrProvider, data.asrModel, ASR_MODELS);
   if (asrErr) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["asrModel"], message: asrErr });
@@ -132,7 +146,14 @@ type AgentFormValues = z.infer<typeof agentFormSchema>;
 export type { AgentFormValues };
 
 export function buildUpdateAgentPayload(data: AgentFormValues) {
-  const { webhookSecret, promptVariables, vadSilenceMs, bargeInEnabled, bargeInEnergyThreshold, bargeInMinFrames, timezone, machineDetectionMode, voicemailAction, voicemailMessage, genderDetectionEnabled, ...rest } = data;
+  const {
+    webhookSecret, promptVariables, vadSilenceMs, bargeInEnabled, bargeInEnergyThreshold, bargeInMinFrames,
+    timezone, machineDetectionMode, voicemailAction, voicemailMessage, genderDetectionEnabled,
+    startSpeakingWaitSecs, startSpeakingOnPunctuationSecs, startSpeakingOnNoPunctuationSecs, startSpeakingOnNumberSecs,
+    stopSpeakingNumWords, stopSpeakingVoiceSecs, stopSpeakingBackOffSecs,
+    complianceIrdai, complianceDpdp, complianceHipaa, complianceTrai,
+    ...rest
+  } = data;
   const agentConfig: Record<string, unknown> = {};
   if (webhookSecret) agentConfig["webhookSecret"] = webhookSecret;
   if (promptVariables?.length) agentConfig["promptVariables"] = promptVariables;
@@ -145,6 +166,23 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   if (voicemailAction && voicemailAction !== "hangup") agentConfig["voicemailAction"] = voicemailAction;
   if (voicemailMessage) agentConfig["voicemailMessage"] = voicemailMessage;
   agentConfig["genderDetectionEnabled"] = !!genderDetectionEnabled;
+  agentConfig["startSpeakingPlan"] = {
+    waitSeconds:            startSpeakingWaitSecs          ?? 0,
+    onPunctuationSeconds:   startSpeakingOnPunctuationSecs ?? 0.1,
+    onNoPunctuationSeconds: startSpeakingOnNoPunctuationSecs ?? 1.5,
+    onNumberSeconds:        startSpeakingOnNumberSecs      ?? 0.5,
+  };
+  agentConfig["stopSpeakingPlan"] = {
+    numWords:       stopSpeakingNumWords    ?? 0,
+    voiceSeconds:   stopSpeakingVoiceSecs   ?? 0.2,
+    backOffSeconds: stopSpeakingBackOffSecs ?? 1,
+  };
+  agentConfig["compliance"] = {
+    irdai: !!complianceIrdai,
+    dpdp:  !!complianceDpdp,
+    hipaa: !!complianceHipaa,
+    trai:  !!complianceTrai,
+  };
 
   const serializedTools = (rest.tools ?? []).map((t) => {
     if (t.type !== "webhook") return t;

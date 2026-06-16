@@ -118,6 +118,21 @@ export async function createSession(params: {
     effectiveSystemPrompt += `\n\n[STRICT LANGUAGE RULE] You MUST respond ONLY in ${langName} at ALL times. Never switch to any other language under any circumstances, even if the caller speaks a different language. Always reply in ${langName} regardless of what language the caller uses.`;
   }
 
+  // P1-K: Inject regulatory compliance disclosures into the system prompt
+  const complianceCfg = agentCfg["compliance"] as { irdai?: boolean; dpdp?: boolean; hipaa?: boolean; trai?: boolean } | undefined;
+  if (complianceCfg?.irdai) {
+    effectiveSystemPrompt += `\n\n[IRDAI COMPLIANCE — MANDATORY] You are governed by the Insurance Regulatory and Development Authority of India (IRDAI). At the very start of every call, BEFORE any product discussion, you MUST say: "This call is for insurance advisory purposes and is regulated by the Insurance Regulatory and Development Authority of India (IRDAI). The information shared is for reference only and does not constitute a guaranteed offer or contract of insurance." Never skip this disclosure.`;
+  }
+  if (complianceCfg?.dpdp) {
+    effectiveSystemPrompt += `\n\n[DPDP ACT COMPLIANCE — MANDATORY] As per the Digital Personal Data Protection Act 2023, you MUST early in the call inform the caller: "This call may involve collection of personal data. By continuing this conversation, you consent to data processing as per our privacy policy and the DPDP Act 2023." Do not collect personal information until the caller explicitly agrees to continue.`;
+  }
+  if (complianceCfg?.hipaa) {
+    effectiveSystemPrompt += `\n\n[HIPAA COMPLIANCE — MANDATORY] This call may involve protected health information (PHI). You MUST inform the caller: "This conversation is confidential and handled in accordance with HIPAA guidelines. Any health information you share will be kept strictly private and used only for the purpose of this advisory." Do not request sensitive medical details unnecessarily.`;
+  }
+  if (complianceCfg?.trai) {
+    effectiveSystemPrompt += `\n\n[TRAI COMPLIANCE — MANDATORY] As per TRAI regulations for commercial communications, at the start of every call you MUST say: "This is a commercial communication. If you wish to stop receiving such calls, please say STOP at any time and we will immediately remove you from our list." If the caller says STOP or asks to be removed, apologize sincerely and end the call immediately without any sales pitch.`;
+  }
+
   const agentConfig: AgentConfig = {
     id: agent.id,
     name: agent.name,
@@ -188,6 +203,12 @@ export async function createSession(params: {
     incrementalDelay:     (agentCfg["incrementalDelay"]     as number | undefined) ?? 0,
     // P1-H: Call lifecycle
     hangupAfterLlmCall: (agentCfg["hangupAfterLlmCall"] as boolean | undefined) ?? false,
+    // P1-I: Start Speaking Plan
+    startSpeakingPlan: (agentCfg["startSpeakingPlan"] as AgentConfig["startSpeakingPlan"]) ?? null,
+    // P1-J: Stop Speaking Plan
+    stopSpeakingPlan: (agentCfg["stopSpeakingPlan"] as AgentConfig["stopSpeakingPlan"]) ?? null,
+    // P1-K: Compliance
+    compliance: (agentCfg["compliance"] as AgentConfig["compliance"]) ?? null,
   };
 
   // ── Cross-call caller memory (3-layer: profile + facts + archive) ──────────
