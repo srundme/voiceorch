@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { db, agentsTable, callsTable, scheduledCallbacksTable, providersTable, usersTable, walletTransactionsTable, platformSettingsTable, knowledgeEntriesTable } from "@workspace/db";
+import { db, agentsTable, callsTable, callEventsTable, scheduledCallbacksTable, providersTable, usersTable, walletTransactionsTable, platformSettingsTable, knowledgeEntriesTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { createSTTAdapter } from "../adapters/stt/index.js";
 import { createLLMAdapter } from "../adapters/llm/index.js";
@@ -246,9 +246,9 @@ export async function handleWebCallWebSocket(
     }
   }
 
-  const sttKey = providerKeys.get(agent.asrProvider);
-  const llmKey = providerKeys.get(agent.llmProvider);
-  const ttsKey = providerKeys.get(agent.ttsProvider);
+  const sttKey = providerKeys.get(agent.asrProvider?.toLowerCase());
+  const llmKey = providerKeys.get(agent.llmProvider?.toLowerCase());
+  const ttsKey = providerKeys.get(agent.ttsProvider?.toLowerCase());
 
   if (!sttKey || !llmKey || !ttsKey) {
     send({ type: "error", message: `Missing API keys for: ${[!sttKey && agent.asrProvider, !llmKey && agent.llmProvider, !ttsKey && agent.ttsProvider].filter(Boolean).join(", ")}` });
@@ -270,7 +270,7 @@ export async function handleWebCallWebSocket(
     fallbackProviders: (agent.asrFallbackProviders as Array<{ provider: string; model: string | null }> | null | undefined) ?? [],
   };
 
-  const sttExtraConfig = providerKeys.get(`${agent.asrProvider}:extraConfig`) ?? null;
+  const sttExtraConfig = providerKeys.get(`${agent.asrProvider?.toLowerCase()}:extraConfig`) ?? null;
   const stt = createSTTAdapter(agent.asrProvider, sttKey, agent.asrModel, sttExtraConfig, sttConfig);
   const llm = createLLMAdapter(agent.llmProvider, llmKey, agent.llmModel);
 
@@ -301,6 +301,19 @@ export async function handleWebCallWebSocket(
   const startedAt = new Date();
   const history: ConversationTurn[] = [];
   let closed      = false;
+
+  // ── Per-call event logger (fire-and-forget, never blocks the call) ────────
+  function callLog(level: "info" | "warn" | "error", event: string, data?: Record<string, unknown>) {
+    void db.insert(callEventsTable).values({ callId, level, event, data: data ?? null }).catch(() => {});
+  }
+
+  callLog("info", "call.start", {
+    agentId,
+    asrProvider: agent.asrProvider,
+    llmProvider: agent.llmProvider,
+    ttsProvider: agent.ttsProvider,
+    ttsVoice: agent.ttsVoice ?? null,
+  });
 
   // ── Per-call usage accumulators (written to usage_events on hangup) ──────
   let llmInputTokensTotal  = 0;
@@ -683,6 +696,7 @@ export async function handleWebCallWebSocket(
 
       if (!userText?.trim()) { processing = false; return; }
 
+      callLog("info", "stt.result", { text: userText, provider: agent.asrProvider });
       send({ type: "transcript", speaker: "user", text: userText });
       history.push({ role: "user", content: userText });
 
@@ -1046,6 +1060,7 @@ export async function handleWebCallWebSocket(
         clearInterval(llmKeepalive);
         const reason = toReadableError(llmErr, "LLM error");
         logger.error({ callId, err: llmErr }, reason);
+        callLog("error", "llm.error", { message: reason, provider: agent.llmProvider });
         send({ type: "error", message: reason });
         speaking = false;
         speakingEndedAt = Date.now();
@@ -1054,6 +1069,12 @@ export async function handleWebCallWebSocket(
         return;
       }
       clearInterval(llmKeepalive);
+      callLog("info", "llm.response", {
+        text: fullReply.replace(/<think>[\s\S]*?<\/think>/g, "").replace(/<function[\s\S]*?>/g, "").trim().substring(0, 600),
+        provider: agent.llmProvider,
+        inputTokens: llmInputTokensTotal,
+        outputTokens: llmOutputTokensTotal,
+      });
 
       // The LLM token stream occasionally ends a few words early while fullReply
       // (set by the onComplete callback) has the complete text.  Re-run
@@ -1126,6 +1147,7 @@ export async function handleWebCallWebSocket(
 
         // Execute the tool via the shared executor
         let toolResult: string | undefined;
+        callLog("info", "tool.call", { tool: triggeredToolName, args: triggeredToolArgs });
         try {
           const tool = agentTools.find((t) => t.name === triggeredToolName);
           if (!tool) {
@@ -1147,9 +1169,11 @@ export async function handleWebCallWebSocket(
           }
         } catch (toolErr) {
           logger.error({ callId, err: toolErr, triggeredToolName }, "Webcall: tool execution error");
+          callLog("error", "tool.error", { tool: triggeredToolName, message: toolErr instanceof Error ? toolErr.message : String(toolErr) });
           toolResult = "error: tool execution failed";
         }
 
+        callLog("info", "tool.result", { tool: triggeredToolName, result: (toolResult ?? "unavailable").substring(0, 400) });
         // Record the tool result so the next turn can speak or act on it.
         // (Same marker pattern as pipeline.ts continueWithToolResult — also
         // surfaces in the dashboard "Tool Calls" panel via the transcript.)
@@ -1620,9 +1644,14 @@ export async function handleWebCallWebSocket(
     clearSilenceTimer();
     if (hangupSilenceTimer) { clearTimeout(hangupSilenceTimer); hangupSilenceTimer = null; }
 
-
     const endedAt         = new Date();
     const durationSeconds = Math.floor((endedAt.getTime() - startedAt.getTime()) / 1000);
+    callLog(reason === "error" ? "error" : "info", "call.end", {
+      reason,
+      durationSeconds,
+      turns: history.filter(t => t.role === "assistant").length,
+      ...(errorDetail ? { error: errorDetail instanceof Error ? errorDetail.message : String(errorDetail) } : {}),
+    });
     const transcript      = history.map(t => `${t.role === "user" ? "Caller" : "Agent"}: ${t.content}`).join("\n");
 
     const isFailed = reason === "error" || reason === "timeout";

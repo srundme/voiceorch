@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { randomBytes } from "crypto";
 import { eq, desc, and, sql, gte, gt } from "drizzle-orm";
-import { db, callsTable, agentsTable, providersTable, usersTable, walletTransactionsTable, activityLogsTable, callTransfersTable, vobizAccountsTable, verifiedPhoneDestinationsTable, platformSettingsTable } from "@workspace/db";
+import { db, callsTable, callEventsTable, agentsTable, providersTable, usersTable, walletTransactionsTable, activityLogsTable, callTransfersTable, vobizAccountsTable, verifiedPhoneDestinationsTable, platformSettingsTable } from "@workspace/db";
 import { getAgentRateCentsPerMin } from "../services/minute-rates.js";
 import {
   InitiateCallBody,
@@ -705,6 +705,26 @@ router.patch("/calls/:id/end", async (req, res): Promise<void> => {
 
   const enriched = await enrichCall(call);
   res.json(EndCallResponse.parse(enriched));
+});
+
+// ── GET /calls/:id/logs — per-call event log ──────────────────────────────
+router.get("/:id/logs", requireAuth, async (req, res) => {
+  const callId = parseInt(String(req.params.id), 10);
+  if (isNaN(callId)) { res.status(400).json({ error: "Invalid call id" }); return; }
+
+  const clerkId = (req as any).clerkUserId as string;
+
+  // Verify the call belongs to the authenticated user
+  const [call] = await db.select({ id: callsTable.id, userId: callsTable.userId })
+    .from(callsTable).where(eq(callsTable.id, callId));
+  if (!call) { res.status(404).json({ error: "Call not found" }); return; }
+  if (call.userId && call.userId !== clerkId) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const events = await db.select().from(callEventsTable)
+    .where(eq(callEventsTable.callId, callId))
+    .orderBy(callEventsTable.ts);
+
+  res.json(events);
 });
 
 export default router;
