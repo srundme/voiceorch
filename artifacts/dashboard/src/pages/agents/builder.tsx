@@ -1,11 +1,12 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useLocation, useParams } from "wouter";
 import {
   Bot, Plus, Search, Phone, Mic, Brain, Zap, Webhook, PhoneForwarded,
   Save, MoreHorizontal, Power, Trash2, Settings, FileText, Wrench,
   GitBranch, VoicemailIcon, SlidersHorizontal, TestTube2, ChevronRight,
-  Volume2, Check, X, Pencil, ChevronDown,
+  Volume2, Check, X, Pencil, ChevronDown, List, Globe,
 } from "lucide-react";
+import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -13,7 +14,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   useListAgents, useGetAgent, useUpdateAgent, useToggleAgent, useDeleteAgent,
   useInitiateOutboundCall, getListAgentsQueryKey, getGetAgentQueryKey,
+  useListCalls, getListCallsQueryKey,
 } from "@workspace/api-client-react";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
 import { agentFormSchema, buildUpdateAgentPayload } from "./edit";
 import type { AgentFormValues } from "./edit";
 import { Button } from "@/components/ui/button";
@@ -48,12 +53,13 @@ import { WebCallPanel } from "@/components/webcall-panel";
 
 /* ── Types ──────────────────────────────────────────────────────────────────── */
 
-type TabId = "overview" | "prompt" | "voice" | "tools" | "pipeline" | "voicemail" | "advanced";
+type TabId = "overview" | "prompt" | "voice" | "tools" | "pipeline" | "voicemail" | "advanced" | "logs";
 
 interface TabDef { id: TabId; label: string; icon: React.ReactNode }
 
 const TABS: TabDef[] = [
   { id: "overview",   label: "Overview",   icon: <Bot className="h-3.5 w-3.5" /> },
+  { id: "logs",       label: "Logs",       icon: <List className="h-3.5 w-3.5" /> },
   { id: "prompt",     label: "Prompt",     icon: <FileText className="h-3.5 w-3.5" /> },
   { id: "voice",      label: "Voice",      icon: <Mic className="h-3.5 w-3.5" /> },
   { id: "tools",      label: "Tools",      icon: <Wrench className="h-3.5 w-3.5" /> },
@@ -979,6 +985,218 @@ function AgentListPanel({ selectedId, onSelect, rateMap }: {
   );
 }
 
+/* ── Logs tab ───────────────────────────────────────────────────────────────── */
+
+const STATUS_LABELS: Record<string, string> = {
+  completed: "Completed", failed: "Failed", in_progress: "In Progress",
+  pending: "Pending", cancelled: "Cancelled", transferred: "Transferred",
+  booked: "Booked", callback_scheduled: "Callback", voicemail: "Voicemail",
+};
+
+const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
+  completed:         { bg: "bg-emerald-500/10", text: "text-emerald-400" },
+  failed:            { bg: "bg-red-500/10",     text: "text-red-400" },
+  in_progress:       { bg: "bg-blue-500/10",    text: "text-blue-400" },
+  pending:           { bg: "bg-zinc-500/10",    text: "text-zinc-400" },
+  cancelled:         { bg: "bg-zinc-500/10",    text: "text-zinc-400" },
+  transferred:       { bg: "bg-amber-500/10",   text: "text-amber-400" },
+  booked:            { bg: "bg-teal-500/10",    text: "text-teal-400" },
+  callback_scheduled:{ bg: "bg-orange-500/10",  text: "text-orange-400" },
+  voicemail:         { bg: "bg-purple-500/10",  text: "text-purple-400" },
+};
+
+function LogsTab({ agentId }: { agentId: number }) {
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [typeFilter,   setTypeFilter]   = useState("all");
+  const [search,       setSearch]       = useState("");
+  const [page,         setPage]         = useState(1);
+  const PAGE_SIZE = 25;
+
+  const { data: calls = [], isLoading } = useListCalls(
+    { agentId },
+    { query: { queryKey: getListCallsQueryKey({ agentId }) } }
+  );
+
+  const filtered = useMemo(() => {
+    let r = [...calls];
+    if (statusFilter !== "all") r = r.filter(c => c.status === statusFilter);
+    if (typeFilter !== "all") {
+      r = r.filter(c =>
+        typeFilter === "webcall" ? (!c.toNumber || c.toNumber === "") : !!(c.toNumber)
+      );
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      r = r.filter(c =>
+        String(c.id).includes(q) ||
+        c.toNumber?.toLowerCase().includes(q) ||
+        c.fromNumber?.toLowerCase().includes(q)
+      );
+    }
+    return r;
+  }, [calls, statusFilter, typeFilter, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pageItems  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const fmtDur = (s?: number | null) => {
+    if (!s) return "—";
+    const m = Math.floor(s / 60), sec = Math.floor(s % 60);
+    return m > 0 ? `${m}m ${sec}s` : `${sec}s`;
+  };
+
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      {/* Filter bar */}
+      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border shrink-0 flex-wrap">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/40" />
+          <Input
+            className="h-8 pl-8 w-48 text-xs bg-background/50"
+            placeholder="Call ID or phone…"
+            value={search}
+            onChange={e => { setSearch(e.target.value); setPage(1); }}
+          />
+        </div>
+
+        <Select value={typeFilter} onValueChange={v => { setTypeFilter(v); setPage(1); }}>
+          <SelectTrigger className="h-8 text-xs w-36 bg-background/50">
+            <SelectValue placeholder="Call Types" />
+          </SelectTrigger>
+          <SelectContent position="popper">
+            <SelectItem value="all" className="text-xs">All Types</SelectItem>
+            <SelectItem value="webcall" className="text-xs">Webcall</SelectItem>
+            <SelectItem value="telephony" className="text-xs">Telephony</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); setPage(1); }}>
+          <SelectTrigger className="h-8 text-xs w-36 bg-background/50">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent position="popper">
+            <SelectItem value="all" className="text-xs">All Statuses</SelectItem>
+            <SelectItem value="completed" className="text-xs">Completed</SelectItem>
+            <SelectItem value="failed" className="text-xs">Failed</SelectItem>
+            <SelectItem value="in_progress" className="text-xs">In Progress</SelectItem>
+            <SelectItem value="pending" className="text-xs">Pending</SelectItem>
+            <SelectItem value="cancelled" className="text-xs">Cancelled</SelectItem>
+            <SelectItem value="transferred" className="text-xs">Transferred</SelectItem>
+            <SelectItem value="booked" className="text-xs">Booked</SelectItem>
+            <SelectItem value="voicemail" className="text-xs">Voicemail</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <span className="ml-auto text-[10px] text-muted-foreground/30">
+          {filtered.length} call{filtered.length !== 1 ? "s" : ""}
+        </span>
+      </div>
+
+      {/* Table */}
+      <div className="flex-1 overflow-auto min-h-0">
+        <Table>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent border-b border-border">
+              <TableHead className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40 h-9 w-[110px]">Type</TableHead>
+              <TableHead className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40 h-9 w-[80px]">Call ID</TableHead>
+              <TableHead className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40 h-9">Phone Number</TableHead>
+              <TableHead className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40 h-9 w-[110px]">Status</TableHead>
+              <TableHead className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40 h-9 w-[130px]">Start Time</TableHead>
+              <TableHead className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40 h-9 w-[90px]">Duration</TableHead>
+              <TableHead className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40 h-9 w-[80px]">Cost</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              Array.from({ length: 6 }).map((_, i) => (
+                <TableRow key={i} className="border-b border-border/40">
+                  {Array.from({ length: 7 }).map((_, j) => (
+                    <TableCell key={j} className="py-3"><Skeleton className="h-3 w-16" /></TableCell>
+                  ))}
+                </TableRow>
+              ))
+            ) : pageItems.length > 0 ? (
+              pageItems.map(call => {
+                const isWeb = !call.toNumber || call.toNumber.trim() === "";
+                const costCents = (call as any).costCents ?? 0;
+                const sc = STATUS_COLORS[call.status] ?? { bg: "bg-zinc-500/10", text: "text-zinc-400" };
+                return (
+                  <TableRow key={call.id} className="hover:bg-muted/20 border-b border-border/40 cursor-default">
+                    <TableCell className="py-2.5">
+                      <span className={cn(
+                        "inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded",
+                        isWeb ? "bg-cyan-500/10 text-cyan-400" : "bg-violet-500/10 text-violet-400"
+                      )}>
+                        {isWeb ? <Globe className="h-3 w-3" /> : <Phone className="h-3 w-3" />}
+                        {isWeb ? "Webcall" : "Telephony"}
+                      </span>
+                    </TableCell>
+                    <TableCell className="py-2.5 font-mono text-[10px] text-muted-foreground/40">
+                      #{call.id}
+                    </TableCell>
+                    <TableCell className="py-2.5 font-mono text-xs text-foreground/70">
+                      {call.toNumber || call.fromNumber || <span className="text-muted-foreground/25">—</span>}
+                    </TableCell>
+                    <TableCell className="py-2.5">
+                      <span className={cn("inline-block text-[10px] font-medium px-1.5 py-0.5 rounded", sc.bg, sc.text)}>
+                        {STATUS_LABELS[call.status] ?? call.status}
+                      </span>
+                    </TableCell>
+                    <TableCell className="py-2.5 text-[11px] text-muted-foreground/50 whitespace-nowrap">
+                      {format(parseISO(call.createdAt), "MMM d, HH:mm")}
+                    </TableCell>
+                    <TableCell className="py-2.5 font-mono text-xs text-muted-foreground/50">
+                      {fmtDur(call.durationSeconds)}
+                    </TableCell>
+                    <TableCell className="py-2.5 font-mono text-xs text-muted-foreground/50">
+                      {costCents > 0 ? `$${(costCents / 100).toFixed(3)}` : "—"}
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            ) : (
+              <TableRow>
+                <TableCell colSpan={7} className="h-64">
+                  <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
+                    <div className="h-12 w-12 rounded-full bg-muted/20 flex items-center justify-center">
+                      <Phone className="h-5 w-5 text-muted-foreground/20" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground/50">No call logs available</p>
+                      <p className="text-xs text-muted-foreground/30 mt-0.5">There are no items to display at this time.</p>
+                    </div>
+                  </div>
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* Pagination footer */}
+      <div className="shrink-0 flex items-center justify-between px-4 py-2 border-t border-border text-[11px] text-muted-foreground/40">
+        <div className="flex items-center gap-1">
+          <button
+            disabled={page <= 1}
+            onClick={() => setPage(p => p - 1)}
+            className="px-2 py-1 rounded hover:bg-muted/30 disabled:opacity-30 disabled:cursor-not-allowed"
+          >‹</button>
+          <span className="px-2">Page {page}</span>
+          <button
+            disabled={page >= totalPages}
+            onClick={() => setPage(p => p + 1)}
+            className="px-2 py-1 rounded hover:bg-muted/30 disabled:opacity-30 disabled:cursor-not-allowed"
+          >›</button>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span>Rows per page</span>
+          <span className="font-semibold text-foreground/50">{PAGE_SIZE}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Agent editor panel ─────────────────────────────────────────────────────── */
 
 function AgentEditorPanel({ agentId }: { agentId: number }) {
@@ -1182,17 +1400,23 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       </div>
 
       {/* Tab content */}
-      <Form {...form}>
-        <form onSubmit={e => e.preventDefault()} className="flex-1 min-h-0 overflow-hidden">
-          {activeTab === "overview"  && <OverviewTab form={form} rateMap={rateMap} agent={agent} />}
-          {activeTab === "prompt"    && <PromptTab form={form} />}
-          {activeTab === "voice"     && <VoiceTab form={form} />}
-          {activeTab === "tools"     && <ToolsTab form={form} />}
-          {activeTab === "pipeline"  && <PipelineTab form={form} />}
-          {activeTab === "voicemail" && <VoicemailTab form={form} />}
-          {activeTab === "advanced"  && <AdvancedTab form={form} />}
-        </form>
-      </Form>
+      {activeTab === "logs" ? (
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <LogsTab agentId={agent.id} />
+        </div>
+      ) : (
+        <Form {...form}>
+          <form onSubmit={e => e.preventDefault()} className="flex-1 min-h-0 overflow-hidden">
+            {activeTab === "overview"  && <OverviewTab form={form} rateMap={rateMap} agent={agent} />}
+            {activeTab === "prompt"    && <PromptTab form={form} />}
+            {activeTab === "voice"     && <VoiceTab form={form} />}
+            {activeTab === "tools"     && <ToolsTab form={form} />}
+            {activeTab === "pipeline"  && <PipelineTab form={form} />}
+            {activeTab === "voicemail" && <VoicemailTab form={form} />}
+            {activeTab === "advanced"  && <AdvancedTab form={form} />}
+          </form>
+        </Form>
+      )}
 
       {/* Outbound call dialog */}
       <Dialog open={callDialog} onOpenChange={setCallDialog}>
