@@ -219,7 +219,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     tokenSummarizationEnabled: tokenSummarizationEnabled ?? false,
     tokenSummarizationThresholdTurns: tokenSummarizationThresholdTurns ?? null,
     stagedPromptEnabled: stagedPromptEnabled ?? false,
-    stagedPromptStages: stagedPromptStages?.length ? stagedPromptStages : null,
+    stagedPromptStages: stagedPromptStages ?? [],
     stagedPromptCoreIdentity: stagedPromptCoreIdentity || null,
     ...(Object.keys(agentConfig).length > 0 ? { agentConfig } : {}),
   };
