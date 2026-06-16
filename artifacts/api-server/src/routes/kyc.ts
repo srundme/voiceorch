@@ -125,6 +125,13 @@ interface VobizCreateAccountResponse {
   status:     string;
 }
 
+class VobizAccountExistsError extends Error {
+  constructor(public readonly email: string) {
+    super(`VoBiz account already exists for ${email}`);
+    this.name = "VobizAccountExistsError";
+  }
+}
+
 async function createVobizSubAccount(
   name: string,
   email: string,
@@ -135,11 +142,29 @@ async function createVobizSubAccount(
     headers: partnerHeaders(),
     body:    JSON.stringify({ name: name || email, email, password, country: "IN" }),
   });
+  if (resp.status === 409) {
+    throw new VobizAccountExistsError(email);
+  }
   if (!resp.ok) {
     const err = await resp.text();
     throw new Error(`Vobiz sub-account creation failed (${resp.status}): ${err}`);
   }
   return resp.json() as Promise<VobizCreateAccountResponse>;
+}
+
+async function fetchVobizSubAccountByEmail(
+  email: string,
+): Promise<VobizCreateAccountResponse | null> {
+  const resp = await fetch(`${VOBIZ_PARTNER_BASE}/accounts`, {
+    method:  "GET",
+    headers: partnerHeaders(),
+  });
+  if (!resp.ok) return null;
+  const data = await resp.json() as { results?: VobizCreateAccountResponse[]; data?: VobizCreateAccountResponse[] } | VobizCreateAccountResponse[];
+  const list: VobizCreateAccountResponse[] = Array.isArray(data)
+    ? data
+    : ((data as any).results ?? (data as any).data ?? []);
+  return list.find((a) => a.email?.toLowerCase() === email.toLowerCase()) ?? null;
 }
 
 interface VobizKycSessionResponse {
@@ -229,9 +254,23 @@ router.post("/kyc/start", requireAuth, async (req, res): Promise<void> => {
     try {
       vobizAccount = await createVobizSubAccount(user.name ?? user.email ?? clerkId, user.email ?? `${clerkId}@snapserve.ai`);
     } catch (err: any) {
-      req.log.error({ err, clerkId }, "Failed to create Vobiz sub-account");
-      res.status(502).json({ error: "Failed to provision verification account. Please try again." });
-      return;
+      if (err instanceof VobizAccountExistsError) {
+        // Account exists on VoBiz side but not in our DB (e.g. after a DB wipe).
+        // Try to recover by listing accounts and finding the match.
+        req.log.warn({ clerkId, email: user.email }, "VoBiz account already exists — attempting to recover by lookup");
+        const existing = await fetchVobizSubAccountByEmail(user.email ?? "");
+        if (!existing) {
+          req.log.error({ clerkId }, "VoBiz account exists but could not be retrieved via list endpoint");
+          res.status(409).json({ error: "A verification account for this email already exists on the carrier but could not be re-linked. Please contact support." });
+          return;
+        }
+        vobizAccount = existing;
+        req.log.info({ clerkId, vobizAuthId: existing.auth_id }, "Recovered existing VoBiz account via lookup");
+      } else {
+        req.log.error({ err, clerkId }, "Failed to create Vobiz sub-account");
+        res.status(502).json({ error: "Failed to provision verification account. Please try again." });
+        return;
+      }
     }
 
     [account] = await db
