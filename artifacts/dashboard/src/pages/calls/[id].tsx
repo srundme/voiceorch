@@ -7,7 +7,7 @@ import {
   ChevronDown, ChevronUp, Phone, Calendar, Clock, TrendingUp,
   BarChart3, Mic, Cpu, Volume2, Hash, ArrowRight, UserCheck,
   Voicemail, BookOpen, Tag, Activity, ExternalLink, Copy, CheckCircle2,
-  XCircle, PlayCircle, PauseCircle, MicOff
+  XCircle, PlayCircle, PauseCircle, MicOff, ScrollText
 } from "lucide-react";
 import {
   useGetCall,
@@ -16,7 +16,8 @@ import {
   getGetCallQueryKey,
   getGetAgentQueryKey,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -229,11 +230,21 @@ function DetailRow({ label, value, icon, highlight }: { label: string; value: Re
   );
 }
 
+interface CallLogEvent {
+  id: number;
+  callId: number;
+  ts: string;
+  level: "info" | "warn" | "error";
+  event: string;
+  data: Record<string, unknown> | null;
+}
+
 export default function CallDetail() {
   const params = useParams();
   const id = parseInt(params.id || "0", 10);
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { getToken } = useAuth();
 
   const { data: call, isLoading } = useGetCall(id, {
     query: { enabled: !!id, queryKey: getGetCallQueryKey(id) }
@@ -242,6 +253,18 @@ export default function CallDetail() {
   const agentId = call?.agentId;
   const { data: agent } = useGetAgent(agentId!, {
     query: { enabled: !!agentId, queryKey: getGetAgentQueryKey(agentId!) }
+  });
+
+  const { data: callLogs, isLoading: logsLoading } = useQuery<CallLogEvent[]>({
+    queryKey: ["call-logs", id],
+    enabled: !!id,
+    queryFn: async () => {
+      const token = await getToken();
+      const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+      const r = await fetch(`/api/calls/${id}/logs`, { headers });
+      if (!r.ok) return [];
+      return r.json();
+    },
   });
 
   const updateDisposition = useUpdateCallDisposition();
@@ -458,6 +481,9 @@ export default function CallDetail() {
                 <TabsTrigger value="tools" className="text-xs h-6 gap-1">
                   <Zap className="h-3 w-3" /> Tools {toolEvents.length > 0 && `(${toolEvents.length})`}
                 </TabsTrigger>
+                <TabsTrigger value="logs" className="text-xs h-6 gap-1">
+                  <ScrollText className="h-3 w-3" /> Logs {callLogs && callLogs.length > 0 && `(${callLogs.length})`}
+                </TabsTrigger>
                 <TabsTrigger value="metadata" className="text-xs h-6 gap-1">
                   <Hash className="h-3 w-3" /> Metadata
                 </TabsTrigger>
@@ -558,6 +584,61 @@ export default function CallDetail() {
                         {toolEvents.map((event, i) => (
                           <ToolEventRow key={i} event={event} />
                         ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="logs" className="flex-1 overflow-auto mt-2 min-h-0">
+                <Card className="h-full flex flex-col overflow-hidden bg-[#0d0d0d] border-border">
+                  <CardContent className="p-0 flex-1 overflow-auto font-mono text-xs">
+                    {logsLoading ? (
+                      <div className="flex items-center justify-center h-full text-muted-foreground/40 gap-2">
+                        <ScrollText className="h-4 w-4 animate-pulse" />
+                        <span>Loading logs…</span>
+                      </div>
+                    ) : !callLogs || callLogs.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-full text-center py-10">
+                        <div className="h-10 w-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center mb-3">
+                          <ScrollText className="h-5 w-5 text-white/20" />
+                        </div>
+                        <p className="text-sm text-white/30">No logs recorded</p>
+                        <p className="text-xs text-white/20 mt-1">Logs are captured for new calls going forward</p>
+                      </div>
+                    ) : (
+                      <div className="p-3 space-y-0.5">
+                        {callLogs.map((entry) => {
+                          const ts = new Date(entry.ts).toISOString().replace("T", " ").substring(0, 23);
+                          const levelColor =
+                            entry.level === "error" ? "text-red-400" :
+                            entry.level === "warn"  ? "text-amber-400" :
+                            "text-emerald-400";
+                          const eventColor =
+                            entry.event.startsWith("call.")  ? "text-sky-400" :
+                            entry.event.startsWith("stt.")   ? "text-violet-400" :
+                            entry.event.startsWith("llm.")   ? "text-amber-300" :
+                            entry.event.startsWith("tool.")  ? "text-orange-400" :
+                            "text-white/60";
+                          const dataStr = entry.data
+                            ? JSON.stringify(entry.data, null, 0)
+                                .replace(/^\{/, "")
+                                .replace(/\}$/, "")
+                                .replace(/"([^"]+)":/g, "$1=")
+                                .replace(/,(?=")/g, "  ")
+                                .replace(/"/g, "")
+                            : "";
+                          return (
+                            <div key={entry.id} className="flex gap-2 items-start py-0.5 hover:bg-white/5 rounded px-1 group">
+                              <span className="text-white/25 shrink-0 tabular-nums">{ts}</span>
+                              <span className={`shrink-0 uppercase w-9 tabular-nums font-bold ${levelColor}`}>{entry.level}</span>
+                              <span className={`shrink-0 font-semibold ${eventColor}`}>{entry.event}</span>
+                              {dataStr && (
+                                <span className="text-white/45 break-all leading-relaxed">{dataStr}</span>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </CardContent>

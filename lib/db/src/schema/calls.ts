@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, json } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, json, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { agentsTable } from "./agents";
@@ -38,3 +38,14 @@ export const callsTable = pgTable("calls", {
 export const insertCallSchema = createInsertSchema(callsTable).omit({ id: true, createdAt: true });
 export type InsertCall = z.infer<typeof insertCallSchema>;
 export type Call = typeof callsTable.$inferSelect;
+
+export const callEventsTable = pgTable("call_events", {
+  id: serial("id").primaryKey(),
+  callId: integer("call_id").notNull().references(() => callsTable.id, { onDelete: "cascade" }),
+  ts: timestamp("ts", { withTimezone: true }).notNull().defaultNow(),
+  level: text("level").notNull().default("info"),
+  event: text("event").notNull(),
+  data: json("data").$type<Record<string, unknown>>(),
+}, (t) => [index("call_events_call_id_idx").on(t.callId)]);
+
+export type CallEvent = typeof callEventsTable.$inferSelect;
