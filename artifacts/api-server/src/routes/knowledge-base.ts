@@ -3,7 +3,67 @@ import { eq, and, sql } from "drizzle-orm";
 import { db, knowledgeSourcesTable, knowledgeEntriesTable, platformSettingsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logger } from "../lib/logger.js";
+import multer from "multer";
+import mammoth from "mammoth";
+import { createRequire } from "node:module";
 const router: IRouter = Router();
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB
+});
+
+/** Split extracted document text into reasonably-sized entry chunks. */
+function chunkText(text: string, maxChars = 4000): string[] {
+  const clean = text.replace(/\r\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  if (!clean) return [];
+  // Prefer splitting on blank lines (paragraphs); merge small paras up to maxChars.
+  const paras = clean.split(/\n{2,}/);
+  const chunks: string[] = [];
+  let buf = "";
+  for (const p of paras) {
+    const para = p.trim();
+    if (!para) continue;
+    if (para.length > maxChars) {
+      // Flush current buffer, then hard-split the oversized paragraph.
+      if (buf) { chunks.push(buf); buf = ""; }
+      for (let i = 0; i < para.length; i += maxChars) {
+        chunks.push(para.slice(i, i + maxChars));
+      }
+      continue;
+    }
+    if (buf.length + para.length + 2 > maxChars) {
+      chunks.push(buf);
+      buf = para;
+    } else {
+      buf = buf ? `${buf}\n\n${para}` : para;
+    }
+  }
+  if (buf) chunks.push(buf);
+  return chunks;
+}
+
+/** Extract plain text from an uploaded document buffer based on its filename/mimetype. */
+async function extractDocumentText(file: Express.Multer.File): Promise<string> {
+  const name = (file.originalname || "").toLowerCase();
+  const ext = name.includes(".") ? name.slice(name.lastIndexOf(".") + 1) : "";
+
+  if (ext === "pdf" || file.mimetype === "application/pdf") {
+    // pdf-parse is CommonJS; load via createRequire to avoid ESM interop issues.
+    const require = createRequire(import.meta.url);
+    const pdfParse = require("pdf-parse") as (buf: Buffer) => Promise<{ text: string }>;
+    const result = await pdfParse(file.buffer);
+    return result.text ?? "";
+  }
+
+  if (ext === "docx" || file.mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+    const result = await mammoth.extractRawText({ buffer: file.buffer });
+    return result.value ?? "";
+  }
+
+  // txt / csv / md / markdown and any other plain-text format
+  return file.buffer.toString("utf-8");
+}
 
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
 
@@ -108,7 +168,7 @@ router.post("/knowledge-sources", requireAuth, async (req, res) => {
   const userId = (req as any).clerkUserId as string;
   const { name, type, url, entries = [] } = req.body as {
     name: string;
-    type: "faq" | "text" | "website";
+    type: "faq" | "text" | "website" | "file";
     url?: string;
     entries?: Array<{ title?: string; content: string; keywords?: string }>;
   };
@@ -117,8 +177,8 @@ router.post("/knowledge-sources", requireAuth, async (req, res) => {
     res.status(400).json({ error: "name is required" });
     return;
   }
-  if (!["faq", "text", "website"].includes(type)) {
-    res.status(400).json({ error: "type must be faq, text, or website" });
+  if (!["faq", "text", "website", "file"].includes(type)) {
+    res.status(400).json({ error: "type must be faq, text, website, or file" });
     return;
   }
 
@@ -180,6 +240,72 @@ router.post("/knowledge-sources", requireAuth, async (req, res) => {
 
   const [refreshed] = await db.select().from(knowledgeSourcesTable).where(eq(knowledgeSourcesTable.id, source!.id));
   res.status(201).json({ ...refreshed, entries: createdEntries });
+});
+
+/* ── Upload document (file source) ───────────────────────────────────────── */
+
+router.post("/knowledge-sources/upload", requireAuth, upload.single("file"), async (req, res) => {
+  const userId = (req as any).clerkUserId as string;
+  const name = String((req.body?.name ?? "")).trim();
+  const file = req.file;
+
+  if (!name) { res.status(400).json({ error: "name is required" }); return; }
+  if (!file) { res.status(400).json({ error: "file is required" }); return; }
+
+  const allowedExts = ["pdf", "docx", "txt", "csv", "md", "markdown"];
+  const lower = (file.originalname || "").toLowerCase();
+  const ext = lower.includes(".") ? lower.slice(lower.lastIndexOf(".") + 1) : "";
+  if (!allowedExts.includes(ext)) {
+    res.status(400).json({ error: `Unsupported file type ".${ext}". Allowed: ${allowedExts.join(", ")}` });
+    return;
+  }
+
+  // Create the source up-front in "processing" state.
+  const [source] = await db
+    .insert(knowledgeSourcesTable)
+    .values({ userId, name, type: "file", status: "processing" })
+    .returning();
+  const sourceId = source!.id;
+
+  try {
+    const text = await extractDocumentText(file);
+    const chunks = chunkText(text);
+    if (!chunks.length) {
+      await db.update(knowledgeSourcesTable)
+        .set({ status: "error", updatedAt: new Date() })
+        .where(eq(knowledgeSourcesTable.id, sourceId));
+      res.status(400).json({ error: "No text could be extracted from the document" });
+      return;
+    }
+
+    const baseTitle = file.originalname;
+    const createdEntries: typeof knowledgeEntriesTable.$inferSelect[] = [];
+    for (let i = 0; i < chunks.length; i++) {
+      const [entry] = await db.insert(knowledgeEntriesTable).values({
+        sourceId,
+        userId,
+        title: chunks.length > 1 ? `${baseTitle} (part ${i + 1})` : baseTitle,
+        content: chunks[i]!,
+        keywords: null,
+      }).returning();
+      createdEntries.push(entry!);
+    }
+
+    await db.update(knowledgeSourcesTable)
+      .set({ status: "active", entryCount: createdEntries.length, updatedAt: new Date() })
+      .where(eq(knowledgeSourcesTable.id, sourceId));
+
+    req.log.info({ sourceId, file: file.originalname, entryCount: createdEntries.length }, "KB file upload processed");
+    const [refreshed] = await db.select().from(knowledgeSourcesTable).where(eq(knowledgeSourcesTable.id, sourceId));
+    res.status(201).json({ ...refreshed, entries: createdEntries });
+  } catch (err) {
+    await db.update(knowledgeSourcesTable)
+      .set({ status: "error", updatedAt: new Date() })
+      .where(eq(knowledgeSourcesTable.id, sourceId))
+      .catch(() => {});
+    req.log.warn({ err, sourceId, file: file.originalname }, "KB file upload extraction failed");
+    res.status(400).json({ error: "Failed to extract text from the uploaded document" });
+  }
 });
 
 /* ── Get detail ──────────────────────────────────────────────────────────── */

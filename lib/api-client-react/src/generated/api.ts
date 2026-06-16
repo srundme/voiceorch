@@ -249,6 +249,7 @@ import type {
   UpdateLeadCallbackBody,
   UpdateLeadCrmBody,
   UpdateLeadSourceBody,
+  UploadKnowledgeSourceBody,
   UserPreferences,
   UserPreferencesUpdate,
   ValidateLeadsBody,
@@ -2211,6 +2212,80 @@ export const useCreateKnowledgeSource = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getCreateKnowledgeSourceMutationOptions(options));
+    }
+
+export const getUploadKnowledgeSourceUrl = () => {
+
+
+
+
+  return `/api/knowledge-sources/upload`
+}
+
+/**
+ * @summary Create a knowledge source from an uploaded document (PDF/DOCX/TXT/CSV/Markdown)
+ */
+export const uploadKnowledgeSource = async (uploadKnowledgeSourceBody: UploadKnowledgeSourceBody, options?: RequestInit): Promise<KnowledgeSourceDetail> => {
+    const formData = new FormData();
+formData.append(`name`, uploadKnowledgeSourceBody.name);
+formData.append(`file`, uploadKnowledgeSourceBody.file);
+
+  return customFetch<KnowledgeSourceDetail>(getUploadKnowledgeSourceUrl(),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body:
+      formData,
+  }
+);}
+
+
+
+
+export const getUploadKnowledgeSourceMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadKnowledgeSource>>, TError,{data: BodyType<UploadKnowledgeSourceBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof uploadKnowledgeSource>>, TError,{data: BodyType<UploadKnowledgeSourceBody>}, TContext> => {
+
+const mutationKey = ['uploadKnowledgeSource'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof uploadKnowledgeSource>>, {data: BodyType<UploadKnowledgeSourceBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  uploadKnowledgeSource(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UploadKnowledgeSourceMutationResult = NonNullable<Awaited<ReturnType<typeof uploadKnowledgeSource>>>
+    export type UploadKnowledgeSourceMutationBody = BodyType<UploadKnowledgeSourceBody>
+    export type UploadKnowledgeSourceMutationError = ErrorType<void>
+
+    /**
+ * @summary Create a knowledge source from an uploaded document (PDF/DOCX/TXT/CSV/Markdown)
+ */
+export const useUploadKnowledgeSource = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadKnowledgeSource>>, TError,{data: BodyType<UploadKnowledgeSourceBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof uploadKnowledgeSource>>,
+        TError,
+        {data: BodyType<UploadKnowledgeSourceBody>},
+        TContext
+      > => {
+      return useMutation(getUploadKnowledgeSourceMutationOptions(options));
     }
 
 export const getGetKnowledgeSourceUrl = (id: number,) => {

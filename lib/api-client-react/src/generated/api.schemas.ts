@@ -392,6 +392,8 @@ export interface Agent {
      * @nullable
      */
   knowledgeBaseId?: number | null;
+  /** IDs of all attached knowledge sources (many-to-many) */
+  knowledgeSourceIds?: number[];
   /**
      * List of tools (functions) the LLM can invoke during a call
      * @nullable
@@ -621,6 +623,8 @@ export interface AgentUpdate {
   inactivityMessage?: string;
   /** ID of an attached knowledge base for RAG context injection */
   knowledgeBaseId?: number;
+  /** IDs of all attached knowledge sources (many-to-many) */
+  knowledgeSourceIds?: number[];
   /** List of tools (functions) the LLM can invoke during a call */
   tools?: AgentTool[];
   status?: string;
@@ -1002,6 +1006,7 @@ export const KnowledgeSourceType = {
   faq: 'faq',
   text: 'text',
   website: 'website',
+  file: 'file',
 } as const;
 
 export type KnowledgeSourceStatus = typeof KnowledgeSourceStatus[keyof typeof KnowledgeSourceStatus];
@@ -1030,6 +1035,7 @@ export const KnowledgeSourceDetailType = {
   faq: 'faq',
   text: 'text',
   website: 'website',
+  file: 'file',
 } as const;
 
 export type KnowledgeSourceDetailStatus = typeof KnowledgeSourceDetailStatus[keyof typeof KnowledgeSourceDetailStatus];
@@ -1070,6 +1076,7 @@ export const KnowledgeSourceInputType = {
   faq: 'faq',
   text: 'text',
   website: 'website',
+  file: 'file',
 } as const;
 
 export interface KnowledgeEntryInput {
@@ -3814,6 +3821,11 @@ export type UpdateCallDispositionBodyDispositionResult = {[key: string]: string 
 
 export type UpdateCallDispositionBody = {
   dispositionResult?: UpdateCallDispositionBodyDispositionResult;
+};
+
+export type UploadKnowledgeSourceBody = {
+  name: string;
+  file: Blob;
 };
 
 export type ListTransactionsParams = {

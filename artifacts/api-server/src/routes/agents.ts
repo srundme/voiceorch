@@ -1,7 +1,7 @@
 // agents router — supports call_transfer + webhook (custom function) tools + AMD voicemail detection
 import { Router, type IRouter } from "express";
 import { eq, and, count, desc, isNull, inArray } from "drizzle-orm";
-import { db, agentsTable, schedulingCalendarsTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callerSentencesTable, callerFactSentenceLinksTable, callerEpisodeFactLinksTable, providersTable } from "@workspace/db";
+import { db, agentsTable, schedulingCalendarsTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callerSentencesTable, callerFactSentenceLinksTable, callerEpisodeFactLinksTable, providersTable, agentKnowledgeSourcesTable } from "@workspace/db";
 import {
   CreateAgentBody,
   UpdateAgentBody,
@@ -32,14 +32,60 @@ function maskLeadToken(token: string | null | undefined): string | null {
   return "..." + plain.slice(-4);
 }
 
-function prepareAgentForResponse(agent: typeof agentsTable.$inferSelect) {
+function prepareAgentForResponse(
+  agent: typeof agentsTable.$inferSelect,
+  knowledgeSourceIds: number[] = [],
+) {
   // Strip admin-only fields from dashboard responses
   const { generatedPrompt: _gp, promptTemplateVersion: _pv, wizardInputs: _wi, ...rest } = agent;
   return {
     ...rest,
+    knowledgeSourceIds,
     leadSourceToken: maskLeadToken(agent.leadSourceToken),
     hasGeneratedPrompt: !!agent.generatedPrompt,
   };
+}
+
+/**
+ * Resolve the set of attached knowledge source IDs for a list of agents.
+ * Unions the M:N join table with the legacy single `knowledgeBaseId` column
+ * so agents created before the join table still surface their attached source.
+ */
+async function getKnowledgeSourceIdsByAgent(
+  agents: Array<typeof agentsTable.$inferSelect>,
+): Promise<Map<number, number[]>> {
+  const result = new Map<number, number[]>();
+  for (const a of agents) result.set(a.id, []);
+  const agentIds = agents.map((a) => a.id);
+  if (agentIds.length > 0) {
+    const links = await db
+      .select()
+      .from(agentKnowledgeSourcesTable)
+      .where(inArray(agentKnowledgeSourcesTable.agentId, agentIds));
+    for (const link of links) {
+      const arr = result.get(link.agentId);
+      if (arr && !arr.includes(link.sourceId)) arr.push(link.sourceId);
+    }
+  }
+  // Union legacy single-column value
+  for (const a of agents) {
+    if (a.knowledgeBaseId != null) {
+      const arr = result.get(a.id)!;
+      if (!arr.includes(a.knowledgeBaseId)) arr.unshift(a.knowledgeBaseId);
+    }
+  }
+  return result;
+}
+
+/** Replace an agent's join-table knowledge source associations. */
+async function setAgentKnowledgeSources(agentId: number, sourceIds: number[]): Promise<void> {
+  const unique = Array.from(new Set(sourceIds.filter((n) => Number.isInteger(n))));
+  await db.delete(agentKnowledgeSourcesTable).where(eq(agentKnowledgeSourcesTable.agentId, agentId));
+  if (unique.length > 0) {
+    await db.insert(agentKnowledgeSourcesTable)
+      .values(unique.map((sourceId) => ({ agentId, sourceId })))
+      .onConflictDoNothing();
+  }
 }
 
 router.get("/agents", requireAuth, async (req, res): Promise<void> => {
@@ -49,7 +95,8 @@ router.get("/agents", requireAuth, async (req, res): Promise<void> => {
     .from(agentsTable)
     .where(eq(agentsTable.userId, clerkId))
     .orderBy(agentsTable.createdAt);
-  res.json(ListAgentsResponse.parse(agents.map(prepareAgentForResponse)));
+  const sourceIdMap = await getKnowledgeSourceIdsByAgent(agents);
+  res.json(ListAgentsResponse.parse(agents.map((a) => prepareAgentForResponse(a, sourceIdMap.get(a.id) ?? []))));
 });
 
 router.post("/agents", requireAuth, async (req, res): Promise<void> => {
@@ -66,6 +113,11 @@ router.post("/agents", requireAuth, async (req, res): Promise<void> => {
   const wizardInputs = (rawBody["wizardInputs"] ?? null) as WizardInputs | null;
 
   const insertData: Record<string, unknown> = { ...parsed.data, userId: clerkId };
+  // knowledgeSourceIds is an M:N association, not an agents column — extract before insert.
+  const createSourceIds = Array.isArray(insertData["knowledgeSourceIds"])
+    ? (insertData["knowledgeSourceIds"] as number[])
+    : null;
+  delete insertData["knowledgeSourceIds"];
   if (insertData["leadSourceToken"]) {
     insertData["leadSourceToken"] = encryptKey(insertData["leadSourceToken"] as string);
   }
@@ -107,6 +159,11 @@ router.post("/agents", requireAuth, async (req, res): Promise<void> => {
     .insert(agentsTable)
     .values(insertData as typeof agentsTable.$inferInsert)
     .returning();
+  let createdSourceIds: number[] = [];
+  if (createSourceIds) {
+    await setAgentKnowledgeSources(agent.id, createSourceIds);
+    createdSourceIds = Array.from(new Set(createSourceIds.filter((n) => Number.isInteger(n))));
+  }
   await logActivity({ userId: clerkId, eventType: "agent.created", resourceType: "agent", resourceId: String(agent.id), description: `Agent "${agent.name}" created` });
   db.insert(schedulingCalendarsTable)
     .values({
@@ -120,7 +177,7 @@ router.post("/agents", requireAuth, async (req, res): Promise<void> => {
     .catch((err) => {
       req.log.warn({ err, agentId: agent.id }, "Failed to auto-create scheduling calendar for agent");
     });
-  res.status(201).json(GetAgentResponse.parse(prepareAgentForResponse(agent)));
+  res.status(201).json(GetAgentResponse.parse(prepareAgentForResponse(agent, createdSourceIds)));
 });
 
 router.get("/agents/:id", requireAuth, async (req, res): Promise<void> => {
@@ -138,7 +195,8 @@ router.get("/agents/:id", requireAuth, async (req, res): Promise<void> => {
     res.status(404).json({ error: "Agent not found" });
     return;
   }
-  res.json(GetAgentResponse.parse(prepareAgentForResponse(agent)));
+  const sourceIdMap = await getKnowledgeSourceIdsByAgent([agent]);
+  res.json(GetAgentResponse.parse(prepareAgentForResponse(agent, sourceIdMap.get(agent.id) ?? [])));
 });
 
 router.patch("/agents/:id", requireAuth, async (req, res): Promise<void> => {
@@ -154,6 +212,11 @@ router.patch("/agents/:id", requireAuth, async (req, res): Promise<void> => {
     return;
   }
   const updateData: Record<string, unknown> = { ...parsed.data };
+  // knowledgeSourceIds is an M:N association, not an agents column — extract before update.
+  const updateSourceIds = Array.isArray(updateData["knowledgeSourceIds"])
+    ? (updateData["knowledgeSourceIds"] as number[])
+    : undefined;
+  delete updateData["knowledgeSourceIds"];
   if (updateData.leadSourceToken) {
     updateData.leadSourceToken = encryptKey(updateData.leadSourceToken as string);
   }
@@ -177,7 +240,11 @@ router.patch("/agents/:id", requireAuth, async (req, res): Promise<void> => {
     res.status(404).json({ error: "Agent not found" });
     return;
   }
-  res.json(UpdateAgentResponse.parse(prepareAgentForResponse(agent)));
+  if (updateSourceIds !== undefined) {
+    await setAgentKnowledgeSources(agent.id, updateSourceIds);
+  }
+  const sourceIdMap = await getKnowledgeSourceIdsByAgent([agent]);
+  res.json(UpdateAgentResponse.parse(prepareAgentForResponse(agent, sourceIdMap.get(agent.id) ?? [])));
 });
 
 router.delete("/agents/:id", requireAuth, async (req, res): Promise<void> => {

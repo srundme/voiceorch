@@ -15,7 +15,7 @@ import { RecordingBuffer } from "./recorder.js";
 import type { AudioProcessResult } from "./audioPool.js";
 import type { AgentConfig, AgentTool, ConversationTurn, LLMUsage, SessionConfig, StreamSTT, ToolDefinition } from "./types.js";
 import { DEFAULT_GOODBYE_MESSAGE } from "./types.js";
-import { retrieveKbContext } from "./kb-retrieval.js";
+import { retrieveKbContext, retrieveKbContextMulti } from "./kb-retrieval.js";
 import { logger } from "../lib/logger.js";
 import { format, addMinutes } from "date-fns";
 import { toZonedTime, formatInTimeZone } from "date-fns-tz";
@@ -423,9 +423,9 @@ export class OrchestrationPipeline {
       this.genderDetector?.addSpeechChunk(pcm8k);
       // KB prefetch: fire on the first frame of a new speech segment so the lookup
       // runs during the utterance rather than after STT resolves.
-      if (!this.inSpeechSegment && !this.isProcessing && this.agent.knowledgeBaseId) {
+      if (!this.inSpeechSegment && !this.isProcessing && this.agent.knowledgeSourceIds.length > 0) {
         this.inSpeechSegment = true;
-        this.kbPrefetchPromise = retrieveKbContext(this.agent.knowledgeBaseId, "")
+        this.kbPrefetchPromise = retrieveKbContextMulti(this.agent.knowledgeSourceIds, "")
           .catch((err) => {
             logger.warn({ callId: this.config.callId, err }, "KB prefetch (streaming STT) failed");
             return null;
@@ -488,8 +488,8 @@ export class OrchestrationPipeline {
       // KB prefetch: fire on the very first speech frame of a new utterance so
       // the lookup runs while the user is still speaking + during the silence
       // wait + during STT — well before processTurn() needs the result.
-      if (this.audioBuffer.length === 0 && this.agent.knowledgeBaseId) {
-        this.kbPrefetchPromise = retrieveKbContext(this.agent.knowledgeBaseId, "")
+      if (this.audioBuffer.length === 0 && this.agent.knowledgeSourceIds.length > 0) {
+        this.kbPrefetchPromise = retrieveKbContextMulti(this.agent.knowledgeSourceIds, "")
           .catch((err) => {
             logger.warn({ callId: this.config.callId, err }, "KB prefetch (batch STT) failed");
             return null;
@@ -1268,8 +1268,8 @@ export class OrchestrationPipeline {
       kbContextPromise = this.kbPrefetchPromise;
       this.kbPrefetchPromise = null;
       logger.debug({ callId: this.config.callId }, "KB context: using speech-start prefetch");
-    } else if (this.agent.knowledgeBaseId) {
-      kbContextPromise = retrieveKbContext(this.agent.knowledgeBaseId, transcript)
+    } else if (this.agent.knowledgeSourceIds.length > 0) {
+      kbContextPromise = retrieveKbContextMulti(this.agent.knowledgeSourceIds, transcript)
         .catch((err) => {
           logger.warn({ callId: this.config.callId, err }, "KB retrieval failed — continuing without context");
           return null;

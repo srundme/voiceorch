@@ -607,6 +607,34 @@ paths:
         "400":
           description: Validation error
 
+  /knowledge-sources/upload:
+    post:
+      operationId: uploadKnowledgeSource
+      tags: [knowledge]
+      summary: Create a knowledge source from an uploaded document (PDF/DOCX/TXT/CSV/Markdown)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [name, file]
+              properties:
+                name:
+                  type: string
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "201":
+          description: Created knowledge source with extracted entries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeSourceDetail"
+        "400":
+          description: Validation error
+
   /knowledge-sources/{id}:
     get:
       operationId: getKnowledgeSource
@@ -5485,6 +5513,11 @@ components:
         knowledgeBaseId:
           type: ["integer", "null"]
           description: ID of an attached knowledge base for RAG context injection
+        knowledgeSourceIds:
+          type: array
+          items:
+            type: integer
+          description: IDs of all attached knowledge sources (many-to-many)
         tools:
           type: ["array", "null"]
           items:
@@ -5747,6 +5780,11 @@ components:
         knowledgeBaseId:
           type: integer
           description: ID of an attached knowledge base for RAG context injection
+        knowledgeSourceIds:
+          type: array
+          items:
+            type: integer
+          description: IDs of all attached knowledge sources (many-to-many)
         tools:
           type: array
           items:
@@ -6166,7 +6204,7 @@ components:
           type: string
         type:
           type: string
-          enum: [faq, text, website]
+          enum: [faq, text, website, file]
         status:
           type: string
           enum: [active, processing, error]
@@ -6189,7 +6227,7 @@ components:
           type: string
         type:
           type: string
-          enum: [faq, text, website]
+          enum: [faq, text, website, file]
         status:
           type: string
           enum: [active, processing, error]
@@ -6215,7 +6253,7 @@ components:
           minLength: 1
         type:
           type: string
-          enum: [faq, text, website]
+          enum: [faq, text, website, file]
         url:
           type: string
           description: URL to crawl (required when type=website)

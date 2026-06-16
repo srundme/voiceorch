@@ -133,6 +133,8 @@ export const agentFormSchema = z.object({
   complianceHipaa: z.boolean().optional(),
   complianceTrai:  z.boolean().optional(),
   snapserveAgentId: z.string().optional(),
+  // Centralized Agent Knowledge — attached knowledge source IDs (M:N)
+  knowledgeSourceIds: z.array(z.number()).optional(),
 }).superRefine((data, ctx) => {
   const asrErr = getModelError(data.asrProvider, data.asrModel, ASR_MODELS);
   if (asrErr) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["asrModel"], message: asrErr });

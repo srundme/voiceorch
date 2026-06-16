@@ -1,10 +1,11 @@
 import React, { useState } from "react";
 import {
-  Brain, Plus, Trash2, FileText, Globe, MessageSquare,
+  BookOpen, Brain, Plus, Trash2, FileText, Globe, MessageSquare,
   ChevronRight, ArrowLeft, FlaskConical, Loader2,
   XCircle, CheckCircle2, Link, AlignLeft, HelpCircle,
-  Pencil, X, Search,
+  Pencil, X, Search, Upload,
 } from "lucide-react";
+import { useAuth } from "@/lib/auth";
 import {
   useListKnowledgeSources,
   useCreateKnowledgeSource,
@@ -42,11 +43,12 @@ const TYPE_META: Record<string, { label: string; icon: React.ReactNode; color: s
   faq: { label: "FAQ", icon: <HelpCircle className="w-4 h-4" />, color: "bg-violet-500/15 text-violet-400 border-violet-500/20" },
   text: { label: "Text", icon: <AlignLeft className="w-4 h-4" />, color: "bg-blue-500/15 text-blue-400 border-blue-500/20" },
   website: { label: "Website", icon: <Globe className="w-4 h-4" />, color: "bg-emerald-500/15 text-emerald-400 border-emerald-500/20" },
+  file: { label: "File", icon: <FileText className="w-4 h-4" />, color: "bg-amber-500/15 text-amber-400 border-amber-500/20" },
 };
 
 const STATUS_META: Record<string, { label: string; color: string; spin?: boolean }> = {
   active: { label: "Active", color: "text-emerald-400" },
-  processing: { label: "Crawling…", color: "text-amber-400", spin: true },
+  processing: { label: "Processing…", color: "text-amber-400", spin: true },
   error: { label: "Error", color: "text-red-400" },
 };
 
@@ -105,7 +107,9 @@ function SourceCard({
 
 /* ── Create Source Modal ─────────────────────────────────────────────────── */
 
-type SourceType = "faq" | "text" | "website";
+type SourceType = "faq" | "text" | "website" | "file";
+
+const ACCEPTED_FILE_EXTS = ".pdf,.docx,.txt,.csv,.md,.markdown";
 
 interface CreateSourceModalProps {
   open: boolean;
@@ -117,6 +121,7 @@ interface FaqPair { q: string; a: string }
 function CreateSourceModal({ open, onClose }: CreateSourceModalProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { getToken } = useAuth();
   const [step, setStep] = useState<"type" | "details">("type");
   const [selectedType, setSelectedType] = useState<SourceType>("faq");
   const [name, setName] = useState("");
@@ -124,6 +129,8 @@ function CreateSourceModal({ open, onClose }: CreateSourceModalProps) {
   const [textContent, setTextContent] = useState("");
   const [textTitle, setTextTitle] = useState("");
   const [faqs, setFaqs] = useState<FaqPair[]>([{ q: "", a: "" }]);
+  const [file, setFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const create = useCreateKnowledgeSource();
 
@@ -134,11 +141,43 @@ function CreateSourceModal({ open, onClose }: CreateSourceModalProps) {
     setTextContent("");
     setTextTitle("");
     setFaqs([{ q: "", a: "" }]);
+    setFile(null);
+    setUploading(false);
   }
 
   function handleClose() { reset(); onClose(); }
 
+  async function handleFileUpload() {
+    if (!name.trim()) { toast({ title: "Name is required", variant: "destructive" }); return; }
+    if (!file) { toast({ title: "Choose a file to upload", variant: "destructive" }); return; }
+    setUploading(true);
+    try {
+      const form = new FormData();
+      form.append("name", name.trim());
+      form.append("file", file);
+      const token = await getToken();
+      const res = await fetch("/api/knowledge-sources/upload", {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        body: form,
+      });
+      if (!res.ok) {
+        let msg = `Upload failed (${res.status})`;
+        try { const body = await res.json(); if (body?.error) msg = body.error; } catch { /* ignore */ }
+        throw new Error(msg);
+      }
+      await queryClient.invalidateQueries({ queryKey: getListKnowledgeSourcesQueryKey() });
+      toast({ title: "Document uploaded", description: "Text extracted into knowledge entries." });
+      handleClose();
+    } catch (err) {
+      toast({ title: "Failed to upload", description: formatApiError(err), variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  }
+
   async function handleSubmit() {
+    if (selectedType === "file") { await handleFileUpload(); return; }
     if (!name.trim()) { toast({ title: "Name is required", variant: "destructive" }); return; }
 
     let entries: Array<{ title?: string; content: string; keywords?: string }> = [];
@@ -175,6 +214,7 @@ function CreateSourceModal({ open, onClose }: CreateSourceModalProps) {
   const typeChoices: Array<{ type: SourceType; label: string; desc: string; icon: React.ReactNode }> = [
     { type: "faq", label: "FAQ", desc: "Question & Answer pairs", icon: <HelpCircle className="w-5 h-5 text-violet-400" /> },
     { type: "text", label: "Paste Text", desc: "Paste any information directly", icon: <AlignLeft className="w-5 h-5 text-blue-400" /> },
+    { type: "file", label: "File Upload", desc: "PDF, DOCX, TXT, CSV, or Markdown", icon: <FileText className="w-5 h-5 text-amber-400" /> },
     { type: "website", label: "Website", desc: "Import from a URL", icon: <Globe className="w-5 h-5 text-emerald-400" /> },
   ];
 
@@ -296,20 +336,56 @@ function CreateSourceModal({ open, onClose }: CreateSourceModalProps) {
                 <p className="text-xs text-muted-foreground mt-1.5">The page will be crawled and imported automatically.</p>
               </div>
             )}
+
+            {selectedType === "file" && (
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Document</label>
+                <label
+                  htmlFor="kb-file-input"
+                  className="flex flex-col items-center justify-center gap-2 p-6 rounded-lg border border-dashed border-border hover:border-primary/40 hover:bg-accent/30 transition-all cursor-pointer text-center"
+                >
+                  {file ? (
+                    <>
+                      <FileText className="w-6 h-6 text-amber-400" />
+                      <span className="text-sm font-medium truncate max-w-full">{file.name}</span>
+                      <span className="text-xs text-muted-foreground">{(file.size / 1024).toFixed(0)} KB · click to replace</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-6 h-6 text-muted-foreground" />
+                      <span className="text-sm font-medium">Choose a file</span>
+                      <span className="text-xs text-muted-foreground">PDF, DOCX, TXT, CSV, or Markdown (max 20 MB)</span>
+                    </>
+                  )}
+                </label>
+                <input
+                  id="kb-file-input"
+                  type="file"
+                  accept={ACCEPTED_FILE_EXTS}
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0] ?? null;
+                    setFile(f);
+                    if (f && !name.trim()) setName(f.name.replace(/\.[^.]+$/, ""));
+                  }}
+                />
+                <p className="text-xs text-muted-foreground mt-1.5">The document text will be extracted into searchable entries.</p>
+              </div>
+            )}
           </div>
         )}
 
         <DialogFooter>
           {step === "details" && (
-            <Button variant="outline" onClick={() => setStep("type")}>Back</Button>
+            <Button variant="outline" onClick={() => setStep("type")} disabled={uploading}>Back</Button>
           )}
           {step === "type" && (
             <Button variant="outline" onClick={handleClose}>Cancel</Button>
           )}
           {step === "details" && (
-            <Button onClick={handleSubmit} disabled={create.isPending}>
-              {create.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              {selectedType === "website" ? "Import Website" : "Create Source"}
+            <Button onClick={handleSubmit} disabled={create.isPending || uploading}>
+              {(create.isPending || uploading) && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              {selectedType === "website" ? "Import Website" : selectedType === "file" ? "Upload Document" : "Create Source"}
             </Button>
           )}
         </DialogFooter>
@@ -713,16 +789,16 @@ export default function KnowledgeBasePage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2.5">
-            <Brain className="w-6 h-6 text-primary" />
-            AI Knowledge
+            <BookOpen className="w-6 h-6 text-primary" />
+            Agent Knowledge
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Train your AI agents with FAQs, documents, and website content.
+            Build reusable knowledge sources from FAQs, text, documents, and websites — then attach them to any agent.
           </p>
         </div>
         <Button onClick={() => setCreateOpen(true)}>
           <Plus className="w-4 h-4 mr-2" />
-          Add Source
+          Add Knowledge
         </Button>
       </div>
 
@@ -734,11 +810,11 @@ export default function KnowledgeBasePage() {
       ) : !sources?.length ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <div className="p-4 rounded-2xl bg-muted mb-4">
-            <Brain className="w-8 h-8 text-muted-foreground" />
+            <BookOpen className="w-8 h-8 text-muted-foreground" />
           </div>
           <h3 className="font-semibold mb-1">No knowledge sources yet</h3>
           <p className="text-sm text-muted-foreground max-w-sm mb-6">
-            Add FAQs, paste text, or import from a website to train your voice agents.
+            Add FAQs, paste text, upload a document, or import from a website to train your voice agents.
           </p>
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="w-4 h-4 mr-2" />

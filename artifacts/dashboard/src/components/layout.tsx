@@ -6,7 +6,7 @@ import {
   Monitor, Users, Zap, CalendarDays, Brain, Phone,
   Settings, Key, Webhook, Wallet, TrendingUp, ShieldCheck,
   Mic2, Menu, ChevronDown, ChevronLeft, ChevronRight,
-  LogOut, Bell, Search, SlidersHorizontal,
+  LogOut, Bell, Search, SlidersHorizontal, BookOpen,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useAuth } from "@/lib/auth";
@@ -18,12 +18,13 @@ const LS_COLLAPSED    = "snapserve:sidebar-collapsed";
 const LS_SETTINGS     = "snapserve:settings-open";
 
 const NAV_PRIMARY = [
-  { name: "Command Center", href: "/app/command-center", icon: Monitor },
-  { name: "Agents",         href: "/app/agents",         icon: Users },
-  { name: "Campaigns",      href: "/app/campaigns",      icon: Zap },
-  { name: "Scheduling",     href: "/app/scheduling",     icon: CalendarDays },
-  { name: "Memory / CRM",   href: "/app/memory",         icon: Brain },
-  { name: "Call Logs",      href: "/app/calls",          icon: Phone },
+  { name: "Command Center",  href: "/app/command-center",  icon: Monitor },
+  { name: "Agents",          href: "/app/agents",          icon: Users },
+  { name: "Agent Knowledge", href: "/app/knowledge-bases", icon: BookOpen },
+  { name: "Campaigns",       href: "/app/campaigns",       icon: Zap },
+  { name: "Scheduling",      href: "/app/scheduling",      icon: CalendarDays },
+  { name: "Memory / CRM",    href: "/app/memory",          icon: Brain },
+  { name: "Call Logs",       href: "/app/calls",           icon: Phone },
 ];
 
 const NAV_SETTINGS = [
@@ -42,6 +43,7 @@ const ROUTE_TITLES: [string, string][] = [
   ["/app/command-center",  "Command Center"],
   ["/app/agents/new",      "New Agent"],
   ["/app/agents",          "Agents"],
+  ["/app/knowledge-bases", "Agent Knowledge"],
   ["/app/campaigns",       "Campaigns"],
   ["/app/scheduling",      "Scheduling"],
   ["/app/memory",          "Memory / CRM"],

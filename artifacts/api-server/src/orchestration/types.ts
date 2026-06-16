@@ -222,6 +222,9 @@ export interface AgentConfig {
 
   // P1-B: Knowledge Base RAG
   knowledgeBaseId: number | null;
+  // Centralized Agent Knowledge — all knowledge source IDs attached to this agent
+  // (M:N join table ∪ legacy knowledgeBaseId). Injected together at call time.
+  knowledgeSourceIds: number[];
 
   // P1-C: Webhook HMAC secret
   webhookSecret: string | null;

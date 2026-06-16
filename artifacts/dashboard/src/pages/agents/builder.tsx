@@ -16,6 +16,7 @@ import {
   useListAgents, useGetAgent, useUpdateAgent, useToggleAgent, useDeleteAgent,
   useInitiateOutboundCall, getListAgentsQueryKey, getGetAgentQueryKey,
   useListCalls, getListCallsQueryKey, useListEventTypes, customFetch,
+  useListKnowledgeSources,
 } from "@workspace/api-client-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -28,6 +29,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+} from "@/components/ui/command";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -110,6 +115,113 @@ function SectionDivider({ label }: { label: string }) {
       <div className="h-px flex-1 bg-border/40" />
       <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{label}</span>
       <div className="h-px flex-1 bg-border/40" />
+    </div>
+  );
+}
+
+/* ── Agent Knowledge multi-select ───────────────────────────────────────────── */
+
+const KB_TYPE_META: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
+  faq:     { label: "FAQ",     icon: <List className="w-3 h-3" />,     color: "bg-violet-500/15 text-violet-400 border-violet-500/20" },
+  text:    { label: "Text",    icon: <FileText className="w-3 h-3" />, color: "bg-blue-500/15 text-blue-400 border-blue-500/20" },
+  website: { label: "Website", icon: <Globe className="w-3 h-3" />,    color: "bg-emerald-500/15 text-emerald-400 border-emerald-500/20" },
+  file:    { label: "File",    icon: <FileText className="w-3 h-3" />, color: "bg-amber-500/15 text-amber-400 border-amber-500/20" },
+};
+
+function KnowledgeSourceMultiSelect({ value, onChange }: {
+  value: number[];
+  onChange: (v: number[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const { data: sources, isLoading } = useListKnowledgeSources();
+  const list = sources ?? [];
+  const selected = useMemo(() => list.filter((s) => value.includes(s.id)), [list, value]);
+
+  const toggle = (id: number) => {
+    if (value.includes(id)) onChange(value.filter((v) => v !== id));
+    else onChange([...value, id]);
+  };
+
+  return (
+    <div className="space-y-2">
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className="w-full flex items-center justify-between rounded-lg border border-border/60 bg-card/30 px-4 py-3 text-sm text-muted-foreground hover:border-border hover:text-foreground transition-colors"
+          >
+            <span>
+              {value.length === 0
+                ? "Select knowledge sources"
+                : `${value.length} source${value.length === 1 ? "" : "s"} attached`}
+            </span>
+            <ChevronDown className="h-4 w-4 opacity-50" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+          <Command>
+            <CommandInput placeholder="Search knowledge sources…" />
+            <CommandList>
+              {isLoading ? (
+                <div className="py-6 text-center text-xs text-muted-foreground">Loading…</div>
+              ) : list.length === 0 ? (
+                <CommandEmpty>No knowledge sources yet. Create one in Agent Knowledge.</CommandEmpty>
+              ) : (
+                <>
+                  <CommandEmpty>No matches.</CommandEmpty>
+                  <CommandGroup>
+                    {list.map((s) => {
+                      const meta = KB_TYPE_META[s.type] ?? KB_TYPE_META["text"]!;
+                      const checked = value.includes(s.id);
+                      return (
+                        <CommandItem
+                          key={s.id}
+                          value={`${s.name} ${meta.label}`}
+                          onSelect={() => toggle(s.id)}
+                          className="flex items-center gap-2"
+                        >
+                          <div className={cn(
+                            "flex h-4 w-4 items-center justify-center rounded border",
+                            checked ? "bg-primary border-primary text-primary-foreground" : "border-border",
+                          )}>
+                            {checked && <Check className="h-3 w-3" />}
+                          </div>
+                          <span className="flex-1 truncate">{s.name}</span>
+                          <Badge variant="outline" className={cn("gap-1 text-[10px] py-0", meta.color)}>
+                            {meta.icon}{meta.label}
+                          </Badge>
+                          <span className="text-[10px] text-muted-foreground tabular-nums">{s.entryCount}</span>
+                        </CommandItem>
+                      );
+                    })}
+                  </CommandGroup>
+                </>
+              )}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {selected.map((s) => {
+            const meta = KB_TYPE_META[s.type] ?? KB_TYPE_META["text"]!;
+            return (
+              <Badge key={s.id} variant="outline" className={cn("gap-1 pr-1", meta.color)}>
+                {meta.icon}
+                <span className="truncate max-w-[140px]">{s.name}</span>
+                <button
+                  type="button"
+                  onClick={() => toggle(s.id)}
+                  className="ml-0.5 rounded-sm hover:bg-background/40 p-0.5"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -459,13 +571,23 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
             )} />
           </div>
 
-          {/* ── Files / Knowledge Base ───────────────────────────────────────── */}
+          {/* ── Agent Knowledge ──────────────────────────────────────────────── */}
           <div className="space-y-2">
-            <span className="text-sm font-semibold">Files</span>
-            <button type="button" className="w-full flex items-center justify-between rounded-lg border border-border/60 bg-card/30 px-4 py-3 text-sm text-muted-foreground hover:border-border hover:text-foreground transition-colors">
-              <span>Select Files</span>
-              <ChevronDown className="h-4 w-4 opacity-50" />
-            </button>
+            <span className="text-sm font-semibold">Agent Knowledge</span>
+            <FormField control={form.control} name="knowledgeSourceIds" render={({ field }) => (
+              <FormItem className="space-y-0">
+                <FormControl>
+                  <KnowledgeSourceMultiSelect
+                    value={(field.value ?? []) as number[]}
+                    onChange={field.onChange}
+                  />
+                </FormControl>
+                <FormDescription className="text-[10px] mt-1.5">
+                  Attached sources are searched during live calls and relevant entries are injected into the agent's context.
+                </FormDescription>
+                <FormMessage className="text-[10px]" />
+              </FormItem>
+            )} />
           </div>
 
           {/* ── Bottom strip: telephony + cost ───────────────────────────────── */}
@@ -1839,6 +1961,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       startSpeakingOnNoPunctuationSecs: 1.5, startSpeakingOnNumberSecs: 0.5,
       stopSpeakingNumWords: 0, stopSpeakingVoiceSecs: 0.2, stopSpeakingBackOffSecs: 1,
       complianceIrdai: false, complianceDpdp: false, complianceHipaa: false, complianceTrai: false,
+      knowledgeSourceIds: [],
     },
   });
 
@@ -1895,6 +2018,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       dispositionSchema:        ((agent as any).dispositionSchema ?? []).map((f: any) => ({
         ...f, options: Array.isArray(f.options) ? f.options.join(", ") : (f.options ?? ""),
       })) as AgentFormValues["dispositionSchema"],
+      knowledgeSourceIds:       ((agent as any).knowledgeSourceIds ?? []) as number[],
     });
   }, [agent]);
 

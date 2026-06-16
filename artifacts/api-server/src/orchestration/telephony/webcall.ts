@@ -19,6 +19,7 @@ import { GenderDetector } from "../genderDetector.js";
 import { GenderDetectorML } from "../genderDetectorML.js";
 import { GenderDetectorMLv2 } from "../genderDetectorMLv2.js";
 import { buildDatetimeInjection } from "../datetimeInject.js";
+import { getAttachedSourceIds, buildKnowledgeBaseBlock } from "../kb-retrieval.js";
 import {
   buildToolDefs,
   executeNativeBooking,
@@ -486,27 +487,24 @@ export async function handleWebCallWebSocket(
       .replace(/\{(\w+)\}/g,     (m, k: string) => resolveVar(k, m));
   }
 
-  // ── Knowledge base injection ─────────────────────────────────────────────
-  if (agent.knowledgeBaseId) {
+  // ── Knowledge base injection (all attached sources) ──────────────────────
+  const kbSourceIds = await getAttachedSourceIds(agent.id, agent.knowledgeBaseId);
+  if (kbSourceIds.length > 0) {
     try {
-      const entries = await db
-        .select()
-        .from(knowledgeEntriesTable)
-        .where(eq(knowledgeEntriesTable.sourceId, agent.knowledgeBaseId))
-        .limit(100);
-      if (entries.length > 0) {
+      const entriesBlock = await buildKnowledgeBaseBlock(kbSourceIds);
+      if (entriesBlock) {
         const kbBlock = [
           "=== KNOWLEDGE BASE ===",
           "Use the following information to answer questions accurately. Always prefer this over your general training data.",
           "",
-          ...entries.map(e => e.title ? `[${e.title}]\n${e.content}` : e.content),
+          entriesBlock,
           "=== END KNOWLEDGE BASE ===",
         ].join("\n\n");
         systemPrompt = `${kbBlock}\n\n${systemPrompt}`;
-        logger.info({ callId, knowledgeBaseId: agent.knowledgeBaseId, entryCount: entries.length }, "Webcall: knowledge base injected into system prompt");
+        logger.info({ callId, knowledgeSourceIds: kbSourceIds }, "Webcall: knowledge base injected into system prompt");
       }
     } catch (kbErr) {
-      logger.warn({ callId, knowledgeBaseId: agent.knowledgeBaseId, kbErr }, "Webcall: failed to load knowledge base — continuing without it");
+      logger.warn({ callId, knowledgeSourceIds: kbSourceIds, kbErr }, "Webcall: failed to load knowledge base — continuing without it");
     }
   }
 

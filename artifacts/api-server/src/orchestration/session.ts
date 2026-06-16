@@ -1,5 +1,6 @@
 import { createHmac } from "crypto";
 import { db, agentsTable, callsTable, providersTable, platformSettingsTable, campaignLeadsTable, knowledgeEntriesTable, callTransfersTable } from "@workspace/db";
+import { getAttachedSourceIds, buildKnowledgeBaseBlock } from "./kb-retrieval.js";
 import { decryptKey } from "../lib/crypto.js";
 import { eq, and } from "drizzle-orm";
 import { OrchestrationPipeline } from "./pipeline.js";
@@ -183,6 +184,7 @@ export async function createSession(params: {
       : [],
     // P1-B: Knowledge Base RAG
     knowledgeBaseId: agent.knowledgeBaseId ?? null,
+    knowledgeSourceIds: await getAttachedSourceIds(agent.id, agent.knowledgeBaseId),
     // P1-C: Webhook HMAC secret
     webhookSecret: (agentCfg["webhookSecret"] as string | undefined) ?? null,
     // P1-D: VAD / Barge-in tuning (defaults match the hardcoded pipeline constants)
@@ -281,30 +283,26 @@ export async function createSession(params: {
     .replace(/\{\{(\w+)\}\}/g, (m, k: string) => resolveVar(k, m))
     .replace(/\{(\w+)\}/g,     (m, k: string) => resolveVar(k, m));
 
-  // ── Knowledge base injection ─────────────────────────────────────────────
-  if (agent.knowledgeBaseId) {
+  // ── Knowledge base injection (all attached sources) ──────────────────────
+  if (agentConfig.knowledgeSourceIds.length > 0) {
     try {
-      const entries = await db
-        .select()
-        .from(knowledgeEntriesTable)
-        .where(eq(knowledgeEntriesTable.sourceId, agent.knowledgeBaseId))
-        .limit(100);
-      if (entries.length > 0) {
+      const entriesBlock = await buildKnowledgeBaseBlock(agentConfig.knowledgeSourceIds);
+      if (entriesBlock) {
         const kbBlock = [
           "=== KNOWLEDGE BASE ===",
           "Use the following information to answer questions accurately. Always prefer this over your general training data.",
           "",
-          ...entries.map((e: { title: string | null; content: string }) => e.title ? `[${e.title}]\n${e.content}` : e.content),
+          entriesBlock,
           "=== END KNOWLEDGE BASE ===",
         ].join("\n\n");
         agentConfig.systemPrompt = `${kbBlock}\n\n${agentConfig.systemPrompt}`;
         logger.info(
-          { agentId: params.agentId, knowledgeBaseId: agent.knowledgeBaseId, entryCount: entries.length },
+          { agentId: params.agentId, knowledgeSourceIds: agentConfig.knowledgeSourceIds },
           "Knowledge base injected into system prompt"
         );
       }
     } catch (kbErr) {
-      logger.warn({ agentId: params.agentId, knowledgeBaseId: agent.knowledgeBaseId, kbErr }, "Failed to load knowledge base — continuing without it");
+      logger.warn({ agentId: params.agentId, knowledgeSourceIds: agentConfig.knowledgeSourceIds, kbErr }, "Failed to load knowledge base — continuing without it");
     }
   }
 

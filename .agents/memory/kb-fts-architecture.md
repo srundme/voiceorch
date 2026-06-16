@@ -17,7 +17,9 @@ USING GIN (to_tsvector('english', coalesce(title, '') || ' ' || content || ' ' |
 ```
 
 ## Agent linkage
-`agents.knowledge_base_id` (integer) now points to `knowledge_sources.id`. The column was not renamed (backward compat). Old agents with stale IDs get empty context silently.
+`agents.knowledge_base_id` (integer) points to `knowledge_sources.id`, kept for backward compat. Agents are now M:N with sources via the `agent_knowledge_sources` join table (composite PK, cascade FKs).
+
+**Union-everywhere convention:** the effective attached-source set is always `join table ∪ legacy knowledge_base_id`. Any code that reads attached sources must compute this union — never trust the legacy column or the join table alone. This union is duplicated across routes (agents get/list/create/patch) AND all 3 orchestration paths (session.ts, pipeline.ts ×3 sites, webcall.ts via kb-retrieval `getAttachedSourceIds`/`retrieveKbContextMulti`). Old agents with stale IDs get empty context silently.
 
 ## Pipeline retrieval
 `orchestration/kb-retrieval.ts` → `retrieveKbContext(knowledgeSourceId, query, topK)` runs plainto_tsquery and returns top-K entries as a prompt-injectable string.

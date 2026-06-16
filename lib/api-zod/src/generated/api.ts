@@ -60,6 +60,7 @@ export const ListAgentsResponseItem = zod.object({
   "noiseCancellationEnabled": zod.boolean().nullish().describe('Request noise reduction from the ASR provider on every transcription call'),
   "inactivityMessage": zod.string().nullish().describe('Message spoken to the caller before hanging up due to silence timeout'),
   "knowledgeBaseId": zod.number().nullish().describe('ID of an attached knowledge base for RAG context injection'),
+  "knowledgeSourceIds": zod.array(zod.number()).optional().describe('IDs of all attached knowledge sources (many-to-many)'),
   "tools": zod.array(zod.object({
   "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability', 'native_list_bookings']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, or native_list_bookings'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
@@ -233,6 +234,7 @@ export const GetAgentResponse = zod.object({
   "noiseCancellationEnabled": zod.boolean().nullish().describe('Request noise reduction from the ASR provider on every transcription call'),
   "inactivityMessage": zod.string().nullish().describe('Message spoken to the caller before hanging up due to silence timeout'),
   "knowledgeBaseId": zod.number().nullish().describe('ID of an attached knowledge base for RAG context injection'),
+  "knowledgeSourceIds": zod.array(zod.number()).optional().describe('IDs of all attached knowledge sources (many-to-many)'),
   "tools": zod.array(zod.object({
   "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability', 'native_list_bookings']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, or native_list_bookings'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
@@ -331,6 +333,7 @@ export const UpdateAgentBody = zod.object({
   "noiseCancellationEnabled": zod.boolean().optional(),
   "inactivityMessage": zod.string().optional(),
   "knowledgeBaseId": zod.number().optional().describe('ID of an attached knowledge base for RAG context injection'),
+  "knowledgeSourceIds": zod.array(zod.number()).optional().describe('IDs of all attached knowledge sources (many-to-many)'),
   "tools": zod.array(zod.object({
   "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability', 'native_list_bookings']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, or native_list_bookings'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
@@ -411,6 +414,7 @@ export const UpdateAgentResponse = zod.object({
   "noiseCancellationEnabled": zod.boolean().nullish().describe('Request noise reduction from the ASR provider on every transcription call'),
   "inactivityMessage": zod.string().nullish().describe('Message spoken to the caller before hanging up due to silence timeout'),
   "knowledgeBaseId": zod.number().nullish().describe('ID of an attached knowledge base for RAG context injection'),
+  "knowledgeSourceIds": zod.array(zod.number()).optional().describe('IDs of all attached knowledge sources (many-to-many)'),
   "tools": zod.array(zod.object({
   "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability', 'native_list_bookings']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, or native_list_bookings'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
@@ -514,6 +518,7 @@ export const ToggleAgentResponse = zod.object({
   "noiseCancellationEnabled": zod.boolean().nullish().describe('Request noise reduction from the ASR provider on every transcription call'),
   "inactivityMessage": zod.string().nullish().describe('Message spoken to the caller before hanging up due to silence timeout'),
   "knowledgeBaseId": zod.number().nullish().describe('ID of an attached knowledge base for RAG context injection'),
+  "knowledgeSourceIds": zod.array(zod.number()).optional().describe('IDs of all attached knowledge sources (many-to-many)'),
   "tools": zod.array(zod.object({
   "type": zod.enum(['call_transfer', 'webhook', 'send_sms', 'end_call', 'cal_com', 'native_booking', 'native_reschedule', 'native_cancel', 'native_check_availability', 'native_list_bookings']).describe('Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, or native_list_bookings'),
   "name": zod.string().describe('LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human)'),
@@ -990,7 +995,7 @@ export const GetDailyCallVolumeResponse = zod.array(GetDailyCallVolumeResponseIt
 export const ListKnowledgeSourcesResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
-  "type": zod.enum(['faq', 'text', 'website']),
+  "type": zod.enum(['faq', 'text', 'website', 'file']),
   "status": zod.enum(['active', 'processing', 'error']),
   "entryCount": zod.number(),
   "createdAt": zod.coerce.date(),
@@ -1008,13 +1013,22 @@ export const ListKnowledgeSourcesResponse = zod.array(ListKnowledgeSourcesRespon
 
 export const CreateKnowledgeSourceBody = zod.object({
   "name": zod.string().min(1),
-  "type": zod.enum(['faq', 'text', 'website']),
+  "type": zod.enum(['faq', 'text', 'website', 'file']),
   "url": zod.string().optional().describe('URL to crawl (required when type=website)'),
   "entries": zod.array(zod.object({
   "title": zod.string().optional(),
   "content": zod.string().min(1),
   "keywords": zod.string().optional()
 })).optional().describe('Initial entries to create')
+})
+
+
+/**
+ * @summary Create a knowledge source from an uploaded document (PDF/DOCX/TXT/CSV/Markdown)
+ */
+export const UploadKnowledgeSourceBody = zod.object({
+  "name": zod.string(),
+  "file": zod.instanceof(File)
 })
 
 
@@ -1028,7 +1042,7 @@ export const GetKnowledgeSourceParams = zod.object({
 export const GetKnowledgeSourceResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
-  "type": zod.enum(['faq', 'text', 'website']),
+  "type": zod.enum(['faq', 'text', 'website', 'file']),
   "status": zod.enum(['active', 'processing', 'error']),
   "entryCount": zod.number(),
   "createdAt": zod.coerce.date(),
@@ -1061,7 +1075,7 @@ export const UpdateKnowledgeSourceBody = zod.object({
 export const UpdateKnowledgeSourceResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
-  "type": zod.enum(['faq', 'text', 'website']),
+  "type": zod.enum(['faq', 'text', 'website', 'file']),
   "status": zod.enum(['active', 'processing', 'error']),
   "entryCount": zod.number(),
   "createdAt": zod.coerce.date(),
