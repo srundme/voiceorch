@@ -1540,7 +1540,7 @@ function AdvancedTab({ form }: { form: any }) {
                 Auto-enabled for Anthropic — caches the system prompt across turns, saving ~5× on repeated input tokens.
               </p>
             </div>
-            <span className={`shrink-0 mt-0.5 text-[10px] font-medium px-2 py-0.5 rounded ${llmProvider === "anthropic" ? "bg-amber-500/20 text-amber-300" : "bg-muted/40 text-muted-foreground"}`}>
+            <span className={`shrink-0 self-center min-w-[36px] text-center text-[10px] font-medium px-2 py-0.5 rounded ${llmProvider === "anthropic" ? "bg-amber-500/20 text-amber-300" : "bg-muted/40 text-muted-foreground"}`}>
               {llmProvider === "anthropic" ? "Active" : "N/A"}
             </span>
           </div>
@@ -1548,7 +1548,7 @@ function AdvancedTab({ form }: { form: any }) {
           {/* Layer 2: Sliding Window */}
           <FormField control={form.control} name="contextWindowTurns" render={({ field }) => (
             <FormItem>
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center justify-between rounded-lg border border-border/50 px-3 py-2 gap-2">
                 <div className="flex-1 min-w-0">
                   <FormLabel className="text-xs">Sliding Window Context</FormLabel>
                   <FormDescription className="text-[10px]">Limit past turns sent to the LLM — older turns are dropped. Leave blank to send full history.</FormDescription>
@@ -1560,7 +1560,7 @@ function AdvancedTab({ form }: { form: any }) {
                       type="number"
                       min={1}
                       max={1000}
-                      placeholder="off"
+                      placeholder=""
                       className="w-16 h-7 text-xs text-center"
                       value={field.value == null ? "" : String(field.value)}
                       onChange={(e) => field.onChange(e.target.value === "" ? null : parseInt(e.target.value, 10))}
@@ -1575,67 +1575,73 @@ function AdvancedTab({ form }: { form: any }) {
 
           {/* Layer 3: Summarization */}
           <FormField control={form.control} name="tokenSummarizationEnabled" render={({ field }) => (
-            <FormItem className="flex items-start justify-between rounded-lg border border-border/50 px-3 py-2 gap-3">
-              <div className="flex-1 min-w-0">
-                <FormLabel className="text-xs font-medium">Automatic Summarization</FormLabel>
-                <FormDescription className="text-[10px] leading-relaxed">When history reaches the threshold, old turns are replaced with a compact summary.</FormDescription>
+            <FormItem className="rounded-lg border border-border/50 px-3 py-2">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <FormLabel className="text-xs font-medium">Automatic Summarization</FormLabel>
+                  <FormDescription className="text-[10px] leading-relaxed">When history reaches the threshold, old turns are replaced with a compact summary.</FormDescription>
+                </div>
+                <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} className="shrink-0 mt-0.5" /></FormControl>
               </div>
-              <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} className="shrink-0 mt-0.5" /></FormControl>
+              {tokenSummarizationEnabled && (
+                <div className="mt-2 pt-2 border-t border-border/40">
+                  <FormField control={form.control} name="tokenSummarizationThresholdTurns" render={({ field: threshField }) => (
+                    <FormItem>
+                      <div className="flex items-center gap-2">
+                        <FormLabel className="text-xs">Summarize after</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min={5}
+                            max={500}
+                            placeholder="20"
+                            className="w-20 h-7 text-xs text-center"
+                            value={threshField.value == null ? "" : String(threshField.value)}
+                            onChange={(e) => threshField.onChange(e.target.value === "" ? null : parseInt(e.target.value, 10))}
+                          />
+                        </FormControl>
+                        <span className="text-[10px] text-muted-foreground">turns</span>
+                      </div>
+                      <FormDescription className="text-[10px]">Default: 20 turns.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                </div>
+              )}
             </FormItem>
           )} />
-          {tokenSummarizationEnabled && (
-            <FormField control={form.control} name="tokenSummarizationThresholdTurns" render={({ field }) => (
-              <FormItem>
-                <div className="flex items-center gap-2">
-                  <FormLabel className="text-xs">Summarize after</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      min={5}
-                      max={500}
-                      placeholder="20"
-                      className="w-20 h-7 text-xs text-center"
-                      value={field.value == null ? "" : String(field.value)}
-                      onChange={(e) => field.onChange(e.target.value === "" ? null : parseInt(e.target.value, 10))}
-                    />
-                  </FormControl>
-                  <span className="text-[10px] text-muted-foreground">turns</span>
-                </div>
-                <FormDescription className="text-[10px]">Default: 20 turns.</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )} />
-          )}
 
           {/* Layer 4: Staged Prompt */}
           <FormField control={form.control} name="stagedPromptEnabled" render={({ field }) => (
-            <FormItem className="flex items-start justify-between rounded-lg border border-border/50 px-3 py-2 gap-3">
-              <div className="flex-1 min-w-0">
-                <FormLabel className="text-xs font-medium">Staged System Prompt</FormLabel>
-                <FormDescription className="text-[10px] leading-relaxed">Serve a smaller, stage-specific prompt per conversation phase. The LLM signals transitions with <code className="text-[10px] bg-muted px-1 rounded">[STAGE:Name]</code>.</FormDescription>
+            <FormItem className="rounded-lg border border-border/50 px-3 py-2">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <FormLabel className="text-xs font-medium">Staged System Prompt</FormLabel>
+                  <FormDescription className="text-[10px] leading-relaxed">Serve a smaller, stage-specific prompt per conversation phase. The LLM signals transitions with <code className="text-[10px] bg-muted px-1 rounded">[STAGE:Name]</code>.</FormDescription>
+                </div>
+                <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} className="shrink-0 mt-0.5" /></FormControl>
               </div>
-              <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} className="shrink-0 mt-0.5" /></FormControl>
+              {stagedPromptEnabled && (
+                <div className="mt-2 pt-2 border-t border-border/40 space-y-3">
+                  <FormField control={form.control} name="stagedPromptCoreIdentity" render={({ field: identField }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs">Core Identity <span className="text-muted-foreground font-normal">(always included)</span></FormLabel>
+                      <FormControl>
+                        <Textarea
+                          className="min-h-[60px] text-xs"
+                          placeholder="You are a helpful assistant for Acme Corp. Always be polite and professional."
+                          {...identField}
+                        />
+                      </FormControl>
+                      <FormDescription className="text-[10px]">Prepended to every stage prompt — name, role, tone only.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                  <StagedPromptEditor control={form.control} />
+                </div>
+              )}
             </FormItem>
           )} />
-          {stagedPromptEnabled && (
-            <div className="space-y-3 pl-1">
-              <FormField control={form.control} name="stagedPromptCoreIdentity" render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-xs">Core Identity <span className="text-muted-foreground font-normal">(always included)</span></FormLabel>
-                  <FormControl>
-                    <Textarea
-                      className="min-h-[60px] text-xs"
-                      placeholder="You are a helpful assistant for Acme Corp. Always be polite and professional."
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormDescription className="text-[10px]">Prepended to every stage prompt — name, role, tone only.</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <StagedPromptEditor control={form.control} />
-            </div>
-          )}
         </div>
       </div>
 
