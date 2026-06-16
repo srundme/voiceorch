@@ -116,6 +116,21 @@ if (agnostApiKey) {
   agnost.init(agnostApiKey, { debug: process.env["NODE_ENV"] !== "production" });
 }
 
+// Log which redirect URI will be used for Google Calendar OAuth so mismatches
+// are immediately visible in logs without having to trigger the flow first.
+if (process.env["GOOGLE_REDIRECT_URI"]) {
+  logger.info({ uri: process.env["GOOGLE_REDIRECT_URI"] }, "Google Calendar OAuth: GOOGLE_REDIRECT_URI set");
+} else if (process.env["REPLIT_DOMAINS"]) {
+  logger.info(
+    { domains: process.env["REPLIT_DOMAINS"] },
+    "Google Calendar OAuth: GOOGLE_REDIRECT_URI not set — using dynamic redirect URI derivation from REPLIT_DOMAINS / forwarded host",
+  );
+} else {
+  logger.warn(
+    "Google Calendar OAuth: neither GOOGLE_REDIRECT_URI nor REPLIT_DOMAINS is set — OAuth flow will likely fail",
+  );
+}
+
 // Start server first so the healthcheck probe can reach /api/healthz immediately.
 // Migrations run in the background after the port is bound.
 server.listen(port, () => {

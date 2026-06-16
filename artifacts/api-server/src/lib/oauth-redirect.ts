@@ -44,30 +44,35 @@ export function isTrustedOrigin(origin: string): boolean {
  * validated against the trusted-origin rules before use so an attacker-controlled
  * Host header cannot forge an arbitrary redirect URI.
  *
- * Derivation order:
- *   1. Request's forwarded host (externally-visible dev/prod domain)
- *   2. GOOGLE_LOGIN_REDIRECT_URI env var (for login callback path)
- *   3. GOOGLE_REDIRECT_URI env var (for calendar callback path, backward compat)
- *   4. First domain in REPLIT_DOMAINS
- *   5. localhost:80 (last resort)
+ * Derivation order (highest priority first):
+ *   1. GOOGLE_LOGIN_REDIRECT_URI env var (for login callback path)
+ *      GOOGLE_REDIRECT_URI env var (for calendar callback path)
+ *      These must be set in production to match the URI registered in Google
+ *      Cloud Console. They take priority over all dynamic derivation.
+ *   2. Request's forwarded host (externally-visible dev/prod domain) —
+ *      convenient fallback in development when no env var is set.
+ *   3. First domain in REPLIT_DOMAINS
+ *   4. localhost:80 (last resort)
  */
 export function deriveRedirectUri(req: Request, callbackPath: string): string {
-  const forwardedHost = (req.headers["x-forwarded-host"] as string | undefined)?.split(",")[0]?.trim();
-  const forwardedProto = (req.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0]?.trim() ?? "https";
-  const host = forwardedHost ?? req.hostname;
-
-  if (host && isTrustedOrigin(`${forwardedProto}://${host}`)) {
-    return `${forwardedProto}://${host}${callbackPath}`;
-  }
-
-  // Env var overrides for production domains where the forwarded host is not
-  // the trusted origin we registered in Google Cloud Console.
+  // Env-var overrides are always first — ensures exact match with the URI
+  // registered in Google Cloud Console regardless of which host the proxy injects.
   if (callbackPath === "/api/auth/google/callback" && process.env["GOOGLE_LOGIN_REDIRECT_URI"]) {
     return process.env["GOOGLE_LOGIN_REDIRECT_URI"];
   }
 
   if (callbackPath === "/api/scheduling/google/callback" && process.env["GOOGLE_REDIRECT_URI"]) {
     return process.env["GOOGLE_REDIRECT_URI"];
+  }
+
+  // Dynamic derivation from the forwarded host (useful in development where
+  // the preview domain changes and a fixed URI hasn't been registered).
+  const forwardedHost = (req.headers["x-forwarded-host"] as string | undefined)?.split(",")[0]?.trim();
+  const forwardedProto = (req.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0]?.trim() ?? "https";
+  const host = forwardedHost ?? req.hostname;
+
+  if (host && isTrustedOrigin(`${forwardedProto}://${host}`)) {
+    return `${forwardedProto}://${host}${callbackPath}`;
   }
 
   const domain = process.env["REPLIT_DOMAINS"]?.split(",")[0];

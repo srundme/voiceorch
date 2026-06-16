@@ -42,29 +42,35 @@ function isTrustedOrigin(origin: string): boolean {
 }
 
 /**
- * Derive the OAuth redirect URI from the current request's externally-visible
- * host (honoring the shared proxy's x-forwarded-host / x-forwarded-proto
- * headers). The host is validated against the trusted-origin rules before use
- * so an attacker-controlled Host header cannot forge an arbitrary redirect URI.
+ * Derive the OAuth redirect URI for the Google Calendar OAuth flow.
  *
- * Derivation order:
- *   1. Request's forwarded host (externally-visible dev/prod domain)
- *   2. GOOGLE_REDIRECT_URI env var (optional explicit override)
- *   3. First domain in REPLIT_DOMAINS (existing fallback)
+ * Derivation order (highest priority first):
+ *   1. GOOGLE_REDIRECT_URI env var — must match what is registered in Google
+ *      Cloud Console exactly. Always use this in production.
+ *   2. Request's forwarded host (externally-visible dev/prod domain) —
+ *      used as a convenience fallback in development when no env var is set.
+ *   3. First domain in REPLIT_DOMAINS
  *   4. localhost:80 (last resort, never reaches Google in practice)
+ *
+ * The dynamic forwarded-host derivation is a fallback only. In production
+ * the env var must be set so Google gets the exact registered URI.
  */
 function deriveRedirectUri(req: Request): string {
+  // Env-var override is always first — ensures exact match with the URI
+  // registered in Google Cloud Console regardless of which host header
+  // the proxy injects.
+  if (process.env["GOOGLE_REDIRECT_URI"]) {
+    return process.env["GOOGLE_REDIRECT_URI"];
+  }
+
+  // Dynamic derivation from the forwarded host (useful in development where
+  // the preview domain changes and a fixed URI hasn't been registered).
   const forwardedHost  = (req.headers["x-forwarded-host"]  as string | undefined)?.split(",")[0]?.trim();
   const forwardedProto = (req.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0]?.trim() ?? "https";
   const host = forwardedHost ?? req.hostname;
 
   if (host && isTrustedOrigin(`${forwardedProto}://${host}`)) {
     return `${forwardedProto}://${host}/api/scheduling/google/callback`;
-  }
-
-  // Explicit env-var override (kept as second priority for backward compat)
-  if (process.env["GOOGLE_REDIRECT_URI"]) {
-    return process.env["GOOGLE_REDIRECT_URI"];
   }
 
   // Auto-detect from REPLIT_DOMAINS
@@ -121,6 +127,13 @@ router.get("/scheduling/google/connect-url", requireAuth, (req, res): void => {
   }
 
   const redirectUri = deriveRedirectUri(req);
+
+  // Warn when using dynamic derivation in an environment where no fixed URI
+  // is registered — Google will reject the flow if this URI isn't in the
+  // Cloud Console's authorised redirect list.
+  if (!process.env["GOOGLE_REDIRECT_URI"] && !process.env["REPLIT_DOMAINS"]) {
+    logger.warn({ redirectUri }, "Google Calendar connect-url: GOOGLE_REDIRECT_URI not set — derived URI may not match Google Cloud Console registration");
+  }
   const url = getAuthUrl(
     clerkId,
     returnTo,
