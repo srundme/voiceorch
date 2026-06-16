@@ -6,7 +6,7 @@ import {
   VoicemailIcon, SlidersHorizontal, TestTube2, ChevronRight,
   Volume2, Check, X, Pencil, ChevronDown, List, Globe, BarChart3,
   User2, Sparkles, BookOpen, ToggleLeft, ToggleRight, Tag, Loader2, Square,
-  Timer, ShieldCheck, Layers, Gauge, MicOff,
+  Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -47,6 +47,7 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError, mapApiErrors, isDestinationUnverifiedError } from "@/lib/format-api-error";
 import {
@@ -1699,20 +1700,43 @@ function AdvancedTab({ form }: { form: any }) {
             </div>
 
             {/* KV Cache */}
-            <div className="rounded-xl border border-border/50 bg-card/40 px-4 py-3.5 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", llmProvider === "anthropic" ? "bg-amber-500/15 text-amber-400" : "bg-muted/40 text-muted-foreground/50")}>
-                  <Zap className="h-4 w-4" />
+            {(() => {
+              const kvCacheTooltips: Record<string, string> = {
+                anthropic: "Explicit prompt caching — VoiceOrch sends cache_control breakpoints so Anthropic caches your system prompt server-side after turn 1, saving ~5× on repeated input tokens.",
+                gemini: "Google auto-caches prompts >1024 tokens on their end — no explicit configuration needed. Savings appear automatically in your Google AI usage.",
+                openai: "OpenAI silently caches prompts >1024 tokens at no extra cost — no explicit configuration needed.",
+              };
+              const kvCacheTooltip = kvCacheTooltips[llmProvider ?? ""] ??
+                "This provider does not currently support prompt caching. Consider Sliding Window or Summarization to reduce token costs.";
+              return (
+                <div className="rounded-xl border border-border/50 bg-card/40 px-4 py-3.5 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", llmProvider === "anthropic" ? "bg-amber-500/15 text-amber-400" : "bg-muted/40 text-muted-foreground/50")}>
+                      <Zap className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <p className="text-[12.5px] font-semibold text-foreground">KV Cache <span className="text-[10px] text-muted-foreground font-normal ml-1">Anthropic only</span></p>
+                      <p className="text-[10px] text-muted-foreground leading-relaxed">Auto-enabled — caches system prompt, saving ~5× on repeated input tokens</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button type="button" className="text-muted-foreground/50 hover:text-muted-foreground transition-colors cursor-default">
+                          <HelpCircle className="h-3.5 w-3.5" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="left" className="max-w-[260px] text-[11px] leading-relaxed">
+                        {kvCacheTooltip}
+                      </TooltipContent>
+                    </Tooltip>
+                    <span className={cn("text-[10.5px] font-semibold px-2.5 py-1 rounded-lg", llmProvider === "anthropic" ? "bg-amber-500/20 text-amber-300 border border-amber-500/30" : "bg-muted/40 text-muted-foreground border border-border/40")}>
+                      {llmProvider === "anthropic" ? "Active" : "N/A"}
+                    </span>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-[12.5px] font-semibold text-foreground">KV Cache <span className="text-[10px] text-muted-foreground font-normal ml-1">Anthropic only</span></p>
-                  <p className="text-[10px] text-muted-foreground leading-relaxed">Auto-enabled — caches system prompt, saving ~5× on repeated input tokens</p>
-                </div>
-              </div>
-              <span className={cn("shrink-0 text-[10.5px] font-semibold px-2.5 py-1 rounded-lg", llmProvider === "anthropic" ? "bg-amber-500/20 text-amber-300 border border-amber-500/30" : "bg-muted/40 text-muted-foreground border border-border/40")}>
-                {llmProvider === "anthropic" ? "Active" : "N/A"}
-              </span>
-            </div>
+              );
+            })()}
 
             {/* Sliding Window */}
             <FormField control={form.control} name="contextWindowTurns" render={({ field }) => (
