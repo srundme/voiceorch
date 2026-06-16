@@ -246,9 +246,9 @@ export async function handleWebCallWebSocket(
     }
   }
 
-  const sttKey = providerKeys.get(agent.asrProvider);
-  const llmKey = providerKeys.get(agent.llmProvider);
-  const ttsKey = providerKeys.get(agent.ttsProvider);
+  const sttKey = providerKeys.get(agent.asrProvider?.toLowerCase());
+  const llmKey = providerKeys.get(agent.llmProvider?.toLowerCase());
+  const ttsKey = providerKeys.get(agent.ttsProvider?.toLowerCase());
 
   if (!sttKey || !llmKey || !ttsKey) {
     send({ type: "error", message: `Missing API keys for: ${[!sttKey && agent.asrProvider, !llmKey && agent.llmProvider, !ttsKey && agent.ttsProvider].filter(Boolean).join(", ")}` });
@@ -270,7 +270,7 @@ export async function handleWebCallWebSocket(
     fallbackProviders: (agent.asrFallbackProviders as Array<{ provider: string; model: string | null }> | null | undefined) ?? [],
   };
 
-  const sttExtraConfig = providerKeys.get(`${agent.asrProvider}:extraConfig`) ?? null;
+  const sttExtraConfig = providerKeys.get(`${agent.asrProvider?.toLowerCase()}:extraConfig`) ?? null;
   const stt = createSTTAdapter(agent.asrProvider, sttKey, agent.asrModel, sttExtraConfig, sttConfig);
   const llm = createLLMAdapter(agent.llmProvider, llmKey, agent.llmModel);
 
