@@ -11,3 +11,4 @@
 - [GitHub push required after every edit](github-push-required.md) — all file edits must be pushed to srundme/voiceorch main branch via GitHub API; Railway deploys from GitHub
 - [Local ECAPA-TDNN speaker recognition](ecapa-tdnn-speaker.md) — Azure Speaker Recognition replaced by SpeechBrain ECAPA-TDNN; runs in gender-service on port 5000; embeddings stored as JSON text in voice_prints.embedding
 - [Radix Select phantom document scroll](radix-select-phantom-scroll.md) — hidden position:absolute <select> bubble escapes overflow clips → phantom scrollbar/whitespace; fix = position:relative on the scroll container
+- [VoBiz KYC account recovery](vobiz-kyc-recovery.md) — no GET /accounts endpoint exists; recover auth_id via GET /kyc-sessions scan matching customer_email or metadata.email
