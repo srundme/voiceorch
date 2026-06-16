@@ -278,6 +278,7 @@ type CardSection = "transcriber" | "model" | "voice";
 
 function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string, number>; agent: any }) {
   const [openCard, setOpenCard] = useState<CardSection | null>(null);
+  const [, navigate] = useLocation();
 
   const asrProvider = form.watch("asrProvider");
   const llmProvider = form.watch("llmProvider");
@@ -403,6 +404,28 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
               <div className="text-[11px] text-muted-foreground mt-1 truncate">
                 {ttsLabel}{ttsModelLabel ? ` · ${ttsModelLabel}` : ""}
               </div>
+            </button>
+          </div>
+
+          {/* ── Managed / BYOP callout ───────────────────────────────────────── */}
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3.5 py-2.5">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="text-sm shrink-0">⚡</span>
+              <div className="min-w-0">
+                <p className="text-[11.5px] font-semibold text-amber-300/90 leading-snug">
+                  Using managed API keys
+                </p>
+                <p className="text-[10.5px] text-muted-foreground leading-relaxed mt-0.5">
+                  SnapServe provides keys for the selected providers. To use your own API keys, add them in the Providers section.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate("/app/providers")}
+              className="shrink-0 text-[10.5px] font-semibold text-amber-400 hover:text-amber-300 border border-amber-500/30 hover:border-amber-400/50 rounded-md px-2.5 py-1.5 transition-colors whitespace-nowrap bg-amber-500/5 hover:bg-amber-500/10"
+            >
+              Add own keys →
             </button>
           </div>
 
