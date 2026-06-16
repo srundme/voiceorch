@@ -7,6 +7,7 @@ import {
   getGetAgentQueryKey,
   getListAgentsQueryKey,
   useListEventTypes,
+  useListCalendars,
 } from "@workspace/api-client-react";
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
@@ -101,6 +102,7 @@ export const agentFormSchema = z.object({
     method: z.enum(["GET", "POST"]).optional(),
     secret: z.string().optional(),
     preToolMessage: z.string().optional(),
+    calendarId: z.string().optional(),
     eventTypeId: z.string().optional(),
     targetNumber: z.string().optional(),
     holdMessage: z.string().optional(),
@@ -341,7 +343,9 @@ export default function AgentEdit() {
   });
 
   const { data: eventTypesData } = useListEventTypes();
-  const eventTypeOptions = (eventTypesData ?? []).map((et: any) => ({ value: String(et.id), label: et.name ?? et.slug }));
+  const { data: calendarsData } = useListCalendars();
+  const calendarOptions = (calendarsData ?? []).map((cal: any) => ({ value: String(cal.id), label: cal.name ?? cal.slug }));
+  const eventTypeOptions = (eventTypesData ?? []).map((et: any) => ({ value: String(et.id), label: et.name ?? et.slug, calendarId: String(et.calendarId) }));
 
   const NATIVE_TOOL_TYPES = ["native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel"];
   const watchedTools = (form.watch("tools") ?? []) as any[];
@@ -1072,7 +1076,11 @@ export default function AgentEdit() {
                   {BOOKING_TOOLS.map(({ type, icon, color, label, description, needsEventType }) => {
                     const isOn = hasNativeTool(type);
                     const c = bookingColorMap[color];
+                    const calendarId = isOn && needsEventType ? getNativeField(type, "calendarId") : undefined;
                     const eventTypeId = isOn && needsEventType ? getNativeField(type, "eventTypeId") : undefined;
+                    const filteredEventTypes = calendarId
+                      ? eventTypeOptions.filter((et: any) => et.calendarId === calendarId)
+                      : eventTypeOptions;
                     return (
                       <div key={type} className={cn("rounded-xl border transition-all duration-150", isOn ? `${c.border} ${c.bg}` : "border-border/60 bg-card/20")}>
                         <button
@@ -1098,27 +1106,43 @@ export default function AgentEdit() {
                         </button>
                         {isOn && needsEventType && (
                           <div className="px-4 pb-4 -mt-1">
-                            <div className="border-t border-border/30 pt-3">
-                              <label className="text-[10px] text-muted-foreground block mb-1">Event Type</label>
-                              {eventTypeOptions.length > 0 ? (
-                                <Select value={eventTypeId ?? ""} onValueChange={(v) => setNativeField(type, "eventTypeId", v)}>
+                            <div className="border-t border-border/30 pt-3 space-y-2">
+                              <div>
+                                <label className="text-[10px] text-muted-foreground block mb-1">Calendar</label>
+                                <Select
+                                  value={calendarId ?? ""}
+                                  onValueChange={(v) => {
+                                    setNativeField(type, "calendarId", v);
+                                    setNativeField(type, "eventTypeId", "");
+                                  }}
+                                >
                                   <SelectTrigger className="h-8 text-xs">
-                                    <SelectValue placeholder="Select event type…" />
+                                    <SelectValue placeholder="Select calendar…" />
                                   </SelectTrigger>
                                   <SelectContent position="popper">
-                                    {eventTypeOptions.map((et: any) => (
+                                    {calendarOptions.map((cal: any) => (
+                                      <SelectItem key={cal.value} value={cal.value} className="text-xs">{cal.label}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-muted-foreground block mb-1">Event Type</label>
+                                <Select
+                                  value={eventTypeId ?? ""}
+                                  onValueChange={(v) => setNativeField(type, "eventTypeId", v)}
+                                  disabled={!calendarId}
+                                >
+                                  <SelectTrigger className="h-8 text-xs">
+                                    <SelectValue placeholder={calendarId ? "Select event type…" : "Pick a calendar first"} />
+                                  </SelectTrigger>
+                                  <SelectContent position="popper">
+                                    {filteredEventTypes.map((et: any) => (
                                       <SelectItem key={et.value} value={et.value} className="text-xs">{et.label}</SelectItem>
                                     ))}
                                   </SelectContent>
                                 </Select>
-                              ) : (
-                                <Input
-                                  value={eventTypeId ?? ""}
-                                  onChange={(e) => setNativeField(type, "eventTypeId", e.target.value)}
-                                  placeholder="Event type ID (create one in Scheduling first)"
-                                  className="h-8 text-xs"
-                                />
-                              )}
+                              </div>
                             </div>
                           </div>
                         )}
