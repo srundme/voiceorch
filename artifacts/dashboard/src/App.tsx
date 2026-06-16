@@ -14,7 +14,7 @@ import { SnapServeLoader } from "@/components/logo";
 import { VoiceAssistant } from "@/components/VoiceAssistant";
 import AssistantsPage from "@/pages/assistants";
 import Dashboard from "@/pages/dashboard";
-import AgentBuilder from "@/pages/agents/builder";
+import AgentsList from "@/pages/agents/index";
 import AgentNew from "@/pages/agents/new";
 import AgentDetail from "@/pages/agents/[id]";
 import AgentEdit from "@/pages/agents/edit";
@@ -275,12 +275,10 @@ function AppRoutes() {
         <Route path="/app" component={() => <Redirect to="/app/command-center" />} />
         <Route path="/app/command-center" component={CommandCenterPage} />
         <Route path="/app/analytics" component={AnalyticsPage} />
-        <Route path="/app/agents" component={AgentBuilder} />
+        <Route path="/app/agents" component={AgentsList} />
         <Route path="/app/agents/new" component={AgentNew} />
-        <Route path="/app/agents/:id/edit">
-          {(params) => <Redirect to={`/app/agents/${params.id}`} />}
-        </Route>
-        <Route path="/app/agents/:id" component={AgentBuilder} />
+        <Route path="/app/agents/:id/edit" component={AgentEdit} />
+        <Route path="/app/agents/:id" component={AgentEdit} />
         <Route path="/app/calls" component={CallsList} />
         <Route path="/app/calls/:id" component={CallDetail} />
         <Route path="/app/knowledge-bases" component={KnowledgeBasePage} />
