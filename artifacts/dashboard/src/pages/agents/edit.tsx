@@ -87,6 +87,9 @@ export const agentFormSchema = z.object({
   bargeInEnergyThreshold: z.number().min(100).max(5000).optional(),
   bargeInMinFrames:       z.number().min(1).max(20).optional(),
   timezone:               z.string().optional(),
+  machineDetectionMode:   z.enum(["disabled", "enable", "detect_message_end"]).optional(),
+  voicemailAction:        z.enum(["hangup", "leave_message", "continue"]).optional(),
+  voicemailMessage:       z.string().optional(),
   tools: z.array(z.object({
     type: z.enum(["call_transfer", "webhook"]),
     name: z.string().min(1, "Function name required"),
@@ -127,7 +130,7 @@ type AgentFormValues = z.infer<typeof agentFormSchema>;
 export type { AgentFormValues };
 
 export function buildUpdateAgentPayload(data: AgentFormValues) {
-  const { webhookSecret, promptVariables, vadSilenceMs, bargeInEnabled, bargeInEnergyThreshold, bargeInMinFrames, timezone, ...rest } = data;
+  const { webhookSecret, promptVariables, vadSilenceMs, bargeInEnabled, bargeInEnergyThreshold, bargeInMinFrames, timezone, machineDetectionMode, voicemailAction, voicemailMessage, ...rest } = data;
   const agentConfig: Record<string, unknown> = {};
   if (webhookSecret) agentConfig["webhookSecret"] = webhookSecret;
   if (promptVariables?.length) agentConfig["promptVariables"] = promptVariables;
@@ -136,6 +139,9 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   if (bargeInEnergyThreshold != null && bargeInEnergyThreshold !== 1200) agentConfig["bargeInEnergyThreshold"] = bargeInEnergyThreshold;
   if (bargeInMinFrames != null && bargeInMinFrames !== 4) agentConfig["bargeInMinFrames"] = bargeInMinFrames;
   if (timezone) agentConfig["timezone"] = timezone;
+  if (machineDetectionMode && machineDetectionMode !== "disabled") agentConfig["machineDetectionMode"] = machineDetectionMode;
+  if (voicemailAction && voicemailAction !== "hangup") agentConfig["voicemailAction"] = voicemailAction;
+  if (voicemailMessage) agentConfig["voicemailMessage"] = voicemailMessage;
 
   const serializedTools = (rest.tools ?? []).map((t) => {
     if (t.type !== "webhook") return t;
@@ -282,6 +288,8 @@ export default function AgentEdit() {
       webhookUrl: "", webhookSecret: "", noiseCancellationEnabled: true,
       promptVariables: [], vadSilenceMs: 250, bargeInEnabled: true, bargeInEnergyThreshold: 1200, bargeInMinFrames: 4,
       timezone: "",
+      machineDetectionMode: "disabled", voicemailAction: "hangup",
+      voicemailMessage: "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
       tools: [],
       dispositionSchema: [],
     },
@@ -339,6 +347,9 @@ export default function AgentEdit() {
       bargeInEnergyThreshold:   ((agent as any).agentConfig?.bargeInEnergyThreshold as number | undefined) ?? 1200,
       bargeInMinFrames:         ((agent as any).agentConfig?.bargeInMinFrames as number | undefined) ?? 4,
       timezone:                 ((agent as any).agentConfig?.timezone as string | undefined) ?? "",
+      machineDetectionMode:     ((agent as any).agentConfig?.machineDetectionMode as string | undefined) as AgentFormValues["machineDetectionMode"] ?? "disabled",
+      voicemailAction:          ((agent as any).agentConfig?.voicemailAction as string | undefined) as AgentFormValues["voicemailAction"] ?? "hangup",
+      voicemailMessage:         ((agent as any).agentConfig?.voicemailMessage as string | undefined) ?? "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
       tools: (agent.tools ?? []) as AgentFormValues["tools"],
       dispositionSchema: ((agent as any).dispositionSchema ?? []).map((f: any) => ({
         ...f,
@@ -912,6 +923,59 @@ export default function AgentEdit() {
                   </FormItem>
                 )} />
               </div>
+            </CardContent>
+          </Card>
+
+          {/* ── Voicemail Detection ── */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><PhoneForwarded className="h-4 w-4" /> Voicemail Detection (AMD)</CardTitle>
+              <CardDescription>Outbound calls only. Detects answering machines and decides what to do when a voicemail picks up.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <FormField control={form.control} name="machineDetectionMode" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Detection Mode</FormLabel>
+                  <Select value={field.value ?? "disabled"} onValueChange={field.onChange}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="disabled">Disabled — no detection</SelectItem>
+                      <SelectItem value="enable">Enable — detect at call start</SelectItem>
+                      <SelectItem value="detect_message_end">Detect Message End — wait for beep</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormDescription className="text-[11px]">"Detect Message End" waits for the beep so the left message doesn't get cut off.</FormDescription>
+                </FormItem>
+              )} />
+              {form.watch("machineDetectionMode") !== "disabled" && (
+                <>
+                  <FormField control={form.control} name="voicemailAction" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>When voicemail is detected</FormLabel>
+                      <Select value={field.value ?? "hangup"} onValueChange={field.onChange}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="hangup">Hang up immediately</SelectItem>
+                          <SelectItem value="leave_message">Leave a voicemail message</SelectItem>
+                          <SelectItem value="continue">Continue — let the AI talk to the voicemail</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )} />
+                  {form.watch("voicemailAction") === "leave_message" && (
+                    <FormField control={form.control} name="voicemailMessage" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Voicemail Message</FormLabel>
+                        <FormControl>
+                          <Textarea className="min-h-[80px] text-sm" placeholder="Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you." {...field} />
+                        </FormControl>
+                        <FormDescription className="text-[11px]">This text is spoken via TTS into the voicemail recording.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  )}
+                </>
+              )}
             </CardContent>
           </Card>
 
