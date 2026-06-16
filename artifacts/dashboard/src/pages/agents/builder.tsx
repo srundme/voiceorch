@@ -1099,7 +1099,7 @@ function ToolsTab({ form }: { form: any }) {
           </div>
         </div>
 
-        {fields.length === 0 ? (
+        {(form.watch("tools") ?? []).filter((t: { type: string }) => t.type === "call_transfer" || t.type === "webhook").length === 0 ? (
           <div className="rounded-xl border border-dashed border-border/50 p-8 text-center">
             <Wrench className="h-7 w-7 text-muted-foreground/20 mx-auto mb-2" />
             <p className="text-sm font-medium text-muted-foreground/50">No custom tools</p>
@@ -1107,8 +1107,9 @@ function ToolsTab({ form }: { form: any }) {
           </div>
         ) : (
           <div className="space-y-3">
-            {fields.map((field, index) => {
+            {fields.flatMap((field, index) => {
               const toolType = form.watch(`tools.${index}.type`);
+              if (toolType !== "call_transfer" && toolType !== "webhook") return [];
               return (
                 <div key={field.id} className="rounded-xl border border-border/60 bg-card/30 p-4 space-y-3">
                   <div className="flex items-center justify-between">
