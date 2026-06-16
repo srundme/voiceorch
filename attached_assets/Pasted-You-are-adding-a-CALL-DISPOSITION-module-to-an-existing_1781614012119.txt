@@ -1,0 +1,80 @@
+You are adding a CALL DISPOSITION module to an existing TypeScript voice-agent
+orchestration codebase ("voiceorch"). DO NOT scaffold a new server, app, or migration
+runner. REUSE what already exists. First, inspect the repo and report what you found
+before writing code:
+- the Drizzle setup (schema file location, db client export, how migrations are run)
+- the existing post-call webhook handler (where a call's transcript + events arrive)
+- the existing LLM client(s) for Sarvam and OpenAI and how they're configured
+
+Then implement the following, matching the repo's existing folder/naming conventions.
+
+GOAL
+Multi-tenant disposition extraction. Each agent has its OWN taxonomy stored in the DB
+as config — never hardcoded. Pipeline: deterministic rule prefilter -> configurable
+structured LLM pass -> validate/reconcile -> route to review. Exposed as a plain async
+function AND called from the post-call webhook.
+
+1. DRIZZLE SCHEMA (add to existing schema file, generate migration with the repo's
+   existing drizzle-kit command — do not invent a new one):
+   - agentDispositions:
+       agentId text pk,
+       taxonomy jsonb not null,            // { PRIMARY: [sub,...] }
+       domainFields jsonb default '[]',    // [{key,type,enum?}]
+       rules jsonb default '[]',
+       updatedAt timestamptz default now()
+   - callDispositions:
+       id uuid pk default, agentId text, callId text, transcript text,
+       callEvents jsonb, result jsonb, needsReview boolean,
+       humanCorrection jsonb, createdAt timestamptz default now()
+   Seed a "default" agent row with the insurance taxonomy:
+     SALE_CLOSED:[payment_link_sent,policy_issued]
+     INTERESTED:[wants_callback,needs_quote,comparing]
+     NOT_INTERESTED:[has_existing_policy,price_objection,no_need]
+     CALLBACK:[busy_now,decision_maker_absent]
+     DNC:[opt_out,abusive]
+     NOT_CONNECTED:[voicemail,no_answer,wrong_number,language_barrier]
+
+2. lib/disposition/ — pure, unit-testable functions (no DB/LLM imports here):
+   - buildSchema(cfg): strict JSON schema. primary enum = taxonomy keys; sub enum =
+     all subs; required: confidence(number), evidence(string), summary(string); plus one
+     nullable field per domainFields entry (enum fields get enum+null).
+   - buildPrompt(cfg): system prompt built FROM cfg.taxonomy (inject taxonomy JSON).
+     Instruct: disposition = what the CUSTOMER said, not the agent; evidence = verbatim
+     customer line; no quotable line -> confidence<0.5; judge intent across
+     Hindi/Hinglish/Kannada/English.
+   - rulePrefilter(events, rules): deterministic, runs before LLM.
+       voicemailDetected -> NOT_CONNECTED/voicemail .99
+       durationSec<6 || userSpeechSec<1 -> NOT_CONNECTED/no_answer .95
+       dtmf includes "9" -> DNC/opt_out .99
+       then apply tenant rules[] overrides. Return match or null.
+     NOTE: DNC + NOT_CONNECTED rules apply to ALL tenants regardless of their custom
+     taxonomy (compliance + connection detection are platform-level).
+   - validate(cfg, out, events): sub must belong to chosen primary per THIS agent's
+     taxonomy; else snap to first valid sub, cap confidence .5. Flags:
+     SALE_CLOSED & durationSec<60 -> "sale_but_short_call";
+     CALLBACK & consent false -> "callback_without_consent".
+     needsReview = confidence<0.7 || flags.length>0.
+
+3. LLM PROVIDER ABSTRACTION:
+   - A small interface { extract(prompt, schema, transcript): Promise<object> }.
+   - Two impls wrapping the EXISTING Sarvam and OpenAI clients (reuse, don't recreate).
+   - Provider chosen per-agent via an env default DISPOSITION_LLM=sarvam|openai, with
+     optional override on the config row. temperature 0, structured/JSON output.
+   - Wrap in try/catch; on failure return a NOT_CONNECTED-free result with needsReview=true
+     and an error note (never crash the webhook).
+
+4. SERVICE FN (the entry point both callers use):
+   export async function disposeCall({ agentId, callId, transcript, callEvents }):
+     load+cache config (60s TTL) -> rulePrefilter -> if null, LLM extract -> validate
+     -> persist row -> return result.
+
+5. WEBHOOK HOOK: in the EXISTING post-call webhook handler, after the transcript/events
+   are available, call disposeCall(...) (await or fire-and-forget per the repo's pattern).
+   Do not block the webhook response on the LLM if the existing handler returns fast —
+   match the existing async style.
+
+6. TESTS: unit tests for buildSchema, buildPrompt, rulePrefilter, validate using the
+   repo's existing test runner. No live LLM calls in tests.
+
+Validate inputs with zod if the repo already uses it. No secrets in code. Report the
+inspection findings and your plan BEFORE generating files.
