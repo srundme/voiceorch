@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { CreateAgentWizard } from "@/components/create-agent-wizard";
 import { Search, Plus, Filter, MoreHorizontal, Settings2, PlayCircle, BarChart2, Phone, Users, Pencil, TrendingUp, PhoneCall, IndianRupee } from "lucide-react";
 import { 
   useListAgents, 
@@ -41,7 +40,6 @@ export default function AgentsList() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [, navigate] = useLocation();
-  const [wizardOpen, setWizardOpen]             = useState(false);
   const [otpDialogOpen, setOtpDialogOpen]       = useState(false);
   const [pendingCallNumber, setPendingCallNumber] = useState("");
 
@@ -141,7 +139,7 @@ export default function AgentsList() {
             Manage your AI voice agents and their configurations.
           </p>
         </div>
-        <Button data-testid="button-create-agent" onClick={() => setWizardOpen(true)}>
+        <Button data-testid="button-create-agent" onClick={() => navigate("/app/agents/new")}>
           <Plus className="mr-2 h-4 w-4" /> Create Agent
         </Button>
       </div>
@@ -305,19 +303,13 @@ export default function AgentsList() {
                 : "You haven't created any voice agents yet. Get started by creating your first one."}
             </p>
             {!search && (
-              <Button onClick={() => setWizardOpen(true)}>
+              <Button onClick={() => navigate("/app/agents/new")}>
                 <Plus className="mr-2 h-4 w-4" /> Create Your First Agent
               </Button>
             )}
           </div>
         )}
       </div>
-
-      <CreateAgentWizard
-        open={wizardOpen}
-        onClose={() => setWizardOpen(false)}
-        onCreated={(id) => { setWizardOpen(false); navigate(`/app/agents/${id}`); }}
-      />
 
       <DestinationOtpDialog
         open={otpDialogOpen}
