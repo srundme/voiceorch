@@ -555,7 +555,8 @@ export interface AgentInput {
   description?: string;
   asrProvider: string;
   asrModel?: string;
-  asrLanguage?: string;
+  /** @nullable */
+  asrLanguage?: string | null;
   asrBackgroundDenoising?: boolean;
   asrConfidenceThreshold?: number;
   asrEndOfTurnConfidence?: number;
@@ -657,7 +658,8 @@ export interface AgentUpdate {
   description?: string;
   asrProvider?: string;
   asrModel?: string;
-  asrLanguage?: string;
+  /** @nullable */
+  asrLanguage?: string | null;
   asrBackgroundDenoising?: boolean;
   asrConfidenceThreshold?: number;
   asrEndOfTurnConfidence?: number;

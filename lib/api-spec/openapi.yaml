@@ -5632,7 +5632,7 @@ components:
         asrModel:
           type: string
         asrLanguage:
-          type: string
+          type: ["string", "null"]
         asrBackgroundDenoising:
           type: boolean
         asrConfidenceThreshold:
@@ -5772,7 +5772,7 @@ components:
         asrModel:
           type: string
         asrLanguage:
-          type: string
+          type: ["string", "null"]
         asrBackgroundDenoising:
           type: boolean
         asrConfidenceThreshold:
