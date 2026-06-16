@@ -1,12 +1,14 @@
 import React, { useEffect, useRef } from "react";
 import { Link, useLocation, useParams } from "wouter";
-import { ArrowLeft, Save, Bot, Plus, Trash2, PhoneForwarded, ClipboardList, Webhook, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowLeft, Save, Bot, Plus, Trash2, PhoneForwarded, ClipboardList, Webhook, ChevronDown, ChevronUp, BookOpen, Sparkles, List, Pencil, X, ToggleLeft, ToggleRight } from "lucide-react";
 import {
   useGetAgent,
   useUpdateAgent,
   getGetAgentQueryKey,
   getListAgentsQueryKey,
+  useListEventTypes,
 } from "@workspace/api-client-react";
+import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { useForm, useWatch, useFieldArray } from "react-hook-form";
@@ -341,6 +343,41 @@ export default function AgentEdit() {
     control: form.control,
     name: "tools",
   });
+
+  const { data: eventTypesData } = useListEventTypes();
+  const eventTypeOptions = (eventTypesData ?? []).map((et: any) => ({ value: String(et.id), label: et.name ?? et.slug }));
+
+  const watchedTools = (form.watch("tools") ?? []) as any[];
+  const hasNativeTool = (type: string) => watchedTools.some((t: any) => t.type === type);
+  const nativeToolIndex = (type: string) => toolFields.findIndex((f: any) => f.type === type);
+  const toggleNativeTool = (type: string) => {
+    const idx = nativeToolIndex(type);
+    if (idx >= 0) { removeTool(idx); } else { appendTool({ type: type as any, name: "", description: "" }); }
+  };
+  const getNativeField = (type: string, fieldName: string) => {
+    const idx = nativeToolIndex(type);
+    return idx >= 0 ? form.watch(`tools.${idx}.${fieldName}` as any) : undefined;
+  };
+  const setNativeField = (type: string, fieldName: string, value: any) => {
+    const idx = nativeToolIndex(type);
+    if (idx >= 0) form.setValue(`tools.${idx}.${fieldName}` as any, value, { shouldDirty: true });
+  };
+
+  const BOOKING_TOOLS = [
+    { type: "native_booking", icon: <BookOpen className="h-4 w-4" />, color: "emerald", label: "Book Appointment", description: "Lets the agent book a meeting slot for the caller. Agent collects name, email, and preferred time, then confirms the booking live.", needsEventType: true },
+    { type: "native_check_availability", icon: <Sparkles className="h-4 w-4" />, color: "sky", label: "Check Availability", description: "Enables the agent to look up open slots before suggesting a time. Use alongside Book Appointment for a natural booking flow.", needsEventType: true },
+    { type: "native_list_bookings", icon: <List className="h-4 w-4" />, color: "violet", label: "List Bookings", description: "Allows the agent to retrieve existing bookings for the caller — useful for reschedule or cancellation flows.", needsEventType: false },
+    { type: "native_reschedule", icon: <Pencil className="h-4 w-4" />, color: "amber", label: "Reschedule Booking", description: "Lets the agent reschedule an existing booking to a new time slot chosen by the caller.", needsEventType: false },
+    { type: "native_cancel", icon: <X className="h-4 w-4" />, color: "red", label: "Cancel Booking", description: "Allows the agent to cancel an upcoming booking on the caller's request.", needsEventType: false },
+  ] as const;
+
+  const bookingColorMap: Record<string, { border: string; bg: string; iconBg: string; iconText: string; label: string; badge: string; badgeText: string }> = {
+    emerald: { border: "border-emerald-400/40", bg: "bg-emerald-950/10", iconBg: "bg-emerald-500/15", iconText: "text-emerald-400", label: "text-emerald-300", badge: "bg-emerald-500/20", badgeText: "text-emerald-300" },
+    sky:     { border: "border-sky-400/40",     bg: "bg-sky-950/10",     iconBg: "bg-sky-500/15",     iconText: "text-sky-400",     label: "text-sky-300",     badge: "bg-sky-500/20",     badgeText: "text-sky-300"     },
+    violet:  { border: "border-violet-400/40",  bg: "bg-violet-950/10",  iconBg: "bg-violet-500/15",  iconText: "text-violet-400",  label: "text-violet-300",  badge: "bg-violet-500/20",  badgeText: "text-violet-300"  },
+    amber:   { border: "border-amber-400/40",   bg: "bg-amber-950/10",   iconBg: "bg-amber-500/15",   iconText: "text-amber-400",   label: "text-amber-300",   badge: "bg-amber-500/20",   badgeText: "text-amber-300"   },
+    red:     { border: "border-red-400/40",     bg: "bg-red-950/10",     iconBg: "bg-red-500/15",     iconText: "text-red-400",     label: "text-red-300",     badge: "bg-red-500/20",     badgeText: "text-red-300"     },
+  };
 
   const { fields: dispositionFields, append: appendDisposition, remove: removeDisposition } = useFieldArray({
     control: form.control,
@@ -1050,6 +1087,70 @@ export default function AgentEdit() {
                 </div>
               </div>
             </CardHeader>
+            <CardContent className="space-y-4">
+              {/* ── Scheduling & Bookings ── */}
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-2">Scheduling & Bookings</p>
+                <div className="space-y-2">
+                  {BOOKING_TOOLS.map(({ type, icon, color, label, description, needsEventType }) => {
+                    const isOn = hasNativeTool(type);
+                    const c = bookingColorMap[color];
+                    const eventTypeId = isOn && needsEventType ? getNativeField(type, "eventTypeId") : undefined;
+                    return (
+                      <div key={type} className={cn("rounded-xl border transition-all duration-150", isOn ? `${c.border} ${c.bg}` : "border-border/60 bg-card/20")}>
+                        <button
+                          type="button"
+                          onClick={() => toggleNativeTool(type)}
+                          className="w-full text-left p-4 flex items-start gap-3"
+                        >
+                          <div className={cn("mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0", isOn ? c.iconBg : "bg-muted/30")}>
+                            <span className={cn(isOn ? c.iconText : "text-muted-foreground/40")}>{icon}</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <span className={cn("text-xs font-semibold", isOn ? c.label : "text-foreground/80")}>{label}</span>
+                              <span className={cn("text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded", isOn ? `${c.badge} ${c.badgeText}` : "bg-muted/40 text-muted-foreground/40")}>
+                                {isOn ? "ON" : "OFF"}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-muted-foreground/60 leading-relaxed">{description}</p>
+                          </div>
+                          <div className="shrink-0 mt-0.5">
+                            {isOn ? <ToggleRight className={cn("h-5 w-5", c.iconText)} /> : <ToggleLeft className="h-5 w-5 text-muted-foreground/30" />}
+                          </div>
+                        </button>
+                        {isOn && needsEventType && (
+                          <div className="px-4 pb-4 -mt-1">
+                            <div className="border-t border-border/30 pt-3">
+                              <label className="text-[10px] text-muted-foreground block mb-1">Event Type</label>
+                              {eventTypeOptions.length > 0 ? (
+                                <Select value={eventTypeId ?? ""} onValueChange={(v) => setNativeField(type, "eventTypeId", v)}>
+                                  <SelectTrigger className="h-8 text-xs">
+                                    <SelectValue placeholder="Select event type…" />
+                                  </SelectTrigger>
+                                  <SelectContent position="popper">
+                                    {eventTypeOptions.map((et: any) => (
+                                      <SelectItem key={et.value} value={et.value} className="text-xs">{et.label}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              ) : (
+                                <Input
+                                  value={eventTypeId ?? ""}
+                                  onChange={(e) => setNativeField(type, "eventTypeId", e.target.value)}
+                                  placeholder="Event type ID (create one in Scheduling first)"
+                                  className="h-8 text-xs"
+                                />
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </CardContent>
             {toolFields.length > 0 && (
               <CardContent className="space-y-4">
                 {toolFields.map((field, index) => {
