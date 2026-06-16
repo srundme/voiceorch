@@ -41,6 +41,9 @@ interface ExecutionLogEntry {
   direction: "request" | "response";
   component: "transcriber" | "llm" | "synthesizer";
   provider: string;
+  systemPrompt?: string;
+  transcriptHistory?: Array<{ role: string; content: string }>;
+  resolvedVars?: Record<string, string>;
 }
 
 function fmtLogTs(d: Date): string {
@@ -48,7 +51,27 @@ function fmtLogTs(d: Date): string {
   const date = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
   const ms = String(d.getMilliseconds()).padStart(3, "0");
   const time = `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${ms}000`;
-  return `${date}\n${time}`;
+  return `${date} ${time}`;
+}
+
+function buildResolvedVars(agent: any, call: any): Record<string, string> {
+  const map: Record<string, string> = {};
+  if (call.fromNumber) { map["caller_number"] = call.fromNumber; map["caller_phone"] = call.fromNumber; }
+  if (call.toNumber) { map["called_number"] = call.toNumber; map["to_number"] = call.toNumber; }
+  if (call.agentName) { map["agent_name"] = call.agentName; }
+  const promptVars: Array<{ key: string; defaultValue?: string }> = agent?.promptVariables ?? [];
+  for (const pv of promptVars) {
+    if (pv.defaultValue != null && pv.defaultValue !== "") map[pv.key] = pv.defaultValue;
+  }
+  if (call.metadata) {
+    try {
+      const meta = JSON.parse(call.metadata) as Record<string, unknown>;
+      for (const [k, v] of Object.entries(meta)) {
+        if (v != null) map[k] = String(v);
+      }
+    } catch { /* ignore */ }
+  }
+  return map;
 }
 
 function parseExecutionLogs(
@@ -64,6 +87,8 @@ function parseExecutionLogs(
     ? `${agent.llmProvider ?? "llm"} / ${agent.llmModel}`
     : (agent?.llmProvider ?? "llm");
   const ttsProvider = agent?.ttsProvider ?? "tts";
+  const systemPrompt: string = agent?.systemPrompt ?? agent?.task ?? "";
+  const resolvedVars = buildResolvedVars(agent, call);
 
   const startMs = new Date(call.createdAt).getTime();
   const endMs = call.endedAt
@@ -93,9 +118,12 @@ function parseExecutionLogs(
           provider: asrProvider,
         });
       } else if (line.role === "assistant") {
-        const ctx = transcriptLines
-          .slice(0, li)
-          .map((l: any) => `${l.role === "user" ? "user" : "assistant"}: ${l.content}`)
+        const historySlice = transcriptLines.slice(0, li).map((l: any) => ({
+          role: l.role === "user" ? "user" : "assistant",
+          content: String(l.content ?? ""),
+        }));
+        const ctx = historySlice
+          .map((l) => `${l.role}: ${l.content}`)
           .join("\n");
         entries.push({
           timestamp: fmtLogTs(ts(idx++)),
@@ -103,6 +131,9 @@ function parseExecutionLogs(
           direction: "request",
           component: "llm",
           provider: llmProvider,
+          systemPrompt,
+          transcriptHistory: historySlice,
+          resolvedVars,
         });
         entries.push({
           timestamp: fmtLogTs(ts(idx++)),
@@ -151,41 +182,176 @@ function parseExecutionLogs(
 const COMPONENT_CONFIG = {
   transcriber: {
     icon: <Mic className="h-3 w-3" />,
-    color: "text-purple-500",
-    bg: "bg-purple-500/10 border-purple-500/20",
+    color: "text-blue-500",
+    bg: "bg-blue-500/10 border-blue-500/20",
     label: "transcriber",
   },
   llm: {
     icon: <Cpu className="h-3 w-3" />,
-    color: "text-blue-500",
-    bg: "bg-blue-500/10 border-blue-500/20",
+    color: "text-purple-500",
+    bg: "bg-purple-500/10 border-purple-500/20",
     label: "llm",
   },
   synthesizer: {
     icon: <Volume2 className="h-3 w-3" />,
-    color: "text-emerald-500",
-    bg: "bg-emerald-500/10 border-emerald-500/20",
+    color: "text-green-500",
+    bg: "bg-green-500/10 border-green-500/20",
     label: "synthesizer",
   },
 };
 
+function extractTemplateVars(text: string): string[] {
+  const vars: string[] = [];
+  let m: RegExpExecArray | null;
+  const re = /\{(\w+)\}/g;
+  while ((m = re.exec(text)) !== null) {
+    if (!vars.includes(m[1])) vars.push(m[1]);
+  }
+  return vars;
+}
+
+function HighlightedSystemPrompt({
+  prompt,
+  resolvedVars,
+}: {
+  prompt: string;
+  resolvedVars: Record<string, string>;
+}) {
+  const parts: React.ReactNode[] = [];
+  let last = 0;
+  const re = /\{(\w+)\}/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(prompt)) !== null) {
+    if (m.index > last) parts.push(prompt.slice(last, m.index));
+    const varName = m[1];
+    const resolved = resolvedVars[varName];
+    if (resolved != null) {
+      parts.push(
+        <span
+          key={m.index}
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] font-mono border border-amber-500/20"
+          title={`${m[0]} → "${resolved}"`}
+        >
+          {m[0]} → &ldquo;{resolved}&rdquo;
+        </span>
+      );
+    } else {
+      parts.push(
+        <span
+          key={m.index}
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-500/10 text-red-500 text-[10px] font-mono border border-red-500/20"
+        >
+          ⚠ Variable not injected ({m[0]})
+        </span>
+      );
+    }
+    last = m.index + m[0].length;
+  }
+  if (last < prompt.length) parts.push(prompt.slice(last));
+  return (
+    <span className="whitespace-pre-wrap break-words leading-relaxed">{parts}</span>
+  );
+}
+
+function LlmRequestExpanded({
+  systemPrompt,
+  transcriptHistory,
+  resolvedVars,
+}: {
+  systemPrompt: string;
+  transcriptHistory: Array<{ role: string; content: string }>;
+  resolvedVars: Record<string, string>;
+}) {
+  const vars = systemPrompt ? extractTemplateVars(systemPrompt) : [];
+
+  return (
+    <div className="mt-3 space-y-3 text-[11px]">
+      {systemPrompt ? (
+        <div>
+          <p className="font-semibold text-foreground/70 mb-1.5 font-mono">## System Prompt:</p>
+          <div className="bg-elevated/40 border border-border rounded p-2.5 text-[10px] font-mono text-foreground/70">
+            <HighlightedSystemPrompt prompt={systemPrompt} resolvedVars={resolvedVars} />
+          </div>
+        </div>
+      ) : null}
+
+      {vars.length > 0 && (
+        <div>
+          <p className="font-semibold text-muted-foreground/60 mb-1.5 font-mono text-[10px]">
+            ── Resolved Variables ──
+          </p>
+          <div className="space-y-1">
+            {vars.map((v) => {
+              const resolved = resolvedVars[v];
+              return (
+                <div key={v} className="flex items-center gap-2 flex-wrap">
+                  <code className="text-[10px] px-1.5 py-0.5 rounded bg-elevated border border-border text-foreground/60">
+                    {"{" + v + "}"}
+                  </code>
+                  {resolved != null ? (
+                    <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/20 text-amber-600 dark:text-amber-400">
+                      &ldquo;{resolved}&rdquo;
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 border border-red-500/20 text-red-500">
+                      ⚠ Variable not injected
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {transcriptHistory.length > 0 && (
+        <div>
+          <p className="font-semibold text-foreground/70 mb-1.5 font-mono">## Transcript:</p>
+          <div className="space-y-1">
+            {transcriptHistory.map((line, i) => (
+              <div key={i} className="flex gap-1.5 text-[10px] font-mono">
+                <span className={`shrink-0 font-semibold ${line.role === "user" ? "text-blue-400" : "text-purple-400"}`}>
+                  {line.role}:
+                </span>
+                <span className="text-foreground/60 break-words">{line.content}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {transcriptHistory.length === 0 && !systemPrompt && (
+        <p className="text-muted-foreground/40 italic text-[10px]">[Start of conversation]</p>
+      )}
+    </div>
+  );
+}
+
 function LogRow({ entry }: { entry: ExecutionLogEntry }) {
   const [expanded, setExpanded] = useState(false);
+  const isLlmRequest = entry.component === "llm" && entry.direction === "request";
   const MAX_LEN = 200;
   const isLong = entry.logData.length > MAX_LEN;
+  const canExpand = isLlmRequest || isLong;
   const display = !isLong || expanded ? entry.logData : entry.logData.slice(0, MAX_LEN) + "…";
   const cfg = COMPONENT_CONFIG[entry.component];
-  const [datePart, timePart] = entry.timestamp.split("\n");
 
   return (
     <tr className="border-b border-border last:border-0 hover:bg-elevated/20 transition-colors group">
-      <td className="px-4 py-3 align-top w-36 shrink-0">
-        <div className="text-[10px] font-mono text-muted-foreground">{datePart}</div>
-        <div className="text-[10px] font-mono text-muted-foreground/60">{timePart}</div>
+      <td className="px-4 py-3 align-top w-44 shrink-0">
+        <div className="text-[10px] font-mono text-muted-foreground whitespace-nowrap">{entry.timestamp}</div>
       </td>
       <td className="px-4 py-3 align-top">
-        <p className="text-xs text-foreground/80 whitespace-pre-wrap leading-relaxed break-words">{display}</p>
-        {isLong && (
+        {isLlmRequest && expanded ? (
+          <LlmRequestExpanded
+            systemPrompt={entry.systemPrompt ?? ""}
+            transcriptHistory={entry.transcriptHistory ?? []}
+            resolvedVars={entry.resolvedVars ?? {}}
+          />
+        ) : (
+          <p className="text-xs text-foreground/80 whitespace-pre-wrap leading-relaxed break-words">{display}</p>
+        )}
+        {canExpand && (
           <button
             onClick={() => setExpanded((v) => !v)}
             className="mt-1.5 flex items-center gap-0.5 text-xs text-primary hover:underline"
@@ -200,11 +366,11 @@ function LogRow({ entry }: { entry: ExecutionLogEntry }) {
       </td>
       <td className="px-4 py-3 align-top w-24">
         {entry.direction === "request" ? (
-          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-500 border border-amber-500/20">
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-transparent text-amber-500 border border-amber-500/40">
             request
           </span>
         ) : (
-          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-muted/60 text-muted-foreground border border-border">
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-transparent text-muted-foreground border border-border">
             response
           </span>
         )}
@@ -436,7 +602,7 @@ export default function CallDetail() {
   const updateDisposition = useUpdateCallDisposition();
   const [editing, setEditing] = useState(false);
   const [edits, setEdits] = useState<Record<string, string>>({});
-  const [activeTab, setActiveTab] = useState("transcript");
+  const [activeTab, setActiveTab] = useState("logs");
 
   const dispositionSchema = Array.isArray((agent as any)?.dispositionSchema)
     ? (agent as any).dispositionSchema as Array<{ key: string; label: string; type: string; options?: string[] }>
