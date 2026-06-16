@@ -1,0 +1,94 @@
+Implement a centralized **Knowledge Management** system to replace the existing **Files** section in the Agent Overview page. This should create a reusable Knowledge Library that can be shared across multiple agents.
+
+## 1. Replace "Files" with "Knowledge"
+
+Replace the current **Files** section in the Agent Overview page with a new section called **Knowledge**.
+
+### Requirements
+
+* Rename the section label from **Files** to **Knowledge**.
+* Replace the existing **Select Files** dropdown with a searchable multi-select dropdown titled **Select Knowledge**.
+* The dropdown must be fully clickable and functional.
+* Users should be able to search, select, and remove multiple knowledge sources.
+* Selected knowledge should persist after saving the agent.
+* When an agent is reopened, previously selected knowledge should automatically be loaded.
+
+The dropdown should display all knowledge sources created in the Knowledge module.
+
+Each knowledge source should display:
+
+* Name
+* Type (File / Text / URL)
+* Status (Ready / Processing)
+
+If no knowledge exists, display:
+
+> No knowledge sources available.
+
+Below it, display a **Create Knowledge** button that navigates directly to the Knowledge page.
+
+When an agent is saved:
+
+* Store the selected Knowledge IDs (not file names).
+* Reload those Knowledge IDs automatically when reopening the agent.
+
+Do not modify any other part of the Agent Overview page.
+
+---
+
+## 2. Create a Knowledge Module
+
+Add a new sidebar menu item called **Knowledge** directly below **Agents**.
+
+The page should match the application's existing dark theme and styling.
+
+### Page Header
+
+**Knowledge**
+
+**Subtitle**
+
+Train your AI agents with documents, text, FAQs, and website content.
+
+Add a **+ Add Knowledge** button in the top-right corner.
+
+Clicking this button should open a modal for creating new knowledge sources.
+
+The Knowledge page will act as the centralized repository for all reusable knowledge that can later be attached to one or more agents.
+
+---
+
+## 3. Connect the Knowledge Module with Agents
+
+The **Select Knowledge** dropdown inside the Agent Overview page should automatically load every knowledge source created in the Knowledge module.
+
+Users should be able to:
+
+* Search knowledge
+* Select multiple knowledge sources
+* Remove selections
+* Save selections
+
+When an existing agent is opened:
+
+* Previously attached knowledge should already be selected.
+
+Store agent-to-knowledge relationships using **Knowledge IDs** instead of file names.
+
+Knowledge must be reusable across multiple agents.
+
+Do not duplicate knowledge records between agents.
+
+---
+
+## 4. Remove the Old Files System
+
+Remove the old **Files** upload component completely from the Agent Overview page.
+
+The Agent Overview page should no longer allow direct file uploads.
+
+All document, text, and URL uploads should be managed exclusively through the new **Knowledge** module.
+
+The Agent page should only allow selecting existing knowledge from the centralized Knowledge Library.
+
+This should establish a single reusable Knowledge Library that can be shared across multiple agents without duplicating uploaded content.

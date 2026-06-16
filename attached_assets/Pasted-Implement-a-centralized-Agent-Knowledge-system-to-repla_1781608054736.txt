@@ -1,0 +1,107 @@
+Implement a centralized **Agent Knowledge** system to replace the existing **Files** section in the Agent Overview page. This should create a reusable knowledge library that can be shared across multiple AI agents.
+
+## 1. Replace "Files" with "Agent Knowledge"
+
+Replace the current **Files** section in the Agent Overview page with a new section called **Agent Knowledge**.
+
+### Requirements
+
+* Rename the section label from **Files** to **Agent Knowledge**.
+* Replace the existing **Select Files** dropdown with a searchable multi-select dropdown titled **Select Agent Knowledge**.
+* The dropdown must be fully clickable and functional.
+* Users should be able to search, select, and remove multiple knowledge sources.
+* Selected Agent Knowledge should persist after saving the agent.
+* When an agent is reopened, previously selected Agent Knowledge should automatically be loaded.
+
+The dropdown should display all knowledge sources created in the **Agent Knowledge** module.
+
+Each knowledge source should display:
+
+* Name
+* Type (File / Text / URL)
+* Status (Ready / Processing)
+
+If no Agent Knowledge exists, display:
+
+> No Agent Knowledge available.
+
+Below it, display a **Create Agent Knowledge** button that navigates directly to the Agent Knowledge page.
+
+When an agent is saved:
+
+* Store the selected Agent Knowledge IDs (not file names).
+* Reload those Agent Knowledge IDs automatically when reopening the agent.
+
+Do not modify any other part of the Agent Overview page.
+
+---
+
+## 2. Create an Agent Knowledge Module
+
+Add a new sidebar menu item called **Agent Knowledge** directly below **Agents**.
+
+The page should match the application's existing dark theme and styling.
+
+### Page Header
+
+**Agent Knowledge**
+
+**Subtitle**
+
+Create reusable knowledge sources for your AI agents using documents, text, FAQs, and website content.
+
+Add a **+ Add Agent Knowledge** button in the top-right corner.
+
+Clicking this button should open a modal for creating new knowledge sources.
+
+The Agent Knowledge page will act as the centralized repository for all reusable knowledge that can later be attached to one or more AI agents.
+
+The knowledge creation modal should support three source types:
+
+* **File Upload** (PDF, DOCX, TXT, CSV, Markdown)
+* **Text**
+* **Website URL**
+
+Each knowledge source should have:
+
+* Name
+* Type
+* Status
+* Created Date
+
+---
+
+## 3. Connect Agent Knowledge with Agents
+
+The **Select Agent Knowledge** dropdown inside the Agent Overview page should automatically load every knowledge source created in the **Agent Knowledge** module.
+
+Users should be able to:
+
+* Search Agent Knowledge
+* Select multiple knowledge sources
+* Remove selections
+* Save selections
+
+When an existing agent is opened:
+
+* Previously attached Agent Knowledge should already be selected.
+
+Store agent-to-knowledge relationships using **Agent Knowledge IDs** instead of file names.
+
+Agent Knowledge must be reusable across multiple agents.
+
+Do not duplicate knowledge records between agents.
+
+---
+
+## 4. Remove the Old Files System
+
+Remove the old **Files** upload component completely from the Agent Overview page.
+
+The Agent Overview page should no longer allow direct file uploads.
+
+All document, text, and website URL uploads should be managed exclusively through the new **Agent Knowledge** module.
+
+The Agent page should only allow selecting existing Agent Knowledge from the centralized Agent Knowledge library.
+
+This should establish a single reusable **Agent Knowledge** library that can be shared across multiple AI agents without duplicating uploaded content.
