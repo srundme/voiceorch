@@ -1420,89 +1420,113 @@ function AdvancedTab({ form }: { form: any }) {
         {/* ── Left column ── */}
         <div className="space-y-4">
           {/* Start Speaking Plan */}
-          <SectionDivider label="Start Speaking Plan" />
-          <p className="text-[10px] text-muted-foreground -mt-2">
-            How long the agent waits after detecting end-of-turn before responding, based on transcript content.
-          </p>
-          <SliderField form={form} name="startSpeakingWaitSecs" label="Wait Seconds"
-            description="Base extra wait before any response (0 = off)" min={0} max={5} step={0.1}
-            format={v => `${v.toFixed(1)}s`} />
-          <SliderField form={form} name="startSpeakingOnPunctuationSecs" label="After Punctuation"
-            description="Delay when utterance ends with . ? !" min={0} max={3} step={0.05}
-            format={v => `${v.toFixed(2)}s`} />
-          <SliderField form={form} name="startSpeakingOnNoPunctuationSecs" label="After No Punctuation"
-            description="Delay when utterance has no terminal punctuation" min={0} max={3} step={0.1}
-            format={v => `${v.toFixed(1)}s`} />
-          <SliderField form={form} name="startSpeakingOnNumberSecs" label="After Number"
-            description="Delay when utterance ends with a digit" min={0} max={3} step={0.05}
-            format={v => `${v.toFixed(2)}s`} />
+          <div className="rounded-lg border border-border/50 p-3 space-y-3">
+            <div>
+              <p className="text-xs font-medium">Start Speaking Plan</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">
+                How long the agent waits after detecting end-of-turn before responding.
+              </p>
+            </div>
+            <div className="space-y-3 pt-2 border-t border-border/40">
+              <SliderField form={form} name="startSpeakingWaitSecs" label="Wait Seconds"
+                description="Base extra wait before any response (0 = off)" min={0} max={5} step={0.1}
+                format={v => `${v.toFixed(1)}s`} />
+              <SliderField form={form} name="startSpeakingOnPunctuationSecs" label="After Punctuation"
+                description="Delay when utterance ends with . ? !" min={0} max={3} step={0.05}
+                format={v => `${v.toFixed(2)}s`} />
+              <SliderField form={form} name="startSpeakingOnNoPunctuationSecs" label="After No Punctuation"
+                description="Delay when utterance has no terminal punctuation" min={0} max={3} step={0.1}
+                format={v => `${v.toFixed(1)}s`} />
+              <SliderField form={form} name="startSpeakingOnNumberSecs" label="After Number"
+                description="Delay when utterance ends with a digit" min={0} max={3} step={0.05}
+                format={v => `${v.toFixed(2)}s`} />
+            </div>
+          </div>
 
           {/* Stop Speaking Plan */}
-          <SectionDivider label="Stop Speaking Plan" />
-          <p className="text-[10px] text-muted-foreground -mt-2">
-            How much speech from the caller triggers agent interruption (barge-in).
-          </p>
-          <FormField control={form.control} name="bargeInEnabled" render={({ field }) => (
-            <FormItem className="flex items-center justify-between rounded-lg border border-border/50 px-3 py-2">
-              <div><FormLabel className="text-sm">Allow Barge-in</FormLabel>
-                <FormDescription className="text-[10px]">Caller can interrupt agent while it speaks</FormDescription></div>
-              <FormControl><Switch checked={field.value ?? true} onCheckedChange={field.onChange} /></FormControl>
-            </FormItem>
-          )} />
-          {bargeIn && (
-            <>
-              <SliderField form={form} name="stopSpeakingNumWords" label="Number of Words"
-                description="Min caller words before barge-in fires (0 = use frames setting)" min={0} max={10} step={1}
-                format={v => v === 0 ? "off" : `${v} word${v !== 1 ? "s" : ""}`} />
-              <SliderField form={form} name="stopSpeakingVoiceSecs" label="Voice Seconds"
-                description="Min caller voice duration to trigger interruption" min={0} max={0.5} step={0.02}
-                format={v => `${v.toFixed(2)}s`} />
-              <SliderField form={form} name="stopSpeakingBackOffSecs" label="Back-off Seconds"
-                description="Silence after TTS starts before barge-in can fire" min={0} max={10} step={0.1}
-                format={v => `${v.toFixed(1)}s`} />
-              <FormField control={form.control} name="bargeInEnergyThreshold" render={({ field }) => (
-                <FormItem>
-                  <div className="flex justify-between"><FormLabel className="text-xs">Energy Threshold</FormLabel>
-                    <span className="text-xs font-mono">{field.value ?? 1200}</span></div>
-                  <FormControl>
-                    <input type="range" min={100} max={5000} step={100} value={field.value ?? 1200}
-                      onChange={e => field.onChange(parseInt(e.target.value))}
-                      className="w-full h-1.5 accent-primary cursor-pointer" />
-                  </FormControl>
-                  <FormDescription className="text-[10px]">Min RMS energy to count as speech</FormDescription>
+          <div className="rounded-lg border border-border/50 p-3 space-y-3">
+            <div>
+              <p className="text-xs font-medium">Stop Speaking Plan</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">
+                How much speech from the caller triggers agent interruption (barge-in).
+              </p>
+            </div>
+            <div className="pt-2 border-t border-border/40 space-y-3">
+              <FormField control={form.control} name="bargeInEnabled" render={({ field }) => (
+                <FormItem className="flex items-center justify-between">
+                  <div>
+                    <FormLabel className="text-xs font-medium">Allow Barge-in</FormLabel>
+                    <FormDescription className="text-[10px]">Caller can interrupt agent while it speaks</FormDescription>
+                  </div>
+                  <FormControl><Switch checked={field.value ?? true} onCheckedChange={field.onChange} /></FormControl>
                 </FormItem>
               )} />
-            </>
-          )}
+              {bargeIn && (
+                <div className="space-y-3 pt-2 border-t border-border/30">
+                  <SliderField form={form} name="stopSpeakingNumWords" label="Number of Words"
+                    description="Min caller words before barge-in fires (0 = use frames setting)" min={0} max={10} step={1}
+                    format={v => v === 0 ? "off" : `${v} word${v !== 1 ? "s" : ""}`} />
+                  <SliderField form={form} name="stopSpeakingVoiceSecs" label="Voice Seconds"
+                    description="Min caller voice duration to trigger interruption" min={0} max={0.5} step={0.02}
+                    format={v => `${v.toFixed(2)}s`} />
+                  <SliderField form={form} name="stopSpeakingBackOffSecs" label="Back-off Seconds"
+                    description="Silence after TTS starts before barge-in can fire" min={0} max={10} step={0.1}
+                    format={v => `${v.toFixed(1)}s`} />
+                  <FormField control={form.control} name="bargeInEnergyThreshold" render={({ field }) => (
+                    <FormItem>
+                      <div className="flex justify-between">
+                        <FormLabel className="text-xs">Energy Threshold</FormLabel>
+                        <span className="text-xs font-mono">{field.value ?? 1200}</span>
+                      </div>
+                      <FormControl>
+                        <input type="range" min={100} max={5000} step={100} value={field.value ?? 1200}
+                          onChange={e => field.onChange(parseInt(e.target.value))}
+                          className="w-full h-1.5 accent-primary cursor-pointer" />
+                      </FormControl>
+                      <FormDescription className="text-[10px]">Min RMS energy to count as speech</FormDescription>
+                    </FormItem>
+                  )} />
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* ── Right column ── */}
         <div className="space-y-4">
           {/* Call Limits */}
-          <SectionDivider label="Call Limits" />
-          <FormField control={form.control} name="silenceTimeoutSeconds" render={({ field }) => (
-            <FormItem>
-              <div className="flex justify-between"><FormLabel className="text-xs">Silence Timeout</FormLabel>
-                <span className="text-xs font-mono">{field.value ?? 30}s</span></div>
-              <FormControl>
-                <input type="range" min={5} max={300} step={5} value={field.value ?? 30}
-                  onChange={e => field.onChange(parseInt(e.target.value))}
-                  className="w-full h-1.5 accent-primary cursor-pointer" />
-              </FormControl>
-              <FormDescription className="text-[10px]">Hang up if caller is silent for this duration</FormDescription>
-            </FormItem>
-          )} />
-          <FormField control={form.control} name="maxDuration" render={({ field }) => (
-            <FormItem>
-              <div className="flex justify-between"><FormLabel className="text-xs">Max Call Duration</FormLabel>
-                <span className="text-xs font-mono">{Math.floor((field.value ?? 300) / 60)}m {(field.value ?? 300) % 60}s</span></div>
-              <FormControl>
-                <input type="range" min={10} max={3600} step={30} value={field.value ?? 300}
-                  onChange={e => field.onChange(parseInt(e.target.value))}
-                  className="w-full h-1.5 accent-primary cursor-pointer" />
-              </FormControl>
-            </FormItem>
-          )} />
+          <div className="rounded-lg border border-border/50 p-3 space-y-3">
+            <p className="text-xs font-medium">Call Limits</p>
+            <div className="space-y-3 pt-2 border-t border-border/40">
+              <FormField control={form.control} name="silenceTimeoutSeconds" render={({ field }) => (
+                <FormItem>
+                  <div className="flex justify-between">
+                    <FormLabel className="text-xs">Silence Timeout</FormLabel>
+                    <span className="text-xs font-mono">{field.value ?? 30}s</span>
+                  </div>
+                  <FormControl>
+                    <input type="range" min={5} max={300} step={5} value={field.value ?? 30}
+                      onChange={e => field.onChange(parseInt(e.target.value))}
+                      className="w-full h-1.5 accent-primary cursor-pointer" />
+                  </FormControl>
+                  <FormDescription className="text-[10px]">Hang up if caller is silent for this duration</FormDescription>
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="maxDuration" render={({ field }) => (
+                <FormItem>
+                  <div className="flex justify-between">
+                    <FormLabel className="text-xs">Max Call Duration</FormLabel>
+                    <span className="text-xs font-mono">{Math.floor((field.value ?? 300) / 60)}m {(field.value ?? 300) % 60}s</span>
+                  </div>
+                  <FormControl>
+                    <input type="range" min={10} max={3600} step={30} value={field.value ?? 300}
+                      onChange={e => field.onChange(parseInt(e.target.value))}
+                      className="w-full h-1.5 accent-primary cursor-pointer" />
+                  </FormControl>
+                </FormItem>
+              )} />
+            </div>
+          </div>
 
           {/* Compliance */}
           <SectionDivider label="Compliance" />
