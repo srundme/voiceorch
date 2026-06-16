@@ -10,8 +10,8 @@
  */
 
 import { google } from "googleapis";
-import { db } from "@workspace/db";
-import { sql } from "drizzle-orm";
+import { db, googleCalendarConnectionsTable } from "@workspace/db";
+import { eq, asc, sql } from "drizzle-orm";
 import { logger } from "../../lib/logger.js";
 import { encryptKey, decryptKey } from "../../lib/crypto.js";
 
@@ -120,18 +120,23 @@ export type GoogleConnection = {
 };
 
 export async function listConnectionsForUser(userId: string): Promise<GoogleConnection[]> {
-  const rows = await db.execute(
-    sql`SELECT id, user_id, email, token_expiry, created_at
-        FROM google_calendar_connections
-        WHERE user_id = ${userId}
-        ORDER BY created_at ASC`,
-  );
-  return (rows.rows as any[]).map(r => ({
+  const rows = await db
+    .select({
+      id: googleCalendarConnectionsTable.id,
+      userId: googleCalendarConnectionsTable.userId,
+      email: googleCalendarConnectionsTable.email,
+      tokenExpiry: googleCalendarConnectionsTable.tokenExpiry,
+      createdAt: googleCalendarConnectionsTable.createdAt,
+    })
+    .from(googleCalendarConnectionsTable)
+    .where(eq(googleCalendarConnectionsTable.userId, userId))
+    .orderBy(asc(googleCalendarConnectionsTable.createdAt));
+  return rows.map(r => ({
     id: r.id,
-    userId: r.user_id,
+    userId: r.userId,
     email: r.email,
-    tokenExpiry: r.token_expiry ? new Date(r.token_expiry) : null,
-    createdAt: new Date(r.created_at),
+    tokenExpiry: r.tokenExpiry,
+    createdAt: r.createdAt,
   }));
 }
 
@@ -144,17 +149,22 @@ export async function upsertConnection(
 ): Promise<string> {
   const encAccess  = encryptKey(accessToken);
   const encRefresh = refreshToken ? encryptKey(refreshToken) : "";
-  const rows = await db.execute(sql`
-    INSERT INTO google_calendar_connections (user_id, email, access_token, refresh_token, token_expiry)
-    VALUES (${userId}, ${email}, ${encAccess}, ${encRefresh}, ${expiry})
-    ON CONFLICT (user_id, email) DO UPDATE
-      SET access_token  = EXCLUDED.access_token,
-          refresh_token = CASE WHEN EXCLUDED.refresh_token != '' THEN EXCLUDED.refresh_token ELSE google_calendar_connections.refresh_token END,
-          token_expiry  = EXCLUDED.token_expiry,
-          updated_at    = NOW()
-    RETURNING id
-  `);
-  return (rows.rows[0] as any).id as string;
+  const rows = await db
+    .insert(googleCalendarConnectionsTable)
+    .values({ userId, email, accessToken: encAccess, refreshToken: encRefresh, tokenExpiry: expiry })
+    .onConflictDoUpdate({
+      target: [googleCalendarConnectionsTable.userId, googleCalendarConnectionsTable.email],
+      set: {
+        accessToken: encAccess,
+        // Preserve existing refresh token when the new one is empty (Google doesn't
+        // always re-issue a refresh token on repeat consent flows)
+        refreshToken: sql`CASE WHEN ${encRefresh} != '' THEN ${encRefresh} ELSE google_calendar_connections.refresh_token END`,
+        tokenExpiry: expiry,
+        updatedAt: new Date(),
+      },
+    })
+    .returning({ id: googleCalendarConnectionsTable.id });
+  return rows[0].id;
 }
 
 /** Returns a valid access token for the connection, auto-refreshing if needed. */
@@ -162,18 +172,25 @@ export async function getValidAccessToken(connectionId: string): Promise<{
   accessToken: string;
   email: string;
 } | null> {
-  const rows = await db.execute(
-    sql`SELECT id, user_id, email, access_token, refresh_token, token_expiry
-        FROM google_calendar_connections WHERE id = ${connectionId}`,
-  );
-  const row = rows.rows[0] as any;
+  const rows = await db
+    .select({
+      id: googleCalendarConnectionsTable.id,
+      email: googleCalendarConnectionsTable.email,
+      accessToken: googleCalendarConnectionsTable.accessToken,
+      refreshToken: googleCalendarConnectionsTable.refreshToken,
+      tokenExpiry: googleCalendarConnectionsTable.tokenExpiry,
+    })
+    .from(googleCalendarConnectionsTable)
+    .where(eq(googleCalendarConnectionsTable.id, connectionId))
+    .limit(1);
+  const row = rows[0];
   if (!row) return null;
 
-  const accessToken  = decryptKey(row.access_token);
-  const refreshToken = row.refresh_token ? decryptKey(row.refresh_token) : "";
+  const accessToken  = decryptKey(row.accessToken);
+  const refreshToken = row.refreshToken ? decryptKey(row.refreshToken) : "";
 
   const now    = Date.now();
-  const expiry = row.token_expiry ? new Date(row.token_expiry).getTime() : 0;
+  const expiry = row.tokenExpiry ? row.tokenExpiry.getTime() : 0;
 
   // Refresh if less than 5 minutes remaining
   if (expiry - now < 5 * 60 * 1000 && refreshToken) {
@@ -183,13 +200,14 @@ export async function getValidAccessToken(connectionId: string): Promise<{
       const { credentials } = await client.refreshAccessToken();
       if (credentials.access_token) {
         const encNew = encryptKey(credentials.access_token);
-        await db.execute(sql`
-          UPDATE google_calendar_connections
-          SET access_token = ${encNew},
-              token_expiry = ${credentials.expiry_date ? new Date(credentials.expiry_date) : null},
-              updated_at   = NOW()
-          WHERE id = ${connectionId}
-        `);
+        await db
+          .update(googleCalendarConnectionsTable)
+          .set({
+            accessToken: encNew,
+            tokenExpiry: credentials.expiry_date ? new Date(credentials.expiry_date) : null,
+            updatedAt: new Date(),
+          })
+          .where(eq(googleCalendarConnectionsTable.id, connectionId));
         return { accessToken: credentials.access_token, email: row.email };
       }
     } catch (err) {
@@ -201,17 +219,21 @@ export async function getValidAccessToken(connectionId: string): Promise<{
 }
 
 export async function revokeConnection(connectionId: string): Promise<void> {
-  const rows = await db.execute(
-    sql`SELECT access_token FROM google_calendar_connections WHERE id = ${connectionId}`,
-  );
-  const row = rows.rows[0] as any;
-  if (row?.access_token) {
+  const rows = await db
+    .select({ accessToken: googleCalendarConnectionsTable.accessToken })
+    .from(googleCalendarConnectionsTable)
+    .where(eq(googleCalendarConnectionsTable.id, connectionId))
+    .limit(1);
+  const row = rows[0];
+  if (row?.accessToken) {
     try {
       const client = makePlatformOAuth2Client();
-      await client.revokeToken(decryptKey(row.access_token));
+      await client.revokeToken(decryptKey(row.accessToken));
     } catch { /* best effort */ }
   }
-  await db.execute(sql`DELETE FROM google_calendar_connections WHERE id = ${connectionId}`);
+  await db
+    .delete(googleCalendarConnectionsTable)
+    .where(eq(googleCalendarConnectionsTable.id, connectionId));
 }
 
 // ── Calendar listing ─────────────────────────────────────────────────────────
@@ -413,9 +435,15 @@ export async function updateCalendarEvent(params: {
 
 /** Returns the first connection for a user, or null. Used as fallback. */
 export async function getFirstConnectionForUser(userId: string): Promise<{ id: string; email: string } | null> {
-  const rows = await db.execute(
-    sql`SELECT id, email FROM google_calendar_connections WHERE user_id = ${userId} ORDER BY created_at ASC LIMIT 1`,
-  );
-  const row = rows.rows[0] as any;
+  const rows = await db
+    .select({
+      id: googleCalendarConnectionsTable.id,
+      email: googleCalendarConnectionsTable.email,
+    })
+    .from(googleCalendarConnectionsTable)
+    .where(eq(googleCalendarConnectionsTable.userId, userId))
+    .orderBy(asc(googleCalendarConnectionsTable.createdAt))
+    .limit(1);
+  const row = rows[0];
   return row ? { id: row.id, email: row.email } : null;
 }
