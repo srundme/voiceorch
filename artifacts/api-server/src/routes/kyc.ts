@@ -152,30 +152,46 @@ async function createVobizSubAccount(
   return resp.json() as Promise<VobizCreateAccountResponse>;
 }
 
+function partnerHeadersBearer() {
+  // Some VoBiz partner endpoints accept Bearer token auth
+  return {
+    "Authorization": `Bearer ${process.env["VOBIZ_AUTH_TOKEN"] ?? ""}`,
+    "Accept":        "application/json",
+    "Content-Type":  "application/json",
+  };
+}
+
 async function fetchVobizSubAccountByEmail(
   email: string,
 ): Promise<VobizCreateAccountResponse | null> {
-  // Try with email as query param first (some partner APIs support this)
-  const urlWithParam = `${VOBIZ_PARTNER_BASE}/accounts?email=${encodeURIComponent(email)}`;
-  const urlList      = `${VOBIZ_PARTNER_BASE}/accounts`;
+  // Try multiple URL + auth combinations to recover an existing sub-account
+  const attempts = [
+    // X-Auth headers, email query param
+    { url: `${VOBIZ_PARTNER_BASE}/accounts?email=${encodeURIComponent(email)}`, headers: partnerHeaders() },
+    // Bearer auth, email query param
+    { url: `${VOBIZ_PARTNER_BASE}/accounts?email=${encodeURIComponent(email)}`, headers: partnerHeadersBearer() },
+    // X-Auth headers, list all
+    { url: `${VOBIZ_PARTNER_BASE}/accounts`, headers: partnerHeaders() },
+    // Bearer auth, list all
+    { url: `${VOBIZ_PARTNER_BASE}/accounts`, headers: partnerHeadersBearer() },
+  ];
 
-  for (const url of [urlWithParam, urlList]) {
-    const resp = await fetch(url, { method: "GET", headers: partnerHeaders() });
+  for (const { url, headers } of attempts) {
+    const resp = await fetch(url, { method: "GET", headers });
     const body = await resp.text();
-    logger.info({ url, status: resp.status, body: body.slice(0, 500) }, "VoBiz GET accounts response");
+    logger.info({ url, status: resp.status, body: body.slice(0, 800) }, "VoBiz GET accounts response");
     if (!resp.ok) continue;
 
     let parsed: unknown;
     try { parsed = JSON.parse(body); } catch { continue; }
 
-    // Normalise to array — VoBiz may wrap in results/data/accounts/items
+    // Normalise — VoBiz may wrap list in results/data/accounts/items or return a single object
     let list: VobizCreateAccountResponse[] = [];
     if (Array.isArray(parsed)) {
       list = parsed as VobizCreateAccountResponse[];
     } else if (parsed && typeof parsed === "object") {
       const obj = parsed as Record<string, unknown>;
       list = (obj["results"] ?? obj["data"] ?? obj["accounts"] ?? obj["items"] ?? []) as VobizCreateAccountResponse[];
-      // Single-object response (direct account lookup)
       if (!list.length && obj["auth_id"]) list = [parsed as VobizCreateAccountResponse];
     }
 
