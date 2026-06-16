@@ -251,7 +251,7 @@ function ModelSelect({
 
 import type { Control } from "react-hook-form";
 
-function StagedPromptEditor({ control }: { control: Control<AgentFormValues> }) {
+export function StagedPromptEditor({ control }: { control: Control<AgentFormValues> }) {
   const { fields, append, remove } = useFieldArray({ control, name: "stagedPromptStages" as any });
   return (
     <div className="space-y-2">

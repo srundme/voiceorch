@@ -21,7 +21,7 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { agentFormSchema, buildUpdateAgentPayload } from "./edit";
+import { agentFormSchema, buildUpdateAgentPayload, StagedPromptEditor } from "./edit";
 import type { AgentFormValues } from "./edit";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1411,6 +1411,9 @@ function SliderField({ form, name, label, description, min, max, step, format }:
 
 function AdvancedTab({ form }: { form: any }) {
   const bargeIn = form.watch("bargeInEnabled");
+  const llmProvider = form.watch("llmProvider");
+  const tokenSummarizationEnabled = form.watch("tokenSummarizationEnabled");
+  const stagedPromptEnabled = form.watch("stagedPromptEnabled");
   return (
     <div className="relative p-6 overflow-y-auto h-full space-y-6">
       <div className="grid grid-cols-2 gap-6">
@@ -1522,6 +1525,117 @@ function AdvancedTab({ form }: { form: any }) {
               </FormItem>
             )} />
           ))}
+
+          {/* Token Optimization */}
+          <SectionDivider label="Token Optimization" />
+          <p className="text-[10px] text-muted-foreground -mt-2">
+            Reduce LLM token usage to lower costs. Each layer is independent.
+          </p>
+
+          {/* Layer 1: KV Cache — read-only badge */}
+          <div className="flex items-start justify-between rounded-lg border border-border/50 px-3 py-2 gap-3">
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium">KV Cache <span className="text-[10px] text-muted-foreground font-normal">(Anthropic only)</span></p>
+              <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">
+                Auto-enabled for Anthropic — caches the system prompt across turns, saving ~5× on repeated input tokens.
+              </p>
+            </div>
+            <span className={`shrink-0 mt-0.5 text-[10px] font-medium px-2 py-0.5 rounded ${llmProvider === "anthropic" ? "bg-amber-500/20 text-amber-300" : "bg-muted/40 text-muted-foreground"}`}>
+              {llmProvider === "anthropic" ? "Active" : "N/A"}
+            </span>
+          </div>
+
+          {/* Layer 2: Sliding Window */}
+          <FormField control={form.control} name="contextWindowTurns" render={({ field }) => (
+            <FormItem>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <FormLabel className="text-xs">Sliding Window Context</FormLabel>
+                  <FormDescription className="text-[10px]">Limit past turns sent to the LLM — older turns are dropped. Leave blank to send full history.</FormDescription>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <span className="text-[10px] text-muted-foreground">Last</span>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={1000}
+                      placeholder="off"
+                      className="w-16 h-7 text-xs text-center"
+                      value={field.value == null ? "" : String(field.value)}
+                      onChange={(e) => field.onChange(e.target.value === "" ? null : parseInt(e.target.value, 10))}
+                    />
+                  </FormControl>
+                  <span className="text-[10px] text-muted-foreground">turns</span>
+                </div>
+              </div>
+              <FormMessage />
+            </FormItem>
+          )} />
+
+          {/* Layer 3: Summarization */}
+          <FormField control={form.control} name="tokenSummarizationEnabled" render={({ field }) => (
+            <FormItem className="flex items-start justify-between rounded-lg border border-border/50 px-3 py-2 gap-3">
+              <div className="flex-1 min-w-0">
+                <FormLabel className="text-xs font-medium">Automatic Summarization</FormLabel>
+                <FormDescription className="text-[10px] leading-relaxed">When history reaches the threshold, old turns are replaced with a compact summary.</FormDescription>
+              </div>
+              <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} className="shrink-0 mt-0.5" /></FormControl>
+            </FormItem>
+          )} />
+          {tokenSummarizationEnabled && (
+            <FormField control={form.control} name="tokenSummarizationThresholdTurns" render={({ field }) => (
+              <FormItem>
+                <div className="flex items-center gap-2">
+                  <FormLabel className="text-xs">Summarize after</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      min={5}
+                      max={500}
+                      placeholder="20"
+                      className="w-20 h-7 text-xs text-center"
+                      value={field.value == null ? "" : String(field.value)}
+                      onChange={(e) => field.onChange(e.target.value === "" ? null : parseInt(e.target.value, 10))}
+                    />
+                  </FormControl>
+                  <span className="text-[10px] text-muted-foreground">turns</span>
+                </div>
+                <FormDescription className="text-[10px]">Default: 20 turns.</FormDescription>
+                <FormMessage />
+              </FormItem>
+            )} />
+          )}
+
+          {/* Layer 4: Staged Prompt */}
+          <FormField control={form.control} name="stagedPromptEnabled" render={({ field }) => (
+            <FormItem className="flex items-start justify-between rounded-lg border border-border/50 px-3 py-2 gap-3">
+              <div className="flex-1 min-w-0">
+                <FormLabel className="text-xs font-medium">Staged System Prompt</FormLabel>
+                <FormDescription className="text-[10px] leading-relaxed">Serve a smaller, stage-specific prompt per conversation phase. The LLM signals transitions with <code className="text-[10px] bg-muted px-1 rounded">[STAGE:Name]</code>.</FormDescription>
+              </div>
+              <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} className="shrink-0 mt-0.5" /></FormControl>
+            </FormItem>
+          )} />
+          {stagedPromptEnabled && (
+            <div className="space-y-3 pl-1">
+              <FormField control={form.control} name="stagedPromptCoreIdentity" render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-xs">Core Identity <span className="text-muted-foreground font-normal">(always included)</span></FormLabel>
+                  <FormControl>
+                    <Textarea
+                      className="min-h-[60px] text-xs"
+                      placeholder="You are a helpful assistant for Acme Corp. Always be polite and professional."
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormDescription className="text-[10px]">Prepended to every stage prompt — name, role, tone only.</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <StagedPromptEditor control={form.control} />
+            </div>
+          )}
         </div>
       </div>
 
@@ -2077,6 +2191,12 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       stopSpeakingNumWords: 0, stopSpeakingVoiceSecs: 0.2, stopSpeakingBackOffSecs: 1,
       complianceIrdai: false, complianceDpdp: false, complianceHipaa: false, complianceTrai: false,
       knowledgeSourceIds: [],
+      contextWindowTurns: undefined,
+      tokenSummarizationEnabled: false,
+      tokenSummarizationThresholdTurns: undefined,
+      stagedPromptEnabled: false,
+      stagedPromptStages: [],
+      stagedPromptCoreIdentity: "",
     },
   });
 
@@ -2131,6 +2251,12 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       complianceTrai:  (agent as any).agentConfig?.compliance?.trai  ?? false,
       snapserveAgentId: (agent as any).snapserveAgentId ?? "",
       knowledgeSourceIds:       ((agent as any).knowledgeSourceIds ?? []) as number[],
+      contextWindowTurns:              (agent as any).contextWindowTurns ?? undefined,
+      tokenSummarizationEnabled:       (agent as any).tokenSummarizationEnabled ?? false,
+      tokenSummarizationThresholdTurns:(agent as any).tokenSummarizationThresholdTurns ?? undefined,
+      stagedPromptEnabled:             (agent as any).stagedPromptEnabled ?? false,
+      stagedPromptStages:              (agent as any).stagedPromptStages ?? [],
+      stagedPromptCoreIdentity:        (agent as any).stagedPromptCoreIdentity ?? "",
     });
   }, [agent]);
 
