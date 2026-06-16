@@ -82,7 +82,7 @@ export interface DispositionField {
 }
 
 /**
- * Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, or native_list_bookings
+ * Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, native_list_bookings, transfer_cold, transfer_warm, or transfer_agent
  */
 export type AgentToolType = typeof AgentToolType[keyof typeof AgentToolType];
 
@@ -98,6 +98,9 @@ export const AgentToolType = {
   native_cancel: 'native_cancel',
   native_check_availability: 'native_check_availability',
   native_list_bookings: 'native_list_bookings',
+  transfer_cold: 'transfer_cold',
+  transfer_warm: 'transfer_warm',
+  transfer_agent: 'transfer_agent',
 } as const;
 
 /**
@@ -128,7 +131,7 @@ export const AgentToolMethod = {
 export type AgentToolHeaders = {[key: string]: string};
 
 export interface AgentTool {
-  /** Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, or native_list_bookings */
+  /** Tool type: call_transfer, webhook, send_sms, end_call, cal_com, native_booking, native_reschedule, native_cancel, native_check_availability, native_list_bookings, transfer_cold, transfer_warm, or transfer_agent */
   type: AgentToolType;
   /** LLM-facing function name (snake_case, no spaces, e.g. transfer_to_human) */
   name: string;
@@ -166,6 +169,12 @@ export interface AgentTool {
   taskName?: string;
   /** (native_booking) Optional sentence the agent should say just before invoking the booking tool */
   preToolMessage?: string;
+  /** (transfer_cold / transfer_warm) E.164 phone number to transfer the call to (e.g. +12125551234) */
+  targetNumber?: string;
+  /** (transfer_cold / transfer_warm) Optional message spoken to the caller before the transfer is initiated */
+  holdMessage?: string;
+  /** (transfer_agent) ID of the specialist agent to transfer the call to */
+  targetAgentId?: number;
 }
 
 export type TestToolBodyArgs = { [key: string]: unknown };
