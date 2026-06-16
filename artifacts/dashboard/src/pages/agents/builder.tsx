@@ -68,7 +68,6 @@ interface TabDef { id: TabId; label: string; icon: React.ReactNode }
 
 const TABS: TabDef[] = [
   { id: "overview",   label: "Overview",   icon: <Bot className="h-3.5 w-3.5" /> },
-  { id: "logs",       label: "Logs",       icon: <List className="h-3.5 w-3.5" /> },
   { id: "prompt",     label: "Prompt",     icon: <FileText className="h-3.5 w-3.5" /> },
   { id: "voice",      label: "Voice",      icon: <Mic className="h-3.5 w-3.5" /> },
   { id: "tools",      label: "Tools",      icon: <Wrench className="h-3.5 w-3.5" /> },
@@ -76,6 +75,7 @@ const TABS: TabDef[] = [
   { id: "pipeline",   label: "Pipeline",   icon: <GitBranch className="h-3.5 w-3.5" /> },
   { id: "voicemail",  label: "Voicemail",  icon: <VoicemailIcon className="h-3.5 w-3.5" /> },
   { id: "advanced",   label: "Advanced",   icon: <SlidersHorizontal className="h-3.5 w-3.5" /> },
+  { id: "logs",       label: "Logs",       icon: <List className="h-3.5 w-3.5" /> },
 ];
 
 /* ── Small helpers ──────────────────────────────────────────────────────────── */
