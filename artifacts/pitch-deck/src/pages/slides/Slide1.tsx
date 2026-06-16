@@ -12,14 +12,15 @@ export default function Slide1() {
       {/* Main content */}
       <div className="absolute left-[7vw] top-1/2 -translate-y-1/2">
         <p className="font-body font-medium text-[2.2vw] tracking-[0.35em] uppercase text-primary mb-[2.5vh]">
-          Voice Intelligence Platform
+          Voice AI Orchestration · India
         </p>
         <h1 className="font-display font-black leading-none tracking-tighter text-text" style={{ fontSize: '9.5vw' }}>
           SnapServe<span className="text-primary"> AI</span>
         </h1>
-        <div className="h-[0.3vh] w-[11vw] bg-primary mt-[3.5vh] mb-[4vh]" />
-        <p className="font-body text-[3.2vw] text-muted leading-relaxed" style={{ maxWidth: '40vw', textWrap: 'pretty' }}>
-          The AI brain for every phone call in India
+        <div className="h-[0.3vh] w-[11vw] bg-primary mt-[3vh] mb-[3vh]" />
+        <p className="font-body text-[2.7vw] text-muted leading-snug" style={{ maxWidth: '46vw', textWrap: 'pretty' }}>
+          Voice AI for India's phone calls — gender-aware, with caller memory and
+          identity, on your own provider keys.
         </p>
       </div>
 

@@ -90,3 +90,9 @@ id = "xqbjqnHGiGSdtUB6BwMgw"
 uri = "file://.local/outputs/SnapServe-Pitch-Deck.pptx"
 type = "slides"
 title = "SnapServe Pitch Deck (PPTX)"
+
+[[outputs]]
+id = "1-RZGBnuZP_alq2YDmqBe"
+uri = "file://artifacts/pitch-deck/investor-cold-email.md"
+type = "text"
+title = "SnapServe AI — Cold Investor Outreach Email"
