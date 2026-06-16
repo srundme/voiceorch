@@ -211,6 +211,13 @@ export async function createSession(params: {
     stopSpeakingPlan: (agentCfg["stopSpeakingPlan"] as AgentConfig["stopSpeakingPlan"]) ?? null,
     // P1-K: Compliance
     compliance: (agentCfg["compliance"] as AgentConfig["compliance"]) ?? null,
+    // Token Optimization
+    contextWindowTurns: agent.contextWindowTurns ?? null,
+    tokenSummarizationEnabled: agent.tokenSummarizationEnabled ?? false,
+    tokenSummarizationThresholdTurns: agent.tokenSummarizationThresholdTurns ?? null,
+    stagedPromptEnabled: agent.stagedPromptEnabled ?? false,
+    stagedPromptStages: (agent.stagedPromptStages as Array<{ name: string; content: string }> | null) ?? [],
+    stagedPromptCoreIdentity: agent.stagedPromptCoreIdentity ?? null,
   };
 
   // ── Cross-call caller memory (3-layer: profile + facts + archive) ──────────
@@ -744,6 +751,11 @@ export async function endSession(sessionId: string): Promise<void> {
         return null;
       });
 
+    const pipelineUsage = (session.pipeline as unknown as {
+      getUsageTotals?: () => { tokensSaved?: number };
+    }).getUsageTotals?.() ?? null;
+    const tokensSavedValue = pipelineUsage?.tokensSaved ?? 0;
+
     await db.update(callsTable).set({
       status: callStatus,
       endedAt,
@@ -752,6 +764,7 @@ export async function endSession(sessionId: string): Promise<void> {
       sttLatencyMs: avgSttMs,
       llmLatencyMs: avgLlmMs,
       ttsFirstChunkMs: avgTtsMs,
+      ...(tokensSavedValue > 0 ? { tokensSaved: tokensSavedValue } : {}),
       ...(recordingUrl ? { recordingUrl } : {}),
       ...(session.wasTransferred && session.transferredTo
         ? { metadata: JSON.stringify({ transferredTo: session.transferredTo }) }

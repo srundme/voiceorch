@@ -1,25 +1,33 @@
 import { Router } from "express";
 import { eq } from "drizzle-orm";
+import { z } from "zod";
 import { db, agentDispositionsTable, callDispositionsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { evictDispositionCache } from "../services/disposition.js";
 
 const router = Router();
 
-function parseIntParam(val: string | string[] | undefined): number {
-  return parseInt(String(val ?? ""), 10);
-}
+const TaxonomyMapSchema = z.record(z.string(), z.array(z.string()));
 
-function isValidTaxonomy(v: unknown): v is Record<string, string[]> {
-  if (!v || typeof v !== "object" || Array.isArray(v)) return false;
-  return Object.values(v as object).every(
-    (arr) => Array.isArray(arr) && (arr as unknown[]).every((s) => typeof s === "string"),
-  );
-}
+const UpsertConfigBody = z.object({
+  taxonomy:     TaxonomyMapSchema,
+  domainFields: z.array(z.object({
+    key:  z.string(),
+    type: z.enum(["string", "number", "boolean"]),
+    enum: z.array(z.string()).optional(),
+  })).optional().default([]),
+  rules: z.array(z.object({
+    when:       z.string(),
+    value:      z.unknown().optional(),
+    primary:    z.string(),
+    sub:        z.string(),
+    confidence: z.number().min(0).max(1),
+  })).optional().default([]),
+});
 
 /* ── GET /api/disposition/config/:agentId ────────────────────────────────── */
 router.get("/disposition/config/:agentId", requireAuth, async (req, res): Promise<void> => {
-  const agentId = parseIntParam(req.params["agentId"]);
+  const agentId = parseInt(String(req.params["agentId"] ?? ""), 10);
   if (!agentId || isNaN(agentId)) {
     res.status(400).json({ error: "Invalid agentId" });
     return;
@@ -40,39 +48,34 @@ router.get("/disposition/config/:agentId", requireAuth, async (req, res): Promis
 
 /* ── PUT /api/disposition/config/:agentId ────────────────────────────────── */
 router.put("/disposition/config/:agentId", requireAuth, async (req, res): Promise<void> => {
-  const agentId = parseIntParam(req.params["agentId"]);
+  const agentId = parseInt(String(req.params["agentId"] ?? ""), 10);
   if (!agentId || isNaN(agentId)) {
     res.status(400).json({ error: "Invalid agentId" });
     return;
   }
 
-  const body = req.body as Record<string, unknown>;
-  if (!body || typeof body !== "object") {
-    res.status(400).json({ error: "Request body must be an object" });
+  const parsed = UpsertConfigBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Validation failed", issues: parsed.error.issues });
     return;
   }
 
-  const { taxonomy, domainFields, rules } = body;
-
-  if (!isValidTaxonomy(taxonomy)) {
-    res.status(400).json({ error: "taxonomy must be Record<string, string[]>" });
-    return;
-  }
+  const { taxonomy, domainFields, rules } = parsed.data;
 
   await db
     .insert(agentDispositionsTable)
     .values({
       agentId,
       taxonomy:     taxonomy as Record<string, string[]>,
-      domainFields: (domainFields ?? []) as any,
-      rules:        (rules ?? []) as any,
+      domainFields: domainFields as any,
+      rules:        rules as any,
     })
     .onConflictDoUpdate({
       target: agentDispositionsTable.agentId,
       set: {
         taxonomy:     taxonomy as Record<string, string[]>,
-        domainFields: (domainFields ?? []) as any,
-        rules:        (rules ?? []) as any,
+        domainFields: domainFields as any,
+        rules:        rules as any,
         updatedAt:    new Date(),
       },
     });
@@ -83,7 +86,7 @@ router.put("/disposition/config/:agentId", requireAuth, async (req, res): Promis
 
 /* ── GET /api/disposition/result/:callId ─────────────────────────────────── */
 router.get("/disposition/result/:callId", requireAuth, async (req, res): Promise<void> => {
-  const callId = parseIntParam(req.params["callId"]);
+  const callId = parseInt(String(req.params["callId"] ?? ""), 10);
   if (!callId || isNaN(callId)) {
     res.status(400).json({ error: "Invalid callId" });
     return;

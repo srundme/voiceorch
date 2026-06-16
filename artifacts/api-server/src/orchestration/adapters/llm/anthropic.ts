@@ -36,12 +36,18 @@ export class AnthropicLLM implements LLMAdapter {
       tools?: ToolDefinition[];
       onToolCall?: (name: string, args: Record<string, unknown>) => void;
       onUsage?: (usage: LLMUsage) => void;
+      kvCache?: boolean;
     }
   ): Promise<void> {
+    const useKvCache = options?.kvCache === true;
+
     const body: Record<string, unknown> = {
       model: this.model,
       max_tokens: 1024,
-      system: systemPrompt,
+      // Use block format to allow cache_control when KV cache is enabled
+      system: useKvCache
+        ? [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }]
+        : systemPrompt,
       messages: messages.map((m) => ({ role: m.role, content: m.content })),
       stream: true,
     };
@@ -54,13 +60,18 @@ export class AnthropicLLM implements LLMAdapter {
       }));
     }
 
+    const headers: Record<string, string> = {
+      "x-api-key": this.key,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    };
+    if (useKvCache) {
+      headers["anthropic-beta"] = "prompt-caching-2024-07-31";
+    }
+
     const resp = await fetch(API_URL, {
       method: "POST",
-      headers: {
-        "x-api-key": this.key,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
+      headers,
       body: JSON.stringify(body),
     });
 

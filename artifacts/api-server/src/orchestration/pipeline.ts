@@ -19,7 +19,7 @@ import { retrieveKbContext, retrieveKbContextMulti } from "./kb-retrieval.js";
 import { logger } from "../lib/logger.js";
 import { format, addMinutes } from "date-fns";
 import { toZonedTime, formatInTimeZone } from "date-fns-tz";
-import { db, bookingsTable, eventTypesTable, schedulingCalendarsTable, agentsTable } from "@workspace/db";
+import { db, bookingsTable, eventTypesTable, schedulingCalendarsTable, agentsTable, platformSettingsTable } from "@workspace/db";
 import { eq, and, or, sql } from "drizzle-orm";
 import { getAvailableSlots } from "../services/scheduling/slot-engine.js";
 import type { TimeSlot } from "../services/scheduling/slot-engine.js";
@@ -77,6 +77,26 @@ const HANDOFF_PHRASES = [
 const BACKCHANNEL_PHRASES = [
   "I see.", "Got it.", "Okay.", "Mm-hmm.", "Sure.", "I understand.", "Go on.",
 ];
+
+// ── Global token-optimization kill switch (cached 30 s to avoid per-turn DB hits) ──
+const TOKEN_OPT_KEY = "token_optimization_enabled";
+const TOKEN_OPT_CACHE_TTL_MS = 30_000;
+let _tokenOptEnabled = true;
+let _tokenOptCacheExpiry = 0;
+async function fetchTokenOptEnabled(): Promise<boolean> {
+  if (Date.now() < _tokenOptCacheExpiry) return _tokenOptEnabled;
+  try {
+    const [row] = await db
+      .select({ value: platformSettingsTable.value })
+      .from(platformSettingsTable)
+      .where(eq(platformSettingsTable.key, TOKEN_OPT_KEY));
+    _tokenOptEnabled = row?.value !== "false";
+  } catch {
+    _tokenOptEnabled = true;
+  }
+  _tokenOptCacheExpiry = Date.now() + TOKEN_OPT_CACHE_TTL_MS;
+  return _tokenOptEnabled;
+}
 
 export class OrchestrationPipeline {
   private config: SessionConfig;
@@ -145,6 +165,10 @@ export class OrchestrationPipeline {
   // providers that don't expose usage (e.g. Sarvam) so session.ts can fall back
   // to its turn-count heuristic for LLM tokens while still using exact TTS chars.
   private hasRealLlmUsage = false;
+
+  // Token Optimization — tracks savings from context trimming
+  private baselineInputTokensEstimate = 0; // what full-history would have cost
+  private currentStageIndex = 0;           // for staged prompt layer
 
   // Recording — stereo WAV of both sides (caller=L, agent=R)
   private recording = new RecordingBuffer(8000);
@@ -1381,6 +1405,30 @@ export class OrchestrationPipeline {
       systemPromptForTurn += lines.join("\n");
     }
 
+    // ── Token Optimization (Layers 1-4) ──────────────────────────────────────
+    const tokenOptEnabled = await fetchTokenOptEnabled();
+    const fullHistoryLen = this.conversationHistory.length;
+
+    // Layer 2: Sliding Window — trim context to last N turns
+    let historyForLlm = this.conversationHistory;
+    if (tokenOptEnabled && this.agent.contextWindowTurns && this.agent.contextWindowTurns > 0) {
+      historyForLlm = this.conversationHistory.slice(-this.agent.contextWindowTurns);
+    }
+    const sentHistoryLen = historyForLlm.length;
+
+    // Layer 4: Staged Prompt — override system prompt with active stage block
+    if (tokenOptEnabled && this.agent.stagedPromptEnabled && this.agent.stagedPromptStages.length > 0) {
+      const stage = this.agent.stagedPromptStages[this.currentStageIndex];
+      if (stage) {
+        const core = this.agent.stagedPromptCoreIdentity?.trim() ?? "";
+        systemPromptForTurn = core ? `${core}\n\n${stage.content}` : stage.content;
+        logger.debug({ callId: this.config.callId, stage: stage.name, idx: this.currentStageIndex }, "Staged prompt active");
+      }
+    }
+
+    // Layer 1: Anthropic KV Cache flag (honoured by AnthropicLLM adapter)
+    const useKvCache = tokenOptEnabled && this.agent.llmProvider === "anthropic";
+
     // ── Dead-air filler timer ────────────────────────────────────────────────
     // If the LLM has not returned a first token within FILLER_THRESHOLD_MS and
     // backchannel didn't already cover the silence, enqueue a filler phrase so
@@ -1412,7 +1460,7 @@ export class OrchestrationPipeline {
 
     try {
       await this.llm.chat(
-        this.conversationHistory,
+        historyForLlm,
         systemPromptForTurn,
         (token) => {
           if (!llmFirstTokenAt) {
@@ -1442,14 +1490,27 @@ export class OrchestrationPipeline {
                 this.hasRealLlmUsage = true;
                 this.llmInputTokensTotal += usage.inputTokens;
                 this.llmOutputTokensTotal += usage.outputTokens;
+                // Accumulate baseline estimate for savings calculation
+                if (fullHistoryLen > sentHistoryLen && sentHistoryLen > 0) {
+                  this.baselineInputTokensEstimate += Math.round(usage.inputTokens * fullHistoryLen / sentHistoryLen);
+                } else {
+                  this.baselineInputTokensEstimate += usage.inputTokens;
+                }
               },
+              kvCache: useKvCache,
             }
           : {
               onUsage: (usage) => {
                 this.hasRealLlmUsage = true;
                 this.llmInputTokensTotal += usage.inputTokens;
                 this.llmOutputTokensTotal += usage.outputTokens;
+                if (fullHistoryLen > sentHistoryLen && sentHistoryLen > 0) {
+                  this.baselineInputTokensEstimate += Math.round(usage.inputTokens * fullHistoryLen / sentHistoryLen);
+                } else {
+                  this.baselineInputTokensEstimate += usage.inputTokens;
+                }
               },
+              kvCache: useKvCache,
             }
       );
       _agnostTurn?.end(llmResponse);
@@ -1521,6 +1582,35 @@ export class OrchestrationPipeline {
     this.conversationHistory.push({ role: "assistant", content: cleanResponse });
     this.config.onTranscript("agent", cleanResponse);
     this.config.onConversationUpdate?.(this.conversationHistory);
+
+    // ── Token Optimization: Stage detection ───────────────────────────────
+    if (tokenOptEnabled && this.agent.stagedPromptEnabled && this.agent.stagedPromptStages.length > 0) {
+      const stageTagMatch = /\[STAGE:([^\]]+)\]/i.exec(llmResponse);
+      if (stageTagMatch) {
+        const stageName = stageTagMatch[1]!.trim();
+        const stageIdx = this.agent.stagedPromptStages.findIndex(
+          (s) => s.name.toLowerCase() === stageName.toLowerCase()
+        );
+        if (stageIdx >= 0 && stageIdx !== this.currentStageIndex) {
+          this.currentStageIndex = stageIdx;
+          logger.info({ callId: this.config.callId, stageName, stageIdx }, "Staged prompt: transitioned to new stage");
+        }
+      }
+    }
+
+    // ── Token Optimization: Layer 3 — Summarization (async, non-blocking) ─
+    if (tokenOptEnabled && this.agent.tokenSummarizationEnabled) {
+      const threshold = this.agent.tokenSummarizationThresholdTurns ?? 20;
+      const histLen = this.conversationHistory.length;
+      if (histLen >= threshold) {
+        const keepTurns = this.agent.contextWindowTurns ?? Math.ceil(threshold / 2);
+        const replaceCount = Math.max(0, histLen - keepTurns);
+        if (replaceCount >= 2) {
+          const turnsToSummarize = this.conversationHistory.slice(0, replaceCount);
+          void this.summarizeOldTurns(turnsToSummarize, replaceCount);
+        }
+      }
+    }
 
     await playPromise;
 
@@ -1604,14 +1694,54 @@ export class OrchestrationPipeline {
    * - llmInputTokens / llmOutputTokens: present only when the active LLM adapter
    *   returned real token counts; undefined when the provider doesn't expose them
    *   (e.g. Sarvam), allowing session.ts to fall back to turn-count heuristics.
+   * - tokensSaved: estimated input tokens saved by context optimization this call.
    */
-  getUsageTotals(): { llmInputTokens?: number; llmOutputTokens?: number; ttsCharacters: number; fillerPlayedCount: number } {
+  getUsageTotals(): { llmInputTokens?: number; llmOutputTokens?: number; ttsCharacters: number; fillerPlayedCount: number; tokensSaved: number } {
+    const tokensSaved = this.hasRealLlmUsage
+      ? Math.max(0, this.baselineInputTokensEstimate - this.llmInputTokensTotal)
+      : 0;
     return {
       llmInputTokens: this.hasRealLlmUsage ? this.llmInputTokensTotal : undefined,
       llmOutputTokens: this.hasRealLlmUsage ? this.llmOutputTokensTotal : undefined,
       ttsCharacters: this.ttsCharactersTotal,
       fillerPlayedCount: this.fillerPlayedCount,
+      tokensSaved,
     };
+  }
+
+  /** Layer 3: Summarize old conversation turns and compress them into a single block. */
+  private async summarizeOldTurns(turns: ConversationTurn[], replaceCount: number): Promise<void> {
+    const transcript = turns
+      .map((t) => `${t.role === "user" ? "Caller" : "Agent"}: ${t.content}`)
+      .join("\n");
+    let summary = "";
+    try {
+      await this.llm.chat(
+        [{ role: "user", content: `Summarize the following conversation excerpt in 2–3 sentences, preserving key facts, decisions, and context:\n\n${transcript}` }],
+        "You are a concise conversation summarizer. Output only the summary, no preamble.",
+        (token) => { summary += token; },
+        () => {},
+        {
+          onUsage: (usage) => {
+            this.llmInputTokensTotal += usage.inputTokens;
+            this.llmOutputTokensTotal += usage.outputTokens;
+            this.baselineInputTokensEstimate += usage.inputTokens;
+          },
+        }
+      );
+      if (summary.trim()) {
+        this.conversationHistory.splice(0, replaceCount, {
+          role: "assistant",
+          content: `[CONVERSATION SUMMARY] ${summary.trim()}`,
+        });
+        logger.info(
+          { callId: this.config.callId, summarizedTurns: replaceCount, historyNow: this.conversationHistory.length },
+          "Token summarization: old turns compressed"
+        );
+      }
+    } catch (err) {
+      logger.warn({ callId: this.config.callId, err }, "Token summarization failed — continuing without compression");
+    }
   }
 
   getTranscript(): string {

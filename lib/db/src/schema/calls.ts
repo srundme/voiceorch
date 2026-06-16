@@ -29,6 +29,8 @@ export const callsTable = pgTable("calls", {
   amdResult: text("amd_result"),         // "human" | "machine" | "unknown"
   // Post-call analysis
   successEvaluation: text("success_evaluation"), // "PASS / FAIL + reason" from LLM pass
+  // Token optimization tracking
+  tokensSaved: integer("tokens_saved"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   endedAt: timestamp("ended_at", { withTimezone: true }),
 });

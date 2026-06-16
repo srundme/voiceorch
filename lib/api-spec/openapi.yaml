@@ -5564,6 +5564,31 @@ components:
         snapserveAgentId:
           type: ["string", "null"]
           description: "SnapServe platform agent ID used to fetch executions from the SnapServe API"
+        contextWindowTurns:
+          type: ["integer", "null"]
+          description: "Sliding-window context: only the last N turns are sent to the LLM (null = unlimited)"
+        tokenSummarizationEnabled:
+          type: ["boolean", "null"]
+          description: "Auto-compress old turns into a summary block when history exceeds threshold"
+        tokenSummarizationThresholdTurns:
+          type: ["integer", "null"]
+          description: "Number of turns after which summarization is triggered"
+        stagedPromptEnabled:
+          type: ["boolean", "null"]
+          description: "Send only the active stage block + core identity instead of the full system prompt"
+        stagedPromptStages:
+          type: ["array", "null"]
+          description: "Named prompt stages (each with name + content)"
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              content:
+                type: string
+        stagedPromptCoreIdentity:
+          type: ["string", "null"]
+          description: "Core identity block always included in staged-prompt mode"
         totalCalls:
           type: integer
         successfulCalls:
@@ -5697,6 +5722,31 @@ components:
         snapserveAgentId:
           type: ["string", "null"]
           description: "SnapServe platform agent ID used to fetch executions from the SnapServe API"
+        contextWindowTurns:
+          type: integer
+          description: "Sliding-window context: only the last N turns are sent to the LLM"
+        tokenSummarizationEnabled:
+          type: boolean
+          description: "Auto-compress old turns into a summary block when history exceeds threshold"
+        tokenSummarizationThresholdTurns:
+          type: integer
+          description: "Number of turns after which summarization is triggered"
+        stagedPromptEnabled:
+          type: boolean
+          description: "Send only the active stage block + core identity instead of the full system prompt"
+        stagedPromptStages:
+          type: array
+          description: "Named prompt stages (each with name + content)"
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              content:
+                type: string
+        stagedPromptCoreIdentity:
+          type: string
+          description: "Core identity block always included in staged-prompt mode"
         wizardInputs:
           type: object
           additionalProperties: true
@@ -5830,6 +5880,31 @@ components:
         snapserveAgentId:
           type: ["string", "null"]
           description: "SnapServe platform agent ID used to fetch executions from the SnapServe API"
+        contextWindowTurns:
+          type: integer
+          description: "Sliding-window context: only the last N turns are sent to the LLM"
+        tokenSummarizationEnabled:
+          type: boolean
+          description: "Auto-compress old turns into a summary block when history exceeds threshold"
+        tokenSummarizationThresholdTurns:
+          type: integer
+          description: "Number of turns after which summarization is triggered"
+        stagedPromptEnabled:
+          type: boolean
+          description: "Send only the active stage block + core identity instead of the full system prompt"
+        stagedPromptStages:
+          type: array
+          description: "Named prompt stages (each with name + content)"
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              content:
+                type: string
+        stagedPromptCoreIdentity:
+          type: string
+          description: "Core identity block always included in staged-prompt mode"
 
     # ── SnapServe Executions ─────────────────────────────────────────────────────
     SnapServeCostBreakdown:
@@ -5975,6 +6050,9 @@ components:
               - type: string
               - type: number
               - type: boolean
+        tokensSaved:
+          type: ["integer", "null"]
+          description: Estimated number of input tokens saved by token optimization (sliding window + summarization)
 
     CallEndPayload:
       type: object
@@ -5988,6 +6066,9 @@ components:
         ttsFirstChunkMs:
           type: integer
           description: Average TTS first-audio-chunk latency measured for this call (ms)
+        tokensSaved:
+          type: integer
+          description: Estimated input tokens saved via context optimization this call
 
     CallInput:
       type: object

@@ -100,6 +100,15 @@ export const ListAgentsResponseItem = zod.object({
   "leadFields": zod.array(zod.string()).nullish().describe('Lead fields to capture per incoming lead (name, email, message)'),
   "productDetails": zod.string().nullish().describe('Product or service details the agent should know when calling leads'),
   "snapserveAgentId": zod.string().nullish().describe('SnapServe platform agent ID used to fetch executions from the SnapServe API'),
+  "contextWindowTurns": zod.number().nullish().describe('Sliding-window context: only the last N turns are sent to the LLM (null = unlimited)'),
+  "tokenSummarizationEnabled": zod.boolean().nullish().describe('Auto-compress old turns into a summary block when history exceeds threshold'),
+  "tokenSummarizationThresholdTurns": zod.number().nullish().describe('Number of turns after which summarization is triggered'),
+  "stagedPromptEnabled": zod.boolean().nullish().describe('Send only the active stage block + core identity instead of the full system prompt'),
+  "stagedPromptStages": zod.array(zod.object({
+  "name": zod.string().optional(),
+  "content": zod.string().optional()
+})).nullish().describe('Named prompt stages (each with name + content)'),
+  "stagedPromptCoreIdentity": zod.string().nullish().describe('Core identity block always included in staged-prompt mode'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -188,6 +197,15 @@ export const CreateAgentBody = zod.object({
   "leadFields": zod.array(zod.string()).optional().describe('Lead fields to capture per incoming lead'),
   "productDetails": zod.string().optional().describe('Product or service details for the agent\'s context'),
   "snapserveAgentId": zod.string().nullish().describe('SnapServe platform agent ID used to fetch executions from the SnapServe API'),
+  "contextWindowTurns": zod.number().optional().describe('Sliding-window context: only the last N turns are sent to the LLM'),
+  "tokenSummarizationEnabled": zod.boolean().optional().describe('Auto-compress old turns into a summary block when history exceeds threshold'),
+  "tokenSummarizationThresholdTurns": zod.number().optional().describe('Number of turns after which summarization is triggered'),
+  "stagedPromptEnabled": zod.boolean().optional().describe('Send only the active stage block + core identity instead of the full system prompt'),
+  "stagedPromptStages": zod.array(zod.object({
+  "name": zod.string().optional(),
+  "content": zod.string().optional()
+})).optional().describe('Named prompt stages (each with name + content)'),
+  "stagedPromptCoreIdentity": zod.string().optional().describe('Core identity block always included in staged-prompt mode'),
   "wizardInputs": zod.record(zod.string(), zod.unknown()).optional().describe('Raw wizard answers passed from the dashboard. May include the ordered micro-question\/answer pairs (microAnswers) and any uploaded job description content (jdFileContent, jdFileName). When present, the server generates the agent\'s system prompt server-side using the active admin master template (Qwen) and stores the result. Never returned in responses.')
 })
 
@@ -280,6 +298,15 @@ export const GetAgentResponse = zod.object({
   "leadFields": zod.array(zod.string()).nullish().describe('Lead fields to capture per incoming lead (name, email, message)'),
   "productDetails": zod.string().nullish().describe('Product or service details the agent should know when calling leads'),
   "snapserveAgentId": zod.string().nullish().describe('SnapServe platform agent ID used to fetch executions from the SnapServe API'),
+  "contextWindowTurns": zod.number().nullish().describe('Sliding-window context: only the last N turns are sent to the LLM (null = unlimited)'),
+  "tokenSummarizationEnabled": zod.boolean().nullish().describe('Auto-compress old turns into a summary block when history exceeds threshold'),
+  "tokenSummarizationThresholdTurns": zod.number().nullish().describe('Number of turns after which summarization is triggered'),
+  "stagedPromptEnabled": zod.boolean().nullish().describe('Send only the active stage block + core identity instead of the full system prompt'),
+  "stagedPromptStages": zod.array(zod.object({
+  "name": zod.string().optional(),
+  "content": zod.string().optional()
+})).nullish().describe('Named prompt stages (each with name + content)'),
+  "stagedPromptCoreIdentity": zod.string().nullish().describe('Core identity block always included in staged-prompt mode'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -382,7 +409,16 @@ export const UpdateAgentBody = zod.object({
   "leadSourceToken": zod.string().optional().describe('Page Access Token for the lead source (encrypted at rest)'),
   "leadFields": zod.array(zod.string()).optional().describe('Lead fields to capture per incoming lead'),
   "productDetails": zod.string().optional().describe('Product or service details for the agent\'s context'),
-  "snapserveAgentId": zod.string().nullish().describe('SnapServe platform agent ID used to fetch executions from the SnapServe API')
+  "snapserveAgentId": zod.string().nullish().describe('SnapServe platform agent ID used to fetch executions from the SnapServe API'),
+  "contextWindowTurns": zod.number().optional().describe('Sliding-window context: only the last N turns are sent to the LLM'),
+  "tokenSummarizationEnabled": zod.boolean().optional().describe('Auto-compress old turns into a summary block when history exceeds threshold'),
+  "tokenSummarizationThresholdTurns": zod.number().optional().describe('Number of turns after which summarization is triggered'),
+  "stagedPromptEnabled": zod.boolean().optional().describe('Send only the active stage block + core identity instead of the full system prompt'),
+  "stagedPromptStages": zod.array(zod.object({
+  "name": zod.string().optional(),
+  "content": zod.string().optional()
+})).optional().describe('Named prompt stages (each with name + content)'),
+  "stagedPromptCoreIdentity": zod.string().optional().describe('Core identity block always included in staged-prompt mode')
 })
 
 export const UpdateAgentResponse = zod.object({
@@ -466,6 +502,15 @@ export const UpdateAgentResponse = zod.object({
   "leadFields": zod.array(zod.string()).nullish().describe('Lead fields to capture per incoming lead (name, email, message)'),
   "productDetails": zod.string().nullish().describe('Product or service details the agent should know when calling leads'),
   "snapserveAgentId": zod.string().nullish().describe('SnapServe platform agent ID used to fetch executions from the SnapServe API'),
+  "contextWindowTurns": zod.number().nullish().describe('Sliding-window context: only the last N turns are sent to the LLM (null = unlimited)'),
+  "tokenSummarizationEnabled": zod.boolean().nullish().describe('Auto-compress old turns into a summary block when history exceeds threshold'),
+  "tokenSummarizationThresholdTurns": zod.number().nullish().describe('Number of turns after which summarization is triggered'),
+  "stagedPromptEnabled": zod.boolean().nullish().describe('Send only the active stage block + core identity instead of the full system prompt'),
+  "stagedPromptStages": zod.array(zod.object({
+  "name": zod.string().optional(),
+  "content": zod.string().optional()
+})).nullish().describe('Named prompt stages (each with name + content)'),
+  "stagedPromptCoreIdentity": zod.string().nullish().describe('Core identity block always included in staged-prompt mode'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -573,6 +618,15 @@ export const ToggleAgentResponse = zod.object({
   "leadFields": zod.array(zod.string()).nullish().describe('Lead fields to capture per incoming lead (name, email, message)'),
   "productDetails": zod.string().nullish().describe('Product or service details the agent should know when calling leads'),
   "snapserveAgentId": zod.string().nullish().describe('SnapServe platform agent ID used to fetch executions from the SnapServe API'),
+  "contextWindowTurns": zod.number().nullish().describe('Sliding-window context: only the last N turns are sent to the LLM (null = unlimited)'),
+  "tokenSummarizationEnabled": zod.boolean().nullish().describe('Auto-compress old turns into a summary block when history exceeds threshold'),
+  "tokenSummarizationThresholdTurns": zod.number().nullish().describe('Number of turns after which summarization is triggered'),
+  "stagedPromptEnabled": zod.boolean().nullish().describe('Send only the active stage block + core identity instead of the full system prompt'),
+  "stagedPromptStages": zod.array(zod.object({
+  "name": zod.string().optional(),
+  "content": zod.string().optional()
+})).nullish().describe('Named prompt stages (each with name + content)'),
+  "stagedPromptCoreIdentity": zod.string().nullish().describe('Core identity block always included in staged-prompt mode'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -666,7 +720,8 @@ export const ListCallsResponseItem = zod.object({
   "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents'),
   "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary'),
   "successEvaluation": zod.string().nullish().describe('Post-call LLM evaluation — PASS or FAIL on first line, one-sentence reason on the second line'),
-  "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name')
+  "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name'),
+  "tokensSaved": zod.number().nullish().describe('Estimated number of input tokens saved by token optimization (sliding window + summarization)')
 })
 export const ListCallsResponse = zod.array(ListCallsResponseItem)
 
@@ -710,7 +765,8 @@ export const GetCallResponse = zod.object({
   "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents'),
   "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary'),
   "successEvaluation": zod.string().nullish().describe('Post-call LLM evaluation — PASS or FAIL on first line, one-sentence reason on the second line'),
-  "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name')
+  "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name'),
+  "tokensSaved": zod.number().nullish().describe('Estimated number of input tokens saved by token optimization (sliding window + summarization)')
 })
 
 
@@ -751,7 +807,8 @@ export const UpdateCallResponse = zod.object({
   "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents'),
   "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary'),
   "successEvaluation": zod.string().nullish().describe('Post-call LLM evaluation — PASS or FAIL on first line, one-sentence reason on the second line'),
-  "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name')
+  "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name'),
+  "tokensSaved": zod.number().nullish().describe('Estimated number of input tokens saved by token optimization (sliding window + summarization)')
 })
 
 
@@ -800,7 +857,8 @@ export const TransferCallResponse = zod.object({
   "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents'),
   "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary'),
   "successEvaluation": zod.string().nullish().describe('Post-call LLM evaluation — PASS or FAIL on first line, one-sentence reason on the second line'),
-  "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name')
+  "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name'),
+  "tokensSaved": zod.number().nullish().describe('Estimated number of input tokens saved by token optimization (sliding window + summarization)')
 })
 
 
@@ -814,7 +872,8 @@ export const EndCallParams = zod.object({
 export const EndCallBody = zod.object({
   "sttLatencyMs": zod.number().optional().describe('Average STT latency measured for this call (ms)'),
   "llmLatencyMs": zod.number().optional().describe('Average LLM first-token latency measured for this call (ms)'),
-  "ttsFirstChunkMs": zod.number().optional().describe('Average TTS first-audio-chunk latency measured for this call (ms)')
+  "ttsFirstChunkMs": zod.number().optional().describe('Average TTS first-audio-chunk latency measured for this call (ms)'),
+  "tokensSaved": zod.number().optional().describe('Estimated input tokens saved via context optimization this call')
 })
 
 export const EndCallResponse = zod.object({
@@ -838,7 +897,8 @@ export const EndCallResponse = zod.object({
   "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents'),
   "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary'),
   "successEvaluation": zod.string().nullish().describe('Post-call LLM evaluation — PASS or FAIL on first line, one-sentence reason on the second line'),
-  "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name')
+  "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name'),
+  "tokensSaved": zod.number().nullish().describe('Estimated number of input tokens saved by token optimization (sliding window + summarization)')
 })
 
 
@@ -874,7 +934,8 @@ export const UpdateCallDispositionResponse = zod.object({
   "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents'),
   "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary'),
   "successEvaluation": zod.string().nullish().describe('Post-call LLM evaluation — PASS or FAIL on first line, one-sentence reason on the second line'),
-  "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name')
+  "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name'),
+  "tokensSaved": zod.number().nullish().describe('Estimated number of input tokens saved by token optimization (sliding window + summarization)')
 })
 
 
@@ -980,7 +1041,8 @@ export const GetRecentCallsResponseItem = zod.object({
   "costCents": zod.number().nullish().describe('Platform orchestration fee charged for this call in cents'),
   "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary'),
   "successEvaluation": zod.string().nullish().describe('Post-call LLM evaluation — PASS or FAIL on first line, one-sentence reason on the second line'),
-  "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name')
+  "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name'),
+  "tokensSaved": zod.number().nullish().describe('Estimated number of input tokens saved by token optimization (sliding window + summarization)')
 })
 export const GetRecentCallsResponse = zod.array(GetRecentCallsResponseItem)
 

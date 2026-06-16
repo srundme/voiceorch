@@ -10,6 +10,7 @@ import {
   useAlertCooldownStatus,
   type AlertNotificationLogEntry,
   useAlertCooldownStats, useResetAlertSuppressedCount,
+  useTokenOptimizationEnabled, useSaveTokenOptimizationEnabled,
 } from "@/hooks/use-admin-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,7 +27,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Settings, Bell, Mail, Check, AlertTriangle, Slack, Send, CheckCircle2, XCircle, Clock, RotateCcw, ShieldCheck, ShieldOff } from "lucide-react";
+import { Settings, Bell, Mail, Check, AlertTriangle, Slack, Send, CheckCircle2, XCircle, Clock, RotateCcw, ShieldCheck, ShieldOff, Sparkles } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
 
@@ -172,6 +174,9 @@ function NotificationLogTable({ entries }: { entries: AlertNotificationLogEntry[
 }
 
 export default function PlatformSettings() {
+  const { data: tokenOptData, isLoading: loadingTokenOpt } = useTokenOptimizationEnabled();
+  const saveTokenOpt = useSaveTokenOptimizationEnabled();
+
   const { data: thresholdData, isLoading: loadingThreshold } = useSpikeThreshold();
   const { data: emailData, isLoading: loadingEmail } = useSpikeAlertEmail();
   const saveThreshold = useSaveSpikeThreshold();
@@ -347,12 +352,47 @@ export default function PlatformSettings() {
     }
   }
 
+  async function handleSaveTokenOpt(enabled: boolean) {
+    try {
+      await saveTokenOpt.mutateAsync(enabled);
+      toast({ title: enabled ? "Token optimization enabled" : "Token optimization disabled" });
+    } catch (err) {
+      toast({ title: "Failed to save", description: formatApiError(err), variant: "destructive" });
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
         <Settings className="h-6 w-6 text-primary" />
         <h1 className="text-3xl font-bold tracking-tight">Platform Settings</h1>
+
       </div>
+
+      {/* Token Optimization Kill Switch */}
+      <Card className="border-border shadow-sm">
+        <CardHeader className="pb-3 border-b border-border">
+          <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+            <Sparkles className="h-4 w-4" />
+            Token Optimization
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-5">
+          <div className="flex items-center justify-between max-w-lg">
+            <div>
+              <p className="text-sm font-medium">Global kill switch</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                When disabled, all optimization layers (KV cache, sliding window, summarization, staged prompts) are bypassed globally for all agents — regardless of agent-level settings. Useful for debugging or emergency rollback.
+              </p>
+            </div>
+            <Switch
+              checked={loadingTokenOpt ? true : (tokenOptData?.enabled ?? true)}
+              onCheckedChange={handleSaveTokenOpt}
+              disabled={loadingTokenOpt || saveTokenOpt.isPending}
+            />
+          </div>
+        </CardContent>
+      </Card>
 
       <Card className="border-border shadow-sm">
         <CardHeader className="pb-3 border-b border-border">

@@ -1607,7 +1607,6 @@ function AnalysisTab({ form, agentId }: { form: any; agentId: number }) {
     setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, [field]: value } : c)));
     setDirty(true);
   }
-
   return (
     <div className="relative p-6 overflow-y-auto h-full space-y-8">
 
@@ -1750,7 +1749,6 @@ function AnalysisTab({ form, agentId }: { form: any; agentId: number }) {
           </div>
         )}
       </div>
-
     </div>
   );
 }

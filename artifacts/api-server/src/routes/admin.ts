@@ -1224,4 +1224,43 @@ router.post("/admin/family/provision", async (req, res): Promise<void> => {
   }
 });
 
+// ─── Token Optimization Kill Switch ──────────────────────────────────────────
+
+const TOKEN_OPT_KEY = "token_optimization_enabled";
+
+router.get("/admin/settings/token-optimization", async (req, res): Promise<void> => {
+  try {
+    const [row] = await db
+      .select({ value: platformSettingsTable.value })
+      .from(platformSettingsTable)
+      .where(eq(platformSettingsTable.key, TOKEN_OPT_KEY));
+    const enabled = row?.value !== "false";
+    res.json({ enabled });
+  } catch (err) {
+    req.log.error({ err }, "admin/settings/token-optimization GET failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.put("/admin/settings/token-optimization", async (req, res): Promise<void> => {
+  try {
+    const { enabled } = req.body as { enabled: boolean };
+    if (typeof enabled !== "boolean") {
+      res.status(400).json({ error: "enabled must be a boolean" });
+      return;
+    }
+    await db
+      .insert(platformSettingsTable)
+      .values({ key: TOKEN_OPT_KEY, value: String(enabled) })
+      .onConflictDoUpdate({
+        target: platformSettingsTable.key,
+        set: { value: String(enabled), updatedAt: new Date() },
+      });
+    res.json({ enabled });
+  } catch (err) {
+    req.log.error({ err }, "admin/settings/token-optimization PUT failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 export default router;

@@ -264,6 +264,11 @@ export type AgentAsrFallbackProvidersItem = {
  */
 export type AgentAgentConfig = { [key: string]: unknown } | null;
 
+export type AgentStagedPromptStagesItem = {
+  name?: string;
+  content?: string;
+};
+
 export interface Agent {
   id: number;
   name: string;
@@ -453,6 +458,36 @@ export interface Agent {
      * @nullable
      */
   snapserveAgentId?: string | null;
+  /**
+     * Sliding-window context: only the last N turns are sent to the LLM (null = unlimited)
+     * @nullable
+     */
+  contextWindowTurns?: number | null;
+  /**
+     * Auto-compress old turns into a summary block when history exceeds threshold
+     * @nullable
+     */
+  tokenSummarizationEnabled?: boolean | null;
+  /**
+     * Number of turns after which summarization is triggered
+     * @nullable
+     */
+  tokenSummarizationThresholdTurns?: number | null;
+  /**
+     * Send only the active stage block + core identity instead of the full system prompt
+     * @nullable
+     */
+  stagedPromptEnabled?: boolean | null;
+  /**
+     * Named prompt stages (each with name + content)
+     * @nullable
+     */
+  stagedPromptStages?: AgentStagedPromptStagesItem[] | null;
+  /**
+     * Core identity block always included in staged-prompt mode
+     * @nullable
+     */
+  stagedPromptCoreIdentity?: string | null;
   totalCalls?: number;
   successfulCalls?: number;
   /** @nullable */
@@ -497,6 +532,11 @@ export type AgentInputAsrFallbackProvidersItem = {
  * Advanced per-tab configuration
  */
 export type AgentInputAgentConfig = { [key: string]: unknown };
+
+export type AgentInputStagedPromptStagesItem = {
+  name?: string;
+  content?: string;
+};
 
 /**
  * Raw wizard answers passed from the dashboard. May include the ordered micro-question/answer pairs (microAnswers) and any uploaded job description content (jdFileContent, jdFileName). When present, the server generates the agent's system prompt server-side using the active admin master template (Qwen) and stores the result. Never returned in responses.
@@ -562,6 +602,18 @@ export interface AgentInput {
      * @nullable
      */
   snapserveAgentId?: string | null;
+  /** Sliding-window context: only the last N turns are sent to the LLM */
+  contextWindowTurns?: number;
+  /** Auto-compress old turns into a summary block when history exceeds threshold */
+  tokenSummarizationEnabled?: boolean;
+  /** Number of turns after which summarization is triggered */
+  tokenSummarizationThresholdTurns?: number;
+  /** Send only the active stage block + core identity instead of the full system prompt */
+  stagedPromptEnabled?: boolean;
+  /** Named prompt stages (each with name + content) */
+  stagedPromptStages?: AgentInputStagedPromptStagesItem[];
+  /** Core identity block always included in staged-prompt mode */
+  stagedPromptCoreIdentity?: string;
   /** Raw wizard answers passed from the dashboard. May include the ordered micro-question/answer pairs (microAnswers) and any uploaded job description content (jdFileContent, jdFileName). When present, the server generates the agent's system prompt server-side using the active admin master template (Qwen) and stores the result. Never returned in responses. */
   wizardInputs?: AgentInputWizardInputs;
 }
@@ -587,6 +639,11 @@ export type AgentUpdateAsrFallbackProvidersItem = {
  * Advanced per-tab configuration
  */
 export type AgentUpdateAgentConfig = { [key: string]: unknown };
+
+export type AgentUpdateStagedPromptStagesItem = {
+  name?: string;
+  content?: string;
+};
 
 export interface AgentUpdate {
   /**
@@ -655,6 +712,18 @@ export interface AgentUpdate {
      * @nullable
      */
   snapserveAgentId?: string | null;
+  /** Sliding-window context: only the last N turns are sent to the LLM */
+  contextWindowTurns?: number;
+  /** Auto-compress old turns into a summary block when history exceeds threshold */
+  tokenSummarizationEnabled?: boolean;
+  /** Number of turns after which summarization is triggered */
+  tokenSummarizationThresholdTurns?: number;
+  /** Send only the active stage block + core identity instead of the full system prompt */
+  stagedPromptEnabled?: boolean;
+  /** Named prompt stages (each with name + content) */
+  stagedPromptStages?: AgentUpdateStagedPromptStagesItem[];
+  /** Core identity block always included in staged-prompt mode */
+  stagedPromptCoreIdentity?: string;
 }
 
 export interface SnapServeCostBreakdown {
@@ -801,6 +870,11 @@ export interface Call {
      * @nullable
      */
   dispositionResult?: CallDispositionResult;
+  /**
+     * Estimated number of input tokens saved by token optimization (sliding window + summarization)
+     * @nullable
+     */
+  tokensSaved?: number | null;
 }
 
 export interface CallEndPayload {
@@ -810,6 +884,8 @@ export interface CallEndPayload {
   llmLatencyMs?: number;
   /** Average TTS first-audio-chunk latency measured for this call (ms) */
   ttsFirstChunkMs?: number;
+  /** Estimated input tokens saved via context optimization this call */
+  tokensSaved?: number;
 }
 
 export interface CallInput {

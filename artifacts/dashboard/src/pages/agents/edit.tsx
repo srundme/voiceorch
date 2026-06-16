@@ -132,6 +132,13 @@ export const agentFormSchema = z.object({
   snapserveAgentId: z.string().optional(),
   // Centralized Agent Knowledge — attached knowledge source IDs (M:N)
   knowledgeSourceIds: z.array(z.number()).optional(),
+  // Token Optimization
+  contextWindowTurns: z.number().min(1).max(1000).optional().nullable(),
+  tokenSummarizationEnabled: z.boolean().optional(),
+  tokenSummarizationThresholdTurns: z.number().min(5).max(500).optional().nullable(),
+  stagedPromptEnabled: z.boolean().optional(),
+  stagedPromptStages: z.array(z.object({ name: z.string(), content: z.string() })).optional(),
+  stagedPromptCoreIdentity: z.string().optional(),
 }).superRefine((data, ctx) => {
   const asrErr = getModelError(data.asrProvider, data.asrModel, ASR_MODELS);
   if (asrErr) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["asrModel"], message: asrErr });
@@ -155,6 +162,8 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     stopSpeakingNumWords, stopSpeakingVoiceSecs, stopSpeakingBackOffSecs,
     complianceIrdai, complianceDpdp, complianceHipaa, complianceTrai,
     snapserveAgentId,
+    contextWindowTurns, tokenSummarizationEnabled, tokenSummarizationThresholdTurns,
+    stagedPromptEnabled, stagedPromptStages, stagedPromptCoreIdentity,
     ...rest
   } = data;
   const agentConfig: Record<string, unknown> = {};
@@ -206,6 +215,12 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     tools: serializedTools,
     asrLanguage: rest.asrLanguage || null,
     snapserveAgentId: snapserveAgentId || null,
+    contextWindowTurns: contextWindowTurns ?? null,
+    tokenSummarizationEnabled: tokenSummarizationEnabled ?? false,
+    tokenSummarizationThresholdTurns: tokenSummarizationThresholdTurns ?? null,
+    stagedPromptEnabled: stagedPromptEnabled ?? false,
+    stagedPromptStages: stagedPromptStages?.length ? stagedPromptStages : null,
+    stagedPromptCoreIdentity: stagedPromptCoreIdentity || null,
     ...(Object.keys(agentConfig).length > 0 ? { agentConfig } : {}),
   };
 }
@@ -235,6 +250,45 @@ function ModelSelect({
 /* ── Webhook parameter editor ─────────────────────────────────────────────── */
 
 import type { Control } from "react-hook-form";
+
+function StagedPromptEditor({ control }: { control: Control<AgentFormValues> }) {
+  const { fields, append, remove } = useFieldArray({ control, name: "stagedPromptStages" as any });
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium text-muted-foreground">Stages</span>
+        <Button type="button" variant="ghost" size="sm" className="h-6 text-xs px-2" onClick={() => append({ name: "", content: "" })}>
+          <Plus className="h-3 w-3 mr-1" /> Add Stage
+        </Button>
+      </div>
+      {fields.length === 0 && (
+        <p className="text-[10px] text-muted-foreground italic">No stages defined yet. Add a stage to get started.</p>
+      )}
+      {fields.map((stage, idx) => (
+        <div key={stage.id} className="rounded-lg border border-border p-3 space-y-2 bg-muted/10">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-muted-foreground font-mono w-4">{idx + 1}.</span>
+            <FormField control={control} name={`stagedPromptStages.${idx}.name` as any} render={({ field: f }) => (
+              <FormItem className="flex-1 space-y-0">
+                <FormControl><Input placeholder="Stage name (e.g. Greeting)" className="h-7 text-xs" {...f} /></FormControl>
+                <FormMessage className="text-[10px]" />
+              </FormItem>
+            )} />
+            <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0" onClick={() => remove(idx)}>
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          </div>
+          <FormField control={control} name={`stagedPromptStages.${idx}.content` as any} render={({ field: f }) => (
+            <FormItem className="space-y-0">
+              <FormControl><Textarea placeholder="System prompt content for this stage…" className="min-h-[80px] text-xs" {...f} /></FormControl>
+              <FormMessage className="text-[10px]" />
+            </FormItem>
+          )} />
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function WebhookParamsEditor({ control, toolIndex }: { control: Control<AgentFormValues>; toolIndex: number }) {
   const { fields, append, remove } = useFieldArray({
@@ -334,6 +388,12 @@ export default function AgentEdit() {
       tools: [],
       genderDetectionEnabled: false,
       snapserveAgentId: "",
+      contextWindowTurns: undefined,
+      tokenSummarizationEnabled: false,
+      tokenSummarizationThresholdTurns: undefined,
+      stagedPromptEnabled: false,
+      stagedPromptStages: [],
+      stagedPromptCoreIdentity: "",
     },
   });
 
@@ -428,6 +488,12 @@ export default function AgentEdit() {
       tools: (agent.tools ?? []) as AgentFormValues["tools"],
       genderDetectionEnabled: (agent as any).agentConfig?.genderDetectionEnabled ?? false,
       snapserveAgentId: (agent as any).snapserveAgentId ?? "",
+      contextWindowTurns: (agent as any).contextWindowTurns ?? undefined,
+      tokenSummarizationEnabled: (agent as any).tokenSummarizationEnabled ?? false,
+      tokenSummarizationThresholdTurns: (agent as any).tokenSummarizationThresholdTurns ?? undefined,
+      stagedPromptEnabled: (agent as any).stagedPromptEnabled ?? false,
+      stagedPromptStages: (agent as any).stagedPromptStages ?? [],
+      stagedPromptCoreIdentity: (agent as any).stagedPromptCoreIdentity ?? "",
     });
   }, [agent]);
 
@@ -1276,6 +1342,118 @@ export default function AgentEdit() {
                 })}
               </CardContent>
             )}
+          </Card>
+
+          {/* ── Token Optimization ── */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Sparkles className="h-4 w-4 text-amber-400" /> Token Optimization
+              </CardTitle>
+              <CardDescription>Reduce LLM token usage to lower costs. Each layer is independent and can be enabled separately.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Layer 1: KV Cache — auto-enabled for Anthropic, read-only info */}
+              <div className="flex items-start gap-4 p-3 rounded-lg border border-border bg-muted/20">
+                <div className="flex-1">
+                  <p className="text-sm font-medium">KV Cache (Anthropic only)</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Automatically enabled when LLM provider is Anthropic. Caches the system prompt across turns using <code className="text-[10px] bg-muted px-1 rounded">cache_control</code> blocks — saves 5× on repeated input tokens.</p>
+                </div>
+                <div className={`text-xs font-medium px-2 py-1 rounded ${llmProvider === "anthropic" ? "bg-amber-500/20 text-amber-300" : "bg-muted/40 text-muted-foreground"}`}>
+                  {llmProvider === "anthropic" ? "Active" : "N/A"}
+                </div>
+              </div>
+
+              {/* Layer 2: Sliding Window */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Sliding Window Context</p>
+                    <p className="text-xs text-muted-foreground">Limit the number of past turns sent to the LLM each time. Older turns are dropped from context.</p>
+                  </div>
+                  <FormField control={form.control} name="contextWindowTurns" render={({ field }) => (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">Last</span>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={1000}
+                        placeholder="off"
+                        className="w-20 h-8 text-xs text-center"
+                        value={field.value == null ? "" : String(field.value)}
+                        onChange={(e) => field.onChange(e.target.value === "" ? null : parseInt(e.target.value, 10))}
+                      />
+                      <span className="text-xs text-muted-foreground">turns</span>
+                    </div>
+                  )} />
+                </div>
+              </div>
+
+              {/* Layer 3: Summarization */}
+              <div className="space-y-3 border-t border-border pt-4">
+                <FormField control={form.control} name="tokenSummarizationEnabled" render={({ field }) => (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">Automatic Summarization</p>
+                      <p className="text-xs text-muted-foreground">When conversation history reaches the threshold, old turns are summarized and replaced with a compact summary block.</p>
+                    </div>
+                    <Switch checked={!!field.value} onCheckedChange={field.onChange} />
+                  </div>
+                )} />
+                {form.watch("tokenSummarizationEnabled") && (
+                  <FormField control={form.control} name="tokenSummarizationThresholdTurns" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs">Summarization threshold (turns)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min={5}
+                          max={500}
+                          placeholder="20"
+                          className="w-32 h-8 text-xs"
+                          value={field.value == null ? "" : String(field.value)}
+                          onChange={(e) => field.onChange(e.target.value === "" ? null : parseInt(e.target.value, 10))}
+                        />
+                      </FormControl>
+                      <FormDescription className="text-[10px]">Summarize when history exceeds this many turns. Default: 20.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                )}
+              </div>
+
+              {/* Layer 4: Staged Prompt */}
+              <div className="space-y-3 border-t border-border pt-4">
+                <FormField control={form.control} name="stagedPromptEnabled" render={({ field }) => (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">Staged System Prompt</p>
+                      <p className="text-xs text-muted-foreground">Serve a smaller, stage-specific system prompt block per conversation phase instead of the full prompt. The LLM signals stage transitions with <code className="text-[10px] bg-muted px-1 rounded">[STAGE:Name]</code>.</p>
+                    </div>
+                    <Switch checked={!!field.value} onCheckedChange={field.onChange} />
+                  </div>
+                )} />
+                {form.watch("stagedPromptEnabled") && (
+                  <div className="space-y-4 pl-1">
+                    <FormField control={form.control} name="stagedPromptCoreIdentity" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Core Identity (always included)</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            className="min-h-[60px] text-xs"
+                            placeholder="You are a helpful assistant for Acme Corp. Always be polite and professional."
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription className="text-[10px]">Prepended to every stage prompt. Keep it short — name, role, tone only.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <StagedPromptEditor control={form.control} />
+                  </div>
+                )}
+              </div>
+            </CardContent>
           </Card>
 
           {/* ── SnapServe Integration ── */}

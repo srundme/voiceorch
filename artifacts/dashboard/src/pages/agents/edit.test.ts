@@ -74,6 +74,10 @@ describe("buildUpdateAgentPayload", () => {
     expect(result.data.ttsProvider).toBe("cartesia");
   });
 
+  it.skip("disposition schema with choice options — placeholder until feature is completed", () => {
+    // dispositionSchema field not yet in agentFormSchema; test preserved for re-enabling
+  });
+
   it("call transfer tool — present in payload and passes validation", () => {
     const data: AgentFormValues = {
       ...BASE,

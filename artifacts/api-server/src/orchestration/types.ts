@@ -275,6 +275,14 @@ export interface AgentConfig {
     hipaa: boolean;
     trai: boolean;
   } | null;
+
+  // Token Optimization
+  contextWindowTurns: number | null;
+  tokenSummarizationEnabled: boolean;
+  tokenSummarizationThresholdTurns: number | null;
+  stagedPromptEnabled: boolean;
+  stagedPromptStages: Array<{ name: string; content: string }>;
+  stagedPromptCoreIdentity: string | null;
 }
 
 export interface ProviderKey {
@@ -319,6 +327,9 @@ export interface LLMAdapter {
        *  returns them — fires on BOTH text turns and tool-call turns so the
        *  pipeline accumulates usage regardless of whether a tool was invoked. */
       onUsage?: (usage: LLMUsage) => void;
+      /** Anthropic KV cache: mark system prompt block as ephemeral so it is
+       *  cached between successive turns. Only honoured by AnthropicLLM. */
+      kvCache?: boolean;
     }
   ): Promise<void>;
 }

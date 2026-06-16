@@ -519,6 +519,10 @@ export default function CallsList() {
                         <StatusBadge status={call.status} />
                       </TableCell>
                       <TableCell>
+                        {/* disposition chips placeholder — awaiting full feature */}
+                        {null}
+                      </TableCell>
+                      <TableCell>
                         <div className="text-xs font-mono text-foreground/70">
                           {call.toNumber}
                         </div>
@@ -562,14 +566,21 @@ export default function CallsList() {
                         )}
                       </TableCell>
                       <TableCell>
-                        {costCents > 0 ? (
-                          <span className="flex items-center gap-0.5 text-[10px] font-mono text-muted-foreground/50">
-                            <DollarSign className="h-2.5 w-2.5" />
-                            {(costCents / 100).toFixed(3)}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground/25 text-[10px]">—</span>
-                        )}
+                        <div className="flex flex-col gap-0.5">
+                          {costCents > 0 ? (
+                            <span className="flex items-center gap-0.5 text-[10px] font-mono text-muted-foreground/50">
+                              <DollarSign className="h-2.5 w-2.5" />
+                              {(costCents / 100).toFixed(3)}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground/25 text-[10px]">—</span>
+                          )}
+                          {((call as any).tokensSaved ?? 0) > 0 && (
+                            <span className="inline-flex items-center gap-0.5 text-[9px] font-medium px-1 rounded bg-amber-500/15 text-amber-400">
+                              ↓{((call as any).tokensSaved as number).toLocaleString()} tok saved
+                            </span>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="text-right">
                         <Link href={`/app/calls/${call.id}`}>

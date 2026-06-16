@@ -204,6 +204,14 @@ export const agentsTable = pgTable("agents", {
   promptTemplateVersion: integer("prompt_template_version"),
   wizardInputs: json("wizard_inputs").$type<Record<string, unknown>>(),
 
+  // ── Token Optimization ────────────────────────────────────────────────────────
+  contextWindowTurns: integer("context_window_turns"),
+  tokenSummarizationEnabled: boolean("token_summarization_enabled").default(false),
+  tokenSummarizationThresholdTurns: integer("token_summarization_threshold_turns"),
+  stagedPromptEnabled: boolean("staged_prompt_enabled").default(false),
+  stagedPromptStages: jsonb("staged_prompt_stages").$type<Array<{ name: string; content: string }>>(),
+  stagedPromptCoreIdentity: text("staged_prompt_core_identity"),
+
   // ── Stats ────────────────────────────────────────────────────────────────────
   totalCalls: integer("total_calls").notNull().default(0),
   successfulCalls: integer("successful_calls").notNull().default(0),

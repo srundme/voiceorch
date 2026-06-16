@@ -570,3 +570,25 @@ export function useProvisionFamilyAgent() {
       }),
   });
 }
+
+// Token Optimization Kill Switch
+export function useTokenOptimizationEnabled() {
+  return useQuery({
+    queryKey: ["admin", "settings", "token-optimization"],
+    queryFn: () => adminFetch<{ enabled: boolean }>("/settings/token-optimization"),
+  });
+}
+
+export function useSaveTokenOptimizationEnabled() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (enabled: boolean) =>
+      adminFetch<{ enabled: boolean }>("/settings/token-optimization", {
+        method: "PUT",
+        body: JSON.stringify({ enabled }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "settings", "token-optimization"] });
+    },
+  });
+}
