@@ -1,4 +1,4 @@
-// agents router — supports call_transfer + webhook (custom function) tools
+// agents router — supports call_transfer + webhook (custom function) tools + AMD voicemail detection
 import { Router, type IRouter } from "express";
 import { eq, and, count, desc, isNull, inArray } from "drizzle-orm";
 import { db, agentsTable, schedulingCalendarsTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callerSentencesTable, callerFactSentenceLinksTable, callerEpisodeFactLinksTable } from "@workspace/db";
