@@ -3224,7 +3224,7 @@ export default function AssistantsPage() {
   const createAgent = useCreateAgent();
   const handleCreate = () => {
     createAgent.mutate(
-      { data: { name: "New Agent", asrProvider: "azure", asrModel: "en-US-standard", llmProvider: "openai", llmModel: "gpt-4o-mini", ttsProvider: "elevenlabs", ttsVoice: "", ttsModel: "", telephonyProvider: "twilio", systemPrompt: "You are a helpful AI voice assistant.", greetingMessage: "Hello", language: "en-US" } as any },
+      { data: { name: "New Agent", asrProvider: "azure", asrModel: "en-US-standard", llmProvider: "openai", llmModel: "gpt-4o-mini", ttsProvider: "elevenlabs", ttsVoice: "", ttsModel: "", telephonyProvider: "vobiz", systemPrompt: "You are a helpful AI voice assistant.", greetingMessage: "Hello", language: "en-US" } as any },
       { onSuccess: (agent) => { setPendingTab("prompt"); setSelectedId(agent.id); }, onError: (err: unknown) => toast({ title: "Error", description: formatApiError(err), variant: "destructive" }) }
     );
   };

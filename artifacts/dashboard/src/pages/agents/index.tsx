@@ -66,7 +66,7 @@ export default function AgentsList() {
           ttsProvider: "elevenlabs",
           ttsVoice: "",
           ttsModel: "",
-          telephonyProvider: "twilio",
+          telephonyProvider: "vobiz",
           systemPrompt: "You are a helpful AI voice assistant.",
           greetingMessage: "Hello",
           language: "en-US",

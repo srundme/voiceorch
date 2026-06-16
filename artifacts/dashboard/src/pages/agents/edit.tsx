@@ -43,7 +43,6 @@ import {
   AGENT_TIMEZONES,
   LLM_PROVIDERS,
   TTS_PROVIDERS,
-  TELEPHONY_PROVIDERS,
   LANGUAGES,
   ASR_MODELS,
   LLM_MODELS,
@@ -871,22 +870,10 @@ export default function AgentEdit() {
                     )} />
                   </div>
 
-                  {/* Step 4 — Telephony */}
+                  {/* Step 4 — Duration */}
                   <div className="space-y-4 p-4 border border-border/60 rounded-lg bg-card/50 relative">
                     <div className="absolute top-0 right-0 -mt-3 -mr-3 bg-primary/10 border border-primary/40 rounded-full px-2 py-0.5 text-[10px] font-bold text-primary uppercase tracking-wider">Step 4</div>
-                    <h4 className="text-[10px] font-bold uppercase tracking-widest text-foreground/80 border-b border-border/50 pb-2">Telephony</h4>
-                    <FormField control={form.control} name="telephonyProvider" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs">Provider</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl><SelectTrigger><SelectValue placeholder="Select Telephony" /></SelectTrigger></FormControl>
-                          <SelectContent>
-                            {TELEPHONY_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
+                    <h4 className="text-[10px] font-bold uppercase tracking-widest text-foreground/80 border-b border-border/50 pb-2">Call Settings</h4>
                     <FormField control={form.control} name="maxDuration" render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-xs">Max Duration (seconds)</FormLabel>

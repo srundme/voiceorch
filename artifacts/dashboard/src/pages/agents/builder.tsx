@@ -49,7 +49,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError, mapApiErrors, isDestinationUnverifiedError } from "@/lib/format-api-error";
 import {
-  ASR_PROVIDERS, LLM_PROVIDERS, TTS_PROVIDERS, TELEPHONY_PROVIDERS,
+  ASR_PROVIDERS, LLM_PROVIDERS, TTS_PROVIDERS,
   LANGUAGES, ASR_MODELS, LLM_MODELS, TTS_MODELS, TTS_VOICES, AGENT_TIMEZONES,
 } from "@/lib/agent-providers";
 import { useMinuteRatesMap, computeAgentRateCents } from "@/hooks/use-minute-rates";
@@ -589,22 +589,16 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
             )} />
           </div>
 
-          {/* ── Bottom strip: telephony + cost ───────────────────────────────── */}
-          <div className="flex items-center gap-3 rounded-lg bg-muted/30 border border-border/40 px-4 py-2.5">
-            <span className="text-[10px] text-muted-foreground shrink-0">Telephony</span>
-            <div className="flex-1">
-              <FormField control={form.control} name="telephonyProvider" render={({ field }) => (
-                <SmallSelect value={field.value} onChange={field.onChange}
-                  options={TELEPHONY_PROVIDERS.map(p => ({ value: p.value, label: p.label }))} />
-              )} />
-            </div>
-            {costCents != null && (
-              <div className="flex items-baseline gap-1 shrink-0">
+          {/* ── Bottom strip: cost ───────────────────────────────────────────── */}
+          {costCents != null && (
+            <div className="flex items-center gap-3 rounded-lg bg-muted/30 border border-border/40 px-4 py-2.5">
+              <span className="text-[10px] text-muted-foreground shrink-0">Estimated cost</span>
+              <div className="flex items-baseline gap-1 ml-auto shrink-0">
                 <span className="text-sm font-bold">~${(costCents / 100).toFixed(3)}</span>
                 <span className="text-[10px] text-muted-foreground">/min</span>
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
         </div>
       </div>
@@ -1507,7 +1501,7 @@ function AgentListPanel({ selectedId, onSelect, rateMap }: {
 
   const handleCreate = () => {
     createAgent.mutate(
-      { data: { name: "New Agent", asrProvider: "azure", asrModel: "en-US-standard", llmProvider: "openai", llmModel: "gpt-4o-mini", ttsProvider: "elevenlabs", ttsVoice: "", ttsModel: "", telephonyProvider: "twilio", systemPrompt: "You are a helpful AI voice assistant.", greetingMessage: "Hello", language: "en-US" } as any },
+      { data: { name: "New Agent", asrProvider: "azure", asrModel: "en-US-standard", llmProvider: "openai", llmModel: "gpt-4o-mini", ttsProvider: "elevenlabs", ttsVoice: "", ttsModel: "", telephonyProvider: "vobiz", systemPrompt: "You are a helpful AI voice assistant.", greetingMessage: "Hello", language: "en-US" } as any },
       { onSuccess: (agent) => onSelect(agent.id), onError: (err: unknown) => toast({ title: "Error", description: formatApiError(err), variant: "destructive" }) }
     );
   };
@@ -1952,7 +1946,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
     defaultValues: {
       name: "", description: "", asrProvider: "deepgram", asrModel: "",
       llmProvider: "openai", llmModel: "", ttsProvider: "elevenlabs",
-      ttsVoice: "", ttsModel: "", telephonyProvider: "twilio",
+      ttsVoice: "", ttsModel: "", telephonyProvider: "vobiz",
       systemPrompt: "", temperature: 0.10, maxDuration: 300,
       greetingMessage: "Hello", endCallPhrases: "", silenceTimeoutSeconds: 30,
       language: "en-US", asrLanguage: "", backchannelingEnabled: true,
@@ -2233,7 +2227,7 @@ export default function AgentBuilder() {
 
   const handleCreate = () => {
     createAgent.mutate(
-      { data: { name: "New Agent", asrProvider: "azure", asrModel: "en-US-standard", llmProvider: "openai", llmModel: "gpt-4o-mini", ttsProvider: "elevenlabs", ttsVoice: "", ttsModel: "", telephonyProvider: "twilio", systemPrompt: "You are a helpful AI voice assistant.", greetingMessage: "Hello", language: "en-US" } as any },
+      { data: { name: "New Agent", asrProvider: "azure", asrModel: "en-US-standard", llmProvider: "openai", llmModel: "gpt-4o-mini", ttsProvider: "elevenlabs", ttsVoice: "", ttsModel: "", telephonyProvider: "vobiz", systemPrompt: "You are a helpful AI voice assistant.", greetingMessage: "Hello", language: "en-US" } as any },
       { onSuccess: (agent) => handleSelect(agent.id), onError: (err: unknown) => toast({ title: "Error", description: formatApiError(err), variant: "destructive" }) }
     );
   };
