@@ -15,7 +15,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   useListAgents, useGetAgent, useUpdateAgent, useToggleAgent, useDeleteAgent,
   useInitiateOutboundCall, getListAgentsQueryKey, getGetAgentQueryKey,
-  useListCalls, getListCallsQueryKey,
+  useListCalls, getListCallsQueryKey, useListEventTypes,
 } from "@workspace/api-client-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -187,7 +187,11 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
   const ttsLabel       = TTS_PROVIDERS.find(p => p.value === ttsProvider)?.label ?? ttsProvider;
   const langLabel      = LANGUAGES.find(l => l.value === language)?.label ?? language;
   const llmModelLabel  = llmOptions.find((m: any) => m.value === llmModel)?.label ?? llmModel;
-  const ttsVoiceLabel  = ttsVoiceOpts.find(v => v.value === ttsVoice)?.label ?? ttsVoice;
+  const curatedVoiceOpts = ttsVoiceOpts.filter(v => v.value !== "__custom__");
+  const inCuratedList    = curatedVoiceOpts.some(v => v.value === ttsVoice);
+  const showCustomVoiceInput = ttsVoiceFree || (ttsVoiceOpts.length > 0 && !inCuratedList);
+  const ttsVoiceDropdownVal  = inCuratedList ? (ttsVoice ?? "") : "__custom__";
+  const ttsVoiceLabel  = (!ttsVoice || ttsVoice === "__custom__") ? "" : (curatedVoiceOpts.find(v => v.value === ttsVoice)?.label ?? ttsVoice);
   const ttsModelLabel  = ttsModelOpts.find((m: any) => m.value === ttsModel)?.label ?? ttsModel;
 
   const costCents = agent ? computeAgentRateCents(rateMap, agent as any) : null;
@@ -349,24 +353,31 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
                       options={TTS_PROVIDERS.map(p => ({ value: p.value, label: p.label }))} />
                   </FormItem>
                 )} />
-                {ttsVoiceFree ? (
-                  <FormField control={form.control} name="ttsVoice" render={({ field }) => (
-                    <FormItem className="space-y-1">
-                      <FormLabel className="text-[10px] text-muted-foreground">Voice ID</FormLabel>
-                      <Input
-                        value={field.value ?? ""}
-                        onChange={field.onChange}
-                        placeholder="Paste voice ID…"
-                        className="h-8 text-xs bg-background/50"
-                      />
-                    </FormItem>
-                  )} />
-                ) : ttsVoiceOpts.length > 0 && (
+                {ttsVoiceOpts.length > 0 && (
                   <FormField control={form.control} name="ttsVoice" render={({ field }) => (
                     <FormItem className="space-y-1">
                       <FormLabel className="text-[10px] text-muted-foreground">Voice</FormLabel>
-                      <SmallSelect value={field.value ?? ""} onChange={field.onChange}
-                        options={ttsVoiceOpts.map(v => ({ value: v.value, label: v.label }))} placeholder="Default" />
+                      <SmallSelect
+                        value={ttsVoiceDropdownVal}
+                        onChange={(v) => field.onChange(v === "__custom__" ? "" : v)}
+                        options={ttsVoiceOpts.map(v => ({ value: v.value, label: v.label }))}
+                        placeholder="Default"
+                      />
+                    </FormItem>
+                  )} />
+                )}
+                {showCustomVoiceInput && (
+                  <FormField control={form.control} name="ttsVoice" render={({ field }) => (
+                    <FormItem className="space-y-1">
+                      <FormLabel className="text-[10px] text-muted-foreground">
+                        {ttsVoiceOpts.length > 0 ? "Custom Voice ID" : "Voice ID"}
+                      </FormLabel>
+                      <Input
+                        value={field.value === "__custom__" ? "" : (field.value ?? "")}
+                        onChange={(e) => field.onChange(e.target.value)}
+                        placeholder="Paste UUID / voice ID…"
+                        className="h-8 text-xs bg-background/50"
+                      />
                     </FormItem>
                   )} />
                 )}
@@ -520,11 +531,116 @@ function PromptTab({ form }: { form: any }) {
 
 function VoiceTab({ form }: { form: any }) {
   const backchannelingEnabled = form.watch("backchannelingEnabled");
+  const ttsProvider = form.watch("ttsProvider");
+  const ttsVoice    = form.watch("ttsVoice");
+  const ttsModel    = form.watch("ttsModel");
+
+  const ttsVoiceRawV  = ttsProvider in TTS_VOICES ? TTS_VOICES[ttsProvider] : undefined;
+  const ttsVoiceOptsV = (ttsVoiceRawV ?? []) as { value: string; label: string }[];
+  const ttsModelOptsV = TTS_MODELS[ttsProvider] ?? [];
+  const curatedVoiceOptsV = ttsVoiceOptsV.filter(v => v.value !== "__custom__");
+  const inCuratedV        = curatedVoiceOptsV.some(v => v.value === ttsVoice);
+  const showCustomV       = ttsVoiceRawV === null || (ttsVoiceOptsV.length > 0 && !inCuratedV);
+  const dropdownValV      = inCuratedV ? (ttsVoice ?? "") : "__custom__";
+
   return (
     <div className="p-6 overflow-y-auto h-full space-y-6">
+
+      {/* ── Provider & Voice ── */}
+      <div className="space-y-3">
+        <SectionDivider label="Text-to-Speech — Provider & Voice" />
+        <div className="grid grid-cols-2 gap-3">
+          <FormField control={form.control} name="ttsProvider" render={({ field }) => (
+            <FormItem className="space-y-1">
+              <FormLabel className="text-xs text-muted-foreground">Provider</FormLabel>
+              <Select value={field.value} onValueChange={(v) => {
+                field.onChange(v);
+                form.setValue("ttsVoice", "");
+                form.setValue("ttsModel", "");
+              }}>
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue placeholder="Select provider" />
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  {TTS_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-sm">{p.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </FormItem>
+          )} />
+
+          {ttsVoiceOptsV.length > 0 && (
+            <FormField control={form.control} name="ttsVoice" render={({ field }) => (
+              <FormItem className="space-y-1">
+                <FormLabel className="text-xs text-muted-foreground">Voice</FormLabel>
+                <Select
+                  value={dropdownValV}
+                  onValueChange={(v) => field.onChange(v === "__custom__" ? "" : v)}
+                >
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="Select voice" />
+                  </SelectTrigger>
+                  <SelectContent position="popper" className="max-h-[300px]">
+                    {ttsVoiceOptsV.map(v => (
+                      <SelectItem key={v.value} value={v.value} className="text-sm">
+                        {v.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FormItem>
+            )} />
+          )}
+
+          {ttsModelOptsV.length > 0 && (
+            <FormField control={form.control} name="ttsModel" render={({ field }) => (
+              <FormItem className="space-y-1">
+                <FormLabel className="text-xs text-muted-foreground">Model</FormLabel>
+                <Select value={field.value ?? ""} onValueChange={field.onChange}>
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="Default" />
+                  </SelectTrigger>
+                  <SelectContent position="popper" className="max-h-[280px]">
+                    {ttsModelOptsV.map((m: any) => (
+                      <SelectItem key={m.value} value={m.value} className="text-sm">{m.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FormItem>
+            )} />
+          )}
+        </div>
+
+        {/* Custom voice ID input — shown when free-form or "Paste custom" selected */}
+        {showCustomV && (
+          <FormField control={form.control} name="ttsVoice" render={({ field }) => (
+            <FormItem className="space-y-1">
+              <FormLabel className="text-xs text-muted-foreground">
+                {ttsVoiceOptsV.length > 0 ? "Custom Voice ID" : "Voice ID"}
+              </FormLabel>
+              <FormControl>
+                <Input
+                  value={field.value === "__custom__" ? "" : (field.value ?? "")}
+                  onChange={(e) => field.onChange(e.target.value)}
+                  placeholder="Paste UUID / voice ID from your provider dashboard…"
+                  className="h-9 text-sm font-mono bg-background/50"
+                />
+              </FormControl>
+              <FormDescription className="text-[10px]">
+                {ttsProvider === "cartesia"
+                  ? "Find voice IDs in your Cartesia Voice Library dashboard"
+                  : ttsProvider === "elevenlabs"
+                    ? "Find voice IDs in the ElevenLabs Voice Lab"
+                    : "Provider-specific voice identifier"}
+              </FormDescription>
+            </FormItem>
+          )} />
+        )}
+      </div>
+
+      {/* ── Behavioral settings ── */}
       <div className="grid grid-cols-2 gap-6">
         <div className="space-y-4">
-          <SectionDivider label="Speech-to-Text" />
+          <SectionDivider label="Speech Recognition" />
           <FormField control={form.control} name="noiseCancellationEnabled" render={({ field }) => (
             <FormItem className="flex items-center justify-between rounded-lg border border-border/50 px-3 py-2">
               <div><FormLabel className="text-sm">Noise Cancellation</FormLabel>
@@ -546,7 +662,7 @@ function VoiceTab({ form }: { form: any }) {
           )} />
         </div>
         <div className="space-y-4">
-          <SectionDivider label="Text-to-Speech" />
+          <SectionDivider label="Text-to-Speech Behaviour" />
           <FormField control={form.control} name="backchannelingEnabled" render={({ field }) => (
             <FormItem className="flex items-center justify-between rounded-lg border border-border/50 px-3 py-2">
               <div><FormLabel className="text-sm">Backchanneling</FormLabel>
@@ -586,6 +702,82 @@ function VoiceTab({ form }: { form: any }) {
 function ToolsTab({ form }: { form: any }) {
   const { fields, append, remove } = useFieldArray({ control: form.control, name: "tools" });
   const genderEnabled = form.watch("genderDetectionEnabled") ?? false;
+  const watchedTools  = (form.watch("tools") ?? []) as any[];
+
+  const { data: eventTypesData } = useListEventTypes();
+  const eventTypeOptions = (eventTypesData ?? []).map((et: any) => ({ value: String(et.id), label: et.name ?? et.slug }));
+
+  const hasNativeTool = (type: string) => watchedTools.some((t: any) => t.type === type);
+  const nativeToolIndex = (type: string) => fields.findIndex((f: any) => f.type === type);
+
+  const toggleNativeTool = (type: string) => {
+    const idx = nativeToolIndex(type);
+    if (idx >= 0) {
+      remove(idx);
+    } else {
+      append({ type: type as any, name: "", description: "" });
+    }
+  };
+
+  const getNativeField = (type: string, fieldName: string) => {
+    const idx = nativeToolIndex(type);
+    return idx >= 0 ? form.watch(`tools.${idx}.${fieldName}`) : undefined;
+  };
+  const setNativeField = (type: string, fieldName: string, value: any) => {
+    const idx = nativeToolIndex(type);
+    if (idx >= 0) form.setValue(`tools.${idx}.${fieldName}`, value, { shouldDirty: true });
+  };
+
+  const BOOKING_TOOLS = [
+    {
+      type: "native_booking",
+      icon: <BookOpen className="h-4 w-4" />,
+      color: "emerald",
+      label: "Book Appointment",
+      description: "Lets the agent book a meeting slot for the caller. Agent collects name, email, and preferred time, then confirms the booking live.",
+      needsEventType: true,
+    },
+    {
+      type: "native_check_availability",
+      icon: <Sparkles className="h-4 w-4" />,
+      color: "sky",
+      label: "Check Availability",
+      description: "Enables the agent to look up open slots before suggesting a time. Use alongside Book Appointment for a natural booking flow.",
+      needsEventType: true,
+    },
+    {
+      type: "native_list_bookings",
+      icon: <List className="h-4 w-4" />,
+      color: "violet",
+      label: "List Bookings",
+      description: "Allows the agent to retrieve existing bookings for the caller — useful for reschedule or cancellation flows.",
+      needsEventType: false,
+    },
+    {
+      type: "native_reschedule",
+      icon: <Pencil className="h-4 w-4" />,
+      color: "amber",
+      label: "Reschedule Booking",
+      description: "Lets the agent reschedule an existing booking to a new time slot chosen by the caller.",
+      needsEventType: false,
+    },
+    {
+      type: "native_cancel",
+      icon: <X className="h-4 w-4" />,
+      color: "red",
+      label: "Cancel Booking",
+      description: "Allows the agent to cancel an upcoming booking on the caller's request.",
+      needsEventType: false,
+    },
+  ] as const;
+
+  const colorMap: Record<string, { border: string; bg: string; iconBg: string; iconText: string; label: string; badge: string; badgeText: string; active: string }> = {
+    emerald: { border: "border-emerald-400/40", bg: "bg-emerald-950/10", iconBg: "bg-emerald-500/15", iconText: "text-emerald-400", label: "text-emerald-300", badge: "bg-emerald-500/20", badgeText: "text-emerald-300", active: "" },
+    sky:     { border: "border-sky-400/40",     bg: "bg-sky-950/10",     iconBg: "bg-sky-500/15",     iconText: "text-sky-400",     label: "text-sky-300",     badge: "bg-sky-500/20",     badgeText: "text-sky-300",     active: "" },
+    violet:  { border: "border-violet-400/40",  bg: "bg-violet-950/10",  iconBg: "bg-violet-500/15",  iconText: "text-violet-400",  label: "text-violet-300",  badge: "bg-violet-500/20",  badgeText: "text-violet-300",  active: "" },
+    amber:   { border: "border-amber-400/40",   bg: "bg-amber-950/10",   iconBg: "bg-amber-500/15",   iconText: "text-amber-400",   label: "text-amber-300",   badge: "bg-amber-500/20",   badgeText: "text-amber-300",   active: "" },
+    red:     { border: "border-red-400/40",     bg: "bg-red-950/10",     iconBg: "bg-red-500/15",     iconText: "text-red-400",     label: "text-red-300",     badge: "bg-red-500/20",     badgeText: "text-red-300",     active: "" },
+  };
 
   return (
     <div className="p-6 overflow-y-auto h-full space-y-6">
@@ -595,6 +787,68 @@ function ToolsTab({ form }: { form: any }) {
         <h3 className="text-sm font-semibold mb-0.5">Platform Tools</h3>
         <p className="text-xs text-muted-foreground mb-3">Built-in capabilities you can enable for this agent</p>
 
+        <div className="space-y-2">
+
+        {/* ── Booking Tools ── */}
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-3">Scheduling & Bookings</p>
+        {BOOKING_TOOLS.map(({ type, icon, color, label, description, needsEventType }) => {
+          const isOn = hasNativeTool(type);
+          const c = colorMap[color];
+          const eventTypeId = isOn && needsEventType ? getNativeField(type, "eventTypeId") : undefined;
+          return (
+            <div key={type} className={cn("rounded-xl border transition-all duration-150", isOn ? `${c.border} ${c.bg}` : "border-border/60 bg-card/20")}>
+              <button
+                type="button"
+                onClick={() => toggleNativeTool(type)}
+                className="w-full text-left p-4 flex items-start gap-3"
+              >
+                <div className={cn("mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0", isOn ? c.iconBg : "bg-muted/30")}>
+                  <span className={cn(isOn ? c.iconText : "text-muted-foreground/40")}>{icon}</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className={cn("text-xs font-semibold", isOn ? c.label : "text-foreground/80")}>{label}</span>
+                    <span className={cn("text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded", isOn ? `${c.badge} ${c.badgeText}` : "bg-muted/40 text-muted-foreground/40")}>
+                      {isOn ? "ON" : "OFF"}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground/60 leading-relaxed">{description}</p>
+                </div>
+                <div className="shrink-0 mt-0.5">
+                  {isOn ? <ToggleRight className={cn("h-5 w-5", c.iconText)} /> : <ToggleLeft className="h-5 w-5 text-muted-foreground/30" />}
+                </div>
+              </button>
+              {isOn && needsEventType && (
+                <div className="px-4 pb-4 -mt-1">
+                  <div className="border-t border-border/30 pt-3">
+                    <label className="text-[10px] text-muted-foreground block mb-1">Event Type</label>
+                    {eventTypeOptions.length > 0 ? (
+                      <Select value={eventTypeId ?? ""} onValueChange={(v) => setNativeField(type, "eventTypeId", v)}>
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue placeholder="Select event type…" />
+                        </SelectTrigger>
+                        <SelectContent position="popper">
+                          {eventTypeOptions.map((et: any) => (
+                            <SelectItem key={et.value} value={et.value} className="text-xs">{et.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        value={eventTypeId ?? ""}
+                        onChange={(e) => setNativeField(type, "eventTypeId", e.target.value)}
+                        placeholder="Event type ID (create one in Scheduling first)"
+                        className="h-8 text-xs"
+                      />
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">Caller Intelligence</p>
         {/* Gender Identification card */}
         <button
           type="button"
@@ -640,6 +894,7 @@ function ToolsTab({ form }: { form: any }) {
             }
           </div>
         </button>
+      </div>
       </div>
 
       {/* ── Custom Tools ─── */}

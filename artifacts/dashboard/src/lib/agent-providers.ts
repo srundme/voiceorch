@@ -69,8 +69,28 @@ export const TTS_MODELS: Record<string, { value: string; label: string }[]> = {
 };
 
 export const TTS_VOICES: Record<string, { value: string; label: string }[] | null> = {
-  elevenlabs: null,
-  cartesia:   null,
+  cartesia: [
+    { value: "a0e99841-438c-4a64-b679-ae501e7d6091", label: "Barbershop Man" },
+    { value: "79a125e8-cd45-4c13-8a67-188112f4dd22", label: "British Narration Lady" },
+    { value: "b7d50908-b17c-442d-ad8d-810c63997ed9", label: "Calm Lady" },
+    { value: "5c42302c-194b-4d0c-ba1a-8cb485c84ab9", label: "Reading Man" },
+    { value: "c45bc5ec-dc68-4feb-8829-6ac1e9f4f478", label: "Customer Support Lady" },
+    { value: "f9836c38-f195-45be-b41c-91b82a5d59c8", label: "Southern Man" },
+    { value: "e00d0e4c-a5c8-443c-8230-60ea3f5b45ff", label: "Friendly Australian Man" },
+    { value: "__custom__", label: "✎ Paste custom Voice ID…" },
+  ],
+  elevenlabs: [
+    { value: "21m00Tcm4TlvDq8ikWAM", label: "Rachel (Female)" },
+    { value: "AZnzlk1XvdvUeBnXmlld", label: "Domi (Female)" },
+    { value: "EXAVITQu4vr4xnSDxMaL", label: "Bella (Female)" },
+    { value: "MF3mGyEYCl7XYWbV9V6O", label: "Elli (Female)" },
+    { value: "ErXwobaYiN019PkySvjV", label: "Antoni (Male)" },
+    { value: "TxGEqnHWrfWFTfGW9XjX", label: "Josh (Male)" },
+    { value: "VR6AewLTigWG4xSOukaG", label: "Arnold (Male)" },
+    { value: "pNInz6obpgDQGcFmaJgB", label: "Adam (Male)" },
+    { value: "yoZ06aMxZJJ28mfd3POQ", label: "Sam (Male)" },
+    { value: "__custom__", label: "✎ Paste custom Voice ID…" },
+  ],
   sarvam: [
     { value: "meera",    label: "Meera (female)" },
     { value: "pavithra", label: "Pavithra (female)" },
