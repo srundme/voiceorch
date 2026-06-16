@@ -32,7 +32,6 @@ const BASE: AgentFormValues = {
   bargeInEnergyThreshold: 1200,
   bargeInMinFrames: 4,
   tools: [],
-  dispositionSchema: [],
 };
 
 describe("buildUpdateAgentPayload", () => {
@@ -73,36 +72,6 @@ describe("buildUpdateAgentPayload", () => {
     expect(result.data.asrProvider).toBe("assemblyai");
     expect(result.data.llmProvider).toBe("google");
     expect(result.data.ttsProvider).toBe("cartesia");
-  });
-
-  it("disposition schema with choice options — CSV is split into array", () => {
-    const data: AgentFormValues = {
-      ...BASE,
-      dispositionSchema: [
-        {
-          key: "outcome",
-          label: "Call Outcome",
-          type: "choice",
-          required: true,
-          options: "Interested, Not Interested, Follow Up",
-        },
-        {
-          key: "satisfied",
-          label: "Satisfied",
-          type: "boolean",
-          required: false,
-          options: "",
-        },
-      ],
-    };
-    const payload = buildUpdateAgentPayload(data);
-    const result = UpdateAgentBody.safeParse(payload);
-    expect(result.success, JSON.stringify(result)).toBe(true);
-    if (!result.success) return;
-    const outcome = result.data.dispositionSchema?.[0];
-    expect(outcome?.options).toEqual(["Interested", "Not Interested", "Follow Up"]);
-    const satisfied = result.data.dispositionSchema?.[1];
-    expect(satisfied?.options).toBeUndefined();
   });
 
   it("call transfer tool — present in payload and passes validation", () => {

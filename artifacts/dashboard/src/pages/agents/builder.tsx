@@ -5,7 +5,7 @@ import {
   Save, MoreHorizontal, Power, Trash2, Settings, FileText, Wrench,
   GitBranch, VoicemailIcon, SlidersHorizontal, TestTube2, ChevronRight,
   Volume2, Check, X, Pencil, ChevronDown, List, Globe, BarChart3,
-  User2, Sparkles, BookOpen, Tag, ToggleLeft, ToggleRight, PlusCircle,
+  User2, Sparkles, BookOpen, ToggleLeft, ToggleRight,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -1344,7 +1344,6 @@ function SliderField({ form, name, label, description, min, max, step, format }:
 
 function AdvancedTab({ form }: { form: any }) {
   const bargeIn = form.watch("bargeInEnabled");
-  const { fields: dsFields, append: dsAppend, remove: dsRemove } = useFieldArray({ control: form.control, name: "dispositionSchema" });
   return (
     <div className="p-6 overflow-y-auto h-full space-y-6">
       <div className="grid grid-cols-2 gap-6">
@@ -1443,46 +1442,6 @@ function AdvancedTab({ form }: { form: any }) {
         </div>
       </div>
 
-      {/* Disposition Schema — full width */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <SectionDivider label="Disposition Schema" />
-          <Button type="button" variant="outline" size="sm" className="h-7 text-xs ml-4"
-            onClick={() => dsAppend({ key: "", label: "", type: "text", required: false, options: "" })}>
-            <Plus className="h-3 w-3 mr-1" /> Add Field
-          </Button>
-        </div>
-        <p className="text-[10px] text-muted-foreground">Fields extracted from the call automatically by the LLM.</p>
-        {dsFields.map((f, i) => (
-          <div key={f.id} className="grid grid-cols-[1fr_1fr_100px_60px_28px] gap-2 items-start">
-            <FormField control={form.control} name={`dispositionSchema.${i}.key`} render={({ field: ff }) => (
-              <FormItem className="space-y-0"><FormControl><Input placeholder="field_key" className="h-7 text-xs" {...ff} /></FormControl><FormMessage className="text-[10px]" /></FormItem>
-            )} />
-            <FormField control={form.control} name={`dispositionSchema.${i}.label`} render={({ field: ff }) => (
-              <FormItem className="space-y-0"><FormControl><Input placeholder="Display Label" className="h-7 text-xs" {...ff} /></FormControl><FormMessage className="text-[10px]" /></FormItem>
-            )} />
-            <FormField control={form.control} name={`dispositionSchema.${i}.type`} render={({ field: ff }) => (
-              <FormItem className="space-y-0">
-                <Select value={ff.value} onValueChange={ff.onChange}>
-                  <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {["text","number","boolean","choice"].map(t => <SelectItem key={t} value={t} className="text-xs">{t}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </FormItem>
-            )} />
-            <FormField control={form.control} name={`dispositionSchema.${i}.required`} render={({ field: ff }) => (
-              <FormItem className="space-y-0 flex items-center gap-1 pt-1">
-                <FormControl><Switch checked={!!ff.value} onCheckedChange={ff.onChange} className="scale-75 origin-left" /></FormControl>
-                <span className="text-[9px] text-muted-foreground">req</span>
-              </FormItem>
-            )} />
-            <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => dsRemove(i)}>
-              <Trash2 className="h-3 w-3" />
-            </Button>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
@@ -1562,11 +1521,6 @@ function AgentListPanel({ selectedId, onSelect, rateMap }: {
 /* ── Tab: Analysis ──────────────────────────────────────────────────────────── */
 
 function AnalysisTab({ form }: { form: any }) {
-  const { fields: dispFields, append: appendDisp, remove: removeDisp } = useFieldArray({
-    control: form.control,
-    name: "dispositionSchema",
-  });
-
   return (
     <div className="p-6 overflow-y-auto h-full space-y-8">
 
@@ -1591,7 +1545,7 @@ function AnalysisTab({ form }: { form: any }) {
                 />
               </FormControl>
               <FormDescription className="text-[10px]">
-                Must be HTTPS. We send a JSON payload with <code className="font-mono bg-muted px-0.5 rounded">callId</code>, <code className="font-mono bg-muted px-0.5 rounded">status</code>, <code className="font-mono bg-muted px-0.5 rounded">transcript</code>, <code className="font-mono bg-muted px-0.5 rounded">dispositionResult</code> and more.
+                Must be HTTPS. We send a JSON payload with <code className="font-mono bg-muted px-0.5 rounded">callId</code>, <code className="font-mono bg-muted px-0.5 rounded">status</code>, <code className="font-mono bg-muted px-0.5 rounded">transcript</code>, <code className="font-mono bg-muted px-0.5 rounded">disposition</code> and more.
               </FormDescription>
             </FormItem>
           )} />
@@ -1612,96 +1566,6 @@ function AnalysisTab({ form }: { form: any }) {
             </FormItem>
           )} />
         </div>
-      </div>
-
-      {/* ── Dispositions ── */}
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <div className="flex items-center gap-2">
-            <Tag className="h-4 w-4 text-amber-400" />
-            <h3 className="text-sm font-semibold">Call Dispositions</h3>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs gap-1"
-            onClick={() => appendDisp({ key: "", label: "", type: "text", required: false, options: "" })}
-          >
-            <PlusCircle className="h-3.5 w-3.5" /> Add Field
-          </Button>
-        </div>
-        <p className="text-xs text-muted-foreground mb-4">
-          Structured fields the agent fills in at the end of each call — booking confirmed, customer intent, follow-up needed, etc.
-        </p>
-
-        {dispFields.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-border/50 p-8 text-center">
-            <Tag className="h-7 w-7 text-muted-foreground/20 mx-auto mb-2" />
-            <p className="text-sm font-medium text-muted-foreground/50">No disposition fields yet</p>
-            <p className="text-xs text-muted-foreground/30 mt-0.5">Add fields to capture structured call outcomes</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {dispFields.map((field, index) => {
-              const watchedType = form.watch(`dispositionSchema.${index}.type`);
-              return (
-                <div key={field.id} className="rounded-xl border border-border/60 bg-card/20 p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400">
-                      Field {index + 1}
-                    </span>
-                    <Button
-                      type="button" variant="ghost" size="icon"
-                      className="h-6 w-6 text-muted-foreground hover:text-destructive"
-                      onClick={() => removeDisp(index)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    <FormField control={form.control} name={`dispositionSchema.${index}.key`} render={({ field: f }) => (
-                      <FormItem className="space-y-1">
-                        <FormLabel className="text-[10px] text-muted-foreground">Key</FormLabel>
-                        <FormControl><Input placeholder="booking_confirmed" className="h-8 text-xs" {...f} /></FormControl>
-                        <FormMessage className="text-[10px]" />
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name={`dispositionSchema.${index}.label`} render={({ field: f }) => (
-                      <FormItem className="space-y-1">
-                        <FormLabel className="text-[10px] text-muted-foreground">Label</FormLabel>
-                        <FormControl><Input placeholder="Booking Confirmed?" className="h-8 text-xs" {...f} /></FormControl>
-                        <FormMessage className="text-[10px]" />
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name={`dispositionSchema.${index}.type`} render={({ field: f }) => (
-                      <FormItem className="space-y-1">
-                        <FormLabel className="text-[10px] text-muted-foreground">Type</FormLabel>
-                        <Select value={f.value} onValueChange={f.onChange}>
-                          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                          <SelectContent position="popper">
-                            <SelectItem value="text" className="text-xs">Text</SelectItem>
-                            <SelectItem value="number" className="text-xs">Number</SelectItem>
-                            <SelectItem value="boolean" className="text-xs">Yes / No</SelectItem>
-                            <SelectItem value="choice" className="text-xs">Choice</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </FormItem>
-                    )} />
-                  </div>
-                  {watchedType === "choice" && (
-                    <FormField control={form.control} name={`dispositionSchema.${index}.options`} render={({ field: f }) => (
-                      <FormItem className="space-y-1">
-                        <FormLabel className="text-[10px] text-muted-foreground">Options (comma-separated)</FormLabel>
-                        <FormControl><Input placeholder="Interested, Not interested, Callback" className="h-8 text-xs" {...f} /></FormControl>
-                      </FormItem>
-                    )} />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
       </div>
 
     </div>
@@ -1956,7 +1820,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       bargeInMinFrames: 4, timezone: "", machineDetectionMode: "disabled",
       voicemailAction: "hangup",
       voicemailMessage: "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
-      tools: [], dispositionSchema: [], genderDetectionEnabled: false,
+      tools: [], genderDetectionEnabled: false,
       startSpeakingWaitSecs: 0, startSpeakingOnPunctuationSecs: 0.1,
       startSpeakingOnNoPunctuationSecs: 1.5, startSpeakingOnNumberSecs: 0.5,
       stopSpeakingNumWords: 0, stopSpeakingVoiceSecs: 0.2, stopSpeakingBackOffSecs: 1,
@@ -2015,9 +1879,6 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       complianceHipaa: (agent as any).agentConfig?.compliance?.hipaa ?? false,
       complianceTrai:  (agent as any).agentConfig?.compliance?.trai  ?? false,
       snapserveAgentId: (agent as any).snapserveAgentId ?? "",
-      dispositionSchema:        ((agent as any).dispositionSchema ?? []).map((f: any) => ({
-        ...f, options: Array.isArray(f.options) ? f.options.join(", ") : (f.options ?? ""),
-      })) as AgentFormValues["dispositionSchema"],
       knowledgeSourceIds:       ((agent as any).knowledgeSourceIds ?? []) as number[],
     });
   }, [agent]);

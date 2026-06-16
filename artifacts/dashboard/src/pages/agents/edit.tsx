@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { Link, useLocation, useParams } from "wouter";
-import { ArrowLeft, Save, Bot, Plus, Trash2, PhoneForwarded, ClipboardList, Webhook, ChevronDown, ChevronUp, BookOpen, Sparkles, List, Pencil, X, ToggleLeft, ToggleRight } from "lucide-react";
+import { ArrowLeft, Save, Bot, Plus, Trash2, PhoneForwarded, Webhook, ChevronDown, ChevronUp, BookOpen, Sparkles, List, Pencil, X, ToggleLeft, ToggleRight } from "lucide-react";
 import {
   useGetAgent,
   useUpdateAgent,
@@ -109,13 +109,6 @@ export const agentFormSchema = z.object({
       required: z.boolean().optional(),
     })).optional(),
   })).optional(),
-  dispositionSchema: z.array(z.object({
-    key: z.string().min(1, "Key required"),
-    label: z.string().min(1, "Label required"),
-    type: z.enum(["text", "number", "boolean", "choice"]),
-    required: z.boolean().optional(),
-    options: z.string().optional(),
-  })).optional(),
   genderDetectionEnabled: z.boolean().optional(),
   // Start Speaking Plan
   startSpeakingWaitSecs:          z.number().min(0).max(5).optional(),
@@ -209,10 +202,6 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     asrLanguage: rest.asrLanguage || null,
     snapserveAgentId: snapserveAgentId || null,
     ...(Object.keys(agentConfig).length > 0 ? { agentConfig } : {}),
-    dispositionSchema: (rest.dispositionSchema ?? []).map(f => ({
-      ...f,
-      options: f.options ? f.options.split(",").map((s: string) => s.trim()).filter(Boolean) : undefined,
-    })),
   };
 }
 
@@ -338,7 +327,6 @@ export default function AgentEdit() {
       machineDetectionMode: "disabled", voicemailAction: "hangup",
       voicemailMessage: "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
       tools: [],
-      dispositionSchema: [],
       genderDetectionEnabled: false,
       snapserveAgentId: "",
     },
@@ -384,11 +372,6 @@ export default function AgentEdit() {
     amber:   { border: "border-amber-400/40",   bg: "bg-amber-950/10",   iconBg: "bg-amber-500/15",   iconText: "text-amber-400",   label: "text-amber-300",   badge: "bg-amber-500/20",   badgeText: "text-amber-300"   },
     red:     { border: "border-red-400/40",     bg: "bg-red-950/10",     iconBg: "bg-red-500/15",     iconText: "text-red-400",     label: "text-red-300",     badge: "bg-red-500/20",     badgeText: "text-red-300"     },
   };
-
-  const { fields: dispositionFields, append: appendDisposition, remove: removeDisposition } = useFieldArray({
-    control: form.control,
-    name: "dispositionSchema",
-  });
 
   const { fields: promptVarFields, append: appendPromptVar, remove: removePromptVar } = useFieldArray({
     control: form.control,
@@ -438,10 +421,6 @@ export default function AgentEdit() {
       tools: (agent.tools ?? []) as AgentFormValues["tools"],
       genderDetectionEnabled: (agent as any).agentConfig?.genderDetectionEnabled ?? false,
       snapserveAgentId: (agent as any).snapserveAgentId ?? "",
-      dispositionSchema: ((agent as any).dispositionSchema ?? []).map((f: any) => ({
-        ...f,
-        options: Array.isArray(f.options) ? f.options.join(", ") : (f.options ?? ""),
-      })) as AgentFormValues["dispositionSchema"],
     });
   }, [agent]);
 
@@ -1295,83 +1274,6 @@ export default function AgentEdit() {
                 </FormItem>
               )} />
             </CardContent>
-          </Card>
-
-          {/* ── Disposition Schema ── */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2"><ClipboardList className="h-4 w-4" /> Disposition Fields</CardTitle>
-                  <CardDescription>Define fields the AI will automatically extract from each call transcript after the call ends.</CardDescription>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => appendDisposition({ type: "text", key: "", label: "", required: false, options: "" })}
-                >
-                  <Plus className="h-4 w-4 mr-1" /> Add Field
-                </Button>
-              </div>
-            </CardHeader>
-            {dispositionFields.length > 0 && (
-              <CardContent className="space-y-3">
-                {dispositionFields.map((field, index) => {
-                  const watchedType = form.watch(`dispositionSchema.${index}.type`);
-                  return (
-                    <div key={field.id} className="border rounded-md p-4 bg-muted/20 space-y-3 relative">
-                      <Button type="button" variant="ghost" size="icon" className="absolute top-2 right-2 h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => removeDisposition(index)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <FormField control={form.control} name={`dispositionSchema.${index}.key`} render={({ field: f }) => (
-                          <FormItem>
-                            <FormLabel className="text-xs">Key</FormLabel>
-                            <FormControl><Input placeholder="e.g. call_outcome" {...f} /></FormControl>
-                            <FormDescription className="text-[10px]">snake_case identifier</FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )} />
-                        <FormField control={form.control} name={`dispositionSchema.${index}.label`} render={({ field: f }) => (
-                          <FormItem>
-                            <FormLabel className="text-xs">Label</FormLabel>
-                            <FormControl><Input placeholder="e.g. Call Outcome" {...f} /></FormControl>
-                            <FormDescription className="text-[10px]">Display name shown in the UI</FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )} />
-                        <FormField control={form.control} name={`dispositionSchema.${index}.type`} render={({ field: f }) => (
-                          <FormItem>
-                            <FormLabel className="text-xs">Type</FormLabel>
-                            <Select onValueChange={f.onChange} value={f.value}>
-                              <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                              <SelectContent>
-                                <SelectItem value="text">Text</SelectItem>
-                                <SelectItem value="number">Number</SelectItem>
-                                <SelectItem value="boolean">Yes / No</SelectItem>
-                                <SelectItem value="choice">Choice</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )} />
-                      </div>
-                      {watchedType === "choice" && (
-                        <FormField control={form.control} name={`dispositionSchema.${index}.options`} render={({ field: f }) => (
-                          <FormItem>
-                            <FormLabel className="text-xs">Options</FormLabel>
-                            <FormControl><Input placeholder="e.g. resolved, escalated, callback" {...f} /></FormControl>
-                            <FormDescription className="text-[10px]">Comma-separated list of allowed values</FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )} />
-                      )}
-                    </div>
-                  );
-                })}
-              </CardContent>
-            )}
           </Card>
 
           <div className="fixed bottom-0 left-0 md:left-64 right-0 p-4 bg-background/80 backdrop-blur-sm border-t border-border flex justify-end z-10">
