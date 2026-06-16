@@ -93,7 +93,7 @@ export const agentFormSchema = z.object({
   voicemailAction:        z.enum(["hangup", "leave_message", "continue"]).optional(),
   voicemailMessage:       z.string().optional(),
   tools: z.array(z.object({
-    type: z.enum(["call_transfer", "webhook", "native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel"]),
+    type: z.enum(["call_transfer", "webhook", "send_sms", "end_call", "cal_com", "native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel"]),
     name: z.string().optional(),
     description: z.string().optional(),
     transferTo: z.string().optional(),
