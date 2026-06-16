@@ -180,10 +180,30 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
 
   const llmOptions    = LLM_MODELS[llmProvider]  ?? [];
   const ttsModelOpts  = TTS_MODELS[ttsProvider]  ?? [];
+  const asrModelOpts  = ASR_MODELS[asrProvider]  ?? [];
+
+  // Fetch admin-whitelisted voices (shared cache with VoiceTab)
+  const { data: whitelistedData } = useQuery({
+    queryKey: ["voices", "whitelisted"],
+    queryFn: () => customFetch<{ voices: Array<{ id: string; name: string; language: string }> }>(`${DASH_API}/voices/whitelisted`),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const cartesiaOverviewOpts = useMemo(() => {
+    const baseLang = (language ?? "en-US").split("-")[0];
+    const all = whitelistedData?.voices ?? [];
+    const filtered = all.filter(v => v.language === baseLang || v.language === language);
+    const opts = filtered.map(v => ({ value: v.id, label: v.name }));
+    opts.push({ value: "__custom__", label: "✎ Paste custom Voice ID…" });
+    return opts;
+  }, [whitelistedData, language]);
+
   const ttsVoiceRaw   = ttsProvider in TTS_VOICES ? TTS_VOICES[ttsProvider] : undefined;
   const ttsVoiceFree  = ttsVoiceRaw === null;
-  const ttsVoiceOpts  = (ttsVoiceRaw ?? []) as { value: string; label: string }[];
-  const asrModelOpts  = ASR_MODELS[asrProvider]  ?? [];
+  const ttsVoiceOpts: { value: string; label: string }[] =
+    ttsProvider === "cartesia"
+      ? cartesiaOverviewOpts
+      : ((ttsVoiceRaw ?? []) as { value: string; label: string }[]);
 
   const asrLabel       = ASR_PROVIDERS.find(p => p.value === asrProvider)?.label ?? asrProvider;
   const llmLabel       = LLM_PROVIDERS.find(p => p.value === llmProvider)?.label ?? llmProvider;
