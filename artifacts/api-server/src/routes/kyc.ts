@@ -152,52 +152,62 @@ async function createVobizSubAccount(
   return resp.json() as Promise<VobizCreateAccountResponse>;
 }
 
-function partnerHeadersBearer() {
-  // Some VoBiz partner endpoints accept Bearer token auth
-  return {
-    "Authorization": `Bearer ${process.env["VOBIZ_AUTH_TOKEN"] ?? ""}`,
-    "Accept":        "application/json",
-    "Content-Type":  "application/json",
-  };
-}
-
+/**
+ * Recovery path: when VoBiz says an account already exists (409) but we have
+ * no record in our DB (e.g. after a data wipe), scan the KYC sessions list for
+ * a session whose customer_email or metadata.email matches the user's address.
+ * Each session carries account_auth_id, so a match lets us re-link the account.
+ *
+ * Going forward every new session includes metadata.email so this always works.
+ * For older redirect-flow sessions (no email stored), only email-flow sessions
+ * (customer_email set) or sessions with metadata.email will match.
+ */
 async function fetchVobizSubAccountByEmail(
   email: string,
 ): Promise<VobizCreateAccountResponse | null> {
-  // Try multiple URL + auth combinations to recover an existing sub-account
-  const attempts = [
-    // X-Auth headers, email query param
-    { url: `${VOBIZ_PARTNER_BASE}/accounts?email=${encodeURIComponent(email)}`, headers: partnerHeaders() },
-    // Bearer auth, email query param
-    { url: `${VOBIZ_PARTNER_BASE}/accounts?email=${encodeURIComponent(email)}`, headers: partnerHeadersBearer() },
-    // X-Auth headers, list all
-    { url: `${VOBIZ_PARTNER_BASE}/accounts`, headers: partnerHeaders() },
-    // Bearer auth, list all
-    { url: `${VOBIZ_PARTNER_BASE}/accounts`, headers: partnerHeadersBearer() },
-  ];
+  const emailLower = email.toLowerCase();
+  let page = 1;
+  const size = 100;
 
-  for (const { url, headers } of attempts) {
-    const resp = await fetch(url, { method: "GET", headers });
+  while (page <= 10) {
+    const url = `${VOBIZ_PARTNER_BASE}/kyc-sessions?page=${page}&size=${size}`;
+    const resp = await fetch(url, { method: "GET", headers: partnerHeaders() });
     const body = await resp.text();
-    logger.info({ url, status: resp.status, body: body.slice(0, 800) }, "VoBiz GET accounts response");
-    if (!resp.ok) continue;
+    logger.info({ url, status: resp.status, snippet: body.slice(0, 400) }, "VoBiz GET kyc-sessions (recovery)");
 
-    let parsed: unknown;
-    try { parsed = JSON.parse(body); } catch { continue; }
-
-    // Normalise — VoBiz may wrap list in results/data/accounts/items or return a single object
-    let list: VobizCreateAccountResponse[] = [];
-    if (Array.isArray(parsed)) {
-      list = parsed as VobizCreateAccountResponse[];
-    } else if (parsed && typeof parsed === "object") {
-      const obj = parsed as Record<string, unknown>;
-      list = (obj["results"] ?? obj["data"] ?? obj["accounts"] ?? obj["items"] ?? []) as VobizCreateAccountResponse[];
-      if (!list.length && obj["auth_id"]) list = [parsed as VobizCreateAccountResponse];
+    if (!resp.ok) {
+      logger.warn({ status: resp.status, body: body.slice(0, 400) }, "VoBiz kyc-sessions list returned non-OK; cannot recover auth_id");
+      break;
     }
 
-    const match = list.find((a) => a.email?.toLowerCase() === email.toLowerCase());
-    if (match) return match;
+    let parsed: unknown;
+    try { parsed = JSON.parse(body); } catch { break; }
+
+    const obj     = parsed as Record<string, unknown>;
+    const sessions = Array.isArray(obj["sessions"]) ? obj["sessions"] as Record<string, unknown>[] : [];
+    const total    = typeof obj["total"] === "number" ? obj["total"] : 0;
+
+    for (const s of sessions) {
+      const authId = typeof s["account_auth_id"] === "string" ? s["account_auth_id"] : null;
+      if (!authId) continue;
+
+      const sessionEmail = typeof s["customer_email"] === "string" ? s["customer_email"] : null;
+      const metaEmail    = (s["metadata"] as Record<string, unknown> | null)?.["email"];
+      const metaStr      = typeof metaEmail === "string" ? metaEmail : null;
+
+      if (sessionEmail?.toLowerCase() === emailLower || metaStr?.toLowerCase() === emailLower) {
+        logger.info({ authId, email }, "Recovered account_auth_id from KYC sessions list");
+        // auth_token is unknown for stale accounts; store empty string (token is only
+        // needed for voice calls, not for the KYC flow itself).
+        return { auth_id: authId, auth_token: "", name: "", email, status: "recovered" };
+      }
+    }
+
+    if (sessions.length < size || page * size >= total) break;
+    page++;
   }
+
+  logger.warn({ email }, "Could not find account_auth_id in VoBiz KYC sessions list");
   return null;
 }
 
@@ -211,6 +221,7 @@ async function createVobizKycSession(
   accountAuthId: string,
   redirectUrl:   string,
   webhookUrl:    string,
+  userEmail:     string,
 ): Promise<VobizKycSessionResponse> {
   const resp = await fetch(`${VOBIZ_PARTNER_BASE}/kyc-sessions`, {
     method:  "POST",
@@ -221,6 +232,9 @@ async function createVobizKycSession(
       redirect_url:    redirectUrl,
       webhook_url:     webhookUrl,
       expires_in_days: 7,
+      // Store email in metadata so fetchVobizSubAccountByEmail can recover
+      // the account_auth_id if our DB is ever wiped.
+      metadata:        { email: userEmail },
     }),
   });
   if (!resp.ok) {
@@ -348,7 +362,7 @@ router.post("/kyc/start", requireAuth, async (req, res): Promise<void> => {
 
   let kycSession: VobizKycSessionResponse;
   try {
-    kycSession = await createVobizKycSession(account.vobizAuthId, redirectUrl, webhookUrl);
+    kycSession = await createVobizKycSession(account.vobizAuthId, redirectUrl, webhookUrl, user.email ?? "");
   } catch (err: any) {
     req.log.error({ err, clerkId }, "Failed to create Vobiz KYC session");
     res.status(502).json({ error: "Failed to start KYC session. Please try again." });
@@ -386,7 +400,8 @@ router.post("/kyc/start", requireAuth, async (req, res): Promise<void> => {
 // KYC widget. No Clerk session — the session_id ties back to our DB.
 
 router.get("/kyc/callback", async (req, res): Promise<void> => {
-  const { session_id, status } = req.query as Record<string, string>;
+  // VoBiz passes session_id, status, and auth_id as query params on redirect
+  const { session_id, status, auth_id } = req.query as Record<string, string>;
   const ip = clientIp(req);
 
   if (!session_id) { res.redirect("/?kyc=error"); return; }
@@ -422,7 +437,7 @@ router.get("/kyc/callback", async (req, res): Promise<void> => {
       await audit("callback_received", {
         userId:    session.userId,
         sessionId: session_id,
-        eventData: { status: newStatus },
+        eventData: { status: newStatus, auth_id: auth_id ?? null },
         ip,
       });
     }
