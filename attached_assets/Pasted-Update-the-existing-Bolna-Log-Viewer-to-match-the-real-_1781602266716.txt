@@ -1,0 +1,92 @@
+Update the existing Bolna Log Viewer to match the real Bolna UI exactly. Here is what needs to be fixed and added:
+1. Table Structure (match Bolna exactly)
+The main log table has these columns:
+
+Timestamp — format: 2026-06-16 07:05:04.634356
+Log Data — the content (truncated with "Show more")
+Direction — badge: request (outlined) or response (outlined)
+Component — colored badge with icon: llm (purple, brain icon), synthesizer (green, speaker icon), transcriber (blue, mic icon)
+Provider — plain text: gpt-4.1-mini, elevenlabs, sarvam, google/gemini-2.5-flash
+
+
+2. Three Component Types to Show
+LLM rows (purple badge):
+
+Direction alternates between request and response
+request row → "Show more" expands to show the full system prompt + conversation history that was sent to the LLM
+response row → shows the agent's reply text
+Variable highlighting: Inside the expanded system prompt, if there are template variables like {caller_context}, show the actual resolved value in a highlighted yellow/amber box inline — not the raw {caller_context} placeholder
+If the variable is empty/unresolved → show a red badge "⚠ Variable not injected"
+
+Synthesizer rows (green badge) — TTS:
+
+Shows the text that was sent to TTS engine (ElevenLabs/Cartesia)
+Both request and response rows
+Provider: elevenlabs or cartesia
+
+Transcriber rows (blue badge) — STT:
+
+Shows what the user said (raw transcript from STT)
+Direction: response
+Provider: sarvam
+
+
+3. "Show More" Behavior (critical)
+Exactly like Bolna UI:
+
+Default: show first 1-2 lines of log data, truncated with ...
+Click "∨ Show more" → expands full content inline in the same row
+Click "∧ Show more" → collapses back
+For LLM request rows, the expanded view shows:
+
+## System Prompt:
+[full system prompt text here]
+── Variable Values ──
+{caller_context} = "No previous call history found"   [yellow highlight]
+
+## Transcript:
+assistant: Hello from Bolna
+user: येस।
+
+4. Sample Data to Render (based on real Bolna logs)
+Row 1: 2026-06-16 07:05:04.634356 | "Hello from Bolna" | response | synthesizer | elevenlabs
+Row 2: 2026-06-16 07:05:16.626439 | "Hello, are you still on the line?" | request | synthesizer | elevenlabs
+Row 3: 2026-06-16 07:05:16.745530 | "Hello, are you still on the line?" | response | synthesizer | elevenlabs
+Row 4: 2026-06-16 07:05:19.682267 | "येस।" | response | transcriber | sarvam
+Row 5: 2026-06-16 07:05:19.682581 | [LLM request - Show more expands full system prompt + transcript] | request | llm | gpt-4.1-mini
+Row 6: 2026-06-16 07:05:21.069615 | "Ok, kya main [aapka naam] se baat kar rahi hoon?..." | response | llm | gpt-4.1-mini
+Row 7: 2026-06-16 07:05:21.069776 | "Ok, kya main [aapka naam] se baat kar rahi hoon?..." | request | synthesizer | elevenlabs
+Row 8: 2026-06-16 07:05:21.285072 | "Ok, kya main [aapka naam] se baat kar rahi hoon?..." | response | synthesizer | elevenlabs
+Row 9: 2026-06-16 07:05:41.739297 | "ये रहा मैडम" | response | transcriber | sarvam
+For Row 5 (LLM request), the expanded "Show more" content should be:
+## System Prompt:
+
+You are Sonal, a friendly yet professional health advisor agent at OPTM Healthcare...
+[full system prompt]
+
+── Resolved Variables ──
+{caller_context} → "No previous call history found"   ← highlight this in amber
+
+## Transcript:
+assistant: Hello from Bolna
+user: येस।
+
+5. Call Header (match Image 1 style)
+Call #857        ✅ Completed
+EXE-0000857  •  Jun 16, 2026 at 2:40:53 PM
+
+AGENT          DURATION     FROM        TO
+Sonal - OPTM   1m 12s       browser     webcall
+Tabs: Transcript | Tools | Logs (8) [active] | Metadata
+Download logs button top right.
+
+6. Color Scheme
+
+Dark background: #0f0f0f / #1a1a1a
+LLM badge: purple #7c3aed
+Synthesizer badge: green #16a34a
+Transcriber badge: blue #2563eb
+Request direction: outlined gray badge
+Response direction: outlined gray badge
+Variable highlight: amber #fbbf24 background with dark text
+Unresolved variable: red #ef4444 warning badge

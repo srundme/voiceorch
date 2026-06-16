@@ -114,6 +114,7 @@ export const agentFormSchema = z.object({
     required: z.boolean().optional(),
     options: z.string().optional(),
   })).optional(),
+  genderDetectionEnabled: z.boolean().optional(),
 }).superRefine((data, ctx) => {
   const asrErr = getModelError(data.asrProvider, data.asrModel, ASR_MODELS);
   if (asrErr) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["asrModel"], message: asrErr });
@@ -130,7 +131,7 @@ type AgentFormValues = z.infer<typeof agentFormSchema>;
 export type { AgentFormValues };
 
 export function buildUpdateAgentPayload(data: AgentFormValues) {
-  const { webhookSecret, promptVariables, vadSilenceMs, bargeInEnabled, bargeInEnergyThreshold, bargeInMinFrames, timezone, machineDetectionMode, voicemailAction, voicemailMessage, ...rest } = data;
+  const { webhookSecret, promptVariables, vadSilenceMs, bargeInEnabled, bargeInEnergyThreshold, bargeInMinFrames, timezone, machineDetectionMode, voicemailAction, voicemailMessage, genderDetectionEnabled, ...rest } = data;
   const agentConfig: Record<string, unknown> = {};
   if (webhookSecret) agentConfig["webhookSecret"] = webhookSecret;
   if (promptVariables?.length) agentConfig["promptVariables"] = promptVariables;
@@ -142,6 +143,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   if (machineDetectionMode && machineDetectionMode !== "disabled") agentConfig["machineDetectionMode"] = machineDetectionMode;
   if (voicemailAction && voicemailAction !== "hangup") agentConfig["voicemailAction"] = voicemailAction;
   if (voicemailMessage) agentConfig["voicemailMessage"] = voicemailMessage;
+  agentConfig["genderDetectionEnabled"] = !!genderDetectionEnabled;
 
   const serializedTools = (rest.tools ?? []).map((t) => {
     if (t.type !== "webhook") return t;
@@ -292,6 +294,7 @@ export default function AgentEdit() {
       voicemailMessage: "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
       tools: [],
       dispositionSchema: [],
+      genderDetectionEnabled: false,
     },
   });
 
@@ -351,6 +354,7 @@ export default function AgentEdit() {
       voicemailAction:          ((agent as any).agentConfig?.voicemailAction as string | undefined) as AgentFormValues["voicemailAction"] ?? "hangup",
       voicemailMessage:         ((agent as any).agentConfig?.voicemailMessage as string | undefined) ?? "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
       tools: (agent.tools ?? []) as AgentFormValues["tools"],
+      genderDetectionEnabled: (agent as any).agentConfig?.genderDetectionEnabled ?? false,
       dispositionSchema: ((agent as any).dispositionSchema ?? []).map((f: any) => ({
         ...f,
         options: Array.isArray(f.options) ? f.options.join(", ") : (f.options ?? ""),
