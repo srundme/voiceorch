@@ -1077,7 +1077,7 @@ export default function AgentDetail() {
                       <div className={`flex flex-col items-center gap-2 p-4 border rounded-lg w-full text-center ${
                         stage.highlight ? "bg-primary/10 border-primary/30" : "bg-card"
                       }`}>
-                        <span className={`text-xs uppercase tracking-wider font-semibold ${stage.highlight ? "text-primary" : "text-muted-foreground"}`}>
+                        <span className={`text-[10px] uppercase tracking-widest font-bold ${stage.highlight ? "text-primary" : "text-foreground/75"}`}>
                           {stage.label}
                         </span>
                         <span className="font-medium capitalize">{stage.value}</span>

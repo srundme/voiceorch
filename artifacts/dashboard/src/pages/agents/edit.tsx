@@ -673,9 +673,9 @@ export default function AgentEdit() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
 
                   {/* Step 1 — ASR */}
-                  <div className="space-y-4 p-4 border rounded-md bg-muted/20 relative">
-                    <div className="absolute top-0 right-0 -mt-3 -mr-3 bg-card border border-border rounded-full px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Step 1</div>
-                    <h4 className="font-medium border-b pb-2">Speech-to-Text</h4>
+                  <div className="space-y-4 p-4 border border-border/60 rounded-lg bg-card/50 relative">
+                    <div className="absolute top-0 right-0 -mt-3 -mr-3 bg-primary/10 border border-primary/40 rounded-full px-2 py-0.5 text-[10px] font-bold text-primary uppercase tracking-wider">Step 1</div>
+                    <h4 className="text-[10px] font-bold uppercase tracking-widest text-foreground/80 border-b border-border/50 pb-2">Speech-to-Text</h4>
                     <FormField control={form.control} name="asrProvider" render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-xs">Provider</FormLabel>
@@ -704,9 +704,9 @@ export default function AgentEdit() {
                   </div>
 
                   {/* Step 2 — LLM */}
-                  <div className="space-y-4 p-4 border rounded-md bg-muted/20 relative">
-                    <div className="absolute top-0 right-0 -mt-3 -mr-3 bg-card border border-border rounded-full px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Step 2</div>
-                    <h4 className="font-medium border-b pb-2">Language Model</h4>
+                  <div className="space-y-4 p-4 border border-border/60 rounded-lg bg-card/50 relative">
+                    <div className="absolute top-0 right-0 -mt-3 -mr-3 bg-primary/10 border border-primary/40 rounded-full px-2 py-0.5 text-[10px] font-bold text-primary uppercase tracking-wider">Step 2</div>
+                    <h4 className="text-[10px] font-bold uppercase tracking-widest text-foreground/80 border-b border-border/50 pb-2">Language Model</h4>
                     <FormField control={form.control} name="llmProvider" render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-xs">Provider</FormLabel>
@@ -735,9 +735,9 @@ export default function AgentEdit() {
                   </div>
 
                   {/* Step 3 — TTS */}
-                  <div className="space-y-4 p-4 border rounded-md bg-muted/20 relative">
-                    <div className="absolute top-0 right-0 -mt-3 -mr-3 bg-card border border-border rounded-full px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Step 3</div>
-                    <h4 className="font-medium border-b pb-2">Text-to-Speech</h4>
+                  <div className="space-y-4 p-4 border border-border/60 rounded-lg bg-card/50 relative">
+                    <div className="absolute top-0 right-0 -mt-3 -mr-3 bg-primary/10 border border-primary/40 rounded-full px-2 py-0.5 text-[10px] font-bold text-primary uppercase tracking-wider">Step 3</div>
+                    <h4 className="text-[10px] font-bold uppercase tracking-widest text-foreground/80 border-b border-border/50 pb-2">Synthesizer (TTS)</h4>
                     <FormField control={form.control} name="ttsProvider" render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-xs">Provider</FormLabel>
@@ -784,9 +784,9 @@ export default function AgentEdit() {
                   </div>
 
                   {/* Step 4 — Telephony */}
-                  <div className="space-y-4 p-4 border rounded-md bg-muted/20 relative">
-                    <div className="absolute top-0 right-0 -mt-3 -mr-3 bg-card border border-border rounded-full px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Step 4</div>
-                    <h4 className="font-medium border-b pb-2">Telephony</h4>
+                  <div className="space-y-4 p-4 border border-border/60 rounded-lg bg-card/50 relative">
+                    <div className="absolute top-0 right-0 -mt-3 -mr-3 bg-primary/10 border border-primary/40 rounded-full px-2 py-0.5 text-[10px] font-bold text-primary uppercase tracking-wider">Step 4</div>
+                    <h4 className="text-[10px] font-bold uppercase tracking-widest text-foreground/80 border-b border-border/50 pb-2">Telephony</h4>
                     <FormField control={form.control} name="telephonyProvider" render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-xs">Provider</FormLabel>
