@@ -1,11 +1,11 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import { useLocation, useParams } from "wouter";
 import {
   Bot, Plus, Search, Phone, Mic, Brain, Zap, Webhook, PhoneForwarded,
   Save, MoreHorizontal, Power, Trash2, Settings, FileText, Wrench,
   GitBranch, VoicemailIcon, SlidersHorizontal, TestTube2, ChevronRight,
   Volume2, Check, X, Pencil, ChevronDown, List, Globe, BarChart3,
-  User2, Sparkles, BookOpen, ToggleLeft, ToggleRight, Tag,
+  User2, Sparkles, BookOpen, ToggleLeft, ToggleRight, Tag, Loader2, Square,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -704,6 +704,73 @@ function VoiceTab({ form }: { form: any }) {
   const showCustomV       = ttsVoiceRawV === null || (ttsVoiceOptsV.length > 0 && !inCuratedV);
   const dropdownValV      = inCuratedV ? (ttsVoice ?? "") : "__custom__";
 
+  // ── Voice preview ─────────────────────────────────────────────────────────
+  const { toast } = useToast();
+  const [previewState, setPreviewState] = useState<"idle" | "loading" | "playing">("idle");
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const previewUrlRef = useRef<string | null>(null);
+
+  // Tear down any in-flight preview audio + object URL.
+  const stopPreview = React.useCallback(() => {
+    const audio = previewAudioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.src = "";
+      previewAudioRef.current = null;
+    }
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
+  }, []);
+
+  // Stop playback when leaving the tab / unmounting.
+  useEffect(() => () => stopPreview(), [stopPreview]);
+
+  const handlePreviewVoice = async () => {
+    // Clicking while playing acts as a stop button.
+    if (previewState === "playing") {
+      stopPreview();
+      setPreviewState("idle");
+      return;
+    }
+    // Always stop anything already playing/loading before starting a new one.
+    stopPreview();
+    setPreviewState("loading");
+    try {
+      const blob = await customFetch<Blob>(`${DASH_API}/voices/preview`, {
+        method: "POST",
+        body: JSON.stringify({
+          provider: ttsProvider,
+          voice: ttsVoice,
+          model: ttsModel || undefined,
+          language: agentLanguage,
+        }),
+        responseType: "blob",
+        timeoutMs: 30_000,
+      });
+      const url = URL.createObjectURL(blob);
+      previewUrlRef.current = url;
+      const audio = new Audio(url);
+      previewAudioRef.current = audio;
+      audio.onended = () => {
+        stopPreview();
+        setPreviewState("idle");
+      };
+      audio.onerror = () => {
+        stopPreview();
+        setPreviewState("idle");
+        toast({ title: "Playback failed", description: "Could not play the voice sample.", variant: "destructive" });
+      };
+      await audio.play();
+      setPreviewState("playing");
+    } catch (err) {
+      stopPreview();
+      setPreviewState("idle");
+      toast({ title: "Preview failed", description: formatApiError(err), variant: "destructive" });
+    }
+  };
+
   return (
     <div className="relative p-6 overflow-y-auto h-full space-y-6">
 
@@ -796,6 +863,31 @@ function VoiceTab({ form }: { form: any }) {
             </FormItem>
           )} />
         )}
+
+        {/* Preview the currently selected voice */}
+        <div className="flex items-center gap-3 pt-1">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handlePreviewVoice}
+            disabled={!ttsVoice || previewState === "loading"}
+            className="h-9 text-sm gap-2"
+          >
+            {previewState === "loading" ? (
+              <><Loader2 className="h-4 w-4 animate-spin" /> Generating…</>
+            ) : previewState === "playing" ? (
+              <><Square className="h-4 w-4" /> Stop</>
+            ) : (
+              <><Volume2 className="h-4 w-4" /> Preview Voice</>
+            )}
+          </Button>
+          <span className="text-[10px] text-muted-foreground">
+            {ttsVoice
+              ? "Plays a short sample using the selected voice"
+              : "Select a voice to preview"}
+          </span>
+        </div>
       </div>
 
       {/* ── Behavioral settings ── */}

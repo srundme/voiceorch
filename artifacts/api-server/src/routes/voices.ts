@@ -1,8 +1,11 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { platformListedVoicesTable, platformSettingsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { platformListedVoicesTable, platformSettingsTable, providersTable } from "@workspace/db";
+import { eq, and } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
+import { decryptKey } from "../lib/crypto.js";
+import { createTTSAdapter } from "../orchestration/adapters/tts/index.js";
+import { pcmToWav } from "../orchestration/audio.js";
 
 const router: IRouter = Router();
 
@@ -48,51 +51,140 @@ const PREVIEW_VALID_MODELS = new Set([
   "sonic-english", "sonic-multilingual",
 ]);
 
-router.post("/voices/preview", async (req, res): Promise<void> => {
-  const { voiceId, text, modelId } = req.body as { voiceId?: string; text?: string; modelId?: string };
+const DEFAULT_PREVIEW_TEXT =
+  "Hello! I am your AI voice assistant. I am here to help you today. How can I assist you?";
 
-  if (!voiceId) {
-    res.status(400).json({ error: "voiceId required" });
-    return;
-  }
-
+/**
+ * Synthesize a short sample of a Cartesia whitelisted voice using the platform
+ * managed key. Returns a 22 kHz WAV (unchanged from the original behaviour).
+ */
+async function previewCartesia(
+  res: import("express").Response,
+  voiceId: string,
+  modelId: string | undefined,
+  previewText: string,
+): Promise<void> {
   const cartesiaKey = await getCartesiaKey();
   if (!cartesiaKey) {
     res.status(503).json({ error: "Voice preview unavailable — Cartesia key not configured" });
     return;
   }
 
-  const previewText = text?.slice(0, 200) ?? "Hello! I am your AI voice assistant. I am here to help you today. How can I assist you?";
   const model = (modelId && PREVIEW_VALID_MODELS.has(modelId)) ? modelId : "sonic-3.5";
 
-  try {
-    const response = await fetch(`${CARTESIA_BASE_URL}/tts/bytes`, {
-      method: "POST",
-      headers: {
-        "X-API-Key": cartesiaKey,
-        "Cartesia-Version": CARTESIA_VERSION,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model_id: model,
-        transcript: previewText,
-        voice: { mode: "id", id: voiceId },
-        output_format: { container: "wav", encoding: "pcm_f32le", sample_rate: 22050 },
-      }),
-    });
+  const response = await fetch(`${CARTESIA_BASE_URL}/tts/bytes`, {
+    method: "POST",
+    headers: {
+      "X-API-Key": cartesiaKey,
+      "Cartesia-Version": CARTESIA_VERSION,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model_id: model,
+      transcript: previewText,
+      voice: { mode: "id", id: voiceId },
+      output_format: { container: "wav", encoding: "pcm_f32le", sample_rate: 22050 },
+    }),
+  });
 
-    if (!response.ok) {
-      const err = await response.text();
-      res.status(502).json({ error: `Cartesia error: ${err}` });
-      return;
+  if (!response.ok) {
+    const err = await response.text();
+    res.status(502).json({ error: `Cartesia error: ${err}` });
+    return;
+  }
+
+  const audioBuffer = await response.arrayBuffer();
+  res.set("Content-Type", "audio/wav");
+  res.send(Buffer.from(audioBuffer));
+}
+
+// ── POST /voices/preview ─────────────────────────────────────────────────────
+// Returns raw WAV audio for the requested voice.
+//
+//   - Cartesia (default): uses the platform managed key — public, no auth. This
+//     keeps the original whitelisted-voice preview behaviour unchanged.
+//   - Any other provider: requires an authenticated session and synthesizes
+//     using the requesting user's own stored provider API key.
+//
+// Body: { provider?, voice?/voiceId, model?/modelId, language?, text? }
+
+router.post("/voices/preview", async (req, res): Promise<void> => {
+  const body = req.body as {
+    provider?: string;
+    voice?: string;
+    voiceId?: string;
+    model?: string;
+    modelId?: string;
+    language?: string;
+    text?: string;
+  };
+
+  const provider = (body.provider ?? "cartesia").toLowerCase();
+  const voiceId = body.voice ?? body.voiceId;
+  const modelId = body.model ?? body.modelId;
+  const previewText = body.text?.slice(0, 200) ?? DEFAULT_PREVIEW_TEXT;
+
+  if (!voiceId) {
+    res.status(400).json({ error: "Select a voice before previewing." });
+    return;
+  }
+
+  // ── Cartesia: managed-key path (public, unchanged) ──────────────────────────
+  if (provider === "cartesia") {
+    try {
+      await previewCartesia(res, voiceId, modelId, previewText);
+    } catch (err) {
+      logger.error({ err }, "Voice preview failed (cartesia)");
+      if (!res.headersSent) res.status(500).json({ error: "Voice preview failed" });
     }
+    return;
+  }
 
-    const audioBuffer = await response.arrayBuffer();
+  // ── Other providers: synthesize with the user's own stored key ──────────────
+  const userId = (req as unknown as { clerkUserId?: string }).clerkUserId;
+  if (!userId) {
+    res.status(401).json({ error: "Sign in to preview this provider's voices." });
+    return;
+  }
+
+  // Resolve the user's active API key for this provider (matches webcall lookup).
+  const [providerRow] = await db
+    .select()
+    .from(providersTable)
+    .where(
+      and(
+        eq(providersTable.userId, userId),
+        eq(providersTable.providerName, provider),
+        eq(providersTable.isActive, true),
+      ),
+    );
+
+  if (!providerRow) {
+    res.status(400).json({
+      error: `No active ${provider} API key found. Add one on the Providers page to preview this voice.`,
+    });
+    return;
+  }
+
+  const apiKey = decryptKey(providerRow.apiKey);
+  const language = body.language ?? null;
+  const extraConfig = provider === "sarvam"
+    ? JSON.stringify({ language: language ?? "en-IN" })
+    : (providerRow.extraConfig ?? null);
+
+  try {
+    const tts = createTTSAdapter(provider, apiKey, voiceId, modelId ?? null, extraConfig, language);
+    const { audio } = await tts.synthesize(previewText);
+    // All TTS adapters return raw 16 kHz mono s16le PCM — wrap in a WAV header.
+    const wav = pcmToWav(audio, 16000, 1, 16);
     res.set("Content-Type", "audio/wav");
-    res.send(Buffer.from(audioBuffer));
+    res.send(wav);
   } catch (err) {
-    logger.error({ err }, "Voice preview failed");
-    res.status(500).json({ error: "Voice preview failed" });
+    logger.error({ err, provider }, "Voice preview failed");
+    const message = err instanceof Error && err.message.startsWith("Unknown TTS provider")
+      ? `Preview is not supported for ${provider}.`
+      : `Could not generate a preview. Check that your ${provider} API key and voice are valid.`;
+    res.status(502).json({ error: message });
   }
 });
 
