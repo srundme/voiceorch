@@ -3,7 +3,7 @@ import { useLocation, useParams } from "wouter";
 import {
   Bot, Plus, Search, Phone, Mic, Brain, Zap, Webhook, PhoneForwarded,
   Save, MoreHorizontal, Power, Trash2, Settings, FileText, Wrench,
-  GitBranch, VoicemailIcon, SlidersHorizontal, TestTube2, ChevronRight,
+  VoicemailIcon, SlidersHorizontal, TestTube2, ChevronRight,
   Volume2, Check, X, Pencil, ChevronDown, List, Globe, BarChart3,
   User2, Sparkles, BookOpen, ToggleLeft, ToggleRight, Tag, Loader2, Square,
 } from "lucide-react";
@@ -61,7 +61,7 @@ const DASH_API   = `${_DASH_BASE}/api`;
 
 /* ── Types ──────────────────────────────────────────────────────────────────── */
 
-type TabId = "overview" | "prompt" | "voice" | "tools" | "analysis" | "pipeline" | "voicemail" | "advanced" | "logs";
+type TabId = "overview" | "prompt" | "voice" | "tools" | "analysis" | "voicemail" | "advanced" | "logs";
 
 interface TabDef { id: TabId; label: string; icon: React.ReactNode }
 
@@ -71,7 +71,6 @@ const TABS: TabDef[] = [
   { id: "voice",      label: "Voice",      icon: <Mic className="h-3.5 w-3.5" /> },
   { id: "tools",      label: "Tools",      icon: <Wrench className="h-3.5 w-3.5" /> },
   { id: "analysis",   label: "Analysis",   icon: <BarChart3 className="h-3.5 w-3.5" /> },
-  { id: "pipeline",   label: "Pipeline",   icon: <GitBranch className="h-3.5 w-3.5" /> },
   { id: "voicemail",  label: "Voicemail",  icon: <VoicemailIcon className="h-3.5 w-3.5" /> },
   { id: "advanced",   label: "Advanced",   icon: <SlidersHorizontal className="h-3.5 w-3.5" /> },
   { id: "logs",       label: "Logs",       icon: <List className="h-3.5 w-3.5" /> },
@@ -632,6 +631,34 @@ function PromptTab({ form }: { form: any }) {
           <FormMessage />
         </FormItem>
       )} />
+      <div className="space-y-4">
+        <SectionDivider label="Call Behaviour" />
+        <div className="grid grid-cols-2 gap-3">
+          <FormField control={form.control} name="greetingMessage" render={({ field }) => (
+            <FormItem>
+              <FormLabel className="text-xs">Greeting Message</FormLabel>
+              <FormControl><Input placeholder="Hello! How can I help you today?" className="h-8 text-xs" {...field} /></FormControl>
+            </FormItem>
+          )} />
+          <FormField control={form.control} name="timezone" render={({ field }) => (
+            <FormItem>
+              <FormLabel className="text-xs">Agent Timezone</FormLabel>
+              <SmallSelect value={field.value ?? ""} onChange={field.onChange}
+                options={[{ value: "", label: "Not set" }, ...AGENT_TIMEZONES]}
+                placeholder="Not set" />
+              <FormDescription className="text-[10px]">Injected as current-time context</FormDescription>
+            </FormItem>
+          )} />
+        </div>
+        <FormField control={form.control} name="endCallPhrases" render={({ field }) => (
+          <FormItem>
+            <FormLabel className="text-xs">End-Call Phrases (comma-separated)</FormLabel>
+            <FormControl><Input placeholder="goodbye, bye, see you" className="h-8 text-xs" {...field} /></FormControl>
+            <FormDescription className="text-[10px]">Agent hangs up when caller says any of these</FormDescription>
+          </FormItem>
+        )} />
+      </div>
+
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <SectionDivider label="Prompt Variables" />
@@ -1297,81 +1324,6 @@ function ToolsTab({ form }: { form: any }) {
   );
 }
 
-/* ── Tab: Pipeline ──────────────────────────────────────────────────────────── */
-
-function PipelineTab({ form }: { form: any }) {
-  return (
-    <div className="relative p-6 overflow-y-auto h-full space-y-5">
-      <div className="grid grid-cols-2 gap-5">
-        <div className="space-y-4">
-          <SectionDivider label="Conversation" />
-          <FormField control={form.control} name="greetingMessage" render={({ field }) => (
-            <FormItem>
-              <FormLabel className="text-xs">Greeting Message</FormLabel>
-              <FormControl><Input placeholder="Hello! How can I help you today?" className="h-8 text-xs" {...field} /></FormControl>
-            </FormItem>
-          )} />
-          <FormField control={form.control} name="endCallPhrases" render={({ field }) => (
-            <FormItem>
-              <FormLabel className="text-xs">End-Call Phrases (comma-separated)</FormLabel>
-              <FormControl><Input placeholder="goodbye, bye, see you" className="h-8 text-xs" {...field} /></FormControl>
-              <FormDescription className="text-[10px]">Agent hangs up when caller says any of these</FormDescription>
-            </FormItem>
-          )} />
-          <FormField control={form.control} name="silenceTimeoutSeconds" render={({ field }) => (
-            <FormItem>
-              <div className="flex justify-between"><FormLabel className="text-xs">Silence Timeout</FormLabel>
-                <span className="text-xs font-mono">{field.value ?? 30}s</span></div>
-              <FormControl>
-                <input type="range" min={5} max={300} step={5} value={field.value ?? 30}
-                  onChange={e => field.onChange(parseInt(e.target.value))}
-                  className="w-full h-1.5 accent-primary cursor-pointer" />
-              </FormControl>
-              <FormDescription className="text-[10px]">Hang up if caller is silent for this duration</FormDescription>
-            </FormItem>
-          )} />
-          <FormField control={form.control} name="maxDuration" render={({ field }) => (
-            <FormItem>
-              <div className="flex justify-between"><FormLabel className="text-xs">Max Call Duration</FormLabel>
-                <span className="text-xs font-mono">{Math.floor((field.value ?? 300) / 60)}m {(field.value ?? 300) % 60}s</span></div>
-              <FormControl>
-                <input type="range" min={10} max={3600} step={30} value={field.value ?? 300}
-                  onChange={e => field.onChange(parseInt(e.target.value))}
-                  className="w-full h-1.5 accent-primary cursor-pointer" />
-              </FormControl>
-            </FormItem>
-          )} />
-          <FormField control={form.control} name="timezone" render={({ field }) => (
-            <FormItem>
-              <FormLabel className="text-xs">Agent Timezone</FormLabel>
-              <SmallSelect value={field.value ?? ""} onChange={field.onChange}
-                options={[{ value: "", label: "Not set" }, ...AGENT_TIMEZONES]}
-                placeholder="Not set" />
-              <FormDescription className="text-[10px]">Injected into the system prompt as current time context</FormDescription>
-            </FormItem>
-          )} />
-        </div>
-        <div className="space-y-4">
-          <SectionDivider label="Webhooks" />
-          <FormField control={form.control} name="webhookUrl" render={({ field }) => (
-            <FormItem>
-              <FormLabel className="text-xs">Call Event Webhook URL</FormLabel>
-              <FormControl><Input placeholder="https://your-api.com/call-events" className="h-8 text-xs" {...field} /></FormControl>
-              <FormDescription className="text-[10px]">Receives call start, end, transcript events</FormDescription>
-            </FormItem>
-          )} />
-          <FormField control={form.control} name="webhookSecret" render={({ field }) => (
-            <FormItem>
-              <FormLabel className="text-xs">Webhook Secret</FormLabel>
-              <FormControl><Input type="password" placeholder="optional-shared-secret" className="h-8 text-xs" {...field} /></FormControl>
-            </FormItem>
-          )} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ── Tab: Voicemail ─────────────────────────────────────────────────────────── */
 
 function VoicemailTab({ form }: { form: any }) {
@@ -1523,6 +1475,32 @@ function AdvancedTab({ form }: { form: any }) {
 
         {/* ── Right column ── */}
         <div className="space-y-4">
+          {/* Call Limits */}
+          <SectionDivider label="Call Limits" />
+          <FormField control={form.control} name="silenceTimeoutSeconds" render={({ field }) => (
+            <FormItem>
+              <div className="flex justify-between"><FormLabel className="text-xs">Silence Timeout</FormLabel>
+                <span className="text-xs font-mono">{field.value ?? 30}s</span></div>
+              <FormControl>
+                <input type="range" min={5} max={300} step={5} value={field.value ?? 30}
+                  onChange={e => field.onChange(parseInt(e.target.value))}
+                  className="w-full h-1.5 accent-primary cursor-pointer" />
+              </FormControl>
+              <FormDescription className="text-[10px]">Hang up if caller is silent for this duration</FormDescription>
+            </FormItem>
+          )} />
+          <FormField control={form.control} name="maxDuration" render={({ field }) => (
+            <FormItem>
+              <div className="flex justify-between"><FormLabel className="text-xs">Max Call Duration</FormLabel>
+                <span className="text-xs font-mono">{Math.floor((field.value ?? 300) / 60)}m {(field.value ?? 300) % 60}s</span></div>
+              <FormControl>
+                <input type="range" min={10} max={3600} step={30} value={field.value ?? 300}
+                  onChange={e => field.onChange(parseInt(e.target.value))}
+                  className="w-full h-1.5 accent-primary cursor-pointer" />
+              </FormControl>
+            </FormItem>
+          )} />
+
           {/* Compliance */}
           <SectionDivider label="Compliance" />
           <p className="text-[10px] text-muted-foreground -mt-2">
@@ -2295,7 +2273,6 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
             {activeTab === "voice"     && <VoiceTab form={form} />}
             {activeTab === "tools"     && <ToolsTab form={form} />}
             {activeTab === "analysis"  && <AnalysisTab form={form} agentId={agentId} />}
-            {activeTab === "pipeline"  && <PipelineTab form={form} />}
             {activeTab === "voicemail" && <VoicemailTab form={form} />}
             {activeTab === "advanced"  && <AdvancedTab form={form} />}
           </form>
