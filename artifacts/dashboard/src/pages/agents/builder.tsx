@@ -14,7 +14,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import {
   useListAgents, useGetAgent, useUpdateAgent, useToggleAgent, useDeleteAgent,
-  useInitiateOutboundCall, getListAgentsQueryKey, getGetAgentQueryKey,
+  useCreateAgent, useInitiateOutboundCall, getListAgentsQueryKey, getGetAgentQueryKey,
   useListCalls, getListCallsQueryKey, useListEventTypes, customFetch,
   useListKnowledgeSources,
 } from "@workspace/api-client-react";
@@ -48,7 +48,6 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError, mapApiErrors, isDestinationUnverifiedError } from "@/lib/format-api-error";
-import { CreateAgentWizard } from "@/components/create-agent-wizard";
 import {
   ASR_PROVIDERS, LLM_PROVIDERS, TTS_PROVIDERS, TELEPHONY_PROVIDERS,
   LANGUAGES, ASR_MODELS, LLM_MODELS, TTS_MODELS, TTS_VOICES, AGENT_TIMEZONES,
@@ -1502,8 +1501,16 @@ function AgentListPanel({ selectedId, onSelect, rateMap }: {
   rateMap: Map<string, number>;
 }) {
   const [search, setSearch] = useState("");
-  const [wizardOpen, setWizardOpen] = useState(false);
   const { data: agents, isLoading } = useListAgents({ query: { queryKey: getListAgentsQueryKey() } });
+  const createAgent = useCreateAgent();
+  const { toast } = useToast();
+
+  const handleCreate = () => {
+    createAgent.mutate(
+      { data: { name: "New Agent", asrProvider: "azure", asrModel: "en-US-standard", llmProvider: "openai", llmModel: "gpt-4o-mini", ttsProvider: "elevenlabs", ttsVoice: "", ttsModel: "", telephonyProvider: "twilio", systemPrompt: "You are a helpful AI voice assistant.", greetingMessage: "Hello", language: "en-US" } as any },
+      { onSuccess: (agent) => onSelect(agent.id), onError: (err: unknown) => toast({ title: "Error", description: formatApiError(err), variant: "destructive" }) }
+    );
+  };
 
   const filtered = (agents ?? []).filter(a =>
     !search || a.name.toLowerCase().includes(search.toLowerCase())
@@ -1514,7 +1521,7 @@ function AgentListPanel({ selectedId, onSelect, rateMap }: {
       <div className="p-3 border-b border-border/60 space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Agents</span>
-          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setWizardOpen(true)}>
+          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={handleCreate} disabled={createAgent.isPending}>
             <Plus className="h-3.5 w-3.5" />
           </Button>
         </div>
@@ -1531,7 +1538,7 @@ function AgentListPanel({ selectedId, onSelect, rateMap }: {
         {!isLoading && filtered.length === 0 && (
           <div className="px-3 py-6 text-center">
             <p className="text-xs text-muted-foreground">No agents yet</p>
-            <Button size="sm" variant="outline" className="mt-2 h-7 text-xs" onClick={() => setWizardOpen(true)}>
+            <Button size="sm" variant="outline" className="mt-2 h-7 text-xs" onClick={handleCreate} disabled={createAgent.isPending}>
               <Plus className="h-3 w-3 mr-1" /> Create
             </Button>
           </div>
@@ -1554,7 +1561,6 @@ function AgentListPanel({ selectedId, onSelect, rateMap }: {
           );
         })}
       </div>
-      <CreateAgentWizard open={wizardOpen} onClose={() => setWizardOpen(false)} onCreated={(id) => { setWizardOpen(false); onSelect(id); }} />
     </div>
   );
 }
@@ -2208,21 +2214,28 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
 export default function AgentBuilder() {
   const params = useParams<{ id?: string }>();
   const [, navigate] = useLocation();
-  const [wizardOpen, setWizardOpen] = useState(false);
+  const createAgent = useCreateAgent();
+  const { toast } = useToast();
   const rateMap = useMinuteRatesMap();
 
   const selectedId = params.id ? parseInt(params.id, 10) : null;
 
   const handleSelect = (id: number) => navigate(`/app/agents/${id}`);
 
+  const handleCreate = () => {
+    createAgent.mutate(
+      { data: { name: "New Agent", asrProvider: "azure", asrModel: "en-US-standard", llmProvider: "openai", llmModel: "gpt-4o-mini", ttsProvider: "elevenlabs", ttsVoice: "", ttsModel: "", telephonyProvider: "twilio", systemPrompt: "You are a helpful AI voice assistant.", greetingMessage: "Hello", language: "en-US" } as any },
+      { onSuccess: (agent) => handleSelect(agent.id), onError: (err: unknown) => toast({ title: "Error", description: formatApiError(err), variant: "destructive" }) }
+    );
+  };
+
   return (
     <div className="flex h-full overflow-hidden">
       <AgentListPanel selectedId={selectedId} onSelect={handleSelect} rateMap={rateMap} />
       {selectedId
         ? <AgentEditorPanel agentId={selectedId} />
-        : <EmptyState onCreate={() => setWizardOpen(true)} />
+        : <EmptyState onCreate={handleCreate} />
       }
-      <CreateAgentWizard open={wizardOpen} onClose={() => setWizardOpen(false)} onCreated={(id) => { setWizardOpen(false); handleSelect(id); }} />
     </div>
   );
 }

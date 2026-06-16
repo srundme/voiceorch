@@ -41,7 +41,6 @@ const NAV_SETTINGS = [
 
 const ROUTE_TITLES: [string, string][] = [
   ["/app/command-center",  "Command Center"],
-  ["/app/agents/new",      "New Agent"],
   ["/app/agents",          "Agents"],
   ["/app/knowledge-bases", "Agent Knowledge"],
   ["/app/campaigns",       "Campaigns"],

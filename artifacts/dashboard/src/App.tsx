@@ -15,7 +15,6 @@ import { VoiceAssistant } from "@/components/VoiceAssistant";
 import AgentBuilder from "@/pages/agents/builder";
 import AssistantsPage from "@/pages/assistants";
 import Dashboard from "@/pages/dashboard";
-import AgentNew from "@/pages/agents/new";
 import AgentDetail from "@/pages/agents/[id]";
 import AgentEdit from "@/pages/agents/edit";
 import CallsList from "@/pages/calls/index";
@@ -276,7 +275,6 @@ function AppRoutes() {
         <Route path="/app/command-center" component={CommandCenterPage} />
         <Route path="/app/analytics" component={AnalyticsPage} />
         <Route path="/app/agents" component={AgentBuilder} />
-        <Route path="/app/agents/new" component={AgentNew} />
         <Route path="/app/agents/:id/edit" component={AgentEdit} />
         <Route path="/app/agents/:id" component={AgentBuilder} />
         <Route path="/app/calls" component={CallsList} />

@@ -3,6 +3,7 @@ import { Link, useLocation } from "wouter";
 import { Search, Plus, Filter, MoreHorizontal, Settings2, PlayCircle, BarChart2, Phone, Users, Pencil, TrendingUp, PhoneCall, IndianRupee } from "lucide-react";
 import { 
   useListAgents, 
+  useCreateAgent,
   useToggleAgent,
   useDeleteAgent,
   useInitiateOutboundCall,
@@ -48,9 +49,39 @@ export default function AgentsList() {
   });
   const rateMap = useMinuteRatesMap();
   
+  const createAgent = useCreateAgent();
   const toggleAgent = useToggleAgent();
   const deleteAgent = useDeleteAgent();
   const initiateOutbound = useInitiateOutboundCall();
+
+  const handleCreateAgent = () => {
+    createAgent.mutate(
+      {
+        data: {
+          name: "New Agent",
+          asrProvider: "azure",
+          asrModel: "en-US-standard",
+          llmProvider: "openai",
+          llmModel: "gpt-4o-mini",
+          ttsProvider: "elevenlabs",
+          ttsVoice: "",
+          ttsModel: "",
+          telephonyProvider: "twilio",
+          systemPrompt: "You are a helpful AI voice assistant.",
+          greetingMessage: "Hello",
+          language: "en-US",
+        } as any,
+      },
+      {
+        onSuccess: (agent) => {
+          navigate(`/app/agents/${agent.id}`);
+        },
+        onError: (err: unknown) => {
+          toast({ title: "Error", description: formatApiError(err), variant: "destructive" });
+        },
+      }
+    );
+  };
 
   const handleOutboundSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -139,8 +170,8 @@ export default function AgentsList() {
             Manage your AI voice agents and their configurations.
           </p>
         </div>
-        <Button data-testid="button-create-agent" onClick={() => navigate("/app/agents/new")}>
-          <Plus className="mr-2 h-4 w-4" /> Create Agent
+        <Button data-testid="button-create-agent" onClick={handleCreateAgent} disabled={createAgent.isPending}>
+          <Plus className="mr-2 h-4 w-4" /> {createAgent.isPending ? "Creating..." : "Create Agent"}
         </Button>
       </div>
 
@@ -303,8 +334,8 @@ export default function AgentsList() {
                 : "You haven't created any voice agents yet. Get started by creating your first one."}
             </p>
             {!search && (
-              <Button onClick={() => navigate("/app/agents/new")}>
-                <Plus className="mr-2 h-4 w-4" /> Create Your First Agent
+              <Button onClick={handleCreateAgent} disabled={createAgent.isPending}>
+                <Plus className="mr-2 h-4 w-4" /> {createAgent.isPending ? "Creating..." : "Create Your First Agent"}
               </Button>
             )}
           </div>
