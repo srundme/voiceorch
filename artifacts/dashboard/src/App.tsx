@@ -12,6 +12,7 @@ import { ThemeSync } from "@/components/theme-sync";
 import { Layout } from "@/components/layout";
 import { SnapServeLoader } from "@/components/logo";
 import { VoiceAssistant } from "@/components/VoiceAssistant";
+import AgentBuilder from "@/pages/agents/builder";
 import AssistantsPage from "@/pages/assistants";
 import Dashboard from "@/pages/dashboard";
 import AgentNew from "@/pages/agents/new";
@@ -274,10 +275,10 @@ function AppRoutes() {
         <Route path="/app" component={() => <Redirect to="/app/command-center" />} />
         <Route path="/app/command-center" component={CommandCenterPage} />
         <Route path="/app/analytics" component={AnalyticsPage} />
-        <Route path="/app/agents" component={AssistantsPage} />
+        <Route path="/app/agents" component={AgentBuilder} />
         <Route path="/app/agents/new" component={AgentNew} />
         <Route path="/app/agents/:id/edit" component={AgentEdit} />
-        <Route path="/app/agents/:id" component={AgentDetail} />
+        <Route path="/app/agents/:id" component={AgentBuilder} />
         <Route path="/app/calls" component={CallsList} />
         <Route path="/app/calls/:id" component={CallDetail} />
         <Route path="/app/knowledge-bases" component={KnowledgeBasePage} />
