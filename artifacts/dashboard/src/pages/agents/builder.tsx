@@ -1563,7 +1563,7 @@ function AdvancedTab({ form }: { form: any }) {
                       placeholder=""
                       className="w-16 h-7 text-xs text-center"
                       value={field.value == null ? "" : String(field.value)}
-                      onChange={(e) => field.onChange(e.target.value === "" ? null : parseInt(e.target.value, 10))}
+                      onChange={(e) => field.onChange(e.target.value === "" ? undefined : parseInt(e.target.value, 10))}
                     />
                   </FormControl>
                   <span className="text-[10px] text-muted-foreground">turns</span>
