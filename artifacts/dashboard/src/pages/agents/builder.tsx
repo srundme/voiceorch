@@ -1451,16 +1451,6 @@ function AdvancedTab({ form }: { form: any }) {
               </FormItem>
             )} />
           ))}
-
-          <div className="pt-2 space-y-4">
-            <SectionDivider label="Description" />
-            <FormField control={form.control} name="description" render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-xs">Agent Description</FormLabel>
-                <FormControl><Textarea className="min-h-[80px] text-sm resize-none" placeholder="What does this agent do?" {...field} /></FormControl>
-              </FormItem>
-            )} />
-          </div>
         </div>
       </div>
 
