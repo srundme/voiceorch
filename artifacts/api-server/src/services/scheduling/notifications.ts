@@ -14,18 +14,8 @@ interface BookingEmailData {
   bookingId: number;
   notes?: string | null;
   meetLink?: string | null;
-  locationType?: string | null;
-  locationAddress?: string | null;
   cancelLink?: string | null;
   rescheduleLink?: string | null;
-}
-
-/** Build the location line shown in confirmation emails: address for in-person, else the Meet link. */
-function locationLine(data: { locationType?: string | null; locationAddress?: string | null; meetLink?: string | null }): string {
-  if (data.locationType === "in_person") {
-    return data.locationAddress ? `\nLocation: ${data.locationAddress}` : "";
-  }
-  return data.meetLink ? `\nGoogle Meet: ${data.meetLink}` : "";
 }
 
 function getTransporter() {
@@ -66,28 +56,20 @@ function buildEmailContent(subject: string, body: string): { subject: string; te
   };
 }
 
-const _EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-/**
- * Collect, dedupe and normalize the full host recipient list (primary + additional).
- * Splits each entry on commas/semicolons/whitespace so that legacy combined-string
- * rows (e.g. "a@example.com, b@example.com") work correctly.
- * Invalid addresses are silently dropped.
- */
+/** Collect, dedupe and normalize the full host recipient list (primary + additional). */
 function hostRecipients(data: { hostEmail?: string | null; additionalHosts?: string[] | null }): string[] {
-  const rawEntries: string[] = [];
-  if (data.hostEmail) rawEntries.push(data.hostEmail);
-  if (data.additionalHosts) rawEntries.push(...data.additionalHosts);
+  const all: string[] = [];
+  if (data.hostEmail) all.push(data.hostEmail);
+  if (data.additionalHosts) all.push(...data.additionalHosts);
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const entry of rawEntries) {
-    for (const e of entry.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean)) {
-      if (!_EMAIL_RE.test(e)) continue;
-      const key = e.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push(e);
-    }
+  for (const raw of all) {
+    const e = raw.trim();
+    if (!e) continue;
+    const key = e.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(e);
   }
   return out;
 }
@@ -124,7 +106,7 @@ export async function sendBookingCreatedEmail(data: BookingEmailData): Promise<v
 
   const from = formatDateTime(data.slotStart, data.timezone);
   const to = formatDateTime(data.slotEnd, data.timezone);
-  const meetLine = locationLine(data);
+  const meetLine = data.meetLink ? `\nGoogle Meet: ${data.meetLink}` : "";
 
   const selfServiceLines = (data.cancelLink || data.rescheduleLink)
     ? `\n\n── Manage your appointment ──${data.rescheduleLink ? `\nReschedule: ${data.rescheduleLink}` : ""}${data.cancelLink ? `\nCancel: ${data.cancelLink}` : ""}`
@@ -164,7 +146,7 @@ export async function sendBookingConfirmedEmail(data: BookingEmailData): Promise
 
   const from = formatDateTime(data.slotStart, data.timezone);
   const to = formatDateTime(data.slotEnd, data.timezone);
-  const meetLine = locationLine(data);
+  const meetLine = data.meetLink ? `\nGoogle Meet: ${data.meetLink}` : "";
 
   const body = `Hi ${data.attendeeName},
 

@@ -27,8 +27,9 @@ async function requireCampaign(campaignId: number, userId: string) {
 const unifiedStatus = sql<string>`coalesce(${bookingsTable.status}, ${callBookingsTable.meetingStatus})`;
 // Unified meeting start time: prefer scheduling slot_start if linked
 const unifiedSlotStart = sql<Date>`coalesce(${bookingsTable.slotStart}, ${callBookingsTable.meetingTime})`;
-// Unified meet link
-const unifiedMeetLink = sql<string>`coalesce(${bookingsTable.meetLink}, ${callBookingsTable.meetingLink})`;
+// Unified meet link — bookings.meet_link is accessed via raw SQL because it is not
+// in the Drizzle bookingsTable type (it lives outside the June 1st schema baseline).
+const unifiedMeetLink = sql<string | null>`coalesce(bookings.meet_link, ${callBookingsTable.meetingLink})`;
 
 // ── GET /campaigns/:id/bookings/metrics ───────────────────────────────────────
 

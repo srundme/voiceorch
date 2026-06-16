@@ -8,17 +8,70 @@ import {
   revokeConnection,
   listConnectionCalendars,
 } from "../../services/scheduling/google-calendar.js";
-import { isTrustedOrigin, dashboardBase, deriveRedirectUri as deriveRedirect } from "../../lib/oauth-redirect.js";
 import { logger } from "../../lib/logger.js";
 
 const router: IRouter = Router();
 
-const CALLBACK_PATH = "/api/scheduling/google/callback";
+const DASHBOARD_BASE = () => {
+  const domain = process.env["REPLIT_DOMAINS"]?.split(",")[0];
+  return domain ? `https://${domain}` : "http://localhost:80";
+};
 
-const DASHBOARD_BASE = dashboardBase;
+/**
+ * Allow the callback to redirect back to the origin that initiated the flow.
+ * Accepts:
+ *   - Any origin listed in REPLIT_DOMAINS (production + dev previews registered there)
+ *   - Any *.sisko.replit.dev or *.replit.dev Replit workspace domain (dev previews)
+ * Rejects anything else to prevent open-redirect abuse.
+ */
+function isTrustedOrigin(origin: string): boolean {
+  try {
+    const url = new URL(origin);
+    if (url.protocol !== "https:") return false;
+    const host = url.hostname;
+    // Production domains explicitly registered
+    const registered = (process.env["REPLIT_DOMAINS"] ?? "").split(",").map(d => d.trim()).filter(Boolean);
+    if (registered.includes(host)) return true;
+    // Replit dev preview domains
+    if (/^[a-z0-9-]+-\d{2}-[a-z0-9]+\.sisko\.replit\.dev$/.test(host)) return true;
+    if (/^[a-z0-9-]+\.replit\.dev$/.test(host)) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
 
+/**
+ * Derive the OAuth redirect URI from the current request's externally-visible
+ * host (honoring the shared proxy's x-forwarded-host / x-forwarded-proto
+ * headers). The host is validated against the trusted-origin rules before use
+ * so an attacker-controlled Host header cannot forge an arbitrary redirect URI.
+ *
+ * Derivation order:
+ *   1. Request's forwarded host (externally-visible dev/prod domain)
+ *   2. GOOGLE_REDIRECT_URI env var (optional explicit override)
+ *   3. First domain in REPLIT_DOMAINS (existing fallback)
+ *   4. localhost:80 (last resort, never reaches Google in practice)
+ */
 function deriveRedirectUri(req: Request): string {
-  return deriveRedirect(req, CALLBACK_PATH);
+  const forwardedHost  = (req.headers["x-forwarded-host"]  as string | undefined)?.split(",")[0]?.trim();
+  const forwardedProto = (req.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0]?.trim() ?? "https";
+  const host = forwardedHost ?? req.hostname;
+
+  if (host && isTrustedOrigin(`${forwardedProto}://${host}`)) {
+    return `${forwardedProto}://${host}/api/scheduling/google/callback`;
+  }
+
+  // Explicit env-var override (kept as second priority for backward compat)
+  if (process.env["GOOGLE_REDIRECT_URI"]) {
+    return process.env["GOOGLE_REDIRECT_URI"];
+  }
+
+  // Auto-detect from REPLIT_DOMAINS
+  const domain = process.env["REPLIT_DOMAINS"]?.split(",")[0];
+  return domain
+    ? `https://${domain}/api/scheduling/google/callback`
+    : "http://localhost:80/api/scheduling/google/callback";
 }
 
 // ── List connected Google accounts ───────────────────────────────────────────
@@ -30,8 +83,6 @@ router.get("/scheduling/google/connections", requireAuth, async (req, res): Prom
     id: c.id,
     email: c.email,
     connectedAt: c.createdAt,
-    needsReconnect: c.needsReconnect,
-    reconnectReason: c.reconnectReason,
   })));
 });
 
@@ -227,7 +278,7 @@ router.get("/scheduling/google/status", requireAuth, async (req, res): Promise<v
   const connections = await listConnectionsForUser(clerkId);
   res.json({
     connected: connections.length > 0,
-    connections: connections.map(c => ({ id: c.id, email: c.email, needsReconnect: c.needsReconnect, reconnectReason: c.reconnectReason })),
+    connections: connections.map(c => ({ id: c.id, email: c.email })),
     // Legacy compat
     email: connections[0]?.email ?? null,
     credentialsConfigured: true, // platform-level — always true

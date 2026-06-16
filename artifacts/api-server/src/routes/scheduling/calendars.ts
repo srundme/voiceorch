@@ -15,45 +15,6 @@ import {
 
 const router: IRouter = Router();
 
-const _EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-/**
- * Split each entry on commas/semicolons/whitespace, trim, validate, and dedupe.
- * Returns one email address per array element. Invalid addresses are dropped.
- * Handles legacy combined-string rows (e.g. ["a@x.com, b@x.com"]) transparently.
- */
-function normalizeAdditionalHosts(emails: string[] | null | undefined): string[] | null {
-  if (!emails || emails.length === 0) return emails ?? null;
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const entry of emails) {
-    for (const e of entry.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean)) {
-      if (!_EMAIL_RE.test(e)) continue;
-      const key = e.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push(e);
-    }
-  }
-  return out.length > 0 ? out : null;
-}
-
-/**
- * Normalize a hostEmail field: trim whitespace, then extract the first valid
- * email address from the value. This handles legacy combined strings like
- * "a@x.com, b@x.com" by keeping only the first valid address (extras are lost,
- * but the runtime splitter in google-calendar.ts rescues them for event creation).
- * Returns null when no valid address is found.
- */
-function normalizeHostEmail(email: string | null | undefined): string | null {
-  if (!email) return null;
-  const candidates = email.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean);
-  for (const c of candidates) {
-    if (_EMAIL_RE.test(c)) return c;
-  }
-  return null;
-}
-
 router.get("/scheduling/calendars", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const rows = await db.select().from(schedulingCalendarsTable)
@@ -70,23 +31,10 @@ router.post("/scheduling/calendars", requireAuth, async (req, res): Promise<void
   const [agent] = await db.select({ id: agentsTable.id }).from(agentsTable)
     .where(and(eq(agentsTable.id, parsed.data.agentId), eq(agentsTable.userId, clerkId)));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
-  try {
-    const [row] = await db.insert(schedulingCalendarsTable)
-      .values({
-        ...parsed.data,
-        hostEmail: normalizeHostEmail(parsed.data.hostEmail),
-        additionalHosts: normalizeAdditionalHosts(parsed.data.additionalHosts),
-        userId: clerkId,
-      })
-      .returning();
-    res.status(201).json(GetCalendarResponse.parse(row));
-  } catch (err: any) {
-    if (err?.code === "23505" || err?.message?.includes("scheduling_calendars_agent_id_unique")) {
-      res.status(409).json({ error: "This agent already has a calendar" });
-      return;
-    }
-    throw err;
-  }
+  const [row] = await db.insert(schedulingCalendarsTable)
+    .values({ ...parsed.data, userId: clerkId })
+    .returning();
+  res.status(201).json(GetCalendarResponse.parse(row));
 });
 
 router.get("/scheduling/calendars/:id", requireAuth, async (req, res): Promise<void> => {
@@ -105,18 +53,8 @@ router.patch("/scheduling/calendars/:id", requireAuth, async (req, res): Promise
   if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }
   const parsed = UpdateCalendarBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
-  const updates: Record<string, unknown> = { ...parsed.data, updatedAt: new Date() };
-  // Only normalize email fields when they were explicitly included in the request body.
-  // Applying normalizeAdditionalHosts(undefined) would produce null and silently
-  // wipe an existing additionalHosts value on unrelated PATCH calls.
-  if ("hostEmail" in parsed.data) {
-    updates["hostEmail"] = normalizeHostEmail(parsed.data.hostEmail);
-  }
-  if ("additionalHosts" in parsed.data) {
-    updates["additionalHosts"] = normalizeAdditionalHosts(parsed.data.additionalHosts);
-  }
   const [row] = await db.update(schedulingCalendarsTable)
-    .set(updates as Partial<typeof schedulingCalendarsTable.$inferInsert>)
+    .set({ ...parsed.data, updatedAt: new Date() })
     .where(and(eq(schedulingCalendarsTable.id, params.data.id), eq(schedulingCalendarsTable.userId, clerkId)))
     .returning();
   if (!row) { res.status(404).json({ error: "Calendar not found" }); return; }

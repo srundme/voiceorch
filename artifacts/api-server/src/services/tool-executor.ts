@@ -12,9 +12,7 @@ import {
   callExecutionsTable,
 } from "@workspace/db";
 import { eq, and, or, sql } from "drizzle-orm";
-import type { ConversationTurn } from "../orchestration/types.js";
 import { getAvailableSlots } from "./scheduling/slot-engine.js";
-import { computeOperationalOutcome, setOperationalOutcome } from "./operational-outcome.js";
 import { buildSlotLockKey } from "./scheduling/lock.js";
 import {
   sendBookingCreatedEmail,
@@ -24,7 +22,6 @@ import {
 import {
   createCalendarEvent,
   deleteCalendarEvent,
-  updateCalendarEvent,
   getFirstConnectionForUser,
 } from "./scheduling/google-calendar.js";
 import { dispatchSchedulingWebhooks } from "../routes/scheduling/webhooks.js";
@@ -98,10 +95,6 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
               preferred_date: {
                 type: "string",
                 description: "Optional preferred date/time for the new slot, e.g. 'next Tuesday' or '2025-06-10T14:00'",
-              },
-              timezone: {
-                type: "string",
-                description: "IANA timezone, e.g. 'America/New_York' or 'Asia/Kolkata'. Defaults to Asia/Kolkata if not provided.",
               },
             },
             required: ["booking_id"],
@@ -243,18 +236,10 @@ export async function executeNativeBooking(
   const attendeeName = String(args["attendee_name"] ?? args["name"] ?? "Guest");
   const attendeeEmail = String(args["attendee_email"] ?? args["email"] ?? "");
   const preferredRaw = args["preferred_date"] != null ? String(args["preferred_date"]) : null;
-  const meetingTypeRaw = args["meeting_type"] != null ? String(args["meeting_type"]).toLowerCase().trim() : null;
-  const locationType: "google_meet" | "in_person" = meetingTypeRaw === "in_person" ? "in_person" : "google_meet";
-  const meetingAddress = args["meeting_address"] != null ? String(args["meeting_address"]).trim() : "";
 
   if (!attendeeEmail) {
     logger.warn({ callId }, "Native booking: no attendee email — cannot book");
     return "error: attendee_email is required to complete the booking";
-  }
-
-  if (locationType === "in_person" && !meetingAddress) {
-    logger.warn({ callId }, "Native booking: in-person selected but no address provided");
-    return "error: meeting_address is required when meeting_type is in_person — ask the caller for the meeting address";
   }
 
   try {
@@ -374,8 +359,6 @@ export async function executeNativeBooking(
           slotEnd,
           status: eventType.confirmationMode === "instant" ? "confirmed" : "pending",
           bookedVia: "agent",
-          locationType,
-          locationAddress: locationType === "in_person" ? meetingAddress : null,
         })
         .returning();
       booking = inserted;
@@ -386,9 +369,7 @@ export async function executeNativeBooking(
       return "error: slot was just taken — no booking created";
     }
 
-    const calendarTz = calendar.timezone || "Asia/Kolkata";
-    const tzLabel = calendarTz === "Asia/Kolkata" ? "IST" : calendarTz;
-    const dateStr = `${formatInTimeZone(slotStart, calendarTz, "EEEE, MMMM do 'at' h:mm a")} (${tzLabel})`;
+    const dateStr = format(slotStart, "EEEE, MMMM do 'at' h:mm a");
     logger.info({ callId, bookingId: booking.id, slotStart, attendeeEmail }, "Native booking created");
 
     // Create Google Calendar event with Meet link (best-effort, non-blocking)
@@ -402,11 +383,6 @@ export async function executeNativeBooking(
         ?.google_calendar_connection_id ?? null;
       const connectionId = calendarConnectionId ?? (await getFirstConnectionForUser(calendar.userId))?.id ?? null;
 
-      logger.info(
-        { callId, bookingId: booking.id, connectionId, locationType, addMeet: locationType === "google_meet" || eventType.enableGoogleMeet },
-        "Native booking: attempting Google Calendar event creation",
-      );
-
       const gcalResult = connectionId
         ? await createCalendarEvent({
             connectionId,
@@ -416,37 +392,22 @@ export async function executeNativeBooking(
             endTime: booking.slotEnd,
             attendeeEmail: booking.attendeeEmail,
             attendeeName: booking.attendeeName,
-            timezone: calendarTz,
+            timezone: calendar.timezone,
             hostEmail: calendar.hostEmail,
             additionalHosts: calendar.additionalHosts,
-            addMeet: locationType === "google_meet" || eventType.enableGoogleMeet,
-            location: { type: locationType, address: locationType === "in_person" ? meetingAddress : null },
           })
         : null;
-      if (gcalResult?.ok) {
+      if (gcalResult) {
         meetLink = gcalResult.meetLink;
         googleEventId = gcalResult.eventId;
-        logger.info(
-          { callId, bookingId: booking.id, connectionId, eventId: gcalResult.eventId, meetLink: gcalResult.meetLink },
-          "Native booking: Google Calendar event created",
-        );
         if (meetLink || googleEventId) {
           await db.execute(
             sql`UPDATE bookings SET meet_link = ${meetLink}, google_event_id = ${googleEventId} WHERE id = ${booking.id}`,
           );
         }
-      } else if (gcalResult && !gcalResult.ok) {
-        logger.error(
-          { callId, bookingId: booking.id, connectionId, gcalError: gcalResult.error },
-          gcalResult.error.needsReconnect
-            ? "Native booking: Google Calendar sync failed — connection needs reconnect (insufficient scope / revoked). User must reconnect via Settings > Conferencing."
-            : "Native booking: Google Calendar sync failed",
-        );
-      } else if (!connectionId) {
-        logger.info({ callId, bookingId: booking.id }, "Native booking: no Google connection found — skipping gcal event");
       }
     } catch (err) {
-      logger.error({ callId, bookingId: booking.id, err }, "Native booking: Google Calendar event creation threw unexpectedly");
+      logger.warn({ callId, bookingId: booking.id, err }, "Native booking: Google Calendar event creation failed");
     }
 
     void sendBookingCreatedEmail({
@@ -455,14 +416,12 @@ export async function executeNativeBooking(
       eventTypeName: eventType.name,
       slotStart: booking.slotStart,
       slotEnd: booking.slotEnd,
-      timezone: calendarTz,
+      timezone: calendar.timezone,
       hostEmail: calendar.hostEmail,
       additionalHosts: calendar.additionalHosts,
       bookingId: booking.id,
       notes: booking.attendeeNotes,
       meetLink,
-      locationType: booking.locationType,
-      locationAddress: booking.locationAddress,
     });
     void dispatchSchedulingWebhooks(calendar.userId, "scheduling.booking.created", {
       booking: {
@@ -474,13 +433,10 @@ export async function executeNativeBooking(
         updatedAt: booking.updatedAt.toISOString(),
         meetLink,
         googleEventId,
-        locationType: booking.locationType,
-        locationAddress: booking.locationAddress,
       },
     });
 
-    const meetPart = meetLink ? `, meet_link="${meetLink}"` : "";
-    return `booking_confirmed: event="${eventType.name}", slot="${dateStr}", booking_id=${booking.id}, attendee="${attendeeName}", email="${attendeeEmail}", status="${booking.status}"${meetPart}`;
+    return `booking_confirmed: event="${eventType.name}", slot="${dateStr}", booking_id=${booking.id}, attendee="${attendeeName}", email="${attendeeEmail}", status="${booking.status}"`;
   } catch (err) {
     logger.error({ callId, err }, "Native booking tool execution failed");
     return "error: booking failed due to a technical issue";
@@ -541,14 +497,10 @@ export async function executeNativeCheckAvailability(
       return `no_availability: no available slots ${rangeDesc}`;
     }
 
-    const tz = (args["timezone"] != null ? String(args["timezone"]) : null) ?? tool.timezone ?? (calendar.timezone || "Asia/Kolkata");
+    const tz = tool.timezone || calendar.timezone || "UTC";
     const preview = slots
-      .slice(0, 15)
-      .map((s) => {
-        const iso = formatInTimeZone(s.slotStart, tz, "yyyy-MM-dd'T'HH:mm:ssxxx");
-        const label = formatInTimeZone(s.slotStart, tz, "EEE MMM d 'at' h:mm a") + " " + tz.replace("Asia/Kolkata", "IST");
-        return `${iso} (${label})`;
-      })
+      .slice(0, 5)
+      .map((s) => formatInTimeZone(s.slotStart, tz, "EEE MMM d 'at' h:mm a"))
       .join("; ");
     return `available_slots: count=${slots.length}, event="${eventType.name}", duration_mins=${eventType.durationMinutes}, timezone="${tz}", next="${preview}"`;
   } catch (err) {
@@ -587,8 +539,6 @@ export async function executeNativeListBookings(
     }
 
     // Fetch upcoming, non-cancelled bookings with a case-insensitive name match.
-    // Ownership + optional calendar scoping are applied in SQL (before LIMIT) so the
-    // limit never inadvertently excludes rows that belong to the authorized user.
     const nameLike = `%${attendeeName.toLowerCase()}%`;
     const now = new Date();
     const owned = await db
@@ -606,10 +556,7 @@ export async function executeNativeListBookings(
           sql`lower(${bookingsTable.attendeeName}) like ${nameLike}`,
           sql`${bookingsTable.slotStart} >= ${now.toISOString()}`,
           sql`${bookingsTable.status} != 'cancelled'`,
-          // Scope to the booking owner — enforced in SQL so LIMIT operates on the
-          // correct tenant's rows only, preventing false-negative lookups.
           authorizedUserId ? eq(bookingsTable.userId, authorizedUserId) : sql`true`,
-          // Optional: further restrict to a specific calendar if tool config specifies one
           tool.calendarId ? eq(bookingsTable.calendarId, tool.calendarId) : sql`true`,
         ),
       )
@@ -693,41 +640,7 @@ export async function executeNativeReschedule(
       return `error: no active booking found with reference ${bookingId}`;
     }
 
-    // Determine target event type and calendar.
-    // When the tool config specifies calendarId/eventTypeId, use them (with ownership validation);
-    // otherwise fall back to the original booking's calendar/event type.
-    // Rules:
-    //   - eventTypeId only → derive targetCalendarId from that event type's calendar
-    //   - calendarId only  → override targetCalendarId; keep original eventTypeId
-    //   - both             → eventType must belong to the given calendar (reject if mismatched)
-    let targetEventTypeId = existing.eventTypeId;
-    let targetCalendarId = existing.calendarId;
-
-    if (tool.eventTypeId) {
-      const [configEt] = await db
-        .select({ id: eventTypesTable.id, calendarId: eventTypesTable.calendarId, userId: eventTypesTable.userId })
-        .from(eventTypesTable)
-        .where(eq(eventTypesTable.id, tool.eventTypeId));
-      if (!configEt || (authorizedUserId && configEt.userId !== authorizedUserId)) {
-        return "error: configured event type not found or not authorized";
-      }
-      if (tool.calendarId && tool.calendarId !== configEt.calendarId) {
-        return "error: configured calendar and event type do not belong to the same calendar";
-      }
-      targetEventTypeId = configEt.id;
-      targetCalendarId = configEt.calendarId;
-    } else if (tool.calendarId) {
-      const [configCal] = await db
-        .select({ id: schedulingCalendarsTable.id, userId: schedulingCalendarsTable.userId })
-        .from(schedulingCalendarsTable)
-        .where(eq(schedulingCalendarsTable.id, tool.calendarId));
-      if (!configCal || (authorizedUserId && configCal.userId !== authorizedUserId)) {
-        return "error: configured calendar not found or not authorized";
-      }
-      targetCalendarId = configCal.id;
-    }
-
-    const [eventType] = await db.select().from(eventTypesTable).where(eq(eventTypesTable.id, targetEventTypeId));
+    const [eventType] = await db.select().from(eventTypesTable).where(eq(eventTypesTable.id, existing.eventTypeId));
     if (!eventType) {
       return "error: appointment type not found for this booking";
     }
@@ -735,14 +648,13 @@ export async function executeNativeReschedule(
     const [calendar] = await db
       .select()
       .from(schedulingCalendarsTable)
-      .where(eq(schedulingCalendarsTable.id, targetCalendarId));
+      .where(eq(schedulingCalendarsTable.id, existing.calendarId));
     if (!calendar || !calendar.isActive) {
       return "error: calendar is unavailable";
     }
 
-    const resolvedTimezone = (args["timezone"] != null ? String(args["timezone"]) : null) ?? tool.timezone ?? calendar.timezone ?? "Asia/Kolkata";
     const { searchStart, minSlotStart, timeFilter } = preferredRaw
-      ? parsePreferredDate(preferredRaw, resolvedTimezone)
+      ? parsePreferredDate(preferredRaw, calendar.timezone)
       : { searchStart: new Date(), minSlotStart: undefined, timeFilter: undefined };
     if (preferredRaw) {
       logger.info({ callId, preferredRaw, searchStart, minSlotStart }, "Native reschedule: preferred date resolved");
@@ -761,7 +673,7 @@ export async function executeNativeReschedule(
     const newStart = newSlot.slotStart;
     const newEnd = newSlot.slotEnd;
     const lockKey = buildSlotLockKey(calendar.id, newStart);
-    let updatedBooking: typeof bookingsTable.$inferSelect | undefined;
+    let newBooking: typeof bookingsTable.$inferSelect | undefined;
     let lockConflict = false;
 
     await db.transaction(async (tx) => {
@@ -775,7 +687,6 @@ export async function executeNativeReschedule(
       const bufBefore = addMinutes(newStart, -eventType.bufferBeforeMins);
       const bufAfter = addMinutes(newEnd, eventType.bufferAfterMins);
 
-      // Overlap checks exclude the booking being rescheduled (it will move to the new slot)
       const overlapCount = await tx
         .select({ count: sql<number>`count(*)::int` })
         .from(bookingsTable)
@@ -783,7 +694,6 @@ export async function executeNativeReschedule(
           and(
             eq(bookingsTable.calendarId, calendar.id),
             or(eq(bookingsTable.status, "pending"), eq(bookingsTable.status, "confirmed")),
-            sql`${bookingsTable.id} != ${bookingId}`,
             sql`${bookingsTable.slotStart} < ${bufAfter}`,
             sql`${bookingsTable.slotEnd} > ${bufBefore}`,
           ),
@@ -797,7 +707,6 @@ export async function executeNativeReschedule(
           and(
             eq(bookingsTable.calendarId, calendar.id),
             or(eq(bookingsTable.status, "pending"), eq(bookingsTable.status, "confirmed")),
-            sql`${bookingsTable.id} != ${bookingId}`,
             sql`${bookingsTable.slotStart} < ${newEnd}`,
             sql`${bookingsTable.slotEnd} > ${newStart}`,
           ),
@@ -809,34 +718,42 @@ export async function executeNativeReschedule(
         return;
       }
 
-      // Update existing booking in-place — same booking ID, same attendee details
-      const [updated] = await tx
-        .update(bookingsTable)
-        .set({
+      await tx.update(bookingsTable).set({ status: "cancelled", cancelledAt: new Date() }).where(eq(bookingsTable.id, bookingId));
+
+      const [inserted] = await tx
+        .insert(bookingsTable)
+        .values({
+          eventTypeId: eventType.id,
+          calendarId: calendar.id,
+          callId,
+          userId: calendar.userId,
+          attendeeName: existing.attendeeName,
+          attendeeEmail: existing.attendeeEmail,
+          attendeeNotes: existing.attendeeNotes,
           slotStart: newStart,
           slotEnd: newEnd,
           status: eventType.confirmationMode === "instant" ? "confirmed" : "pending",
-          updatedAt: new Date(),
+          bookedVia: "agent",
+          rescheduledFromId: bookingId,
         })
-        .where(eq(bookingsTable.id, bookingId))
         .returning();
-      updatedBooking = updated;
+      newBooking = inserted;
     });
 
-    if (lockConflict || !updatedBooking) {
+    if (lockConflict || !newBooking) {
       return "error: slot was just taken — reschedule failed";
     }
 
-    const dateStr = formatInTimeZone(newStart, resolvedTimezone, "EEEE, MMMM do 'at' h:mm a zzz");
-    logger.info({ callId, bookingId, newStart }, "Native reschedule complete (in-place)");
+    const dateStr = format(newStart, "EEEE, MMMM do 'at' h:mm a");
+    logger.info({ callId, oldBookingId: bookingId, newBookingId: newBooking.id }, "Native reschedule complete");
 
-    // Google Calendar sync: update the existing event in-place (best-effort)
+    // Google Calendar sync: delete the old event, create a new one with a Meet link (best-effort)
     let meetLink: string | null = null;
     try {
-      const gcalRow = await db.execute(
+      const oldGcalRow = await db.execute(
         sql`SELECT google_event_id FROM bookings WHERE id = ${bookingId}`,
       );
-      const existingGoogleEventId = (gcalRow.rows[0] as { google_event_id?: string | null })
+      const existingGoogleEventId = (oldGcalRow.rows[0] as { google_event_id?: string | null })
         ?.google_event_id ?? null;
       const calRow = await db.execute(
         sql`SELECT google_calendar_connection_id FROM scheduling_calendars WHERE id = ${calendar.id}`,
@@ -846,88 +763,58 @@ export async function executeNativeReschedule(
       const connectionId = calendarConnectionId ?? (await getFirstConnectionForUser(calendar.userId))?.id ?? null;
 
       if (existingGoogleEventId && connectionId) {
-        // Move the existing calendar event in-place (preserves the Meet link)
-        const gcalResult = await updateCalendarEvent({
-          connectionId,
-          eventId: existingGoogleEventId,
-          summary: `${eventType.name} — ${updatedBooking.attendeeName}`,
-          description: updatedBooking.attendeeNotes ?? undefined,
-          startTime: updatedBooking.slotStart,
-          endTime: updatedBooking.slotEnd,
-          attendeeEmail: updatedBooking.attendeeEmail,
-          attendeeName: updatedBooking.attendeeName,
-          timezone: calendar.timezone,
-          hostEmail: calendar.hostEmail,
-          additionalHosts: calendar.additionalHosts,
-        });
-        if (gcalResult.ok) {
-          meetLink = gcalResult.meetLink;
-          if (meetLink) {
-            await db.execute(
-              sql`UPDATE bookings SET meet_link = ${meetLink} WHERE id = ${bookingId}`,
-            );
-          }
-        } else {
-          logger.error({ callId, bookingId, gcalError: gcalResult.error }, "Native reschedule: Google Calendar event move failed");
-        }
-      } else if (connectionId) {
-        // No existing event — create a new one
-        const locationType = updatedBooking.locationType === "in_person" ? "in_person" as const : "google_meet" as const;
+        await deleteCalendarEvent(connectionId, existingGoogleEventId);
+      }
+      if (connectionId) {
         const gcalResult = await createCalendarEvent({
           connectionId,
-          summary: `${eventType.name} — ${updatedBooking.attendeeName}`,
-          description: updatedBooking.attendeeNotes ?? undefined,
-          startTime: updatedBooking.slotStart,
-          endTime: updatedBooking.slotEnd,
-          attendeeEmail: updatedBooking.attendeeEmail,
-          attendeeName: updatedBooking.attendeeName,
+          summary: `${eventType.name} — ${newBooking.attendeeName}`,
+          description: newBooking.attendeeNotes ?? undefined,
+          startTime: newBooking.slotStart,
+          endTime: newBooking.slotEnd,
+          attendeeEmail: newBooking.attendeeEmail,
+          attendeeName: newBooking.attendeeName,
           timezone: calendar.timezone,
           hostEmail: calendar.hostEmail,
           additionalHosts: calendar.additionalHosts,
-          addMeet: locationType === "google_meet" || eventType.enableGoogleMeet,
-          location: { type: locationType, address: updatedBooking.locationAddress },
         });
-        if (gcalResult.ok) {
+        if (gcalResult) {
           meetLink = gcalResult.meetLink;
           await db.execute(
-            sql`UPDATE bookings SET meet_link = ${gcalResult.meetLink}, google_event_id = ${gcalResult.eventId} WHERE id = ${bookingId}`,
+            sql`UPDATE bookings SET meet_link = ${gcalResult.meetLink}, google_event_id = ${gcalResult.eventId} WHERE id = ${newBooking.id}`,
           );
-        } else {
-          logger.error({ callId, bookingId, gcalError: gcalResult.error }, "Native reschedule: Google Calendar event creation failed");
         }
       }
     } catch (err) {
-      logger.error({ callId, bookingId, err }, "Native reschedule: Google Calendar sync threw unexpectedly");
+      logger.warn({ callId, bookingId: newBooking.id, err }, "Native reschedule: Google Calendar sync failed");
     }
 
     void sendBookingRescheduledEmail({
-      attendeeName: updatedBooking.attendeeName,
-      attendeeEmail: updatedBooking.attendeeEmail,
+      attendeeName: newBooking.attendeeName,
+      attendeeEmail: newBooking.attendeeEmail,
       eventTypeName: eventType.name,
-      slotStart: updatedBooking.slotStart,
-      slotEnd: updatedBooking.slotEnd,
+      slotStart: newBooking.slotStart,
+      slotEnd: newBooking.slotEnd,
       timezone: calendar.timezone,
       hostEmail: calendar.hostEmail,
       additionalHosts: calendar.additionalHosts,
-      bookingId: updatedBooking.id,
-      notes: updatedBooking.attendeeNotes,
+      bookingId: newBooking.id,
+      notes: newBooking.attendeeNotes,
       meetLink,
-      locationType: updatedBooking.locationType,
-      locationAddress: updatedBooking.locationAddress,
       oldSlotStart: existing.slotStart,
     });
     void dispatchSchedulingWebhooks(calendar.userId, "scheduling.booking.rescheduled", {
       booking: {
-        ...updatedBooking,
-        slotStart: updatedBooking.slotStart.toISOString(),
-        slotEnd: updatedBooking.slotEnd.toISOString(),
-        cancelledAt: updatedBooking.cancelledAt?.toISOString() ?? null,
-        createdAt: updatedBooking.createdAt.toISOString(),
-        updatedAt: updatedBooking.updatedAt.toISOString(),
+        ...newBooking,
+        slotStart: newBooking.slotStart.toISOString(),
+        slotEnd: newBooking.slotEnd.toISOString(),
+        cancelledAt: newBooking.cancelledAt?.toISOString() ?? null,
+        createdAt: newBooking.createdAt.toISOString(),
+        updatedAt: newBooking.updatedAt.toISOString(),
       },
     });
 
-    return `reschedule_confirmed: booking_id=${bookingId}, new_slot="${dateStr}", status="${updatedBooking.status}"`;
+    return `reschedule_confirmed: old_booking_id=${bookingId}, new_booking_id=${newBooking.id}, new_slot="${dateStr}", status="${newBooking.status}"`;
   } catch (err) {
     logger.error({ callId, err }, "Native reschedule tool execution failed");
     return "error: reschedule failed due to a technical issue";
@@ -1103,75 +990,6 @@ export async function executeWebhookTool(
   }
 }
 
-// ── Transfer DB helpers ────────────────────────────────────────────────────────
-
-export async function writeTransferLeadDb(
-  opts: {
-    callId: number;
-    campaignLeadId: number | null;
-    transferTo: string;
-    type: "cold" | "warm" | "agent";
-    summary?: string;
-  },
-): Promise<void> {
-  const { callId, campaignLeadId, transferTo, type, summary } = opts;
-  if (!campaignLeadId) return;
-
-  // Resolve campaignId and batchId from the lead
-  let campaignId: number | undefined;
-  let batchId: number | null = null;
-  try {
-    const [lead] = await db.select().from(campaignLeadsTable).where(eq(campaignLeadsTable.id, campaignLeadId));
-    if (lead) {
-      campaignId = lead.campaignId;
-      batchId = lead.batchId ?? null;
-    }
-  } catch (err) {
-    logger.warn({ callId, campaignLeadId, err }, "Transfer DB: failed to load lead — skipping DB writes");
-    return;
-  }
-  if (!campaignId) return;
-
-  // Find the active call execution for this call
-  let callExecutionId: number | null = null;
-  try {
-    const [exec] = await db.select().from(callExecutionsTable).where(eq(callExecutionsTable.callId, callId));
-    if (exec) callExecutionId = exec.id;
-  } catch (err) {
-    logger.warn({ callId, err }, "Transfer DB: failed to resolve call execution");
-  }
-
-  // Insert lead_transfers record
-  let transferId: number | null = null;
-  try {
-    const [row] = await db.insert(leadTransfersTable).values({
-      leadId: campaignLeadId,
-      campaignId,
-      batchId,
-      callExecutionId: callExecutionId ?? undefined,
-      transferredTo: transferTo,
-      type,
-      summary: summary ?? null,
-      transferTime: new Date(),
-    }).returning({ id: leadTransfersTable.id });
-    transferId = row?.id ?? null;
-  } catch (err) {
-    logger.error({ callId, campaignLeadId, err }, "Transfer DB: lead_transfers insert failed");
-  }
-
-  // Write lead_timeline event
-  try {
-    await db.insert(leadTimelineTable).values({
-      leadId: campaignLeadId,
-      campaignId,
-      eventType: `transfer_${type}`,
-      data: { transferTo, summary: summary ?? null, transferId },
-    });
-  } catch (err) {
-    logger.warn({ callId, campaignLeadId, err }, "Transfer DB: lead_timeline insert failed");
-  }
-}
-
 // ── parsePreferredDate (shared between pipeline.ts and webcall tool execution) ─
 
 /**
@@ -1245,4 +1063,71 @@ export function parsePreferredDate(
   }
 
   return { searchStart: now };
+}
+
+// ── Transfer lead DB helper ───────────────────────────────────────────────────
+// Not a scheduling function — re-exported here so pipeline.ts can import it
+// from one place without circular dependencies.
+
+export async function writeTransferLeadDb(
+  opts: {
+    callId: number;
+    campaignLeadId: number | null;
+    transferTo: string;
+    type: "cold" | "warm" | "agent";
+    summary?: string;
+  },
+): Promise<void> {
+  const { callId, campaignLeadId, transferTo, type, summary } = opts;
+  if (!campaignLeadId) return;
+
+  let campaignId: number | undefined;
+  let batchId: number | null = null;
+  try {
+    const [lead] = await db.select().from(campaignLeadsTable).where(eq(campaignLeadsTable.id, campaignLeadId));
+    if (lead) {
+      campaignId = lead.campaignId;
+      batchId = lead.batchId ?? null;
+    }
+  } catch (err) {
+    logger.warn({ callId, campaignLeadId, err }, "Transfer DB: failed to load lead — skipping DB writes");
+    return;
+  }
+  if (!campaignId) return;
+
+  let callExecutionId: number | null = null;
+  try {
+    const [exec] = await db.select().from(callExecutionsTable).where(eq(callExecutionsTable.callId, callId));
+    if (exec) callExecutionId = exec.id;
+  } catch (err) {
+    logger.warn({ callId, err }, "Transfer DB: failed to resolve call execution");
+  }
+
+  let transferId: number | null = null;
+  try {
+    const [row] = await db.insert(leadTransfersTable).values({
+      leadId: campaignLeadId,
+      campaignId,
+      batchId,
+      callExecutionId: callExecutionId ?? undefined,
+      transferredTo: transferTo,
+      type,
+      summary: summary ?? null,
+      transferTime: new Date(),
+    }).returning({ id: leadTransfersTable.id });
+    transferId = row?.id ?? null;
+  } catch (err) {
+    logger.error({ callId, campaignLeadId, err }, "Transfer DB: lead_transfers insert failed");
+  }
+
+  try {
+    await db.insert(leadTimelineTable).values({
+      leadId: campaignLeadId,
+      campaignId,
+      eventType: `transfer_${type}`,
+      data: { transferTo, summary: summary ?? null, transferId },
+    });
+  } catch (err) {
+    logger.warn({ callId, campaignLeadId, err }, "Transfer DB: lead_timeline insert failed");
+  }
 }
