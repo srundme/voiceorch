@@ -427,6 +427,31 @@ export default function AgentNew() {
     });
   };
 
+  const ADVANCED_STT_FIELDS = new Set([
+    "asrLanguage", "asrKeyterms", "asrSmartEndpointing",
+    "asrConfidenceThreshold", "asrEndOfTurnConfidence", "asrEndOfTurnTimeout",
+    "asrBackgroundDenoising", "asrAutoFallback",
+  ]);
+
+  const onInvalid = (errors: Record<string, unknown>) => {
+    const fieldNames = Object.keys(errors);
+    const hasAdvancedSTTError = fieldNames.some(f => ADVANCED_STT_FIELDS.has(f));
+    if (hasAdvancedSTTError) setShowAdvancedSTT(true);
+    toast({
+      title: "Please fix the highlighted fields",
+      description: "One or more required fields are missing or invalid.",
+      variant: "destructive",
+    });
+    setTimeout(() => {
+      const firstErrorName = fieldNames[0];
+      const el = document.querySelector(`[name="${firstErrorName}"]`) as HTMLElement | null;
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.focus();
+      }
+    }, 50);
+  };
+
   return (
     <div className="flex-1 space-y-6 p-6 md:p-8 pt-6 max-w-5xl mx-auto h-full flex flex-col">
       <div className="flex items-center gap-4">
@@ -525,7 +550,7 @@ export default function AgentNew() {
       </div>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 pb-20">
+        <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-6 pb-20">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
             {/* ── General ── */}
@@ -658,7 +683,7 @@ export default function AgentNew() {
                           <FormLabel>Silence Timeout (s)</FormLabel>
                           <FormControl>
                             <Input type="number" min={5} max={300} placeholder="30" {...field}
-                              onChange={(e) => field.onChange(parseInt(e.target.value, 10))} />
+                              onChange={(e) => field.onChange(e.target.value === "" ? undefined : parseInt(e.target.value, 10))} />
                           </FormControl>
                           <FormDescription>Hang up after N seconds of caller silence.</FormDescription>
                           <FormMessage />
@@ -935,7 +960,7 @@ export default function AgentNew() {
                         <FormLabel className="text-xs">Max Duration (seconds)</FormLabel>
                         <FormControl>
                           <Input type="number" placeholder="e.g. 600" {...field}
-                            onChange={(e) => field.onChange(parseInt(e.target.value, 10))} />
+                            onChange={(e) => field.onChange(e.target.value === "" ? undefined : parseInt(e.target.value, 10))} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -1024,7 +1049,7 @@ export default function AgentNew() {
                       <FormLabel>End-of-Turn Timeout (ms)</FormLabel>
                       <FormControl>
                         <Input type="number" min={100} max={30000} placeholder="5000" {...field}
-                          onChange={e => field.onChange(parseInt(e.target.value, 10))} />
+                          onChange={e => field.onChange(e.target.value === "" ? undefined : parseInt(e.target.value, 10))} />
                       </FormControl>
                       <FormDescription className="text-[11px]">Silence window (ms) before ASR finalizes a turn.</FormDescription>
                     </FormItem>
@@ -1177,7 +1202,7 @@ export default function AgentNew() {
                     <FormControl>
                       <Input type="number" min={50} max={2000} step={50}
                         value={field.value ?? 250}
-                        onChange={e => field.onChange(parseInt(e.target.value, 10))} />
+                        onChange={e => field.onChange(e.target.value === "" ? undefined : parseInt(e.target.value, 10))} />
                     </FormControl>
                     <FormDescription className="text-[11px]">Silence before STT flushes. Default: 250 ms</FormDescription>
                     <FormMessage />
@@ -1199,7 +1224,7 @@ export default function AgentNew() {
                     <FormControl>
                       <Input type="number" min={100} max={5000} step={100}
                         value={field.value ?? 1200}
-                        onChange={e => field.onChange(parseInt(e.target.value, 10))} />
+                        onChange={e => field.onChange(e.target.value === "" ? undefined : parseInt(e.target.value, 10))} />
                     </FormControl>
                     <FormDescription className="text-[11px]">Min RMS energy to count as speech. Default: 1200</FormDescription>
                     <FormMessage />
@@ -1211,7 +1236,7 @@ export default function AgentNew() {
                     <FormControl>
                       <Input type="number" min={1} max={20}
                         value={field.value ?? 4}
-                        onChange={e => field.onChange(parseInt(e.target.value, 10))} />
+                        onChange={e => field.onChange(e.target.value === "" ? undefined : parseInt(e.target.value, 10))} />
                     </FormControl>
                     <FormDescription className="text-[11px]">Consecutive speech frames to trigger barge-in. Default: 4 (~80 ms)</FormDescription>
                     <FormMessage />
