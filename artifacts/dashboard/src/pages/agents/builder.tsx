@@ -1975,12 +1975,10 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
           <span className="text-xs text-muted-foreground">{(agent as any).totalCalls ?? 0} calls</span>
         </div>
         <div className="flex items-center gap-2">
-          {isDirty && (
-            <Button size="sm" className="h-7 text-xs gap-1.5" onClick={onSave} disabled={updateAgent.isPending}>
-              <Save className="h-3.5 w-3.5" />
-              {updateAgent.isPending ? "Saving…" : "Save"}
-            </Button>
-          )}
+          <Button size="sm" className="h-7 text-xs gap-1.5" onClick={onSave} disabled={!isDirty || updateAgent.isPending}>
+            <Save className="h-3.5 w-3.5" />
+            {updateAgent.isPending ? "Saving…" : "Save"}
+          </Button>
           <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => setCallDialog(true)}>
             <Phone className="h-3.5 w-3.5" /> Call
           </Button>
