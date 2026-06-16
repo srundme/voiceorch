@@ -155,16 +155,34 @@ async function createVobizSubAccount(
 async function fetchVobizSubAccountByEmail(
   email: string,
 ): Promise<VobizCreateAccountResponse | null> {
-  const resp = await fetch(`${VOBIZ_PARTNER_BASE}/accounts`, {
-    method:  "GET",
-    headers: partnerHeaders(),
-  });
-  if (!resp.ok) return null;
-  const data = await resp.json() as { results?: VobizCreateAccountResponse[]; data?: VobizCreateAccountResponse[] } | VobizCreateAccountResponse[];
-  const list: VobizCreateAccountResponse[] = Array.isArray(data)
-    ? data
-    : ((data as any).results ?? (data as any).data ?? []);
-  return list.find((a) => a.email?.toLowerCase() === email.toLowerCase()) ?? null;
+  // Try with email as query param first (some partner APIs support this)
+  const urlWithParam = `${VOBIZ_PARTNER_BASE}/accounts?email=${encodeURIComponent(email)}`;
+  const urlList      = `${VOBIZ_PARTNER_BASE}/accounts`;
+
+  for (const url of [urlWithParam, urlList]) {
+    const resp = await fetch(url, { method: "GET", headers: partnerHeaders() });
+    const body = await resp.text();
+    logger.info({ url, status: resp.status, body: body.slice(0, 500) }, "VoBiz GET accounts response");
+    if (!resp.ok) continue;
+
+    let parsed: unknown;
+    try { parsed = JSON.parse(body); } catch { continue; }
+
+    // Normalise to array — VoBiz may wrap in results/data/accounts/items
+    let list: VobizCreateAccountResponse[] = [];
+    if (Array.isArray(parsed)) {
+      list = parsed as VobizCreateAccountResponse[];
+    } else if (parsed && typeof parsed === "object") {
+      const obj = parsed as Record<string, unknown>;
+      list = (obj["results"] ?? obj["data"] ?? obj["accounts"] ?? obj["items"] ?? []) as VobizCreateAccountResponse[];
+      // Single-object response (direct account lookup)
+      if (!list.length && obj["auth_id"]) list = [parsed as VobizCreateAccountResponse];
+    }
+
+    const match = list.find((a) => a.email?.toLowerCase() === email.toLowerCase());
+    if (match) return match;
+  }
+  return null;
 }
 
 interface VobizKycSessionResponse {
