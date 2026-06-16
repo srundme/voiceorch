@@ -220,7 +220,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     tokenSummarizationThresholdTurns: tokenSummarizationThresholdTurns ?? null,
     stagedPromptEnabled: stagedPromptEnabled ?? false,
     stagedPromptStages: stagedPromptStages ?? [],
-    stagedPromptCoreIdentity: stagedPromptCoreIdentity || null,
+    stagedPromptCoreIdentity: stagedPromptCoreIdentity || undefined,
     ...(Object.keys(agentConfig).length > 0 ? { agentConfig } : {}),
   };
 }
