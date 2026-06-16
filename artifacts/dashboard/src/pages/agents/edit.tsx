@@ -132,6 +132,7 @@ export const agentFormSchema = z.object({
   complianceDpdp:  z.boolean().optional(),
   complianceHipaa: z.boolean().optional(),
   complianceTrai:  z.boolean().optional(),
+  bolnaAgentId: z.string().optional(),
 }).superRefine((data, ctx) => {
   const asrErr = getModelError(data.asrProvider, data.asrModel, ASR_MODELS);
   if (asrErr) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["asrModel"], message: asrErr });
@@ -154,6 +155,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     startSpeakingWaitSecs, startSpeakingOnPunctuationSecs, startSpeakingOnNoPunctuationSecs, startSpeakingOnNumberSecs,
     stopSpeakingNumWords, stopSpeakingVoiceSecs, stopSpeakingBackOffSecs,
     complianceIrdai, complianceDpdp, complianceHipaa, complianceTrai,
+    bolnaAgentId,
     ...rest
   } = data;
   const agentConfig: Record<string, unknown> = {};
@@ -204,6 +206,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     ...rest,
     tools: serializedTools,
     asrLanguage: rest.asrLanguage || null,
+    bolnaAgentId: bolnaAgentId || null,
     ...(Object.keys(agentConfig).length > 0 ? { agentConfig } : {}),
     dispositionSchema: (rest.dispositionSchema ?? []).map(f => ({
       ...f,
@@ -336,6 +339,7 @@ export default function AgentEdit() {
       tools: [],
       dispositionSchema: [],
       genderDetectionEnabled: false,
+      bolnaAgentId: "",
     },
   });
 
@@ -431,6 +435,7 @@ export default function AgentEdit() {
       voicemailMessage:         ((agent as any).agentConfig?.voicemailMessage as string | undefined) ?? "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
       tools: (agent.tools ?? []) as AgentFormValues["tools"],
       genderDetectionEnabled: (agent as any).agentConfig?.genderDetectionEnabled ?? false,
+      bolnaAgentId: (agent as any).bolnaAgentId ?? "",
       dispositionSchema: ((agent as any).dispositionSchema ?? []).map((f: any) => ({
         ...f,
         options: Array.isArray(f.options) ? f.options.join(", ") : (f.options ?? ""),
@@ -1274,6 +1279,31 @@ export default function AgentEdit() {
                 })}
               </CardContent>
             )}
+          </Card>
+
+          {/* ── Bolna Integration ── */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Bot className="h-4 w-4" /> Bolna Integration
+              </CardTitle>
+              <CardDescription>Connect this agent to a Bolna agent to view live execution history in the call log.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <FormField control={form.control} name="bolnaAgentId" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Bolna Agent ID</FormLabel>
+                  <FormControl>
+                    <Input placeholder="3c90c3cc-0d44-4b50-8888-…" {...field} />
+                  </FormControl>
+                  <FormDescription className="text-[11px]">
+                    The Bolna platform agent UUID. Find it in your Bolna dashboard. You also need a Bolna API key saved on the{" "}
+                    <Link href="/app/providers" className="text-foreground/70 hover:underline">Providers page</Link>.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )} />
+            </CardContent>
           </Card>
 
           {/* ── Disposition Schema ── */}

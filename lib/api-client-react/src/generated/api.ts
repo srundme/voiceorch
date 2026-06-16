@@ -74,6 +74,7 @@ import type {
   BatchWorkspaceKpis,
   BatchWorkspaceLeadsPage,
   BatchWorkspaceSources,
+  BolnaExecutionsResponse,
   Booking,
   BookingInput,
   BookingMetrics,
@@ -118,6 +119,7 @@ import type {
   ExportCampaignLiveQueueParams,
   GetAdminAgents200,
   GetAdminPromptTemplates200,
+  GetAgentBolnaExecutionsParams,
   GetAvailableSlotsParams,
   GetBatchWorkspaceActivityParams,
   GetCommandCenterActivityStream200,
@@ -784,6 +786,95 @@ export const useToggleAgent = <TError = ErrorType<void>,
       > => {
       return useMutation(getToggleAgentMutationOptions(options));
     }
+
+export const getGetAgentBolnaExecutionsUrl = (id: number,
+    params?: GetAgentBolnaExecutionsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/agents/${id}/bolna-executions?${stringifiedParams}` : `/api/agents/${id}/bolna-executions`
+}
+
+/**
+ * @summary Fetch Bolna executions for an agent (proxied from Bolna API)
+ */
+export const getAgentBolnaExecutions = async (id: number,
+    params?: GetAgentBolnaExecutionsParams, options?: RequestInit): Promise<BolnaExecutionsResponse> => {
+
+  return customFetch<BolnaExecutionsResponse>(getGetAgentBolnaExecutionsUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAgentBolnaExecutionsQueryKey = (id: number,
+    params?: GetAgentBolnaExecutionsParams,) => {
+    return [
+    `/api/agents/${id}/bolna-executions`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetAgentBolnaExecutionsQueryOptions = <TData = Awaited<ReturnType<typeof getAgentBolnaExecutions>>, TError = ErrorType<void>>(id: number,
+    params?: GetAgentBolnaExecutionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAgentBolnaExecutions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAgentBolnaExecutionsQueryKey(id,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAgentBolnaExecutions>>> = ({ signal }) => getAgentBolnaExecutions(id,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAgentBolnaExecutions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAgentBolnaExecutionsQueryResult = NonNullable<Awaited<ReturnType<typeof getAgentBolnaExecutions>>>
+export type GetAgentBolnaExecutionsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Fetch Bolna executions for an agent (proxied from Bolna API)
+ */
+
+export function useGetAgentBolnaExecutions<TData = Awaited<ReturnType<typeof getAgentBolnaExecutions>>, TError = ErrorType<void>>(
+ id: number,
+    params?: GetAgentBolnaExecutionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAgentBolnaExecutions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAgentBolnaExecutionsQueryOptions(id,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 
 export const getListCallsUrl = (params?: ListCallsParams,) => {
   const normalizedParams = new URLSearchParams();

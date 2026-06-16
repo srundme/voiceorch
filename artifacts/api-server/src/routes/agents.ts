@@ -1,7 +1,7 @@
 // agents router — supports call_transfer + webhook (custom function) tools + AMD voicemail detection
 import { Router, type IRouter } from "express";
 import { eq, and, count, desc, isNull, inArray } from "drizzle-orm";
-import { db, agentsTable, schedulingCalendarsTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callerSentencesTable, callerFactSentenceLinksTable, callerEpisodeFactLinksTable } from "@workspace/db";
+import { db, agentsTable, schedulingCalendarsTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callerSentencesTable, callerFactSentenceLinksTable, callerEpisodeFactLinksTable, providersTable } from "@workspace/db";
 import {
   CreateAgentBody,
   UpdateAgentBody,
@@ -392,6 +392,73 @@ router.delete("/agents/:id/caller-memory/:phone/facts/:factId", requireAuth, asy
       ));
   }
   res.status(204).end();
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Bolna Executions proxy ─────────────────────────────────────────────────
+
+router.get("/agents/:id/bolna-executions", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const agentId = parseInt(String(req.params["id"] ?? ""), 10);
+  if (isNaN(agentId)) { res.status(400).json({ error: "Invalid agent id" }); return; }
+
+  const [agent] = await db.select({ id: agentsTable.id, bolnaAgentId: agentsTable.bolnaAgentId })
+    .from(agentsTable)
+    .where(and(eq(agentsTable.id, agentId), eq(agentsTable.userId, clerkId)));
+
+  if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+
+  if (!agent.bolnaAgentId) {
+    res.status(404).json({ error: "Bolna Agent ID not configured for this agent" });
+    return;
+  }
+
+  const pageNumber = parseInt(String(req.query["page_number"] ?? "1"), 10) || 1;
+  const pageSize   = parseInt(String(req.query["page_size"] ?? "20"), 10) || 20;
+
+  // Find an active Bolna provider key for this user
+  const [bolnaProvider] = await db.select({ apiKey: providersTable.apiKey })
+    .from(providersTable)
+    .where(and(
+      eq(providersTable.userId, clerkId),
+      eq(providersTable.providerType, "orchestration"),
+      eq(providersTable.providerName, "bolna"),
+      eq(providersTable.isActive, true),
+    ))
+    .limit(1);
+
+  if (!bolnaProvider) {
+    res.status(404).json({ error: "No active Bolna API key found. Add one on the Providers page." });
+    return;
+  }
+
+  const rawKey = decryptKey(bolnaProvider.apiKey);
+  const bolnaUrl = `https://api.bolna.ai/v2/agent/${agent.bolnaAgentId}/executions?page_number=${pageNumber}&page_size=${pageSize}`;
+
+  let bolnaRes: Response;
+  try {
+    bolnaRes = await fetch(bolnaUrl, {
+      headers: { "Authorization": `Bearer ${rawKey}`, "Content-Type": "application/json" },
+    });
+  } catch (err) {
+    req.log.error({ err, bolnaUrl }, "Bolna API fetch failed");
+    res.status(502).json({ error: "Failed to reach Bolna API", detail: String(err) });
+    return;
+  }
+
+  const body = await bolnaRes.text().catch(() => "");
+  if (!bolnaRes.ok) {
+    req.log.warn({ status: bolnaRes.status, body }, "Bolna API returned non-2xx");
+    let parsed: unknown;
+    try { parsed = JSON.parse(body); } catch { parsed = { error: body || `Bolna API error (HTTP ${bolnaRes.status})` }; }
+    res.status(bolnaRes.status).json(parsed);
+    return;
+  }
+
+  let data: unknown;
+  try { data = JSON.parse(body); } catch { data = body; }
+  res.json(data);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

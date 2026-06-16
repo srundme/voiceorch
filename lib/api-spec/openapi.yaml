@@ -186,6 +186,49 @@ paths:
         "404":
           description: Not found
 
+  /agents/{id}/bolna-executions:
+    get:
+      operationId: getAgentBolnaExecutions
+      tags: [agents]
+      summary: Fetch Bolna executions for an agent (proxied from Bolna API)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: page_number
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Bolna executions page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BolnaExecutionsResponse"
+        "400":
+          description: Invalid agent ID
+        "401":
+          description: Bolna API key rejected (passed through from Bolna)
+        "403":
+          description: Bolna access forbidden (passed through from Bolna)
+        "404":
+          description: Agent not found or Bolna Agent ID / API key not configured
+        "429":
+          description: Bolna rate limit exceeded (passed through from Bolna)
+        "502":
+          description: Network error reaching Bolna API
+
   # ── Calls ───────────────────────────────────────────────────────────────────
   /calls:
     get:
@@ -5476,6 +5519,9 @@ components:
         productDetails:
           type: ["string", "null"]
           description: "Product or service details the agent should know when calling leads"
+        bolnaAgentId:
+          type: ["string", "null"]
+          description: "Bolna platform agent ID used to fetch executions from the Bolna API"
         totalCalls:
           type: integer
         successfulCalls:
@@ -5606,6 +5652,9 @@ components:
         productDetails:
           type: string
           description: "Product or service details for the agent's context"
+        bolnaAgentId:
+          type: ["string", "null"]
+          description: "Bolna platform agent ID used to fetch executions from the Bolna API"
         wizardInputs:
           type: object
           additionalProperties: true
@@ -5731,6 +5780,90 @@ components:
         productDetails:
           type: string
           description: "Product or service details for the agent's context"
+        bolnaAgentId:
+          type: ["string", "null"]
+          description: "Bolna platform agent ID used to fetch executions from the Bolna API"
+
+    # ── Bolna Executions ────────────────────────────────────────────────────────
+    BolnaCostBreakdown:
+      type: object
+      properties:
+        llm:
+          type: ["number", "null"]
+        network:
+          type: ["number", "null"]
+        platform:
+          type: ["number", "null"]
+        synthesizer:
+          type: ["number", "null"]
+        transcriber:
+          type: ["number", "null"]
+
+    BolnaTelephonyData:
+      type: object
+      properties:
+        duration:
+          type: ["number", "null"]
+        to_number:
+          type: ["string", "null"]
+        from_number:
+          type: ["string", "null"]
+        recording_url:
+          type: ["string", "null"]
+        hosted_telephony:
+          type: ["boolean", "null"]
+        provider_call_id:
+          type: ["string", "null"]
+        hangup_by:
+          type: ["string", "null"]
+        hangup_reason:
+          type: ["string", "null"]
+        hangup_provider_code:
+          type: ["string", "null"]
+
+    BolnaExecution:
+      type: object
+      properties:
+        id:
+          type: string
+        agent_id:
+          type: string
+        batch_id:
+          type: ["string", "null"]
+        conversation_duration:
+          type: ["number", "null"]
+        total_cost:
+          type: ["number", "null"]
+        error_message:
+          type: ["string", "null"]
+        answered_by_voice_mail:
+          type: ["boolean", "null"]
+        transcript:
+          type: ["string", "null"]
+        created_at:
+          type: ["string", "null"]
+        updated_at:
+          type: ["string", "null"]
+        cost_breakdown:
+          $ref: "#/components/schemas/BolnaCostBreakdown"
+        telephony_data:
+          $ref: "#/components/schemas/BolnaTelephonyData"
+
+    BolnaExecutionsResponse:
+      type: object
+      properties:
+        page_number:
+          type: integer
+        page_size:
+          type: integer
+        total:
+          type: ["integer", "null"]
+        has_more:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/BolnaExecution"
 
     # ── Call ───────────────────────────────────────────────────────────────────
     Call:
@@ -5879,7 +6012,7 @@ components:
           type: integer
         providerType:
           type: string
-          enum: [asr, llm, tts, telephony]
+          enum: [orchestration, asr, llm, tts, telephony]
         providerName:
           type: string
         apiKeyHint:
@@ -5900,7 +6033,7 @@ components:
       properties:
         providerType:
           type: string
-          enum: [asr, llm, tts, telephony]
+          enum: [orchestration, asr, llm, tts, telephony]
         providerName:
           type: string
           minLength: 1

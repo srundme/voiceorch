@@ -437,6 +437,11 @@ export interface Agent {
      * @nullable
      */
   productDetails?: string | null;
+  /**
+     * Bolna platform agent ID used to fetch executions from the Bolna API
+     * @nullable
+     */
+  bolnaAgentId?: string | null;
   totalCalls?: number;
   successfulCalls?: number;
   /** @nullable */
@@ -541,6 +546,11 @@ export interface AgentInput {
   leadFields?: string[];
   /** Product or service details for the agent's context */
   productDetails?: string;
+  /**
+     * Bolna platform agent ID used to fetch executions from the Bolna API
+     * @nullable
+     */
+  bolnaAgentId?: string | null;
   /** Raw wizard answers passed from the dashboard. May include the ordered micro-question/answer pairs (microAnswers) and any uploaded job description content (jdFileContent, jdFileName). When present, the server generates the agent's system prompt server-side using the active admin master template (Qwen) and stores the result. Never returned in responses. */
   wizardInputs?: AgentInputWizardInputs;
 }
@@ -627,6 +637,77 @@ export interface AgentUpdate {
   leadFields?: string[];
   /** Product or service details for the agent's context */
   productDetails?: string;
+  /**
+     * Bolna platform agent ID used to fetch executions from the Bolna API
+     * @nullable
+     */
+  bolnaAgentId?: string | null;
+}
+
+export interface BolnaCostBreakdown {
+  /** @nullable */
+  llm?: number | null;
+  /** @nullable */
+  network?: number | null;
+  /** @nullable */
+  platform?: number | null;
+  /** @nullable */
+  synthesizer?: number | null;
+  /** @nullable */
+  transcriber?: number | null;
+}
+
+export interface BolnaTelephonyData {
+  /** @nullable */
+  duration?: number | null;
+  /** @nullable */
+  to_number?: string | null;
+  /** @nullable */
+  from_number?: string | null;
+  /** @nullable */
+  recording_url?: string | null;
+  /** @nullable */
+  hosted_telephony?: boolean | null;
+  /** @nullable */
+  provider_call_id?: string | null;
+  /** @nullable */
+  hangup_by?: string | null;
+  /** @nullable */
+  hangup_reason?: string | null;
+  /** @nullable */
+  hangup_provider_code?: string | null;
+}
+
+export interface BolnaExecution {
+  id?: string;
+  agent_id?: string;
+  /** @nullable */
+  batch_id?: string | null;
+  /** @nullable */
+  conversation_duration?: number | null;
+  /** @nullable */
+  total_cost?: number | null;
+  /** @nullable */
+  error_message?: string | null;
+  /** @nullable */
+  answered_by_voice_mail?: boolean | null;
+  /** @nullable */
+  transcript?: string | null;
+  /** @nullable */
+  created_at?: string | null;
+  /** @nullable */
+  updated_at?: string | null;
+  cost_breakdown?: BolnaCostBreakdown;
+  telephony_data?: BolnaTelephonyData;
+}
+
+export interface BolnaExecutionsResponse {
+  page_number?: number;
+  page_size?: number;
+  /** @nullable */
+  total?: number | null;
+  has_more?: boolean;
+  data?: BolnaExecution[];
 }
 
 export type CallStatus = typeof CallStatus[keyof typeof CallStatus];
@@ -768,6 +849,7 @@ export type ProviderConfigProviderType = typeof ProviderConfigProviderType[keyof
 
 
 export const ProviderConfigProviderType = {
+  orchestration: 'orchestration',
   asr: 'asr',
   llm: 'llm',
   tts: 'tts',
@@ -796,6 +878,7 @@ export type ProviderInputProviderType = typeof ProviderInputProviderType[keyof t
 
 
 export const ProviderInputProviderType = {
+  orchestration: 'orchestration',
   asr: 'asr',
   llm: 'llm',
   tts: 'tts',
@@ -3710,6 +3793,11 @@ export interface PendriveCallerList {
  * Platform admin token (matches ADMIN_TOKEN env var).
  */
 export type AdminTokenParameter = string;
+
+export type GetAgentBolnaExecutionsParams = {
+page_number?: number;
+page_size?: number;
+};
 
 export type ListCallsParams = {
 /**

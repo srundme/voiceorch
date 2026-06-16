@@ -95,6 +95,7 @@ export const ListAgentsResponseItem = zod.object({
   "leadSourceToken": zod.string().nullish().describe('Masked hint of the lead source access token (last 4 chars)'),
   "leadFields": zod.array(zod.string()).nullish().describe('Lead fields to capture per incoming lead (name, email, message)'),
   "productDetails": zod.string().nullish().describe('Product or service details the agent should know when calling leads'),
+  "bolnaAgentId": zod.string().nullish().describe('Bolna platform agent ID used to fetch executions from the Bolna API'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -179,6 +180,7 @@ export const CreateAgentBody = zod.object({
   "leadSourceToken": zod.string().optional().describe('Page Access Token for the lead source (encrypted at rest)'),
   "leadFields": zod.array(zod.string()).optional().describe('Lead fields to capture per incoming lead'),
   "productDetails": zod.string().optional().describe('Product or service details for the agent\'s context'),
+  "bolnaAgentId": zod.string().nullish().describe('Bolna platform agent ID used to fetch executions from the Bolna API'),
   "wizardInputs": zod.record(zod.string(), zod.unknown()).optional().describe('Raw wizard answers passed from the dashboard. May include the ordered micro-question\/answer pairs (microAnswers) and any uploaded job description content (jdFileContent, jdFileName). When present, the server generates the agent\'s system prompt server-side using the active admin master template (Qwen) and stores the result. Never returned in responses.')
 })
 
@@ -266,6 +268,7 @@ export const GetAgentResponse = zod.object({
   "leadSourceToken": zod.string().nullish().describe('Masked hint of the lead source access token (last 4 chars)'),
   "leadFields": zod.array(zod.string()).nullish().describe('Lead fields to capture per incoming lead (name, email, message)'),
   "productDetails": zod.string().nullish().describe('Product or service details the agent should know when calling leads'),
+  "bolnaAgentId": zod.string().nullish().describe('Bolna platform agent ID used to fetch executions from the Bolna API'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -363,7 +366,8 @@ export const UpdateAgentBody = zod.object({
   "leadSourceType": zod.string().optional().describe('Lead source platform (e.g. instagram)'),
   "leadSourceToken": zod.string().optional().describe('Page Access Token for the lead source (encrypted at rest)'),
   "leadFields": zod.array(zod.string()).optional().describe('Lead fields to capture per incoming lead'),
-  "productDetails": zod.string().optional().describe('Product or service details for the agent\'s context')
+  "productDetails": zod.string().optional().describe('Product or service details for the agent\'s context'),
+  "bolnaAgentId": zod.string().nullish().describe('Bolna platform agent ID used to fetch executions from the Bolna API')
 })
 
 export const UpdateAgentResponse = zod.object({
@@ -442,6 +446,7 @@ export const UpdateAgentResponse = zod.object({
   "leadSourceToken": zod.string().nullish().describe('Masked hint of the lead source access token (last 4 chars)'),
   "leadFields": zod.array(zod.string()).nullish().describe('Lead fields to capture per incoming lead (name, email, message)'),
   "productDetails": zod.string().nullish().describe('Product or service details the agent should know when calling leads'),
+  "bolnaAgentId": zod.string().nullish().describe('Bolna platform agent ID used to fetch executions from the Bolna API'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -544,6 +549,7 @@ export const ToggleAgentResponse = zod.object({
   "leadSourceToken": zod.string().nullish().describe('Masked hint of the lead source access token (last 4 chars)'),
   "leadFields": zod.array(zod.string()).nullish().describe('Lead fields to capture per incoming lead (name, email, message)'),
   "productDetails": zod.string().nullish().describe('Product or service details the agent should know when calling leads'),
+  "bolnaAgentId": zod.string().nullish().describe('Bolna platform agent ID used to fetch executions from the Bolna API'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -552,6 +558,59 @@ export const ToggleAgentResponse = zod.object({
   "avgTtsFirstChunkMs": zod.number().nullish().describe('Rolling average TTS first-audio-chunk latency across all completed calls (ms)'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Fetch Bolna executions for an agent (proxied from Bolna API)
+ */
+export const GetAgentBolnaExecutionsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const getAgentBolnaExecutionsQueryPageNumberDefault = 1;
+export const getAgentBolnaExecutionsQueryPageSizeDefault = 20;
+
+export const GetAgentBolnaExecutionsQueryParams = zod.object({
+  "page_number": zod.coerce.number().default(getAgentBolnaExecutionsQueryPageNumberDefault),
+  "page_size": zod.coerce.number().default(getAgentBolnaExecutionsQueryPageSizeDefault)
+})
+
+export const GetAgentBolnaExecutionsResponse = zod.object({
+  "page_number": zod.number().optional(),
+  "page_size": zod.number().optional(),
+  "total": zod.number().nullish(),
+  "has_more": zod.boolean().optional(),
+  "data": zod.array(zod.object({
+  "id": zod.string().optional(),
+  "agent_id": zod.string().optional(),
+  "batch_id": zod.string().nullish(),
+  "conversation_duration": zod.number().nullish(),
+  "total_cost": zod.number().nullish(),
+  "error_message": zod.string().nullish(),
+  "answered_by_voice_mail": zod.boolean().nullish(),
+  "transcript": zod.string().nullish(),
+  "created_at": zod.string().nullish(),
+  "updated_at": zod.string().nullish(),
+  "cost_breakdown": zod.object({
+  "llm": zod.number().nullish(),
+  "network": zod.number().nullish(),
+  "platform": zod.number().nullish(),
+  "synthesizer": zod.number().nullish(),
+  "transcriber": zod.number().nullish()
+}).optional(),
+  "telephony_data": zod.object({
+  "duration": zod.number().nullish(),
+  "to_number": zod.string().nullish(),
+  "from_number": zod.string().nullish(),
+  "recording_url": zod.string().nullish(),
+  "hosted_telephony": zod.boolean().nullish(),
+  "provider_call_id": zod.string().nullish(),
+  "hangup_by": zod.string().nullish(),
+  "hangup_reason": zod.string().nullish(),
+  "hangup_provider_code": zod.string().nullish()
+}).optional()
+})).optional()
 })
 
 
@@ -801,7 +860,7 @@ export const UpdateCallDispositionResponse = zod.object({
  */
 export const ListProvidersResponseItem = zod.object({
   "id": zod.number(),
-  "providerType": zod.enum(['asr', 'llm', 'tts', 'telephony']),
+  "providerType": zod.enum(['orchestration', 'asr', 'llm', 'tts', 'telephony']),
   "providerName": zod.string(),
   "apiKeyHint": zod.string().nullish().describe('Last 4 chars of the API key (masked)'),
   "isActive": zod.boolean(),
@@ -820,7 +879,7 @@ export const createProviderBodyProviderNameRegExp = new RegExp('\\S');
 
 
 export const CreateProviderBody = zod.object({
-  "providerType": zod.enum(['asr', 'llm', 'tts', 'telephony']),
+  "providerType": zod.enum(['orchestration', 'asr', 'llm', 'tts', 'telephony']),
   "providerName": zod.string().min(1).regex(createProviderBodyProviderNameRegExp),
   "apiKey": zod.string(),
   "extraConfig": zod.string().optional()
@@ -842,7 +901,7 @@ export const UpdateProviderBody = zod.object({
 
 export const UpdateProviderResponse = zod.object({
   "id": zod.number(),
-  "providerType": zod.enum(['asr', 'llm', 'tts', 'telephony']),
+  "providerType": zod.enum(['orchestration', 'asr', 'llm', 'tts', 'telephony']),
   "providerName": zod.string(),
   "apiKeyHint": zod.string().nullish().describe('Last 4 chars of the API key (masked)'),
   "isActive": zod.boolean(),
