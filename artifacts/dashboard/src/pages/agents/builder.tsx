@@ -175,7 +175,9 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
 
   const llmOptions    = LLM_MODELS[llmProvider]  ?? [];
   const ttsModelOpts  = TTS_MODELS[ttsProvider]  ?? [];
-  const ttsVoiceOpts  = (TTS_VOICES[ttsProvider] ?? []) as { value: string; label: string }[];
+  const ttsVoiceRaw   = ttsProvider in TTS_VOICES ? TTS_VOICES[ttsProvider] : undefined;
+  const ttsVoiceFree  = ttsVoiceRaw === null;
+  const ttsVoiceOpts  = (ttsVoiceRaw ?? []) as { value: string; label: string }[];
   const asrModelOpts  = ASR_MODELS[asrProvider]  ?? [];
 
   const asrLabel       = ASR_PROVIDERS.find(p => p.value === asrProvider)?.label ?? asrProvider;
@@ -345,7 +347,19 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
                       options={TTS_PROVIDERS.map(p => ({ value: p.value, label: p.label }))} />
                   </FormItem>
                 )} />
-                {ttsVoiceOpts.length > 0 && (
+                {ttsVoiceFree ? (
+                  <FormField control={form.control} name="ttsVoice" render={({ field }) => (
+                    <FormItem className="space-y-1">
+                      <FormLabel className="text-[10px] text-muted-foreground">Voice ID</FormLabel>
+                      <Input
+                        value={field.value ?? ""}
+                        onChange={field.onChange}
+                        placeholder="Paste voice ID…"
+                        className="h-8 text-xs bg-background/50"
+                      />
+                    </FormItem>
+                  )} />
+                ) : ttsVoiceOpts.length > 0 && (
                   <FormField control={form.control} name="ttsVoice" render={({ field }) => (
                     <FormItem className="space-y-1">
                       <FormLabel className="text-[10px] text-muted-foreground">Voice</FormLabel>
