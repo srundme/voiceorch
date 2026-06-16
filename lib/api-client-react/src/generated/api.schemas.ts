@@ -603,12 +603,18 @@ export interface AgentInput {
      * @nullable
      */
   snapserveAgentId?: string | null;
-  /** Sliding-window context: only the last N turns are sent to the LLM */
-  contextWindowTurns?: number;
+  /**
+     * Sliding-window context: only the last N turns are sent to the LLM
+     * @nullable
+     */
+  contextWindowTurns?: number | null;
   /** Auto-compress old turns into a summary block when history exceeds threshold */
   tokenSummarizationEnabled?: boolean;
-  /** Number of turns after which summarization is triggered */
-  tokenSummarizationThresholdTurns?: number;
+  /**
+     * Number of turns after which summarization is triggered
+     * @nullable
+     */
+  tokenSummarizationThresholdTurns?: number | null;
   /** Send only the active stage block + core identity instead of the full system prompt */
   stagedPromptEnabled?: boolean;
   /** Named prompt stages (each with name + content) */
@@ -714,12 +720,18 @@ export interface AgentUpdate {
      * @nullable
      */
   snapserveAgentId?: string | null;
-  /** Sliding-window context: only the last N turns are sent to the LLM */
-  contextWindowTurns?: number;
+  /**
+     * Sliding-window context: only the last N turns are sent to the LLM
+     * @nullable
+     */
+  contextWindowTurns?: number | null;
   /** Auto-compress old turns into a summary block when history exceeds threshold */
   tokenSummarizationEnabled?: boolean;
-  /** Number of turns after which summarization is triggered */
-  tokenSummarizationThresholdTurns?: number;
+  /**
+     * Number of turns after which summarization is triggered
+     * @nullable
+     */
+  tokenSummarizationThresholdTurns?: number | null;
   /** Send only the active stage block + core identity instead of the full system prompt */
   stagedPromptEnabled?: boolean;
   /** Named prompt stages (each with name + content) */

@@ -197,9 +197,9 @@ export const CreateAgentBody = zod.object({
   "leadFields": zod.array(zod.string()).optional().describe('Lead fields to capture per incoming lead'),
   "productDetails": zod.string().optional().describe('Product or service details for the agent\'s context'),
   "snapserveAgentId": zod.string().nullish().describe('SnapServe platform agent ID used to fetch executions from the SnapServe API'),
-  "contextWindowTurns": zod.number().optional().describe('Sliding-window context: only the last N turns are sent to the LLM'),
+  "contextWindowTurns": zod.number().nullish().describe('Sliding-window context: only the last N turns are sent to the LLM'),
   "tokenSummarizationEnabled": zod.boolean().optional().describe('Auto-compress old turns into a summary block when history exceeds threshold'),
-  "tokenSummarizationThresholdTurns": zod.number().optional().describe('Number of turns after which summarization is triggered'),
+  "tokenSummarizationThresholdTurns": zod.number().nullish().describe('Number of turns after which summarization is triggered'),
   "stagedPromptEnabled": zod.boolean().optional().describe('Send only the active stage block + core identity instead of the full system prompt'),
   "stagedPromptStages": zod.array(zod.object({
   "name": zod.string().optional(),
@@ -410,9 +410,9 @@ export const UpdateAgentBody = zod.object({
   "leadFields": zod.array(zod.string()).optional().describe('Lead fields to capture per incoming lead'),
   "productDetails": zod.string().optional().describe('Product or service details for the agent\'s context'),
   "snapserveAgentId": zod.string().nullish().describe('SnapServe platform agent ID used to fetch executions from the SnapServe API'),
-  "contextWindowTurns": zod.number().optional().describe('Sliding-window context: only the last N turns are sent to the LLM'),
+  "contextWindowTurns": zod.number().nullish().describe('Sliding-window context: only the last N turns are sent to the LLM'),
   "tokenSummarizationEnabled": zod.boolean().optional().describe('Auto-compress old turns into a summary block when history exceeds threshold'),
-  "tokenSummarizationThresholdTurns": zod.number().optional().describe('Number of turns after which summarization is triggered'),
+  "tokenSummarizationThresholdTurns": zod.number().nullish().describe('Number of turns after which summarization is triggered'),
   "stagedPromptEnabled": zod.boolean().optional().describe('Send only the active stage block + core identity instead of the full system prompt'),
   "stagedPromptStages": zod.array(zod.object({
   "name": zod.string().optional(),

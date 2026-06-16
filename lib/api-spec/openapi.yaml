@@ -5723,13 +5723,13 @@ components:
           type: ["string", "null"]
           description: "SnapServe platform agent ID used to fetch executions from the SnapServe API"
         contextWindowTurns:
-          type: integer
+          type: ["integer", "null"]
           description: "Sliding-window context: only the last N turns are sent to the LLM"
         tokenSummarizationEnabled:
           type: boolean
           description: "Auto-compress old turns into a summary block when history exceeds threshold"
         tokenSummarizationThresholdTurns:
-          type: integer
+          type: ["integer", "null"]
           description: "Number of turns after which summarization is triggered"
         stagedPromptEnabled:
           type: boolean
@@ -5881,13 +5881,13 @@ components:
           type: ["string", "null"]
           description: "SnapServe platform agent ID used to fetch executions from the SnapServe API"
         contextWindowTurns:
-          type: integer
+          type: ["integer", "null"]
           description: "Sliding-window context: only the last N turns are sent to the LLM"
         tokenSummarizationEnabled:
           type: boolean
           description: "Auto-compress old turns into a summary block when history exceeds threshold"
         tokenSummarizationThresholdTurns:
-          type: integer
+          type: ["integer", "null"]
           description: "Number of turns after which summarization is triggered"
         stagedPromptEnabled:
           type: boolean
