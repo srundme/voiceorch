@@ -37,6 +37,7 @@ export function computeAgentRateCents(
     telephonyProvider?: string | null;
   },
 ): number {
+  if (!(rateMap instanceof Map)) return 0;
   const get = (cat: string, prov: string | null | undefined) =>
     rateMap.get(`${cat}:${(prov ?? "").toLowerCase()}`) ?? 0;
   return (

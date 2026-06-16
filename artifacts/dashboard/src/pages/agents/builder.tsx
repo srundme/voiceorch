@@ -284,8 +284,8 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
         <FormField control={form.control} name="asrLanguage" render={({ field }) => (
           <FormItem className="space-y-1">
             <FormLabel className="text-[10px] text-muted-foreground">ASR Language Override</FormLabel>
-            <SmallSelect value={field.value ?? ""} onChange={field.onChange}
-              options={[{ value: "", label: "Same as language" }, ...asrLangOpts.map(l => ({ value: l.value, label: l.label }))]} />
+            <SmallSelect value={field.value ? field.value : "__none__"} onChange={v => field.onChange(v === "__none__" ? "" : v)}
+              options={[{ value: "__none__", label: "Same as language" }, ...asrLangOpts.map(l => ({ value: l.value, label: l.label }))]} />
           </FormItem>
         )} />
       </OverviewCard>
