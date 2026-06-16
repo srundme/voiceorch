@@ -11,11 +11,11 @@ import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import {
   useListAgents, useGetAgent, useUpdateAgent, useToggleAgent, useDeleteAgent,
   useInitiateOutboundCall, getListAgentsQueryKey, getGetAgentQueryKey,
-  useListCalls, getListCallsQueryKey, useListEventTypes,
+  useListCalls, getListCallsQueryKey, useListEventTypes, customFetch,
 } from "@workspace/api-client-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -51,6 +51,9 @@ import {
 import { useMinuteRatesMap, computeAgentRateCents } from "@/hooks/use-minute-rates";
 import { DestinationOtpDialog } from "@/components/destination-otp-dialog";
 import { WebCallPanel } from "@/components/webcall-panel";
+
+const _DASH_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+const DASH_API   = `${_DASH_BASE}/api`;
 
 /* ── Types ──────────────────────────────────────────────────────────────────── */
 
@@ -531,12 +534,35 @@ function PromptTab({ form }: { form: any }) {
 
 function VoiceTab({ form }: { form: any }) {
   const backchannelingEnabled = form.watch("backchannelingEnabled");
-  const ttsProvider = form.watch("ttsProvider");
-  const ttsVoice    = form.watch("ttsVoice");
-  const ttsModel    = form.watch("ttsModel");
+  const ttsProvider   = form.watch("ttsProvider");
+  const ttsVoice      = form.watch("ttsVoice");
+  const ttsModel      = form.watch("ttsModel");
+  const agentLanguage = (form.watch("language") as string) ?? "en-US";
 
+  // Fetch admin-whitelisted voices (public endpoint, no auth required)
+  const { data: whitelistedData } = useQuery({
+    queryKey: ["voices", "whitelisted"],
+    queryFn: () => customFetch<{ voices: Array<{ id: string; name: string; language: string }> }>(`${DASH_API}/voices/whitelisted`),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // For Cartesia: build dropdown options from whitelisted voices filtered by the agent's language
+  const cartesiaVoiceOpts = useMemo(() => {
+    const baseLang = agentLanguage.split("-")[0]; // "en-US" → "en", "hi-IN" → "hi"
+    const all = whitelistedData?.voices ?? [];
+    const filtered = all.filter(v => v.language === baseLang || v.language === agentLanguage);
+    const opts = filtered.map(v => ({ value: v.id, label: v.name }));
+    opts.push({ value: "__custom__", label: "✎ Paste custom Voice ID…" });
+    return opts;
+  }, [whitelistedData, agentLanguage]);
+
+  // For non-Cartesia providers fall back to the hardcoded list
   const ttsVoiceRawV  = ttsProvider in TTS_VOICES ? TTS_VOICES[ttsProvider] : undefined;
-  const ttsVoiceOptsV = (ttsVoiceRawV ?? []) as { value: string; label: string }[];
+  const ttsVoiceOptsV: { value: string; label: string }[] =
+    ttsProvider === "cartesia"
+      ? cartesiaVoiceOpts
+      : ((ttsVoiceRawV ?? []) as { value: string; label: string }[]);
+
   const ttsModelOptsV = TTS_MODELS[ttsProvider] ?? [];
   const curatedVoiceOptsV = ttsVoiceOptsV.filter(v => v.value !== "__custom__");
   const inCuratedV        = curatedVoiceOptsV.some(v => v.value === ttsVoice);
