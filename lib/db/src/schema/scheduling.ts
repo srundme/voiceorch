@@ -1,8 +1,19 @@
-import { pgTable, text, serial, timestamp, integer, boolean, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, boolean, unique, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { agentsTable } from "./agents";
 import { callsTable } from "./calls";
+
+export const googleCalendarConnectionsTable = pgTable("google_calendar_connections", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: text("user_id").notNull(),
+  email: text("email").notNull(),
+  accessToken: text("access_token").notNull(),
+  refreshToken: text("refresh_token").notNull().default(""),
+  tokenExpiry: timestamp("token_expiry", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+}, (t) => [unique("google_calendar_connections_user_email_unique").on(t.userId, t.email)]);
 
 export const schedulingCalendarsTable = pgTable("scheduling_calendars", {
   id: serial("id").primaryKey(),
@@ -12,6 +23,7 @@ export const schedulingCalendarsTable = pgTable("scheduling_calendars", {
   timezone: text("timezone").notNull().default("UTC"),
   hostEmail: text("host_email"),
   additionalHosts: text("additional_hosts").array(),
+  googleCalendarConnectionId: uuid("google_calendar_connection_id").references(() => googleCalendarConnectionsTable.id, { onDelete: "set null" }),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
