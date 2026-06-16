@@ -5,13 +5,13 @@ import {
   Save, MoreHorizontal, Power, Trash2, Settings, FileText, Wrench,
   GitBranch, VoicemailIcon, SlidersHorizontal, TestTube2, ChevronRight,
   Volume2, Check, X, Pencil, ChevronDown, List, Globe, BarChart3,
-  User2, Sparkles, BookOpen, ToggleLeft, ToggleRight,
+  User2, Sparkles, BookOpen, ToggleLeft, ToggleRight, Tag,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import {
   useListAgents, useGetAgent, useUpdateAgent, useToggleAgent, useDeleteAgent,
   useCreateAgent, useInitiateOutboundCall, getListAgentsQueryKey, getGetAgentQueryKey,
@@ -1542,7 +1542,81 @@ function AgentListPanel({ selectedId, onSelect, rateMap }: {
 
 /* ── Tab: Analysis ──────────────────────────────────────────────────────────── */
 
-function AnalysisTab({ form }: { form: any }) {
+type DispositionCategory = { id: string; name: string; values: string };
+
+function AnalysisTab({ form, agentId }: { form: any; agentId: number }) {
+  const { toast } = useToast();
+
+  // ── Disposition config state ──────────────────────────────────────────────
+  const [categories, setCategories] = useState<DispositionCategory[]>([]);
+  const [dirty, setDirty] = useState(false);
+
+  const { data: dispConfig, isLoading: dispLoading } = useQuery<{ taxonomy: Record<string, string[]> } | null>({
+    queryKey: ["disposition-config", agentId],
+    queryFn: async () => {
+      try {
+        return await customFetch<{ taxonomy: Record<string, string[]> }>(`${DASH_API}/disposition/config/${agentId}`);
+      } catch {
+        return null;
+      }
+    },
+    staleTime: 60_000,
+    enabled: agentId > 0,
+  });
+
+  useEffect(() => {
+    if (dispConfig?.taxonomy) {
+      setCategories(
+        Object.entries(dispConfig.taxonomy).map(([name, vals]) => ({
+          id: crypto.randomUUID(),
+          name,
+          values: vals.join(", "),
+        })),
+      );
+    }
+    setDirty(false);
+  }, [dispConfig]);
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const taxonomy: Record<string, string[]> = {};
+      for (const cat of categories) {
+        const name = cat.name.trim();
+        if (!name) continue;
+        taxonomy[name] = cat.values
+          .split(",")
+          .map((v) => v.trim())
+          .filter(Boolean);
+      }
+      await customFetch(`${DASH_API}/disposition/config/${agentId}`, {
+        method: "PUT",
+        body: JSON.stringify({ taxonomy }),
+      });
+    },
+    onSuccess: () => {
+      toast({ title: "Disposition config saved" });
+      setDirty(false);
+    },
+    onError: () => {
+      toast({ title: "Failed to save", variant: "destructive" });
+    },
+  });
+
+  function addCategory() {
+    setCategories((prev) => [...prev, { id: crypto.randomUUID(), name: "", values: "" }]);
+    setDirty(true);
+  }
+
+  function removeCategory(id: string) {
+    setCategories((prev) => prev.filter((c) => c.id !== id));
+    setDirty(true);
+  }
+
+  function updateCategory(id: string, field: "name" | "values", value: string) {
+    setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, [field]: value } : c)));
+    setDirty(true);
+  }
+
   return (
     <div className="relative p-6 overflow-y-auto h-full space-y-8">
 
@@ -1588,6 +1662,102 @@ function AnalysisTab({ form }: { form: any }) {
             </FormItem>
           )} />
         </div>
+      </div>
+
+      {/* ── Call Disposition ── */}
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center gap-2">
+            <Tag className="h-4 w-4 text-amber-400" />
+            <h3 className="text-sm font-semibold">Call Disposition</h3>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs gap-1"
+            onClick={addCategory}
+          >
+            <Plus className="h-3.5 w-3.5" /> Add Category
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground mb-4">
+          Define categories and their possible values. After each call the AI automatically picks the best match from the transcript and saves it. Results appear in the call detail page.
+        </p>
+
+        {dispLoading ? (
+          <div className="space-y-2">
+            {[1, 2].map((i) => <div key={i} className="h-16 rounded-xl bg-muted/20 animate-pulse" />)}
+          </div>
+        ) : categories.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border/50 p-8 text-center">
+            <Tag className="h-7 w-7 text-muted-foreground/20 mx-auto mb-2" />
+            <p className="text-sm font-medium text-muted-foreground/50">No categories yet</p>
+            <p className="text-xs text-muted-foreground/30 mt-0.5">Add a category to start capturing structured call outcomes</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {categories.map((cat) => (
+              <div key={cat.id} className="rounded-xl border border-border/60 bg-card/20 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex-1 grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Category name</label>
+                      <Input
+                        className="h-8 text-xs"
+                        placeholder="e.g. intent"
+                        value={cat.name}
+                        onChange={(e) => updateCategory(cat.id, "name", e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Possible values <span className="normal-case">(comma-separated)</span></label>
+                      <Input
+                        className="h-8 text-xs"
+                        placeholder="e.g. interested, not_interested, callback"
+                        value={cat.values}
+                        onChange={(e) => updateCategory(cat.id, "values", e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 mt-5 text-muted-foreground hover:text-destructive shrink-0"
+                    onClick={() => removeCategory(cat.id)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                {cat.values && (
+                  <div className="flex flex-wrap gap-1 mt-3">
+                    {cat.values.split(",").map((v) => v.trim()).filter(Boolean).map((v) => (
+                      <span key={v} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                        {v}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {(categories.length > 0 || dirty) && (
+          <div className="flex justify-end mt-4">
+            <Button
+              type="button"
+              size="sm"
+              className="h-8 text-xs gap-1.5"
+              disabled={saveMutation.isPending || !dirty}
+              onClick={() => saveMutation.mutate()}
+            >
+              <Save className="h-3.5 w-3.5" />
+              {saveMutation.isPending ? "Saving…" : "Save Disposition Config"}
+            </Button>
+          </div>
+        )}
       </div>
 
     </div>
@@ -2043,7 +2213,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
             {activeTab === "prompt"    && <PromptTab form={form} />}
             {activeTab === "voice"     && <VoiceTab form={form} />}
             {activeTab === "tools"     && <ToolsTab form={form} />}
-            {activeTab === "analysis"  && <AnalysisTab form={form} />}
+            {activeTab === "analysis"  && <AnalysisTab form={form} agentId={agentId} />}
             {activeTab === "pipeline"  && <PipelineTab form={form} />}
             {activeTab === "voicemail" && <VoicemailTab form={form} />}
             {activeTab === "advanced"  && <AdvancedTab form={form} />}
