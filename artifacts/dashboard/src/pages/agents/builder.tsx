@@ -1891,7 +1891,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       complianceDpdp:  (agent as any).agentConfig?.compliance?.dpdp  ?? false,
       complianceHipaa: (agent as any).agentConfig?.compliance?.hipaa ?? false,
       complianceTrai:  (agent as any).agentConfig?.compliance?.trai  ?? false,
-      bolnaAgentId:    (agent as any).bolnaAgentId ?? "",
+      snapserveAgentId: (agent as any).snapserveAgentId ?? "",
       dispositionSchema:        ((agent as any).dispositionSchema ?? []).map((f: any) => ({
         ...f, options: Array.isArray(f.options) ? f.options.join(", ") : (f.options ?? ""),
       })) as AgentFormValues["dispositionSchema"],
