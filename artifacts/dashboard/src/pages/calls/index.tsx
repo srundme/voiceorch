@@ -188,6 +188,98 @@ function MiniStat({ label, value, icon, trend }: { label: string; value: string;
   );
 }
 
+/* ── Disposition Chips ───────────────────────────────────────────────────── */
+
+type DispositionValue = string | number | boolean | null;
+
+function dispositionColor(value: DispositionValue): { bg: string; text: string; border: string } {
+  if (typeof value === "boolean") {
+    return value
+      ? { bg: "bg-emerald-500/10", text: "text-emerald-400", border: "border-emerald-500/20" }
+      : { bg: "bg-red-500/10",     text: "text-red-400",     border: "border-red-500/20"     };
+  }
+  if (typeof value === "number") {
+    return { bg: "bg-blue-500/10", text: "text-blue-400", border: "border-blue-500/20" };
+  }
+  const lower = String(value).toLowerCase();
+  if (/\b(interested|yes|qualified|high|positive|success|good|confirm|booked|agreed|hot|very)\b/.test(lower)) {
+    return { bg: "bg-emerald-500/10", text: "text-emerald-400", border: "border-emerald-500/20" };
+  }
+  if (/\b(not interested|no|unqualified|low|negative|failed|cold|rejected|dnc|never|bad)\b/.test(lower)) {
+    return { bg: "bg-red-500/10", text: "text-red-400", border: "border-red-500/20" };
+  }
+  if (/\b(follow|callback|maybe|medium|warm|partial|later|consider|perhaps|pending|moderate)\b/.test(lower)) {
+    return { bg: "bg-amber-500/10", text: "text-amber-400", border: "border-amber-500/20" };
+  }
+  return { bg: "bg-slate-500/10", text: "text-slate-400", border: "border-slate-500/30" };
+}
+
+function DispositionChips({
+  result,
+  schema,
+}: {
+  result: Record<string, DispositionValue> | null | undefined;
+  schema: Array<{ key: string; label: string; type: string }> | null | undefined;
+}) {
+  if (!result) return <span className="text-muted-foreground/20 text-[10px]">—</span>;
+  const entries = Object.entries(result).filter(([, v]) => v != null && v !== "");
+  if (entries.length === 0) return <span className="text-muted-foreground/20 text-[10px]">—</span>;
+
+  const MAX_VISIBLE = 2;
+  const visible = entries.slice(0, MAX_VISIBLE);
+  const overflow = entries.slice(MAX_VISIBLE);
+
+  function formatVal(v: DispositionValue) {
+    if (typeof v === "boolean") return v ? "Yes" : "No";
+    return String(v);
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      {visible.map(([key, value]) => {
+        const field = schema?.find((f) => f.key === key);
+        const label = field?.label ?? key.replace(/_/g, " ");
+        const display = formatVal(value);
+        const colors = dispositionColor(value);
+        return (
+          <Tooltip key={key}>
+            <TooltipTrigger asChild>
+              <span
+                className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold border cursor-default whitespace-nowrap ${colors.bg} ${colors.text} ${colors.border}`}
+              >
+                {display}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">
+              <span className="text-muted-foreground">{label}:</span> {display}
+            </TooltipContent>
+          </Tooltip>
+        );
+      })}
+      {overflow.length > 0 && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium border bg-muted/20 text-muted-foreground/50 border-border/30 cursor-default">
+              +{overflow.length}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-xs space-y-1 max-w-[180px]">
+            {overflow.map(([key, value]) => {
+              const field = schema?.find((f) => f.key === key);
+              const label = field?.label ?? key.replace(/_/g, " ");
+              return (
+                <div key={key}>
+                  <span className="text-muted-foreground">{label}:</span> {formatVal(value)}
+                </div>
+              );
+            })}
+          </TooltipContent>
+        </Tooltip>
+      )}
+    </div>
+  );
+}
+
 /* ── Page ────────────────────────────────────────────────────────────────── */
 export default function CallsList() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -215,6 +307,17 @@ export default function CallsList() {
   const { data: agents } = useListAgents({
     query: { queryKey: getListAgentsQueryKey() },
   });
+
+  // Build agentId → dispositionSchema map for label resolution
+  const agentSchemaMap = useMemo(() => {
+    const map = new Map<number, Array<{ key: string; label: string; type: string }>>();
+    for (const a of agents ?? []) {
+      if (a.id != null && Array.isArray((a as any).dispositionSchema)) {
+        map.set(a.id, (a as any).dispositionSchema);
+      }
+    }
+    return map;
+  }, [agents]);
 
   // Client-side search filter
   const filteredCalls = useMemo(() => {
@@ -455,6 +558,7 @@ export default function CallsList() {
                 <TableHead className="w-[90px]">Exec ID</TableHead>
                 <TableHead>Agent</TableHead>
                 <TableHead className="w-[110px]">Status</TableHead>
+                <TableHead className="w-[160px]">Disposition</TableHead>
                 <TableHead>Contact</TableHead>
                 <TableHead className="w-[80px]">Duration</TableHead>
                 <TableHead className="w-[140px]">Latency</TableHead>
@@ -471,6 +575,7 @@ export default function CallsList() {
                     <TableCell><Skeleton className="h-3 w-16" /></TableCell>
                     <TableCell><Skeleton className="h-3 w-28" /></TableCell>
                     <TableCell><Skeleton className="h-5 w-20 rounded-md" /></TableCell>
+                    <TableCell><div className="flex gap-1"><Skeleton className="h-4 w-16 rounded" /><Skeleton className="h-4 w-14 rounded" /></div></TableCell>
                     <TableCell><Skeleton className="h-3 w-28" /></TableCell>
                     <TableCell><Skeleton className="h-3 w-10" /></TableCell>
                     <TableCell><Skeleton className="h-3 w-24" /></TableCell>
@@ -516,6 +621,12 @@ export default function CallsList() {
                       </TableCell>
                       <TableCell>
                         <StatusBadge status={call.status} />
+                      </TableCell>
+                      <TableCell>
+                        <DispositionChips
+                          result={(call as any).dispositionResult as Record<string, DispositionValue> | null | undefined}
+                          schema={agentSchemaMap.get(call.agentId ?? 0)}
+                        />
                       </TableCell>
                       <TableCell>
                         <div className="text-xs font-mono text-foreground/70">
