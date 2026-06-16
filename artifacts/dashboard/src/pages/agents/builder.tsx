@@ -6,6 +6,7 @@ import {
   VoicemailIcon, SlidersHorizontal, TestTube2, ChevronRight,
   Volume2, Check, X, Pencil, ChevronDown, List, Globe, BarChart3,
   User2, Sparkles, BookOpen, ToggleLeft, ToggleRight, Tag, Loader2, Square,
+  Timer, ShieldCheck, Layers, Gauge, MicOff,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -1385,290 +1386,416 @@ function VoicemailTab({ form }: { form: any }) {
 
 /* ── Tab: Advanced ──────────────────────────────────────────────────────────── */
 
-function SliderField({ form, name, label, description, min, max, step, format }: {
-  form: any; name: string; label: string; description?: string;
-  min: number; max: number; step: number; format?: (v: number) => string;
+type AdvSection = "timing" | "interruption" | "limits" | "compliance" | "optimize";
+
+function AdvSlider({ form, name, label, hint, min, max, step, fmt }: {
+  form: any; name: string; label: string; hint?: string;
+  min: number; max: number; step: number; fmt: (v: number) => string;
 }) {
   return (
-    <FormField control={form.control} name={name} render={({ field }) => (
-      <FormItem>
-        <div className="flex justify-between items-center">
-          <FormLabel className="text-xs">{label}</FormLabel>
-          <span className="text-xs font-mono text-muted-foreground">
-            {format ? format(field.value ?? min) : (field.value ?? min)}
-          </span>
-        </div>
-        <FormControl>
-          <input type="range" min={min} max={max} step={step} value={field.value ?? min}
-            onChange={e => field.onChange(parseFloat(e.target.value))}
-            className="w-full h-1.5 accent-primary cursor-pointer" />
-        </FormControl>
-        {description && <FormDescription className="text-[10px]">{description}</FormDescription>}
-      </FormItem>
-    )} />
+    <FormField control={form.control} name={name} render={({ field }) => {
+      const val = field.value ?? min;
+      const pct = ((val - min) / (max - min)) * 100;
+      return (
+        <FormItem className="space-y-0">
+          <div className="flex items-center justify-between mb-1.5">
+            <FormLabel className="text-[12px] font-medium text-foreground/90">{label}</FormLabel>
+            <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">
+              {fmt(val)}
+            </span>
+          </div>
+          <FormControl>
+            <div className="relative h-5 flex items-center">
+              <div className="absolute inset-x-0 h-1.5 rounded-full bg-border/60" />
+              <div className="absolute left-0 h-1.5 rounded-full bg-primary/70 pointer-events-none" style={{ width: `${pct}%` }} />
+              <input
+                type="range" min={min} max={max} step={step} value={val}
+                onChange={e => field.onChange(step % 1 !== 0 ? parseFloat(e.target.value) : parseInt(e.target.value))}
+                className="absolute inset-x-0 w-full opacity-0 h-5 cursor-pointer"
+              />
+            </div>
+          </FormControl>
+          {hint && <p className="text-[10px] text-muted-foreground/70 mt-1 leading-relaxed">{hint}</p>}
+        </FormItem>
+      );
+    }} />
   );
 }
 
 function AdvancedTab({ form }: { form: any }) {
+  const [section, setSection] = useState<AdvSection>("timing");
   const bargeIn = form.watch("bargeInEnabled");
   const llmProvider = form.watch("llmProvider");
   const tokenSummarizationEnabled = form.watch("tokenSummarizationEnabled");
   const stagedPromptEnabled = form.watch("stagedPromptEnabled");
+
+  const nav: { id: AdvSection; icon: React.ReactNode; label: string }[] = [
+    { id: "timing",       icon: <Timer className="h-3.5 w-3.5" />,       label: "Timing"       },
+    { id: "interruption", icon: <MicOff className="h-3.5 w-3.5" />,      label: "Interruption" },
+    { id: "limits",       icon: <Gauge className="h-3.5 w-3.5" />,       label: "Limits"       },
+    { id: "compliance",   icon: <ShieldCheck className="h-3.5 w-3.5" />, label: "Compliance"   },
+    { id: "optimize",     icon: <Layers className="h-3.5 w-3.5" />,      label: "Optimize"     },
+  ];
+
   return (
-    <div className="relative p-6 overflow-y-auto h-full space-y-6">
-      <div className="grid grid-cols-2 gap-6">
-        {/* ── Left column ── */}
-        <div className="space-y-4">
-          {/* Start Speaking Plan */}
-          <div className="rounded-lg border border-border/50 p-3 space-y-3">
-            <div>
-              <p className="text-xs font-medium">Start Speaking Plan</p>
-              <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">
-                How long the agent waits after detecting end-of-turn before responding.
-              </p>
-            </div>
-            <div className="space-y-3 pt-2 border-t border-border/40">
-              <SliderField form={form} name="startSpeakingWaitSecs" label="Wait Seconds"
-                description="Base extra wait before any response (0 = off)" min={0} max={5} step={0.1}
-                format={v => `${v.toFixed(1)}s`} />
-              <SliderField form={form} name="startSpeakingOnPunctuationSecs" label="After Punctuation"
-                description="Delay when utterance ends with . ? !" min={0} max={3} step={0.05}
-                format={v => `${v.toFixed(2)}s`} />
-              <SliderField form={form} name="startSpeakingOnNoPunctuationSecs" label="After No Punctuation"
-                description="Delay when utterance has no terminal punctuation" min={0} max={3} step={0.1}
-                format={v => `${v.toFixed(1)}s`} />
-              <SliderField form={form} name="startSpeakingOnNumberSecs" label="After Number"
-                description="Delay when utterance ends with a digit" min={0} max={3} step={0.05}
-                format={v => `${v.toFixed(2)}s`} />
-            </div>
-          </div>
-
-          {/* Stop Speaking Plan */}
-          <div className="rounded-lg border border-border/50 p-3 space-y-3">
-            <div>
-              <p className="text-xs font-medium">Stop Speaking Plan</p>
-              <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">
-                How much speech from the caller triggers agent interruption (barge-in).
-              </p>
-            </div>
-            <div className="pt-2 border-t border-border/40 space-y-3">
-              <FormField control={form.control} name="bargeInEnabled" render={({ field }) => (
-                <FormItem className="flex items-center justify-between">
-                  <div>
-                    <FormLabel className="text-xs font-medium">Allow Barge-in</FormLabel>
-                    <FormDescription className="text-[10px]">Caller can interrupt agent while it speaks</FormDescription>
-                  </div>
-                  <FormControl><Switch checked={field.value ?? true} onCheckedChange={field.onChange} /></FormControl>
-                </FormItem>
-              )} />
-              {bargeIn && (
-                <div className="space-y-3 pt-2 border-t border-border/30">
-                  <SliderField form={form} name="stopSpeakingNumWords" label="Number of Words"
-                    description="Min caller words before barge-in fires (0 = use frames setting)" min={0} max={10} step={1}
-                    format={v => v === 0 ? "off" : `${v} word${v !== 1 ? "s" : ""}`} />
-                  <SliderField form={form} name="stopSpeakingVoiceSecs" label="Voice Seconds"
-                    description="Min caller voice duration to trigger interruption" min={0} max={0.5} step={0.02}
-                    format={v => `${v.toFixed(2)}s`} />
-                  <SliderField form={form} name="stopSpeakingBackOffSecs" label="Back-off Seconds"
-                    description="Silence after TTS starts before barge-in can fire" min={0} max={10} step={0.1}
-                    format={v => `${v.toFixed(1)}s`} />
-                  <FormField control={form.control} name="bargeInEnergyThreshold" render={({ field }) => (
-                    <FormItem>
-                      <div className="flex justify-between">
-                        <FormLabel className="text-xs">Energy Threshold</FormLabel>
-                        <span className="text-xs font-mono">{field.value ?? 1200}</span>
-                      </div>
-                      <FormControl>
-                        <input type="range" min={100} max={5000} step={100} value={field.value ?? 1200}
-                          onChange={e => field.onChange(parseInt(e.target.value))}
-                          className="w-full h-1.5 accent-primary cursor-pointer" />
-                      </FormControl>
-                      <FormDescription className="text-[10px]">Min RMS energy to count as speech</FormDescription>
-                    </FormItem>
-                  )} />
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* ── Right column ── */}
-        <div className="space-y-4">
-          {/* Call Limits */}
-          <div className="rounded-lg border border-border/50 p-3 space-y-3">
-            <p className="text-xs font-medium">Call Limits</p>
-            <div className="space-y-3 pt-2 border-t border-border/40">
-              <FormField control={form.control} name="silenceTimeoutSeconds" render={({ field }) => (
-                <FormItem>
-                  <div className="flex justify-between">
-                    <FormLabel className="text-xs">Silence Timeout</FormLabel>
-                    <span className="text-xs font-mono">{field.value ?? 30}s</span>
-                  </div>
-                  <FormControl>
-                    <input type="range" min={5} max={300} step={5} value={field.value ?? 30}
-                      onChange={e => field.onChange(parseInt(e.target.value))}
-                      className="w-full h-1.5 accent-primary cursor-pointer" />
-                  </FormControl>
-                  <FormDescription className="text-[10px]">Hang up if caller is silent for this duration</FormDescription>
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="maxDuration" render={({ field }) => (
-                <FormItem>
-                  <div className="flex justify-between">
-                    <FormLabel className="text-xs">Max Call Duration</FormLabel>
-                    <span className="text-xs font-mono">{Math.floor((field.value ?? 300) / 60)}m {(field.value ?? 300) % 60}s</span>
-                  </div>
-                  <FormControl>
-                    <input type="range" min={10} max={3600} step={30} value={field.value ?? 300}
-                      onChange={e => field.onChange(parseInt(e.target.value))}
-                      className="w-full h-1.5 accent-primary cursor-pointer" />
-                  </FormControl>
-                </FormItem>
-              )} />
-            </div>
-          </div>
-
-          {/* Compliance */}
-          <SectionDivider label="Compliance" />
-          <p className="text-[10px] text-muted-foreground -mt-2">
-            Regulatory disclosures injected into the agent's system prompt at runtime. Enable the frameworks that apply to your use-case.
-          </p>
-          {([
-            { name: "complianceIrdai", label: "IRDAI", desc: "Insurance Regulatory and Development Authority of India — required for insurance advisory calls" },
-            { name: "complianceDpdp",  label: "DPDP Act", desc: "Digital Personal Data Protection Act 2023 — required when collecting personal data from callers" },
-            { name: "complianceHipaa", label: "HIPAA",   desc: "Health Insurance Portability and Accountability Act — required for healthcare-related calls" },
-            { name: "complianceTrai",  label: "TRAI",    desc: "Telecom Regulatory Authority of India — required for commercial communications; includes opt-out" },
-          ] as const).map(({ name, label, desc }) => (
-            <FormField key={name} control={form.control} name={name} render={({ field }) => (
-              <FormItem className="flex items-start justify-between rounded-lg border border-border/50 px-3 py-2 gap-3">
-                <div className="flex-1 min-w-0">
-                  <FormLabel className="text-sm font-medium">{label}</FormLabel>
-                  <FormDescription className="text-[10px] leading-relaxed">{desc}</FormDescription>
-                </div>
-                <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} className="shrink-0 mt-0.5" /></FormControl>
-              </FormItem>
-            )} />
-          ))}
-
-          {/* Token Optimization */}
-          <SectionDivider label="Token Optimization" />
-          <p className="text-[10px] text-muted-foreground -mt-2">
-            Reduce LLM token usage to lower costs. Each layer is independent.
-          </p>
-
-          {/* Layer 1: KV Cache — read-only badge */}
-          <div className="flex items-start justify-between rounded-lg border border-border/50 px-3 py-2 gap-3">
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium">KV Cache <span className="text-[10px] text-muted-foreground font-normal">(Anthropic only)</span></p>
-              <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">
-                Auto-enabled for Anthropic — caches the system prompt across turns, saving ~5× on repeated input tokens.
-              </p>
-            </div>
-            <span className={`shrink-0 self-center min-w-[36px] text-center text-[10px] font-medium px-2 py-0.5 rounded ${llmProvider === "anthropic" ? "bg-amber-500/20 text-amber-300" : "bg-muted/40 text-muted-foreground"}`}>
-              {llmProvider === "anthropic" ? "Active" : "N/A"}
-            </span>
-          </div>
-
-          {/* Layer 2: Sliding Window */}
-          <FormField control={form.control} name="contextWindowTurns" render={({ field }) => (
-            <FormItem>
-              <div className="flex items-center justify-between rounded-lg border border-border/50 px-3 py-2 gap-2">
-                <div className="flex-1 min-w-0">
-                  <FormLabel className="text-xs">Sliding Window Context</FormLabel>
-                  <FormDescription className="text-[10px]">Limit past turns sent to the LLM — older turns are dropped. Leave blank to send full history.</FormDescription>
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <span className="text-[10px] text-muted-foreground">Last</span>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={1000}
-                      placeholder=""
-                      className="w-16 h-7 text-xs text-center"
-                      value={field.value == null ? "" : String(field.value)}
-                      onChange={(e) => field.onChange(e.target.value === "" ? undefined : parseInt(e.target.value, 10))}
-                    />
-                  </FormControl>
-                  <span className="text-[10px] text-muted-foreground">turns</span>
-                </div>
-              </div>
-              <FormMessage />
-            </FormItem>
-          )} />
-
-          {/* Layer 3: Summarization */}
-          <FormField control={form.control} name="tokenSummarizationEnabled" render={({ field }) => (
-            <FormItem className="rounded-lg border border-border/50 px-3 py-2">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <FormLabel className="text-xs font-medium">Automatic Summarization</FormLabel>
-                  <FormDescription className="text-[10px] leading-relaxed">When history reaches the threshold, old turns are replaced with a compact summary.</FormDescription>
-                </div>
-                <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} className="shrink-0 mt-0.5" /></FormControl>
-              </div>
-              {tokenSummarizationEnabled && (
-                <div className="mt-2 pt-2 border-t border-border/40">
-                  <FormField control={form.control} name="tokenSummarizationThresholdTurns" render={({ field: threshField }) => (
-                    <FormItem>
-                      <div className="flex items-center gap-2">
-                        <FormLabel className="text-xs">Summarize after</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            min={5}
-                            max={500}
-                            placeholder="20"
-                            className="w-20 h-7 text-xs text-center"
-                            value={threshField.value == null ? "" : String(threshField.value)}
-                            onChange={(e) => threshField.onChange(e.target.value === "" ? null : parseInt(e.target.value, 10))}
-                          />
-                        </FormControl>
-                        <span className="text-[10px] text-muted-foreground">turns</span>
-                      </div>
-                      <FormDescription className="text-[10px]">Default: 20 turns.</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                </div>
-              )}
-            </FormItem>
-          )} />
-
-          {/* Layer 4: Staged Prompt */}
-          <FormField control={form.control} name="stagedPromptEnabled" render={({ field }) => (
-            <FormItem className="rounded-lg border border-border/50 px-3 py-2">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <FormLabel className="text-xs font-medium">Staged System Prompt</FormLabel>
-                  <FormDescription className="text-[10px] leading-relaxed">Serve a smaller, stage-specific prompt per conversation phase. The LLM signals transitions with <code className="text-[10px] bg-muted px-1 rounded">[STAGE:Name]</code>.</FormDescription>
-                </div>
-                <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} className="shrink-0 mt-0.5" /></FormControl>
-              </div>
-              {stagedPromptEnabled && (
-                <div className="mt-2 pt-2 border-t border-border/40 space-y-3">
-                  <FormField control={form.control} name="stagedPromptCoreIdentity" render={({ field: identField }) => (
-                    <FormItem>
-                      <FormLabel className="text-xs">Core Identity <span className="text-muted-foreground font-normal">(always included)</span></FormLabel>
-                      <FormControl>
-                        <Textarea
-                          className="min-h-[60px] text-xs"
-                          placeholder="You are a helpful assistant for Acme Corp. Always be polite and professional."
-                          {...identField}
-                        />
-                      </FormControl>
-                      <FormDescription className="text-[10px]">Prepended to every stage prompt — name, role, tone only.</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <StagedPromptEditor control={form.control} />
-                </div>
-              )}
-            </FormItem>
-          )} />
-        </div>
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* ── Sub-nav ── */}
+      <div className="flex items-center gap-1 px-4 pt-4 pb-3 border-b border-border/40 flex-shrink-0">
+        {nav.map(n => (
+          <button
+            key={n.id}
+            type="button"
+            onClick={() => setSection(n.id)}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11.5px] font-medium transition-all",
+              section === n.id
+                ? "bg-primary/15 text-primary border border-primary/30"
+                : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
+            )}
+          >
+            {n.icon}
+            {n.label}
+          </button>
+        ))}
       </div>
 
+      {/* ── Content ── */}
+      <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
+
+        {/* ── TIMING ── */}
+        {section === "timing" && (
+          <>
+            <div>
+              <h3 className="text-[13px] font-semibold text-foreground">Response Timing</h3>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Control how long the agent waits after detecting end-of-turn before it starts speaking.
+              </p>
+            </div>
+            <div className="space-y-5 rounded-xl border border-border/50 bg-card/40 p-4">
+              <AdvSlider form={form} name="startSpeakingWaitSecs"          label="Base Wait"           hint="Extra pause before any response (0 = off)"               min={0} max={5}   step={0.1}  fmt={v => `${v.toFixed(1)}s`} />
+              <AdvSlider form={form} name="startSpeakingOnPunctuationSecs"  label="After Punctuation"   hint="Delay when utterance ends with . ? !"                    min={0} max={3}   step={0.05} fmt={v => `${v.toFixed(2)}s`} />
+              <AdvSlider form={form} name="startSpeakingOnNoPunctuationSecs" label="After No Punctuation" hint="Delay when utterance has no terminal punctuation"        min={0} max={3}   step={0.1}  fmt={v => `${v.toFixed(1)}s`} />
+              <AdvSlider form={form} name="startSpeakingOnNumberSecs"       label="After Number"        hint="Extra delay when utterance ends with a digit"            min={0} max={3}   step={0.05} fmt={v => `${v.toFixed(2)}s`} />
+            </div>
+          </>
+        )}
+
+        {/* ── INTERRUPTION ── */}
+        {section === "interruption" && (
+          <>
+            <div>
+              <h3 className="text-[13px] font-semibold text-foreground">Interruption Control</h3>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Configure how caller speech interrupts the agent mid-utterance (barge-in).
+              </p>
+            </div>
+
+            <FormField control={form.control} name="bargeInEnabled" render={({ field }) => (
+              <FormItem className="flex items-center justify-between rounded-xl border border-border/50 bg-card/40 px-4 py-3.5 gap-3">
+                <div className="flex items-center gap-3">
+                  <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", field.value ? "bg-primary/15 text-primary" : "bg-muted/40 text-muted-foreground")}>
+                    <MicOff className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <FormLabel className="text-[13px] font-semibold">Allow Barge-in</FormLabel>
+                    <FormDescription className="text-[11px]">Caller can interrupt the agent while it speaks</FormDescription>
+                  </div>
+                </div>
+                <FormControl><Switch checked={field.value ?? true} onCheckedChange={field.onChange} /></FormControl>
+              </FormItem>
+            )} />
+
+            {bargeIn && (
+              <div className="space-y-5 rounded-xl border border-border/50 bg-card/40 p-4">
+                <AdvSlider form={form} name="stopSpeakingNumWords"    label="Min Words"           hint="Caller must say this many words before barge-in fires (0 = use frames)"  min={0}   max={10}   step={1}    fmt={v => v === 0 ? "off" : `${v}w`} />
+                <AdvSlider form={form} name="stopSpeakingVoiceSecs"   label="Min Voice Duration"  hint="Minimum caller voice time needed to trigger interruption"                min={0}   max={0.5}  step={0.02} fmt={v => `${v.toFixed(2)}s`} />
+                <AdvSlider form={form} name="stopSpeakingBackOffSecs" label="Back-off Silence"    hint="Silence after TTS starts before barge-in becomes active"                min={0}   max={10}   step={0.1}  fmt={v => `${v.toFixed(1)}s`} />
+                <FormField control={form.control} name="bargeInEnergyThreshold" render={({ field }) => {
+                  const val = field.value ?? 1200;
+                  const pct = ((val - 100) / (5000 - 100)) * 100;
+                  return (
+                    <FormItem className="space-y-0">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <FormLabel className="text-[12px] font-medium text-foreground/90">Energy Threshold</FormLabel>
+                        <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">{val}</span>
+                      </div>
+                      <FormControl>
+                        <div className="relative h-5 flex items-center">
+                          <div className="absolute inset-x-0 h-1.5 rounded-full bg-border/60" />
+                          <div className="absolute left-0 h-1.5 rounded-full bg-primary/70 pointer-events-none" style={{ width: `${pct}%` }} />
+                          <input type="range" min={100} max={5000} step={100} value={val}
+                            onChange={e => field.onChange(parseInt(e.target.value))}
+                            className="absolute inset-x-0 w-full opacity-0 h-5 cursor-pointer" />
+                        </div>
+                      </FormControl>
+                      <p className="text-[10px] text-muted-foreground/70 mt-1 leading-relaxed">Min RMS energy level for speech to count as a barge-in signal</p>
+                    </FormItem>
+                  );
+                }} />
+              </div>
+            )}
+
+            {!bargeIn && (
+              <div className="rounded-xl border border-border/30 bg-muted/20 px-4 py-6 flex flex-col items-center text-center gap-2">
+                <MicOff className="h-5 w-5 text-muted-foreground/40" />
+                <p className="text-[12px] text-muted-foreground/60">Barge-in is disabled — the caller cannot interrupt the agent.</p>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ── LIMITS ── */}
+        {section === "limits" && (
+          <>
+            <div>
+              <h3 className="text-[13px] font-semibold text-foreground">Call Limits</h3>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Set hard boundaries on call duration and silence tolerance.
+              </p>
+            </div>
+            <div className="space-y-5 rounded-xl border border-border/50 bg-card/40 p-4">
+              <FormField control={form.control} name="silenceTimeoutSeconds" render={({ field }) => {
+                const val = field.value ?? 30;
+                const pct = ((val - 5) / (300 - 5)) * 100;
+                return (
+                  <FormItem className="space-y-0">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div>
+                        <FormLabel className="text-[12px] font-medium text-foreground/90">Silence Timeout</FormLabel>
+                        <p className="text-[10px] text-muted-foreground/70 mt-0.5">Hang up if caller is silent for this duration</p>
+                      </div>
+                      <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">{val}s</span>
+                    </div>
+                    <FormControl>
+                      <div className="relative h-5 flex items-center">
+                        <div className="absolute inset-x-0 h-1.5 rounded-full bg-border/60" />
+                        <div className="absolute left-0 h-1.5 rounded-full bg-primary/70 pointer-events-none" style={{ width: `${pct}%` }} />
+                        <input type="range" min={5} max={300} step={5} value={val}
+                          onChange={e => field.onChange(parseInt(e.target.value))}
+                          className="absolute inset-x-0 w-full opacity-0 h-5 cursor-pointer" />
+                      </div>
+                    </FormControl>
+                    <div className="flex justify-between mt-1">
+                      <span className="text-[9px] text-muted-foreground/50">5s</span>
+                      <span className="text-[9px] text-muted-foreground/50">5min</span>
+                    </div>
+                  </FormItem>
+                );
+              }} />
+              <div className="border-t border-border/30" />
+              <FormField control={form.control} name="maxDuration" render={({ field }) => {
+                const val = field.value ?? 300;
+                const mins = Math.floor(val / 60);
+                const secs = val % 60;
+                const pct = ((val - 10) / (3600 - 10)) * 100;
+                return (
+                  <FormItem className="space-y-0">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div>
+                        <FormLabel className="text-[12px] font-medium text-foreground/90">Max Call Duration</FormLabel>
+                        <p className="text-[10px] text-muted-foreground/70 mt-0.5">Hard cut-off — call is ended after this time</p>
+                      </div>
+                      <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">{mins}m {secs > 0 ? `${secs}s` : ""}</span>
+                    </div>
+                    <FormControl>
+                      <div className="relative h-5 flex items-center">
+                        <div className="absolute inset-x-0 h-1.5 rounded-full bg-border/60" />
+                        <div className="absolute left-0 h-1.5 rounded-full bg-primary/70 pointer-events-none" style={{ width: `${pct}%` }} />
+                        <input type="range" min={10} max={3600} step={30} value={val}
+                          onChange={e => field.onChange(parseInt(e.target.value))}
+                          className="absolute inset-x-0 w-full opacity-0 h-5 cursor-pointer" />
+                      </div>
+                    </FormControl>
+                    <div className="flex justify-between mt-1">
+                      <span className="text-[9px] text-muted-foreground/50">10s</span>
+                      <span className="text-[9px] text-muted-foreground/50">60min</span>
+                    </div>
+                  </FormItem>
+                );
+              }} />
+            </div>
+          </>
+        )}
+
+        {/* ── COMPLIANCE ── */}
+        {section === "compliance" && (
+          <>
+            <div>
+              <h3 className="text-[13px] font-semibold text-foreground">Compliance Frameworks</h3>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Regulatory disclosures injected into the system prompt at runtime. Enable the frameworks that apply to your use-case.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {([
+                { name: "complianceIrdai", label: "IRDAI",    flag: "🇮🇳", badge: "Insurance",   desc: "Insurance Regulatory and Development Authority of India — for insurance advisory calls"         },
+                { name: "complianceDpdp",  label: "DPDP Act", flag: "🇮🇳", badge: "Data Privacy", desc: "Digital Personal Data Protection Act 2023 — when collecting personal data from callers"       },
+                { name: "complianceHipaa", label: "HIPAA",    flag: "🇺🇸", badge: "Healthcare",  desc: "Health Insurance Portability and Accountability Act — for healthcare-related calls"           },
+                { name: "complianceTrai",  label: "TRAI",     flag: "🇮🇳", badge: "Telecom",     desc: "Telecom Regulatory Authority of India — for commercial communications; includes opt-out"      },
+              ] as const).map(({ name, label, flag, badge, desc }) => (
+                <FormField key={name} control={form.control} name={name} render={({ field }) => (
+                  <FormItem
+                    className={cn(
+                      "rounded-xl border p-4 cursor-pointer transition-all space-y-0",
+                      field.value
+                        ? "border-primary/40 bg-primary/5"
+                        : "border-border/50 bg-card/40 hover:border-border",
+                    )}
+                    onClick={() => field.onChange(!field.value)}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span className="text-base leading-none">{flag}</span>
+                          <span className="text-[12.5px] font-bold text-foreground">{label}</span>
+                        </div>
+                        <span className={cn("text-[9.5px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded", field.value ? "bg-primary/20 text-primary" : "bg-muted/60 text-muted-foreground")}>
+                          {badge}
+                        </span>
+                      </div>
+                      <FormControl>
+                        <Switch checked={!!field.value} onCheckedChange={field.onChange} onClick={e => e.stopPropagation()} className="shrink-0" />
+                      </FormControl>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground leading-relaxed mt-2.5">{desc}</p>
+                  </FormItem>
+                )} />
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* ── OPTIMIZE ── */}
+        {section === "optimize" && (
+          <>
+            <div>
+              <h3 className="text-[13px] font-semibold text-foreground">Token Optimization</h3>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Reduce LLM token usage to lower costs. Each layer is independent.
+              </p>
+            </div>
+
+            {/* KV Cache */}
+            <div className="rounded-xl border border-border/50 bg-card/40 px-4 py-3.5 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", llmProvider === "anthropic" ? "bg-amber-500/15 text-amber-400" : "bg-muted/40 text-muted-foreground/50")}>
+                  <Zap className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-[12.5px] font-semibold text-foreground">KV Cache <span className="text-[10px] text-muted-foreground font-normal ml-1">Anthropic only</span></p>
+                  <p className="text-[10px] text-muted-foreground leading-relaxed">Auto-enabled — caches system prompt, saving ~5× on repeated input tokens</p>
+                </div>
+              </div>
+              <span className={cn("shrink-0 text-[10.5px] font-semibold px-2.5 py-1 rounded-lg", llmProvider === "anthropic" ? "bg-amber-500/20 text-amber-300 border border-amber-500/30" : "bg-muted/40 text-muted-foreground border border-border/40")}>
+                {llmProvider === "anthropic" ? "Active" : "N/A"}
+              </span>
+            </div>
+
+            {/* Sliding Window */}
+            <FormField control={form.control} name="contextWindowTurns" render={({ field }) => (
+              <FormItem className="rounded-xl border border-border/50 bg-card/40 px-4 py-3.5 space-y-0">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center shrink-0">
+                      <Layers className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <FormLabel className="text-[12.5px] font-semibold">Sliding Window Context</FormLabel>
+                      <FormDescription className="text-[10px]">Limit past turns sent — older turns dropped. Blank = full history.</FormDescription>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-[10px] text-muted-foreground">Last</span>
+                    <FormControl>
+                      <Input type="number" min={1} max={1000} placeholder="∞"
+                        className="w-14 h-7 text-xs text-center"
+                        value={field.value == null ? "" : String(field.value)}
+                        onChange={(e) => field.onChange(e.target.value === "" ? undefined : parseInt(e.target.value, 10))}
+                      />
+                    </FormControl>
+                    <span className="text-[10px] text-muted-foreground">turns</span>
+                  </div>
+                </div>
+                <FormMessage />
+              </FormItem>
+            )} />
+
+            {/* Auto Summarization */}
+            <FormField control={form.control} name="tokenSummarizationEnabled" render={({ field }) => (
+              <FormItem className={cn("rounded-xl border bg-card/40 px-4 py-3.5 space-y-0 transition-colors", field.value ? "border-primary/30" : "border-border/50")}>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", field.value ? "bg-primary/15 text-primary" : "bg-muted/40 text-muted-foreground/50")}>
+                      <Brain className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <FormLabel className="text-[12.5px] font-semibold">Auto Summarization</FormLabel>
+                      <FormDescription className="text-[10px]">Old turns replaced with a compact AI summary at threshold</FormDescription>
+                    </div>
+                  </div>
+                  <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} /></FormControl>
+                </div>
+                {tokenSummarizationEnabled && (
+                  <div className="mt-3 pt-3 border-t border-border/40">
+                    <FormField control={form.control} name="tokenSummarizationThresholdTurns" render={({ field: tf }) => (
+                      <FormItem>
+                        <div className="flex items-center gap-2">
+                          <FormLabel className="text-[11px] text-muted-foreground shrink-0">Summarize after</FormLabel>
+                          <FormControl>
+                            <Input type="number" min={5} max={500} placeholder="20"
+                              className="w-20 h-7 text-xs text-center"
+                              value={tf.value == null ? "" : String(tf.value)}
+                              onChange={(e) => tf.onChange(e.target.value === "" ? null : parseInt(e.target.value, 10))}
+                            />
+                          </FormControl>
+                          <span className="text-[11px] text-muted-foreground">turns</span>
+                        </div>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  </div>
+                )}
+              </FormItem>
+            )} />
+
+            {/* Staged Prompt */}
+            <FormField control={form.control} name="stagedPromptEnabled" render={({ field }) => (
+              <FormItem className={cn("rounded-xl border bg-card/40 px-4 py-3.5 space-y-0 transition-colors", field.value ? "border-primary/30" : "border-border/50")}>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", field.value ? "bg-primary/15 text-primary" : "bg-muted/40 text-muted-foreground/50")}>
+                      <FileText className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <FormLabel className="text-[12.5px] font-semibold">Staged System Prompt</FormLabel>
+                      <FormDescription className="text-[10px]">Stage-specific prompts per conversation phase — LLM signals via <code className="bg-muted px-1 rounded">[STAGE:Name]</code></FormDescription>
+                    </div>
+                  </div>
+                  <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} /></FormControl>
+                </div>
+                {stagedPromptEnabled && (
+                  <div className="mt-3 pt-3 border-t border-border/40 space-y-3">
+                    <FormField control={form.control} name="stagedPromptCoreIdentity" render={({ field: idf }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Core Identity <span className="text-muted-foreground font-normal">(always included)</span></FormLabel>
+                        <FormControl>
+                          <Textarea className="min-h-[60px] text-xs"
+                            placeholder="You are a helpful assistant for Acme Corp. Always be polite and professional."
+                            {...idf} />
+                        </FormControl>
+                        <FormDescription className="text-[10px]">Prepended to every stage prompt — name, role, tone only.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <StagedPromptEditor control={form.control} />
+                  </div>
+                )}
+              </FormItem>
+            )} />
+          </>
+        )}
+
+      </div>
     </div>
   );
 }
