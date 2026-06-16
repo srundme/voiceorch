@@ -219,8 +219,8 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     tokenSummarizationEnabled: tokenSummarizationEnabled ?? false,
     tokenSummarizationThresholdTurns: tokenSummarizationThresholdTurns ?? null,
     stagedPromptEnabled: stagedPromptEnabled ?? false,
-    stagedPromptStages: stagedPromptStages?.length ? stagedPromptStages : null,
-    stagedPromptCoreIdentity: stagedPromptCoreIdentity || null,
+    stagedPromptStages: stagedPromptStages ?? [],
+    stagedPromptCoreIdentity: stagedPromptCoreIdentity || undefined,
     ...(Object.keys(agentConfig).length > 0 ? { agentConfig } : {}),
   };
 }
