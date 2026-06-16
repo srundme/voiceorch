@@ -7,9 +7,8 @@ import {
   ChevronDown, ChevronUp, Phone, Calendar, Clock, TrendingUp,
   BarChart3, Mic, Cpu, Volume2, Hash, ArrowRight, UserCheck,
   Voicemail, BookOpen, Tag, Activity, ExternalLink, Copy, CheckCircle2,
-  XCircle, PlayCircle, PauseCircle, MicOff, ScrollText
+  XCircle, PlayCircle, PauseCircle, MicOff
 } from "lucide-react";
-import { SnapServeExecutionsPanel } from "@/components/snapserve-executions-panel";
 import {
   useGetCall,
   useGetAgent,
@@ -459,9 +458,6 @@ export default function CallDetail() {
                 <TabsTrigger value="tools" className="text-xs h-6 gap-1">
                   <Zap className="h-3 w-3" /> Tools {toolEvents.length > 0 && `(${toolEvents.length})`}
                 </TabsTrigger>
-                <TabsTrigger value="logs" className="text-xs h-6 gap-1">
-                  <ScrollText className="h-3 w-3" /> SnapServe Executions
-                </TabsTrigger>
                 <TabsTrigger value="metadata" className="text-xs h-6 gap-1">
                   <Hash className="h-3 w-3" /> Metadata
                 </TabsTrigger>
@@ -564,14 +560,6 @@ export default function CallDetail() {
                         ))}
                       </div>
                     )}
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="logs" className="flex-1 overflow-auto mt-2 min-h-0">
-                <Card className="h-full flex flex-col overflow-hidden">
-                  <CardContent className="p-0 flex-1 overflow-hidden">
-                    <SnapServeExecutionsPanel agentId={call.agentId ?? undefined} />
                   </CardContent>
                 </Card>
               </TabsContent>
