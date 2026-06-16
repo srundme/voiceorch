@@ -1,9 +1,12 @@
-import { useState } from "react";
-import { Brain, Phone, User, Clock, ChevronRight, Filter, Search, Sparkles } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Brain, Phone, User, Clock, ChevronRight, Search, Sparkles, X, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useListAgents, getListAgentsQueryKey } from "@workspace/api-client-react";
+import { useAuth } from "@/lib/auth";
+import { useToast } from "@/hooks/use-toast";
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 interface CallerMemory {
@@ -12,8 +15,101 @@ interface CallerMemory {
   callCount: number;
   lastSeen: string;
   agentName: string;
-  agentId: string;
-  keyFacts: string[];
+  agentId: number;
+  factCount: number;
+}
+
+interface CallerFact {
+  id: number;
+  key: string;
+  value: string;
+  confidence: number;
+  createdAt: string;
+  history: Array<{ id: number; value: string; confidence: number; createdAt: string }>;
+}
+
+interface CallerSentence {
+  id: number;
+  sequenceNum: number;
+  speaker: string;
+  text: string;
+}
+
+interface CallerEpisode {
+  id: number;
+  callId: number | null;
+  summary: string | null;
+  durationSeconds: number | null;
+  createdAt: string;
+  insightFactIds: number[];
+  sentences: CallerSentence[];
+}
+
+interface CallerDetail {
+  facts: CallerFact[];
+  episodes: CallerEpisode[];
+}
+
+interface ApiCallerRow {
+  phoneNumber: string;
+  name: string | null;
+  callCount: number;
+  factCount: number;
+  lastCalledAt: string | null;
+}
+
+/* ─── Helpers ────────────────────────────────────────────────────────────── */
+function timeAgo(iso: string | null): string {
+  if (!iso) return "—";
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1)  return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24)  return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  return `${Math.floor(days / 30)}mo ago`;
+}
+
+function sentimentEmoji(summary: string | null): string {
+  if (!summary) return "📖";
+  const s = summary.toLowerCase();
+  if (s.includes("angry") || s.includes("frustrat") || s.includes("upset")) return "😤";
+  if (s.includes("happy") || s.includes("satisf") || s.includes("great")) return "😊";
+  if (s.includes("neutral") || s.includes("inquir")) return "😐";
+  return "📖";
+}
+
+/* ─── Hooks ──────────────────────────────────────────────────────────────── */
+function useAuthHeaders() {
+  const { getToken } = useAuth();
+  return async (): Promise<HeadersInit> => {
+    const token = await getToken();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+}
+
+function callerListKey(agentId: number) {
+  return ["caller-memory", "list", agentId];
+}
+
+function callerDetailKey(agentId: number, phone: string) {
+  return ["caller-memory", "detail", agentId, phone];
+}
+
+function useCallerDetail(agentId: number | null, phone: string | null) {
+  const getHeaders = useAuthHeaders();
+  return useQuery<CallerDetail>({
+    queryKey: callerDetailKey(agentId ?? 0, phone ?? ""),
+    enabled: agentId !== null && phone !== null,
+    queryFn: async () => {
+      const headers = await getHeaders();
+      const r = await fetch(`/api/agents/${agentId}/caller-memory/${encodeURIComponent(phone!)}`, { headers });
+      if (!r.ok) throw new Error("Failed to load caller detail");
+      return r.json();
+    },
+  });
 }
 
 /* ─── Empty state ─────────────────────────────────────────────────────────── */
@@ -47,19 +143,37 @@ function EmptyState() {
   );
 }
 
-/* ─── Caller row (placeholder data until real API exists) ─────────────────── */
+/* ─── Skeleton rows ───────────────────────────────────────────────────────── */
+function SkeletonRows() {
+  return (
+    <>
+      {Array.from({ length: 5 }).map((_, i) => (
+        <div key={i} className="flex items-center gap-4 px-5 py-3.5 border-b border-border">
+          <Skeleton className="w-8 h-8 rounded-full shrink-0" />
+          <div className="flex-1 space-y-1.5">
+            <Skeleton className="h-3 w-32" />
+            <Skeleton className="h-2.5 w-24" />
+          </div>
+          <Skeleton className="hidden sm:block h-3 w-8" />
+          <Skeleton className="hidden md:block h-3 w-16" />
+          <Skeleton className="hidden lg:block h-5 w-20 rounded-full" />
+        </div>
+      ))}
+    </>
+  );
+}
+
+/* ─── Caller row ──────────────────────────────────────────────────────────── */
 function CallerRow({ caller, onClick }: { caller: CallerMemory; onClick: () => void }) {
   return (
     <div
       onClick={onClick}
       className="flex items-center gap-4 px-5 py-3.5 border-b border-border hover:bg-accent/30 cursor-pointer transition-colors group"
     >
-      {/* Avatar */}
       <div className="w-8 h-8 rounded-full bg-elevated border border-border flex items-center justify-center shrink-0">
         <User className="w-3.5 h-3.5 text-muted-foreground/50" />
       </div>
 
-      {/* Phone + name */}
       <div className="flex-1 min-w-0">
         <p className="text-[13px] font-medium text-foreground tabular-nums">{caller.phone}</p>
         {caller.name && (
@@ -67,34 +181,29 @@ function CallerRow({ caller, onClick }: { caller: CallerMemory; onClick: () => v
         )}
       </div>
 
-      {/* Call count */}
       <div className="hidden sm:flex flex-col items-center gap-0.5 min-w-[48px]">
         <Phone className="w-3 h-3 text-muted-foreground/40" />
         <span className="text-[11px] tabular-nums text-muted-foreground">{caller.callCount}</span>
       </div>
 
-      {/* Last seen */}
       <div className="hidden md:flex flex-col items-end gap-0.5 min-w-[80px]">
         <Clock className="w-3 h-3 text-muted-foreground/40" />
         <span className="text-[11px] text-muted-foreground">{caller.lastSeen}</span>
       </div>
 
-      {/* Agent */}
       <div className="hidden lg:block min-w-[100px]">
         <Badge variant="outline" className="text-[10.5px] font-medium max-w-[100px] truncate">
           {caller.agentName}
         </Badge>
       </div>
 
-      {/* Key facts preview */}
-      <div className="hidden xl:flex items-center gap-1.5 flex-1 min-w-0 max-w-[260px]">
-        {caller.keyFacts.slice(0, 2).map(fact => (
-          <span key={fact} className="text-[11px] px-2 py-0.5 rounded-full bg-elevated border border-border text-muted-foreground truncate max-w-[120px]">
-            {fact}
+      <div className="hidden xl:flex items-center gap-1 min-w-[80px]">
+        {caller.factCount > 0 ? (
+          <span className="text-[11px] px-2 py-0.5 rounded-full bg-elevated border border-border text-muted-foreground">
+            {caller.factCount} {caller.factCount === 1 ? "fact" : "facts"}
           </span>
-        ))}
-        {caller.keyFacts.length > 2 && (
-          <span className="text-[11px] text-muted-foreground/50">+{caller.keyFacts.length - 2}</span>
+        ) : (
+          <span className="text-[11px] text-muted-foreground/40">No facts</span>
         )}
       </div>
 
@@ -103,28 +212,59 @@ function CallerRow({ caller, onClick }: { caller: CallerMemory; onClick: () => v
   );
 }
 
-/* ─── Memory graph drawer (placeholder) ──────────────────────────────────── */
-function MemoryDrawer({ caller, onClose }: { caller: CallerMemory; onClose: () => void }) {
+/* ─── Memory drawer ───────────────────────────────────────────────────────── */
+function MemoryDrawer({
+  caller,
+  onClose,
+}: {
+  caller: CallerMemory;
+  onClose: () => void;
+}) {
+  const getHeaders = useAuthHeaders();
+  const qc = useQueryClient();
+  const { toast } = useToast();
+
+  const { data: detail, isLoading: detailLoading } = useCallerDetail(caller.agentId, caller.phone);
+
+  const deleteFact = useMutation({
+    mutationFn: async (factId: number) => {
+      const headers = await getHeaders();
+      const r = await fetch(
+        `/api/agents/${caller.agentId}/caller-memory/${encodeURIComponent(caller.phone)}/facts/${factId}`,
+        { method: "DELETE", headers },
+      );
+      if (!r.ok && r.status !== 204) throw new Error("Failed to delete fact");
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: callerListKey(caller.agentId) });
+      qc.invalidateQueries({ queryKey: callerDetailKey(caller.agentId, caller.phone) });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="fixed inset-0 bg-background/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative z-10 w-full max-w-md bg-background border-l border-border flex flex-col shadow-2xl overflow-hidden">
-        {/* Drawer header */}
+        {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
           <div>
             <p className="font-semibold text-foreground text-[14px] tabular-nums">{caller.phone}</p>
             {caller.name && <p className="text-[12px] text-muted-foreground mt-0.5">{caller.name}</p>}
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-accent transition-colors text-muted-foreground hover:text-foreground">
-            <ChevronRight className="w-4 h-4" />
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
+          >
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Stats */}
+        {/* Stats bar */}
         <div className="grid grid-cols-3 gap-px bg-border shrink-0">
           {[
-            { label: "Calls",    value: String(caller.callCount) },
-            { label: "Agent",    value: caller.agentName },
+            { label: "Calls",     value: String(caller.callCount) },
+            { label: "Agent",     value: caller.agentName },
             { label: "Last seen", value: caller.lastSeen },
           ].map(s => (
             <div key={s.label} className="bg-card px-4 py-3 text-center">
@@ -136,48 +276,128 @@ function MemoryDrawer({ caller, onClose }: { caller: CallerMemory; onClose: () =
 
         {/* Memory layers */}
         <div className="flex-1 overflow-y-auto p-5 space-y-5">
-          {/* Facts */}
+          {/* ── Facts ── */}
           <div>
             <div className="flex items-center gap-2 mb-3">
               <span className="text-base">🗂️</span>
               <h3 className="text-[12.5px] font-semibold text-foreground">Facts</h3>
-              <Badge variant="outline" className="text-[9.5px] ml-auto">{caller.keyFacts.length}</Badge>
+              <Badge variant="outline" className="text-[9.5px] ml-auto">
+                {detailLoading ? "…" : (detail?.facts.length ?? 0)}
+              </Badge>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {caller.keyFacts.length > 0 ? caller.keyFacts.map(fact => (
-                <span key={fact} className="text-[11.5px] px-2.5 py-1 rounded-full bg-elevated border border-border text-muted-foreground">
-                  {fact}
-                </span>
-              )) : (
-                <p className="text-[12px] text-muted-foreground">No facts extracted yet.</p>
-              )}
-            </div>
+
+            {detailLoading ? (
+              <div className="flex flex-wrap gap-2">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Skeleton key={i} className="h-6 w-24 rounded-full" />
+                ))}
+              </div>
+            ) : detail && detail.facts.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {detail.facts.map(fact => (
+                  <span
+                    key={fact.id}
+                    className="group flex items-center gap-1.5 text-[11.5px] px-2.5 py-1 rounded-full bg-elevated border border-border text-muted-foreground"
+                  >
+                    <span className="font-medium text-foreground/70">{fact.key}:</span>
+                    <span>{fact.value}</span>
+                    {fact.history.length > 0 && (
+                      <span className="text-[10px] text-muted-foreground/40" title={`Updated ${fact.history.length} time(s)`}>
+                        ({fact.history.length}↑)
+                      </span>
+                    )}
+                    <button
+                      onClick={() => deleteFact.mutate(fact.id)}
+                      disabled={deleteFact.isPending}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground/60 hover:text-destructive ml-0.5"
+                      title="Delete fact"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[12px] text-muted-foreground">No facts extracted yet.</p>
+            )}
           </div>
 
-          {/* Episodes */}
+          {/* ── Episodes ── */}
           <div>
             <div className="flex items-center gap-2 mb-3">
               <span className="text-base">📖</span>
               <h3 className="text-[12.5px] font-semibold text-foreground">Episodes</h3>
+              <Badge variant="outline" className="text-[9.5px] ml-auto">
+                {detailLoading ? "…" : (detail?.episodes.length ?? 0)}
+              </Badge>
             </div>
-            <div className="space-y-2">
-              {Array.from({ length: caller.callCount }).slice(0, 3).map((_, i) => (
-                <div key={i} className="rounded-lg border border-border bg-card p-3">
-                  <p className="text-[11px] text-muted-foreground/60 mb-1">Call {caller.callCount - i} · {caller.lastSeen}</p>
-                  <Skeleton className="h-3 w-full mb-1.5" />
-                  <Skeleton className="h-3 w-4/5" />
-                </div>
-              ))}
-            </div>
+
+            {detailLoading ? (
+              <div className="space-y-2">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="rounded-lg border border-border bg-card p-3 space-y-1.5">
+                    <Skeleton className="h-2.5 w-24" />
+                    <Skeleton className="h-3 w-full" />
+                    <Skeleton className="h-3 w-4/5" />
+                  </div>
+                ))}
+              </div>
+            ) : detail && detail.episodes.length > 0 ? (
+              <div className="space-y-2">
+                {detail.episodes.map(ep => (
+                  <div key={ep.id} className="rounded-lg border border-border bg-card p-3">
+                    <p className="text-[11px] text-muted-foreground/60 mb-1.5 flex items-center gap-1.5">
+                      <span>{sentimentEmoji(ep.summary)}</span>
+                      <span>{timeAgo(ep.createdAt)}</span>
+                      {ep.durationSeconds != null && (
+                        <span>· {Math.floor(ep.durationSeconds / 60)}m {ep.durationSeconds % 60}s</span>
+                      )}
+                    </p>
+                    {ep.summary ? (
+                      <p className="text-[12px] text-foreground leading-relaxed">{ep.summary}</p>
+                    ) : (
+                      <p className="text-[12px] text-muted-foreground italic">No summary available.</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[12px] text-muted-foreground">No episodes recorded yet.</p>
+            )}
           </div>
 
-          {/* Sentences */}
+          {/* ── Verbatim quotes ── */}
           <div>
             <div className="flex items-center gap-2 mb-3">
               <span className="text-base">💬</span>
               <h3 className="text-[12.5px] font-semibold text-foreground">Verbatim Quotes</h3>
             </div>
-            <p className="text-[12px] text-muted-foreground italic">No verbatim quotes captured yet.</p>
+
+            {detailLoading ? (
+              <div className="space-y-2">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-10 w-full rounded-lg" />
+                ))}
+              </div>
+            ) : (() => {
+              const allSentences = detail?.episodes.flatMap(ep =>
+                ep.sentences.map(s => ({ ...s, episodeId: ep.id, episodeAt: ep.createdAt }))
+              ) ?? [];
+              return allSentences.length > 0 ? (
+                <div className="space-y-2">
+                  {allSentences.map(s => (
+                    <div key={s.id} className="rounded-lg border border-border bg-card px-3 py-2.5">
+                      <p className="text-[10px] text-muted-foreground/50 mb-1 uppercase tracking-wide">
+                        {s.speaker === "agent" ? "🤖 Agent" : "👤 Caller"}
+                      </p>
+                      <p className="text-[12px] text-foreground leading-relaxed">"{s.text}"</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[12px] text-muted-foreground italic">No verbatim quotes captured yet.</p>
+              );
+            })()}
           </div>
         </div>
       </div>
@@ -187,18 +407,76 @@ function MemoryDrawer({ caller, onClose }: { caller: CallerMemory; onClose: () =
 
 /* ─── Page ────────────────────────────────────────────────────────────────── */
 export default function MemoryPage() {
-  const [search, setSearch]         = useState("");
+  const [search, setSearch]           = useState("");
   const [agentFilter, setAgentFilter] = useState("all");
-  const [selected, setSelected]     = useState<CallerMemory | null>(null);
+  const [selected, setSelected]       = useState<CallerMemory | null>(null);
+
+  const { getToken } = useAuth();
+  const { toast }    = useToast();
 
   const { data: agents } = useListAgents({ query: { queryKey: getListAgentsQueryKey() } });
+  const agentList = agents ?? [];
 
-  // Placeholder callers — will be replaced by real API (GET /api/caller-memory) in Phase 4
-  const placeholderCallers: CallerMemory[] = [];
+  // Determine which agents to fetch
+  const targetAgents = agentFilter === "all"
+    ? agentList
+    : agentList.filter(a => String(a.id) === agentFilter);
 
-  const filtered = placeholderCallers.filter(c =>
-    (agentFilter === "all" || c.agentId === agentFilter) &&
-    (search === "" || c.phone.includes(search) || c.name?.toLowerCase().includes(search.toLowerCase()))
+  // Parallel per-agent caller-list queries
+  const callerQueries = useQueries({
+    queries: targetAgents.map(agent => ({
+      queryKey: callerListKey(agent.id),
+      queryFn: async (): Promise<{ agentId: number; agentName: string; rows: ApiCallerRow[] }> => {
+        const token = await getToken();
+        const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+        const r = await fetch(`/api/agents/${agent.id}/caller-memory`, { headers });
+        if (!r.ok) throw new Error(`Failed to load callers for agent ${agent.name}`);
+        const rows: ApiCallerRow[] = await r.json();
+        return { agentId: agent.id, agentName: agent.name, rows };
+      },
+      staleTime: 30_000,
+    })),
+  });
+
+  const isLoading = callerQueries.some(q => q.isLoading);
+  const hasError  = callerQueries.some(q => q.isError);
+
+  // Show toast on first error
+  useMemo(() => {
+    if (hasError) {
+      const errQ = callerQueries.find(q => q.isError);
+      if (errQ?.error instanceof Error) {
+        toast({ title: "Error loading callers", description: errQ.error.message, variant: "destructive" });
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasError]);
+
+  // Merge all results into a flat list
+  const allCallers: CallerMemory[] = useMemo(() => {
+    const rows: CallerMemory[] = [];
+    for (const q of callerQueries) {
+      if (!q.data) continue;
+      for (const r of q.data.rows) {
+        rows.push({
+          phone:     r.phoneNumber,
+          name:      r.name ?? undefined,
+          callCount: r.callCount,
+          lastSeen:  timeAgo(r.lastCalledAt),
+          agentName: q.data.agentName,
+          agentId:   q.data.agentId,
+          factCount: r.factCount,
+        });
+      }
+    }
+    // Sort by most recent (we sort by lastCalledAt desc on server but across agents merge by call count as proxy)
+    return rows.sort((a, b) => b.callCount - a.callCount);
+  }, [callerQueries]);
+
+  const filtered = allCallers.filter(c =>
+    search === "" ||
+    c.phone.includes(search) ||
+    c.name?.toLowerCase().includes(search.toLowerCase()),
   );
 
   return (
@@ -212,9 +490,7 @@ export default function MemoryPage() {
             <p className="text-[11.5px] text-muted-foreground mt-0.5">Cross-call caller profiles — facts, episodes, voice prints</p>
           </div>
         </div>
-
         <div className="flex items-center gap-2">
-          {/* Differentiator badge */}
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-border bg-elevated">
             <Sparkles className="w-3 h-3 text-muted-foreground/50" />
             <span className="text-[10.5px] text-muted-foreground font-medium">Exclusive to SnapServe</span>
@@ -238,40 +514,43 @@ export default function MemoryPage() {
         <select
           className="h-8 text-xs px-2.5 rounded-md border border-input bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           value={agentFilter}
-          onChange={e => setAgentFilter(e.target.value)}
+          onChange={e => { setAgentFilter(e.target.value); setSelected(null); }}
         >
           <option value="all">All agents</option>
-          {agents?.map(a => (
+          {agentList.map(a => (
             <option key={a.id} value={a.id}>{a.name}</option>
           ))}
         </select>
 
-        <div className="ml-auto text-[11px] text-muted-foreground tabular-nums">
+        <div className="ml-auto flex items-center gap-2 text-[11px] text-muted-foreground tabular-nums">
+          {isLoading && <Loader2 className="w-3 h-3 animate-spin" />}
           {filtered.length} callers
         </div>
       </div>
 
       {/* Table header */}
-      {filtered.length > 0 && (
+      {(isLoading || filtered.length > 0) && (
         <div className="flex items-center gap-4 px-5 py-2 border-b border-border bg-card shrink-0 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/50">
           <div className="w-8 shrink-0" />
           <div className="flex-1">Phone / Name</div>
           <div className="hidden sm:block w-12 text-center">Calls</div>
           <div className="hidden md:block w-20 text-right">Last seen</div>
           <div className="hidden lg:block w-24">Agent</div>
-          <div className="hidden xl:flex flex-1 max-w-[260px]">Key facts</div>
+          <div className="hidden xl:flex flex-1 max-w-[120px]">Key facts</div>
           <div className="w-4" />
         </div>
       )}
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto min-h-0">
-        {filtered.length === 0 ? (
+        {isLoading ? (
+          <SkeletonRows />
+        ) : filtered.length === 0 ? (
           <EmptyState />
         ) : (
           filtered.map(caller => (
             <CallerRow
-              key={caller.phone}
+              key={`${caller.agentId}-${caller.phone}`}
               caller={caller}
               onClick={() => setSelected(caller)}
             />
