@@ -7,7 +7,7 @@ import {
   ChevronDown, ChevronUp, Phone, Calendar, Clock, TrendingUp,
   BarChart3, Mic, Cpu, Volume2, Hash, ArrowRight, UserCheck,
   Voicemail, BookOpen, Tag, Activity, ExternalLink, Copy, CheckCircle2,
-  XCircle, PlayCircle, PauseCircle, MicOff
+  XCircle, PlayCircle, PauseCircle, MicOff, ScrollText
 } from "lucide-react";
 import {
   useGetCall,
@@ -33,6 +33,195 @@ interface ToolEvent {
   toolName: string;
   result: string;
   status: "success" | "error";
+}
+
+interface ExecutionLogEntry {
+  timestamp: string;
+  logData: string;
+  direction: "request" | "response";
+  component: "transcriber" | "llm" | "synthesizer";
+  provider: string;
+}
+
+function fmtLogTs(d: Date): string {
+  const p = (n: number, l = 2) => String(n).padStart(l, "0");
+  const date = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  const ms = String(d.getMilliseconds()).padStart(3, "0");
+  const time = `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${ms}000`;
+  return `${date}\n${time}`;
+}
+
+function parseExecutionLogs(
+  isJsonTranscript: boolean,
+  transcriptLines: any[],
+  plainLines: string[],
+  call: any,
+  agent: any
+): ExecutionLogEntry[] {
+  const entries: ExecutionLogEntry[] = [];
+  const asrProvider = agent?.asrProvider ?? "asr";
+  const llmProvider = agent?.llmModel
+    ? `${agent.llmProvider ?? "llm"} / ${agent.llmModel}`
+    : (agent?.llmProvider ?? "llm");
+  const ttsProvider = agent?.ttsProvider ?? "tts";
+
+  const startMs = new Date(call.createdAt).getTime();
+  const endMs = call.endedAt
+    ? new Date(call.endedAt).getTime()
+    : startMs + (call.durationSeconds ?? 60) * 1000;
+  const totalMs = Math.max(endMs - startMs, 1000);
+
+  if (isJsonTranscript && transcriptLines.length > 0) {
+    let totalEvents = 0;
+    for (const line of transcriptLines) {
+      if (line.role === "user") totalEvents += 1;
+      else if (line.role === "assistant") totalEvents += 4;
+    }
+
+    let idx = 0;
+    const ts = (i: number) =>
+      new Date(startMs + Math.round((i / Math.max(totalEvents, 1)) * totalMs));
+
+    for (let li = 0; li < transcriptLines.length; li++) {
+      const line = transcriptLines[li];
+      if (line.role === "user") {
+        entries.push({
+          timestamp: fmtLogTs(ts(idx++)),
+          logData: String(line.content ?? ""),
+          direction: "response",
+          component: "transcriber",
+          provider: asrProvider,
+        });
+      } else if (line.role === "assistant") {
+        const ctx = transcriptLines
+          .slice(0, li)
+          .map((l: any) => `${l.role === "user" ? "user" : "assistant"}: ${l.content}`)
+          .join("\n");
+        entries.push({
+          timestamp: fmtLogTs(ts(idx++)),
+          logData: ctx || "[Start of conversation]",
+          direction: "request",
+          component: "llm",
+          provider: llmProvider,
+        });
+        entries.push({
+          timestamp: fmtLogTs(ts(idx++)),
+          logData: String(line.content ?? ""),
+          direction: "response",
+          component: "llm",
+          provider: llmProvider,
+        });
+        entries.push({
+          timestamp: fmtLogTs(ts(idx++)),
+          logData: String(line.content ?? ""),
+          direction: "request",
+          component: "synthesizer",
+          provider: ttsProvider,
+        });
+        entries.push({
+          timestamp: fmtLogTs(ts(idx++)),
+          logData: String(line.content ?? ""),
+          direction: "response",
+          component: "synthesizer",
+          provider: ttsProvider,
+        });
+      }
+    }
+  } else if (plainLines.length > 0) {
+    const nonEmpty = plainLines.filter((l) => l.trim());
+    nonEmpty.forEach((line, i) => {
+      const t = new Date(
+        startMs + Math.round((i / Math.max(nonEmpty.length, 1)) * totalMs)
+      );
+      const isUser = /^user:/i.test(line);
+      const isBot = /^(assistant|bot):/i.test(line);
+      entries.push({
+        timestamp: fmtLogTs(t),
+        logData: line,
+        direction: "response",
+        component: isUser ? "transcriber" : isBot ? "synthesizer" : "llm",
+        provider: isUser ? asrProvider : isBot ? ttsProvider : llmProvider,
+      });
+    });
+  }
+
+  return entries;
+}
+
+const COMPONENT_CONFIG = {
+  transcriber: {
+    icon: <Mic className="h-3 w-3" />,
+    color: "text-purple-500",
+    bg: "bg-purple-500/10 border-purple-500/20",
+    label: "transcriber",
+  },
+  llm: {
+    icon: <Cpu className="h-3 w-3" />,
+    color: "text-blue-500",
+    bg: "bg-blue-500/10 border-blue-500/20",
+    label: "llm",
+  },
+  synthesizer: {
+    icon: <Volume2 className="h-3 w-3" />,
+    color: "text-emerald-500",
+    bg: "bg-emerald-500/10 border-emerald-500/20",
+    label: "synthesizer",
+  },
+};
+
+function LogRow({ entry }: { entry: ExecutionLogEntry }) {
+  const [expanded, setExpanded] = useState(false);
+  const MAX_LEN = 200;
+  const isLong = entry.logData.length > MAX_LEN;
+  const display = !isLong || expanded ? entry.logData : entry.logData.slice(0, MAX_LEN) + "…";
+  const cfg = COMPONENT_CONFIG[entry.component];
+  const [datePart, timePart] = entry.timestamp.split("\n");
+
+  return (
+    <tr className="border-b border-border last:border-0 hover:bg-elevated/20 transition-colors group">
+      <td className="px-4 py-3 align-top w-36 shrink-0">
+        <div className="text-[10px] font-mono text-muted-foreground">{datePart}</div>
+        <div className="text-[10px] font-mono text-muted-foreground/60">{timePart}</div>
+      </td>
+      <td className="px-4 py-3 align-top">
+        <p className="text-xs text-foreground/80 whitespace-pre-wrap leading-relaxed break-words">{display}</p>
+        {isLong && (
+          <button
+            onClick={() => setExpanded((v) => !v)}
+            className="mt-1.5 flex items-center gap-0.5 text-xs text-primary hover:underline"
+          >
+            {expanded ? (
+              <><ChevronUp className="h-3 w-3" /> Show less</>
+            ) : (
+              <><ChevronDown className="h-3 w-3" /> Show more</>
+            )}
+          </button>
+        )}
+      </td>
+      <td className="px-4 py-3 align-top w-24">
+        {entry.direction === "request" ? (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-500 border border-amber-500/20">
+            request
+          </span>
+        ) : (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-muted/60 text-muted-foreground border border-border">
+            response
+          </span>
+        )}
+      </td>
+      <td className="px-4 py-3 align-top w-32">
+        <span className={`inline-flex items-center gap-1.5 text-[10px] font-medium ${cfg.color}`}>
+          <span className={`inline-flex items-center justify-center w-4 h-4 rounded border ${cfg.bg}`}>
+            {cfg.icon}
+          </span>
+          {cfg.label}
+        </span>
+      </td>
+      <td className="px-4 py-3 align-top w-32 text-[10px] font-mono text-muted-foreground">
+        {entry.provider}
+      </td>
+    </tr>
+  );
 }
 
 const TOOL_CALL_RE = /\[calling tool:\s*([^\]]+)\]/i;
@@ -345,6 +534,14 @@ export default function CallDetail() {
       ? parseToolEventsFromLines(call.transcript.split(/\r?\n/))
       : [];
 
+  const executionLogs = parseExecutionLogs(
+    isJsonTranscript,
+    transcriptLines,
+    plainLines,
+    call,
+    agent
+  );
+
   const callSummary = (call as any).callSummary as string | null | undefined;
   const rawEval = (call as any).successEvaluation as string | null | undefined;
   const evalVerdict = rawEval ? rawEval.split(/\r?\n/)[0]?.trim().toUpperCase() : undefined;
@@ -458,6 +655,9 @@ export default function CallDetail() {
                 <TabsTrigger value="tools" className="text-xs h-6 gap-1">
                   <Zap className="h-3 w-3" /> Tools {toolEvents.length > 0 && `(${toolEvents.length})`}
                 </TabsTrigger>
+                <TabsTrigger value="logs" className="text-xs h-6 gap-1">
+                  <ScrollText className="h-3 w-3" /> Logs {executionLogs.length > 0 && `(${executionLogs.length})`}
+                </TabsTrigger>
                 <TabsTrigger value="metadata" className="text-xs h-6 gap-1">
                   <Hash className="h-3 w-3" /> Metadata
                 </TabsTrigger>
@@ -558,6 +758,88 @@ export default function CallDetail() {
                         {toolEvents.map((event, i) => (
                           <ToolEventRow key={i} event={event} />
                         ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="logs" className="flex-1 overflow-auto mt-2 min-h-0">
+                <Card className="h-full flex flex-col">
+                  <CardHeader className="py-3 px-4 border-b shrink-0">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="text-sm flex items-center gap-2">
+                          <ScrollText className="h-4 w-4 text-primary/70" />
+                          Agent Execution Logs
+                        </CardTitle>
+                        <CardDescription className="text-[10px] mt-0.5">
+                          Every request and response through the agent pipeline
+                        </CardDescription>
+                      </div>
+                      {executionLogs.length > 0 && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs gap-1.5"
+                          onClick={() => {
+                            const blob = new Blob(
+                              [JSON.stringify(executionLogs, null, 2)],
+                              { type: "application/json" }
+                            );
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement("a");
+                            a.href = url;
+                            a.download = `call-${call.id}-logs.json`;
+                            a.click();
+                            URL.revokeObjectURL(url);
+                          }}
+                        >
+                          <Download className="h-3 w-3" />
+                          Download logs
+                        </Button>
+                      )}
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-0 flex-1 overflow-auto">
+                    {executionLogs.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-full text-center py-16">
+                        <div className="h-10 w-10 rounded-xl bg-elevated border border-border flex items-center justify-center mb-3">
+                          <ScrollText className="h-5 w-5 text-muted-foreground/30" />
+                        </div>
+                        <p className="text-sm text-foreground/40">No execution logs</p>
+                        <p className="text-xs text-muted-foreground/30 mt-1">
+                          Logs are generated from the call transcript once available
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="border-b border-border bg-elevated/30 sticky top-0 z-10">
+                              <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 w-36">
+                                Timestamp
+                              </th>
+                              <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                                Log data
+                              </th>
+                              <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 w-24">
+                                Direction
+                              </th>
+                              <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 w-32">
+                                Component
+                              </th>
+                              <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 w-32">
+                                Provider
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {executionLogs.map((entry, i) => (
+                              <LogRow key={i} entry={entry} />
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     )}
                   </CardContent>

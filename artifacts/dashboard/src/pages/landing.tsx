@@ -1,10 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Link } from "wouter";
 import { useAuth } from "@/lib/auth";
-import gsap from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
-
-gsap.registerPlugin(ScrollTrigger);
 
 /* ─────────────────────────────────────────────────────────────────────────── */
 /*  DATA                                                                        */
@@ -92,71 +88,30 @@ export default function LandingPage() {
   const statsRef  = useRef<HTMLDivElement>(null);
   const countersRef = useRef<HTMLSpanElement[]>([]);
 
-  /* GSAP setup */
+  /* Stat counters via IntersectionObserver */
   useEffect(() => {
-    const ctx = gsap.context(() => {
-
-      /* ── Hero entrance ─────────────────────────────────────────────────── */
-      gsap.from(".hero-badge",   { y: 20, opacity: 0, duration: 0.7, ease: "power3.out", delay: 0.1 });
-      gsap.from(".hero-h1 span",{
-        y: 80, opacity: 0, duration: 1, ease: "power4.out", delay: 0.2, stagger: 0.12,
+    const spans = document.querySelectorAll<HTMLSpanElement>(".stat-num");
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        const el = entry.target as HTMLSpanElement;
+        const idx = Array.from(spans).indexOf(el);
+        const stat = STATS[idx];
+        if (!stat) return;
+        const isFloat = stat.value % 1 !== 0;
+        let start = 0;
+        const step = stat.value / 40;
+        const tick = () => {
+          start = Math.min(start + step, stat.value);
+          el.textContent = isFloat ? start.toFixed(1) : Math.round(start).toString();
+          if (start < stat.value) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+        observer.unobserve(el);
       });
-      gsap.from(".hero-sub",    { y: 30, opacity: 0, duration: 0.9, ease: "power3.out", delay: 0.65 });
-      gsap.from(".hero-ctas",   { y: 24, opacity: 0, duration: 0.8, ease: "power3.out", delay: 0.8 });
-      gsap.from(".hero-note",   { opacity: 0, duration: 0.6, delay: 1.1 });
-
-      /* ── Orb parallax ──────────────────────────────────────────────────── */
-      gsap.to(".hero-orb", {
-        y: -120,
-        ease: "none",
-        scrollTrigger: { trigger: heroRef.current, start: "top top", end: "bottom top", scrub: true },
-      });
-
-      /* ── Differentiator cards ──────────────────────────────────────────── */
-      gsap.utils.toArray<HTMLElement>(".diff-card").forEach((card, i) => {
-        gsap.from(card, {
-          y: 70,
-          opacity: 0,
-          duration: 0.9,
-          ease: "power3.out",
-          scrollTrigger: { trigger: card, start: "top 82%", toggleActions: "play none none none" },
-        });
-      });
-
-      /* ── Stats counters ────────────────────────────────────────────────── */
-      gsap.utils.toArray<HTMLSpanElement>(".stat-num").forEach((el, i) => {
-        const stat = STATS[i]!;
-        const obj  = { val: 0 };
-        ScrollTrigger.create({
-          trigger: el,
-          start: "top 85%",
-          onEnter: () => {
-            gsap.to(obj, {
-              val: stat.value,
-              duration: 1.6,
-              ease: "power2.out",
-              onUpdate() {
-                el.textContent = stat.value % 1 !== 0
-                  ? obj.val.toFixed(1)
-                  : Math.round(obj.val).toString();
-              },
-            });
-          },
-          once: true,
-        });
-      });
-
-      /* ── Section reveals ───────────────────────────────────────────────── */
-      gsap.utils.toArray<HTMLElement>(".reveal").forEach(el => {
-        gsap.from(el, {
-          y: 40, opacity: 0, duration: 0.8, ease: "power3.out",
-          scrollTrigger: { trigger: el, start: "top 86%", toggleActions: "play none none none" },
-        });
-      });
-
-    }, rootRef);
-
-    return () => ctx.revert();
+    }, { threshold: 0.3 });
+    spans.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
   }, []);
 
   return (
