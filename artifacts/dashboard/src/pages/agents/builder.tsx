@@ -336,7 +336,7 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
     <div className="flex h-full overflow-hidden">
 
       {/* ── Left: Vapi-style config ──────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto min-w-0 border-r border-border/50">
+      <div className="relative flex-1 overflow-y-auto min-w-0 border-r border-border/50">
         <div className="p-5 space-y-5">
 
           {/* Agent name */}
@@ -622,7 +622,7 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
 function PromptTab({ form }: { form: any }) {
   const { fields: pvFields, append: pvAppend, remove: pvRemove } = useFieldArray({ control: form.control, name: "promptVariables" });
   return (
-    <div className="flex flex-col h-full p-6 gap-4 overflow-y-auto">
+    <div className="relative flex flex-col h-full p-6 gap-4 overflow-y-auto">
       <FormField control={form.control} name="systemPrompt" render={({ field }) => (
         <FormItem className="flex-1 flex flex-col space-y-2">
           <FormLabel className="text-sm font-semibold">System Prompt</FormLabel>
@@ -705,7 +705,7 @@ function VoiceTab({ form }: { form: any }) {
   const dropdownValV      = inCuratedV ? (ttsVoice ?? "") : "__custom__";
 
   return (
-    <div className="p-6 overflow-y-auto h-full space-y-6">
+    <div className="relative p-6 overflow-y-auto h-full space-y-6">
 
       {/* ── Provider & Voice ── */}
       <div className="space-y-3">
@@ -941,7 +941,7 @@ function ToolsTab({ form }: { form: any }) {
   };
 
   return (
-    <div className="p-6 overflow-y-auto h-full space-y-6">
+    <div className="relative p-6 overflow-y-auto h-full space-y-6">
 
       {/* ── Platform Tools ─── */}
       <div>
@@ -1186,7 +1186,7 @@ function ToolsTab({ form }: { form: any }) {
 
 function PipelineTab({ form }: { form: any }) {
   return (
-    <div className="p-6 overflow-y-auto h-full space-y-5">
+    <div className="relative p-6 overflow-y-auto h-full space-y-5">
       <div className="grid grid-cols-2 gap-5">
         <div className="space-y-4">
           <SectionDivider label="Conversation" />
@@ -1263,7 +1263,7 @@ function VoicemailTab({ form }: { form: any }) {
   const mode   = form.watch("machineDetectionMode");
   const action = form.watch("voicemailAction");
   return (
-    <div className="p-6 overflow-y-auto h-full space-y-5 max-w-xl">
+    <div className="relative p-6 overflow-y-auto h-full space-y-5 max-w-xl">
       <div>
         <h3 className="text-sm font-semibold">Voicemail Detection (AMD)</h3>
         <p className="text-xs text-muted-foreground mt-1">Outbound calls only — detects answering machines and takes action.</p>
@@ -1345,7 +1345,7 @@ function SliderField({ form, name, label, description, min, max, step, format }:
 function AdvancedTab({ form }: { form: any }) {
   const bargeIn = form.watch("bargeInEnabled");
   return (
-    <div className="p-6 overflow-y-auto h-full space-y-6">
+    <div className="relative p-6 overflow-y-auto h-full space-y-6">
       <div className="grid grid-cols-2 gap-6">
         {/* ── Left column ── */}
         <div className="space-y-4">
@@ -1522,7 +1522,7 @@ function AgentListPanel({ selectedId, onSelect, rateMap }: {
 
 function AnalysisTab({ form }: { form: any }) {
   return (
-    <div className="p-6 overflow-y-auto h-full space-y-8">
+    <div className="relative p-6 overflow-y-auto h-full space-y-8">
 
       {/* ── Webhook ── */}
       <div>
@@ -1680,7 +1680,7 @@ function LogsTab({ agentId }: { agentId: number }) {
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto min-h-0">
+      <div className="relative flex-1 overflow-auto min-h-0">
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent border-b border-border">
@@ -1960,7 +1960,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
   if (!agent) return null;
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+    <div className="relative flex-1 flex flex-col min-h-0 overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-border/60 shrink-0">
         <div className="flex items-center gap-3">
