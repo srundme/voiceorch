@@ -438,10 +438,10 @@ export interface Agent {
      */
   productDetails?: string | null;
   /**
-     * Bolna platform agent ID used to fetch executions from the Bolna API
+     * SnapServe platform agent ID used to fetch executions from the SnapServe API
      * @nullable
      */
-  bolnaAgentId?: string | null;
+  snapserveAgentId?: string | null;
   totalCalls?: number;
   successfulCalls?: number;
   /** @nullable */
@@ -547,10 +547,10 @@ export interface AgentInput {
   /** Product or service details for the agent's context */
   productDetails?: string;
   /**
-     * Bolna platform agent ID used to fetch executions from the Bolna API
+     * SnapServe platform agent ID used to fetch executions from the SnapServe API
      * @nullable
      */
-  bolnaAgentId?: string | null;
+  snapserveAgentId?: string | null;
   /** Raw wizard answers passed from the dashboard. May include the ordered micro-question/answer pairs (microAnswers) and any uploaded job description content (jdFileContent, jdFileName). When present, the server generates the agent's system prompt server-side using the active admin master template (Qwen) and stores the result. Never returned in responses. */
   wizardInputs?: AgentInputWizardInputs;
 }
@@ -638,13 +638,13 @@ export interface AgentUpdate {
   /** Product or service details for the agent's context */
   productDetails?: string;
   /**
-     * Bolna platform agent ID used to fetch executions from the Bolna API
+     * SnapServe platform agent ID used to fetch executions from the SnapServe API
      * @nullable
      */
-  bolnaAgentId?: string | null;
+  snapserveAgentId?: string | null;
 }
 
-export interface BolnaCostBreakdown {
+export interface SnapServeCostBreakdown {
   /** @nullable */
   llm?: number | null;
   /** @nullable */
@@ -657,7 +657,7 @@ export interface BolnaCostBreakdown {
   transcriber?: number | null;
 }
 
-export interface BolnaTelephonyData {
+export interface SnapServeTelephonyData {
   /** @nullable */
   duration?: number | null;
   /** @nullable */
@@ -678,7 +678,7 @@ export interface BolnaTelephonyData {
   hangup_provider_code?: string | null;
 }
 
-export interface BolnaExecution {
+export interface SnapServeExecution {
   id?: string;
   agent_id?: string;
   /** @nullable */
@@ -697,17 +697,17 @@ export interface BolnaExecution {
   created_at?: string | null;
   /** @nullable */
   updated_at?: string | null;
-  cost_breakdown?: BolnaCostBreakdown;
-  telephony_data?: BolnaTelephonyData;
+  cost_breakdown?: SnapServeCostBreakdown;
+  telephony_data?: SnapServeTelephonyData;
 }
 
-export interface BolnaExecutionsResponse {
+export interface SnapServeExecutionsResponse {
   page_number?: number;
   page_size?: number;
   /** @nullable */
   total?: number | null;
   has_more?: boolean;
-  data?: BolnaExecution[];
+  data?: SnapServeExecution[];
 }
 
 export type CallStatus = typeof CallStatus[keyof typeof CallStatus];
@@ -3794,7 +3794,7 @@ export interface PendriveCallerList {
  */
 export type AdminTokenParameter = string;
 
-export type GetAgentBolnaExecutionsParams = {
+export type GetAgentSnapserveExecutionsParams = {
 page_number?: number;
 page_size?: number;
 };

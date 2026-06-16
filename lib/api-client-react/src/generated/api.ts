@@ -74,7 +74,6 @@ import type {
   BatchWorkspaceKpis,
   BatchWorkspaceLeadsPage,
   BatchWorkspaceSources,
-  BolnaExecutionsResponse,
   Booking,
   BookingInput,
   BookingMetrics,
@@ -119,7 +118,7 @@ import type {
   ExportCampaignLiveQueueParams,
   GetAdminAgents200,
   GetAdminPromptTemplates200,
-  GetAgentBolnaExecutionsParams,
+  GetAgentSnapserveExecutionsParams,
   GetAvailableSlotsParams,
   GetBatchWorkspaceActivityParams,
   GetCommandCenterActivityStream200,
@@ -234,6 +233,7 @@ import type {
   SchedulingCalendar,
   SchedulingCalendarInput,
   SchedulingCalendarUpdate,
+  SnapServeExecutionsResponse,
   TestToolBody,
   TestToolResponse,
   TimeSlot,
@@ -787,8 +787,8 @@ export const useToggleAgent = <TError = ErrorType<void>,
       return useMutation(getToggleAgentMutationOptions(options));
     }
 
-export const getGetAgentBolnaExecutionsUrl = (id: number,
-    params?: GetAgentBolnaExecutionsParams,) => {
+export const getGetAgentSnapserveExecutionsUrl = (id: number,
+    params?: GetAgentSnapserveExecutionsParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
@@ -800,16 +800,16 @@ export const getGetAgentBolnaExecutionsUrl = (id: number,
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/api/agents/${id}/bolna-executions?${stringifiedParams}` : `/api/agents/${id}/bolna-executions`
+  return stringifiedParams.length > 0 ? `/api/agents/${id}/snapserve-executions?${stringifiedParams}` : `/api/agents/${id}/snapserve-executions`
 }
 
 /**
- * @summary Fetch Bolna executions for an agent (proxied from Bolna API)
+ * @summary Fetch SnapServe executions for an agent (proxied from SnapServe API)
  */
-export const getAgentBolnaExecutions = async (id: number,
-    params?: GetAgentBolnaExecutionsParams, options?: RequestInit): Promise<BolnaExecutionsResponse> => {
+export const getAgentSnapserveExecutions = async (id: number,
+    params?: GetAgentSnapserveExecutionsParams, options?: RequestInit): Promise<SnapServeExecutionsResponse> => {
 
-  return customFetch<BolnaExecutionsResponse>(getGetAgentBolnaExecutionsUrl(id,params),
+  return customFetch<SnapServeExecutionsResponse>(getGetAgentSnapserveExecutionsUrl(id,params),
   {
     ...options,
     method: 'GET'
@@ -822,48 +822,48 @@ export const getAgentBolnaExecutions = async (id: number,
 
 
 
-export const getGetAgentBolnaExecutionsQueryKey = (id: number,
-    params?: GetAgentBolnaExecutionsParams,) => {
+export const getGetAgentSnapserveExecutionsQueryKey = (id: number,
+    params?: GetAgentSnapserveExecutionsParams,) => {
     return [
-    `/api/agents/${id}/bolna-executions`, ...(params ? [params] : [])
+    `/api/agents/${id}/snapserve-executions`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetAgentBolnaExecutionsQueryOptions = <TData = Awaited<ReturnType<typeof getAgentBolnaExecutions>>, TError = ErrorType<void>>(id: number,
-    params?: GetAgentBolnaExecutionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAgentBolnaExecutions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetAgentSnapserveExecutionsQueryOptions = <TData = Awaited<ReturnType<typeof getAgentSnapserveExecutions>>, TError = ErrorType<void>>(id: number,
+    params?: GetAgentSnapserveExecutionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAgentSnapserveExecutions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetAgentBolnaExecutionsQueryKey(id,params);
+  const queryKey =  queryOptions?.queryKey ?? getGetAgentSnapserveExecutionsQueryKey(id,params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAgentBolnaExecutions>>> = ({ signal }) => getAgentBolnaExecutions(id,params, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAgentSnapserveExecutions>>> = ({ signal }) => getAgentSnapserveExecutions(id,params, { signal, ...requestOptions });
 
 
 
 
 
-   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAgentBolnaExecutions>>, TError, TData> & { queryKey: QueryKey }
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAgentSnapserveExecutions>>, TError, TData> & { queryKey: QueryKey }
 }
 
-export type GetAgentBolnaExecutionsQueryResult = NonNullable<Awaited<ReturnType<typeof getAgentBolnaExecutions>>>
-export type GetAgentBolnaExecutionsQueryError = ErrorType<void>
+export type GetAgentSnapserveExecutionsQueryResult = NonNullable<Awaited<ReturnType<typeof getAgentSnapserveExecutions>>>
+export type GetAgentSnapserveExecutionsQueryError = ErrorType<void>
 
 
 /**
- * @summary Fetch Bolna executions for an agent (proxied from Bolna API)
+ * @summary Fetch SnapServe executions for an agent (proxied from SnapServe API)
  */
 
-export function useGetAgentBolnaExecutions<TData = Awaited<ReturnType<typeof getAgentBolnaExecutions>>, TError = ErrorType<void>>(
+export function useGetAgentSnapserveExecutions<TData = Awaited<ReturnType<typeof getAgentSnapserveExecutions>>, TError = ErrorType<void>>(
  id: number,
-    params?: GetAgentBolnaExecutionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAgentBolnaExecutions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+    params?: GetAgentSnapserveExecutionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAgentSnapserveExecutions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetAgentBolnaExecutionsQueryOptions(id,params,options)
+  const queryOptions = getGetAgentSnapserveExecutionsQueryOptions(id,params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

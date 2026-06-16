@@ -46,7 +46,7 @@ interface ProviderDef {
 
 const SUPPORTED_PROVIDERS: Record<string, ProviderDef[]> = {
   orchestration: [
-    { label: "Bolna", value: "bolna", apiKeyLabel: "API Key", apiKeyPlaceholder: "Paste your Bolna API key…", docsUrl: "https://app.bolna.ai", docsLabel: "app.bolna.ai" },
+    { label: "SnapServe", value: "snapserve", apiKeyLabel: "API Key", apiKeyPlaceholder: "Paste your SnapServe API key…", docsUrl: "https://app.snapserve.ai", docsLabel: "app.snapserve.ai" },
   ],
   asr: [
     { label: "Deepgram", value: "deepgram", apiKeyLabel: "API Key", apiKeyPlaceholder: "Paste your Deepgram key…", docsUrl: "https://console.deepgram.com", docsLabel: "console.deepgram.com" },
@@ -88,7 +88,7 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 const TYPE_DESC: Record<string, string> = {
-  orchestration: "Platform integrations (e.g. Bolna)",
+  orchestration: "Platform integrations (e.g. SnapServe)",
   asr:           "Transcribe caller speech",
   llm:           "Drive conversation logic",
   tts:           "Synthesize agent voice",

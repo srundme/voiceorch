@@ -5,10 +5,10 @@ import {
   Clock, DollarSign, PhoneOff, Voicemail, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import {
-  useGetAgentBolnaExecutions,
-  getGetAgentBolnaExecutionsQueryKey,
+  useGetAgentSnapserveExecutions,
+  getGetAgentSnapserveExecutionsQueryKey,
 } from "@workspace/api-client-react";
-import type { BolnaExecution } from "@workspace/api-client-react";
+import type { SnapServeExecution } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -31,7 +31,7 @@ function fmtDate(s?: string | null) {
   try { return format(parseISO(s), "MMM d, yyyy HH:mm:ss"); } catch { return s; }
 }
 
-function CostBreakdownRow({ cb }: { cb: BolnaExecution["cost_breakdown"] }) {
+function CostBreakdownRow({ cb }: { cb: SnapServeExecution["cost_breakdown"] }) {
   if (!cb) return null;
   const items: Array<{ label: string; val: number | null | undefined }> = [
     { label: "LLM",         val: cb.llm },
@@ -52,7 +52,7 @@ function CostBreakdownRow({ cb }: { cb: BolnaExecution["cost_breakdown"] }) {
   );
 }
 
-function TelephonyGrid({ td }: { td: BolnaExecution["telephony_data"] }) {
+function TelephonyGrid({ td }: { td: SnapServeExecution["telephony_data"] }) {
   if (!td) return null;
   const items: Array<{ label: string; val: string | number | boolean | null | undefined }> = [
     { label: "To",               val: td.to_number },
@@ -84,7 +84,7 @@ function TelephonyGrid({ td }: { td: BolnaExecution["telephony_data"] }) {
   );
 }
 
-function ExecutionRow({ exec }: { exec: BolnaExecution }) {
+function ExecutionRow({ exec }: { exec: SnapServeExecution }) {
   const [expanded, setExpanded] = useState(false);
   const hasDetails = exec.cost_breakdown || exec.telephony_data || exec.transcript;
 
@@ -168,21 +168,21 @@ function ExecutionRow({ exec }: { exec: BolnaExecution }) {
   );
 }
 
-interface BolnaExecutionsPanelProps {
+interface SnapServeExecutionsPanelProps {
   agentId: number | undefined;
 }
 
-export function BolnaExecutionsPanel({ agentId }: BolnaExecutionsPanelProps) {
+export function SnapServeExecutionsPanel({ agentId }: SnapServeExecutionsPanelProps) {
   const [pageNumber, setPageNumber] = useState(1);
   const pageSize = 20;
 
-  const { data, isLoading, isError, error } = useGetAgentBolnaExecutions(
+  const { data, isLoading, isError, error } = useGetAgentSnapserveExecutions(
     agentId!,
     { page_number: pageNumber, page_size: pageSize },
     {
       query: {
         enabled: !!agentId,
-        queryKey: getGetAgentBolnaExecutionsQueryKey(agentId!, { page_number: pageNumber, page_size: pageSize }),
+        queryKey: getGetAgentSnapserveExecutionsQueryKey(agentId!, { page_number: pageNumber, page_size: pageSize }),
         retry: false,
       },
     }
@@ -210,19 +210,19 @@ export function BolnaExecutionsPanel({ agentId }: BolnaExecutionsPanelProps) {
     const is404 = (error as any)?.response?.status === 404;
 
     if (is404) {
-      const isMissingKey = errMsg.includes("No active Bolna");
+      const isMissingKey = errMsg.includes("No active SnapServe");
       return (
         <div className="flex flex-col items-center justify-center h-full text-center py-16 px-6">
           <div className="h-10 w-10 rounded-xl bg-elevated border border-border flex items-center justify-center mb-3">
             <PhoneOff className="h-5 w-5 text-muted-foreground/30" />
           </div>
           <p className="text-sm text-foreground/50 font-medium mb-1">
-            {isMissingKey ? "Bolna API key not found" : "Bolna Agent ID not configured"}
+            {isMissingKey ? "SnapServe API key not found" : "SnapServe Agent ID not configured"}
           </p>
           <p className="text-xs text-muted-foreground/40 max-w-xs leading-relaxed mb-4">
             {isMissingKey
-              ? "Add a Bolna API key on the Providers page under the Orchestration group."
-              : "Set the Bolna Agent ID on the agent's edit page to enable execution history."}
+              ? "Add a SnapServe API key on the Providers page under the Orchestration group."
+              : "Set the SnapServe Agent ID on the agent's edit page to enable execution history."}
           </p>
           {isMissingKey ? (
             <Link href="/app/providers">
@@ -233,7 +233,7 @@ export function BolnaExecutionsPanel({ agentId }: BolnaExecutionsPanelProps) {
           ) : (
             <Link href={`/app/agents/${agentId}/edit`}>
               <Button size="sm" variant="outline" className="gap-1.5 text-xs">
-                <ExternalLink className="h-3 w-3" /> Configure Bolna Agent ID
+                <ExternalLink className="h-3 w-3" /> Configure SnapServe Agent ID
               </Button>
             </Link>
           )}
@@ -247,7 +247,7 @@ export function BolnaExecutionsPanel({ agentId }: BolnaExecutionsPanelProps) {
         <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-red-500" />
         <div>
           <p className="text-xs font-semibold text-red-600">
-            Failed to load Bolna executions{httpStatus ? ` (HTTP ${httpStatus})` : ""}
+            Failed to load SnapServe executions{httpStatus ? ` (HTTP ${httpStatus})` : ""}
           </p>
           <p className="text-xs text-muted-foreground mt-0.5">{errMsg}</p>
         </div>
@@ -262,7 +262,7 @@ export function BolnaExecutionsPanel({ agentId }: BolnaExecutionsPanelProps) {
       <div className="flex flex-col items-center justify-center h-full text-center py-16">
         <Clock className="h-8 w-8 text-muted-foreground/20 mb-3" />
         <p className="text-sm text-foreground/40">No executions found</p>
-        <p className="text-xs text-muted-foreground/30 mt-1">Executions will appear here after calls are made through Bolna</p>
+        <p className="text-xs text-muted-foreground/30 mt-1">Executions will appear here after calls are made through SnapServe</p>
       </div>
     );
   }

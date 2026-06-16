@@ -196,8 +196,8 @@ export const agentsTable = pgTable("agents", {
   maxConcurrentCalls: integer("max_concurrent_calls"),
   monthlySpendLimitCents: integer("monthly_spend_limit_cents"),
 
-  // ── Bolna Integration ─────────────────────────────────────────────────────
-  bolnaAgentId: text("bolna_agent_id"),
+  // ── SnapServe Integration ─────────────────────────────────────────────────
+  snapserveAgentId: text("snapserve_agent_id"),
 
   // ── Prompt Template System (admin-managed master template + Qwen-generated prompt) ─
   generatedPrompt: text("generated_prompt"),

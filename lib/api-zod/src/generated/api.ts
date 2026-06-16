@@ -95,7 +95,7 @@ export const ListAgentsResponseItem = zod.object({
   "leadSourceToken": zod.string().nullish().describe('Masked hint of the lead source access token (last 4 chars)'),
   "leadFields": zod.array(zod.string()).nullish().describe('Lead fields to capture per incoming lead (name, email, message)'),
   "productDetails": zod.string().nullish().describe('Product or service details the agent should know when calling leads'),
-  "bolnaAgentId": zod.string().nullish().describe('Bolna platform agent ID used to fetch executions from the Bolna API'),
+  "snapserveAgentId": zod.string().nullish().describe('SnapServe platform agent ID used to fetch executions from the SnapServe API'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -180,7 +180,7 @@ export const CreateAgentBody = zod.object({
   "leadSourceToken": zod.string().optional().describe('Page Access Token for the lead source (encrypted at rest)'),
   "leadFields": zod.array(zod.string()).optional().describe('Lead fields to capture per incoming lead'),
   "productDetails": zod.string().optional().describe('Product or service details for the agent\'s context'),
-  "bolnaAgentId": zod.string().nullish().describe('Bolna platform agent ID used to fetch executions from the Bolna API'),
+  "snapserveAgentId": zod.string().nullish().describe('SnapServe platform agent ID used to fetch executions from the SnapServe API'),
   "wizardInputs": zod.record(zod.string(), zod.unknown()).optional().describe('Raw wizard answers passed from the dashboard. May include the ordered micro-question\/answer pairs (microAnswers) and any uploaded job description content (jdFileContent, jdFileName). When present, the server generates the agent\'s system prompt server-side using the active admin master template (Qwen) and stores the result. Never returned in responses.')
 })
 
@@ -268,7 +268,7 @@ export const GetAgentResponse = zod.object({
   "leadSourceToken": zod.string().nullish().describe('Masked hint of the lead source access token (last 4 chars)'),
   "leadFields": zod.array(zod.string()).nullish().describe('Lead fields to capture per incoming lead (name, email, message)'),
   "productDetails": zod.string().nullish().describe('Product or service details the agent should know when calling leads'),
-  "bolnaAgentId": zod.string().nullish().describe('Bolna platform agent ID used to fetch executions from the Bolna API'),
+  "snapserveAgentId": zod.string().nullish().describe('SnapServe platform agent ID used to fetch executions from the SnapServe API'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -367,7 +367,7 @@ export const UpdateAgentBody = zod.object({
   "leadSourceToken": zod.string().optional().describe('Page Access Token for the lead source (encrypted at rest)'),
   "leadFields": zod.array(zod.string()).optional().describe('Lead fields to capture per incoming lead'),
   "productDetails": zod.string().optional().describe('Product or service details for the agent\'s context'),
-  "bolnaAgentId": zod.string().nullish().describe('Bolna platform agent ID used to fetch executions from the Bolna API')
+  "snapserveAgentId": zod.string().nullish().describe('SnapServe platform agent ID used to fetch executions from the SnapServe API')
 })
 
 export const UpdateAgentResponse = zod.object({
@@ -446,7 +446,7 @@ export const UpdateAgentResponse = zod.object({
   "leadSourceToken": zod.string().nullish().describe('Masked hint of the lead source access token (last 4 chars)'),
   "leadFields": zod.array(zod.string()).nullish().describe('Lead fields to capture per incoming lead (name, email, message)'),
   "productDetails": zod.string().nullish().describe('Product or service details the agent should know when calling leads'),
-  "bolnaAgentId": zod.string().nullish().describe('Bolna platform agent ID used to fetch executions from the Bolna API'),
+  "snapserveAgentId": zod.string().nullish().describe('SnapServe platform agent ID used to fetch executions from the SnapServe API'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -549,7 +549,7 @@ export const ToggleAgentResponse = zod.object({
   "leadSourceToken": zod.string().nullish().describe('Masked hint of the lead source access token (last 4 chars)'),
   "leadFields": zod.array(zod.string()).nullish().describe('Lead fields to capture per incoming lead (name, email, message)'),
   "productDetails": zod.string().nullish().describe('Product or service details the agent should know when calling leads'),
-  "bolnaAgentId": zod.string().nullish().describe('Bolna platform agent ID used to fetch executions from the Bolna API'),
+  "snapserveAgentId": zod.string().nullish().describe('SnapServe platform agent ID used to fetch executions from the SnapServe API'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -562,21 +562,21 @@ export const ToggleAgentResponse = zod.object({
 
 
 /**
- * @summary Fetch Bolna executions for an agent (proxied from Bolna API)
+ * @summary Fetch SnapServe executions for an agent (proxied from SnapServe API)
  */
-export const GetAgentBolnaExecutionsParams = zod.object({
+export const GetAgentSnapserveExecutionsParams = zod.object({
   "id": zod.coerce.number()
 })
 
-export const getAgentBolnaExecutionsQueryPageNumberDefault = 1;
-export const getAgentBolnaExecutionsQueryPageSizeDefault = 20;
+export const getAgentSnapserveExecutionsQueryPageNumberDefault = 1;
+export const getAgentSnapserveExecutionsQueryPageSizeDefault = 20;
 
-export const GetAgentBolnaExecutionsQueryParams = zod.object({
-  "page_number": zod.coerce.number().default(getAgentBolnaExecutionsQueryPageNumberDefault),
-  "page_size": zod.coerce.number().default(getAgentBolnaExecutionsQueryPageSizeDefault)
+export const GetAgentSnapserveExecutionsQueryParams = zod.object({
+  "page_number": zod.coerce.number().default(getAgentSnapserveExecutionsQueryPageNumberDefault),
+  "page_size": zod.coerce.number().default(getAgentSnapserveExecutionsQueryPageSizeDefault)
 })
 
-export const GetAgentBolnaExecutionsResponse = zod.object({
+export const GetAgentSnapserveExecutionsResponse = zod.object({
   "page_number": zod.number().optional(),
   "page_size": zod.number().optional(),
   "total": zod.number().nullish(),

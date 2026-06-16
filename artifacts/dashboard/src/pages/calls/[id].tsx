@@ -9,7 +9,7 @@ import {
   Voicemail, BookOpen, Tag, Activity, ExternalLink, Copy, CheckCircle2,
   XCircle, PlayCircle, PauseCircle, MicOff, ScrollText
 } from "lucide-react";
-import { BolnaExecutionsPanel } from "@/components/bolna-executions-panel";
+import { SnapServeExecutionsPanel } from "@/components/snapserve-executions-panel";
 import {
   useGetCall,
   useGetAgent,
@@ -460,7 +460,7 @@ export default function CallDetail() {
                   <Zap className="h-3 w-3" /> Tools {toolEvents.length > 0 && `(${toolEvents.length})`}
                 </TabsTrigger>
                 <TabsTrigger value="logs" className="text-xs h-6 gap-1">
-                  <ScrollText className="h-3 w-3" /> Bolna Executions
+                  <ScrollText className="h-3 w-3" /> SnapServe Executions
                 </TabsTrigger>
                 <TabsTrigger value="metadata" className="text-xs h-6 gap-1">
                   <Hash className="h-3 w-3" /> Metadata
@@ -571,7 +571,7 @@ export default function CallDetail() {
               <TabsContent value="logs" className="flex-1 overflow-auto mt-2 min-h-0">
                 <Card className="h-full flex flex-col overflow-hidden">
                   <CardContent className="p-0 flex-1 overflow-hidden">
-                    <BolnaExecutionsPanel agentId={call.agentId ?? undefined} />
+                    <SnapServeExecutionsPanel agentId={call.agentId ?? undefined} />
                   </CardContent>
                 </Card>
               </TabsContent>

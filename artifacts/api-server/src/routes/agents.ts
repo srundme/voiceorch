@@ -396,63 +396,63 @@ router.delete("/agents/:id/caller-memory/:phone/facts/:factId", requireAuth, asy
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ── Bolna Executions proxy ─────────────────────────────────────────────────
+// ── SnapServe Executions proxy ─────────────────────────────────────────────
 
-router.get("/agents/:id/bolna-executions", requireAuth, async (req, res): Promise<void> => {
+router.get("/agents/:id/snapserve-executions", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const agentId = parseInt(String(req.params["id"] ?? ""), 10);
   if (isNaN(agentId)) { res.status(400).json({ error: "Invalid agent id" }); return; }
 
-  const [agent] = await db.select({ id: agentsTable.id, bolnaAgentId: agentsTable.bolnaAgentId })
+  const [agent] = await db.select({ id: agentsTable.id, snapserveAgentId: agentsTable.snapserveAgentId })
     .from(agentsTable)
     .where(and(eq(agentsTable.id, agentId), eq(agentsTable.userId, clerkId)));
 
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
 
-  if (!agent.bolnaAgentId) {
-    res.status(404).json({ error: "Bolna Agent ID not configured for this agent" });
+  if (!agent.snapserveAgentId) {
+    res.status(404).json({ error: "SnapServe Agent ID not configured for this agent" });
     return;
   }
 
   const pageNumber = parseInt(String(req.query["page_number"] ?? "1"), 10) || 1;
   const pageSize   = parseInt(String(req.query["page_size"] ?? "20"), 10) || 20;
 
-  // Find an active Bolna provider key for this user
-  const [bolnaProvider] = await db.select({ apiKey: providersTable.apiKey })
+  // Find an active SnapServe provider key for this user
+  const [snapserveProvider] = await db.select({ apiKey: providersTable.apiKey })
     .from(providersTable)
     .where(and(
       eq(providersTable.userId, clerkId),
       eq(providersTable.providerType, "orchestration"),
-      eq(providersTable.providerName, "bolna"),
+      eq(providersTable.providerName, "snapserve"),
       eq(providersTable.isActive, true),
     ))
     .limit(1);
 
-  if (!bolnaProvider) {
-    res.status(404).json({ error: "No active Bolna API key found. Add one on the Providers page." });
+  if (!snapserveProvider) {
+    res.status(404).json({ error: "No active SnapServe API key found. Add one on the Providers page." });
     return;
   }
 
-  const rawKey = decryptKey(bolnaProvider.apiKey);
-  const bolnaUrl = `https://api.bolna.ai/v2/agent/${agent.bolnaAgentId}/executions?page_number=${pageNumber}&page_size=${pageSize}`;
+  const rawKey = decryptKey(snapserveProvider.apiKey);
+  const snapserveUrl = `https://api.snapserve.ai/v2/agent/${agent.snapserveAgentId}/executions?page_number=${pageNumber}&page_size=${pageSize}`;
 
-  let bolnaRes: Response;
+  let snapserveRes: Response;
   try {
-    bolnaRes = await fetch(bolnaUrl, {
+    snapserveRes = await fetch(snapserveUrl, {
       headers: { "Authorization": `Bearer ${rawKey}`, "Content-Type": "application/json" },
     });
   } catch (err) {
-    req.log.error({ err, bolnaUrl }, "Bolna API fetch failed");
-    res.status(502).json({ error: "Failed to reach Bolna API", detail: String(err) });
+    req.log.error({ err, snapserveUrl }, "SnapServe API fetch failed");
+    res.status(502).json({ error: "Failed to reach SnapServe API", detail: String(err) });
     return;
   }
 
-  const body = await bolnaRes.text().catch(() => "");
-  if (!bolnaRes.ok) {
-    req.log.warn({ status: bolnaRes.status, body }, "Bolna API returned non-2xx");
+  const body = await snapserveRes.text().catch(() => "");
+  if (!snapserveRes.ok) {
+    req.log.warn({ status: snapserveRes.status, body }, "SnapServe API returned non-2xx");
     let parsed: unknown;
-    try { parsed = JSON.parse(body); } catch { parsed = { error: body || `Bolna API error (HTTP ${bolnaRes.status})` }; }
-    res.status(bolnaRes.status).json(parsed);
+    try { parsed = JSON.parse(body); } catch { parsed = { error: body || `SnapServe API error (HTTP ${snapserveRes.status})` }; }
+    res.status(snapserveRes.status).json(parsed);
     return;
   }
 

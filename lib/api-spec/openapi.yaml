@@ -186,11 +186,11 @@ paths:
         "404":
           description: Not found
 
-  /agents/{id}/bolna-executions:
+  /agents/{id}/snapserve-executions:
     get:
-      operationId: getAgentBolnaExecutions
+      operationId: getAgentSnapserveExecutions
       tags: [agents]
-      summary: Fetch Bolna executions for an agent (proxied from Bolna API)
+      summary: Fetch SnapServe executions for an agent (proxied from SnapServe API)
       parameters:
         - name: id
           in: path
@@ -211,23 +211,23 @@ paths:
             default: 20
       responses:
         "200":
-          description: Bolna executions page
+          description: SnapServe executions page
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BolnaExecutionsResponse"
+                $ref: "#/components/schemas/SnapServeExecutionsResponse"
         "400":
           description: Invalid agent ID
         "401":
-          description: Bolna API key rejected (passed through from Bolna)
+          description: SnapServe API key rejected (passed through from SnapServe)
         "403":
-          description: Bolna access forbidden (passed through from Bolna)
+          description: SnapServe access forbidden (passed through from SnapServe)
         "404":
-          description: Agent not found or Bolna Agent ID / API key not configured
+          description: Agent not found or SnapServe Agent ID / API key not configured
         "429":
-          description: Bolna rate limit exceeded (passed through from Bolna)
+          description: SnapServe rate limit exceeded (passed through from SnapServe)
         "502":
-          description: Network error reaching Bolna API
+          description: Network error reaching SnapServe API
 
   # ── Calls ───────────────────────────────────────────────────────────────────
   /calls:
@@ -5519,9 +5519,9 @@ components:
         productDetails:
           type: ["string", "null"]
           description: "Product or service details the agent should know when calling leads"
-        bolnaAgentId:
+        snapserveAgentId:
           type: ["string", "null"]
-          description: "Bolna platform agent ID used to fetch executions from the Bolna API"
+          description: "SnapServe platform agent ID used to fetch executions from the SnapServe API"
         totalCalls:
           type: integer
         successfulCalls:
@@ -5652,9 +5652,9 @@ components:
         productDetails:
           type: string
           description: "Product or service details for the agent's context"
-        bolnaAgentId:
+        snapserveAgentId:
           type: ["string", "null"]
-          description: "Bolna platform agent ID used to fetch executions from the Bolna API"
+          description: "SnapServe platform agent ID used to fetch executions from the SnapServe API"
         wizardInputs:
           type: object
           additionalProperties: true
@@ -5780,12 +5780,12 @@ components:
         productDetails:
           type: string
           description: "Product or service details for the agent's context"
-        bolnaAgentId:
+        snapserveAgentId:
           type: ["string", "null"]
-          description: "Bolna platform agent ID used to fetch executions from the Bolna API"
+          description: "SnapServe platform agent ID used to fetch executions from the SnapServe API"
 
-    # ── Bolna Executions ────────────────────────────────────────────────────────
-    BolnaCostBreakdown:
+    # ── SnapServe Executions ─────────────────────────────────────────────────────
+    SnapServeCostBreakdown:
       type: object
       properties:
         llm:
@@ -5799,7 +5799,7 @@ components:
         transcriber:
           type: ["number", "null"]
 
-    BolnaTelephonyData:
+    SnapServeTelephonyData:
       type: object
       properties:
         duration:
@@ -5821,7 +5821,7 @@ components:
         hangup_provider_code:
           type: ["string", "null"]
 
-    BolnaExecution:
+    SnapServeExecution:
       type: object
       properties:
         id:
@@ -5845,11 +5845,11 @@ components:
         updated_at:
           type: ["string", "null"]
         cost_breakdown:
-          $ref: "#/components/schemas/BolnaCostBreakdown"
+          $ref: "#/components/schemas/SnapServeCostBreakdown"
         telephony_data:
-          $ref: "#/components/schemas/BolnaTelephonyData"
+          $ref: "#/components/schemas/SnapServeTelephonyData"
 
-    BolnaExecutionsResponse:
+    SnapServeExecutionsResponse:
       type: object
       properties:
         page_number:
@@ -5863,7 +5863,7 @@ components:
         data:
           type: array
           items:
-            $ref: "#/components/schemas/BolnaExecution"
+            $ref: "#/components/schemas/SnapServeExecution"
 
     # ── Call ───────────────────────────────────────────────────────────────────
     Call:
