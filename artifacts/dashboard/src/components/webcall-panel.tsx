@@ -50,6 +50,9 @@ export function WebCallPanel({
   const activeSourcesRef = useRef<AudioBufferSourceNode[]>([]);
   const mutedRef         = useRef(false);
   const transcriptRef    = useRef<HTMLDivElement>(null);
+  const statusRef        = useRef<CallStatus>("idle");
+
+  useEffect(() => { statusRef.current = status; }, [status]);
 
   useEffect(() => {
     if (transcriptRef.current) {
@@ -103,6 +106,7 @@ export function WebCallPanel({
   }
 
   const startCall = useCallback(async () => {
+    if (wsRef.current || (statusRef.current !== "idle" && statusRef.current !== "ended")) return;
     setError(null);
     setMsgs([]);
     setDuration(null);
@@ -214,7 +218,7 @@ export function WebCallPanel({
 
   if (compact) {
     return (
-      <div className="flex flex-col h-full">
+      <div className="flex flex-col h-full flex-1 min-h-0">
         {/* Status */}
         <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border/50 shrink-0">
           <span className={`w-2 h-2 rounded-full shrink-0 ${sc.dot} ${sc.pulse ? "animate-pulse" : ""}`} />
