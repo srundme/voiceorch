@@ -4,8 +4,9 @@ import {
   Bot, Plus, Search, Phone, Mic, Brain, Zap, Webhook, PhoneForwarded,
   Save, MoreHorizontal, Power, Trash2, Settings, FileText, Wrench,
   GitBranch, VoicemailIcon, SlidersHorizontal, TestTube2, ChevronRight,
-  Volume2, Check, X,
+  Volume2, Check, X, Pencil, ChevronDown,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient } from "@tanstack/react-query";
@@ -74,7 +75,7 @@ function SmallSelect({ value, onChange, options, placeholder }: {
       <SelectTrigger className="h-8 text-xs bg-background/50">
         <SelectValue placeholder={placeholder ?? "Select…"} />
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent position="popper" className="max-h-[280px] overflow-y-auto">
         {options.filter(o => o.value !== "").map(o => <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>)}
       </SelectContent>
     </Select>
@@ -149,179 +150,290 @@ function WebhookParamsEditor({ control, toolIndex }: { control: any; toolIndex: 
   );
 }
 
-/* ── Tab: Overview ──────────────────────────────────────────────────────────── */
+/* ── Tab: Overview (Vapi-style) ─────────────────────────────────────────────── */
+
+type CardSection = "transcriber" | "model" | "voice";
 
 function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string, number>; agent: any }) {
+  const [openCard, setOpenCard] = useState<CardSection | null>(null);
+
   const asrProvider = form.watch("asrProvider");
   const llmProvider = form.watch("llmProvider");
   const ttsProvider = form.watch("ttsProvider");
-  const telephony   = form.watch("telephonyProvider");
+  const asrModel    = form.watch("asrModel");
+  const llmModel    = form.watch("llmModel");
+  const ttsVoice    = form.watch("ttsVoice");
+  const ttsModel    = form.watch("ttsModel");
+  const language    = form.watch("language");
   const temperature = form.watch("temperature") ?? 0.1;
 
-  const llmOptions   = LLM_MODELS[llmProvider]  ?? [];
-  const ttsModelOpts = TTS_MODELS[ttsProvider]  ?? [];
-  const ttsVoiceOpts = TTS_VOICES[ttsProvider]  ?? [];
-  const asrModelOpts = ASR_MODELS[asrProvider]  ?? [];
+  const llmOptions    = LLM_MODELS[llmProvider]  ?? [];
+  const ttsModelOpts  = TTS_MODELS[ttsProvider]  ?? [];
+  const ttsVoiceOpts  = (TTS_VOICES[ttsProvider] ?? []) as { value: string; label: string }[];
+  const asrModelOpts  = ASR_MODELS[asrProvider]  ?? [];
+
+  const asrLabel       = ASR_PROVIDERS.find(p => p.value === asrProvider)?.label ?? asrProvider;
+  const llmLabel       = LLM_PROVIDERS.find(p => p.value === llmProvider)?.label ?? llmProvider;
+  const ttsLabel       = TTS_PROVIDERS.find(p => p.value === ttsProvider)?.label ?? ttsProvider;
+  const langLabel      = LANGUAGES.find(l => l.value === language)?.label ?? language;
+  const llmModelLabel  = llmOptions.find((m: any) => m.value === llmModel)?.label ?? llmModel;
+  const ttsVoiceLabel  = ttsVoiceOpts.find(v => v.value === ttsVoice)?.label ?? ttsVoice;
+  const ttsModelLabel  = ttsModelOpts.find((m: any) => m.value === ttsModel)?.label ?? ttsModel;
 
   const costCents = agent ? computeAgentRateCents(rateMap, agent as any) : null;
+
+  const toggle = (c: CardSection) => setOpenCard(prev => prev === c ? null : c);
 
   return (
     <div className="flex h-full overflow-hidden">
 
-      {/* ── Left: Configuration ─────────────────────────────────────────────── */}
+      {/* ── Left: Vapi-style config ──────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto min-w-0 border-r border-border/50">
         <div className="p-5 space-y-5">
 
-          {/* IDENTITY */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-widest text-foreground/70">
-              <Bot className="h-3 w-3" /> Identity
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <FormField control={form.control} name="name" render={({ field }) => (
-                <FormItem className="col-span-2 space-y-1">
-                  <FormLabel className="text-[10px] text-muted-foreground">Name</FormLabel>
-                  <FormControl><Input className="h-8 text-sm font-medium" {...field} /></FormControl>
-                  <FormMessage className="text-[10px]" />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="language" render={({ field }) => (
-                <FormItem className="space-y-1">
-                  <FormLabel className="text-[10px] text-muted-foreground">Language</FormLabel>
-                  <SmallSelect value={field.value} onChange={field.onChange}
-                    options={LANGUAGES.map(l => ({ value: l.value, label: l.label }))} placeholder="Select language" />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="telephonyProvider" render={({ field }) => (
-                <FormItem className="space-y-1">
-                  <FormLabel className="text-[10px] text-muted-foreground">Telephony</FormLabel>
-                  <SmallSelect value={field.value} onChange={field.onChange}
-                    options={TELEPHONY_PROVIDERS.map(p => ({ value: p.value, label: p.label }))} />
-                </FormItem>
-              )} />
-            </div>
+          {/* Agent name */}
+          <FormField control={form.control} name="name" render={({ field }) => (
+            <FormItem className="space-y-1">
+              <FormLabel className="text-[10px] text-muted-foreground uppercase tracking-widest">Agent Name</FormLabel>
+              <FormControl><Input className="h-9 text-sm font-medium" {...field} /></FormControl>
+              <FormMessage className="text-[10px]" />
+            </FormItem>
+          )} />
+
+          {/* ── Three provider cards ─────────────────────────────────────────── */}
+          <div className="grid grid-cols-3 gap-3">
+
+            {/* TRANSCRIBER */}
+            <button type="button" onClick={() => toggle("transcriber")}
+              className={cn(
+                "relative text-left rounded-xl border p-4 cursor-pointer transition-all hover:border-blue-400/40",
+                openCard === "transcriber"
+                  ? "border-blue-400/50 bg-blue-950/20 shadow-[0_0_0_1px_rgba(96,165,250,0.2)]"
+                  : "border-border/60 bg-card/50"
+              )}>
+              <Pencil className="absolute top-3 right-3 h-3 w-3 text-muted-foreground/40" />
+              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-blue-400 mb-2.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" /> Transcriber
+              </div>
+              <div className="text-sm font-medium truncate leading-snug">{langLabel || "—"}</div>
+              <div className="text-[11px] text-muted-foreground mt-1 truncate">
+                {asrLabel}{asrModel ? ` · ${asrModel}` : ""}
+              </div>
+            </button>
+
+            {/* MODEL */}
+            <button type="button" onClick={() => toggle("model")}
+              className={cn(
+                "relative text-left rounded-xl border p-4 cursor-pointer transition-all hover:border-purple-400/40",
+                openCard === "model"
+                  ? "border-purple-400/50 bg-purple-950/20 shadow-[0_0_0_1px_rgba(192,132,252,0.2)]"
+                  : "border-border/60 bg-card/50"
+              )}>
+              <Pencil className="absolute top-3 right-3 h-3 w-3 text-muted-foreground/40" />
+              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-purple-400 mb-2.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-purple-400 shrink-0" /> Model
+              </div>
+              <div className="text-sm font-medium truncate leading-snug">{llmModelLabel || llmLabel || "—"}</div>
+              <div className="text-[11px] text-muted-foreground mt-1 truncate">{llmLabel}</div>
+            </button>
+
+            {/* VOICE */}
+            <button type="button" onClick={() => toggle("voice")}
+              className={cn(
+                "relative text-left rounded-xl border p-4 cursor-pointer transition-all hover:border-green-400/40",
+                openCard === "voice"
+                  ? "border-green-400/50 bg-green-950/20 shadow-[0_0_0_1px_rgba(74,222,128,0.2)]"
+                  : "border-border/60 bg-card/50"
+              )}>
+              <Pencil className="absolute top-3 right-3 h-3 w-3 text-muted-foreground/40" />
+              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-green-400 mb-2.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" /> Voice
+              </div>
+              <div className="text-sm font-medium truncate leading-snug">
+                {ttsVoiceLabel || ttsVoice || ttsModelLabel || ttsLabel || "—"}
+              </div>
+              <div className="text-[11px] text-muted-foreground mt-1 truncate">
+                {ttsLabel}{ttsModelLabel ? ` · ${ttsModelLabel}` : ""}
+              </div>
+            </button>
           </div>
 
-          <div className="h-px bg-border/40" />
-
-          {/* BRAIN */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-widest text-foreground/70">
-              <Brain className="h-3 w-3" /> Brain
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <FormField control={form.control} name="llmProvider" render={({ field }) => (
-                <FormItem className="space-y-1">
-                  <FormLabel className="text-[10px] text-muted-foreground">LLM Provider</FormLabel>
-                  <SmallSelect value={field.value} onChange={(v) => { field.onChange(v); form.setValue("llmModel", ""); }}
-                    options={LLM_PROVIDERS.map(p => ({ value: p.value, label: p.label }))} />
-                </FormItem>
-              )} />
-              {llmOptions.length > 0 && (
-                <FormField control={form.control} name="llmModel" render={({ field }) => (
+          {/* ── Inline config for selected card ─────────────────────────────── */}
+          {openCard === "transcriber" && (
+            <div className="rounded-xl border border-blue-400/30 bg-blue-950/10 p-4 space-y-3 animate-in slide-in-from-top-1 duration-150">
+              <div className="text-[10px] font-bold uppercase tracking-widest text-blue-400">Transcriber Configuration</div>
+              <div className="grid grid-cols-2 gap-3">
+                <FormField control={form.control} name="language" render={({ field }) => (
                   <FormItem className="space-y-1">
-                    <FormLabel className="text-[10px] text-muted-foreground">Model</FormLabel>
-                    <SmallSelect value={field.value ?? ""} onChange={field.onChange}
-                      options={llmOptions.map((m: any) => ({ value: m.value, label: m.label }))} placeholder="Default" />
-                    <FormMessage className="text-[10px]" />
+                    <FormLabel className="text-[10px] text-muted-foreground">Language</FormLabel>
+                    <SmallSelect value={field.value} onChange={field.onChange}
+                      options={LANGUAGES.map(l => ({ value: l.value, label: l.label }))} placeholder="Select language" />
                   </FormItem>
                 )} />
-              )}
+                <FormField control={form.control} name="asrProvider" render={({ field }) => (
+                  <FormItem className="space-y-1">
+                    <FormLabel className="text-[10px] text-muted-foreground">Provider</FormLabel>
+                    <SmallSelect value={field.value} onChange={(v) => { field.onChange(v); form.setValue("asrModel", ""); }}
+                      options={ASR_PROVIDERS.map(p => ({ value: p.value, label: p.label }))} />
+                  </FormItem>
+                )} />
+                {asrModelOpts.length > 0 && (
+                  <FormField control={form.control} name="asrModel" render={({ field }) => (
+                    <FormItem className="space-y-1">
+                      <FormLabel className="text-[10px] text-muted-foreground">Model</FormLabel>
+                      <SmallSelect value={field.value ?? ""} onChange={field.onChange}
+                        options={asrModelOpts.map((m: any) => ({ value: m.value, label: m.label }))} placeholder="Default" />
+                      <FormMessage className="text-[10px]" />
+                    </FormItem>
+                  )} />
+                )}
+              </div>
             </div>
-            <FormField control={form.control} name="temperature" render={({ field }) => (
-              <FormItem className="space-y-1">
-                <div className="flex justify-between items-center">
-                  <FormLabel className="text-[10px] text-muted-foreground">Temperature — Creativity</FormLabel>
-                  <span className="text-xs font-mono text-foreground">{temperature.toFixed(2)}</span>
-                </div>
-                <input type="range" min={0} max={2} step={0.01} value={temperature}
-                  onChange={e => field.onChange(parseFloat(e.target.value))}
-                  className="w-full h-1.5 accent-primary cursor-pointer" />
-                <div className="flex justify-between text-[9px] text-muted-foreground"><span>0</span><span>2</span></div>
+          )}
+
+          {openCard === "model" && (
+            <div className="rounded-xl border border-purple-400/30 bg-purple-950/10 p-4 space-y-3 animate-in slide-in-from-top-1 duration-150">
+              <div className="text-[10px] font-bold uppercase tracking-widest text-purple-400">Model Configuration</div>
+              <div className="grid grid-cols-2 gap-3">
+                <FormField control={form.control} name="llmProvider" render={({ field }) => (
+                  <FormItem className="space-y-1">
+                    <FormLabel className="text-[10px] text-muted-foreground">Provider</FormLabel>
+                    <SmallSelect value={field.value} onChange={(v) => { field.onChange(v); form.setValue("llmModel", ""); }}
+                      options={LLM_PROVIDERS.map(p => ({ value: p.value, label: p.label }))} />
+                  </FormItem>
+                )} />
+                {llmOptions.length > 0 && (
+                  <FormField control={form.control} name="llmModel" render={({ field }) => (
+                    <FormItem className="space-y-1">
+                      <FormLabel className="text-[10px] text-muted-foreground">Model</FormLabel>
+                      <SmallSelect value={field.value ?? ""} onChange={field.onChange}
+                        options={llmOptions.map((m: any) => ({ value: m.value, label: m.label }))} placeholder="Default" />
+                      <FormMessage className="text-[10px]" />
+                    </FormItem>
+                  )} />
+                )}
+              </div>
+              <FormField control={form.control} name="temperature" render={({ field }) => (
+                <FormItem className="space-y-1">
+                  <div className="flex justify-between items-center">
+                    <FormLabel className="text-[10px] text-muted-foreground">Temperature — Creativity</FormLabel>
+                    <span className="text-xs font-mono">{temperature.toFixed(2)}</span>
+                  </div>
+                  <input type="range" min={0} max={2} step={0.01} value={temperature}
+                    onChange={e => field.onChange(parseFloat(e.target.value))}
+                    className="w-full h-1.5 accent-primary cursor-pointer" />
+                  <div className="flex justify-between text-[9px] text-muted-foreground"><span>0</span><span>2</span></div>
+                </FormItem>
+              )} />
+            </div>
+          )}
+
+          {openCard === "voice" && (
+            <div className="rounded-xl border border-green-400/30 bg-green-950/10 p-4 space-y-3 animate-in slide-in-from-top-1 duration-150">
+              <div className="text-[10px] font-bold uppercase tracking-widest text-green-400">Voice Configuration</div>
+              <div className="grid grid-cols-2 gap-3">
+                <FormField control={form.control} name="ttsProvider" render={({ field }) => (
+                  <FormItem className="space-y-1">
+                    <FormLabel className="text-[10px] text-muted-foreground">Provider</FormLabel>
+                    <SmallSelect value={field.value} onChange={(v) => { field.onChange(v); form.setValue("ttsVoice", ""); form.setValue("ttsModel", ""); }}
+                      options={TTS_PROVIDERS.map(p => ({ value: p.value, label: p.label }))} />
+                  </FormItem>
+                )} />
+                {ttsVoiceOpts.length > 0 && (
+                  <FormField control={form.control} name="ttsVoice" render={({ field }) => (
+                    <FormItem className="space-y-1">
+                      <FormLabel className="text-[10px] text-muted-foreground">Voice</FormLabel>
+                      <SmallSelect value={field.value ?? ""} onChange={field.onChange}
+                        options={ttsVoiceOpts.map(v => ({ value: v.value, label: v.label }))} placeholder="Default" />
+                    </FormItem>
+                  )} />
+                )}
+                {ttsModelOpts.length > 0 && (
+                  <FormField control={form.control} name="ttsModel" render={({ field }) => (
+                    <FormItem className="space-y-1">
+                      <FormLabel className="text-[10px] text-muted-foreground">Model</FormLabel>
+                      <SmallSelect value={field.value ?? ""} onChange={field.onChange}
+                        options={ttsModelOpts.map((m: any) => ({ value: m.value, label: m.label }))} placeholder="Default" />
+                    </FormItem>
+                  )} />
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── First Message ────────────────────────────────────────────────── */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold">First Message</span>
+              <Select defaultValue="assistant">
+                <SelectTrigger className="h-8 w-48 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  <SelectItem value="assistant" className="text-xs">Assistant speaks first</SelectItem>
+                  <SelectItem value="user" className="text-xs">User speaks first</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <FormField control={form.control} name="greetingMessage" render={({ field }) => (
+              <FormItem className="space-y-0">
+                <FormControl>
+                  <Textarea className="min-h-[72px] text-sm resize-none" placeholder="Hello, how can I help?" {...field} />
+                </FormControl>
+                <FormMessage className="text-[10px]" />
               </FormItem>
             )} />
           </div>
 
-          <div className="h-px bg-border/40" />
-
-          {/* VOICE & SPEECH — merged */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-widest text-foreground/70">
-              <Volume2 className="h-3 w-3" /> Voice &amp; Speech
+          {/* ── System Prompt ────────────────────────────────────────────────── */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold">System Prompt</span>
+              <Button type="button" variant="outline" size="sm" className="h-8 text-xs gap-1.5 px-3">
+                <Zap className="h-3 w-3" /> Generate
+              </Button>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <FormField control={form.control} name="ttsProvider" render={({ field }) => (
-                <FormItem className="space-y-1">
-                  <FormLabel className="text-[10px] text-muted-foreground">TTS Provider</FormLabel>
-                  <SmallSelect value={field.value} onChange={(v) => { field.onChange(v); form.setValue("ttsVoice", ""); form.setValue("ttsModel", ""); }}
-                    options={TTS_PROVIDERS.map(p => ({ value: p.value, label: p.label }))} />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="asrProvider" render={({ field }) => (
-                <FormItem className="space-y-1">
-                  <FormLabel className="text-[10px] text-muted-foreground">STT Provider</FormLabel>
-                  <SmallSelect value={field.value} onChange={(v) => { field.onChange(v); form.setValue("asrModel", ""); }}
-                    options={ASR_PROVIDERS.map(p => ({ value: p.value, label: p.label }))} />
-                </FormItem>
-              )} />
-              {ttsVoiceOpts.length > 0 && (
-                <FormField control={form.control} name="ttsVoice" render={({ field }) => (
-                  <FormItem className="space-y-1">
-                    <FormLabel className="text-[10px] text-muted-foreground">Voice</FormLabel>
-                    <SmallSelect value={field.value ?? ""} onChange={field.onChange}
-                      options={ttsVoiceOpts.map((v: any) => ({ value: v.value, label: v.label }))} placeholder="Default" />
-                  </FormItem>
-                )} />
-              )}
-              {asrModelOpts.length > 0 && (
-                <FormField control={form.control} name="asrModel" render={({ field }) => (
-                  <FormItem className="space-y-1">
-                    <FormLabel className="text-[10px] text-muted-foreground">STT Model</FormLabel>
-                    <SmallSelect value={field.value ?? ""} onChange={field.onChange}
-                      options={asrModelOpts.map((m: any) => ({ value: m.value, label: m.label }))} placeholder="Default" />
-                    <FormMessage className="text-[10px]" />
-                  </FormItem>
-                )} />
-              )}
-              {ttsModelOpts.length > 0 && (
-                <FormField control={form.control} name="ttsModel" render={({ field }) => (
-                  <FormItem className="space-y-1">
-                    <FormLabel className="text-[10px] text-muted-foreground">TTS Model</FormLabel>
-                    <SmallSelect value={field.value ?? ""} onChange={field.onChange}
-                      options={ttsModelOpts.map((m: any) => ({ value: m.value, label: m.label }))} placeholder="Default" />
-                  </FormItem>
-                )} />
-              )}
-            </div>
+            <FormField control={form.control} name="systemPrompt" render={({ field }) => (
+              <FormItem className="space-y-0">
+                <FormControl>
+                  <Textarea className="min-h-[220px] text-sm resize-none font-mono leading-relaxed" placeholder="You are a helpful voice assistant…" {...field} />
+                </FormControl>
+                <FormMessage className="text-[10px]" />
+              </FormItem>
+            )} />
           </div>
 
-          {/* Cost strip */}
-          <div className="flex items-center justify-between rounded-lg bg-muted/30 border border-border/40 px-4 py-2.5">
-            <div className="flex items-center gap-3 flex-wrap">
-              {[
-                { label: "ASR", val: asrProvider },
-                { label: "LLM", val: llmProvider },
-                { label: "TTS", val: ttsProvider },
-                { label: "Tel", val: telephony },
-              ].map(({ label, val }) => (
-                <span key={label} className="text-[10px] text-muted-foreground">
-                  {label} <span className="text-foreground/70 font-medium">{val || "—"}</span>
-                </span>
-              ))}
+          {/* ── Files / Knowledge Base ───────────────────────────────────────── */}
+          <div className="space-y-2">
+            <span className="text-sm font-semibold">Files</span>
+            <button type="button" className="w-full flex items-center justify-between rounded-lg border border-border/60 bg-card/30 px-4 py-3 text-sm text-muted-foreground hover:border-border hover:text-foreground transition-colors">
+              <span>Select Files</span>
+              <ChevronDown className="h-4 w-4 opacity-50" />
+            </button>
+          </div>
+
+          {/* ── Bottom strip: telephony + cost ───────────────────────────────── */}
+          <div className="flex items-center gap-3 rounded-lg bg-muted/30 border border-border/40 px-4 py-2.5">
+            <span className="text-[10px] text-muted-foreground shrink-0">Telephony</span>
+            <div className="flex-1">
+              <FormField control={form.control} name="telephonyProvider" render={({ field }) => (
+                <SmallSelect value={field.value} onChange={field.onChange}
+                  options={TELEPHONY_PROVIDERS.map(p => ({ value: p.value, label: p.label }))} />
+              )} />
             </div>
-            <div className="flex items-baseline gap-1">
-              <span className="text-sm font-bold text-foreground">
-                {costCents != null ? `~$${(costCents / 100).toFixed(3)}` : "—"}
-              </span>
-              <span className="text-[10px] text-muted-foreground">/min</span>
-            </div>
+            {costCents != null && (
+              <div className="flex items-baseline gap-1 shrink-0">
+                <span className="text-sm font-bold">~${(costCents / 100).toFixed(3)}</span>
+                <span className="text-[10px] text-muted-foreground">/min</span>
+              </div>
+            )}
           </div>
 
         </div>
       </div>
 
       {/* ── Right: Live Test panel ───────────────────────────────────────────── */}
-      <div className="w-[280px] shrink-0 flex flex-col min-h-0 bg-background/20">
+      <div className="w-[272px] shrink-0 flex flex-col min-h-0 bg-background/20">
         <div className="px-4 py-3 border-b border-border/50 shrink-0 flex items-center gap-2">
           <Mic className="h-3 w-3 text-primary" />
           <span className="text-[10px] font-semibold uppercase tracking-widest text-foreground/70">Live Test</span>
