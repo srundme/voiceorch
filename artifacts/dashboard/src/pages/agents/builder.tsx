@@ -2028,19 +2028,28 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
     });
   }, [agent]);
 
-  const onSave = form.handleSubmit(async (data) => {
-    try {
-      const payload = buildUpdateAgentPayload(data);
-      await updateAgent.mutateAsync({ id: agentId, data: payload as any });
-      queryClient.invalidateQueries({ queryKey: getGetAgentQueryKey(agentId) });
-      queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
-      toast({ title: "Saved", description: `${data.name} updated.` });
-    } catch (err) {
-      const mapped = mapApiErrors(err);
-      if (mapped) { Object.entries(mapped).forEach(([k, v]) => form.setError(k as any, { message: v })); }
-      toast({ title: "Error", description: formatApiError(err), variant: "destructive" });
+  const onSave = form.handleSubmit(
+    async (data) => {
+      try {
+        const payload = buildUpdateAgentPayload(data);
+        await updateAgent.mutateAsync({ id: agentId, data: payload as any });
+        queryClient.invalidateQueries({ queryKey: getGetAgentQueryKey(agentId) });
+        queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
+        toast({ title: "Saved", description: `${data.name} updated.` });
+      } catch (err) {
+        const mapped = mapApiErrors(err);
+        if (mapped) { Object.entries(mapped).forEach(([k, v]) => form.setError(k as any, { message: v })); }
+        toast({ title: "Error", description: formatApiError(err), variant: "destructive" });
+      }
+    },
+    (errors) => {
+      const firstError = Object.values(errors)[0];
+      const msg = firstError && typeof firstError === "object" && "message" in firstError
+        ? String((firstError as any).message)
+        : "Please fix the highlighted fields before saving.";
+      toast({ title: "Validation error", description: msg, variant: "destructive" });
     }
-  });
+  );
 
   const handleToggle = async () => {
     try {
@@ -2106,7 +2115,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
           <span className="text-xs text-muted-foreground">{(agent as any).totalCalls ?? 0} calls</span>
         </div>
         <div className="flex items-center gap-2">
-          <Button size="sm" className="h-7 text-xs gap-1.5" onClick={onSave} disabled={!isDirty || updateAgent.isPending}>
+          <Button size="sm" className="h-7 text-xs gap-1.5" onClick={onSave} disabled={updateAgent.isPending} title={!isDirty ? "No unsaved changes" : undefined}>
             <Save className="h-3.5 w-3.5" />
             {updateAgent.isPending ? "Saving…" : "Save"}
           </Button>
