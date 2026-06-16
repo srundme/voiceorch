@@ -351,9 +351,10 @@ export default function AgentEdit() {
   const { data: eventTypesData } = useListEventTypes();
   const eventTypeOptions = (eventTypesData ?? []).map((et: any) => ({ value: String(et.id), label: et.name ?? et.slug }));
 
+  const NATIVE_TOOL_TYPES = ["native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel"];
   const watchedTools = (form.watch("tools") ?? []) as any[];
   const hasNativeTool = (type: string) => watchedTools.some((t: any) => t.type === type);
-  const nativeToolIndex = (type: string) => toolFields.findIndex((f: any) => f.type === type);
+  const nativeToolIndex = (type: string) => watchedTools.findIndex((t: any) => t.type === type);
   const toggleNativeTool = (type: string) => {
     const idx = nativeToolIndex(type);
     if (idx >= 0) { removeTool(idx); } else { appendTool({ type: type as any, name: "", description: "" }); }
@@ -1156,10 +1157,11 @@ export default function AgentEdit() {
                 </div>
               </div>
             </CardContent>
-            {toolFields.length > 0 && (
+            {toolFields.filter((_f, i) => !NATIVE_TOOL_TYPES.includes(form.getValues(`tools.${i}.type`) ?? "")).length > 0 && (
               <CardContent className="space-y-4">
                 {toolFields.map((field, index) => {
-                  const toolType = form.watch(`tools.${index}.type`);
+                  const toolType = form.watch(`tools.${index}.type`) ?? "";
+                  if (NATIVE_TOOL_TYPES.includes(toolType)) return null;
                   return (
                     <div key={field.id} className="border rounded-md p-4 bg-muted/20 space-y-3 relative">
                       <div className="flex items-center justify-between mb-1">
