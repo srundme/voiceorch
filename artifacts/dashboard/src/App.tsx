@@ -14,7 +14,6 @@ import { SnapServeLoader } from "@/components/logo";
 import { VoiceAssistant } from "@/components/VoiceAssistant";
 import AssistantsPage from "@/pages/assistants";
 import Dashboard from "@/pages/dashboard";
-import AgentsList from "@/pages/agents/index";
 import AgentNew from "@/pages/agents/new";
 import AgentDetail from "@/pages/agents/[id]";
 import AgentEdit from "@/pages/agents/edit";
