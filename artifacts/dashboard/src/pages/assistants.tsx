@@ -1375,7 +1375,6 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
 
   // ── Booking-tool modal state (Tools tab) ───────────────────────────────
   const [bookingModal, setBookingModal] = useState<null | {
-    editIdx: number | null;
     calendarId: number | null;
     eventTypeId: number | null;
     timezone: string;
@@ -2316,7 +2315,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                   { label: "Call Transfer",    icon: PhoneForwarded, onClick: () => { setAgentTools(prev => [...prev, { type: "call_transfer" as const, name: "transfer_to_human", description: "Transfer the call to a human agent when the caller requests escalation.", transferTo: "", warmHandoffMessage: "" }]); setDirty(true); } },
                   { label: "End Call",         icon: PhoneOff,       onClick: () => { setAgentTools(prev => [...prev, { type: "end_call" as const, name: "end_call", description: "End the call when the conversation is complete.", goodbyeMessage: "" }]); setDirty(true); } },
                   { label: "Cal.com",          icon: Clock,          onClick: () => { setAgentTools(prev => [...prev, { type: "cal_com" as const, name: "book_appointment", description: "Book an appointment on Cal.com when the caller wants to schedule.", apiKey: "", eventTypeId: 0, timezone: "UTC" }]); setDirty(true); } },
-                  { label: "Book Appointment", icon: CalendarPlus,   onClick: () => setBookingModal({ editIdx: null, calendarId: null, eventTypeId: null, timezone: "UTC", taskName: "book_appointment", description: "Book an appointment when the caller wants to schedule a meeting.", preToolMessage: "" }) },
+                  { label: "Book Appointment", icon: CalendarPlus,   onClick: () => setBookingModal({ calendarId: null, eventTypeId: null, timezone: "UTC", taskName: "book_appointment", description: "Book an appointment when the caller wants to schedule a meeting.", preToolMessage: "" }) },
                   { label: "Availability",     icon: CalendarCheck,  onClick: () => { setAgentTools(prev => [...prev, { type: "native_check_availability" as const, name: "check_availability", description: "Check available slots when the caller asks what times are open.", eventTypeId: 0 }]); setDirty(true); } },
                   { label: "Reschedule",       icon: CalendarClock,  onClick: () => { setAgentTools(prev => [...prev, { type: "native_reschedule" as const, name: "reschedule_appointment", description: "Reschedule an existing booking when the caller provides their booking reference.", timezone: "UTC" }]); setDirty(true); } },
                   { label: "Cancel Booking",   icon: CalendarX,      onClick: () => { setAgentTools(prev => [...prev, { type: "native_cancel" as const, name: "cancel_appointment", description: "Cancel an existing booking when the caller provides their booking reference." }]); setDirty(true); } },
@@ -3197,7 +3196,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
       <Dialog open={bookingModal !== null} onOpenChange={open => { if (!open) setBookingModal(null); }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><CalendarPlus className="h-4 w-4 text-zinc-500" />{bookingModal?.editIdx == null ? "Add Book Appointment Tool" : "Edit Book Appointment Tool"}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2"><CalendarPlus className="h-4 w-4 text-zinc-500" />Add Book Appointment Tool</DialogTitle>
             <DialogDescription>Configure how the AI books appointments using your inbuilt calendar.</DialogDescription>
           </DialogHeader>
           {bookingModal && (
@@ -3246,9 +3245,9 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
               if (!bookingModal.eventTypeId) { toast({ title: "Event type is required", variant: "destructive" }); return; }
               const taskName = (bookingModal.taskName || "book_appointment").trim();
               const next: AgentToolLocal = { type: "native_booking", name: taskName, description: bookingModal.description || "Book an appointment when the caller wants to schedule a meeting.", eventTypeId: bookingModal.eventTypeId, calendarId: bookingModal.calendarId, timezone: bookingModal.timezone, taskName, preToolMessage: bookingModal.preToolMessage || undefined };
-              setAgentTools(prev => { if (bookingModal.editIdx == null) return [...prev, next]; const copy = [...prev]; copy[bookingModal.editIdx] = next; return copy; });
+              setAgentTools(prev => [...prev, next]);
               setDirty(true); setBookingModal(null);
-              toast({ title: bookingModal.editIdx == null ? "Booking tool added" : "Booking tool updated" });
+              toast({ title: "Booking tool added" });
             }}>Save Configuration</Button>
           </DialogFooter>
         </DialogContent>
