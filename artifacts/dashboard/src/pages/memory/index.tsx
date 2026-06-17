@@ -73,12 +73,12 @@ function timeAgo(iso: string | null): string {
 }
 
 function sentimentEmoji(summary: string | null): string {
-  if (!summary) return "📖";
+  if (!summary) return "";
   const s = summary.toLowerCase();
-  if (s.includes("angry") || s.includes("frustrat") || s.includes("upset")) return "😤";
-  if (s.includes("happy") || s.includes("satisf") || s.includes("great")) return "😊";
-  if (s.includes("neutral") || s.includes("inquir")) return "😐";
-  return "📖";
+  if (s.includes("angry") || s.includes("frustrat") || s.includes("upset")) return "angry";
+  if (s.includes("happy") || s.includes("satisf") || s.includes("great")) return "happy";
+  if (s.includes("neutral") || s.includes("inquir")) return "neutral";
+  return "";
 }
 
 /* ─── Hooks ──────────────────────────────────────────────────────────────── */
@@ -126,9 +126,9 @@ function EmptyState() {
       </p>
       <div className="flex flex-col gap-2 text-left max-w-xs w-full">
         {[
-          { icon: "🗂️", label: "Facts", desc: "Structured data extracted per call" },
-          { icon: "📖", label: "Episodes", desc: "AI-written summaries of each call" },
-          { icon: "💬", label: "Sentences", desc: "Verbatim notable quotes preserved" },
+          { icon: "F", label: "Facts", desc: "Structured data extracted per call" },
+          { icon: "E", label: "Episodes", desc: "AI-written summaries of each call" },
+          { icon: "Q", label: "Sentences", desc: "Verbatim notable quotes preserved" },
         ].map(item => (
           <div key={item.label} className="flex items-start gap-3 px-3 py-2.5 rounded-lg border border-border bg-card">
             <span className="text-base mt-0.5">{item.icon}</span>
@@ -279,7 +279,7 @@ function MemoryDrawer({
           {/* ── Facts ── */}
           <div>
             <div className="flex items-center gap-2 mb-3">
-              <span className="text-base">🗂️</span>
+              <span className="text-base text-muted-foreground">F</span>
               <h3 className="text-[12.5px] font-semibold text-foreground">Facts</h3>
               <Badge variant="outline" className="text-[9.5px] ml-auto">
                 {detailLoading ? "…" : (detail?.facts.length ?? 0)}
@@ -325,7 +325,7 @@ function MemoryDrawer({
           {/* ── Episodes ── */}
           <div>
             <div className="flex items-center gap-2 mb-3">
-              <span className="text-base">📖</span>
+              <span className="text-base text-muted-foreground">E</span>
               <h3 className="text-[12.5px] font-semibold text-foreground">Episodes</h3>
               <Badge variant="outline" className="text-[9.5px] ml-auto">
                 {detailLoading ? "…" : (detail?.episodes.length ?? 0)}
@@ -369,7 +369,7 @@ function MemoryDrawer({
           {/* ── Verbatim quotes ── */}
           <div>
             <div className="flex items-center gap-2 mb-3">
-              <span className="text-base">💬</span>
+              <span className="text-base text-muted-foreground">Q</span>
               <h3 className="text-[12.5px] font-semibold text-foreground">Verbatim Quotes</h3>
             </div>
 
@@ -388,7 +388,7 @@ function MemoryDrawer({
                   {allSentences.map(s => (
                     <div key={s.id} className="rounded-lg border border-border bg-card px-3 py-2.5">
                       <p className="text-[10px] text-muted-foreground/50 mb-1 uppercase tracking-wide">
-                        {s.speaker === "agent" ? "🤖 Agent" : "👤 Caller"}
+                        {s.speaker === "agent" ? "Agent" : "Caller"}
                       </p>
                       <p className="text-[12px] text-foreground leading-relaxed">"{s.text}"</p>
                     </div>

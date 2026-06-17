@@ -335,11 +335,11 @@ export function VoiceAssistant() {
           <div className="px-4 py-2 min-h-[28px] shrink-0" style={{ borderTop: "1px solid #1e293b" }}>
             {phase === "listening" && (
               <p className="text-xs animate-pulse text-foreground font-semibold">
-                🎙 Listening{transcript ? `: "${transcript}"` : "…"}
+                Listening{transcript ? `: "${transcript}"` : "…"}
               </p>
             )}
             {phase === "speaking" && (
-              <p className="text-xs text-muted-foreground">🔊 Speaking…</p>
+              <p className="text-xs text-muted-foreground">Speaking…</p>
             )}
             {phase === "thinking" && (
               <p className="text-xs text-muted-foreground">Thinking…</p>

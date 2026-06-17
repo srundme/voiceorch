@@ -323,7 +323,7 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
     const all = whitelistedData?.voices ?? [];
     if (all.length === 0) {
       const opts = [...(TTS_VOICES.cartesia ?? []).filter(v => v.value !== "__custom__")];
-      opts.push({ value: "__custom__", label: "✎ Paste custom Voice ID…" });
+      opts.push({ value: "__custom__", label: "Paste custom Voice ID" });
       return opts;
     }
     // Show only voices matching the agent's language (e.g. "ta-IN" → "ta")
@@ -331,7 +331,7 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
     const matched = all.filter(v => v.language?.toLowerCase() === baseLang);
     // If no voices for this language, show only the custom paste option
     const opts = matched.map(v => ({ value: v.id, label: v.name }));
-    opts.push({ value: "__custom__", label: "✎ Paste custom Voice ID…" });
+    opts.push({ value: "__custom__", label: "Paste custom Voice ID" });
     return opts;
   }, [whitelistedData, language]);
 
@@ -435,7 +435,7 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
           {/* ── Managed / BYOP callout ───────────────────────────────────────── */}
           <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3.5 py-2.5">
             <div className="flex items-center gap-2.5 min-w-0">
-              <span className="text-sm shrink-0">⚡</span>
+              <span className="text-sm shrink-0 text-amber-400">★</span>
               <div className="min-w-0">
                 <p className="text-[11.5px] font-semibold text-amber-300/90 leading-snug">
                   Using managed API keys
@@ -588,6 +588,12 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
                       />
                     </FormItem>
                   )} />
+                )}
+                {ttsProvider === "cartesia" && (whitelistedData?.voices ?? []).length > 0 && curatedVoiceOpts.length === 0 && (
+                  <p className="text-[10px] text-amber-400/80 leading-relaxed rounded-md border border-amber-500/20 bg-amber-500/5 px-2.5 py-2">
+                    No voices available for <span className="font-semibold">{langLabel}</span>. Paste a Voice ID from{" "}
+                    <a href="https://cartesia.ai" target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-amber-300">cartesia.ai</a>.
+                  </p>
                 )}
                 {showCustomVoiceInput && (
                   <FormField control={form.control} name="ttsVoice" render={({ field }) => (
@@ -808,14 +814,14 @@ function VoiceTab({ form }: { form: any }) {
     const all = whitelistedData?.voices ?? [];
     if (all.length === 0) {
       const opts = [...(TTS_VOICES.cartesia ?? []).filter(v => v.value !== "__custom__")];
-      opts.push({ value: "__custom__", label: "✎ Paste custom Voice ID…" });
+      opts.push({ value: "__custom__", label: "Paste custom Voice ID" });
       return opts;
     }
     const baseLang = agentLanguage.split("-")[0]!.toLowerCase();
     const matched = all.filter(v => v.language?.toLowerCase() === baseLang);
     // If no voices for this language, show only the custom paste option
     const opts = matched.map(v => ({ value: v.id, label: v.name }));
-    opts.push({ value: "__custom__", label: "✎ Paste custom Voice ID…" });
+    opts.push({ value: "__custom__", label: "Paste custom Voice ID" });
     return opts;
   }, [whitelistedData, agentLanguage]);
 
@@ -995,6 +1001,14 @@ function VoiceTab({ form }: { form: any }) {
                 </Select>
               </FormItem>
             )} />
+          )}
+
+          {ttsProvider === "cartesia" && (whitelistedData?.voices ?? []).length > 0 && curatedVoiceOptsV.length === 0 && (
+            <p className="text-xs text-amber-400/80 leading-relaxed rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2.5">
+              No voices available for <span className="font-semibold">{LANGUAGES.find(l => l.value === agentLanguage)?.label ?? agentLanguage}</span>.
+              {" "}Paste a Voice ID from{" "}
+              <a href="https://cartesia.ai" target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-amber-300">cartesia.ai</a>.
+            </p>
           )}
 
           {ttsModelOptsV.length > 0 && (
@@ -2025,11 +2039,11 @@ function AdvancedTab({ form }: { form: any }) {
             </div>
             <div className="grid grid-cols-2 gap-3">
               {([
-                { name: "complianceIrdai", label: "IRDAI",    flag: "🇮🇳", badge: "Insurance",   desc: "Insurance Regulatory and Development Authority of India — for insurance advisory calls"         },
-                { name: "complianceDpdp",  label: "DPDP Act", flag: "🇮🇳", badge: "Data Privacy", desc: "Digital Personal Data Protection Act 2023 — when collecting personal data from callers"       },
-                { name: "complianceHipaa", label: "HIPAA",    flag: "🇺🇸", badge: "Healthcare",  desc: "Health Insurance Portability and Accountability Act — for healthcare-related calls"           },
-                { name: "complianceTrai",  label: "TRAI",     flag: "🇮🇳", badge: "Telecom",     desc: "Telecom Regulatory Authority of India — for commercial communications; includes opt-out"      },
-              ] as const).map(({ name, label, flag, badge, desc }) => (
+                { name: "complianceIrdai", label: "IRDAI",    badge: "Insurance",   desc: "Insurance Regulatory and Development Authority of India — for insurance advisory calls"         },
+                { name: "complianceDpdp",  label: "DPDP Act", badge: "Data Privacy", desc: "Digital Personal Data Protection Act 2023 — when collecting personal data from callers"       },
+                { name: "complianceHipaa", label: "HIPAA",    badge: "Healthcare",  desc: "Health Insurance Portability and Accountability Act — for healthcare-related calls"           },
+                { name: "complianceTrai",  label: "TRAI",     badge: "Telecom",     desc: "Telecom Regulatory Authority of India — for commercial communications; includes opt-out"      },
+              ] as const).map(({ name, label, badge, desc }) => (
                 <FormField key={name} control={form.control} name={name} render={({ field }) => (
                   <FormItem
                     className={cn(
@@ -2043,7 +2057,6 @@ function AdvancedTab({ form }: { form: any }) {
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 mb-1">
-                          <span className="text-base leading-none">{flag}</span>
                           <span className="text-[12.5px] font-bold text-foreground">{label}</span>
                         </div>
                         <span className={cn("text-[9.5px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded", field.value ? "bg-primary/20 text-primary" : "bg-muted/60 text-muted-foreground")}>

@@ -55,7 +55,7 @@ export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
 
 export const TTS_MODELS: Record<string, { value: string; label: string }[]> = {
   cartesia: [
-    { value: "sonic-3.5",   label: "Sonic 3.5 ✦ New — 42 languages, lowest latency" },
+    { value: "sonic-3.5",   label: "Sonic 3.5 — 42 languages, lowest latency" },
     { value: "sonic-3",     label: "Sonic 3" },
     { value: "sonic-2",     label: "Sonic 2 (stable)" },
     { value: "sonic-turbo", label: "Sonic Turbo (fast, low-latency)" },
@@ -71,7 +71,7 @@ export const TTS_VOICES: Record<string, { value: string; label: string }[] | nul
     { value: "c45bc5ec-dc68-4feb-8829-6ac1e9f4f478", label: "Customer Support Lady" },
     { value: "f9836c38-f195-45be-b41c-91b82a5d59c8", label: "Southern Man" },
     { value: "e00d0e4c-a5c8-443c-8230-60ea3f5b45ff", label: "Friendly Australian Man" },
-    { value: "__custom__", label: "✎ Paste custom Voice ID…" },
+    { value: "__custom__", label: "Paste custom Voice ID" },
   ],
   elevenlabs: [
     { value: "21m00Tcm4TlvDq8ikWAM", label: "Rachel (Female)" },
@@ -83,7 +83,7 @@ export const TTS_VOICES: Record<string, { value: string; label: string }[] | nul
     { value: "VR6AewLTigWG4xSOukaG", label: "Arnold (Male)" },
     { value: "pNInz6obpgDQGcFmaJgB", label: "Adam (Male)" },
     { value: "yoZ06aMxZJJ28mfd3POQ", label: "Sam (Male)" },
-    { value: "__custom__", label: "✎ Paste custom Voice ID…" },
+    { value: "__custom__", label: "Paste custom Voice ID" },
   ],
   sarvam: [
     { value: "meera",    label: "Meera (female)" },
