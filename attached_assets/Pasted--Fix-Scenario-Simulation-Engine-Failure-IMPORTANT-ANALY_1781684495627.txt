@@ -1,0 +1,391 @@
+# Fix Scenario Simulation Engine Failure
+
+## IMPORTANT: ANALYZE FIRST, IMPLEMENT SECOND
+
+Before making changes:
+
+1. Analyze the Scenario Simulation architecture.
+2. Analyze the Persona Generator flow.
+3. Analyze the Simulation Runner.
+4. Analyze the LLM orchestration flow.
+5. Analyze how the agent prompt is loaded.
+6. Analyze how tool definitions are loaded.
+7. Analyze how variables are injected.
+8. Analyze how knowledge base retrieval works.
+9. Analyze how function/tool calling works.
+
+Do NOT blindly patch the error.
+
+Find the root cause.
+
+Provide findings before implementing the fix.
+
+---
+
+# Current Problem
+
+Scenario Simulation successfully creates the test case.
+
+The test case appears in the UI.
+
+When I click:
+
+Run
+
+The simulation starts but immediately fails.
+
+Error:
+
+Failed to call a function.
+Please adjust your prompt.
+See 'failed_generation' for more details.
+
+---
+
+# Expected Behavior
+
+The Scenario Simulation should create a virtual customer persona.
+
+Example:
+
+Persona:
+
+Priya
+
+27 years old
+
+First-time health insurance buyer
+
+Budget conscious
+
+No pre-existing diseases
+
+Confused about insurance terminology
+
+Looking for a plan under ₹8,000
+
+The Persona AI should then interact with the Agent.
+
+Agent:
+
+Health Insurance Advisor
+
+Persona:
+
+Potential Customer
+
+The conversation should continue naturally until:
+
+- Goal completed
+- Success criteria evaluated
+- Max turns reached
+
+---
+
+# Suspected Root Cause
+
+Based on the failure logs, it appears the Persona Generator is producing chain-of-thought style output.
+
+Example:
+
+<think>
+I need to act like Priya...
+I should ask about deductibles...
+I should continue the conversation...
+</think>
+
+Instead of generating an actual customer message.
+
+This suggests the simulation engine is passing reasoning text into a tool/function schema that expects a customer response.
+
+---
+
+# Required Behavior
+
+The Persona Engine should ONLY generate the next customer message.
+
+Example:
+
+Correct:
+
+"What exactly is a deductible?"
+
+OR
+
+"Do you have any plans under ₹8,000 per year?"
+
+OR
+
+"I already have insurance. Can I port it?"
+
+---
+
+Never:
+
+<think>
+I need to ask about deductibles...
+</think>
+
+Never expose reasoning.
+
+Never expose chain-of-thought.
+
+Never expose planning text.
+
+Only generate customer-facing messages.
+
+---
+
+# Simulation Architecture
+
+Expected Flow:
+
+Agent Prompt
+
+↓
+
+Persona Prompt
+
+↓
+
+Conversation Context
+
+↓
+
+Persona Generates Customer Message
+
+↓
+
+Agent Responds
+
+↓
+
+Persona Generates Next Message
+
+↓
+
+Continue Until Completion
+
+---
+
+The Persona should behave like a customer.
+
+The Persona should NOT behave like an LLM agent.
+
+The Persona should NOT call tools.
+
+The Persona should NOT execute functions.
+
+The Persona should NOT generate system instructions.
+
+The Persona should NOT generate reasoning.
+
+---
+
+# Tool Calling Rules
+
+Critical Requirement
+
+Only the Agent may call tools.
+
+Examples:
+
+book_appointment()
+
+check_availability()
+
+cancel_booking()
+
+CRM functions
+
+Webhook functions
+
+Knowledge functions
+
+Memory functions
+
+---
+
+The Persona must NEVER attempt tool execution.
+
+If the Persona can call tools, disable it.
+
+The Persona only generates user messages.
+
+---
+
+# Prompt Engineering Fix
+
+The Persona Prompt should enforce:
+
+"You are a customer in a conversation.
+
+Your task is ONLY to generate the next message the customer would say.
+
+Do not explain your reasoning.
+
+Do not generate chain-of-thought.
+
+Do not generate analysis.
+
+Do not generate system instructions.
+
+Do not generate XML tags.
+
+Do not generate JSON.
+
+Do not generate tool calls.
+
+Output only the customer's next spoken message."
+
+---
+
+# Error Handling
+
+If the Persona generation fails:
+
+Display:
+
+Simulation Failed
+
+Root Cause
+
+Failed Step
+
+Provider Response
+
+Validation Error
+
+Function Error
+
+Stack Trace
+
+---
+
+Current error:
+
+"Failed to call a function"
+
+is too generic.
+
+Provide meaningful debugging information.
+
+---
+
+# Debug Logging
+
+Store:
+
+Simulation ID
+
+Persona Prompt
+
+Resolved Agent Prompt
+
+Variables
+
+Knowledge Retrieved
+
+Tools Available
+
+Function Definitions
+
+Agent Response
+
+Persona Response
+
+Failure Reason
+
+Provider Error
+
+---
+
+Create a Simulation Logs section.
+
+This will help debug failures.
+
+---
+
+# Validation Before Running
+
+Before simulation starts:
+
+Validate:
+
+✓ Agent prompt exists
+
+✓ Persona prompt exists
+
+✓ LLM provider available
+
+✓ Variables resolved
+
+✓ Tool definitions valid
+
+✓ Knowledge base accessible
+
+✓ Memory layer available
+
+If validation fails:
+
+Block execution and display the exact issue.
+
+---
+
+# Success Criteria
+
+When I click Run:
+
+✓ Persona generates realistic customer messages
+
+✓ Agent responds normally
+
+✓ Tools execute correctly
+
+✓ Conversation continues naturally
+
+✓ Success criteria are evaluated
+
+✓ Final score is generated
+
+✓ No function-calling errors occur
+
+✓ No chain-of-thought is exposed
+
+✓ No XML tags appear
+
+✓ No reasoning appears
+
+The simulation should feel like a real conversation between a customer and the AI agent.
+
+---
+
+# Git Requirements
+
+After the issue is fixed:
+
+1. Run a full regression test on:
+   - Manual Chat
+   - Scenario Simulation
+   - Agent Builder
+   - Version Control
+   - Tools
+   - Knowledge Base
+   - Memory
+   - Execution Logs
+
+2. Verify existing functionality is not broken.
+
+3. Commit all changes.
+
+Commit Message:
+
+fix(simulation): resolve scenario simulation function calling failure and persona generation flow
+
+4. Push all changes to Git.
+
+5. Provide:
+   - Commit SHA
+   - Files Changed
+   - Summary of Fixes
+   - Any remaining known limitations
