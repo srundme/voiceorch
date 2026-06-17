@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { format, parseISO } from "date-fns";
 import {
   Search, Phone, Mic, Cpu, Volume2, DollarSign, ArrowRight,
@@ -191,6 +191,7 @@ function MiniStat({ label, value, icon, trend }: { label: string; value: string;
 
 /* ── Page ────────────────────────────────────────────────────────────────── */
 export default function CallsList() {
+  const [, navigate] = useLocation();
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [agentFilter, setAgentFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -270,6 +271,30 @@ export default function CallsList() {
     setDateTo("");
   };
 
+  const handleExport = () => {
+    if (!filteredCalls.length) return;
+    const headers = ["ID","Execution ID","Date","Agent","Status","From","To","Duration (s)","Cost ($)"];
+    const rows = filteredCalls.map(c => [
+      c.id,
+      c.executionId ?? "",
+      c.createdAt ? format(parseISO(c.createdAt), "yyyy-MM-dd HH:mm:ss") : "",
+      c.agentName ?? "",
+      c.status ?? "",
+      c.fromNumber ?? "",
+      c.toNumber ?? "",
+      c.durationSeconds ?? "",
+      c.costCents != null ? (c.costCents / 100).toFixed(3) : "",
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `call-log-${format(new Date(), "yyyy-MM-dd")}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const hasActiveFilters =
     statusFilter !== "all" ||
     agentFilter !== "all" ||
@@ -300,10 +325,10 @@ export default function CallsList() {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+              <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={handleExport} disabled={!filteredCalls.length}>
                 <Download className="h-3.5 w-3.5" /> Export
               </Button>
-              <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+              <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => navigate("/app/analytics")}>
                 <BarChart3 className="h-3.5 w-3.5" /> Analytics
               </Button>
             </div>
