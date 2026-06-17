@@ -570,13 +570,12 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
             <div className="rounded-xl border border-green-400/30 bg-green-950/10 p-4 space-y-3 animate-in slide-in-from-top-1 duration-150">
               <div className="text-[10px] font-bold uppercase tracking-widest text-green-400">Voice Configuration</div>
               <div className="grid grid-cols-2 gap-3">
-                <FormField control={form.control} name="ttsProvider" render={({ field }) => (
-                  <FormItem className="space-y-1">
-                    <FormLabel className="text-[10px] text-muted-foreground">Provider</FormLabel>
-                    <SmallSelect value={field.value} onChange={(v) => { field.onChange(v); form.setValue("ttsVoice", ""); form.setValue("ttsModel", ""); }}
-                      options={TTS_PROVIDERS.map(p => ({ value: p.value, label: p.label }))} />
-                  </FormItem>
-                )} />
+                <FormItem className="space-y-1">
+                  <FormLabel className="text-[10px] text-muted-foreground">Provider</FormLabel>
+                  <div className="h-7 px-2 flex items-center rounded-md border border-input bg-muted/40 text-xs text-muted-foreground">
+                    Cartesia (Sonic)
+                  </div>
+                </FormItem>
                 {ttsVoiceOpts.length > 0 && (
                   <FormField control={form.control} name="ttsVoice" render={({ field }) => (
                     <FormItem className="space-y-1">
@@ -968,23 +967,12 @@ function VoiceTab({ form }: { form: any }) {
       <div className="space-y-3">
         <SectionDivider label="Text-to-Speech — Provider & Voice" />
         <div className="grid grid-cols-2 gap-3">
-          <FormField control={form.control} name="ttsProvider" render={({ field }) => (
-            <FormItem className="space-y-1">
-              <FormLabel className="text-xs text-muted-foreground">Provider</FormLabel>
-              <Select value={field.value} onValueChange={(v) => {
-                field.onChange(v);
-                form.setValue("ttsVoice", "");
-                form.setValue("ttsModel", "");
-              }}>
-                <SelectTrigger className="h-9 text-sm">
-                  <SelectValue placeholder="Select provider" />
-                </SelectTrigger>
-                <SelectContent position="popper">
-                  {TTS_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value} className="text-sm">{p.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </FormItem>
-          )} />
+          <FormItem className="space-y-1">
+            <FormLabel className="text-xs text-muted-foreground">Provider</FormLabel>
+            <div className="h-9 px-3 flex items-center rounded-md border border-input bg-muted/40 text-sm text-muted-foreground">
+              Cartesia (Sonic)
+            </div>
+          </FormItem>
 
           {ttsVoiceOptsV.length > 0 && (
             <FormField control={form.control} name="ttsVoice" render={({ field }) => (
@@ -2246,7 +2234,7 @@ function AgentListPanel({ selectedId, onSelect, rateMap }: {
 
   const handleCreate = () => {
     createAgent.mutate(
-      { data: { name: "New Agent", asrProvider: "azure", asrModel: "en-US-standard", llmProvider: "openai", llmModel: "gpt-4o-mini", ttsProvider: "elevenlabs", ttsVoice: "", ttsModel: "", telephonyProvider: "vobiz", systemPrompt: "You are a helpful AI voice assistant.", greetingMessage: "Hello", language: "en-US" } as any },
+      { data: { name: "New Agent", asrProvider: "azure", asrModel: "en-US-standard", llmProvider: "openai", llmModel: "gpt-4o-mini", ttsProvider: "cartesia", ttsVoice: "", ttsModel: "", telephonyProvider: "vobiz", systemPrompt: "You are a helpful AI voice assistant.", greetingMessage: "Hello", language: "en-US" } as any },
       { onSuccess: (agent) => onSelect(agent.id), onError: (err: unknown) => toast({ title: "Error", description: formatApiError(err), variant: "destructive" }) }
     );
   };
@@ -3168,7 +3156,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
     resolver: zodResolver(agentFormSchema),
     defaultValues: {
       name: "", description: "", asrProvider: "deepgram", asrModel: "",
-      llmProvider: "openai", llmModel: "", ttsProvider: "elevenlabs",
+      llmProvider: "openai", llmModel: "", ttsProvider: "cartesia",
       ttsVoice: "", ttsModel: "", telephonyProvider: "vobiz",
       systemPrompt: "", temperature: 0.10, maxDuration: 300,
       greetingMessage: "Hello", firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
@@ -3488,7 +3476,7 @@ export default function AgentBuilder() {
 
   const handleCreate = () => {
     createAgent.mutate(
-      { data: { name: "New Agent", asrProvider: "azure", asrModel: "en-US-standard", llmProvider: "openai", llmModel: "gpt-4o-mini", ttsProvider: "elevenlabs", ttsVoice: "", ttsModel: "", telephonyProvider: "vobiz", systemPrompt: "You are a helpful AI voice assistant.", greetingMessage: "Hello", language: "en-US" } as any },
+      { data: { name: "New Agent", asrProvider: "azure", asrModel: "en-US-standard", llmProvider: "openai", llmModel: "gpt-4o-mini", ttsProvider: "cartesia", ttsVoice: "", ttsModel: "", telephonyProvider: "vobiz", systemPrompt: "You are a helpful AI voice assistant.", greetingMessage: "Hello", language: "en-US" } as any },
       { onSuccess: (agent) => handleSelect(agent.id), onError: (err: unknown) => toast({ title: "Error", description: formatApiError(err), variant: "destructive" }) }
     );
   };
