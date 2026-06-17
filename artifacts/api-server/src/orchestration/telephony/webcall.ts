@@ -2217,6 +2217,10 @@ export async function handleWebCallWebSocket(
             greetAudio = withTailSilence(audio);
           }
 
+          // Send transcript before audio starts so the UI shows the text
+          // while the agent is speaking, not after it finishes.
+          send({ type: "transcript", speaker: "agent", text: greetingText });
+
           for (let j = 0; j < greetAudio.length; j += AUDIO_CHUNK_BYTES) {
             if (closed || interrupted) break;
             const chunk = greetAudio.slice(j, j + AUDIO_CHUNK_BYTES);
@@ -2234,7 +2238,6 @@ export async function handleWebCallWebSocket(
         speaking = false;
         speakingEndedAt = Date.now();
         history.push({ role: "assistant", content: greetingText });
-        send({ type: "transcript", speaker: "agent", text: greetingText });
 
         if (!closed) {
           const drainFrames = Math.ceil(AUDIO_TAIL_SILENCE_MS / 40);
