@@ -10,7 +10,7 @@ import {
   Play, Pause,
   Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff,
   History, GitBranch, Eye, RotateCcw, ChevronUp, AlertTriangle, ArrowLeftRight,
-  Upload,
+  Upload, Archive, Info, AlertCircle,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -23,13 +23,15 @@ import {
   useListCalls, getListCallsQueryKey, useListCalendars, customFetch,
   useListKnowledgeSources, useRunToolTest, useListAmbientSounds, useListEventTypes,
   useListAgentVersions, usePublishAgentVersion, useGetAgentVersion, useRestoreAgentVersion,
+  useArchiveAgentVersion,
   getListAgentVersionsQueryKey, getGetAgentVersionQueryKey,
 } from "@workspace/api-client-react";
 import type { AgentVersion } from "@workspace/api-client-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { agentFormSchema, buildUpdateAgentPayload, StagedPromptEditor } from "./edit";
+import { agentFormSchema } from "./edit.schema";
+import { buildUpdateAgentPayload, StagedPromptEditor } from "./edit";
 import type { AgentFormValues } from "./edit";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,6 +58,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError, mapApiErrors, isDestinationUnverifiedError } from "@/lib/format-api-error";
 import {
@@ -1277,13 +1280,15 @@ function VoiceTab({ form }: { form: any }) {
 
 
 
-function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
+function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined }) {
   const { fields, append, remove } = useFieldArray({ control: form.control, name: "tools" });
   const genderEnabled = form.watch("genderDetectionEnabled") ?? false;
+  const recordingEnabled = form.watch("recordingEnabled") ?? false;
   const watchedTools  = (form.watch("tools") ?? []) as any[];
+  const { toast } = useToast();
 
   const { data: calendarsData } = useListCalendars();
-  const agentCalendar = (calendarsData ?? []).find((cal: any) => cal.agentId === agentId);
+  const agentCalendar = agentId ? (calendarsData ?? []).find((cal: any) => cal.agentId === agentId) : undefined;
   const calendarIdForEt = agentCalendar?.id;
   const { data: agentEventTypes } = useListEventTypes(
     calendarIdForEt ? { calendarId: calendarIdForEt } : undefined,
@@ -1335,6 +1340,18 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
       setExpandedTest(null);
     } else {
       append({ type: type as any, name: NATIVE_DEFAULT_NAMES[type] ?? "", description: "" });
+      const bookingTypes = ["native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel"];
+      if (bookingTypes.includes(type)) {
+        if (!agentId) {
+          toast({ title: "Save agent first", description: "Save this agent before configuring calendar tools.", variant: "destructive" });
+        } else if (!agentCalendar) {
+          toast({ title: "No calendar configured", description: "No calendar configured for this agent. Go to Settings → Calendar to set one up.", variant: "destructive" });
+        } else if (!(agentCalendar as any).connectedGoogleEmail) {
+          toast({ title: "No Google account connected", description: `Connect a Google account to the "${agentCalendar.name}" calendar in Scheduling.`, variant: "destructive" });
+        } else if ((agentEventTypes ?? []).length === 0 && ["native_booking", "native_check_availability", "native_list_bookings"].includes(type)) {
+          toast({ title: "No event types found", description: "Create an event type in Scheduling before using this tool.", variant: "destructive" });
+        }
+      }
     }
   };
 
@@ -1455,7 +1472,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
             try {
               let parsedArgs: Record<string, unknown> = {};
               try { parsedArgs = JSON.parse(testArgs[argKey] || "{}"); } catch { parsedArgs = {}; }
-              const res = await runTest.mutateAsync({ data: { agentId, toolName: fnName, args: parsedArgs } });
+              const res = await runTest.mutateAsync({ data: { agentId: agentId!, toolName: fnName, args: parsedArgs } });
               setTestResult((r) => ({ ...r, [type]: res.result ?? JSON.stringify(res) }));
             } catch (err: any) {
               setTestResult((r) => ({ ...r, [type]: `Error: ${err?.message ?? String(err)}` }));
@@ -1484,15 +1501,38 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
               {isOn && (
                 <div className="px-4 pb-4 -mt-1">
                   <div className="border-t border-border/30 pt-3 space-y-2">
-                    {/* Calendar badge */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[10px] text-muted-foreground">Assigned calendar:</span>
-                      <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded", c.badge, c.badgeText)}>
-                        {agentCalendar ? (agentCalendar.name || "Calendar") : "No calendar assigned yet"}
-                      </span>
-                    </div>
-                    {/* Event Type (booking / availability / list / reschedule / cancel tools) */}
-                    {(type === "native_booking" || type === "native_check_availability" || type === "native_list_bookings" || type === "native_reschedule" || type === "native_cancel") && (() => {
+                    {/* Calendar status block */}
+                    {!agentId ? (
+                      <p className="text-[10px] text-amber-400/80">
+                        Save this agent first, then configure calendar tools in <span className="font-medium">Settings → Calendar</span>.
+                      </p>
+                    ) : !agentCalendar ? (
+                      <p className="text-[10px] text-amber-400/80">
+                        No calendar found for this agent. Go to <span className="font-medium">Settings → Calendar</span> to create one.
+                      </p>
+                    ) : !(agentCalendar as any).connectedGoogleEmail ? (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] text-muted-foreground">Assigned calendar:</span>
+                        <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded", c.badge, c.badgeText)}>
+                          {agentCalendar.name || "Calendar"}
+                        </span>
+                        <span className="text-[10px] text-amber-400/80">No Google account connected to this calendar.</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] text-muted-foreground">Assigned calendar:</span>
+                        <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded", c.badge, c.badgeText)}>
+                          {agentCalendar.name || "Calendar"}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground/60">
+                          {(agentCalendar as any).connectedGoogleAccountsCount > 1
+                            ? `${(agentCalendar as any).connectedGoogleAccountsCount} accounts`
+                            : (agentCalendar as any).connectedGoogleEmail}
+                        </span>
+                      </div>
+                    )}
+                    {/* Event Type (all booking tools) */}
+                    {(() => {
                       const idx = nativeToolIndex(type);
                       const toolEventTypeId = watchedTools[idx]?.eventTypeId;
                       return (
@@ -1501,15 +1541,19 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
                           <Select
                             value={toolEventTypeId != null ? String(toolEventTypeId) : "__none__"}
                             onValueChange={(v) => form.setValue(`tools.${idx}.eventTypeId` as any, v === "__none__" ? undefined : Number(v))}
+                            disabled={!agentCalendar}
                           >
                             <SelectTrigger className="h-7 text-xs bg-background/50"><SelectValue placeholder="Any event type" /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="__none__" className="text-xs">Any event type</SelectItem>
                               {(agentEventTypes ?? []).map((et: any) => (
-                                <SelectItem key={et.id} value={String(et.id)} className="text-xs">{et.title}</SelectItem>
+                                <SelectItem key={et.id} value={String(et.id)} className="text-xs">{et.name}</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
+                          {agentCalendar && (agentEventTypes ?? []).length === 0 && (
+                            <p className="text-[10px] text-amber-400/80">No event types found for this calendar. Create one in Scheduling.</p>
+                          )}
                         </div>
                       );
                     })()}
@@ -1638,6 +1682,35 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
             </div>
           );
         })}
+
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">Recording</p>
+        {/* Call Recording card */}
+        <div className={cn("rounded-xl border transition-all duration-150", recordingEnabled ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
+          <button
+            type="button"
+            onClick={() => form.setValue("recordingEnabled", !recordingEnabled, { shouldDirty: true })}
+            className="w-full text-left p-4 flex items-start gap-3"
+          >
+            <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
+              <Mic className={cn("h-4 w-4", recordingEnabled ? "text-foreground/70" : "text-muted-foreground/35")} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="text-xs font-semibold text-foreground/80">Call Recording</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
+                Records the full audio of each call (caller and agent) and stores it on the call. When enabled, recordings appear in the Call Recording tab on the call's detail page for playback and download.
+              </p>
+            </div>
+            <div className="shrink-0 mt-1">
+              <Switch
+                checked={recordingEnabled}
+                onCheckedChange={(v) => form.setValue("recordingEnabled", v, { shouldDirty: true })}
+                onClick={e => e.stopPropagation()}
+              />
+            </div>
+          </button>
+        </div>
 
         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">Caller Intelligence</p>
         {/* Gender Identification card */}
@@ -2815,24 +2888,31 @@ function VersionStatusBadge({ status }: { status: string }) {
 
 /* ── Publish version modal ───────────────────────────────────────────────────── */
 
+const VERSION_LIMIT = 10;
+
 function PublishVersionModal({
-  open, onOpenChange, agentId, onSuccess,
+  open, onOpenChange, agentId, onSuccess, publishedCount,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   agentId: number;
   onSuccess: (v: AgentVersion) => void;
+  publishedCount: number;
 }) {
   const [versionName, setVersionName] = useState("");
   const [commitDesc, setCommitDesc] = useState("");
   const [releaseNotes, setReleaseNotes] = useState("");
+  const [limitReached, setLimitReached] = useState(false);
   const { toast } = useToast();
   const publish = usePublishAgentVersion();
+
+  const isAtLimit = publishedCount >= VERSION_LIMIT;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!versionName.trim()) return;
     if (!commitDesc.trim()) return;
+    if (isAtLimit) { setLimitReached(true); return; }
     try {
       const result = await publish.mutateAsync({
         id: agentId,
@@ -2847,9 +2927,41 @@ function PublishVersionModal({
       onOpenChange(false);
       onSuccess(result);
     } catch (err: any) {
+      const errorCode = err?.response?.data?.error ?? err?.data?.error;
+      if (errorCode === "VERSION_LIMIT_REACHED") {
+        setLimitReached(true);
+        return;
+      }
       toast({ title: "Publish failed", description: err?.message ?? "Unknown error", variant: "destructive" });
     }
   };
+
+  if (limitReached) {
+    return (
+      <Dialog open={open} onOpenChange={v => { onOpenChange(v); if (!v) setLimitReached(false); }}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-destructive" /> Maximum Published Versions Reached
+            </DialogTitle>
+            <DialogDescription>
+              You have reached the limit of <strong>{VERSION_LIMIT} published versions</strong>. Archive older versions to free up space before publishing a new one.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button type="button" variant="outline" onClick={() => { onOpenChange(false); setLimitReached(false); }}>Cancel</Button>
+            <Button
+              type="button"
+              onClick={() => { onOpenChange(false); setLimitReached(false); }}
+              className="gap-1.5"
+            >
+              <Archive className="h-3.5 w-3.5" /> Manage Versions
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -2899,7 +3011,7 @@ function PublishVersionModal({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button
               type="submit"
-              disabled={publish.isPending || !versionName.trim() || !commitDesc.trim()}
+              disabled={publish.isPending || !versionName.trim() || !commitDesc.trim() || isAtLimit}
               className="gap-1.5"
             >
               <Upload className="h-3.5 w-3.5" />
@@ -2909,6 +3021,30 @@ function PublishVersionModal({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/* ── Publish version modal wrapper (fetches publishedCount) ─────────────────── */
+
+function PublishVersionModalWrapper({
+  open, onOpenChange, agentId, onSuccess,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  agentId: number;
+  onSuccess: (v: AgentVersion) => void;
+}) {
+  const { data: listData } = useListAgentVersions(agentId);
+  const publishedCount = listData?.publishedCount ?? 0;
+
+  return (
+    <PublishVersionModal
+      open={open}
+      onOpenChange={onOpenChange}
+      agentId={agentId}
+      onSuccess={onSuccess}
+      publishedCount={publishedCount}
+    />
   );
 }
 
@@ -2978,7 +3114,7 @@ function CompareView({
 }: {
   agentId: number;
   baseVersion: AgentVersion;
-  allVersions: Omit<AgentVersion, "snapshot">[];
+  allVersions: VersionSummary[];
   onClose: () => void;
 }) {
   const [compareId, setCompareId] = useState<number | null>(null);
@@ -3103,6 +3239,103 @@ function CompareView({
   );
 }
 
+/* ── Version card ────────────────────────────────────────────────────────────── */
+
+type VersionSummary = Omit<AgentVersion, "snapshot">;
+
+function VersionCard({
+  v,
+  onCompare,
+  onRestore,
+  onArchive,
+  restorePending,
+  archivePending,
+  showArchiveAction,
+}: {
+  v: VersionSummary;
+  onCompare: () => void;
+  onRestore: () => void;
+  onArchive?: () => void;
+  restorePending: boolean;
+  archivePending: boolean;
+  showArchiveAction: boolean;
+}) {
+  const isArchived = v.status === "archived";
+  const changedFields = (v as any).changedFields as string[] | null | undefined;
+
+  return (
+    <div className={cn(
+      "flex items-start gap-4 px-5 py-4 hover:bg-muted/10 transition-colors",
+      isArchived && "opacity-60",
+    )}>
+      {/* Timeline node */}
+      <div className="shrink-0 mt-1 flex flex-col items-center gap-1">
+        <div className={cn(
+          "h-7 w-10 rounded-md border text-[11px] font-mono font-bold flex items-center justify-center",
+          v.status === "production" ? "bg-green-500/15 border-green-500/40 text-green-400" :
+          v.status === "published"  ? "bg-blue-500/15 border-blue-500/30 text-blue-400" :
+          v.status === "archived"   ? "bg-muted/20 border-border/30 text-muted-foreground/50" :
+          "bg-muted/30 border-border/50 text-foreground/80",
+        )}>
+          {v.versionNumber}
+        </div>
+      </div>
+
+      {/* Details */}
+      <div className="flex-1 min-w-0 space-y-1.5">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className={cn("text-sm font-semibold truncate", isArchived && "text-muted-foreground")}>{v.versionName}</span>
+          <VersionStatusBadge status={v.status} />
+          {v.restoredFromVersionId && (
+            <Badge variant="outline" className="text-[10px] h-5 px-1.5 text-muted-foreground">
+              <RotateCcw className="h-2.5 w-2.5 mr-1" /> restored
+            </Badge>
+          )}
+        </div>
+
+        <p className="text-xs text-muted-foreground leading-relaxed">{v.commitDescription}</p>
+
+        {/* Changed fields pills */}
+        {changedFields && changedFields.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-1">
+            {changedFields.map((label) => (
+              <span key={label} className="inline-flex items-center rounded-full border border-border/50 bg-muted/30 px-2 py-0.5 text-[10px] text-muted-foreground font-medium">
+                {label}
+              </span>
+            ))}
+          </div>
+        )}
+
+        <p className="text-[10px] text-muted-foreground/50 flex items-center gap-1">
+          {v.publishedBy && (
+            <>
+              <User2 className="h-2.5 w-2.5" />
+              <span className="font-mono">{v.publishedBy.slice(0, 12)}</span>
+              <span className="mx-0.5">·</span>
+            </>
+          )}
+          {format(new Date(v.createdAt), "MMM d, yyyy · HH:mm")}
+        </p>
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-1 shrink-0">
+        <Button type="button" variant="ghost" size="sm" className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground" onClick={onCompare}>
+          <ArrowLeftRight className="h-3 w-3" /> Compare
+        </Button>
+        <Button type="button" variant="ghost" size="sm" className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground" onClick={onRestore} disabled={restorePending}>
+          <RotateCcw className="h-3 w-3" /> Restore
+        </Button>
+        {showArchiveAction && !isArchived && onArchive && (
+          <Button type="button" variant="ghost" size="sm" className="h-7 text-xs gap-1 text-muted-foreground hover:text-amber-400" onClick={onArchive} disabled={archivePending}>
+            <Archive className="h-3 w-3" /> Archive
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ── Versions tab ────────────────────────────────────────────────────────────── */
 
 function VersionsTab({ agentId }: { agentId: number }) {
@@ -3110,24 +3343,28 @@ function VersionsTab({ agentId }: { agentId: number }) {
   const queryClient = useQueryClient();
   const [, navigate] = useLocation();
   const [compareVersion, setCompareVersion] = useState<AgentVersion | null>(null);
-  const [restoreTarget, setRestoreTarget] = useState<Omit<AgentVersion, "snapshot"> | null>(null);
+  const [restoreTarget, setRestoreTarget] = useState<VersionSummary | null>(null);
+  const [archiveTarget, setArchiveTarget] = useState<VersionSummary | null>(null);
+  const [archivedOpen, setArchivedOpen] = useState(false);
 
-  const { data: versions = [], isLoading } = useListAgentVersions(agentId);
+  const { data: listData, isLoading } = useListAgentVersions(agentId);
+  const versions: VersionSummary[] = listData?.versions ?? [];
+  const publishedCount = listData?.publishedCount ?? 0;
+  const limit = listData?.limit ?? VERSION_LIMIT;
+
   const restore = useRestoreAgentVersion();
+  const archive = useArchiveAgentVersion();
 
+  const activeVersions = versions.filter(v => v.status !== "archived");
+  const archivedVersions = versions.filter(v => v.status === "archived");
   const productionVersion = versions.find(v => v.status === "production");
-
-  const handleRestoreLatest = () => {
-    if (!productionVersion) return;
-    setRestoreTarget(productionVersion);
-  };
 
   const handleConfirmRestore = async () => {
     if (!restoreTarget) return;
     try {
-      const result = await restore.mutateAsync({ id: agentId, versionId: restoreTarget.id });
+      await restore.mutateAsync({ id: agentId, versionId: restoreTarget.id });
       queryClient.invalidateQueries({ queryKey: getListAgentVersionsQueryKey(agentId) });
-      queryClient.invalidateQueries({ queryKey: ["agents", agentId] });
+      queryClient.invalidateQueries({ queryKey: getGetAgentQueryKey(agentId) });
       toast({ title: "Restored", description: `Created draft from ${restoreTarget.versionNumber}: ${restoreTarget.versionName}.` });
       setRestoreTarget(null);
       navigate(`/app/agents/${agentId}`);
@@ -3135,6 +3372,21 @@ function VersionsTab({ agentId }: { agentId: number }) {
       toast({ title: "Restore failed", description: err?.message ?? "Unknown error", variant: "destructive" });
     }
   };
+
+  const handleConfirmArchive = async () => {
+    if (!archiveTarget) return;
+    try {
+      await archive.mutateAsync({ id: agentId, versionId: archiveTarget.id });
+      queryClient.invalidateQueries({ queryKey: getListAgentVersionsQueryKey(agentId) });
+      toast({ title: "Archived", description: `${archiveTarget.versionNumber} has been archived and no longer counts toward your limit.` });
+      setArchiveTarget(null);
+    } catch (err: any) {
+      toast({ title: "Archive failed", description: err?.message ?? "Unknown error", variant: "destructive" });
+    }
+  };
+
+  const usagePct = Math.min((publishedCount / limit) * 100, 100);
+  const isNearLimit = publishedCount >= 8;
 
   if (compareVersion) {
     return (
@@ -3157,18 +3409,37 @@ function VersionsTab({ agentId }: { agentId: number }) {
           <Badge variant="outline" className="text-[10px] h-5 px-1.5 ml-1">{versions.length}</Badge>
         </div>
         {productionVersion && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs gap-1.5"
-            onClick={handleRestoreLatest}
-          >
-            <RotateCcw className="h-3 w-3" />
-            Restore Last Working Version
+          <Button type="button" variant="outline" size="sm" className="h-7 text-xs gap-1.5" onClick={() => setRestoreTarget(productionVersion)}>
+            <RotateCcw className="h-3 w-3" /> Restore Last Working Version
           </Button>
         )}
       </div>
+
+      {/* Usage indicator */}
+      {!isLoading && versions.length > 0 && (
+        <div className="px-5 py-3 border-b border-border/40 shrink-0 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-muted-foreground font-medium">
+              <span className={cn("font-bold", publishedCount >= limit ? "text-destructive" : publishedCount >= 8 ? "text-amber-400" : "text-foreground")}>
+                {publishedCount}
+              </span>
+              {" / "}{limit} Versions Used
+            </span>
+            <span className="text-[10px] text-muted-foreground/60">{archivedVersions.length} archived</span>
+          </div>
+          <Progress value={usagePct} className={cn("h-1.5", publishedCount >= limit ? "[&>div]:bg-destructive" : publishedCount >= 8 ? "[&>div]:bg-amber-400" : "")} />
+        </div>
+      )}
+
+      {/* Warning banner */}
+      {isNearLimit && publishedCount < limit && (
+        <div className="mx-5 mt-3 shrink-0 flex items-start gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/8 px-3.5 py-2.5">
+          <Info className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
+          <p className="text-[11px] text-amber-400/90 leading-relaxed">
+            <strong>Approaching limit:</strong> You have {publishedCount} of {limit} published versions used. Consider archiving older versions to keep publishing new ones.
+          </p>
+        </div>
+      )}
 
       {/* Version list */}
       <div className="flex-1 overflow-y-auto">
@@ -3188,59 +3459,52 @@ function VersionsTab({ agentId }: { agentId: number }) {
             </div>
           </div>
         )}
-        {!isLoading && versions.length > 0 && (
+        {!isLoading && activeVersions.length > 0 && (
           <div className="divide-y divide-border/40">
-            {(versions as Omit<AgentVersion, "snapshot">[]).map((v) => (
-              <div key={v.id} className="flex items-start gap-4 px-5 py-4 hover:bg-muted/10 transition-colors">
-                {/* Version badge */}
-                <div className="shrink-0 mt-0.5">
-                  <span className="inline-flex items-center justify-center h-7 w-10 rounded-md bg-muted/30 border border-border/50 text-[11px] font-mono font-bold text-foreground/80">
-                    {v.versionNumber}
-                  </span>
-                </div>
-
-                {/* Details */}
-                <div className="flex-1 min-w-0 space-y-0.5">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-medium truncate">{v.versionName}</span>
-                    <VersionStatusBadge status={v.status} />
-                    {v.restoredFromVersionId && (
-                      <Badge variant="outline" className="text-[10px] h-5 px-1.5 text-muted-foreground">
-                        <RotateCcw className="h-2.5 w-2.5 mr-1" /> restored
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground truncate">{v.commitDescription}</p>
-                  <p className="text-[10px] text-muted-foreground/60">
-                    {v.publishedBy ? `by ${v.publishedBy.slice(0, 8)}… · ` : ""}
-                    {format(new Date(v.createdAt), "MMM d, yyyy HH:mm")}
-                  </p>
-                </div>
-
-                {/* Actions */}
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-xs gap-1"
-                    onClick={() => setCompareVersion(v as AgentVersion)}
-                  >
-                    <ArrowLeftRight className="h-3 w-3" /> Compare
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-xs gap-1"
-                    onClick={() => setRestoreTarget(v)}
-                    disabled={restore.isPending}
-                  >
-                    <RotateCcw className="h-3 w-3" /> Restore
-                  </Button>
-                </div>
-              </div>
+            {activeVersions.map((v) => (
+              <VersionCard
+                key={v.id}
+                v={v}
+                onCompare={() => setCompareVersion(v as AgentVersion)}
+                onRestore={() => setRestoreTarget(v)}
+                onArchive={() => setArchiveTarget(v)}
+                restorePending={restore.isPending}
+                archivePending={archive.isPending}
+                showArchiveAction={v.status !== "production"}
+              />
             ))}
+          </div>
+        )}
+
+        {/* Archived versions section */}
+        {!isLoading && archivedVersions.length > 0 && (
+          <div className="mt-2">
+            <button
+              type="button"
+              onClick={() => setArchivedOpen(o => !o)}
+              className="w-full flex items-center gap-2 px-5 py-2.5 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors border-t border-border/40 hover:bg-muted/10"
+            >
+              {archivedOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              <Archive className="h-3 w-3" />
+              Archived Versions
+              <Badge variant="outline" className="text-[10px] h-4 px-1 ml-1">{archivedVersions.length}</Badge>
+              <span className="ml-auto text-[10px] text-muted-foreground/50">Don&apos;t count toward limit</span>
+            </button>
+            {archivedOpen && (
+              <div className="divide-y divide-border/30 border-t border-border/30 bg-muted/5">
+                {archivedVersions.map((v) => (
+                  <VersionCard
+                    key={v.id}
+                    v={v}
+                    onCompare={() => setCompareVersion(v as AgentVersion)}
+                    onRestore={() => setRestoreTarget(v)}
+                    restorePending={restore.isPending}
+                    archivePending={archive.isPending}
+                    showArchiveAction={false}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -3258,14 +3522,30 @@ function VersionsTab({ agentId }: { agentId: number }) {
           </DialogHeader>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setRestoreTarget(null)}>Cancel</Button>
-            <Button
-              type="button"
-              disabled={restore.isPending}
-              onClick={handleConfirmRestore}
-              className="gap-1.5"
-            >
+            <Button type="button" disabled={restore.isPending} onClick={handleConfirmRestore} className="gap-1.5">
               <RotateCcw className="h-3.5 w-3.5" />
               {restore.isPending ? "Restoring…" : "Restore Draft"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Archive confirmation dialog */}
+      <Dialog open={!!archiveTarget} onOpenChange={open => { if (!open) setArchiveTarget(null); }}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Archive className="h-4 w-4 text-amber-400" /> Archive Version
+            </DialogTitle>
+            <DialogDescription>
+              Archive <strong>{archiveTarget?.versionNumber}: {archiveTarget?.versionName}</strong>? It will no longer count toward your {limit}-version limit. You can still compare and restore archived versions at any time.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setArchiveTarget(null)}>Cancel</Button>
+            <Button type="button" disabled={archive.isPending} onClick={handleConfirmArchive} className="gap-1.5">
+              <Archive className="h-3.5 w-3.5" />
+              {archive.isPending ? "Archiving…" : "Archive Version"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -3312,7 +3592,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       bargeInMinFrames: 4, timezone: "", machineDetectionMode: "disabled",
       voicemailAction: "hangup",
       voicemailMessage: "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
-      tools: [], genderDetectionEnabled: false,
+      tools: [], genderDetectionEnabled: false, recordingEnabled: false,
       startSpeakingWaitSecs: 0, startSpeakingOnPunctuationSecs: 0.1,
       startSpeakingOnNoPunctuationSecs: 1.5, startSpeakingOnNumberSecs: 0.5,
       stopSpeakingNumWords: 0, stopSpeakingVoiceSecs: 0.2, stopSpeakingBackOffSecs: 1,
@@ -3372,6 +3652,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       voicemailMessage:         (agent as any).agentConfig?.voicemailMessage ?? "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
       tools:                    (agent.tools ?? []) as AgentFormValues["tools"],
       genderDetectionEnabled:   (agent as any).agentConfig?.genderDetectionEnabled ?? false,
+      recordingEnabled:         (agent as any).agentConfig?.recordingEnabled ?? false,
       startSpeakingWaitSecs:            (agent as any).agentConfig?.startSpeakingPlan?.waitSeconds            ?? 0,
       startSpeakingOnPunctuationSecs:   (agent as any).agentConfig?.startSpeakingPlan?.onPunctuationSeconds   ?? 0.1,
       startSpeakingOnNoPunctuationSecs: (agent as any).agentConfig?.startSpeakingPlan?.onNoPunctuationSeconds ?? 1.5,
@@ -3577,7 +3858,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       {otpOpen && <DestinationOtpDialog open={otpOpen} phoneNumber={pendingNumber} onClose={() => setOtpOpen(false)} onVerified={() => setOtpOpen(false)} />}
 
       {/* Publish version modal */}
-      <PublishVersionModal
+      <PublishVersionModalWrapper
         open={publishModalOpen}
         onOpenChange={setPublishModalOpen}
         agentId={agentId}
