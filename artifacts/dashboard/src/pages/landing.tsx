@@ -14,7 +14,7 @@ const DIFFERENTIATORS = [
     accent: "#a855f7",
     glow: "rgba(168,85,247,0.15)",
     detail: ["Facts extracted per call", "Episode summaries archived", "Verbatim sentences preserved"],
-    icon: "🧠",
+    icon: "M",
   },
   {
     tag: "02 — RESILIENCE",
@@ -23,7 +23,7 @@ const DIFFERENTIATORS = [
     accent: "#06b6d4",
     glow: "rgba(6,182,212,0.15)",
     detail: ["<200ms drop detection", "Auto-redial with context", "Seamless resume for caller"],
-    icon: "🔄",
+    icon: "R",
   },
   {
     tag: "03 — IDENTITY",
@@ -32,7 +32,7 @@ const DIFFERENTIATORS = [
     accent: "#f59e0b",
     glow: "rgba(245,158,11,0.15)",
     detail: ["Azure Speaker Recognition", "Real-time gender analysis", "Cross-number caller ID"],
-    icon: "🎙️",
+    icon: "V",
   },
   {
     tag: "04 — CAMPAIGNS",
@@ -41,7 +41,7 @@ const DIFFERENTIATORS = [
     accent: "#22c55e",
     glow: "rgba(34,197,94,0.15)",
     detail: ["CSV batch import", "Smart retry + DNC", "Live command center"],
-    icon: "📞",
+    icon: "C",
   },
   {
     tag: "05 — SCHEDULING",
@@ -50,7 +50,7 @@ const DIFFERENTIATORS = [
     accent: "#ec4899",
     glow: "rgba(236,72,153,0.15)",
     detail: ["Books during the call", "Google Calendar sync", "No third-party needed"],
-    icon: "📅",
+    icon: "S",
   },
 ];
 
@@ -295,11 +295,11 @@ export default function LandingPage() {
           {/* Pipeline row */}
           <div className="reveal" style={{ display: "flex", alignItems: "stretch", gap: 0, overflowX: "auto", paddingBottom: 8 }}>
             {[
-              { label: "Caller Rings",      sub: "phone or webcall",           color: "#6b7280", icon: "📞" },
-              { label: "Voice Analysis",    sub: "gender · voice print",        color: "#a855f7", icon: "🎙️" },
-              { label: "Memory Query",      sub: "facts · episodes · sentences", color: "#a855f7", icon: "🧠", accent: true },
-              { label: "LLM Response",      sub: "context-aware reply",          color: "#06b6d4", icon: "⚡" },
-              { label: "Action Taken",      sub: "book · transfer · callback",   color: "#22c55e", icon: "✅" },
+              { label: "Caller Rings",      sub: "phone or webcall",           color: "#6b7280", icon: "C" },
+              { label: "Voice Analysis",    sub: "gender · voice print",        color: "#a855f7", icon: "V" },
+              { label: "Memory Query",      sub: "facts · episodes · sentences", color: "#a855f7", icon: "M", accent: true },
+              { label: "LLM Response",      sub: "context-aware reply",          color: "#06b6d4", icon: "L" },
+              { label: "Action Taken",      sub: "book · transfer · callback",   color: "#22c55e", icon: "OK" },
             ].map((n, i, arr) => (
               <div key={n.label} style={{ display: "flex", alignItems: "center", flex: i === 2 ? "0 0 auto" : "1 1 0" }}>
                 <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 12, minWidth: 120 }}>
@@ -324,9 +324,9 @@ export default function LandingPage() {
           {/* 3-layer cards */}
           <div className="reveal" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginTop: 48 }}>
             {[
-              { title: "Facts Layer",    desc: "Structured facts extracted per call — budget, intent, family info, product interest", icon: "🗂️", color: "#a855f7" },
-              { title: "Episode Layer",  desc: "AI-written summary of each call stored as a searchable episode in the memory graph", icon: "📖", color: "#06b6d4" },
-              { title: "Sentence Layer", desc: "Verbatim notable quotes preserved word-for-word — what they actually said", icon: "💬", color: "#22c55e" },
+              { title: "Facts Layer",    desc: "Structured facts extracted per call — budget, intent, family info, product interest", icon: "F", color: "#a855f7" },
+              { title: "Episode Layer",  desc: "AI-written summary of each call stored as a searchable episode in the memory graph", icon: "E", color: "#06b6d4" },
+              { title: "Sentence Layer", desc: "Verbatim notable quotes preserved word-for-word — what they actually said", icon: "Q", color: "#22c55e" },
             ].map(c => (
               <div key={c.title} style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 16, padding: "24px 22px", transition: "border-color .2s" }}
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = `${c.color}50`; }}
@@ -380,10 +380,10 @@ export default function LandingPage() {
           {/* Timeline visual */}
           <div className="reveal" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 20, padding: 32 }}>
             {[
-              { step: "Active call",     detail: "Agent mid-conversation",              icon: "📞", color: "#22c55e" },
-              { step: "Drop detected",   detail: "180ms · connection lost",             icon: "⚡", color: "#ef4444" },
-              { step: "Auto-redial",     detail: "Calling back with full memory",       icon: "🔄", color: "#f59e0b" },
-              { step: "Reconnected",     detail: "Conversation resumes seamlessly",      icon: "✅", color: "#22c55e" },
+              { step: "Active call",     detail: "Agent mid-conversation",              icon: "C", color: "#22c55e" },
+              { step: "Drop detected",   detail: "180ms · connection lost",             icon: "L", color: "#ef4444" },
+              { step: "Auto-redial",     detail: "Calling back with full memory",       icon: "R", color: "#f59e0b" },
+              { step: "Reconnected",     detail: "Conversation resumes seamlessly",      icon: "OK", color: "#22c55e" },
             ].map((s, i) => (
               <div key={s.step}>
                 <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 0" }}>
@@ -416,7 +416,7 @@ export default function LandingPage() {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 160px 160px", background: "rgba(255,255,255,0.03)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
               <div style={{ padding: "16px 24px", fontSize: 11, color: "#333", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" }}>Feature</div>
               <div style={{ padding: "16px 24px", textAlign: "center", fontSize: 13, color: "#444", fontWeight: 600 }}>Bolna AI</div>
-              <div style={{ padding: "16px 24px", textAlign: "center", fontSize: 13, fontWeight: 700, background: "rgba(168,85,247,0.07)", borderLeft: "1px solid rgba(168,85,247,0.12)", color: "#a855f7" }}>SnapServe ✦</div>
+              <div style={{ padding: "16px 24px", textAlign: "center", fontSize: 13, fontWeight: 700, background: "rgba(168,85,247,0.07)", borderLeft: "1px solid rgba(168,85,247,0.12)", color: "#a855f7" }}>SnapServe</div>
             </div>
 
             {COMPARE.map((row, i) => (

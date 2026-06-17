@@ -224,7 +224,7 @@ const ASR_LANGUAGES: Record<string, { value: string; label: string }[]> = {
 };
 const TTS_MODELS: Record<string, { value: string; label: string }[]> = {
   cartesia: [
-    { value: "sonic-3.5",   label: "Sonic 3.5 ✦ New — 42 languages, lowest latency" },
+    { value: "sonic-3.5",   label: "Sonic 3.5 — 42 languages, lowest latency" },
     { value: "sonic-3",     label: "Sonic 3" },
     { value: "sonic-2",     label: "Sonic 2 (stable)" },
     { value: "sonic-turbo", label: "Sonic Turbo (fast)" },
@@ -850,6 +850,7 @@ type AgentToolLocal =
       description: string;
       calendarId?: number;
       eventTypeId?: number;
+      timezone?: string;
     }
   | {
       type: "native_check_availability";
@@ -864,6 +865,7 @@ type AgentToolLocal =
       name: string;
       description: string;
       calendarId?: number;
+      eventTypeId?: number;
       timezone?: string;
     };
 
@@ -2433,17 +2435,25 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                     </div>;
                   })()}
                   {tool.type === "native_check_availability" && (
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1"><p className="text-xs text-muted-foreground">Calendar</p>
-                        <Select value={tool.calendarId ? String(tool.calendarId) : undefined} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, calendarId: parseInt(v) || undefined, eventTypeId: 0 }; setAgentTools(n); setDirty(true); }}>
-                          <SelectTrigger className="bg-card border-border text-foreground text-xs h-8"><SelectValue placeholder="Select calendar…" /></SelectTrigger>
-                          <SelectContent>{(calendars ?? []).map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}{(calendars ?? []).length === 0 && <SelectItem value="__none" disabled>No calendars — create one in Scheduling</SelectItem>}</SelectContent>
-                        </Select>
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1"><p className="text-xs text-muted-foreground">Calendar</p>
+                          <Select value={tool.calendarId ? String(tool.calendarId) : undefined} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, calendarId: parseInt(v) || undefined, eventTypeId: 0 }; setAgentTools(n); setDirty(true); }}>
+                            <SelectTrigger className="bg-card border-border text-foreground text-xs h-8"><SelectValue placeholder="Select calendar…" /></SelectTrigger>
+                            <SelectContent>{(calendars ?? []).map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}{(calendars ?? []).length === 0 && <SelectItem value="__none" disabled>No calendars — create one in Scheduling</SelectItem>}</SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1"><p className="text-xs text-muted-foreground">Event Type</p>
+                          <Select value={tool.eventTypeId ? String(tool.eventTypeId) : undefined} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, eventTypeId: parseInt(v) || 0 }; setAgentTools(n); setDirty(true); }} disabled={!tool.calendarId}>
+                            <SelectTrigger className="bg-card border-border text-foreground text-xs h-8"><SelectValue placeholder={tool.calendarId ? "Select event type…" : "Pick a calendar first"} /></SelectTrigger>
+                            <SelectContent>{(eventTypes ?? []).filter(et => !tool.calendarId || et.calendarId === tool.calendarId).map(et => <SelectItem key={et.id} value={String(et.id)}>{et.name} ({et.durationMinutes} min)</SelectItem>)}</SelectContent>
+                          </Select>
+                        </div>
                       </div>
-                      <div className="space-y-1"><p className="text-xs text-muted-foreground">Event Type</p>
-                        <Select value={tool.eventTypeId ? String(tool.eventTypeId) : undefined} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, eventTypeId: parseInt(v) || 0 }; setAgentTools(n); setDirty(true); }} disabled={!tool.calendarId}>
-                          <SelectTrigger className="bg-card border-border text-foreground text-xs h-8"><SelectValue placeholder={tool.calendarId ? "Select event type…" : "Pick a calendar first"} /></SelectTrigger>
-                          <SelectContent>{(eventTypes ?? []).filter(et => !tool.calendarId || et.calendarId === tool.calendarId).map(et => <SelectItem key={et.id} value={String(et.id)}>{et.name} ({et.durationMinutes} min)</SelectItem>)}</SelectContent>
+                      <div className="space-y-1"><p className="text-xs text-muted-foreground">Timezone</p>
+                        <Select value={tool.timezone ?? "UTC"} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, timezone: v }; setAgentTools(n); setDirty(true); }}>
+                          <SelectTrigger className="bg-card border-border text-foreground text-xs h-8"><SelectValue /></SelectTrigger>
+                          <SelectContent>{["UTC","America/New_York","America/Chicago","America/Denver","America/Los_Angeles","Europe/London","Europe/Paris","Asia/Kolkata","Asia/Singapore","Asia/Tokyo","Australia/Sydney"].map(tz => <SelectItem key={tz} value={tz}>{tz}</SelectItem>)}</SelectContent>
                         </Select>
                       </div>
                     </div>
@@ -2474,11 +2484,39 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                     </div>
                   )}
                   {tool.type === "native_cancel" && (
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1"><p className="text-xs text-muted-foreground">Calendar</p>
-                        <Select value={tool.calendarId ? String(tool.calendarId) : undefined} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, calendarId: parseInt(v) || undefined, eventTypeId: 0 }; setAgentTools(n); setDirty(true); }}>
-                          <SelectTrigger className="bg-card border-border text-foreground text-xs h-8"><SelectValue placeholder="Select calendar…" /></SelectTrigger>
-                          <SelectContent>{(calendars ?? []).map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}{(calendars ?? []).length === 0 && <SelectItem value="__none" disabled>No calendars — create one in Scheduling</SelectItem>}</SelectContent>
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1"><p className="text-xs text-muted-foreground">Calendar</p>
+                          <Select value={tool.calendarId ? String(tool.calendarId) : undefined} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, calendarId: parseInt(v) || undefined, eventTypeId: 0 }; setAgentTools(n); setDirty(true); }}>
+                            <SelectTrigger className="bg-card border-border text-foreground text-xs h-8"><SelectValue placeholder="Select calendar…" /></SelectTrigger>
+                            <SelectContent>{(calendars ?? []).map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}{(calendars ?? []).length === 0 && <SelectItem value="__none" disabled>No calendars — create one in Scheduling</SelectItem>}</SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1"><p className="text-xs text-muted-foreground">Event Type (optional)</p>
+                          <Select value={tool.eventTypeId ? String(tool.eventTypeId) : undefined} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, eventTypeId: parseInt(v) || undefined }; setAgentTools(n); setDirty(true); }} disabled={!tool.calendarId}>
+                            <SelectTrigger className="bg-card border-border text-foreground text-xs h-8"><SelectValue placeholder={tool.calendarId ? "Select event type…" : "Pick a calendar first"} /></SelectTrigger>
+                            <SelectContent>{(eventTypes ?? []).filter(et => !tool.calendarId || et.calendarId === tool.calendarId).map(et => <SelectItem key={et.id} value={String(et.id)}>{et.name} ({et.durationMinutes} min)</SelectItem>)}</SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="space-y-1"><p className="text-xs text-muted-foreground">Timezone</p>
+                        <Select value={tool.timezone ?? "UTC"} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, timezone: v }; setAgentTools(n); setDirty(true); }}>
+                          <SelectTrigger className="bg-card border-border text-foreground text-xs h-8"><SelectValue /></SelectTrigger>
+                          <SelectContent>{["UTC","America/New_York","America/Chicago","America/Denver","America/Los_Angeles","Europe/London","Europe/Paris","Asia/Kolkata","Asia/Singapore","Asia/Tokyo","Australia/Sydney"].map(tz => <SelectItem key={tz} value={tz}>{tz}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  )}
+                  {tool.type === "native_list_bookings" && (
+                    <div className="space-y-2">
+                      <div className="space-y-1"><p className="text-xs text-muted-foreground">Calendar (optional — limit search to one calendar)</p>
+                        <Select value={tool.calendarId ? String(tool.calendarId) : "__all"} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, calendarId: v === "__all" ? undefined : (parseInt(v) || undefined), eventTypeId: undefined }; setAgentTools(n); setDirty(true); }}>
+                          <SelectTrigger className="bg-card border-border text-foreground text-xs h-8"><SelectValue placeholder="All calendars" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__all">All calendars</SelectItem>
+                            {(calendars ?? []).map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
+                            {(calendars ?? []).length === 0 && <SelectItem value="__none" disabled>No calendars — create one in Scheduling</SelectItem>}
+                          </SelectContent>
                         </Select>
                       </div>
                       <div className="space-y-1"><p className="text-xs text-muted-foreground">Event Type (optional)</p>
@@ -2487,18 +2525,10 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                           <SelectContent>{(eventTypes ?? []).filter(et => !tool.calendarId || et.calendarId === tool.calendarId).map(et => <SelectItem key={et.id} value={String(et.id)}>{et.name} ({et.durationMinutes} min)</SelectItem>)}</SelectContent>
                         </Select>
                       </div>
-                    </div>
-                  )}
-                  {tool.type === "native_list_bookings" && (
-                    <div className="space-y-2">
-                      <div className="space-y-1"><p className="text-xs text-muted-foreground">Calendar (optional — limit search to one calendar)</p>
-                        <Select value={tool.calendarId ? String(tool.calendarId) : "__all"} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, calendarId: v === "__all" ? undefined : (parseInt(v) || undefined) }; setAgentTools(n); setDirty(true); }}>
-                          <SelectTrigger className="bg-card border-border text-foreground text-xs h-8"><SelectValue placeholder="All calendars" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__all">All calendars</SelectItem>
-                            {(calendars ?? []).map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
-                            {(calendars ?? []).length === 0 && <SelectItem value="__none" disabled>No calendars — create one in Scheduling</SelectItem>}
-                          </SelectContent>
+                      <div className="space-y-1"><p className="text-xs text-muted-foreground">Timezone</p>
+                        <Select value={tool.timezone ?? "UTC"} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, timezone: v }; setAgentTools(n); setDirty(true); }}>
+                          <SelectTrigger className="bg-card border-border text-foreground text-xs h-8"><SelectValue /></SelectTrigger>
+                          <SelectContent>{["UTC","America/New_York","America/Chicago","America/Denver","America/Los_Angeles","Europe/London","Europe/Paris","Asia/Kolkata","Asia/Singapore","Asia/Tokyo","Australia/Sydney"].map(tz => <SelectItem key={tz} value={tz}>{tz}</SelectItem>)}</SelectContent>
                         </Select>
                       </div>
                       <p className="text-[10px] text-muted-foreground">The agent will ask the caller for their name and return any upcoming bookings matching that name.</p>
