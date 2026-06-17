@@ -1,0 +1,163 @@
+BUG: Reschedule Booking Is Ignoring Requested Time
+
+Current Problem
+
+When a user requests a specific new time during rescheduling, the system is automatically selecting a different available slot instead of the requested slot.
+
+Example:
+
+Existing Booking:
+June 18, 10:30 AM
+
+User Says:
+"Can you reschedule that to 12:00 PM on the same day?"
+
+Expected Behavior:
+1. Check whether June 18, 12:00 PM is available.
+2. If available:
+   - Reschedule to exactly 12:00 PM.
+3. If unavailable:
+   - Inform the user.
+   - Offer nearby available slots.
+
+Current Behavior:
+The system immediately reschedules to another slot (example: 3:30 AM) without validating the requested time.
+
+--------------------------------------------------
+
+Root Cause To Investigate
+
+Review the reschedule_booking flow.
+
+Most likely one of these is happening:
+
+1. Tool is receiving an empty time value.
+2. Tool is receiving an incorrectly formatted time.
+3. Backend is auto-selecting the first available slot.
+4. Fallback logic is replacing the requested slot.
+5. Timezone conversion is changing the requested time.
+6. The reschedule tool ignores the requested datetime parameter.
+
+--------------------------------------------------
+
+Required Reschedule Flow
+
+User:
+"Move my booking to June 18 at 12 PM."
+
+System:
+
+Step 1:
+Identify booking.
+
+Step 2:
+Call check_availability with:
+
+Date = June 18
+Time = 12:00 PM
+
+Step 3:
+
+IF available:
+    call reschedule_booking
+    with exact requested datetime
+
+IF unavailable:
+    return:
+    "12:00 PM is unavailable.
+     Available slots are:
+     12:30 PM
+     1:00 PM
+     2:00 PM"
+
+Step 4:
+Wait for user confirmation.
+
+Only then execute reschedule.
+
+--------------------------------------------------
+
+Validation Rules
+
+The reschedule tool must NEVER:
+
+- Auto-pick another slot
+- Auto-pick first available slot
+- Change AM/PM
+- Change timezone silently
+- Modify requested date
+- Modify requested time
+
+--------------------------------------------------
+
+Tool Contract
+
+reschedule_booking must receive:
+
+booking_id
+requested_date
+requested_time
+timezone
+
+Example:
+
+booking_id=26
+date=2026-06-18
+time=12:00 PM
+timezone=Asia/Kolkata
+
+Verify that these values reach the backend unchanged.
+
+--------------------------------------------------
+
+Logging
+
+Add debug logs:
+
+Requested Slot:
+June 18 12:00 PM
+
+Availability Result:
+Available / Unavailable
+
+Reschedule Payload:
+{ ... }
+
+Final Booked Slot:
+...
+
+This will reveal where the time changes.
+
+--------------------------------------------------
+
+Success Criteria
+
+User requests:
+"Reschedule to 12 PM."
+
+Case A:
+12 PM available
+→ booking moves to exactly 12 PM.
+
+Case B:
+12 PM unavailable
+→ user is shown alternatives.
+
+Case C:
+System never automatically chooses another slot.
+
+--------------------------------------------------
+
+After fixing:
+
+1. Test booking creation.
+2. Test list bookings.
+3. Test reschedule.
+4. Test cancel booking.
+5. Verify timezone handling.
+6. Commit changes.
+7. Push to Git.
+
+Commit Message:
+
+fix(calendar): enforce exact requested slot during reschedule and prevent automatic slot substitution
