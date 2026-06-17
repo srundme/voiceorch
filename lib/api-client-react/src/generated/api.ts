@@ -56,6 +56,7 @@ import type {
   AgentVariableCreate,
   AgentVariableUpdate,
   AgentVersion,
+  AgentVersionsListResponse,
   AmbientSoundOption,
   AmbientSoundRecord,
   AssignPhoneNumberInput,
@@ -107,6 +108,8 @@ import type {
   CreateCallbackFromIncoming200,
   CreateCallbackFromIncomingBody,
   CreateSimulationRunBody,
+  CreateWebcallTicket200,
+  CreateWebcallTicketBody,
   CsvImportBody,
   CsvImportResult,
   DailyCallVolume,
@@ -901,9 +904,9 @@ export const getListAgentVersionsUrl = (id: number,) => {
 /**
  * @summary List all versions for an agent
  */
-export const listAgentVersions = async (id: number, options?: RequestInit): Promise<AgentVersion[]> => {
+export const listAgentVersions = async (id: number, options?: RequestInit): Promise<AgentVersionsListResponse> => {
 
-  return customFetch<AgentVersion[]>(getListAgentVersionsUrl(id),
+  return customFetch<AgentVersionsListResponse>(getListAgentVersionsUrl(id),
   {
     ...options,
     method: 'GET'
@@ -1191,6 +1194,78 @@ export const useRestoreAgentVersion = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getRestoreAgentVersionMutationOptions(options));
+    }
+
+export const getArchiveAgentVersionUrl = (id: number,
+    versionId: number,) => {
+
+
+
+
+  return `/api/agents/${id}/versions/${versionId}/archive`
+}
+
+/**
+ * @summary Archive a published/production version (removes it from the active count)
+ */
+export const archiveAgentVersion = async (id: number,
+    versionId: number, options?: RequestInit): Promise<AgentVersion> => {
+
+  return customFetch<AgentVersion>(getArchiveAgentVersionUrl(id,versionId),
+  {
+    ...options,
+    method: 'PATCH'
+
+
+  }
+);}
+
+
+
+
+export const getArchiveAgentVersionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof archiveAgentVersion>>, TError,{id: number;versionId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof archiveAgentVersion>>, TError,{id: number;versionId: number}, TContext> => {
+
+const mutationKey = ['archiveAgentVersion'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof archiveAgentVersion>>, {id: number;versionId: number}> = (props) => {
+          const {id,versionId} = props ?? {};
+
+          return  archiveAgentVersion(id,versionId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ArchiveAgentVersionMutationResult = NonNullable<Awaited<ReturnType<typeof archiveAgentVersion>>>
+
+    export type ArchiveAgentVersionMutationError = ErrorType<void>
+
+    /**
+ * @summary Archive a published/production version (removes it from the active count)
+ */
+export const useArchiveAgentVersion = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof archiveAgentVersion>>, TError,{id: number;versionId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof archiveAgentVersion>>,
+        TError,
+        {id: number;versionId: number},
+        TContext
+      > => {
+      return useMutation(getArchiveAgentVersionMutationOptions(options));
     }
 
 export const getListCallsUrl = (params?: ListCallsParams,) => {
@@ -18646,4 +18721,77 @@ export function useListSimulationTemplates<TData = Awaited<ReturnType<typeof lis
 
 
 
+
+export const getCreateWebcallTicketUrl = () => {
+
+
+
+
+  return `/api/webcall/ticket`
+}
+
+/**
+ * Returns a 64-hex-char token valid for 60 seconds and usable exactly once. The frontend passes it as ?ticket= on the WS URL so the session JWT never appears in server access logs.
+
+ * @summary Issue a short-lived single-use ticket for a webcall WebSocket upgrade
+ */
+export const createWebcallTicket = async (createWebcallTicketBody: CreateWebcallTicketBody, options?: RequestInit): Promise<CreateWebcallTicket200> => {
+
+  return customFetch<CreateWebcallTicket200>(getCreateWebcallTicketUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createWebcallTicketBody,)
+  }
+);}
+
+
+
+
+export const getCreateWebcallTicketMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createWebcallTicket>>, TError,{data: BodyType<CreateWebcallTicketBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createWebcallTicket>>, TError,{data: BodyType<CreateWebcallTicketBody>}, TContext> => {
+
+const mutationKey = ['createWebcallTicket'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createWebcallTicket>>, {data: BodyType<CreateWebcallTicketBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createWebcallTicket(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateWebcallTicketMutationResult = NonNullable<Awaited<ReturnType<typeof createWebcallTicket>>>
+    export type CreateWebcallTicketMutationBody = BodyType<CreateWebcallTicketBody>
+    export type CreateWebcallTicketMutationError = ErrorType<void>
+
+    /**
+ * @summary Issue a short-lived single-use ticket for a webcall WebSocket upgrade
+ */
+export const useCreateWebcallTicket = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createWebcallTicket>>, TError,{data: BodyType<CreateWebcallTicketBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createWebcallTicket>>,
+        TError,
+        {data: BodyType<CreateWebcallTicketBody>},
+        TContext
+      > => {
+      return useMutation(getCreateWebcallTicketMutationOptions(options));
+    }
 
