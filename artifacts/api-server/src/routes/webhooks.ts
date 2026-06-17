@@ -2,10 +2,43 @@ import { Router, type IRouter } from "express";
 import { getTwilioVoiceTwiML } from "../orchestration/telephony/twilio.js";
 import { getPlivoAnswerXML } from "../orchestration/telephony/plivo.js";
 import { getVobizAnswerXML } from "../orchestration/telephony/vobiz.js";
-import { db, agentsTable, callsTable, phoneNumbersTable } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { db, agentsTable, callsTable, phoneNumbersTable, providersTable } from "@workspace/db";
+import { eq, sql, and } from "drizzle-orm";
+import { decryptKey } from "../lib/crypto.js";
+import { validateTwilioSignature, validatePlivoSignature } from "../lib/webhook-signature.js";
+import { logger } from "../lib/logger.js";
 
 const router: IRouter = Router();
+
+const IS_PROD = process.env["NODE_ENV"] === "production";
+
+/**
+ * Fetch the decrypted provider auth token for a given agent + provider type.
+ * Returns null if the agent or key is not found.
+ */
+async function getAgentProviderToken(agentId: number, provider: "twilio" | "plivo"): Promise<string | null> {
+  try {
+    const [agent] = await db
+      .select({ userId: agentsTable.userId })
+      .from(agentsTable)
+      .where(eq(agentsTable.id, agentId));
+    if (!agent?.userId) return null;
+    const [row] = await db
+      .select({ apiKey: providersTable.apiKey })
+      .from(providersTable)
+      .where(
+        and(
+          eq(providersTable.userId, agent.userId),
+          eq(providersTable.providerName, provider),
+          eq(providersTable.isActive, true),
+        ),
+      );
+    if (!row) return null;
+    return decryptKey(row.apiKey);
+  } catch {
+    return null;
+  }
+}
 
 /** Resolve the public WebSocket base URL from the request */
 function getWsBaseUrl(req: Parameters<Parameters<IRouter["post"]>[1]>[0]): string {
@@ -26,6 +59,37 @@ router.post("/webhooks/twilio/voice", async (req, res): Promise<void> => {
 
   if (!agentId) {
     res.status(400).send("<Response><Say>Agent not configured.</Say><Hangup/></Response>");
+    return;
+  }
+
+  // ── Twilio signature validation ────────────────────────────────────────────
+  // Twilio signs every inbound request with HMAC-SHA1 over the full URL + POST
+  // body params. We verify against the agent's Twilio auth token so that only
+  // genuine Twilio traffic can trigger a call session (burning API credits).
+  const twilioSig = String(req.headers["x-twilio-signature"] ?? "");
+  if (twilioSig) {
+    const authToken = await getAgentProviderToken(agentId, "twilio");
+    if (authToken) {
+      const proto = String(req.headers["x-forwarded-proto"] ?? "https");
+      const host  = String(req.headers["x-forwarded-host"] ?? req.hostname);
+      const fullUrl = `${proto}://${host}${req.path}`;
+      const bodyParams: Record<string, string> = {};
+      for (const [k, v] of Object.entries(req.body as Record<string, unknown>)) {
+        if (typeof v === "string") bodyParams[k] = v;
+      }
+      const valid = validateTwilioSignature(authToken, fullUrl, bodyParams, twilioSig);
+      if (!valid) {
+        logger.warn({ agentId, fullUrl }, "Twilio signature validation failed");
+        if (IS_PROD) {
+          res.status(403).send("<Response><Say>Forbidden.</Say><Hangup/></Response>");
+          return;
+        }
+      }
+    }
+  } else if (IS_PROD) {
+    // In production, missing signature header = reject
+    logger.warn({ agentId }, "Twilio voice webhook missing X-Twilio-Signature — rejected");
+    res.status(403).send("<Response><Say>Forbidden.</Say><Hangup/></Response>");
     return;
   }
 
@@ -53,6 +117,28 @@ router.post("/webhooks/plivo/voice", async (req, res): Promise<void> => {
 
   if (!agentId) {
     res.status(400).set("Content-Type", "text/xml").send("<Response><Speak>Agent not configured.</Speak><Hangup/></Response>");
+    return;
+  }
+
+  // ── Plivo v2 signature validation ─────────────────────────────────────────
+  // Plivo signs every inbound request with HMAC-SHA256 over (nonce + uri).
+  const plivoSig   = String(req.headers["x-plivo-signature-v2"] ?? "");
+  const plivoNonce = String(req.headers["x-plivo-signature-v2-nonce"] ?? "");
+  if (plivoSig && plivoNonce) {
+    const authToken = await getAgentProviderToken(agentId, "plivo");
+    if (authToken) {
+      const valid = validatePlivoSignature(authToken, plivoNonce, req.path, plivoSig);
+      if (!valid) {
+        logger.warn({ agentId }, "Plivo signature validation failed");
+        if (IS_PROD) {
+          res.status(403).set("Content-Type", "text/xml").send("<Response><Speak>Forbidden.</Speak><Hangup/></Response>");
+          return;
+        }
+      }
+    }
+  } else if (IS_PROD) {
+    logger.warn({ agentId }, "Plivo voice webhook missing signature headers — rejected");
+    res.status(403).set("Content-Type", "text/xml").send("<Response><Speak>Forbidden.</Speak><Hangup/></Response>");
     return;
   }
 
