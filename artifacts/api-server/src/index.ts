@@ -114,6 +114,9 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
         .select({ userId: agentsTable.userId })
         .from(agentsTable)
         .where(eq(agentsTable.id, agentId));
+      // NOTE: platform-managed agents have userId = null and correctly fail
+      // this check. If public/demo agents are ever needed, add an explicit
+      // allow path (e.g. agent.webcallPublic flag or admin-role bypass).
       if (!agent || agent.userId !== payload.sub) {
         logger.warn({ agentId, sub: payload.sub, agentUserId: agent?.userId }, "Webcall WebSocket rejected: agent ownership mismatch");
         socket.write("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n");
