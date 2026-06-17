@@ -56,6 +56,7 @@ import VoicesPage from "@/pages/voices";
 import TestSimulatorPage from "@/pages/test-simulator";
 import CommandCenterPage from "@/pages/command-center/index";
 import MemoryPage from "@/pages/memory/index";
+import DocsPage from "@/pages/docs/index";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -349,6 +350,8 @@ function Router() {
           <Route path="/book/cancel" component={CancelBookingPage} />
           <Route path="/book/reschedule" component={RescheduleBookingPage} />
           <Route path="/book/:slug" component={PublicBookingPage} />
+          <Route path="/docs" component={DocsPage} />
+          <Route path="/docs/:section" component={DocsPage} />
           <Route path="/privacy" component={PrivacyPage} />
           <Route path="/terms" component={TermsPage} />
           <Route component={NotFound} />

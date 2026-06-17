@@ -56,6 +56,7 @@ import testToolRouter from "./test-tool.js";
 import authRouter from "./auth.js";
 import dispositionRouter from "./disposition.js";
 import simulationRouter from "./simulation.js";
+import docsRouter from "./docs.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
 const router: IRouter = Router();
@@ -74,6 +75,9 @@ router.use(adminPromptTemplatesRouter);
 // Public campaign lead webhook — must be before provisionUser (no Clerk session needed)
 router.use(campaignWebhookRouter);
 
+
+// Public docs routes — changelog API (no session required)
+router.use(docsRouter);
 
 // Public auth routes — Google login redirect + callback (no session required)
 router.use(authRouter);
