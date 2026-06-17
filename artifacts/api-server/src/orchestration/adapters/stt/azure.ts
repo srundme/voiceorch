@@ -251,183 +251,212 @@ export class AzureSTT implements STTAdapter {
       `wss://${this.region}.stt.speech.microsoft.com/speech/recognition/` +
       `conversation/cognitiveservices/v1?${params.toString()}`;
 
-    // One requestId per streaming session — required on every frame sent to Azure.
-    // Azure terminates the connection with 1002 if X-RequestId is missing.
-    const requestId = randomUUID().replace(/-/g, "").toUpperCase();
-
+    // Mutable socket state — replaced on reconnect.
+    let ws: WebSocket;
     let wsReady = false;
+    let intentionallyClosed = false;
+    let reconnectAttempts = 0;
+    let currentRequestId = "";
+    const MAX_RECONNECT_ATTEMPTS = 10;
     const audioQueue: Buffer[] = [];
 
-    const ws = new WebSocket(wsUrl, {
-      headers: { "Ocp-Apim-Subscription-Key": this.key },
-    });
+    const openSocket = () => {
+      // Each Azure connection needs its own requestId — shared across all
+      // frames within a single connection, replaced on reconnect.
+      const requestId = randomUUID().replace(/-/g, "").toUpperCase();
+      currentRequestId = requestId;
+      wsReady = false;
 
-    ws.on("open", () => {
-      wsReady = true;
+      ws = new WebSocket(wsUrl, {
+        headers: { "Ocp-Apim-Subscription-Key": this.key },
+      });
 
-      // ① Speech config — declares the audio format to Azure
-      ws.send(
-        textFrame(
-          "speech.config",
-          JSON.stringify({
-            context: {
-              system: { version: "1.0.0" },
-              os: { platform: "node", name: "node", version: process.version },
-              device: {
-                manufacturer: "voiceorch",
-                model: "voiceorch",
-                version: "1.0",
+      ws.on("open", () => {
+        wsReady = true;
+        reconnectAttempts = 0;
+
+        // ① Speech config — declares the audio format to Azure
+        ws.send(
+          textFrame(
+            "speech.config",
+            JSON.stringify({
+              context: {
+                system: { version: "1.0.0" },
+                os: { platform: "node", name: "node", version: process.version },
+                device: {
+                  manufacturer: "voiceorch",
+                  model: "voiceorch",
+                  version: "1.0",
+                },
               },
+            }),
+            requestId,
+          ),
+        );
+
+        // ② Speech context — language detection mode + phrase list
+        // languageId.mode "Continuous" re-detects language on every utterance
+        // instead of locking in at-start — essential for mid-call switching.
+        if (this.candidateLocales.length > 1 || this.cfg.keyterms.length > 0) {
+          const ctx: Record<string, unknown> = {
+            phraseDetection: {
+              onInterim: { resultType: "Always" },
+              onSuccess: { resultType: "Always" },
+              mode: "Conversation",
             },
-          }),
-          requestId,
-        ),
-      );
-
-      // ② Speech context — language detection mode + phrase list
-      // Always sent when we have LID candidates or keyterms to configure.
-      // languageId.mode "Continuous" tells Azure to re-detect the language on
-      // every utterance instead of locking in at-start — essential for mid-call
-      // language switching (e.g. Tamil → Hindi).
-      if (this.candidateLocales.length > 1 || this.cfg.keyterms.length > 0) {
-        const ctx: Record<string, unknown> = {
-          phraseDetection: {
-            onInterim: { resultType: "Always" },
-            onSuccess: { resultType: "Always" },
-            mode: "Conversation",
-          },
-        };
-        if (this.candidateLocales.length > 1) {
-          ctx.languageId = { mode: "Continuous", priority: "PrioritizeLatency" };
-        }
-        if (this.cfg.keyterms.length > 0) {
-          ctx.phraseList = {
-            onRecognition: { enabled: true, phrases: this.cfg.keyterms },
           };
-        }
-        ws.send(textFrame("speech.context", JSON.stringify(ctx), requestId));
-      }
-
-      // ③ Flush any audio queued before the socket was ready
-      for (const chunk of audioQueue.splice(0)) {
-        ws.send(audioFrame(chunk, requestId));
-      }
-
-      logger.info(
-        {
-          region: this.region,
-          language: this.language,
-          candidateLocales: this.candidateLocales,
-          keyterms: this.cfg.keyterms.length,
-          hasEndpointId: !!this.endpointId,
-        },
-        "Azure streaming STT WebSocket opened",
-      );
-    });
-
-    ws.on("message", (raw: Buffer | string, isBinary: boolean) => {
-      // Azure only sends transcript events as text frames; skip binary frames.
-      if (isBinary) return;
-
-      const parsed = parseFrame(raw.toString());
-      if (!parsed) return;
-
-      const { path, body } = parsed;
-
-      // ── Interim hypothesis ──────────────────────────────────────────────
-      if (path === "speech.hypothesis") {
-        try {
-          const msg = JSON.parse(body) as AzureHypothesisBody;
-          const text = msg.Text?.trim();
-          if (text) onTranscript(text, false);
-        } catch {
-          // malformed JSON — ignore
-        }
-        return;
-      }
-
-      // ── Final phrase ────────────────────────────────────────────────────
-      if (path === "speech.phrase") {
-        try {
-          const msg = JSON.parse(body) as AzurePhraseBody;
-
-          if (msg.RecognitionStatus !== "Success") {
-            // InitialSilenceTimeout, NoMatch, etc. — nothing to emit
-            return;
+          if (this.candidateLocales.length > 1) {
+            ctx.languageId = { mode: "Continuous", priority: "PrioritizeLatency" };
           }
-
-          const best = msg.NBest?.[0];
-          const text = (best?.Display ?? msg.DisplayText ?? "").trim();
-
-          if (!text) return;
-
-          // In streaming mode, apply confidence filter only as a soft gate.
-          // Use the configured threshold but floor it at 0.15 — Azure streaming
-          // confidence for Indic languages is naturally lower than Latin-script.
-          const confidence = best?.Confidence ?? 1;
-          const effectiveThreshold = Math.min(this.cfg.confidenceThreshold, 0.15);
-          if (confidence < effectiveThreshold) {
-            logger.info(
-              { confidence, effectiveThreshold, configured: this.cfg.confidenceThreshold },
-              "Azure stream: transcript filtered by confidence",
-            );
-            return;
+          if (this.cfg.keyterms.length > 0) {
+            ctx.phraseList = {
+              onRecognition: { enabled: true, phrases: this.cfg.keyterms },
+            };
           }
-
-          // Pass detected language when Azure LID returns one (multilingual mode).
-          const detectedLang = best?.Language
-            ? normalizeLocale(best.Language)
-            : undefined;
-
-          onTranscript(text, true, detectedLang);
-        } catch {
-          // malformed JSON — ignore
+          ws.send(textFrame("speech.context", JSON.stringify(ctx), requestId));
         }
-        return;
-      }
 
-      // ── Turn lifecycle (informational only) ─────────────────────────────
-      // After turn.end the socket stays open; the next audio chunk starts a
-      // new turn automatically — no reconnect needed.
-      if (path === "turn.end") {
-        logger.debug({ region: this.region }, "Azure STT: turn.end");
-        return;
-      }
+        // ③ Flush any audio queued before the socket was ready
+        for (const chunk of audioQueue.splice(0)) {
+          ws.send(audioFrame(chunk, requestId));
+        }
 
-      if (path === "turn.start") {
-        logger.debug({ region: this.region }, "Azure STT: turn.start");
-        return;
-      }
+        logger.info(
+          {
+            region: this.region,
+            language: this.language,
+            candidateLocales: this.candidateLocales,
+            keyterms: this.cfg.keyterms.length,
+            hasEndpointId: !!this.endpointId,
+            reconnectAttempts,
+          },
+          "Azure streaming STT WebSocket opened",
+        );
+      });
 
-      if (path === "speech.enddetected") {
-        logger.debug({ region: this.region }, "Azure STT: speech.enddetected");
-        return;
-      }
-    });
+      ws.on("message", (raw: Buffer | string, isBinary: boolean) => {
+        // Azure only sends transcript events as text frames; skip binary frames.
+        if (isBinary) return;
 
-    ws.on("error", (err: unknown) => {
-      logger.error({ err }, "Azure streaming STT WebSocket error");
-    });
+        const parsed = parseFrame(raw.toString());
+        if (!parsed) return;
 
-    ws.on("close", (code: number, reason: Buffer) => {
-      logger.info(
-        { code, reason: reason.toString() },
-        "Azure streaming STT WebSocket closed",
-      );
-      onClose?.();
-    });
+        const { path, body } = parsed;
+
+        // ── Interim hypothesis ──────────────────────────────────────────────
+        if (path === "speech.hypothesis") {
+          try {
+            const msg = JSON.parse(body) as AzureHypothesisBody;
+            const text = msg.Text?.trim();
+            if (text) onTranscript(text, false);
+          } catch {
+            // malformed JSON — ignore
+          }
+          return;
+        }
+
+        // ── Final phrase ────────────────────────────────────────────────────
+        if (path === "speech.phrase") {
+          try {
+            const msg = JSON.parse(body) as AzurePhraseBody;
+
+            if (msg.RecognitionStatus !== "Success") {
+              // InitialSilenceTimeout, NoMatch, etc. — nothing to emit
+              return;
+            }
+
+            const best = msg.NBest?.[0];
+            const text = (best?.Display ?? msg.DisplayText ?? "").trim();
+
+            if (!text) return;
+
+            // In streaming mode, apply confidence filter only as a soft gate.
+            // Use the configured threshold but floor it at 0.15 — Azure streaming
+            // confidence for Indic languages is naturally lower than Latin-script.
+            const confidence = best?.Confidence ?? 1;
+            const effectiveThreshold = Math.min(this.cfg.confidenceThreshold, 0.15);
+            if (confidence < effectiveThreshold) {
+              logger.info(
+                { confidence, effectiveThreshold, configured: this.cfg.confidenceThreshold },
+                "Azure stream: transcript filtered by confidence",
+              );
+              return;
+            }
+
+            // Pass detected language when Azure LID returns one (multilingual mode).
+            const detectedLang = best?.Language
+              ? normalizeLocale(best.Language)
+              : undefined;
+
+            onTranscript(text, true, detectedLang);
+          } catch {
+            // malformed JSON — ignore
+          }
+          return;
+        }
+
+        // ── Turn lifecycle (informational only) ─────────────────────────────
+        // After turn.end the socket stays open; the next audio chunk starts a
+        // new turn automatically — no reconnect needed.
+        if (path === "turn.end") {
+          logger.debug({ region: this.region }, "Azure STT: turn.end");
+          return;
+        }
+
+        if (path === "turn.start") {
+          logger.debug({ region: this.region }, "Azure STT: turn.start");
+          return;
+        }
+
+        if (path === "speech.enddetected") {
+          logger.debug({ region: this.region }, "Azure STT: speech.enddetected");
+          return;
+        }
+      });
+
+      ws.on("error", (err: unknown) => {
+        logger.error({ err }, "Azure streaming STT WebSocket error");
+      });
+
+      ws.on("close", (code: number, reason: Buffer) => {
+        logger.info(
+          { code, reason: reason.toString(), intentionallyClosed, reconnectAttempts },
+          "Azure streaming STT WebSocket closed",
+        );
+        if (intentionallyClosed) {
+          onClose?.();
+          return;
+        }
+        // Unexpected close — reconnect with exponential back-off (max ~30 s).
+        // Azure closes after ~10 min idle or on transient errors; reconnect
+        // silently so long calls continue without dropping user audio.
+        if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30_000);
+          reconnectAttempts++;
+          logger.info({ delay, reconnectAttempts }, "Azure STT: reconnecting…");
+          setTimeout(openSocket, delay);
+        } else {
+          logger.error({ reconnectAttempts }, "Azure STT: max reconnect attempts reached");
+          onClose?.();
+        }
+      });
+    };
+
+    openSocket();
 
     return {
       sendAudio(chunk: Buffer): void {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(audioFrame(chunk, requestId));
-        } else if (!wsReady) {
+        if (wsReady && ws.readyState === WebSocket.OPEN) {
+          ws.send(audioFrame(chunk, currentRequestId));
+        } else {
+          // Buffer audio that arrives before the socket is ready or during
+          // a reconnect window — flushed once the new socket opens.
           audioQueue.push(chunk);
         }
-        // If closed/closing: pipeline auto-reconnect will open a fresh socket.
       },
 
       close(): void {
+        intentionallyClosed = true;
         if (ws.readyState < WebSocket.CLOSING) ws.close();
       },
     };

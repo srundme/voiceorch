@@ -174,7 +174,7 @@ export function WebCallPanel({
         } catch { /**/ }
       };
 
-      ws.onclose = () => { if (status !== "ended" && status !== "idle") setStatus("idle"); cleanup(); };
+      ws.onclose = () => { if (statusRef.current !== "ended" && statusRef.current !== "idle") setStatus("idle"); cleanup(); };
       ws.onerror = () => { setError("Connection failed. Check your API keys."); setStatus("idle"); cleanup(); };
     } catch {
       setError("Microphone access was denied or is unavailable.");
@@ -194,7 +194,7 @@ export function WebCallPanel({
   if (keyStatus !== null) {
     if (!keyStatus["sarvam"] && !keyStatus["deepgram"] && !keyStatus["openai"]) missingKeys.push("ASR");
     if (!keyStatus["cartesia"] && !keyStatus["openai"]) missingKeys.push("TTS");
-    if (!keyStatus["qwen"] && !keyStatus["openai"]) missingKeys.push("LLM");
+    if (!keyStatus["qwen"] && !keyStatus["groq"] && !keyStatus["openai"]) missingKeys.push("LLM");
   }
   const keysReady = !keyLoading && keyStatus !== null && missingKeys.length === 0;
 

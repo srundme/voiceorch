@@ -11,7 +11,7 @@ import { toReadableError } from "../utils.js";
 import { logger } from "../../lib/logger.js";
 import { RecordingBuffer } from "../recorder.js";
 import type { ConversationTurn, STTConfig, StreamSTT } from "../types.js";
-import { DEFAULT_GOODBYE_MESSAGE } from "../types.js";
+import { DEFAULT_GOODBYE_MESSAGE, resolveGoodbyeMessage } from "../types.js";
 import { decryptKey } from "../../lib/crypto.js";
 import { loadCallerContext, injectEnhancedMemory, updateCallerProfile, latchCallerName, latchCallerFact, detectCallbackRequest } from "../callerMemory.js";
 
@@ -293,14 +293,22 @@ export async function handleWebCallWebSocket(
   let streamSTT: StreamSTT | null = null;
   // Transcript received from streaming STT WebSocket — consumed by process()
   let streamingTranscriptPending: string | null = null;
-  const agentLanguage = agent.language ?? null;
+  // When multilingual is OFF, prefer asrLanguage over language for TTS —
+  // setting the Transcriber to kn-IN signals intent for the whole agent to run
+  // in Kannada, not just ASR. When multilingual is ON, language hot-swaps via
+  // setLanguage() so we use the primary agent.language as the initial locale.
+  const agentLanguage = (!isMultilingualWc && agent.asrLanguage)
+    ? agent.asrLanguage
+    : (agent.language ?? null);
   const ttsExtraConfig = agent.ttsProvider === "sarvam"
     ? JSON.stringify({ language: agentLanguage ?? "en-IN" })
     : null;
   const tts = createTTSAdapter(agent.ttsProvider, ttsKey, agent.ttsVoice, agent.ttsModel, ttsExtraConfig, agentLanguage);
 
-  // Multilingual: tracks the current detected language for TTS hot-swap
-  let currentLangWc: string = "";
+  // Multilingual: tracks the current detected language for TTS hot-swap.
+  // Initialised from agentLanguage so the per-turn LLM language injection
+  // fires from turn 1 even in non-multilingual mode (e.g. kn-IN from start).
+  let currentLangWc: string = agentLanguage ?? "";
 
   // ── Create call DB record ─────────────────────────────────────────────────
   const [callRecord] = await db.insert(callsTable).values({
@@ -670,6 +678,49 @@ export async function handleWebCallWebSocket(
     }
   }
 
+  // ── Reschedule context — set when list_bookings returns exactly one booking ──
+  let activeRescheduleBooking: { bookingId: number; isoDate: string; timeLabel: string; eventName: string } | null = null;
+  // All bookings from the most recent list_bookings call (for multi-booking inference)
+  let pendingListedBookings: Array<{ bookingId: number; isoDate: string; timeLabel: string; eventName: string }> = [];
+
+  function parseAllListedBookings(result: string): Array<{ bookingId: number; isoDate: string; timeLabel: string; eventName: string }> {
+    if (!result.startsWith("bookings_found:")) return [];
+    const entries = result.split(" | ");
+    const parsed: Array<{ bookingId: number; isoDate: string; timeLabel: string; eventName: string }> = [];
+    for (const entry of entries) {
+      const bookingIdMatch = /booking_id=(\d+)/.exec(entry);
+      const eventMatch = /event="([^"]+)"/.exec(entry);
+      const isoStartMatch = /iso_start=([^\s,|]+)/.exec(entry);
+      const dateMatch = /date="([^"]+)"/.exec(entry);
+      if (!bookingIdMatch || !isoStartMatch) continue;
+      const isoFull = isoStartMatch[1]!;
+      parsed.push({
+        bookingId: parseInt(bookingIdMatch[1]!, 10),
+        isoDate: isoFull.split("T")[0] ?? isoFull,
+        timeLabel: dateMatch?.[1] ?? isoFull,
+        eventName: eventMatch?.[1] ?? "Appointment",
+      });
+    }
+    return parsed;
+  }
+
+  function parseBookingIdArg(val: unknown): number | null {
+    if (typeof val === "number") return val;
+    if (typeof val === "string") { const n = parseInt(val, 10); return isNaN(n) ? null : n; }
+    return null;
+  }
+
+  function buildRescheduleContextBlock(booking: { bookingId: number; isoDate: string; timeLabel: string; eventName: string }): string {
+    return [
+      "",
+      "",
+      "[ACTIVE RESCHEDULE CONTEXT]",
+      `Currently rescheduling booking #${booking.bookingId} (${booking.eventName}: ${booking.timeLabel}).`,
+      `When the caller proposes only a new time (e.g. "Can we do 12:30?"), you MUST default preferred_date to "${booking.isoDate}" unless they explicitly state a different date.`,
+      `Always pass preferred_date as a full ISO datetime (e.g. "${booking.isoDate}T12:30:00+05:30") — never omit the date portion.`,
+    ].join("\n");
+  }
+
   // ── State ─────────────────────────────────────────────────────────────────
   const audioChunks: Buffer[] = [];
   let silenceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -802,11 +853,7 @@ export async function handleWebCallWebSocket(
           if (matchedPhrase) {
             logger.info({ callId, userText }, "Webcall: end-call phrase detected — speaking goodbye then hanging up");
             processing = false;
-            const endCallTool = ((agent.tools ?? []) as unknown as import("../types.js").AgentTool[]).find((t) => t.type === "end_call");
-            const goodbyeText =
-              endCallTool?.type === "end_call" && endCallTool.goodbyeMessage?.trim()
-                ? endCallTool.goodbyeMessage
-                : DEFAULT_GOODBYE_MESSAGE;
+            const goodbyeText = phrases[0]?.trim() || DEFAULT_GOODBYE_MESSAGE;
             history.push({ role: "assistant", content: goodbyeText });
             send({ type: "transcript", speaker: "agent", text: goodbyeText });
             try {
@@ -973,8 +1020,10 @@ export async function handleWebCallWebSocket(
       const agentTimezone = (agentCfg["timezone"] as string | undefined) || "Asia/Kolkata";
       const dtInjection = buildDatetimeInjection(agentTimezone);
       systemPromptForTurn = `${dtInjection}\n\n${systemPromptForTurn}`;
-      // Multilingual: tell the LLM which language to reply in for this turn
-      if (isMultilingualWc && currentLangWc) {
+      // Tell the LLM which language to reply in for this turn.
+      // Fires in both multilingual mode (Azure LID detected switch) and
+      // non-multilingual mode (seeded from agentLanguage at call start).
+      if (currentLangWc) {
         const LANG_NAMES: Record<string, string> = {
           "hi-IN": "Hindi", "ta-IN": "Tamil", "te-IN": "Telugu", "kn-IN": "Kannada",
           "ml-IN": "Malayalam", "mr-IN": "Marathi", "bn-IN": "Bengali", "gu-IN": "Gujarati",
@@ -1026,6 +1075,11 @@ export async function handleWebCallWebSocket(
 
       // ── Build tool definitions for this agent ─────────────────────────────
       const agentTools = (agent.tools ?? []) as unknown as import("../types.js").AgentTool[];
+      // Parsed End Call Phrases (raw comma-separated string → trimmed list),
+      // used to resolve the spoken goodbye for LLM-driven end-calls below.
+      const endCallPhraseList = agent.endCallPhrases
+        ? agent.endCallPhrases.split(",").map((s: string) => s.trim()).filter(Boolean)
+        : [];
 
       // Inject scheduling tool usage guide when the agent has cancel/reschedule/list-bookings tools
       const hasSchedulingNav = agentTools.some(
@@ -1040,13 +1094,20 @@ export async function handleWebCallWebSocket(
           "",
           "",
           "[SCHEDULING TOOL GUIDE]",
-          "When the caller wants to cancel or reschedule an appointment:",
+          "State machine for cancel/reschedule:",
           `1. ALWAYS call "${listName}" (not "${checkName}") to look up their existing appointment by name. Never call "${checkName}" for this purpose.`,
           `2. Always pass the caller's stated timezone into every scheduling tool call (e.g. timezone="Asia/Kolkata"). Default to "Asia/Kolkata" if not stated.`,
           `3. If "${listName}" returns an empty result, say: "There are no upcoming bookings under your name."`,
           `4. If all returned bookings are in the past, say: "Your previous appointment has already passed — I can only reschedule upcoming ones. Would you like to book a new one?"`,
+          `5. Once a booking is identified for rescheduling: call "${checkName}" for the SAME DATE as the existing booking unless the caller explicitly states a different date. Use the booking's existing date as preferred_date.`,
+          `6. After the caller confirms a new slot, call the reschedule tool. Once reschedule_confirmed is returned, the context is cleared.`,
           `IMPORTANT: NEVER invent or guess slot times. You MUST call "${checkName}" before offering any available times to the caller. Only relay times that you received from a tool result.`,
         ].join("\n");
+
+        // Inject active reschedule context so the LLM defaults to the correct date
+        if (activeRescheduleBooking) {
+          systemPromptForTurn += buildRescheduleContextBlock(activeRescheduleBooking);
+        }
       }
 
       // Inject booking/availability guide when the agent has a native_booking or native_check_availability tool
@@ -1139,12 +1200,20 @@ export async function handleWebCallWebSocket(
         try { ws.ping(); } catch { /* ignore */ }
       }, 8_000);
 
+      // Refresh [ACTIVE RESCHEDULE CONTEXT] per iteration in case list_bookings set it
+      // during a previous tool iteration in the same user turn (the initial systemPromptForTurn
+      // was built before those tool results arrived, so it may lack the context block).
+      let iterSystemPrompt = systemPromptForTurn;
+      if (hasSchedulingNav && activeRescheduleBooking && !iterSystemPrompt.includes("[ACTIVE RESCHEDULE CONTEXT]")) {
+        iterSystemPrompt += buildRescheduleContextBlock(activeRescheduleBooking);
+      }
+
       const llmStartMs = Date.now();
       logExecution("LLM", "request", {
         provider: agent.llmProvider,
         requestPayload: {
           model: (agent as any).llmModel ?? "default",
-          systemPromptPreview: systemPromptForTurn.substring(0, 800),
+          systemPromptPreview: iterSystemPrompt.substring(0, 800),
           historyLength: history.length,
           tools: attachTools ? toolDefs.map((t: any) => t.function?.name ?? t.name).filter(Boolean) : [],
         },
@@ -1154,7 +1223,7 @@ export async function handleWebCallWebSocket(
       try {
        await llm.chat(
         history,
-        systemPromptForTurn,
+        iterSystemPrompt,
         (token) => {
           fullReply += token;                         // keep raw (for cleaning later)
           const afterThink = filterThinkToken(token); // strip <think>…</think>
@@ -1254,10 +1323,13 @@ export async function handleWebCallWebSocket(
         const matchedTriggeredTool = matchToolByName(agentTools, triggeredToolName);
         if (triggeredToolName === "end_call" || matchedTriggeredTool?.type === "end_call") {
           const endTool = matchedTriggeredTool?.type === "end_call" ? matchedTriggeredTool : undefined;
-          const configured = endTool && endTool.type === "end_call" ? (endTool.goodbyeMessage ?? "") : "";
-          // Always speak a closing line — fall back to a sensible default so the
-          // call never drops silently — and record it to the transcript.
-          const goodbye = configured.trim() ? configured.trim() : DEFAULT_GOODBYE_MESSAGE;
+          // Always speak a closing line — fall back through the configured End
+          // Call Phrase then a sensible default so the call never drops silently
+          // — and record it to the transcript.
+          const goodbye = resolveGoodbyeMessage(
+            endTool && endTool.type === "end_call" ? endTool.goodbyeMessage : undefined,
+            endCallPhraseList,
+          );
           history.push({ role: "assistant", content: goodbye });
           send({ type: "transcript", speaker: "agent", text: goodbye });
           try {
@@ -1295,13 +1367,59 @@ export async function handleWebCallWebSocket(
           } else if (tool.type === "native_booking") {
             toolResult = await executeNativeBooking(callId, agentId, tool, triggeredToolArgs);
           } else if (tool.type === "native_check_availability") {
+            logger.info({
+              callId,
+              selected_booking_id: activeRescheduleBooking?.bookingId ?? null,
+              selected_booking_date: activeRescheduleBooking?.isoDate ?? null,
+              selected_booking_time: activeRescheduleBooking?.timeLabel ?? null,
+              resolved_requested_datetime: triggeredToolArgs["preferred_date"] ?? null,
+            }, "Webcall: executeNativeCheckAvailability invoked");
             toolResult = await executeNativeCheckAvailability(callId, agentId, tool, triggeredToolArgs);
           } else if (tool.type === "native_reschedule") {
+            if (!activeRescheduleBooking) {
+              const bid = parseBookingIdArg(triggeredToolArgs["booking_id"]);
+              if (bid) {
+                const found = pendingListedBookings.find((b) => b.bookingId === bid);
+                if (found) { activeRescheduleBooking = found; logger.info({ callId, ...found }, "Webcall: activeRescheduleBooking inferred from reschedule booking_id arg"); }
+              }
+            }
+            logger.info({
+              callId,
+              selected_booking_id: activeRescheduleBooking?.bookingId ?? null,
+              selected_booking_date: activeRescheduleBooking?.isoDate ?? null,
+              selected_booking_time: activeRescheduleBooking?.timeLabel ?? null,
+              resolved_requested_datetime: triggeredToolArgs["preferred_date"] ?? triggeredToolArgs["new_time"] ?? null,
+            }, "Webcall: executeNativeReschedule invoked");
             toolResult = await executeNativeReschedule(callId, agentId, tool, triggeredToolArgs);
+            if (toolResult?.includes("reschedule_confirmed")) {
+              logger.info({ callId }, "Webcall: reschedule confirmed — clearing activeRescheduleBooking");
+              activeRescheduleBooking = null;
+              pendingListedBookings = [];
+            }
           } else if (tool.type === "native_cancel") {
+            if (!activeRescheduleBooking) {
+              const bid = parseBookingIdArg(triggeredToolArgs["booking_id"]);
+              if (bid) {
+                const found = pendingListedBookings.find((b) => b.bookingId === bid);
+                if (found) { activeRescheduleBooking = found; logger.info({ callId, ...found }, "Webcall: activeRescheduleBooking inferred from cancel booking_id arg"); }
+              }
+            }
             toolResult = await executeNativeCancel(callId, agentId, tool, triggeredToolArgs);
+            if (toolResult?.includes("cancel_confirmed")) {
+              logger.info({ callId }, "Webcall: cancel confirmed — clearing activeRescheduleBooking");
+              activeRescheduleBooking = null;
+              pendingListedBookings = [];
+            }
           } else if (tool.type === "native_list_bookings") {
             toolResult = await executeNativeListBookings(callId, agentId, tool, triggeredToolArgs);
+            activeRescheduleBooking = null;
+            pendingListedBookings = parseAllListedBookings(toolResult ?? "");
+            if (pendingListedBookings.length === 1) {
+              activeRescheduleBooking = pendingListedBookings[0]!;
+              logger.info({ callId, ...activeRescheduleBooking }, "Webcall: activeRescheduleBooking set from list_bookings result (count=1)");
+            } else if (pendingListedBookings.length > 1) {
+              logger.info({ callId, count: pendingListedBookings.length }, "Webcall: multiple bookings listed — activeRescheduleBooking deferred");
+            }
           } else if (tool.type === "webhook") {
             toolResult = await executeWebhookTool(callId, tool, triggeredToolArgs);
           } else {
@@ -1376,8 +1494,10 @@ export async function handleWebCallWebSocket(
             const matchedFnTool = matchToolByName(agentTools, fnName);
             if (fnName === "end_call" || matchedFnTool?.type === "end_call") {
               const endTool = matchedFnTool?.type === "end_call" ? matchedFnTool : undefined;
-              const configured = endTool && endTool.type === "end_call" ? (endTool.goodbyeMessage ?? "") : "";
-              const goodbye = configured.trim() ? configured.trim() : DEFAULT_GOODBYE_MESSAGE;
+              const goodbye = resolveGoodbyeMessage(
+                endTool && endTool.type === "end_call" ? endTool.goodbyeMessage : undefined,
+                endCallPhraseList,
+              );
               history.push({ role: "assistant", content: goodbye });
               send({ type: "transcript", speaker: "agent", text: goodbye });
               try {
@@ -1402,13 +1522,40 @@ export async function handleWebCallWebSocket(
                 if (tool.type === "native_booking") {
                   inlineFnResult = await executeNativeBooking(callId, agentId, tool, fnArgs);
                 } else if (tool.type === "native_check_availability") {
+                  logger.info({
+                    callId,
+                    selected_booking_id: activeRescheduleBooking?.bookingId ?? null,
+                    selected_booking_date: activeRescheduleBooking?.isoDate ?? null,
+                    selected_booking_time: activeRescheduleBooking?.timeLabel ?? null,
+                    resolved_requested_datetime: fnArgs["preferred_date"] ?? null,
+                  }, "Webcall (tag-only): executeNativeCheckAvailability invoked");
                   inlineFnResult = await executeNativeCheckAvailability(callId, agentId, tool, fnArgs);
                 } else if (tool.type === "native_reschedule") {
+                  if (!activeRescheduleBooking) {
+                    const bid = parseBookingIdArg(fnArgs["booking_id"]);
+                    if (bid) { const f = pendingListedBookings.find((b) => b.bookingId === bid); if (f) { activeRescheduleBooking = f; } }
+                  }
+                  logger.info({
+                    callId,
+                    selected_booking_id: activeRescheduleBooking?.bookingId ?? null,
+                    selected_booking_date: activeRescheduleBooking?.isoDate ?? null,
+                    selected_booking_time: activeRescheduleBooking?.timeLabel ?? null,
+                    resolved_requested_datetime: fnArgs["preferred_date"] ?? fnArgs["new_time"] ?? null,
+                  }, "Webcall (tag-only): executeNativeReschedule invoked");
                   inlineFnResult = await executeNativeReschedule(callId, agentId, tool, fnArgs);
+                  if (inlineFnResult?.includes("reschedule_confirmed")) { activeRescheduleBooking = null; pendingListedBookings = []; }
                 } else if (tool.type === "native_cancel") {
+                  if (!activeRescheduleBooking) {
+                    const bid = parseBookingIdArg(fnArgs["booking_id"]);
+                    if (bid) { const f = pendingListedBookings.find((b) => b.bookingId === bid); if (f) { activeRescheduleBooking = f; } }
+                  }
                   inlineFnResult = await executeNativeCancel(callId, agentId, tool, fnArgs);
+                  if (inlineFnResult?.includes("cancel_confirmed")) { activeRescheduleBooking = null; pendingListedBookings = []; }
                 } else if (tool.type === "native_list_bookings") {
                   inlineFnResult = await executeNativeListBookings(callId, agentId, tool, fnArgs);
+                  activeRescheduleBooking = null;
+                  pendingListedBookings = parseAllListedBookings(inlineFnResult ?? "");
+                  if (pendingListedBookings.length === 1) { activeRescheduleBooking = pendingListedBookings[0]!; logger.info({ callId, ...activeRescheduleBooking }, "Webcall (tag-only): activeRescheduleBooking set"); }
                 } else if (tool.type === "webhook") {
                   inlineFnResult = await executeWebhookTool(callId, tool, fnArgs);
                 }
@@ -1547,8 +1694,10 @@ export async function handleWebCallWebSocket(
             const matchedFnTool = matchToolByName(agentTools, fnName);
             if (fnName === "end_call" || matchedFnTool?.type === "end_call") {
               const endTool = matchedFnTool?.type === "end_call" ? matchedFnTool : undefined;
-              const configured = endTool && endTool.type === "end_call" ? (endTool.goodbyeMessage ?? "") : "";
-              const goodbye = configured.trim() ? configured.trim() : DEFAULT_GOODBYE_MESSAGE;
+              const goodbye = resolveGoodbyeMessage(
+                endTool && endTool.type === "end_call" ? endTool.goodbyeMessage : undefined,
+                endCallPhraseList,
+              );
               history.push({ role: "assistant", content: goodbye });
               send({ type: "transcript", speaker: "agent", text: goodbye });
               try {
@@ -1574,13 +1723,40 @@ export async function handleWebCallWebSocket(
                 if (tool.type === "native_booking") {
                   inlineFnResult = await executeNativeBooking(callId, agentId, tool, fnArgs);
                 } else if (tool.type === "native_check_availability") {
+                  logger.info({
+                    callId,
+                    selected_booking_id: activeRescheduleBooking?.bookingId ?? null,
+                    selected_booking_date: activeRescheduleBooking?.isoDate ?? null,
+                    selected_booking_time: activeRescheduleBooking?.timeLabel ?? null,
+                    resolved_requested_datetime: fnArgs["preferred_date"] ?? null,
+                  }, "Webcall (inline-fn): executeNativeCheckAvailability invoked");
                   inlineFnResult = await executeNativeCheckAvailability(callId, agentId, tool, fnArgs);
                 } else if (tool.type === "native_reschedule") {
+                  if (!activeRescheduleBooking) {
+                    const bid = parseBookingIdArg(fnArgs["booking_id"]);
+                    if (bid) { const f = pendingListedBookings.find((b) => b.bookingId === bid); if (f) { activeRescheduleBooking = f; } }
+                  }
+                  logger.info({
+                    callId,
+                    selected_booking_id: activeRescheduleBooking?.bookingId ?? null,
+                    selected_booking_date: activeRescheduleBooking?.isoDate ?? null,
+                    selected_booking_time: activeRescheduleBooking?.timeLabel ?? null,
+                    resolved_requested_datetime: fnArgs["preferred_date"] ?? fnArgs["new_time"] ?? null,
+                  }, "Webcall (inline-fn): executeNativeReschedule invoked");
                   inlineFnResult = await executeNativeReschedule(callId, agentId, tool, fnArgs);
+                  if (inlineFnResult?.includes("reschedule_confirmed")) { activeRescheduleBooking = null; pendingListedBookings = []; }
                 } else if (tool.type === "native_cancel") {
+                  if (!activeRescheduleBooking) {
+                    const bid = parseBookingIdArg(fnArgs["booking_id"]);
+                    if (bid) { const f = pendingListedBookings.find((b) => b.bookingId === bid); if (f) { activeRescheduleBooking = f; } }
+                  }
                   inlineFnResult = await executeNativeCancel(callId, agentId, tool, fnArgs);
+                  if (inlineFnResult?.includes("cancel_confirmed")) { activeRescheduleBooking = null; pendingListedBookings = []; }
                 } else if (tool.type === "native_list_bookings") {
                   inlineFnResult = await executeNativeListBookings(callId, agentId, tool, fnArgs);
+                  activeRescheduleBooking = null;
+                  pendingListedBookings = parseAllListedBookings(inlineFnResult ?? "");
+                  if (pendingListedBookings.length === 1) { activeRescheduleBooking = pendingListedBookings[0]!; logger.info({ callId, ...activeRescheduleBooking }, "Webcall (inline-fn): activeRescheduleBooking set"); }
                 } else if (tool.type === "webhook") {
                   inlineFnResult = await executeWebhookTool(callId, tool, fnArgs);
                 }
@@ -1680,7 +1856,12 @@ export async function handleWebCallWebSocket(
 
       let greetingText = "";
 
-      if (agent.greetingMessage) {
+      // For returning callers, prefer a memory-informed (recognition-style)
+      // opening generated from the memory-injected system prompt over the static
+      // scripted greeting — otherwise the agent would re-introduce itself cold.
+      const isReturningCaller = (webcallProfile?.callCount ?? 0) >= 1;
+
+      if (agent.greetingMessage && !isReturningCaller) {
         // Fast path — use configured greeting directly.
         // Substitute {caller_salutation} with neutral salutation — gender is
         // not yet known at greeting time; per-turn substitution will use the
@@ -1719,7 +1900,9 @@ export async function handleWebCallWebSocket(
         }
         const triggerContent = callbackId
           ? "[callback connected — please open the conversation with your greeting now]"
-          : "[call connected — please greet the user and open the conversation now]";
+          : isReturningCaller
+            ? "[call connected — this is a returning caller you already know from the CALLER MEMORY block above; open by greeting them by name and referencing prior context, do NOT re-introduce yourself]"
+            : "[call connected — please greet the user and open the conversation now]";
         const triggerHistory: import("../types.js").ConversationTurn[] = [
           { role: "user", content: triggerContent },
         ];

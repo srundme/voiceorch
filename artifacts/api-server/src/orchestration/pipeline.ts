@@ -265,7 +265,12 @@ export class OrchestrationPipeline {
       sttCfg
     );
     this.llm = createLLMAdapter(this.agent.llmProvider, llmKey, this.agent.llmModel);
+    // AgentConfig.language already holds asrLanguage || agent.language
+    // (merged in session.ts). Use it directly for TTS language.
     const agentLanguage = this.agent.language ?? null;
+    // Seed currentLang so per-turn LLM language injection fires from turn 1
+    // in both multilingual and non-multilingual mode.
+    if (agentLanguage) this.currentLang = agentLanguage;
     const ttsExtraConfig = this.agent.ttsProvider === "sarvam"
       ? JSON.stringify({ language: agentLanguage ?? "en-IN" })
       : (keys.get(`${this.agent.ttsProvider}:extraConfig`) ?? null);
@@ -1441,10 +1446,11 @@ export class OrchestrationPipeline {
     let systemPromptForTurn = this.agent.systemPrompt;
     const dtInjection = buildDatetimeInjection(this.agent.timezone);
     systemPromptForTurn = `${dtInjection}\n\n${systemPromptForTurn}`;
-    // Multilingual: tell the LLM which language to reply in when Azure LID has
-    // detected a specific language mid-call. Without this, the LLM may "drift"
-    // back to the agent's primary language even when the caller has switched.
-    if (this.agent.isMultilingual && this.currentLang) {
+    // Tell the LLM which language to reply in. Fires in multilingual mode
+    // (Azure LID detected a switch) and non-multilingual mode (seeded from
+    // agentLanguage at setup). Prevents Tamil/Hindi drift when agent is
+    // configured for a specific Indic language but system prompt is in English.
+    if (this.currentLang) {
       const langName = LANG_DISPLAY_NAMES[this.currentLang] ?? this.currentLang;
       systemPromptForTurn += `\n\n[ACTIVE LANGUAGE] The caller is currently speaking ${langName}. Respond ONLY in ${langName} for this reply.`;
     }
