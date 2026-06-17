@@ -312,18 +312,21 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
   const phoneNumbers = Array.isArray(phoneNumbersRaw) ? phoneNumbersRaw : [];
 
   const cartesiaOverviewOpts = useMemo(() => {
-    // Cartesia Sonic voices are multilingual (42 languages), so we offer every
-    // admin-whitelisted voice regardless of the agent's configured language.
-    // When the admin has whitelisted nothing, fall back to the built-in
-    // Cartesia voice list (matches the admin page's stated fallback) so the
-    // dropdown is never reduced to custom-only.
     const all = whitelistedData?.voices ?? [];
-    const opts = all.length > 0
-      ? all.map(v => ({ value: v.id, label: v.name }))
-      : (TTS_VOICES.cartesia ?? []).filter(v => v.value !== "__custom__");
+    const fallback = (TTS_VOICES.cartesia ?? []).filter(v => v.value !== "__custom__");
+    if (all.length === 0) {
+      const opts = [...fallback];
+      opts.push({ value: "__custom__", label: "✎ Paste custom Voice ID…" });
+      return opts;
+    }
+    // Filter by agent's base language code (e.g. "ta-IN" → "ta", "en-US" → "en")
+    const baseLang = (language ?? "en-US").split("-")[0]!.toLowerCase();
+    const langMatches = all.filter(v => v.language?.toLowerCase() === baseLang);
+    const pool = langMatches.length > 0 ? langMatches : all;
+    const opts = pool.map(v => ({ value: v.id, label: v.name }));
     opts.push({ value: "__custom__", label: "✎ Paste custom Voice ID…" });
     return opts;
-  }, [whitelistedData]);
+  }, [whitelistedData, language]);
 
   const ttsVoiceRaw   = ttsProvider in TTS_VOICES ? TTS_VOICES[ttsProvider] : undefined;
   const ttsVoiceFree  = ttsVoiceRaw === null;
@@ -789,20 +792,25 @@ function VoiceTab({ form }: { form: any }) {
     staleTime: 5 * 60 * 1000,
   });
 
-  // For Cartesia: build dropdown options from the admin-whitelisted voices.
-  // Cartesia Sonic voices are multilingual (42 languages), so we offer every
-  // whitelisted voice regardless of the agent's configured language. When the
-  // admin has whitelisted nothing, fall back to the built-in Cartesia voice
-  // list (matches the admin page's stated fallback) so the dropdown is never
-  // reduced to custom-only.
+  // For Cartesia: build dropdown from whitelisted voices filtered by agent language.
+  // Base language code is extracted from the agent language (e.g. "ta-IN" → "ta").
+  // If no voices match the agent's language, show all whitelisted voices.
+  // When the whitelist is empty, fall back to the built-in Cartesia voice list.
   const cartesiaVoiceOpts = useMemo(() => {
     const all = whitelistedData?.voices ?? [];
-    const opts = all.length > 0
-      ? all.map(v => ({ value: v.id, label: v.name }))
-      : (TTS_VOICES.cartesia ?? []).filter(v => v.value !== "__custom__");
+    const fallback = (TTS_VOICES.cartesia ?? []).filter(v => v.value !== "__custom__");
+    if (all.length === 0) {
+      const opts = [...fallback];
+      opts.push({ value: "__custom__", label: "✎ Paste custom Voice ID…" });
+      return opts;
+    }
+    const baseLang = agentLanguage.split("-")[0]!.toLowerCase();
+    const langMatches = all.filter(v => v.language?.toLowerCase() === baseLang);
+    const pool = langMatches.length > 0 ? langMatches : all;
+    const opts = pool.map(v => ({ value: v.id, label: v.name }));
     opts.push({ value: "__custom__", label: "✎ Paste custom Voice ID…" });
     return opts;
-  }, [whitelistedData]);
+  }, [whitelistedData, agentLanguage]);
 
   // For non-Cartesia providers fall back to the hardcoded list
   const ttsVoiceRawV  = ttsProvider in TTS_VOICES ? TTS_VOICES[ttsProvider] : undefined;
