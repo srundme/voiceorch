@@ -23,7 +23,6 @@ import {
   useListCalls, getListCallsQueryKey, useListCalendars, customFetch,
   useListKnowledgeSources, useRunToolTest, useListAmbientSounds, useListEventTypes,
   useListAgentVersions, usePublishAgentVersion, useGetAgentVersion, useRestoreAgentVersion,
-  useArchiveAgentVersion,
   getListAgentVersionsQueryKey, getGetAgentVersionQueryKey,
 } from "@workspace/api-client-react";
 import type { AgentVersion } from "@workspace/api-client-react";
@@ -3344,7 +3343,6 @@ function VersionsTab({ agentId }: { agentId: number }) {
   const [, navigate] = useLocation();
   const [compareVersion, setCompareVersion] = useState<AgentVersion | null>(null);
   const [restoreTarget, setRestoreTarget] = useState<VersionSummary | null>(null);
-  const [archiveTarget, setArchiveTarget] = useState<VersionSummary | null>(null);
   const [archivedOpen, setArchivedOpen] = useState(false);
 
   const { data: listData, isLoading } = useListAgentVersions(agentId);
@@ -3353,7 +3351,6 @@ function VersionsTab({ agentId }: { agentId: number }) {
   const limit = listData?.limit ?? VERSION_LIMIT;
 
   const restore = useRestoreAgentVersion();
-  const archive = useArchiveAgentVersion();
 
   const activeVersions = versions.filter(v => v.status !== "archived");
   const archivedVersions = versions.filter(v => v.status === "archived");
@@ -3370,18 +3367,6 @@ function VersionsTab({ agentId }: { agentId: number }) {
       navigate(`/app/agents/${agentId}`);
     } catch (err: any) {
       toast({ title: "Restore failed", description: err?.message ?? "Unknown error", variant: "destructive" });
-    }
-  };
-
-  const handleConfirmArchive = async () => {
-    if (!archiveTarget) return;
-    try {
-      await archive.mutateAsync({ id: agentId, versionId: archiveTarget.id });
-      queryClient.invalidateQueries({ queryKey: getListAgentVersionsQueryKey(agentId) });
-      toast({ title: "Archived", description: `${archiveTarget.versionNumber} has been archived and no longer counts toward your limit.` });
-      setArchiveTarget(null);
-    } catch (err: any) {
-      toast({ title: "Archive failed", description: err?.message ?? "Unknown error", variant: "destructive" });
     }
   };
 
@@ -3467,10 +3452,9 @@ function VersionsTab({ agentId }: { agentId: number }) {
                 v={v}
                 onCompare={() => setCompareVersion(v as AgentVersion)}
                 onRestore={() => setRestoreTarget(v)}
-                onArchive={() => setArchiveTarget(v)}
                 restorePending={restore.isPending}
-                archivePending={archive.isPending}
-                showArchiveAction={v.status !== "production"}
+                archivePending={false}
+                showArchiveAction={false}
               />
             ))}
           </div>
@@ -3499,7 +3483,7 @@ function VersionsTab({ agentId }: { agentId: number }) {
                     onCompare={() => setCompareVersion(v as AgentVersion)}
                     onRestore={() => setRestoreTarget(v)}
                     restorePending={restore.isPending}
-                    archivePending={archive.isPending}
+                    archivePending={false}
                     showArchiveAction={false}
                   />
                 ))}
@@ -3530,26 +3514,7 @@ function VersionsTab({ agentId }: { agentId: number }) {
         </DialogContent>
       </Dialog>
 
-      {/* Archive confirmation dialog */}
-      <Dialog open={!!archiveTarget} onOpenChange={open => { if (!open) setArchiveTarget(null); }}>
-        <DialogContent className="sm:max-w-[440px]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Archive className="h-4 w-4 text-amber-400" /> Archive Version
-            </DialogTitle>
-            <DialogDescription>
-              Archive <strong>{archiveTarget?.versionNumber}: {archiveTarget?.versionName}</strong>? It will no longer count toward your {limit}-version limit. You can still compare and restore archived versions at any time.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setArchiveTarget(null)}>Cancel</Button>
-            <Button type="button" disabled={archive.isPending} onClick={handleConfirmArchive} className="gap-1.5">
-              <Archive className="h-3.5 w-3.5" />
-              {archive.isPending ? "Archiving…" : "Archive Version"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Archive action pending API implementation */}
     </div>
   );
 }
