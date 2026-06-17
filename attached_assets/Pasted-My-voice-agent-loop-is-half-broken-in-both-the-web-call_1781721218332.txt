@@ -1,0 +1,26 @@
+My voice agent loop is half-broken in both the web-call test and inbound telephony, and I need you to find and fix it.
+
+SYMPTOM
+- The agent speaks its first message correctly (TTS + first LLM turn work).
+- Immediately after, the call status goes to "Listening..." and stays there forever.
+- No user transcript is ever produced and the agent never takes a second turn.
+- The agent operates in Tamil (first message and persona are Tamil/multilingual), but I noticed the transcriber/STT is configured as "en-IN-standard" (English-India).
+
+PRIMARY HYPOTHESIS
+The STT language is hardcoded or defaulting to English while the user speaks Tamil, so the transcriber returns no usable final transcript, endpointing never fires, and the turn loop hangs. Same root cause breaks inbound telephony.
+
+WHAT TO DO
+1. Find every place the transcriber/STT session is configured (both the web-call/WebRTC orchestration path AND the telephony/inbound-call ingress path). Look for a language/locale param being set to "en-IN" or an English default.
+2. Make the STT language driven by the agent's configured language (e.g. agent.language -> ta-IN) instead of a hardcoded English value. If the provider supports multilingual/auto-detect, prefer that. Ensure the SAME language config flows to BOTH the web-call path and the telephony ingress path — they likely diverge right now.
+3. Independently verify audio is actually reaching the STT (a wrong language is one cause of "stuck listening"; no audio frames reaching STT is the other). 
+   - Web call: confirm the user mic track is subscribed and forwarded into the STT stream, and sample rate matches what the STT expects.
+   - Telephony ingress: confirm inbound media (likely 8kHz mu-law/PCMU) is decoded and resampled to the STT's required format before it's piped in. Log the number of audio frames/bytes received by the STT per second.
+4. Add logging at three points so I can see where it dies: (a) audio frames received by STT, (b) interim + final transcripts emitted by STT, (c) turn-end / endpointing trigger. 
+
+ACCEPTANCE CRITERIA
+- In a Tamil web-call test, after the greeting the user's Tamil speech produces a final transcript and the agent responds (loop completes).
+- An inbound telephony call with Tamil speech does the same — no dead air after greeting.
+- STT language is no longer hardcoded; it follows the agent's language setting in both paths.
+- Logs clearly show audio frames in, transcripts out, and turn-end firing.
+
+Show me the diffs and tell me which file/function had the wrong/missing language config in each path.

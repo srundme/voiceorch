@@ -38,6 +38,7 @@ RUN pnpm install --frozen-lockfile --prod
 
 COPY --from=builder /workspace/artifacts/api-server/dist ./artifacts/api-server/dist
 COPY --from=builder /workspace/artifacts/dashboard/dist ./artifacts/dashboard/dist
+COPY --from=builder /workspace/lib/db/drizzle ./lib/db/drizzle
 
 ENV NODE_ENV=production
 ENV FRONTEND_DIST_PATH=artifacts/dashboard/dist/public

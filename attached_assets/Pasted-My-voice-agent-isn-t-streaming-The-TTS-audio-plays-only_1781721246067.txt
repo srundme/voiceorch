@@ -1,0 +1,44 @@
+My voice agent isn't streaming. The TTS audio plays only after the full LLM
+answer is ready, and the transcript text appears all at once afterward. I want
+true streaming so TTS starts speaking after the first sentence.
+
+ARCHITECTURE
+SnapServe is an OpenAI-compatible LLM proxy. Voice platforms point their api_base
+at it; it injects caller memory into the request and must stream the completion
+back as SSE. Latency-sensitive (deployed on Railway).
+
+PRIMARY HYPOTHESIS
+The proxy is breaking the stream. Either it calls the upstream LLM with
+stream=False and returns one string, OR it sets stream=True but buffers all
+chunks and yields them at the end, OR the web framework/response isn't a true
+streaming response so it gets buffered before the client.
+
+WHAT TO DO
+1. Find the proxy's chat/completions handler. Confirm whether it requests
+   stream=True from the upstream LLM and whether it forwards each chunk
+   immediately. If it buffers or uses stream=False, fix it.
+2. Make it a true passthrough SSE stream:
+   - Request stream=True upstream.
+   - For each chunk received, transform/forward it IMMEDIATELY (do not accumulate).
+   - Do memory injection on the REQUEST side only; do not wait for the full
+     response to post-process. If you must touch the stream, do it per-chunk.
+   - Use a real streaming response (e.g. StreamingResponse) with
+     Content-Type: text/event-stream, and flush each chunk.
+   - Terminate the stream correctly with the [DONE] sentinel.
+3. Disable response buffering end-to-end: set header X-Accel-Buffering: no,
+   ensure no gzip/proxy buffering on Railway, and flush after every write.
+4. Confirm the downstream voice platform is configured for streaming and that
+   its sentence/clause chunker feeds TTS per chunk (so TTS starts on sentence 1,
+   not on full completion).
+5. Stream partial transcripts to the UI as tokens arrive, instead of emitting
+   the transcript only on completion.
+
+ACCEPTANCE CRITERIA
+- curl-ing the proxy with stream=true returns SSE chunks incrementally over
+  time, not one blob at the end.
+- In a live call, TTS begins speaking within ~1 sentence of the LLM starting,
+  not after the full answer.
+- Transcript text appears progressively, not all at once.
+
+Show me the proxy handler diff and tell me exactly where the stream was being
+buffered or disabled.

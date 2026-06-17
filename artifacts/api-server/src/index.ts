@@ -194,6 +194,47 @@ if (process.env["GOOGLE_REDIRECT_URI"]) {
   );
 }
 
+// Seed the Drizzle migration journal for pre-existing production DBs.
+// If the DB was bootstrapped via drizzle-kit push (no journal), mark the two
+// known historical migrations as already applied so migrate() only runs NEW ones.
+async function bootstrapMigrationJournal(): Promise<void> {
+  const KNOWN = [
+    { hash: "e2b1a59f6d146aa9caa4a43233e860debafcf1655f7286a07f2c7c3c2519f559", created_at: 1781539061605 },
+    { hash: "b7c04adb1d16b404a9cd1e22d854e7db01af1846504f561990a4b70bcf1a3b91", created_at: 1781693800000 },
+  ];
+
+  // Check if the users table exists (= DB was created outside of migrations)
+  const { rows: tables } = await db.execute(sql`
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'users'
+  `);
+  if (tables.length === 0) return; // fresh DB — let migrate() do all the work
+
+  // Ensure the drizzle journal schema + table exist
+  await db.execute(sql`CREATE SCHEMA IF NOT EXISTS drizzle`);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS drizzle.__drizzle_migrations (
+      id      SERIAL PRIMARY KEY,
+      hash    text   NOT NULL,
+      created_at bigint
+    )
+  `);
+
+  // Insert any missing journal entries (idempotent)
+  for (const m of KNOWN) {
+    const { rows } = await db.execute(sql`
+      SELECT 1 FROM drizzle.__drizzle_migrations WHERE hash = ${m.hash}
+    `);
+    if (rows.length === 0) {
+      await db.execute(sql`
+        INSERT INTO drizzle.__drizzle_migrations (hash, created_at)
+        VALUES (${m.hash}, ${m.created_at})
+      `);
+      logger.info({ hash: m.hash.slice(0, 12) }, "Migration journal: seeded pre-existing migration");
+    }
+  }
+}
+
 // Start server first so the healthcheck probe can reach /api/healthz immediately.
 // Migrations run in the background after the port is bound.
 server.listen(port, () => {
@@ -204,7 +245,8 @@ server.listen(port, () => {
   // while the schema is being applied. Services that need tables will become
   // available within seconds; the server gracefully exits if migration fails.
   const migrationsFolder = join(dirname(fileURLToPath(import.meta.url)), "../../../lib/db/drizzle");
-  migrate(db, { migrationsFolder })
+  bootstrapMigrationJournal()
+    .then(() => migrate(db, { migrationsFolder }))
     .then(() => {
       logger.info({ migrationsFolder }, "DB migrations applied");
       void seedManagedKeyFromEnv("managed_qwen_key",     "GROQ_API_KEY");
