@@ -500,7 +500,7 @@ export async function handleWebCallWebSocket(
       webcallProfile = webcallCtx.profile;
       for (const f of webcallCtx.facts) webcallLatchedFacts.set(f.key, f.value);
       if (webcallProfile || webcallCtx.facts.length > 0 || webcallCtx.recentCalls.length > 0) {
-        systemPrompt = injectEnhancedMemory(systemPrompt, webcallCtx);
+        systemPrompt = injectEnhancedMemory(systemPrompt, webcallCtx, { isMultilingual: isMultilingualWc });
         logger.info({ callId, agentId, callCount: webcallProfile?.callCount ?? 0, factCount: webcallCtx.facts.length, archiveCount: webcallCtx.recentCalls.length }, "Webcall caller memory injected");
         logExecution("Memory", "response", {
           responsePayload: {
@@ -1105,7 +1105,11 @@ export async function handleWebCallWebSocket(
           "ar-EG": "Arabic", "ru-RU": "Russian",
         };
         const langName = LANG_NAMES[currentLangWc] ?? currentLangWc;
-        systemPromptForTurn += `\n\n[ACTIVE LANGUAGE] The caller is currently speaking ${langName}. Respond ONLY in ${langName} for this reply.`;
+        if (isMultilingualWc) {
+          systemPromptForTurn += `\n\n[ACTIVE LANGUAGE] The caller is currently speaking ${langName}. Respond ONLY in ${langName} for this reply.`;
+        } else {
+          systemPromptForTurn += `\n\n[LANGUAGE — NON-NEGOTIABLE] This agent is configured for ${langName} ONLY. You MUST respond in ${langName} regardless of any stored language_pref in caller memory or inferred language from the conversation. Do NOT switch to any other language under any circumstances.`;
+        }
       }
 
       const detectedGender = genderDetector?.gender ?? null;

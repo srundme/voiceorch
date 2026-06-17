@@ -286,7 +286,7 @@ export async function createSession(params: {
     callerProfileSnapshot = callerCtxResult.profile;
     for (const f of callerCtxResult.facts) latchedFactsMap.set(f.key, f.value);
     if (callerProfileSnapshot || callerCtxResult.facts.length > 0 || callerCtxResult.recentCalls.length > 0) {
-      agentConfig.systemPrompt = injectEnhancedMemory(agentConfig.systemPrompt, callerCtxResult);
+      agentConfig.systemPrompt = injectEnhancedMemory(agentConfig.systemPrompt, callerCtxResult, { isMultilingual: agentConfig.isMultilingual });
       logger.info(
         { agentId: params.agentId, callerPhone, callCount: callerProfileSnapshot?.callCount ?? 0, factCount: callerCtxResult.facts.length, archiveCount: callerCtxResult.recentCalls.length },
         "Caller memory injected into system prompt"

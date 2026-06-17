@@ -1533,7 +1533,11 @@ export class OrchestrationPipeline {
     // configured for a specific Indic language but system prompt is in English.
     if (this.currentLang) {
       const langName = LANG_DISPLAY_NAMES[this.currentLang] ?? this.currentLang;
-      systemPromptForTurn += `\n\n[ACTIVE LANGUAGE] The caller is currently speaking ${langName}. Respond ONLY in ${langName} for this reply.`;
+      if (this.agent.isMultilingual) {
+        systemPromptForTurn += `\n\n[ACTIVE LANGUAGE] The caller is currently speaking ${langName}. Respond ONLY in ${langName} for this reply.`;
+      } else {
+        systemPromptForTurn += `\n\n[LANGUAGE — NON-NEGOTIABLE] This agent is configured for ${langName} ONLY. You MUST respond in ${langName} regardless of any stored language_pref in caller memory or inferred language from the conversation. Do NOT switch to any other language under any circumstances.`;
+      }
     }
     let kbContextPromise: Promise<string | null>;
     if (this.kbPrefetchPromise) {
