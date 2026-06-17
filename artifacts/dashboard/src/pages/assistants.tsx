@@ -2421,19 +2421,31 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                       <div className="space-y-1"><p className="text-xs text-muted-foreground">Default Timezone</p><Input value={tool.timezone ?? "UTC"} onChange={e => { const n = [...agentTools]; n[idx] = { ...tool, timezone: e.target.value }; setAgentTools(n); setDirty(true); }} placeholder="America/New_York" className="bg-card border-border text-foreground text-xs h-8" /></div>
                     </div>
                   </>}
-                  {tool.type === "native_booking" && (() => {
-                    const et = (eventTypes ?? []).find(e => e.id === tool.eventTypeId);
-                    return <div className="space-y-2">
-                      <div className="grid grid-cols-2 gap-3 text-xs">
-                        <div><p className="text-muted-foreground mb-0.5">Event Type</p><p className="text-foreground truncate">{et ? `${et.name} (${et.durationMinutes} min)` : <span className="italic text-muted-foreground">Not selected</span>}</p></div>
-                        <div><p className="text-muted-foreground mb-0.5">Timezone</p><p className="text-foreground">{tool.timezone || "UTC"}</p></div>
+                  {tool.type === "native_booking" && (
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1"><p className="text-xs text-muted-foreground">Calendar</p>
+                          <Select value={tool.calendarId ? String(tool.calendarId) : undefined} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, calendarId: parseInt(v) || undefined, eventTypeId: 0 }; setAgentTools(n); setDirty(true); }}>
+                            <SelectTrigger className="bg-card border-border text-foreground text-xs h-8"><SelectValue placeholder="Select calendar…" /></SelectTrigger>
+                            <SelectContent>{(calendars ?? []).map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}{(calendars ?? []).length === 0 && <SelectItem value="__none" disabled>No calendars — create one in Scheduling</SelectItem>}</SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1"><p className="text-xs text-muted-foreground">Event Type</p>
+                          <Select value={tool.eventTypeId ? String(tool.eventTypeId) : undefined} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, eventTypeId: parseInt(v) || 0 }; setAgentTools(n); setDirty(true); }} disabled={!tool.calendarId}>
+                            <SelectTrigger className="bg-card border-border text-foreground text-xs h-8"><SelectValue placeholder={tool.calendarId ? "Select event type…" : "Pick a calendar first"} /></SelectTrigger>
+                            <SelectContent>{(eventTypes ?? []).filter(et => !tool.calendarId || et.calendarId === tool.calendarId).map(et => <SelectItem key={et.id} value={String(et.id)}>{et.name} ({et.durationMinutes} min)</SelectItem>)}</SelectContent>
+                          </Select>
+                        </div>
                       </div>
-                      <button type="button" onClick={() => {
-                        setBookingModal({ editIdx: idx, calendarId: tool.calendarId ?? null, eventTypeId: tool.eventTypeId || null, timezone: tool.timezone ?? "UTC", taskName: tool.taskName ?? tool.name, description: tool.description, preToolMessage: tool.preToolMessage ?? "" });
-                      }} className="text-xs text-foreground underline underline-offset-2 hover:text-foreground">Edit configuration</button>
+                      <div className="space-y-1"><p className="text-xs text-muted-foreground">Timezone</p>
+                        <Select value={tool.timezone ?? "UTC"} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, timezone: v }; setAgentTools(n); setDirty(true); }}>
+                          <SelectTrigger className="bg-card border-border text-foreground text-xs h-8"><SelectValue /></SelectTrigger>
+                          <SelectContent>{["UTC","America/New_York","America/Chicago","America/Denver","America/Los_Angeles","Europe/London","Europe/Paris","Asia/Kolkata","Asia/Singapore","Asia/Tokyo","Australia/Sydney"].map(tz => <SelectItem key={tz} value={tz}>{tz}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
                       {!tool.eventTypeId && <p className="text-[10px] text-muted-foreground">⚠ Event type not selected — booking will fail at runtime.</p>}
-                    </div>;
-                  })()}
+                    </div>
+                  )}
                   {tool.type === "native_check_availability" && (
                     <div className="space-y-2">
                       <div className="grid grid-cols-2 gap-3">
