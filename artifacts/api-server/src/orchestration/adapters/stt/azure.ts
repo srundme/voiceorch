@@ -113,12 +113,23 @@ const INDIC_LOCALES = new Set([
 ]);
 
 /** Expand a short code ("hi") or already-full locale ("hi-IN") to the
- *  canonical IETF tag Azure requires. */
+ *  canonical IETF tag Azure requires.
+ *
+ *  Sanitizes model-style suffixes that users sometimes paste into the language
+ *  field (e.g. "en-IN-standard", "ta-IN-neural").  Azure locale tags are
+ *  always "ll-RR" (two dash-separated segments); extra segments cause Azure
+ *  to reject the locale, producing empty transcripts and a stuck
+ *  "Listening…" state.  We take only the first two segments.
+ */
 function normalizeLocale(lang: string): string {
   if (!lang) return "en-IN";
-  // Already has a region tag (e.g. "hi-IN", "en-US")
-  if (lang.includes("-")) return lang;
-  return LOCALE_MAP[lang.toLowerCase()] ?? `${lang}-${lang.toUpperCase()}`;
+  // Canonicalize to "language-Region" — strip any extra segments such as
+  // "-standard", "-neural", "-preview" that are Azure model labels, not
+  // BCP-47 locale identifiers.
+  const parts = lang.split("-");
+  const canonical = parts.length >= 2 ? `${parts[0]!}-${parts[1]!}` : lang;
+  if (canonical.includes("-")) return canonical;
+  return LOCALE_MAP[canonical.toLowerCase()] ?? `${canonical}-${canonical.toUpperCase()}`;
 }
 
 export class AzureSTT implements STTAdapter {

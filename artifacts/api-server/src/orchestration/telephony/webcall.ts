@@ -90,11 +90,112 @@ function rmsEnergy(buf: Buffer): number {
   return samples > 0 ? Math.sqrt(sum / samples) : 0;
 }
 
+/**
+ * Split a streaming LLM token buffer into complete sentences and a remainder.
+ *
+ * Handles English punctuation (.  !  ?) plus:
+ *   • Devanagari / Indic danda (।, U+0964) — Hindi, Tamil-mixed, etc.
+ *   • Comma-clause fallback: when a long buffer (≥ 60 chars) has no sentence
+ *     boundary yet, split at the last ", " after the first 30 chars so TTS
+ *     can start synthesising before the full reply arrives (critical for
+ *     Tamil/Hindi responses that don't use Latin punctuation).
+ *
+ * This mirrors the pipeline.ts implementation so telephony and webcall paths
+ * have identical streaming-TTS behaviour.
+ */
 function extractSentences(buf: string): [string[], string] {
-  const parts = buf.split(/(?<=[.!?])\s+/);
-  if (parts.length <= 1) return [[], buf];
-  const complete = parts.slice(0, -1).map(s => s.trim()).filter(Boolean);
-  return [complete, parts[parts.length - 1] ?? ""];
+  const sentences: string[] = [];
+  let i = 0;
+  let segStart = 0;
+
+  while (i < buf.length) {
+    const ch = buf[i]!;
+
+    // ── ! and ? ────────────────────────────────────────────────────────────
+    if (ch === '!' || ch === '?') {
+      while (i + 1 < buf.length && (buf[i + 1] === '!' || buf[i + 1] === '?')) i++;
+      const s = buf.slice(segStart, i + 1).trim();
+      if (s.length >= 4) sentences.push(s);
+      i++;
+      while (i < buf.length && buf[i] === ' ') i++;
+      segStart = i;
+
+    // ── Devanagari / Indic danda (।) ───────────────────────────────────────
+    } else if (ch === '\u0964') {
+      const s = buf.slice(segStart, i + 1).trim();
+      if (s.length >= 4) sentences.push(s);
+      i++;
+      while (i < buf.length && buf[i] === ' ') i++;
+      segStart = i;
+
+    // ── Ellipsis ───────────────────────────────────────────────────────────
+    } else if (ch === '.' && buf[i + 1] === '.' && buf[i + 2] === '.') {
+      const s = buf.slice(segStart, i + 3).trim();
+      if (s.length >= 4) sentences.push(s);
+      i += 3;
+      while (i < buf.length && buf[i] === ' ') i++;
+      segStart = i;
+
+    // ── Period ─────────────────────────────────────────────────────────────
+    } else if (ch === '.') {
+      const next = i + 1;
+      if (next >= buf.length) {
+        // Period at end of buffer
+        const s = buf.slice(segStart, i + 1).trim();
+        if (s.length >= 4) sentences.push(s);
+        i++;
+        segStart = i;
+      } else if (buf[next] === ' ' || buf[next] === '\n') {
+        let j = next + 1;
+        while (j < buf.length && (buf[j] === ' ' || buf[j] === '\n')) j++;
+        const afterSpace = j < buf.length ? buf[j] : undefined;
+
+        // Split when the next real char starts a new sentence (uppercase / quote)
+        // or when nothing follows (trailing period in streaming chunk).
+        const shouldSplit =
+          afterSpace === undefined ||
+          /[A-Z"'(\u2018\u201C]/.test(afterSpace);
+
+        if (shouldSplit) {
+          // Skip if word before period is ≤ 4 alpha chars (likely an abbreviation).
+          const wordBefore = buf.slice(segStart, i).match(/([A-Za-z]{1,4})$/)?.[1];
+          const isAbbrev = wordBefore !== undefined;
+          if (!isAbbrev) {
+            const s = buf.slice(segStart, i + 1).trim();
+            if (s.length >= 4) sentences.push(s);
+            segStart = j;
+            i = j;
+          } else {
+            i++;
+          }
+        } else {
+          i++;
+        }
+      } else {
+        i++; // decimal / URL — not a sentence boundary
+      }
+
+    } else {
+      i++;
+    }
+  }
+
+  let remainder = buf.slice(segStart);
+
+  // Comma-clause fallback: fire TTS early on long Indic/list-heavy responses
+  // that haven't hit a sentence boundary yet.
+  if (sentences.length === 0 && remainder.length >= 60) {
+    const commaIdx = remainder.lastIndexOf(", ");
+    if (commaIdx >= 30) {
+      const clause = remainder.slice(0, commaIdx).trim();
+      if (clause.length >= 8) {
+        sentences.push(clause);
+        remainder = remainder.slice(commaIdx + 2);
+      }
+    }
+  }
+
+  return [sentences, remainder];
 }
 
 /**

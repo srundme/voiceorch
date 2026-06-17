@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "hello": "tsx ./src/hello.ts",
+    "push-migration-fix": "tsx ./src/push-to-github.ts",
     "seed-provider-pricing": "tsx ./src/seed-provider-pricing.ts",
     "backfill-user-identity": "tsx ./src/backfill-user-identity.ts",
     "wipe-beta-data": "tsx ./src/wipe-beta-data.ts",
