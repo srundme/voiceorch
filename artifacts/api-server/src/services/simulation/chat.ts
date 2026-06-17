@@ -3,7 +3,7 @@ import { simulationRunsTable, simulationMessagesTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { createLLMAdapter } from "../../orchestration/adapters/llm/index.js";
 import { buildToolDefs, matchToolByName } from "../tool-executor.js";
-import { retrieveKbContextMulti } from "../../orchestration/kb-retrieval.js";
+import { retrieveKbContextMulti, getAttachedSourceIds } from "../../orchestration/kb-retrieval.js";
 import { decryptKey } from "../../lib/crypto.js";
 import { logger } from "../../lib/logger.js";
 import type { ConversationTurn, ToolDefinition, AgentTool } from "../../orchestration/types.js";
@@ -157,7 +157,7 @@ export async function runChatTurn(
     content: userMessage,
   });
 
-  const kbSourceIds: number[] = ((agent as any).knowledgeSourceIds as number[] | null) ?? [];
+  const kbSourceIds: number[] = await getAttachedSourceIds(agent.id, agent.knowledgeBaseId);
   let kbChunks = "";
   if (kbSourceIds.length > 0) {
     kbChunks = await retrieveKbContextMulti(kbSourceIds, userMessage).catch(() => "");
@@ -331,8 +331,7 @@ export async function callLlmDirect(
 
   const llm = createLLMAdapter(agent.llmProvider, apiKey, agent.llmModel ?? null);
 
-  const agentKbSourceIds: number[] =
-    ((agent as any).knowledgeSourceIds as number[] | null) ?? [];
+  const agentKbSourceIds: number[] = await getAttachedSourceIds(agent.id, agent.knowledgeBaseId);
   const allKbSourceIds = [
     ...new Set([...agentKbSourceIds, ...(opts?.extraKbSourceIds ?? [])]),
   ];
