@@ -54,6 +54,10 @@ tags:
     description: Global search across leads, campaigns, batches, bookings, callbacks
   - name: pendrive
     description: Pendrive — caller memory API keys, archive, and context retrieval
+  - name: simulation
+    description: Agent simulation testing — manual chat and scenario persona testing
+  - name: webcall
+    description: Browser-based test call management
 
 paths:
   /healthz:
@@ -228,6 +232,135 @@ paths:
           description: SnapServe rate limit exceeded (passed through from SnapServe)
         "502":
           description: Network error reaching SnapServe API
+
+  # ── Agent Versions ──────────────────────────────────────────────────────────
+  /agents/{id}/versions:
+    get:
+      operationId: listAgentVersions
+      tags: [agents]
+      summary: List all versions for an agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of agent versions with usage summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentVersionsListResponse"
+        "404":
+          description: Agent not found
+    post:
+      operationId: publishAgentVersion
+      tags: [agents]
+      summary: Publish a new version snapshot of the agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PublishAgentVersionBody"
+      responses:
+        "201":
+          description: Version published
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentVersion"
+        "400":
+          description: Validation error
+        "404":
+          description: Agent not found
+
+  /agents/{id}/versions/{versionId}:
+    get:
+      operationId: getAgentVersion
+      tags: [agents]
+      summary: Fetch a single agent version snapshot
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: versionId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Agent version with full snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentVersion"
+        "404":
+          description: Not found
+
+  /agents/{id}/versions/{versionId}/restore:
+    post:
+      operationId: restoreAgentVersion
+      tags: [agents]
+      summary: Create a new draft by restoring a previous version snapshot
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: versionId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "201":
+          description: Restored draft version
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentVersion"
+        "404":
+          description: Not found
+
+  /agents/{id}/versions/{versionId}/archive:
+    patch:
+      operationId: archiveAgentVersion
+      tags: [agents]
+      summary: Archive a published/production version (removes it from the active count)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: versionId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Version archived
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentVersion"
+        "400":
+          description: Version is already archived
+        "404":
+          description: Not found
 
   # ── Calls ───────────────────────────────────────────────────────────────────
   /calls:
@@ -5210,6 +5343,232 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/PendriveArchiveResult' }
 
+  # ── Simulation ─────────────────────────────────────────────────────────────────
+  /simulation/runs/chat:
+    post:
+      operationId: startSimulationChat
+      tags: [simulation]
+      summary: Start or continue a manual chat turn (SSE stream)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agent_id, message]
+              properties:
+                agent_id: { type: integer }
+                run_id: { type: ["integer", "null"] }
+                message: { type: string }
+      responses:
+        "200":
+          description: SSE stream of agent_token, debug_info, done events
+          content:
+            text/event-stream:
+              schema: { type: string }
+        "400":
+          description: Validation error
+        "404":
+          description: Agent not found
+
+  /simulation/runs/stream:
+    post:
+      operationId: startScenarioStream
+      tags: [simulation]
+      summary: Start a scenario simulation run and stream progress via SSE
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [test_case_id]
+              properties:
+                test_case_id: { type: integer }
+                max_turns: { type: integer, default: 20 }
+      responses:
+        "200":
+          description: SSE stream of scenario events
+          content:
+            text/event-stream:
+              schema: { type: string }
+
+  /simulation/test-cases:
+    get:
+      operationId: listSimulationTestCases
+      tags: [simulation]
+      summary: List test cases for an agent
+      parameters:
+        - name: agent_id
+          in: query
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: List of test cases
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/SimulationTestCase" }
+    post:
+      operationId: createSimulationTestCase
+      tags: [simulation]
+      summary: Create a test case
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SimulationTestCaseInput" }
+      responses:
+        "201":
+          description: Created test case
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SimulationTestCase" }
+
+  /simulation/test-cases/{id}:
+    delete:
+      operationId: deleteSimulationTestCase
+      tags: [simulation]
+      summary: Delete a test case
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  /simulation/runs:
+    get:
+      operationId: listSimulationRuns
+      tags: [simulation]
+      summary: List simulation runs for an agent
+      parameters:
+        - name: agent_id
+          in: query
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: List of runs
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/SimulationRun" }
+    post:
+      operationId: createSimulationRun
+      tags: [simulation]
+      summary: Start a scenario simulation run
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [test_case_id]
+              properties:
+                test_case_id: { type: integer }
+                max_turns: { type: integer, default: 20 }
+      responses:
+        "201":
+          description: Run created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SimulationRun" }
+
+  /simulation/runs/{id}:
+    get:
+      operationId: getSimulationRun
+      tags: [simulation]
+      summary: Get run status and messages
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Run details with messages
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SimulationRunDetail" }
+        "404":
+          description: Not found
+
+  /simulation/runs/{id}/report:
+    get:
+      operationId: downloadSimulationReport
+      tags: [simulation]
+      summary: Download run report as JSON
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: JSON report
+          content:
+            application/json:
+              schema: { type: object }
+
+  /simulation/templates:
+    get:
+      operationId: listSimulationTemplates
+      tags: [simulation]
+      summary: List built-in persona templates
+      responses:
+        "200":
+          description: List of persona templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/SimulationTemplate" }
+
+  # ── Webcall ticket ────────────────────────────────────────────────────────
+  /webcall/ticket:
+    post:
+      operationId: createWebcallTicket
+      tags: [webcall]
+      summary: Issue a short-lived single-use ticket for a webcall WebSocket upgrade
+      description: >
+        Returns a 64-hex-char token valid for 60 seconds and usable exactly once.
+        The frontend passes it as ?ticket= on the WS URL so the session JWT never
+        appears in server access logs.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agentId]
+              properties:
+                agentId:
+                  type: integer
+      responses:
+        "200":
+          description: Short-lived ticket
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ticket]
+                properties:
+                  ticket:
+                    type: string
+                    description: 64-hex-char single-use token, valid for 60 s
+        "401":
+          description: No valid session
+        "403":
+          description: Agent not found or not owned by the authenticated user
+
 components:
   parameters:
     AdminToken:
@@ -5407,6 +5766,77 @@ components:
         id: { type: string }
         name: { type: string }
 
+    AgentVersionsListResponse:
+      type: object
+      required: [versions, publishedCount, limit]
+      properties:
+        versions:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentVersion"
+        publishedCount:
+          type: integer
+          description: "Number of non-archived published/production versions"
+        limit:
+          type: integer
+          description: "Maximum allowed published versions (hardcoded to 10)"
+
+    AgentVersion:
+      type: object
+      required: [id, agentId, userId, versionNumber, versionName, commitDescription, status, snapshot, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        agentId:
+          type: integer
+        userId:
+          type: string
+        versionNumber:
+          type: string
+          description: "Auto-assigned version label, e.g. v1, v2, v3"
+        versionName:
+          type: string
+        commitDescription:
+          type: string
+        releaseNotes:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [draft, published, production, archived, restored, deprecated]
+        snapshot:
+          type: object
+          description: "Full copy of all agent columns at publish time"
+          additionalProperties: true
+        changedFields:
+          type: ["array", "null"]
+          items:
+            type: string
+          description: "Auto-detected list of changed field labels vs. previous production snapshot"
+        publishedBy:
+          type: ["string", "null"]
+        restoredFromVersionId:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+
+    PublishAgentVersionBody:
+      type: object
+      required: [versionName, commitDescription]
+      properties:
+        versionName:
+          type: string
+          minLength: 1
+          maxLength: 120
+        commitDescription:
+          type: string
+          minLength: 1
+          maxLength: 500
+        releaseNotes:
+          type: string
+          maxLength: 2000
+
     Agent:
       type: object
       required: [id, name, status, asrProvider, llmProvider, ttsProvider, telephonyProvider, systemPrompt, createdAt, updatedAt]
@@ -5492,6 +5922,10 @@ components:
         greetingMessage:
           type: ["string", "null"]
           description: First thing the agent says when a call connects. If blank the LLM generates an opener.
+        firstSpeaker:
+          type: ["string", "null"]
+          enum: [assistant, user, null]
+          description: Who speaks first when a call connects. "assistant" plays the greeting (or LLM opener); "user" keeps the agent silent until the caller speaks.
         endCallPhrases:
           type: ["string", "null"]
           description: Comma-separated phrases that trigger hangup (e.g. "goodbye,bye,thanks for calling")
@@ -5684,6 +6118,10 @@ components:
           type: integer
         greetingMessage:
           type: string
+        firstSpeaker:
+          type: string
+          enum: [assistant, user]
+          description: Who speaks first when a call connects. "assistant" plays the greeting (or LLM opener); "user" keeps the agent silent until the caller speaks.
         endCallPhrases:
           type: string
         silenceTimeoutSeconds:
@@ -5824,6 +6262,10 @@ components:
           type: integer
         greetingMessage:
           type: string
+        firstSpeaker:
+          type: string
+          enum: [assistant, user]
+          description: Who speaks first when a call connects. "assistant" plays the greeting (or LLM opener); "user" keeps the agent silent until the caller speaks.
         endCallPhrases:
           type: string
         silenceTimeoutSeconds:
@@ -7501,6 +7943,12 @@ components:
         updatedAt:
           type: string
           format: date-time
+        connectedGoogleEmail:
+          type: ["string", "null"]
+          description: Email of the linked Google Calendar account, if any
+        connectedGoogleAccountsCount:
+          type: ["integer", "null"]
+          description: Total number of Google Calendar connections for this user
 
     SchedulingCalendarInput:
       type: object
@@ -9532,3 +9980,90 @@ components:
               callCount:   { type: integer }
               factCount:   { type: integer }
               lastCalledAt: { type: ["string", "null"] }
+
+    SimulationTestCase:
+      type: object
+      required: [id, agentId, userId, name, personaPrompt, goal, successCriteria, maxTurns, createdAt]
+      properties:
+        id:              { type: integer }
+        agentId:         { type: integer }
+        userId:          { type: string }
+        name:            { type: string }
+        personaPrompt:   { type: string }
+        goal:            { type: string }
+        successCriteria:
+          type: array
+          items: { type: string }
+        variables:       { type: ["object", "null"] }
+        kbSourceId:      { type: ["integer", "null"] }
+        maxTurns:        { type: integer }
+        createdAt:       { type: string }
+        updatedAt:       { type: string }
+        lastRun:
+          type: ["object", "null"]
+          properties:
+            status: { type: string }
+            score:  { type: ["integer", "null"] }
+            createdAt: { type: string }
+
+    SimulationTestCaseInput:
+      type: object
+      required: [agent_id, name, persona_prompt, goal]
+      properties:
+        agent_id:         { type: integer }
+        name:             { type: string }
+        persona_prompt:   { type: string }
+        goal:             { type: string }
+        success_criteria:
+          type: array
+          items: { type: string }
+        variables:        { type: object }
+        kb_source_id:     { type: ["integer", "null"] }
+        max_turns:        { type: integer, default: 20 }
+
+    SimulationRun:
+      type: object
+      required: [id, agentId, userId, status, createdAt]
+      properties:
+        id:           { type: integer }
+        agentId:      { type: integer }
+        testCaseId:   { type: ["integer", "null"] }
+        userId:       { type: string }
+        status:       { type: string }
+        score:        { type: ["integer", "null"] }
+        result:       { type: ["object", "null"] }
+        startedAt:    { type: ["string", "null"] }
+        completedAt:  { type: ["string", "null"] }
+        createdAt:    { type: string }
+
+    SimulationMessage:
+      type: object
+      required: [id, simulationRunId, role, content, createdAt]
+      properties:
+        id:               { type: integer }
+        simulationRunId:  { type: integer }
+        role:             { type: string }
+        content:          { type: string }
+        metadata:         { type: ["object", "null"] }
+        createdAt:        { type: string }
+
+    SimulationRunDetail:
+      allOf:
+        - $ref: "#/components/schemas/SimulationRun"
+        - type: object
+          properties:
+            messages:
+              type: array
+              items: { $ref: "#/components/schemas/SimulationMessage" }
+
+    SimulationTemplate:
+      type: object
+      required: [id, name, personaPrompt, goal, successCriteria]
+      properties:
+        id:             { type: string }
+        name:           { type: string }
+        personaPrompt:  { type: string }
+        goal:           { type: string }
+        successCriteria:
+          type: array
+          items: { type: string }
