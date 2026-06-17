@@ -174,7 +174,7 @@ export function WebCallPanel({
         } catch { /**/ }
       };
 
-      ws.onclose = () => { if (status !== "ended" && status !== "idle") setStatus("idle"); cleanup(); };
+      ws.onclose = () => { if (statusRef.current !== "ended" && statusRef.current !== "idle") setStatus("idle"); cleanup(); };
       ws.onerror = () => { setError("Connection failed. Check your API keys."); setStatus("idle"); cleanup(); };
     } catch {
       setError("Microphone access was denied or is unavailable.");

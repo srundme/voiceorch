@@ -293,14 +293,22 @@ export async function handleWebCallWebSocket(
   let streamSTT: StreamSTT | null = null;
   // Transcript received from streaming STT WebSocket — consumed by process()
   let streamingTranscriptPending: string | null = null;
-  const agentLanguage = agent.language ?? null;
+  // When multilingual is OFF, prefer asrLanguage over language for TTS —
+  // setting the Transcriber to kn-IN signals intent for the whole agent to run
+  // in Kannada, not just ASR. When multilingual is ON, language hot-swaps via
+  // setLanguage() so we use the primary agent.language as the initial locale.
+  const agentLanguage = (!isMultilingualWc && agent.asrLanguage)
+    ? agent.asrLanguage
+    : (agent.language ?? null);
   const ttsExtraConfig = agent.ttsProvider === "sarvam"
     ? JSON.stringify({ language: agentLanguage ?? "en-IN" })
     : null;
   const tts = createTTSAdapter(agent.ttsProvider, ttsKey, agent.ttsVoice, agent.ttsModel, ttsExtraConfig, agentLanguage);
 
-  // Multilingual: tracks the current detected language for TTS hot-swap
-  let currentLangWc: string = "";
+  // Multilingual: tracks the current detected language for TTS hot-swap.
+  // Initialised from agentLanguage so the per-turn LLM language injection
+  // fires from turn 1 even in non-multilingual mode (e.g. kn-IN from start).
+  let currentLangWc: string = agentLanguage ?? "";
 
   // ── Create call DB record ─────────────────────────────────────────────────
   const [callRecord] = await db.insert(callsTable).values({
@@ -1012,8 +1020,10 @@ export async function handleWebCallWebSocket(
       const agentTimezone = (agentCfg["timezone"] as string | undefined) || "Asia/Kolkata";
       const dtInjection = buildDatetimeInjection(agentTimezone);
       systemPromptForTurn = `${dtInjection}\n\n${systemPromptForTurn}`;
-      // Multilingual: tell the LLM which language to reply in for this turn
-      if (isMultilingualWc && currentLangWc) {
+      // Tell the LLM which language to reply in for this turn.
+      // Fires in both multilingual mode (Azure LID detected switch) and
+      // non-multilingual mode (seeded from agentLanguage at call start).
+      if (currentLangWc) {
         const LANG_NAMES: Record<string, string> = {
           "hi-IN": "Hindi", "ta-IN": "Tamil", "te-IN": "Telugu", "kn-IN": "Kannada",
           "ml-IN": "Malayalam", "mr-IN": "Marathi", "bn-IN": "Bengali", "gu-IN": "Gujarati",
