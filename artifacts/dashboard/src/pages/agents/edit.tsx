@@ -516,9 +516,6 @@ export default function AgentEdit() {
 
   const [schemaViewType, setSchemaViewType] = useState<string | null>(null);
 
-  const agentCalendar = (calendarsData ?? []).find((cal: any) => cal.agentId === id);
-  const agentCalendarName = agentCalendar?.name ?? "Auto-assigned";
-
   const bookingColorMap: Record<string, { border: string; bg: string; iconBg: string; iconText: string; label: string; badge: string; badgeText: string }> = {
     emerald: { border: "border-emerald-400/40", bg: "bg-emerald-950/10", iconBg: "bg-emerald-500/15", iconText: "text-emerald-400", label: "text-emerald-300", badge: "bg-emerald-500/20", badgeText: "text-emerald-300" },
     sky:     { border: "border-sky-400/40",     bg: "bg-sky-950/10",     iconBg: "bg-sky-500/15",     iconText: "text-sky-400",     label: "text-sky-300",     badge: "bg-sky-500/20",     badgeText: "text-sky-300"     },

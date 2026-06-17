@@ -1021,10 +1021,6 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
 
   const runTest = useRunToolTest();
 
-  const { data: calendarsData } = useListCalendars();
-  const agentCalendar = agentId > 0 ? (calendarsData ?? []).find((cal: any) => cal.agentId === agentId) : null;
-  const agentCalendarName = agentCalendar?.name ?? "Auto-assigned on save";
-
   const hasNativeTool = (type: string) => watchedTools.some((t: any) => t.type === type);
   const nativeToolIndex = (type: string) => watchedTools.findIndex((t: any) => t.type === type);
 
