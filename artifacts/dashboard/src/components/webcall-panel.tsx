@@ -59,7 +59,7 @@ export function WebCallPanel({
   // sentence highlight: which sentence the agent is currently speaking
   const [speakingSentence, setSpeakingSentence] = useState<string>("");
   const { keys: keyStatus, loading: keyLoading } = useWebcallKeyStatus();
-  const { userId: callerUserId } = useAuth();
+  const { userId: callerUserId, getToken } = useAuth();
   const hasAutoStarted = useRef(false);
 
   const wsRef            = useRef<WebSocket | null>(null);
@@ -151,6 +151,9 @@ export function WebCallPanel({
       const qsParts: string[] = [];
       if (callerUserId) qsParts.push(`callerId=${encodeURIComponent(callerUserId)}`);
       if (callbackId)   qsParts.push(`callbackId=${callbackId}`);
+      // Include the session JWT so the server can authenticate the upgrade.
+      const sessionToken = await getToken();
+      if (sessionToken) qsParts.push(`token=${encodeURIComponent(sessionToken)}`);
       const qs = qsParts.length ? `?${qsParts.join("&")}` : "";
       const ws = new WebSocket(`${proto}://${location.host}/api/ws/webcall/${agentId}${qs}`);
       ws.binaryType  = "arraybuffer";
@@ -185,11 +188,11 @@ export function WebCallPanel({
           if (msg.type === "ready") {
             setStatus("listening");
           } else if (msg.type === "token" && msg.text) {
-            setStreaming(msg.text);
+            setStreamingText(msg.text);
           } else if (msg.type === "interrupted") {
             // #637 — freeze the streaming bubble instead of clearing it
             stopAllAudio();
-            setStreaming(null);
+            setStreamingText("");
             mutedRef.current = true;
             streamingStaleRef.current = true;
             setStreamingStale(true);
@@ -224,12 +227,12 @@ export function WebCallPanel({
             setMsgs(prev => [...prev, { speaker: msg.speaker!, text: msg.text! }]);
           } else if (msg.type === "ended") {
             setDuration(msg.durationSeconds ?? null);
-            setStreaming(null);
+            setStreamingText("");
             setStatus("ended");
             cleanup();
           } else if (msg.type === "error") {
             setError(msg.message ?? "An error occurred");
-            setStreaming(null);
+            setStreamingText("");
             setStatus("idle");
             cleanup();
           }

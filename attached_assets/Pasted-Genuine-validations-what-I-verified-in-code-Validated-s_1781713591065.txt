@@ -1,0 +1,179 @@
+Genuine validations (what I verified in code)
+✅ Validated strengths
+No console.log in api-server — structured Pino logging throughout.
+Rate limiting exists — 100 req/min IP, 500 req/min per user; health/webhooks exempt.
+Graceful shutdown — SIGTERM/SIGINT with 10s drain in index.ts.
+Health probes — /api/healthz + /api/healthz/deep (DB, Redis, active calls, campaign concurrency).
+Multi-tenant REST isolation — agent routes consistently filter by clerkUserId / userId.
+Key encryption at rest — AES-256-GCM with scrypt-derived key; plaintext passthrough for migration.
+Auth middleware chain — attachSession → JWT verify → requireAuth on protected routes.
+Concurrent call caps — per-user limits in both session.ts (15 default) and webcall in-memory map.
+OpenAPI contract — ~100 documented endpoints; codegen enforces types.
+Audio isolation — worker thread pool with consistent hashing per call.
+Campaign concurrency cap — documented and implemented in batch scheduler.
+LLM fallback — code path exists in both pipeline and webcall.
+Tool name sanitization — cross-provider safe function names in tool-executor.ts.
+❌ Validated gaps (blockers for enterprise)
+Orchestration test coverage is effectively zero
+
+Only 3 test files in api-server/src (disposition, rate-limit cleanup, alert notifications).
+Zero tests for pipeline.ts, webcall.ts, session.ts, adapters, barge-in, VAD, tool execution.
+Total repo: ~10 test files; none cover the voice loop.
+No CI/CD pipeline
+
+No .github/workflows/ found.
+Enterprise buyers expect automated typecheck, test, lint, security scan on every PR.
+Dual pipeline duplication (~6,400 lines)
+
+Documented maintenance hazard; high regression risk when shipping features.
+Webhook signature verification missing
+
+Twilio/Plivo/Vobiz webhook handlers accept POSTs with only agentId validation — no HMAC/signature check found in webhooks.ts.
+Anyone who discovers an agent ID can potentially trigger call setup flows.
+WebSocket upgrade is unauthenticated
+
+
+index.ts
+Lines 37-67
+server.on("upgrade", (request, socket, head) => {
+  const match = url.match(/^\/api\/ws\/(twilio|plivo|vobiz|webcall)\/(\d+)/);
+  ...
+  wss.handleUpgrade(request, socket, head, (ws) => {
+    switch (provider) {
+      case "webcall": void handleWebCallWebSocket(ws, agentId, callerId, ...);
+    }
+  });
+});
+No JWT/session check on upgrade.
+/api/ws/webcall/:agentId can be abused to burn user API keys and wallet credits.
+Single Node.js process — no horizontal scale
+
+WebSockets pin to one process; webcall limits are in-memory.
+Documented ceiling: ~30–50 concurrent calls on current VM.
+No external APM/alerting
+
+Pino logs only; no Sentry/Datadog/New Relic integration found.
+Enterprise SLAs require proactive incident detection.
+No circuit breaker for provider APIs
+
+Partial retries exist (Cartesia TTS); no systematic circuit breaker for STT/LLM/TTS.
+LLM failure can end the call.
+CORS is fully open
+
+
+app.ts
+Lines 34-34
+app.use(cors({ credentials: true, origin: true }));
+Acceptable for dev; enterprise security reviews flag this.
+GDPR/data deletion gap
+
+Privacy page claims account deletion from Settings.
+No delete account API route found in api-server.
+EU B2B deals will ask for this.
+Dependencies not installable / tests not runnable in this environment
+
+Cannot confirm green test suite; enterprise due diligence will require reproducible CI runs.
+Product scope creep
+
+SNAPSERVE_FEATURE_AUDIT.md flags incomplete KYC, scheduling disconnected from agents, placeholder legal pages, family-app as separate product — increases enterprise support burden.
+Enterprise readiness scorecard
+Ready today (with evidence)
+Requirement	Status	Evidence
+Provider-agnostic orchestration
+✅
+Adapter factories, 15+ providers
+BYOK + encrypted keys
+✅
+crypto.ts, providers table
+Real-time streaming pipeline
+✅
+VAD, barge-in, streaming STT/TTS
+Multi-tenant data isolation (REST)
+✅
+userId scoping on agents/campaigns
+Call lifecycle + transcripts
+✅
+calls table, session end flow
+Usage metering / billing hooks
+✅
+wallet, usage events
+Campaign outbound at scale (controlled)
+✅
+batch scheduler, concurrency cap
+Operational health endpoints
+✅
+/healthz/deep
+Structured logging
+✅
+Pino, auth header redaction
+Graceful shutdown
+✅
+SIGTERM handler
+Regulatory prompt compliance
+✅
+IRDAI/DPDP/HIPAA/TRAI injection
+Caller memory (differentiator)
+✅
+3-layer graph in callerMemory.ts
+Needs work before mid-market
+Requirement	Status	Gap
+Automated testing
+❌
+0 orchestration tests
+CI/CD
+❌
+No GitHub Actions
+Webhook auth
+❌
+No provider signature validation
+Webcall auth
+❌
+Open WebSocket by agent ID
+Horizontal scaling
+❌
+Single process, sticky WS
+Observability / SLAs
+⚠️
+Logs only, no APM
+Unified pipeline
+⚠️
+2 duplicated implementations
+Documentation for self-serve
+⚠️
+Audit says critical gap
+Not ready for enterprise procurement
+Requirement	Status
+SOC 2 / ISO 27001 controls
+❌ Not evidenced
+SSO/SAML (Okta, Azure AD)
+❌ Google OAuth only
+RBAC / org teams
+❌ Single-user model
+Data residency / multi-region
+❌ Single Replit VM
+99.9% uptime architecture
+❌ Single point of failure
+Pen-test remediation (ZAP)
+⚠️ Repo path suggests security review context; webhook/WS issues are typical findings
+GDPR right-to-erasure API
+❌ Claimed in UI, not in API
+DR / backup verification
+⚠️ Documented as unconfirmed
+SLA-backed 100+ concurrent calls
+❌ Hard ceiling ~50
+Capacity reality (from code + your health doc)
+Metric	Value
+Safe concurrent telephony calls
+30–50 (audio worker bound)
+Webcalls per user
+5–15 (in-memory, resets on restart)
+DB pool
+50 connections
+Audio workers (8-core VM)
+7 threads
+Campaign throughput
+~1,200 leads/hour/campaign (20 concurrent)
+Light API-only users
+500–1,000
+Memory is not the bottleneck; CPU (audio workers) and external API rate limits are.
+

@@ -16,6 +16,7 @@ import { handleTwilioWebSocket } from "./orchestration/telephony/twilio.js";
 import { handlePlivoWebSocket } from "./orchestration/telephony/plivo.js";
 import { handleVobizWebSocket } from "./orchestration/telephony/vobiz.js";
 import { handleWebCallWebSocket } from "./orchestration/telephony/webcall.js";
+import { verifySessionToken } from "./lib/session.js";
 
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { db } from "@workspace/db";
@@ -34,12 +35,47 @@ const server = http.createServer(app);
 
 const wss = new WebSocketServer({ noServer: true });
 
+// ── WebSocket per-IP rate limiter ─────────────────────────────────────────────
+// Limits the number of WS upgrade attempts per remote IP to prevent credential
+// burning / resource exhaustion via the unauthenticated upgrade path.
+const WS_RATE_WINDOW_MS   = 60_000; // 1-minute window
+const WS_RATE_MAX_PER_MIN = 20;     // max new connections per IP per window
+const wsRateMap = new Map<string, { count: number; resetAt: number }>();
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of wsRateMap) {
+    if (entry.resetAt <= now) wsRateMap.delete(ip);
+  }
+}, WS_RATE_WINDOW_MS).unref();
+
+function isWsRateLimited(ip: string): boolean {
+  const now = Date.now();
+  let entry = wsRateMap.get(ip);
+  if (!entry || entry.resetAt <= now) {
+    entry = { count: 0, resetAt: now + WS_RATE_WINDOW_MS };
+    wsRateMap.set(ip, entry);
+  }
+  entry.count++;
+  return entry.count > WS_RATE_MAX_PER_MIN;
+}
+
 server.on("upgrade", (request, socket, head) => {
   const url = request.url ?? "";
 
   // Match /api/ws/<provider>/<agentId>[?pt=1]
   const match = url.match(/^\/api\/ws\/(twilio|plivo|vobiz|webcall)\/(\d+)/);
   if (!match) {
+    socket.destroy();
+    return;
+  }
+
+  // Per-IP rate limiting — apply to all providers to prevent resource exhaustion
+  const remoteIp =
+    (request.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ??
+    (request.socket?.remoteAddress ?? "unknown");
+  if (isWsRateLimited(remoteIp)) {
+    logger.warn({ remoteIp, url }, "WebSocket upgrade rate-limited");
+    socket.write("HTTP/1.1 429 Too Many Requests\r\nContent-Length: 0\r\n\r\n");
     socket.destroy();
     return;
   }
@@ -56,6 +92,22 @@ server.on("upgrade", (request, socket, head) => {
   const promptVariables: Record<string, string> | undefined = qs.has("variables")
     ? (() => { try { return JSON.parse(qs.get("variables")!) as Record<string, string>; } catch { return undefined; } })()
     : undefined;
+
+  // ── Webcall JWT authentication ─────────────────────────────────────────────
+  // Twilio/Plivo/VoBiz upgrades come from the telephony provider (server-to-server)
+  // and are not user-initiated, so we skip JWT enforcement for those providers.
+  // Webcall connections are initiated directly from a user's browser and MUST
+  // carry a valid platform session token to prevent API-key burning.
+  if (provider === "webcall") {
+    const token = qs.get("token") ?? "";
+    const payload = token ? verifySessionToken(token) : null;
+    if (!payload) {
+      logger.warn({ agentId, remoteIp }, "Webcall WebSocket rejected: missing or invalid JWT");
+      socket.write("HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n");
+      socket.destroy();
+      return;
+    }
+  }
 
   wss.handleUpgrade(request, socket, head, (ws: import("ws").WebSocket) => {
     logger.info({ provider, agentId, platformTelephony, campaignLeadId, url }, "WebSocket upgraded");
