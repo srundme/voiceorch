@@ -463,6 +463,8 @@ export async function createSession(params: {
     campaignLeadId: params.campaignLeadId ?? null,
     onAudioOut: params.onAudioOut,
     rawPcmOutput: params.telephonyProvider === "vobiz",
+    // Returning caller (>=1 prior completed call) → memory-informed recognition opening
+    isReturningCaller: (callerProfileSnapshot?.callCount ?? 0) >= 1,
     onTranscript: (speaker, text) => {
       logger.debug({ callId: callRecord.id, speaker, text: text.slice(0, 80) }, "Transcript");
       if (speaker === "user" && callerPhone) {

@@ -581,7 +581,11 @@ export class OrchestrationPipeline {
         if (transferred || this.closed) return; // call was routed away — do not greet
       }
 
-      let greeting = this.agent.greetingMessage ?? "";
+      // For returning callers, prefer a memory-informed (recognition-style)
+      // opening generated from the memory-injected system prompt over the static
+      // scripted greeting — otherwise the agent would re-introduce itself cold.
+      const isReturningCaller = this.config.isReturningCaller === true;
+      let greeting = isReturningCaller ? "" : (this.agent.greetingMessage ?? "");
 
       // Substitute {caller_salutation} in the greeting with the neutral salutation —
       // gender detection has not fired yet at greeting time.
@@ -601,10 +605,15 @@ export class OrchestrationPipeline {
       }
 
       if (!greeting.trim()) {
-        // Fallback: ask the LLM to generate an opener
+        // Fallback / returning-caller path: ask the LLM to generate an opener.
+        // The system prompt already carries the injected caller-memory block, so
+        // for returning callers this yields a recognition-style opening.
+        const greetingTrigger: import("./types.js").ConversationTurn[] = isReturningCaller
+          ? [{ role: "user", content: "[call connected — this is a returning caller you already know from the CALLER MEMORY block above; open by greeting them by name and referencing prior context, do NOT re-introduce yourself]" }]
+          : [];
         try {
           await this.llm.chat(
-            [], this.agent.systemPrompt,
+            greetingTrigger, this.agent.systemPrompt,
             (token) => { greeting += token; },
             (full) => { greeting = full; },
             {

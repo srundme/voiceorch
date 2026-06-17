@@ -82,6 +82,9 @@ export interface CallerContext {
   profile: CallerProfile | null;
   facts: CallerFact[];         // only current (non-superseded) facts
   recentCalls: CallerCallRecord[];  // last 5 archived calls
+  /** Tail (last few utterances) of the prior conversation when it ended abruptly
+   *  (dropped within the dropped-call window). null when there is nothing to resume. */
+  abruptEndTail?: Array<{ speaker: "agent" | "caller"; text: string }> | null;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -105,6 +108,43 @@ function daysSinceLabel(d: Date | null): string | null {
   if (days < 30) return `${Math.floor(days / 7)} week${Math.floor(days / 7) > 1 ? "s" : ""} ago`;
   if (days < 365) return `${Math.floor(days / 30)} month${Math.floor(days / 30) > 1 ? "s" : ""} ago`;
   return `${Math.floor(days / 365)} year${Math.floor(days / 365) > 1 ? "s" : ""} ago`;
+}
+
+// ── Abrupt-end / dropped-call detection ──────────────────────────────────────
+
+/** A prior call counts as "abruptly ended" if it was flagged dropped and that
+ *  drop happened within this window. Used to decide whether to resume the thread. */
+const DROPPED_CALL_WINDOW_MS = 60 * 60 * 1000;
+
+/** How many trailing utterances of the prior conversation to keep for resuming. */
+const ABRUPT_END_TAIL_SIZE = 6;
+
+export function isAbruptEnd(profile: CallerProfile | null): boolean {
+  return (
+    profile?.lastCallDropped === true &&
+    profile.lastCallDroppedAt != null &&
+    Date.now() - profile.lastCallDroppedAt.getTime() < DROPPED_CALL_WINDOW_MS
+  );
+}
+
+/** Fetch the last `limit` utterances of an archived episode (L2), in chronological order. */
+async function loadEpisodeTail(
+  episodeId: number,
+  limit: number,
+): Promise<Array<{ speaker: "agent" | "caller"; text: string }>> {
+  const rows = await db
+    .select({
+      speaker:     callerSentencesTable.speaker,
+      text:        callerSentencesTable.text,
+      sequenceNum: callerSentencesTable.sequenceNum,
+    })
+    .from(callerSentencesTable)
+    .where(eq(callerSentencesTable.episodeId, episodeId))
+    .orderBy(desc(callerSentencesTable.sequenceNum))
+    .limit(limit);
+  return rows
+    .reverse()
+    .map(r => ({ speaker: r.speaker as "agent" | "caller", text: r.text }));
 }
 
 // ── Layer 1 compat: load just the profile row ─────────────────────────────────
@@ -160,13 +200,28 @@ export async function loadCallerContext(
       .limit(5),
   ]);
 
+  const normalizedProfile: CallerProfile | null = profile ? {
+    ...profile,
+    predictedIntent: (profile as any).predictedIntent ?? null,
+    riskScore:       (profile as any).riskScore ?? null,
+    sentimentTrend:  (profile as any).sentimentTrend ?? null,
+  } : null;
+
+  // ── Resume support: when the previous call ended abruptly (dropped within the
+  //    window), load the tail of that last episode so the agent can pick the
+  //    thread back up instead of restarting. Best-effort — never blocks memory. ──
+  let abruptEndTail: Array<{ speaker: "agent" | "caller"; text: string }> | null = null;
+  if (isAbruptEnd(normalizedProfile) && recentCalls.length > 0) {
+    try {
+      const tail = await loadEpisodeTail(recentCalls[0]!.id, ABRUPT_END_TAIL_SIZE);
+      if (tail.length > 0) abruptEndTail = tail;
+    } catch (tailErr) {
+      logger.warn({ agentId, phoneNumber, tailErr }, "Failed to load abrupt-end conversation tail — continuing without resume context");
+    }
+  }
+
   return {
-    profile: profile ? {
-      ...profile,
-      predictedIntent: (profile as any).predictedIntent ?? null,
-      riskScore:       (profile as any).riskScore ?? null,
-      sentimentTrend:  (profile as any).sentimentTrend ?? null,
-    } : null,
+    profile: normalizedProfile,
     facts: currentFacts.map(r => ({
       id:                r.id,
       key:               r.key,
@@ -185,12 +240,11 @@ export async function loadCallerContext(
       sentiment:       r.sentiment ?? null,
       createdAt:       r.createdAt,
     })),
+    abruptEndTail,
   };
 }
 
 // ── Layer 1 compat: inject old-style memory block ─────────────────────────────
-
-const DROPPED_CALL_WINDOW_MS = 60 * 60 * 1000;
 
 export function injectCallerMemory(systemPrompt: string, profile: CallerProfile): string {
   const ctx: CallerContext = { profile, facts: [], recentCalls: [] };
@@ -229,10 +283,7 @@ export function injectEnhancedMemory(systemPrompt: string, ctx: CallerContext): 
   const headerParts: string[] = [`Name: ${namePart}`, `Calls: ${callCount}`];
   if (lastLabel) headerParts.push(`Last: ${lastLabel}`);
 
-  const isRecentDrop =
-    profile?.lastCallDropped === true &&
-    profile.lastCallDroppedAt != null &&
-    Date.now() - profile.lastCallDroppedAt.getTime() < DROPPED_CALL_WINDOW_MS;
+  const isRecentDrop = isAbruptEnd(profile);
 
   if (isRecentDrop) headerParts.push("⚠️ LAST CALL DROPPED");
   lines.push(headerParts.join("  |  "));
@@ -293,14 +344,32 @@ export function injectEnhancedMemory(systemPrompt: string, ctx: CallerContext): 
     }
   }
 
+  // ── Resume thread: tail of the abruptly-ended prior conversation (L2) ──────
+  const abruptEndTail = ctx.abruptEndTail ?? null;
+  const hasResumeTail = isRecentDrop && !!abruptEndTail && abruptEndTail.length > 0;
+  if (hasResumeTail) {
+    lines.push("");
+    lines.push("LAST EXCHANGES BEFORE THE CALL DROPPED (resume from here):");
+    for (const t of abruptEndTail!) {
+      const who = t.speaker === "caller" ? "Caller" : "You";
+      lines.push(`${who}: ${t.text.trim()}`);
+    }
+  }
+
   // ── Behavioural instruction ───────────────────────────────────────────────
+  // These directives are HIGH PRIORITY and must override any "introduce
+  // yourself" / scripted-intro behaviour in the agent's base prompt below.
   lines.push("");
   if (isRecentDrop) {
     lines.push(
-      "IMPORTANT: The previous call was dropped unexpectedly. " +
-      "Acknowledge briefly and continue where you left off. Do NOT re-introduce yourself.",
+      "⚠️ IMPORTANT — RESUME, DO NOT RESTART: Your previous call with this caller ended abruptly (it dropped). " +
+      "Do NOT re-introduce yourself or your company and do NOT start the conversation over. " +
+      "Briefly acknowledge the interruption (e.g. \"Sorry, it looks like we got cut off\"), then " +
+      (hasResumeTail
+        ? "pick the conversation back up exactly where the exchanges above left off."
+        : "continue naturally from the prior context above."),
     );
-  } else if (callCount > 1) {
+  } else if (callCount >= 1) {
     const riskInstruction = risk >= 0.7
       ? " Caller has shown frustration recently — proactively address concerns before they escalate."
       : risk >= 0.4
@@ -309,9 +378,12 @@ export function injectEnhancedMemory(systemPrompt: string, ctx: CallerContext): 
     const intentInstruction = profile?.predictedIntent
       ? ` They are likely calling about: ${profile.predictedIntent} — address this proactively if appropriate.`
       : "";
+    const namePhrase = namePart !== "unknown" ? ` by name (${namePart})` : " by name if known";
     lines.push(
-      `IMPORTANT: RETURNING caller (call #${callCount + 1}). ` +
-      `Greet warmly by name, reference prior context naturally.${riskInstruction}${intentInstruction}`,
+      `⚠️ IMPORTANT — THIS IS A RETURNING CALLER YOU ALREADY KNOW (call #${callCount + 1}). ` +
+      `Do NOT introduce yourself or your company as if meeting for the first time, and do NOT speak a generic first-time intro. ` +
+      `Open by greeting them${namePhrase} and naturally reference what you already know about them from the memory above. ` +
+      `Continue the relationship rather than starting cold.${riskInstruction}${intentInstruction}`,
     );
   }
 

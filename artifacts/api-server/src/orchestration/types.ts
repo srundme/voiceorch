@@ -401,4 +401,8 @@ export interface SessionConfig {
    *  Used for telephony providers (e.g. Vobiz) that natively accept PCM, avoiding a
    *  lossy mulaw encode→decode round-trip. */
   rawPcmOutput?: boolean;
+  /** True when caller memory shows this is a returning caller (>=1 prior completed call).
+   *  When set, the opening greeting is generated from the memory-injected system prompt
+   *  (recognition-style) instead of speaking the static scripted greeting verbatim. */
+  isReturningCaller?: boolean;
 }

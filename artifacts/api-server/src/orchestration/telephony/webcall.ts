@@ -1680,7 +1680,12 @@ export async function handleWebCallWebSocket(
 
       let greetingText = "";
 
-      if (agent.greetingMessage) {
+      // For returning callers, prefer a memory-informed (recognition-style)
+      // opening generated from the memory-injected system prompt over the static
+      // scripted greeting — otherwise the agent would re-introduce itself cold.
+      const isReturningCaller = (webcallProfile?.callCount ?? 0) >= 1;
+
+      if (agent.greetingMessage && !isReturningCaller) {
         // Fast path — use configured greeting directly.
         // Substitute {caller_salutation} with neutral salutation — gender is
         // not yet known at greeting time; per-turn substitution will use the
@@ -1719,7 +1724,9 @@ export async function handleWebCallWebSocket(
         }
         const triggerContent = callbackId
           ? "[callback connected — please open the conversation with your greeting now]"
-          : "[call connected — please greet the user and open the conversation now]";
+          : isReturningCaller
+            ? "[call connected — this is a returning caller you already know from the CALLER MEMORY block above; open by greeting them by name and referencing prior context, do NOT re-introduce yourself]"
+            : "[call connected — please greet the user and open the conversation now]";
         const triggerHistory: import("../types.js").ConversationTurn[] = [
           { role: "user", content: triggerContent },
         ];

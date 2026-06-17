@@ -13,3 +13,4 @@
 - [Radix Select phantom document scroll](radix-select-phantom-scroll.md) — hidden position:absolute <select> bubble escapes overflow clips → phantom scrollbar/whitespace; fix = position:relative on the scroll container
 - [VoBiz KYC account recovery](vobiz-kyc-recovery.md) — no GET /accounts endpoint exists; recover auth_id via GET /kyc-sessions scan matching customer_email or metadata.email
 - [Azure STT continuous LID](azure-stt-continuous-lid.md) — must send speech.context with languageId.mode:"Continuous" for mid-call language switching; default is at-start (locks to first language)
+- [Static greeting bypasses caller memory](static-greeting-bypasses-memory.md) — configured greetingMessage skips the LLM/memory; memory-aware openings must force the LLM path on both pipeline.ts and webcall.ts
