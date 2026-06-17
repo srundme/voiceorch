@@ -684,7 +684,7 @@ export async function executeNativeListBookings(
     const list = owned.map((b) => {
       const eventName = etMap.get(b.eventTypeId) ?? "Appointment";
       const dateStr = formatInTimeZone(b.slotStart, tz, "EEE MMM d 'at' h:mm a zzz");
-      return `booking_id=${b.id}, event="${eventName}", date="${dateStr}", status="${b.status}"`;
+      return `booking_id=${b.id}, event="${eventName}", iso_start=${b.slotStart.toISOString()}, date="${dateStr}", status="${b.status}"`;
     });
 
     return `bookings_found: count=${owned.length}, ${list.join(" | ")}`;

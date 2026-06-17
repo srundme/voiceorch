@@ -188,6 +188,13 @@ export class OrchestrationPipeline {
   private conversationHistory: ConversationTurn[] = [];
   private closed = false;
 
+  // Reschedule context — set when list_bookings returns exactly one booking,
+  // cleared when reschedule_confirmed or cancel_confirmed is received.
+  private activeRescheduleBooking: { bookingId: number; isoDate: string; timeLabel: string; eventName: string } | null = null;
+  // All bookings returned by the most recent list_bookings call (used to infer
+  // which booking the caller selected when count > 1 and reschedule/cancel fires).
+  private pendingListedBookings: Array<{ bookingId: number; isoDate: string; timeLabel: string; eventName: string }> = [];
+
   // Ambient noise
   private ambientStream: AmbientNoiseStream | FileAmbientNoiseStream | null = null;
   private ambientInterval: ReturnType<typeof setInterval> | null = null;
@@ -888,15 +895,90 @@ export class OrchestrationPipeline {
     } else if (tool.type === "native_booking") {
       return await this.executeNativeBooking(tool, args);
     } else if (tool.type === "native_reschedule") {
-      return await this.executeNativeReschedule(tool, args);
+      // Infer active booking from booking_id arg when multiple bookings were listed
+      if (!this.activeRescheduleBooking) {
+        const bid = this.parseBookingIdArg(args["booking_id"]);
+        if (bid) {
+          const found = this.pendingListedBookings.find((b) => b.bookingId === bid);
+          if (found) {
+            this.activeRescheduleBooking = found;
+            logger.info({ callId: this.config.callId, ...found }, "activeRescheduleBooking inferred from reschedule booking_id arg");
+          }
+        }
+      }
+      const result = await this.executeNativeReschedule(tool, args);
+      if (result.includes("reschedule_confirmed")) {
+        logger.info({ callId: this.config.callId }, "Reschedule confirmed — clearing activeRescheduleBooking");
+        this.activeRescheduleBooking = null;
+        this.pendingListedBookings = [];
+      }
+      return result;
     } else if (tool.type === "native_cancel") {
-      return await this.executeNativeCancel(tool, args);
+      // Infer active booking from booking_id arg when multiple bookings were listed
+      if (!this.activeRescheduleBooking) {
+        const bid = this.parseBookingIdArg(args["booking_id"]);
+        if (bid) {
+          const found = this.pendingListedBookings.find((b) => b.bookingId === bid);
+          if (found) {
+            this.activeRescheduleBooking = found;
+            logger.info({ callId: this.config.callId, ...found }, "activeRescheduleBooking inferred from cancel booking_id arg");
+          }
+        }
+      }
+      const result = await this.executeNativeCancel(tool, args);
+      if (result.includes("cancel_confirmed")) {
+        logger.info({ callId: this.config.callId }, "Cancel confirmed — clearing activeRescheduleBooking");
+        this.activeRescheduleBooking = null;
+        this.pendingListedBookings = [];
+      }
+      return result;
     } else if (tool.type === "native_check_availability") {
       return await this.executeNativeCheckAvailability(tool, args);
     } else if (tool.type === "native_list_bookings") {
-      return await this.executeNativeListBookings(tool, args);
+      const result = await this.executeNativeListBookings(tool, args);
+      // Always reset first to avoid stale context from a previous list call
+      this.activeRescheduleBooking = null;
+      this.pendingListedBookings = this.parseAllListedBookings(result);
+      if (this.pendingListedBookings.length === 1) {
+        this.activeRescheduleBooking = this.pendingListedBookings[0]!;
+        logger.info({ callId: this.config.callId, ...this.activeRescheduleBooking }, "activeRescheduleBooking set from list_bookings result (count=1)");
+      } else if (this.pendingListedBookings.length > 1) {
+        logger.info({ callId: this.config.callId, count: this.pendingListedBookings.length }, "Multiple bookings listed — activeRescheduleBooking deferred until booking_id is known");
+      }
+      return result;
     }
     return undefined;
+  }
+
+  /**
+   * Parse all booking entries from a `bookings_found:` result string.
+   * Returns an empty array on no-bookings or error results.
+   */
+  private parseAllListedBookings(result: string): Array<{ bookingId: number; isoDate: string; timeLabel: string; eventName: string }> {
+    if (!result.startsWith("bookings_found:")) return [];
+    const entries = result.split(" | ");
+    const parsed: Array<{ bookingId: number; isoDate: string; timeLabel: string; eventName: string }> = [];
+    for (const entry of entries) {
+      const bookingIdMatch = /booking_id=(\d+)/.exec(entry);
+      const eventMatch = /event="([^"]+)"/.exec(entry);
+      const isoStartMatch = /iso_start=([^\s,|]+)/.exec(entry);
+      const dateMatch = /date="([^"]+)"/.exec(entry);
+      if (!bookingIdMatch || !isoStartMatch) continue;
+      const isoFull = isoStartMatch[1]!;
+      parsed.push({
+        bookingId: parseInt(bookingIdMatch[1]!, 10),
+        isoDate: isoFull.split("T")[0] ?? isoFull,
+        timeLabel: dateMatch?.[1] ?? isoFull,
+        eventName: eventMatch?.[1] ?? "Appointment",
+      });
+    }
+    return parsed;
+  }
+
+  private parseBookingIdArg(val: unknown): number | null {
+    if (typeof val === "number") return val;
+    if (typeof val === "string") { const n = parseInt(val, 10); return isNaN(n) ? null : n; }
+    return null;
   }
 
   private async executeWebhookTool(tool: AgentTool & { type: "webhook" }, args: Record<string, unknown>): Promise<void> {
@@ -1424,13 +1506,28 @@ export class OrchestrationPipeline {
         "",
         "",
         "[SCHEDULING TOOL GUIDE]",
-        "When the caller wants to cancel or reschedule an appointment:",
+        "State machine for cancel/reschedule:",
         `1. ALWAYS call "${listName}" (not "${checkName}") to look up their existing appointment by name. Never call "${checkName}" for this purpose.`,
         `2. Always pass the caller's stated timezone into every scheduling tool call (e.g. timezone="Asia/Kolkata"). Default to "Asia/Kolkata" if not stated.`,
         `3. If "${listName}" returns an empty result, say: "There are no upcoming bookings under your name."`,
         `4. If all returned bookings are in the past, say: "Your previous appointment has already passed — I can only reschedule upcoming ones. Would you like to book a new one?"`,
+        `5. Once a booking is identified for rescheduling: call "${checkName}" for the SAME DATE as the existing booking unless the caller explicitly states a different date. Use the booking's existing date as preferred_date.`,
+        `6. After the caller confirms a new slot, call the reschedule tool. Once reschedule_confirmed is returned, the context is cleared.`,
         `IMPORTANT: NEVER invent or guess slot times. You MUST call "${checkName}" before offering any available times to the caller. Only relay times that you received from a tool result.`,
       ].join("\n");
+
+      // Inject active reschedule context so the LLM defaults to the correct date
+      if (this.activeRescheduleBooking) {
+        const { bookingId, isoDate, timeLabel, eventName } = this.activeRescheduleBooking;
+        systemPromptForTurn += [
+          "",
+          "",
+          "[ACTIVE RESCHEDULE CONTEXT]",
+          `Currently rescheduling booking #${bookingId} (${eventName}: ${timeLabel}).`,
+          `When the caller proposes only a new time (e.g. "Can we do 12:30?"), you MUST default preferred_date to "${isoDate}" unless they explicitly state a different date.`,
+          `Always pass preferred_date as a full ISO datetime (e.g. "${isoDate}T12:30:00+05:30") — never omit the date portion.`,
+        ].join("\n");
+      }
     }
 
     // Inject booking/availability guide when the agent has a native_booking or native_check_availability tool
@@ -1811,6 +1908,13 @@ export class OrchestrationPipeline {
   }
 
   private async executeNativeReschedule(tool: AgentTool & { type: "native_reschedule" }, args: Record<string, unknown>): Promise<string> {
+    logger.info({
+      callId: this.config.callId,
+      selected_booking_id: this.activeRescheduleBooking?.bookingId ?? null,
+      selected_booking_date: this.activeRescheduleBooking?.isoDate ?? null,
+      selected_booking_time: this.activeRescheduleBooking?.timeLabel ?? null,
+      resolved_requested_datetime: args["preferred_date"] ?? args["new_time"] ?? null,
+    }, "Pipeline: executeNativeReschedule invoked");
     return sharedExecuteNativeReschedule(this.config.callId, this.agent.id, tool, args);
   }
 
@@ -1819,6 +1923,13 @@ export class OrchestrationPipeline {
   }
 
   private async executeNativeCheckAvailability(tool: AgentTool & { type: "native_check_availability" }, args: Record<string, unknown>): Promise<string> {
+    logger.info({
+      callId: this.config.callId,
+      selected_booking_id: this.activeRescheduleBooking?.bookingId ?? null,
+      selected_booking_date: this.activeRescheduleBooking?.isoDate ?? null,
+      selected_booking_time: this.activeRescheduleBooking?.timeLabel ?? null,
+      resolved_requested_datetime: args["preferred_date"] ?? null,
+    }, "Pipeline: executeNativeCheckAvailability invoked");
     return sharedExecuteNativeCheckAvailability(this.config.callId, this.agent.id, tool, args);
   }
 
@@ -1899,6 +2010,23 @@ export class OrchestrationPipeline {
       toolSystemPrompt = toolSystemPrompt
         .replace(/\s*\{\{caller_salutation\}\}\s*/g, " ")
         .replace(/\s*\{caller_salutation\}\s*/g, " ");
+    }
+
+    // Inject active reschedule context (same as processTurn) so the LLM keeps the
+    // correct date when chaining tool calls within a single user turn.
+    const _ctHasSchedulingNav = this.agent.tools.some(
+      (t) => t.type === "native_cancel" || t.type === "native_reschedule" || t.type === "native_list_bookings",
+    );
+    if (_ctHasSchedulingNav && this.activeRescheduleBooking) {
+      const { bookingId, isoDate, timeLabel, eventName } = this.activeRescheduleBooking;
+      toolSystemPrompt += [
+        "",
+        "",
+        "[ACTIVE RESCHEDULE CONTEXT]",
+        `Currently rescheduling booking #${bookingId} (${eventName}: ${timeLabel}).`,
+        `When the caller proposes only a new time (e.g. "Can we do 12:30?"), you MUST default preferred_date to "${isoDate}" unless they explicitly state a different date.`,
+        `Always pass preferred_date as a full ISO datetime (e.g. "${isoDate}T12:30:00+05:30") — never omit the date portion.`,
+      ].join("\n");
     }
 
     try {
