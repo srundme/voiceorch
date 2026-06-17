@@ -714,7 +714,8 @@ export const ListAgentVersionsParams = zod.object({
   "id": zod.coerce.number()
 })
 
-export const ListAgentVersionsResponseItem = zod.object({
+export const ListAgentVersionsResponse = zod.object({
+  "versions": zod.array(zod.object({
   "id": zod.number(),
   "agentId": zod.number(),
   "userId": zod.string(),
@@ -724,12 +725,15 @@ export const ListAgentVersionsResponseItem = zod.object({
   "releaseNotes": zod.string().nullish(),
   "status": zod.enum(['draft', 'published', 'production', 'archived', 'restored', 'deprecated']),
   "snapshot": zod.record(zod.string(), zod.unknown()).describe('Full copy of all agent columns at publish time'),
+  "changedFields": zod.array(zod.string()).nullish().describe('Auto-detected list of changed field labels vs. previous production snapshot'),
   "publishedBy": zod.string().nullish(),
   "restoredFromVersionId": zod.number().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
+})),
+  "publishedCount": zod.number().describe('Number of non-archived published\/production versions'),
+  "limit": zod.number().describe('Maximum allowed published versions (hardcoded to 10)')
 })
-export const ListAgentVersionsResponse = zod.array(ListAgentVersionsResponseItem)
 
 
 /**
@@ -772,6 +776,7 @@ export const GetAgentVersionResponse = zod.object({
   "releaseNotes": zod.string().nullish(),
   "status": zod.enum(['draft', 'published', 'production', 'archived', 'restored', 'deprecated']),
   "snapshot": zod.record(zod.string(), zod.unknown()).describe('Full copy of all agent columns at publish time'),
+  "changedFields": zod.array(zod.string()).nullish().describe('Auto-detected list of changed field labels vs. previous production snapshot'),
   "publishedBy": zod.string().nullish(),
   "restoredFromVersionId": zod.number().nullish(),
   "createdAt": zod.string(),
@@ -785,6 +790,32 @@ export const GetAgentVersionResponse = zod.object({
 export const RestoreAgentVersionParams = zod.object({
   "id": zod.coerce.number(),
   "versionId": zod.coerce.number()
+})
+
+
+/**
+ * @summary Archive a published/production version (removes it from the active count)
+ */
+export const ArchiveAgentVersionParams = zod.object({
+  "id": zod.coerce.number(),
+  "versionId": zod.coerce.number()
+})
+
+export const ArchiveAgentVersionResponse = zod.object({
+  "id": zod.number(),
+  "agentId": zod.number(),
+  "userId": zod.string(),
+  "versionNumber": zod.string().describe('Auto-assigned version label, e.g. v1, v2, v3'),
+  "versionName": zod.string(),
+  "commitDescription": zod.string(),
+  "releaseNotes": zod.string().nullish(),
+  "status": zod.enum(['draft', 'published', 'production', 'archived', 'restored', 'deprecated']),
+  "snapshot": zod.record(zod.string(), zod.unknown()).describe('Full copy of all agent columns at publish time'),
+  "changedFields": zod.array(zod.string()).nullish().describe('Auto-detected list of changed field labels vs. previous production snapshot'),
+  "publishedBy": zod.string().nullish(),
+  "restoredFromVersionId": zod.number().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
 })
 
 
@@ -3939,7 +3970,9 @@ export const ListCalendarsResponseItem = zod.object({
   "additionalHosts": zod.array(zod.string()).nullish().describe('Additional host\/organizer email addresses notified on every booking and added as calendar attendees'),
   "isActive": zod.boolean(),
   "createdAt": zod.coerce.date(),
-  "updatedAt": zod.coerce.date()
+  "updatedAt": zod.coerce.date(),
+  "connectedGoogleEmail": zod.string().nullish().describe('Email of the linked Google Calendar account, if any'),
+  "connectedGoogleAccountsCount": zod.number().nullish().describe('Total number of Google Calendar connections for this user')
 })
 export const ListCalendarsResponse = zod.array(ListCalendarsResponseItem)
 
@@ -3976,7 +4009,9 @@ export const GetCalendarResponse = zod.object({
   "additionalHosts": zod.array(zod.string()).nullish().describe('Additional host\/organizer email addresses notified on every booking and added as calendar attendees'),
   "isActive": zod.boolean(),
   "createdAt": zod.coerce.date(),
-  "updatedAt": zod.coerce.date()
+  "updatedAt": zod.coerce.date(),
+  "connectedGoogleEmail": zod.string().nullish().describe('Email of the linked Google Calendar account, if any'),
+  "connectedGoogleAccountsCount": zod.number().nullish().describe('Total number of Google Calendar connections for this user')
 })
 
 
@@ -4005,7 +4040,9 @@ export const UpdateCalendarResponse = zod.object({
   "additionalHosts": zod.array(zod.string()).nullish().describe('Additional host\/organizer email addresses notified on every booking and added as calendar attendees'),
   "isActive": zod.boolean(),
   "createdAt": zod.coerce.date(),
-  "updatedAt": zod.coerce.date()
+  "updatedAt": zod.coerce.date(),
+  "connectedGoogleEmail": zod.string().nullish().describe('Email of the linked Google Calendar account, if any'),
+  "connectedGoogleAccountsCount": zod.number().nullish().describe('Total number of Google Calendar connections for this user')
 })
 
 
@@ -5861,5 +5898,19 @@ export const ListSimulationTemplatesResponseItem = zod.object({
   "successCriteria": zod.array(zod.string())
 })
 export const ListSimulationTemplatesResponse = zod.array(ListSimulationTemplatesResponseItem)
+
+
+/**
+ * Returns a 64-hex-char token valid for 60 seconds and usable exactly once. The frontend passes it as ?ticket= on the WS URL so the session JWT never appears in server access logs.
+
+ * @summary Issue a short-lived single-use ticket for a webcall WebSocket upgrade
+ */
+export const CreateWebcallTicketBody = zod.object({
+  "agentId": zod.number()
+})
+
+export const CreateWebcallTicketResponse = zod.object({
+  "ticket": zod.string().describe('64-hex-char single-use token, valid for 60 s')
+})
 
 
