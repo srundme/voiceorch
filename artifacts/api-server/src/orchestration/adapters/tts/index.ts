@@ -5,6 +5,7 @@ import { SarvamTTS } from "./sarvam.js";
 import { OpenAITTS } from "./openai.js";
 import { AzureTTS } from "./azure.js";
 import { DeepgramTTS } from "./deepgram.js";
+import { STUB_PROVIDERS_ENABLED, createStubTTS } from "../stubs.js";
 
 export function createTTSAdapter(
   provider: string,
@@ -14,6 +15,7 @@ export function createTTSAdapter(
   extraConfig?: string | null,
   language?: string | null,
 ): TTSAdapter {
+  if (STUB_PROVIDERS_ENABLED) return createStubTTS();
   switch (provider.toLowerCase()) {
     case "elevenlabs":
       return new ElevenLabsTTS(apiKey, voice);

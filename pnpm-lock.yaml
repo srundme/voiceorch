@@ -1323,10 +1323,16 @@ importers:
       drizzle-orm:
         specifier: 'catalog:'
         version: 0.45.2(@types/pg@8.20.0)(@upstash/redis@1.38.0)(pg@8.20.0)
+      ws:
+        specifier: ^8.18.0
+        version: 8.20.1
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
         version: 25.6.2
+      '@types/ws':
+        specifier: ^8.5.14
+        version: 8.18.1
       tsx:
         specifier: 'catalog:'
         version: 4.21.0

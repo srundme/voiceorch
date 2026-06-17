@@ -16,6 +16,7 @@ import type { AudioProcessResult } from "./audioPool.js";
 import type { AgentConfig, AgentTool, ConversationTurn, LLMUsage, SessionConfig, StreamSTT, ToolDefinition } from "./types.js";
 import { DEFAULT_GOODBYE_MESSAGE, resolveGoodbyeMessage } from "./types.js";
 import { retrieveKbContext, retrieveKbContextMulti } from "./kb-retrieval.js";
+import { performance } from "perf_hooks";
 import { logger } from "../lib/logger.js";
 import { format, addMinutes } from "date-fns";
 import { toZonedTime, formatInTimeZone } from "date-fns-tz";
@@ -167,6 +168,16 @@ export class OrchestrationPipeline {
   private firstAudioSentAt: number | null = null;
   // Count of filler phrases played due to slow LLM response (>800 ms to first token)
   private fillerPlayedCount = 0;
+
+  // ── Per-turn latency instrumentation (monotonic via performance.now()) ─────
+  private turnIndex = 0;
+  private _tTurnVadFlush        = 0;   // when VAD silence window closed → audio sent to STT
+  private _tTurnSttFinal        = 0;   // when STT returned the final transcript
+  private _tTurnLlmFirstToken:  number | null = null; // first LLM token received
+  private _tTurnLlmFirstClause: number | null = null; // first complete clause flushed to TTS queue
+  private _tTurnTtsFirstByte:   number | null = null; // first TTS audio chunk from provider
+  private _tTurnFirstAudioOut:  number | null = null; // first audio chunk written to onAudioOut
+  private _fillerPlayedThisTurn = false;
 
   // Usage accumulators — updated on every LLM call and every TTS synthesis.
   // Exposed via getUsageTotals() so session.ts can pass real values to recordUsage().
@@ -384,6 +395,9 @@ export class OrchestrationPipeline {
    * Handles barge-in detection and queuing if a turn is already in progress.
    */
   private async handleStreamingTranscript(transcript: string, sttEmittedAt = Date.now()): Promise<void> {
+    const _tStreamNow = performance.now();
+    this._tTurnVadFlush = _tStreamNow;
+    this._tTurnSttFinal = _tStreamNow;
     const sttToProcessMs = Date.now() - sttEmittedAt;
     logger.info(
       { callId: this.config.callId, sttToProcessMs, queued: this.isProcessing },
@@ -734,6 +748,7 @@ export class OrchestrationPipeline {
           if (queue.length > 0) {
             const chunk = queue.shift()!;
             if (!this.firstAudioSentAt) this.firstAudioSentAt = Date.now();
+            if (this._tTurnFirstAudioOut === null) this._tTurnFirstAudioOut = performance.now();
             // Ambient mixing only applies to mulaw output; skip when sending raw PCM
             const outChunk = (!this.config.rawPcmOutput && this.ambientStream)
               ? this.ambientStream.mixIntoMulaw(chunk)
@@ -829,6 +844,7 @@ export class OrchestrationPipeline {
           text,
           (chunk) => {
             if (this.closed || this.bargeInRequested) return;
+            if (this._tTurnTtsFirstByte === null) this._tTurnTtsFirstByte = performance.now();
             // Reset the timeout every time a chunk arrives — the connection is alive.
             clearTimeout(ttsTimerId);
             accum.push(chunk);
@@ -1317,6 +1333,12 @@ export class OrchestrationPipeline {
     // transcript arrives while the agent is not playing (belt-and-suspenders).
     this.streamingBargeInWordCount = 0;
     this.firstAudioSentAt = null;
+    const _currentTurnIndex = ++this.turnIndex;
+    this._tTurnLlmFirstToken  = null;
+    this._tTurnLlmFirstClause = null;
+    this._tTurnTtsFirstByte   = null;
+    this._tTurnFirstAudioOut  = null;
+    this._fillerPlayedThisTurn = false;
 
     logger.info({ callId: this.config.callId, transcript, sttLatencyMs }, "Processing turn");
 
@@ -1398,6 +1420,9 @@ export class OrchestrationPipeline {
     let wakePlayer: (() => void) | null = null;
 
     const enqueue = (text: string): void => {
+      if (llmFirstTokenAt !== null && this._tTurnLlmFirstClause === null) {
+        this._tTurnLlmFirstClause = performance.now();
+      }
       sentenceQueue.push(text);
       if (wakePlayer) {
         const wake = wakePlayer;
@@ -1622,6 +1647,7 @@ export class OrchestrationPipeline {
           const phrase = FILLER_PHRASES[Math.floor(Math.random() * FILLER_PHRASES.length)]!;
           enqueue(phrase);
           this.fillerPlayedCount++;
+          this._fillerPlayedThisTurn = true;
           logger.info({ callId: this.config.callId, phrase }, "Dead-air filler enqueued (LLM > 800 ms)");
         }
       }, FILLER_THRESHOLD_MS);
@@ -1647,6 +1673,7 @@ export class OrchestrationPipeline {
         (token) => {
           if (!llmFirstTokenAt) {
             llmFirstTokenAt = Date.now();
+            this._tTurnLlmFirstToken = performance.now();
             // LLM responded in time — cancel the dead-air filler before it fires
             if (fillerTimer) { clearTimeout(fillerTimer); fillerTimer = null; }
           }
@@ -1813,10 +1840,36 @@ export class OrchestrationPipeline {
 
     const llmLatencyMs = llmFirstTokenAt ? llmFirstTokenAt - llmStart : Date.now() - llmStart;
     const ttsFirstChunkMs = this.firstAudioSentAt ? this.firstAudioSentAt - llmStart : 0;
-    logger.info(
-      { callId: this.config.callId, sttLatencyMs, llmLatencyMs, ttsFirstChunkMs },
-      "Turn metrics"
-    );
+    {
+      const _tEnd = performance.now();
+      const _stt_ms = this._tTurnSttFinal > 0 && this._tTurnVadFlush > 0
+        ? Math.round(this._tTurnSttFinal - this._tTurnVadFlush) : Math.round(sttLatencyMs);
+      const _llm_ttft_ms = this._tTurnLlmFirstToken !== null && this._tTurnSttFinal > 0
+        ? Math.round(this._tTurnLlmFirstToken - this._tTurnSttFinal) : null;
+      const _llm_ttft_to_clause_ms = this._tTurnLlmFirstClause !== null && this._tTurnLlmFirstToken !== null
+        ? Math.round(this._tTurnLlmFirstClause - this._tTurnLlmFirstToken) : null;
+      const _tts_ttfb_ms = this._tTurnTtsFirstByte !== null && this._tTurnSttFinal > 0
+        ? Math.round(this._tTurnTtsFirstByte - this._tTurnSttFinal) : null;
+      const _return_ms = this._tTurnFirstAudioOut !== null && this._tTurnSttFinal > 0
+        ? Math.round(this._tTurnFirstAudioOut - this._tTurnSttFinal) : null;
+      const _total_ms = this._tTurnVadFlush > 0 ? Math.round(_tEnd - this._tTurnVadFlush) : null;
+      logger.info({
+        evt:                   "turn_latency",
+        path:                  "pipeline",
+        callId:                this.config.callId,
+        turnIndex:             _currentTurnIndex,
+        stt_ms:                _stt_ms,
+        llm_ttft_ms:           _llm_ttft_ms,
+        llm_ttft_to_clause_ms: _llm_ttft_to_clause_ms,
+        tts_ttfb_ms:           _tts_ttfb_ms,
+        return_ms:             _return_ms,
+        total_ms:              _total_ms,
+        asrProvider:           this.agent.asrProvider,
+        llmProvider:           this.agent.llmProvider,
+        ttsProvider:           this.agent.ttsProvider,
+        fillerPlayed:          this._fillerPlayedThisTurn,
+      }, "turn_latency");
+    }
     this.config.onMetrics?.({ sttLatencyMs, llmLatencyMs, ttsFirstChunkMs });
 
     // ── Hangup after LLM call ───────────────────────────────────────────────
@@ -1839,6 +1892,7 @@ export class OrchestrationPipeline {
       const pcm16k = upsample8to16(pcm8k);
       logger.info({ callId: this.config.callId, bytes: pcm16k.length }, "Sending to STT");
 
+      this._tTurnVadFlush = performance.now();
       const sttStart = Date.now();
       let transcript: string | null | undefined;
       try {
@@ -1849,6 +1903,7 @@ export class OrchestrationPipeline {
         this.config.onFatalError?.(reason);
         return;
       }
+      this._tTurnSttFinal = performance.now();
       const sttLatencyMs = Date.now() - sttStart;
 
       if (!transcript?.trim()) {

@@ -1,0 +1,38 @@
+Here's the prompt. It's grounded in your actual file names and constants so the agent doesn't hallucinate structure:
+
+Context: SnapServe voice orchestration platform, repo srundme/voiceorch. Per-turn latency is the open question — the codebase is built and typechecks, but there are no measured per-turn numbers, only aggregate sttTotal/llmTotal/ttsTotal accumulators written at call end (see orchestration/session.ts). I need (A) real per-turn latency logging and (B) a concurrent-call load test. Do NOT redesign the architecture. Streaming adapters stay.
+Part A — Per-turn latency instrumentation
+In OrchestrationPipeline.processTurn() (orchestration/pipeline.ts), add a per-turn tracker using performance.now() (monotonic). Stamp these stages:
+
+t_vad_flush — VAD silence window (VAD_SILENCE_MS) closes, audio sent to ASR
+t_stt_final — final transcript received from ASR adapter
+t_llm_first_token — first token from LLM adapter
+t_llm_first_clause — first complete clause flushed to TTS adapter (the overlap boundary — this is the one that proves clause-by-clause streaming actually works vs. buffering the full response)
+t_tts_first_byte — first audio chunk back from TTS adapter
+t_first_audio_out — first mulaw frame written to the telephony socket
+
+At end of each turn, emit one structured pino log (logger.info, NOT console.log per §10):
+{ evt: "turn_latency", callId, turnIndex,
+  stt_ms, llm_ttft_ms, llm_ttft_to_clause_ms, tts_ttfb_ms, return_ms, total_ms,
+  asrProvider, llmProvider, ttsProvider, region,
+  fillerPlayed: boolean }
+Include fillerPlayed — every turn where the filler fired is a turn where LLM TTFT beat FILLER_THRESHOLD_MS (800ms). That count alone tells me how often LLM first-token is the bottleneck.
+Mirror this in orchestration/telephony/webcall.ts — it's a separate code path (§2.4, §12) and will silently drift otherwise. Same log shape, tag path: "webcall" vs path: "pipeline".
+Do not change any timing behavior. Instrumentation only.
+Part B — Concurrent-call load test
+Write a standalone script scripts/loadtest-calls.ts that:
+
+Spins up N simulated concurrent calls (parameterize N: run at 10, 50, 100, 250). Use a mock telephony source that streams pre-recorded mulaw audio frames over the WebSocket path at realtime pace (8kHz), with realistic turn-taking (speak ~3s, pause past VAD_SILENCE_MS, wait for response).
+Drives them through the real pipeline against a test agent — but stub the provider adapters with fixed-latency fakes (e.g. STT 120ms, LLM TTFT 400ms then token stream, TTS TTFB 200ms) so the test measures SnapServe's own orchestration overhead and event-loop contention, not provider variance. The point is to isolate what your layer adds under load.
+Collects the Part A turn_latency logs and reports p50/p90/p99 for each stage at each concurrency level, plus: event-loop lag (perf_hooks monitorEventLoopDelay), worker pool saturation (audioPool — are calls queueing behind max(2, cpuCount-1) threads?), and memory growth of the in-memory sessions Map.
+
+What I'm specifically trying to find:
+
+Does per-turn orchestration overhead stay flat as concurrency rises, or does it degrade? (Degradation = event-loop blocking or worker-pool starvation, not provider latency.)
+At what N does the single-node assumption (§12) start hurting — event-loop lag climbing, audio worker queue backing up?
+Is the audioPool consistent-hash routing creating hot workers when calls cluster?
+
+Report findings as a table: concurrency × stage p50/p99 × event-loop lag. Don't fix anything yet — give me the numbers first.
+
+This gives you two things this report is missing: proof the overlap actually works (the llm_ttft_to_clause_ms delta — if it's near-zero you're streaming, if it's large you're buffering), and the concurrency ceiling of the single-node design before a real client hits it.
+One caveat on Part B: stubbed adapters won't tell you real-world latency — they isolate your overhead on purpose. You still need the Part A logs from 50 real production calls for the true numbers. The load test answers "will I fall over at call #1001," the real-call logs answer "is each call fast enough." You need both.
