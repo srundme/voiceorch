@@ -23,6 +23,7 @@ const BRANCH = "main";
 
 const FILES_TO_PUSH = [
   "artifacts/api-server/src/orchestration/telephony/webcall.ts",
+  "artifacts/dashboard/src/components/webcall-panel.tsx",
 ];
 
 async function ghFetch(apiPath: string, options: RequestInit = {}) {
@@ -59,7 +60,7 @@ async function pushFile(relPath: string) {
   await ghFetch(`contents/${relPath}`, {
     method: "PUT",
     body: JSON.stringify({
-      message: `fix: show Listening status in streaming STT path after agent finishes speaking`,
+      message: `fix: stream LLM tokens progressively to UI (text appears word by word)`,
       content: encoded,
       branch: BRANCH,
       ...(sha ? { sha } : {}),

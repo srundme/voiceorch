@@ -1,0 +1,87 @@
+I need to migrate and deploy my application from Replit to Railway.
+
+Before making any changes, please perform a complete deployment readiness assessment and provide a migration plan.
+
+Please analyze and document:
+
+1. Application Architecture
+- Frontend framework and version
+- Backend framework and version
+- Database being used
+- Authentication providers
+- External APIs and integrations
+- Background jobs, cron jobs, queues, workers
+- File storage requirements
+- Environment variables currently used
+
+2. Railway Deployment Requirements
+- Whether the application can run on Railway without code changes
+- Required services (Web Service, PostgreSQL, Redis, etc.)
+- Build command
+- Start command
+- Node.js/Python version requirements
+- Required ports and networking configuration
+- Health check endpoint recommendation
+
+3. Environment Variables
+Generate a complete list of:
+- Required variables
+- Optional variables
+- Secret variables
+- Variables currently hardcoded in the codebase that should be moved to environment variables
+
+4. Database Migration
+- Current database provider
+- Database schema status
+- Migration strategy
+- Backup procedure
+- Railway PostgreSQL compatibility
+- Prisma/Drizzle/ORM configuration review
+
+5. Storage & File Handling
+- Check whether the application stores files locally
+- Identify any Replit-specific file dependencies
+- Recommend Railway-compatible storage strategy
+
+6. Replit Dependencies
+Identify all Replit-specific features currently being used, such as:
+- Replit secrets
+- Replit database
+- Replit auth
+- Replit object storage
+- Replit domains
+- Replit environment variables
+- Replit workflows
+
+For each dependency:
+- Explain how it currently works
+- Recommend Railway replacement
+
+7. Production Readiness Audit
+Check for:
+- Hardcoded URLs
+- localhost references
+- Replit domain references
+- Missing error handling
+- Missing health endpoints
+- Missing logging
+- Security concerns
+- Missing CORS configuration
+
+8. Deployment Plan
+Create a step-by-step Railway deployment plan including:
+- What must be completed before deployment
+- What can break during migration
+- Estimated deployment effort
+- Rollback strategy
+
+9. Deliverables
+Provide:
+- Railway architecture diagram
+- Environment variable checklist
+- Deployment checklist
+- Migration risk assessment
+
+Do not modify any code yet.
+
+First produce a complete migration assessment report and deployment readiness report. Wait for approval before making changes.

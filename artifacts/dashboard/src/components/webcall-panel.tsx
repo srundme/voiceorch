@@ -197,10 +197,20 @@ export function WebCallPanel({
           };
           if (msg.type === "ready") {
             setStatus("listening");
-          } else if (msg.type === "token" && msg.text) {
-            setStreamingText(msg.text);
+          } else if (msg.type === "token") {
+            // Accumulate LLM tokens progressively into the streaming bubble.
+            // Each event carries a raw token chunk to append (not the full text).
+            const chunk = msg.text ?? "";
+            if (streamingStaleRef.current) {
+              // New turn after barge-in — wipe stale text and start fresh
+              streamingStaleRef.current = false;
+              setStreamingStale(false);
+              setStreamingText(chunk);
+            } else {
+              setStreamingText(prev => prev + chunk);
+            }
           } else if (msg.type === "interrupted") {
-            // #637 — freeze the streaming bubble instead of clearing it
+            // Freeze the streaming bubble instead of clearing it on barge-in
             stopAllAudio();
             setStreamingText("");
             mutedRef.current = true;
@@ -208,17 +218,6 @@ export function WebCallPanel({
             setStreamingStale(true);
             setSpeakingSentence("");
             setStatus("listening");
-          } else if (msg.type === "token") {
-            // #636 — accumulate LLM tokens into the streaming bubble
-            const chunk = msg.text ?? "";
-            if (streamingStaleRef.current) {
-              // New turn after barge-in — wipe stale text and start fresh (#637)
-              streamingStaleRef.current = false;
-              setStreamingStale(false);
-              setStreamingText(chunk);
-            } else {
-              setStreamingText(prev => prev + chunk);
-            }
           } else if (msg.type === "sentence_start") {
             // #635 — clear typing bubble; highlight this sentence in the transcript
             setStreamingText("");

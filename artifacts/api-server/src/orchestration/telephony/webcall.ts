@@ -1051,7 +1051,6 @@ export async function handleWebCallWebSocket(
       let sentenceTexts: string[] = [];  // parallel to sentenceJobs — canonical text per sentence for UI highlighting
       let tokenBuf    = "";   // filtered text waiting to be split into sentences
       let fullReply   = "";   // raw LLM output (may include <think> blocks)
-      let streamedText = ""; // visible sentence text already sent to client via token events
 
       // ── Think-block filter (same as pipeline.ts) ──────────────────────────
       let inThinkBlock = false;
@@ -1365,7 +1364,6 @@ export async function handleWebCallWebSocket(
       }
       tokenBuf = "";
       fullReply = "";
-      streamedText = "";
       inThinkBlock = false;
       thinkBuf = "";
       inFnTag = false;
@@ -1417,8 +1415,6 @@ export async function handleWebCallWebSocket(
           const [sentences, rest] = extractSentences(tokenBuf);
           for (const s of sentences) {
             queueSentence(s);
-            streamedText += (streamedText ? " " : "") + s.trim();
-            send({ type: "token", text: streamedText });
           }
           tokenBuf = rest;
         },
@@ -1464,8 +1460,6 @@ export async function handleWebCallWebSocket(
                   const [sentences, remainder] = extractSentences(tokenBuf);
                   for (const s of sentences) {
                     queueSentence(s);
-                    streamedText += (streamedText ? " " : "") + s.trim();
-                    send({ type: "token", text: streamedText });
                   }
                   tokenBuf = remainder;
                 },
