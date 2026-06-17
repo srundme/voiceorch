@@ -1,0 +1,461 @@
+# Fix Scenario Simulation Run Failure
+
+## IMPORTANT: ANALYZE FIRST, IMPLEMENT SECOND
+
+Do not patch symptoms.
+
+Find the root cause of why Scenario Simulation is completing the conversation but still returning a FAIL state.
+
+---
+
+# Current Problem
+
+Inside:
+
+Agent → Simulation → Scenario Simulation
+
+I create a test case successfully.
+
+The simulation starts successfully.
+
+The conversation runs.
+
+The simulation ends.
+
+However:
+
+The result is either:
+
+- Fails unexpectedly
+- Returns a low score
+- Shows evaluation failed
+- Shows criteria failed
+- Sometimes completes but still marks FAIL
+
+Current example:
+
+Run #8
+
+Completed
+
+Score:
+50 / 100
+
+Status:
+FAIL
+
+Threshold:
+70 / 100
+
+The simulation execution itself is working.
+
+The evaluation layer is not behaving correctly.
+
+---
+
+# Required Investigation
+
+Analyze the entire simulation pipeline.
+
+Specifically inspect:
+
+1. Test Case Creation
+2. Persona Generation
+3. Simulation Conversation Runner
+4. Conversation Storage
+5. Evaluation Engine
+6. Criteria Scoring Logic
+7. Final Score Calculation
+8. Pass / Fail Determination
+
+---
+
+# Debug the Entire Flow
+
+Log:
+
+Simulation ID
+
+Agent ID
+
+Test Case ID
+
+Persona Prompt
+
+Generated Persona
+
+Agent Prompt
+
+Conversation Messages
+
+Retrieved KB Chunks
+
+Variables Used
+
+Tool Calls
+
+Tool Results
+
+Success Criteria
+
+Evaluation Prompt
+
+Evaluator Response
+
+Final Score
+
+Pass/Fail Reason
+
+---
+
+# Current Suspected Issue
+
+The simulation appears to be running.
+
+But the evaluator is either:
+
+- Not receiving the full conversation
+- Not receiving success criteria
+- Not receiving tool results
+- Not receiving knowledge retrieval results
+- Not receiving persona goals
+
+As a result it gives poor scores or fails evaluation.
+
+---
+
+# Required Evaluation Architecture
+
+After simulation ends:
+
+Evaluator should receive:
+
+Test Case
+
+↓
+
+Goal
+
+↓
+
+Success Criteria
+
+↓
+
+Full Conversation
+
+↓
+
+Tool Usage
+
+↓
+
+Knowledge Retrieval
+
+↓
+
+Agent Responses
+
+↓
+
+Persona Responses
+
+↓
+
+Generate Final Assessment
+
+---
+
+# Success Criteria Evaluation
+
+Current UI allows:
+
+Goal
+
+Example:
+
+Understand health insurance basics and find a suitable plan.
+
+Success Criteria
+
+Example:
+
+Agent explains insurance terms clearly
+
+Agent recommends a plan
+
+Agent collects follow-up details
+
+---
+
+The evaluator must score each criterion separately.
+
+Example:
+
+Criterion 1
+
+Agent explains insurance clearly
+
+Score:
+9/10
+
+Reason:
+Agent explained deductible and premium correctly.
+
+---
+
+Criterion 2
+
+Agent recommends a plan
+
+Score:
+10/10
+
+Reason:
+Recommended plan matched budget.
+
+---
+
+Criterion 3
+
+Agent collects follow-up details
+
+Score:
+2/10
+
+Reason:
+Never asked for contact information.
+
+---
+
+# Detailed Failure Report
+
+Current report is too generic.
+
+Instead show:
+
+Simulation Result
+
+PASS
+
+or
+
+FAIL
+
+---
+
+Overall Score
+
+83 / 100
+
+---
+
+Goal Achievement
+
+18 / 20
+
+Reason:
+Goal successfully achieved.
+
+---
+
+Conversation Quality
+
+17 / 20
+
+Reason:
+Natural conversation.
+
+---
+
+Knowledge Accuracy
+
+20 / 20
+
+Reason:
+Knowledge base correctly used.
+
+---
+
+Tool Usage
+
+15 / 20
+
+Reason:
+Appointment booking tool not triggered.
+
+---
+
+Prompt Compliance
+
+13 / 20
+
+Reason:
+Agent exceeded response length requirement.
+
+---
+
+# Evaluation Transparency
+
+Add:
+
+View Full Evaluation
+
+Show:
+
+Evaluator Prompt
+
+Evaluator Response
+
+Scoring Breakdown
+
+Evidence Used
+
+Reasoning Summary
+
+---
+
+# Failure Diagnostics
+
+If simulation fails:
+
+Show:
+
+Failure Reason
+
+Evaluation Error
+
+Tool Error
+
+Provider Error
+
+Knowledge Error
+
+Memory Error
+
+Prompt Error
+
+instead of generic:
+
+FAIL
+
+---
+
+# Validation
+
+Before evaluation:
+
+Verify:
+
+✓ Conversation exists
+
+✓ Success criteria exists
+
+✓ Goal exists
+
+✓ Messages exist
+
+✓ Agent responses exist
+
+✓ Persona responses exist
+
+If any missing:
+
+Display exact issue.
+
+---
+
+# UI Improvements
+
+Simulation Results Page should show:
+
+Overall Score
+
+PASS / FAIL
+
+Goal Completion %
+
+Criteria Breakdown
+
+Tool Usage
+
+Knowledge Usage
+
+Prompt Compliance
+
+Recommendations
+
+View Full Evaluation
+
+Download Report
+
+---
+
+# Success Criteria
+
+After fix:
+
+✓ Simulation runs successfully
+
+✓ Evaluation runs successfully
+
+✓ Criteria scored accurately
+
+✓ Goal scored accurately
+
+✓ PASS/FAIL is reliable
+
+✓ Users understand why they passed or failed
+
+✓ Detailed evaluation report available
+
+✓ Debug logs available for troubleshooting
+
+---
+
+# Root Cause Report
+
+Before implementing the fix:
+
+Provide:
+
+1. Root Cause
+2. Files Impacted
+3. Proposed Fix
+4. Risk Assessment
+
+Only then implement.
+
+---
+
+# Git Requirements
+
+After fixing:
+
+1. Run full regression testing:
+   - Manual Chat
+   - Scenario Simulation
+   - Agent Builder
+   - Version Control
+   - Tools
+   - Knowledge Base
+   - Memory
+   - Calendar Tools
+
+2. Verify no regressions.
+
+3. Commit changes.
+
+Commit Message:
+
+fix(simulation): resolve evaluation pipeline and scoring failures
+
+4. Push changes to Git.
+
+Provide:
+
+- Commit SHA
+- Files Changed
+- Root Cause
+- Fix Summary
+- Test Results
