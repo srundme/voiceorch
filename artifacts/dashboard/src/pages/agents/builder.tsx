@@ -1004,59 +1004,7 @@ function VoiceTab({ form }: { form: any }) {
 
 /* ── Tab: Tools ─────────────────────────────────────────────────────────────── */
 
-const TOOL_FN_NAMES: Record<string, string> = {
-  native_booking: "book_appointment",
-  native_check_availability: "check_availability",
-  native_list_bookings: "list_bookings",
-  native_reschedule: "reschedule_booking",
-  native_cancel: "cancel_booking",
-  end_call: "end_call",
-};
 
-const TOOL_SCHEMAS: Record<string, object> = {
-  native_booking: {
-    type: "object",
-    properties: {
-      attendee_name: { type: "string", description: "Full name of the person being booked" },
-      attendee_email: { type: "string", description: "Email address of the person being booked" },
-      preferred_date: { type: "string", description: "Optional preferred date/time, e.g. 'next Tuesday', '2025-06-10'" },
-      meeting_type: { type: "string", enum: ["google_meet", "in_person"], description: "Where the meeting takes place" },
-      meeting_address: { type: "string", description: "Physical address — only required when meeting_type is in_person" },
-    },
-    required: ["attendee_name", "attendee_email"],
-  },
-  native_check_availability: {
-    type: "object",
-    properties: {
-      preferred_date: { type: "string", description: "Optional preferred date/time, e.g. 'next Tuesday'" },
-      timezone: { type: "string", description: "IANA timezone, e.g. 'America/New_York'" },
-    },
-    required: [],
-  },
-  native_list_bookings: {
-    type: "object",
-    properties: {
-      attendee_name: { type: "string", description: "Full name of the caller whose bookings to look up" },
-      timezone: { type: "string", description: "IANA timezone, e.g. 'America/New_York'" },
-    },
-    required: ["attendee_name"],
-  },
-  native_reschedule: {
-    type: "object",
-    properties: {
-      booking_id: { type: "string", description: "The booking reference ID to reschedule" },
-      preferred_date: { type: "string", description: "Optional preferred date/time for the new slot" },
-    },
-    required: ["booking_id"],
-  },
-  native_cancel: {
-    type: "object",
-    properties: {
-      booking_id: { type: "string", description: "The booking reference ID to cancel" },
-    },
-    required: ["booking_id"],
-  },
-};
 
 function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
   const { fields, append, remove } = useFieldArray({ control: form.control, name: "tools" });
@@ -1073,8 +1021,20 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
 
   const runTest = useRunToolTest();
 
+  const { data: calendarsData } = useListCalendars();
+  const agentCalendar = agentId > 0 ? (calendarsData ?? []).find((cal: any) => cal.agentId === agentId) : null;
+  const agentCalendarName = agentCalendar?.name ?? "Auto-assigned on save";
+
   const hasNativeTool = (type: string) => watchedTools.some((t: any) => t.type === type);
   const nativeToolIndex = (type: string) => watchedTools.findIndex((t: any) => t.type === type);
+
+  const NATIVE_DEFAULT_NAMES: Record<string, string> = {
+    native_booking: "book_appointment",
+    native_check_availability: "check_availability",
+    native_list_bookings: "list_bookings",
+    native_reschedule: "reschedule_booking",
+    native_cancel: "cancel_booking",
+  };
 
   const toggleNativeTool = (type: string) => {
     const idx = nativeToolIndex(type);
@@ -1083,57 +1043,83 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
       setExpandedSchema(null);
       setExpandedTest(null);
     } else {
-      append({ type: type as any, name: TOOL_FN_NAMES[type] ?? "", description: "" });
+      append({ type: type as any, name: NATIVE_DEFAULT_NAMES[type] ?? "", description: "" });
     }
   };
 
-  const getNativeToolName = (type: string): string => {
-    const idx = nativeToolIndex(type);
-    return idx >= 0 ? (form.watch(`tools.${idx}.name`) || TOOL_FN_NAMES[type] || type) : (TOOL_FN_NAMES[type] ?? type);
-  };
 
   const BOOKING_TOOLS = [
-    {
-      type: "native_booking",
-      icon: <BookOpen className="h-4 w-4" />,
-      color: "emerald",
-      label: "Book Appointment",
-      description: "Lets the agent book a meeting slot for the caller. Agent collects name, email, and preferred time, then confirms the booking live.",
-      needsEventType: true,
-    },
-    {
-      type: "native_check_availability",
-      icon: <Sparkles className="h-4 w-4" />,
-      color: "sky",
-      label: "Check Availability",
-      description: "Enables the agent to look up open slots before suggesting a time. Use alongside Book Appointment for a natural booking flow.",
-      needsEventType: true,
-    },
-    {
-      type: "native_list_bookings",
-      icon: <List className="h-4 w-4" />,
-      color: "violet",
-      label: "List Bookings",
-      description: "Allows the agent to retrieve existing bookings for the caller — useful for reschedule or cancellation flows.",
-      needsEventType: false,
-    },
-    {
-      type: "native_reschedule",
-      icon: <Pencil className="h-4 w-4" />,
-      color: "amber",
-      label: "Reschedule Booking",
-      description: "Lets the agent reschedule an existing booking to a new time slot chosen by the caller.",
-      needsEventType: false,
-    },
-    {
-      type: "native_cancel",
-      icon: <X className="h-4 w-4" />,
-      color: "red",
-      label: "Cancel Booking",
-      description: "Allows the agent to cancel an upcoming booking on the caller's request.",
-      needsEventType: false,
-    },
+    { type: "native_booking",           fnName: "book_appointment",   icon: <BookOpen className="h-4 w-4" />, color: "emerald", label: "Book Appointment",    description: "Lets the agent book a meeting slot for the caller. Agent collects name, email, and preferred time, then confirms the booking live." },
+    { type: "native_check_availability", fnName: "check_availability", icon: <Sparkles className="h-4 w-4" />, color: "sky",     label: "Check Availability", description: "Enables the agent to look up open slots before suggesting a time. Use alongside Book Appointment for a natural booking flow." },
+    { type: "native_list_bookings",      fnName: "list_bookings",      icon: <List className="h-4 w-4" />,     color: "violet",  label: "List Bookings",      description: "Allows the agent to retrieve existing bookings for the caller — useful for reschedule or cancellation flows." },
+    { type: "native_reschedule",         fnName: "reschedule_booking", icon: <Pencil className="h-4 w-4" />,   color: "amber",   label: "Reschedule Booking", description: "Lets the agent reschedule an existing booking to a new time slot chosen by the caller." },
+    { type: "native_cancel",             fnName: "cancel_booking",     icon: <X className="h-4 w-4" />,        color: "red",     label: "Cancel Booking",     description: "Allows the agent to cancel an upcoming booking on the caller's request." },
   ] as const;
+
+  const BOOKING_TOOL_SCHEMAS: Record<string, object> = {
+    native_booking: {
+      name: "book_appointment",
+      description: "Book an appointment for the caller.",
+      parameters: {
+        type: "object",
+        properties: {
+          attendee_name:  { type: "string", description: "Full name of the person being booked" },
+          attendee_email: { type: "string", description: "Email address of the person being booked" },
+          preferred_date: { type: "string", description: "Optional preferred date/time, e.g. 'next Tuesday' or '2026-06-10'" },
+          meeting_type:   { type: "string", enum: ["google_meet", "in_person"], description: "Meeting format" },
+          meeting_address: { type: "string", description: "Physical address (required when meeting_type is in_person)" },
+        },
+        required: ["attendee_name", "attendee_email"],
+      },
+    },
+    native_check_availability: {
+      name: "check_availability",
+      description: "Check available appointment slots.",
+      parameters: {
+        type: "object",
+        properties: {
+          preferred_date: { type: "string", description: "Optional preferred date/time to check, e.g. 'tomorrow morning'" },
+          timezone:       { type: "string", description: "IANA timezone, e.g. 'America/New_York'" },
+        },
+        required: [],
+      },
+    },
+    native_list_bookings: {
+      name: "list_bookings",
+      description: "List existing bookings for the caller.",
+      parameters: {
+        type: "object",
+        properties: {
+          attendee_name: { type: "string", description: "Full name of the caller whose bookings to look up" },
+          timezone:      { type: "string", description: "IANA timezone for formatting dates" },
+        },
+        required: ["attendee_name"],
+      },
+    },
+    native_reschedule: {
+      name: "reschedule_booking",
+      description: "Reschedule an existing booking to a new time slot.",
+      parameters: {
+        type: "object",
+        properties: {
+          booking_id:     { type: "string", description: "The booking reference ID to reschedule" },
+          preferred_date: { type: "string", description: "Optional new preferred date/time" },
+        },
+        required: ["booking_id"],
+      },
+    },
+    native_cancel: {
+      name: "cancel_booking",
+      description: "Cancel an upcoming booking on the caller's request.",
+      parameters: {
+        type: "object",
+        properties: {
+          booking_id: { type: "string", description: "The booking reference ID to cancel" },
+        },
+        required: ["booking_id"],
+      },
+    },
+  };
 
   const CALL_CONTROL_TOOLS = [
     {
@@ -1167,10 +1153,9 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
 
         {/* ── Booking Tools ── */}
         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-3">Scheduling & Bookings</p>
-        {BOOKING_TOOLS.map(({ type, icon, color, label, description }) => {
+        {BOOKING_TOOLS.map(({ type, fnName, icon, color, label, description }) => {
           const isOn = hasNativeTool(type);
           const c = colorMap[color];
-          const toolName = getNativeToolName(type);
           const schemaOpen = expandedSchema === type;
           const testOpen   = expandedTest === type;
           const argKey = `${type}:args`;
@@ -1179,7 +1164,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
             try {
               let parsedArgs: Record<string, unknown> = {};
               try { parsedArgs = JSON.parse(testArgs[argKey] || "{}"); } catch { parsedArgs = {}; }
-              const res = await runTest.mutateAsync({ data: { agentId, toolName, args: parsedArgs } });
+              const res = await runTest.mutateAsync({ data: { agentId, toolName: fnName, args: parsedArgs } });
               setTestResult((r) => ({ ...r, [type]: res.result ?? JSON.stringify(res) }));
             } catch (err: any) {
               setTestResult((r) => ({ ...r, [type]: `Error: ${err?.message ?? String(err)}` }));
@@ -1197,7 +1182,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                    <span className={cn("text-xs font-semibold", isOn ? c.label : "text-foreground/80")}>{label}</span>
+                    <code className={cn("text-[11px] font-mono font-semibold", isOn ? c.label : "text-foreground/70")}>{fnName}</code>
                     <span className={cn("text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded", isOn ? `${c.badge} ${c.badgeText}` : "bg-muted/40 text-muted-foreground/40")}>
                       {isOn ? "ON" : "OFF"}
                     </span>
@@ -1258,7 +1243,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
                       <div className="rounded-md bg-muted/20 border border-border/30 p-3">
                         <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-2">Function Schema</p>
                         <pre className="text-[10px] text-muted-foreground/80 overflow-x-auto whitespace-pre-wrap font-mono leading-relaxed">
-                          {JSON.stringify(TOOL_SCHEMAS[type] ?? {}, null, 2)}
+                          {JSON.stringify(BOOKING_TOOL_SCHEMAS[type] ?? {}, null, 2)}
                         </pre>
                       </div>
                     )}

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "wouter";
 import { ArrowLeft, Save, Bot, Plus, Trash2, PhoneForwarded, Webhook, ChevronDown, ChevronUp, BookOpen, Sparkles, List, Pencil, X, ToggleLeft, ToggleRight } from "lucide-react";
 import {
@@ -37,6 +37,7 @@ import {
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError, mapApiErrors } from "@/lib/format-api-error";
 import {
@@ -198,8 +199,13 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   };
 
   const NATIVE_BOOKING_TYPES = new Set(["native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel"]);
+
   const serializedTools = (rest.tools ?? []).map((t) => {
-    const isNativeTool = NATIVE_BOOKING_TYPES.has(t.type);
+    // Strip calendarId/eventTypeId from native scheduling tools — runtime auto-resolves from agent's calendar
+    if (NATIVE_BOOKING_TYPES.has(t.type)) {
+      const { calendarId: _cal, eventTypeId: _et, ...nativeTool } = t as any;
+      return nativeTool;
+    }
     const toolWithCoercedIds = {
       ...t,
       ...(t.calendarId != null ? { calendarId: Number(t.calendarId) } : {}),
@@ -429,18 +435,89 @@ export default function AgentEdit() {
     native_reschedule: "reschedule_booking",
     native_cancel: "cancel_booking",
   };
+
   const toggleNativeTool = (type: string) => {
     const idx = nativeToolIndex(type);
     if (idx >= 0) { removeTool(idx); } else { appendTool({ type: type as any, name: EDIT_TOOL_FN_NAMES[type] ?? "", description: "" }); }
   };
 
   const BOOKING_TOOLS = [
-    { type: "native_booking", icon: <BookOpen className="h-4 w-4" />, color: "emerald", label: "Book Appointment", description: "Lets the agent book a meeting slot for the caller. Agent collects name, email, and preferred time, then confirms the booking live.", needsEventType: true },
-    { type: "native_check_availability", icon: <Sparkles className="h-4 w-4" />, color: "sky", label: "Check Availability", description: "Enables the agent to look up open slots before suggesting a time. Use alongside Book Appointment for a natural booking flow.", needsEventType: true },
-    { type: "native_list_bookings", icon: <List className="h-4 w-4" />, color: "violet", label: "List Bookings", description: "Allows the agent to retrieve existing bookings for the caller — useful for reschedule or cancellation flows.", needsEventType: false },
-    { type: "native_reschedule", icon: <Pencil className="h-4 w-4" />, color: "amber", label: "Reschedule Booking", description: "Lets the agent reschedule an existing booking to a new time slot chosen by the caller.", needsEventType: false },
-    { type: "native_cancel", icon: <X className="h-4 w-4" />, color: "red", label: "Cancel Booking", description: "Allows the agent to cancel an upcoming booking on the caller's request.", needsEventType: false },
+    { type: "native_booking", fnName: "book_appointment", icon: <BookOpen className="h-4 w-4" />, color: "emerald", label: "Book Appointment", description: "Lets the agent book a meeting slot for the caller. Agent collects name, email, and preferred time, then confirms the booking live." },
+    { type: "native_check_availability", fnName: "check_availability", icon: <Sparkles className="h-4 w-4" />, color: "sky", label: "Check Availability", description: "Enables the agent to look up open slots before suggesting a time. Use alongside Book Appointment for a natural booking flow." },
+    { type: "native_list_bookings", fnName: "list_bookings", icon: <List className="h-4 w-4" />, color: "violet", label: "List Bookings", description: "Allows the agent to retrieve existing bookings for the caller — useful for reschedule or cancellation flows." },
+    { type: "native_reschedule", fnName: "reschedule_booking", icon: <Pencil className="h-4 w-4" />, color: "amber", label: "Reschedule Booking", description: "Lets the agent reschedule an existing booking to a new time slot chosen by the caller." },
+    { type: "native_cancel", fnName: "cancel_booking", icon: <X className="h-4 w-4" />, color: "red", label: "Cancel Booking", description: "Allows the agent to cancel an upcoming booking on the caller's request." },
   ] as const;
+
+  const BOOKING_TOOL_SCHEMAS: Record<string, object> = {
+    native_booking: {
+      name: "book_appointment",
+      description: "Book an appointment for the caller.",
+      parameters: {
+        type: "object",
+        properties: {
+          attendee_name: { type: "string", description: "Full name of the person being booked" },
+          attendee_email: { type: "string", description: "Email address of the person being booked" },
+          preferred_date: { type: "string", description: "Optional preferred date/time, e.g. 'next Tuesday' or '2026-06-10'" },
+          meeting_type: { type: "string", enum: ["google_meet", "in_person"], description: "Meeting format" },
+          meeting_address: { type: "string", description: "Physical address (required when meeting_type is in_person)" },
+        },
+        required: ["attendee_name", "attendee_email"],
+      },
+    },
+    native_check_availability: {
+      name: "check_availability",
+      description: "Check available appointment slots.",
+      parameters: {
+        type: "object",
+        properties: {
+          preferred_date: { type: "string", description: "Optional preferred date/time to check, e.g. 'tomorrow morning'" },
+          timezone: { type: "string", description: "IANA timezone, e.g. 'America/New_York'" },
+        },
+        required: [],
+      },
+    },
+    native_list_bookings: {
+      name: "list_bookings",
+      description: "List existing bookings for the caller.",
+      parameters: {
+        type: "object",
+        properties: {
+          attendee_name: { type: "string", description: "Full name of the caller whose bookings to look up" },
+          timezone: { type: "string", description: "IANA timezone for formatting dates" },
+        },
+        required: ["attendee_name"],
+      },
+    },
+    native_reschedule: {
+      name: "reschedule_booking",
+      description: "Reschedule an existing booking to a new time slot.",
+      parameters: {
+        type: "object",
+        properties: {
+          booking_id: { type: "string", description: "The booking reference ID to reschedule" },
+          preferred_date: { type: "string", description: "Optional new preferred date/time" },
+        },
+        required: ["booking_id"],
+      },
+    },
+    native_cancel: {
+      name: "cancel_booking",
+      description: "Cancel an upcoming booking on the caller's request.",
+      parameters: {
+        type: "object",
+        properties: {
+          booking_id: { type: "string", description: "The booking reference ID to cancel" },
+        },
+        required: ["booking_id"],
+      },
+    },
+  };
+
+  const [schemaViewType, setSchemaViewType] = useState<string | null>(null);
+
+  const agentCalendar = (calendarsData ?? []).find((cal: any) => cal.agentId === id);
+  const agentCalendarName = agentCalendar?.name ?? "Auto-assigned";
 
   const bookingColorMap: Record<string, { border: string; bg: string; iconBg: string; iconText: string; label: string; badge: string; badgeText: string }> = {
     emerald: { border: "border-emerald-400/40", bg: "bg-emerald-950/10", iconBg: "bg-emerald-500/15", iconText: "text-emerald-400", label: "text-emerald-300", badge: "bg-emerald-500/20", badgeText: "text-emerald-300" },
@@ -1149,10 +1226,9 @@ export default function AgentEdit() {
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-2">Scheduling & Bookings</p>
                 <div className="space-y-2">
-                  {BOOKING_TOOLS.map(({ type, icon, color, label, description }) => {
+                  {BOOKING_TOOLS.map(({ type, fnName, icon, color, description }) => {
                     const isOn = hasNativeTool(type);
                     const c = bookingColorMap[color];
-                    const fnName = EDIT_TOOL_FN_NAMES[type] ?? type;
                     return (
                       <div key={type} className={cn("rounded-xl border transition-all duration-150", isOn ? `${c.border} ${c.bg}` : "border-border/60 bg-card/20")}>
                         <button
@@ -1164,8 +1240,8 @@ export default function AgentEdit() {
                             <span className={cn(isOn ? c.iconText : "text-muted-foreground/40")}>{icon}</span>
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                              <span className={cn("text-xs font-semibold", isOn ? c.label : "text-foreground/80")}>{label}</span>
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <code className={cn("text-[11px] font-mono font-semibold", isOn ? c.label : "text-foreground/70")}>{fnName}</code>
                               <span className={cn("text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded", isOn ? `${c.badge} ${c.badgeText}` : "bg-muted/40 text-muted-foreground/40")}>
                                 {isOn ? "ON" : "OFF"}
                               </span>
@@ -1181,13 +1257,20 @@ export default function AgentEdit() {
                         </button>
                         {isOn && (
                           <div className="px-4 pb-4 -mt-1">
-                            <div className="border-t border-border/30 pt-3">
-                              <div className="flex items-center gap-2 flex-wrap">
+                            <div className="border-t border-border/30 pt-3 flex items-center justify-between gap-2 flex-wrap">
+                              <div className="flex items-center gap-2">
                                 <span className="text-[10px] text-muted-foreground">Assigned calendar:</span>
                                 <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded", c.badge, c.badgeText)}>
                                   {agentCalendar ? (agentCalendar.name || "Calendar") : "No calendar assigned yet"}
                                 </span>
                               </div>
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); setSchemaViewType(type); }}
+                                className="text-[10px] text-muted-foreground/60 hover:text-foreground/80 underline underline-offset-2 transition-colors"
+                              >
+                                View schema
+                              </button>
                             </div>
                           </div>
                         )}
@@ -1196,6 +1279,20 @@ export default function AgentEdit() {
                   })}
                 </div>
               </div>
+
+              {/* View Schema dialog */}
+              <Dialog open={schemaViewType !== null} onOpenChange={(open) => { if (!open) setSchemaViewType(null); }}>
+                <DialogContent className="max-w-lg">
+                  <DialogHeader>
+                    <DialogTitle className="font-mono text-sm">
+                      {schemaViewType ? BOOKING_TOOLS.find(t => t.type === schemaViewType)?.fnName : ""}
+                    </DialogTitle>
+                  </DialogHeader>
+                  <pre className="text-[11px] bg-muted/40 rounded-lg p-3 overflow-auto max-h-[60vh] leading-relaxed">
+                    {schemaViewType ? JSON.stringify(BOOKING_TOOL_SCHEMAS[schemaViewType], null, 2) : ""}
+                  </pre>
+                </DialogContent>
+              </Dialog>
             </CardContent>
             {toolFields.filter((_f, i) => !NATIVE_TOOL_TYPES.includes(form.getValues(`tools.${i}.type`) ?? "")).length > 0 && (
               <CardContent className="space-y-4">

@@ -258,23 +258,28 @@ export async function executeNativeBooking(
       authorizedUserId = agentRow?.userId ?? null;
     }
 
-    // Auto-resolve eventTypeId: if absent on the tool, find the first active event type for this agent's calendar
-    let resolvedEventTypeId = tool.eventTypeId;
-    if (!resolvedEventTypeId && agentCalendar?.id) {
+    // Always auto-resolve event type from agent's calendar first; legacy stored eventTypeId is a fallback only
+    let resolvedEventTypeId: number | undefined;
+    if (agentCalendar?.id) {
       const [firstEt] = await db
         .select({ id: eventTypesTable.id })
         .from(eventTypesTable)
         .where(and(eq(eventTypesTable.calendarId, agentCalendar.id), eq(eventTypesTable.isActive, true)))
         .limit(1);
-      if (!firstEt) {
-        return JSON.stringify({ error: "no_event_type", message: "No event type configured for this agent's calendar. Go to Settings → Calendar to create one." });
-      }
-      resolvedEventTypeId = firstEt.id;
+      resolvedEventTypeId = firstEt?.id;
+    }
+    if (!resolvedEventTypeId && tool.eventTypeId) {
+      resolvedEventTypeId = tool.eventTypeId;
+    }
+    // Fall back to stored eventTypeId for legacy configs that haven't been re-saved yet
+    if (!resolvedEventTypeId && tool.eventTypeId) {
+      resolvedEventTypeId = tool.eventTypeId;
+    }
+    if (!resolvedEventTypeId) {
+      return JSON.stringify({ error: "no_event_type", message: "No event type configured for this agent's calendar. Go to Settings → Calendar to create one." });
     }
 
-    const [eventType] = resolvedEventTypeId
-      ? await db.select().from(eventTypesTable).where(eq(eventTypesTable.id, resolvedEventTypeId))
-      : [];
+    const [eventType] = await db.select().from(eventTypesTable).where(eq(eventTypesTable.id, resolvedEventTypeId));
     if (!eventType || !eventType.isActive) {
       return "error: the appointment type is unavailable";
     }
@@ -484,23 +489,28 @@ export async function executeNativeCheckAvailability(
       authorizedUserId = agentRow?.userId ?? null;
     }
 
-    // Auto-resolve eventTypeId: if absent on the tool, find the first active event type for this agent's calendar
-    let resolvedEventTypeId = tool.eventTypeId;
-    if (!resolvedEventTypeId && agentCalendar?.id) {
+    // Always auto-resolve event type from agent's calendar first; legacy stored eventTypeId is a fallback only
+    let resolvedEventTypeId: number | undefined;
+    if (agentCalendar?.id) {
       const [firstEt] = await db
         .select({ id: eventTypesTable.id })
         .from(eventTypesTable)
         .where(and(eq(eventTypesTable.calendarId, agentCalendar.id), eq(eventTypesTable.isActive, true)))
         .limit(1);
-      if (!firstEt) {
-        return JSON.stringify({ error: "no_event_type", message: "No event type configured for this agent's calendar. Go to Settings → Calendar to create one." });
-      }
-      resolvedEventTypeId = firstEt.id;
+      resolvedEventTypeId = firstEt?.id;
+    }
+    if (!resolvedEventTypeId && tool.eventTypeId) {
+      resolvedEventTypeId = tool.eventTypeId;
+    }
+    // Fall back to stored eventTypeId for legacy configs that haven't been re-saved yet
+    if (!resolvedEventTypeId && tool.eventTypeId) {
+      resolvedEventTypeId = tool.eventTypeId;
+    }
+    if (!resolvedEventTypeId) {
+      return JSON.stringify({ error: "no_event_type", message: "No event type configured for this agent's calendar. Go to Settings → Calendar to create one." });
     }
 
-    const [eventType] = resolvedEventTypeId
-      ? await db.select().from(eventTypesTable).where(eq(eventTypesTable.id, resolvedEventTypeId))
-      : [];
+    const [eventType] = await db.select().from(eventTypesTable).where(eq(eventTypesTable.id, resolvedEventTypeId));
     if (!eventType || !eventType.isActive) {
       return "error: the appointment type is unavailable";
     }
