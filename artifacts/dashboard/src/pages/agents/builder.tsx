@@ -1017,12 +1017,41 @@ function ToolsTab({ form }: { form: any }) {
   const hasNativeTool = (type: string) => watchedTools.some((t: any) => t.type === type);
   const nativeToolIndex = (type: string) => fields.findIndex((f: any) => f.type === type);
 
+  const NATIVE_TOOL_DEFAULTS: Record<string, { name: string; description: string; supportsPreToolMessage: boolean }> = {
+    native_booking: {
+      name: "book_appointment",
+      description: "Lets the agent book a meeting slot for the caller. Agent collects name, email, and preferred time, then confirms the booking live.",
+      supportsPreToolMessage: true,
+    },
+    native_check_availability: {
+      name: "check_availability",
+      description: "Enables the agent to look up open slots before suggesting a time. Use alongside Book Appointment for a natural booking flow.",
+      supportsPreToolMessage: true,
+    },
+    native_list_bookings: {
+      name: "list_bookings",
+      description: "Allows the agent to retrieve existing bookings for the caller — useful for reschedule or cancellation flows.",
+      supportsPreToolMessage: true,
+    },
+    native_reschedule: {
+      name: "reschedule_booking",
+      description: "Lets the agent reschedule an existing booking to a new time slot chosen by the caller.",
+      supportsPreToolMessage: true,
+    },
+    native_cancel: {
+      name: "cancel_booking",
+      description: "Allows the agent to cancel an upcoming booking on the caller's request.",
+      supportsPreToolMessage: true,
+    },
+  };
+
   const toggleNativeTool = (type: string) => {
     const idx = nativeToolIndex(type);
     if (idx >= 0) {
       remove(idx);
     } else {
-      append({ type: type as any, name: "", description: "" });
+      const defaults = NATIVE_TOOL_DEFAULTS[type];
+      append({ type: type as any, name: defaults?.name ?? "", description: defaults?.description ?? "" });
     }
   };
 
@@ -1106,6 +1135,7 @@ function ToolsTab({ form }: { form: any }) {
           const filteredEventTypes = calendarId
             ? eventTypeOptions.filter((et: any) => et.calendarId === calendarId)
             : eventTypeOptions;
+          const toolDefaults = NATIVE_TOOL_DEFAULTS[type];
           return (
             <div key={type} className={cn("rounded-xl border transition-all duration-150", isOn ? `${c.border} ${c.bg}` : "border-border/60 bg-card/20")}>
               <button
@@ -1129,45 +1159,79 @@ function ToolsTab({ form }: { form: any }) {
                   {isOn ? <ToggleRight className={cn("h-5 w-5", c.iconText)} /> : <ToggleLeft className="h-5 w-5 text-muted-foreground/30" />}
                 </div>
               </button>
-              {isOn && needsEventType && (
+              {isOn && (
                 <div className="px-4 pb-4 -mt-1">
-                  <div className="border-t border-border/30 pt-3 space-y-2">
+                  <div className="border-t border-border/30 pt-3 space-y-3">
+                    {needsEventType && (
+                      <div className="space-y-2">
+                        <div>
+                          <label className="text-[10px] text-muted-foreground block mb-1">Calendar</label>
+                          <Select
+                            value={calendarId ?? ""}
+                            onValueChange={(v) => {
+                              setNativeField(type, "calendarId", v);
+                              setNativeField(type, "eventTypeId", "");
+                            }}
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder="Select calendar…" />
+                            </SelectTrigger>
+                            <SelectContent position="popper">
+                              {calendarOptions.map((cal: any) => (
+                                <SelectItem key={cal.value} value={cal.value} className="text-xs">{cal.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-muted-foreground block mb-1">Event Type</label>
+                          <Select
+                            value={eventTypeId ?? ""}
+                            onValueChange={(v) => setNativeField(type, "eventTypeId", v)}
+                            disabled={!calendarId}
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder={calendarId ? "Select event type…" : "Pick a calendar first"} />
+                            </SelectTrigger>
+                            <SelectContent position="popper">
+                              {filteredEventTypes.map((et: any) => (
+                                <SelectItem key={et.value} value={et.value} className="text-xs">{et.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    )}
                     <div>
-                      <label className="text-[10px] text-muted-foreground block mb-1">Calendar</label>
-                      <Select
-                        value={calendarId ?? ""}
-                        onValueChange={(v) => {
-                          setNativeField(type, "calendarId", v);
-                          setNativeField(type, "eventTypeId", "");
-                        }}
-                      >
-                        <SelectTrigger className="h-8 text-xs">
-                          <SelectValue placeholder="Select calendar…" />
-                        </SelectTrigger>
-                        <SelectContent position="popper">
-                          {calendarOptions.map((cal: any) => (
-                            <SelectItem key={cal.value} value={cal.value} className="text-xs">{cal.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <label className="text-[10px] text-muted-foreground block mb-1">Function Name</label>
+                      <Input
+                        className="h-8 text-xs font-mono bg-muted/20 border-border/50"
+                        value={getNativeField(type, "name") ?? toolDefaults?.name ?? ""}
+                        onChange={(e) => setNativeField(type, "name", e.target.value)}
+                        placeholder={toolDefaults?.name ?? "function_name"}
+                      />
+                      <p className="text-[10px] text-muted-foreground/50 mt-1">Use this name in your prompt when instructing the agent to call this tool.</p>
                     </div>
                     <div>
-                      <label className="text-[10px] text-muted-foreground block mb-1">Event Type</label>
-                      <Select
-                        value={eventTypeId ?? ""}
-                        onValueChange={(v) => setNativeField(type, "eventTypeId", v)}
-                        disabled={!calendarId}
-                      >
-                        <SelectTrigger className="h-8 text-xs">
-                          <SelectValue placeholder={calendarId ? "Select event type…" : "Pick a calendar first"} />
-                        </SelectTrigger>
-                        <SelectContent position="popper">
-                          {filteredEventTypes.map((et: any) => (
-                            <SelectItem key={et.value} value={et.value} className="text-xs">{et.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <label className="text-[10px] text-muted-foreground block mb-1">Description (Prompt)</label>
+                      <Textarea
+                        className="text-xs min-h-[72px] resize-none bg-muted/20 border-border/50"
+                        value={getNativeField(type, "description") ?? toolDefaults?.description ?? ""}
+                        onChange={(e) => setNativeField(type, "description", e.target.value)}
+                        placeholder={toolDefaults?.description ?? "Describe when the LLM should invoke this tool…"}
+                      />
                     </div>
+                    {toolDefaults?.supportsPreToolMessage && (
+                      <div>
+                        <label className="text-[10px] text-muted-foreground block mb-1">Pre-tool Message</label>
+                        <Input
+                          className="h-8 text-xs bg-muted/20 border-border/50"
+                          value={getNativeField(type, "preToolMessage") ?? ""}
+                          onChange={(e) => setNativeField(type, "preToolMessage", e.target.value)}
+                          placeholder="e.g. One moment, let me check that for you…"
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
