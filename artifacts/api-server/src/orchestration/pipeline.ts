@@ -189,6 +189,9 @@ export class OrchestrationPipeline {
   // Gender detection — fires once per call using early caller speech
   private genderDetector: GenderDetector | GenderDetectorML | GenderDetectorMLv2;
 
+  // Multilingual — tracks the active language detected by Azure LID
+  private currentLang: string = "";
+
   constructor(config: SessionConfig) {
     this.config = config;
     this.agent = config.agentConfig;
@@ -232,10 +235,16 @@ export class OrchestrationPipeline {
     const ttsKey = keys.get(this.agent.ttsProvider);
     if (!ttsKey) throw new Error(`No API key found for TTS provider: ${this.agent.ttsProvider}`);
 
+    // Multilingual: pass all configured languages as Azure LID candidates
+    const sttCfg = this.agent.sttConfig;
+    if (this.agent.isMultilingual && this.agent.multilingualLanguages.length > 0) {
+      sttCfg.candidateLanguages = this.agent.multilingualLanguages;
+    }
+
     this.stt = createSTTAdapter(
       this.agent.asrProvider, sttKey, this.agent.asrModel,
       keys.get(`${this.agent.asrProvider}:extraConfig`) ?? null,
-      this.agent.sttConfig
+      sttCfg
     );
     this.llm = createLLMAdapter(this.agent.llmProvider, llmKey, this.agent.llmModel);
     const agentLanguage = this.agent.language ?? null;
@@ -300,10 +309,25 @@ export class OrchestrationPipeline {
     if (!this.stt.transcribeStream) return;
     try {
       this.streamSTT = this.stt.transcribeStream(
-        (text, isFinal) => {
+        (text, isFinal, detectedLanguage) => {
           if (!isFinal || !text.trim() || this.closed) return;
           this.streamSTTReconnectAttempts = 0; // reset backoff on successful transcript
           this.resetHangupTimer();
+          // Multilingual: hot-swap TTS language when Azure LID detects a switch
+          if (
+            detectedLanguage &&
+            this.agent.isMultilingual &&
+            detectedLanguage !== this.currentLang
+          ) {
+            this.currentLang = detectedLanguage;
+            if (typeof (this.tts as unknown as { setLanguage?: (l: string) => void }).setLanguage === "function") {
+              (this.tts as unknown as { setLanguage: (l: string) => void }).setLanguage(detectedLanguage);
+            }
+            logger.info(
+              { callId: this.config.callId, lang: detectedLanguage },
+              "Multilingual: language switched mid-call",
+            );
+          }
           void this.handleStreamingTranscript(text, Date.now());
         },
         () => {

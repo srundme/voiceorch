@@ -16,6 +16,8 @@ export type AgentConfig = {
   // Tab 3 — Audio
   secondaryLanguage?: string;
   secondaryLanguages?: string[];
+  isMultilingual?: boolean;
+  multilingualLanguages?: string[];
   ttsStream?: boolean;
   ttsSamplingRate?: number;
   ttsEncoding?: string;

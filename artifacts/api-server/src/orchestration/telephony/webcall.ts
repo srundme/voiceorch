@@ -261,6 +261,10 @@ export async function handleWebCallWebSocket(
     return;
   }
 
+  const agentCfgWc = (agent.agentConfig ?? {}) as Record<string, unknown>;
+  const isMultilingualWc = (agentCfgWc["isMultilingual"] as boolean | undefined) ?? false;
+  const multilingualLanguagesWc = (agentCfgWc["multilingualLanguages"] as string[] | undefined) ?? [];
+
   const sttConfig: STTConfig = {
     language: agent.asrLanguage || agent.language || null,
     backgroundDenoising: agent.asrBackgroundDenoising ?? false,
@@ -273,6 +277,10 @@ export async function handleWebCallWebSocket(
     smartEndpointing: agent.asrSmartEndpointing ?? "off",
     autoFallback: agent.asrAutoFallback ?? false,
     fallbackProviders: (agent.asrFallbackProviders as Array<{ provider: string; model: string | null }> | null | undefined) ?? [],
+    // Multilingual: pass all configured languages as Azure LID candidates
+    ...(isMultilingualWc && multilingualLanguagesWc.length > 0
+      ? { candidateLanguages: multilingualLanguagesWc }
+      : {}),
   };
 
   const sttExtraConfig = providerKeys.get(`${agent.asrProvider?.toLowerCase()}:extraConfig`) ?? null;
@@ -289,6 +297,9 @@ export async function handleWebCallWebSocket(
     ? JSON.stringify({ language: agentLanguage ?? "en-IN" })
     : null;
   const tts = createTTSAdapter(agent.ttsProvider, ttsKey, agent.ttsVoice, agent.ttsModel, ttsExtraConfig, agentLanguage);
+
+  // Multilingual: tracks the current detected language for TTS hot-swap
+  let currentLangWc: string = "";
 
   // ── Create call DB record ─────────────────────────────────────────────────
   const [callRecord] = await db.insert(callsTable).values({
@@ -356,8 +367,16 @@ export async function handleWebCallWebSocket(
   if (stt.transcribeStream) {
     try {
       streamSTT = stt.transcribeStream(
-        (text, isFinal) => {
+        (text, isFinal, detectedLanguage) => {
           if (!isFinal || !text.trim() || closed) return;
+          // Multilingual: hot-swap TTS language when Azure LID detects a switch
+          if (detectedLanguage && isMultilingualWc && detectedLanguage !== currentLangWc) {
+            currentLangWc = detectedLanguage;
+            if (typeof (tts as unknown as { setLanguage?: (l: string) => void }).setLanguage === "function") {
+              (tts as unknown as { setLanguage: (l: string) => void }).setLanguage(detectedLanguage);
+            }
+            logger.info({ callId, lang: detectedLanguage }, "Webcall multilingual: language switched mid-call");
+          }
           // Barge-in: if agent is speaking, only interrupt if the transcript
           // meets the same wordsForInterruption gate as energy-based barge-in.
           // This prevents a faint background speaker (distant person) producing

@@ -148,6 +148,8 @@ export const agentFormSchema = z.object({
   stagedPromptCoreIdentity: z.string().optional(),
   inboundPhoneNumberId: z.number().optional().nullable(),
   outboundPhoneNumberId: z.number().optional().nullable(),
+  isMultilingual: z.boolean().optional(),
+  multilingualLanguages: z.array(z.string()).optional(),
 }).superRefine((data, ctx) => {
   const asrErr = getModelError(data.asrProvider, data.asrModel, ASR_MODELS);
   if (asrErr) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["asrModel"], message: asrErr });
@@ -174,6 +176,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     contextWindowTurns, tokenSummarizationEnabled, tokenSummarizationThresholdTurns,
     stagedPromptEnabled, stagedPromptStages, stagedPromptCoreIdentity,
     ambientNoiseEnabled, ambientNoiseTrack,
+    isMultilingual, multilingualLanguages,
     ...rest
   } = data;
   const agentConfig: Record<string, unknown> = {};
@@ -190,6 +193,8 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   agentConfig["genderDetectionEnabled"] = !!genderDetectionEnabled;
   agentConfig["ambientNoiseEnabled"] = !!ambientNoiseEnabled;
   if (ambientNoiseTrack) agentConfig["ambientNoiseTrack"] = ambientNoiseTrack;
+  agentConfig["isMultilingual"] = !!isMultilingual;
+  if (isMultilingual && multilingualLanguages?.length) agentConfig["multilingualLanguages"] = multilingualLanguages;
   agentConfig["startSpeakingPlan"] = {
     waitSeconds:            startSpeakingWaitSecs          ?? 0,
     onPunctuationSeconds:   startSpeakingOnPunctuationSecs ?? 0.1,

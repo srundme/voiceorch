@@ -292,15 +292,30 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
   const [openCard, setOpenCard] = useState<CardSection | null>(null);
   const [, navigate] = useLocation();
 
-  const asrProvider = form.watch("asrProvider");
-  const llmProvider = form.watch("llmProvider");
-  const ttsProvider = form.watch("ttsProvider");
-  const asrModel    = form.watch("asrModel");
-  const llmModel    = form.watch("llmModel");
-  const ttsVoice    = form.watch("ttsVoice");
-  const ttsModel    = form.watch("ttsModel");
-  const language    = form.watch("language");
-  const temperature = form.watch("temperature") ?? 0.1;
+  const asrProvider           = form.watch("asrProvider");
+  const llmProvider           = form.watch("llmProvider");
+  const ttsProvider           = form.watch("ttsProvider");
+  const asrModel              = form.watch("asrModel");
+  const llmModel              = form.watch("llmModel");
+  const ttsVoice              = form.watch("ttsVoice");
+  const ttsModel              = form.watch("ttsModel");
+  const language              = form.watch("language");
+  const temperature           = form.watch("temperature") ?? 0.1;
+  const isMultilingual        = form.watch("isMultilingual") ?? false;
+  const multilingualLanguages = (form.watch("multilingualLanguages") ?? []) as string[];
+
+  const MULTILINGUAL_LANGUAGES = [
+    { value: "en-IN", label: "English (India)" },
+    { value: "hi-IN", label: "Hindi" },
+    { value: "ta-IN", label: "Tamil" },
+    { value: "te-IN", label: "Telugu" },
+    { value: "ml-IN", label: "Malayalam" },
+    { value: "kn-IN", label: "Kannada" },
+    { value: "mr-IN", label: "Marathi" },
+    { value: "bn-IN", label: "Bengali (India)" },
+    { value: "gu-IN", label: "Gujarati" },
+    { value: "pa-IN", label: "Punjabi (India)" },
+  ];
 
   const llmOptions    = LLM_MODELS[llmProvider]  ?? [];
   const ttsModelOpts  = TTS_MODELS[ttsProvider]  ?? [];
@@ -624,6 +639,72 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
               </div>
             </div>
           )}
+
+          {/* ── Multilingual Mode ────────────────────────────────────────────── */}
+          <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Globe className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-semibold">Multilingual Mode</span>
+                {isMultilingual && (
+                  <Badge variant="outline" className="text-[10px] h-4 px-1.5 text-emerald-500 border-emerald-500/50">Active</Badge>
+                )}
+              </div>
+              <FormField control={form.control} name="isMultilingual" render={({ field }) => (
+                <Switch
+                  checked={!!field.value}
+                  onCheckedChange={(checked) => {
+                    field.onChange(checked);
+                    if (checked) {
+                      form.setValue("asrProvider", "azure");
+                      form.setValue("asrModel", "en-IN-standard");
+                      form.setValue("ttsProvider", "cartesia");
+                      if (!multilingualLanguages.length) {
+                        form.setValue("multilingualLanguages", ["en-IN", "hi-IN"]);
+                      }
+                    }
+                  }}
+                />
+              )} />
+            </div>
+            {isMultilingual && (
+              <div className="space-y-2">
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Azure STT detects the caller's language on every utterance. Cartesia TTS automatically switches voice language to match. The agent responds in the same language as the caller.
+                </p>
+                <div className="space-y-1.5">
+                  <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-widest">Supported Languages</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {MULTILINGUAL_LANGUAGES.map(lang => {
+                      const selected = multilingualLanguages.includes(lang.value);
+                      return (
+                        <button
+                          key={lang.value}
+                          type="button"
+                          onClick={() => {
+                            const next = selected
+                              ? multilingualLanguages.filter(l => l !== lang.value)
+                              : [...multilingualLanguages, lang.value];
+                            form.setValue("multilingualLanguages", next);
+                          }}
+                          className={`text-[11px] px-2 py-0.5 rounded-full border transition-colors ${
+                            selected
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-transparent text-muted-foreground border-border hover:border-primary/50"
+                          }`}
+                        >
+                          {lang.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {multilingualLanguages.length === 0 && (
+                    <p className="text-[11px] text-destructive">Select at least one language.</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* ── First Message ────────────────────────────────────────────────── */}
           <div className="space-y-2">
@@ -3245,6 +3326,8 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       stagedPromptCoreIdentity: "",
       inboundPhoneNumberId: undefined,
       outboundPhoneNumberId: undefined,
+      isMultilingual: false,
+      multilingualLanguages: [],
     },
   });
 
@@ -3308,6 +3391,8 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       stagedPromptEnabled:             (agent as any).stagedPromptEnabled ?? false,
       stagedPromptStages:              (agent as any).stagedPromptStages ?? [],
       stagedPromptCoreIdentity:        (agent as any).stagedPromptCoreIdentity ?? "",
+      isMultilingual:          ((agent as any).agentConfig?.isMultilingual as boolean | undefined) ?? false,
+      multilingualLanguages:   ((agent as any).agentConfig?.multilingualLanguages as string[] | undefined) ?? [],
       inboundPhoneNumberId:            (agent as any).inboundPhoneNumberId ?? undefined,
       outboundPhoneNumberId:           (agent as any).outboundPhoneNumberId ?? undefined,
     });

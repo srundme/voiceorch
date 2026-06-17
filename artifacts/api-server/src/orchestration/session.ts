@@ -236,6 +236,9 @@ export async function createSession(params: {
     stagedPromptEnabled: agent.stagedPromptEnabled ?? false,
     stagedPromptStages: (agent.stagedPromptStages as Array<{ name: string; content: string }> | null) ?? [],
     stagedPromptCoreIdentity: agent.stagedPromptCoreIdentity ?? null,
+    // Multilingual
+    isMultilingual: (agentCfg["isMultilingual"] as boolean | undefined) ?? false,
+    multilingualLanguages: (agentCfg["multilingualLanguages"] as string[] | undefined) ?? [],
   };
 
   // ── Parallel pre-fetch: caller memory + campaign lead + knowledge base ───────

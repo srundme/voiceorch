@@ -1,0 +1,192 @@
+# Improve Version History UX & Version Retention Policy
+
+The Version Control feature is functional, but the user experience is not yet intuitive.
+
+Current issues:
+
+1. Audit history lacks useful information.
+2. Users cannot quickly understand what changed between versions.
+3. There is no visibility into version usage limits.
+4. There is no version lifecycle management.
+5. Published versions can grow indefinitely.
+
+--------------------------------------------------
+
+GOAL
+
+Make Version History feel like a professional GitHub-style release system for AI Agents.
+
+--------------------------------------------------
+
+VERSION HISTORY IMPROVEMENTS
+
+Each version card should display:
+
+Version Number
+
+Version Name
+
+Status:
+- Production
+- Published
+- Draft
+- Archived
+
+Published By
+
+Published Date & Time
+
+Commit Description
+
+Detected Changes Summary
+
+Example:
+
+Prompt Modified
+Voice Updated
+Knowledge Base Updated
+Variables Updated
+
+Actions:
+
+View
+Compare
+Restore
+Archive
+
+--------------------------------------------------
+
+VERSION TIMELINE
+
+Add a timeline view.
+
+Example:
+
+17 Jun 2026 14:03
+V4 Published
+By Gopi
+
+17 Jun 2026 13:38
+V3 Published
+By Gopi
+
+17 Jun 2026 13:35
+V2 Published
+By Gopi
+
+--------------------------------------------------
+
+VERSION RETENTION
+
+Published Versions Limit:
+10
+
+Drafts:
+Unlimited
+
+Archived Versions:
+Unlimited
+
+--------------------------------------------------
+
+USAGE INDICATOR
+
+Display:
+
+Published Versions Used
+
+Example:
+
+4 / 10 Versions Used
+
+Progress Bar
+
+--------------------------------------------------
+
+WARNING SYSTEM
+
+At 8 versions:
+
+Show Info Banner
+
+"You have used 8 of 10 published versions.
+Consider archiving older versions."
+
+At 10 versions:
+
+Block publishing.
+
+Show Modal:
+
+Maximum Published Versions Reached
+
+This agent already has 10 published versions.
+
+Please archive or delete older versions before publishing a new version.
+
+Buttons:
+
+Manage Versions
+Cancel
+
+--------------------------------------------------
+
+ARCHIVE FEATURE
+
+Do not force delete.
+
+Add:
+
+Archive Version
+
+Archived versions should move to:
+
+Archived Versions
+
+section.
+
+Archived versions:
+
+- Do not count toward published limit.
+- Can still be restored.
+- Can still be compared.
+
+--------------------------------------------------
+
+CHANGE SUMMARY
+
+When publishing:
+
+Automatically generate change summary.
+
+Detect:
+
+Prompt Changes
+Tool Changes
+Voice Changes
+Knowledge Base Changes
+Memory Changes
+Webhook Changes
+Variables Changes
+
+Store this summary in the version snapshot.
+
+Display it in Version History.
+
+--------------------------------------------------
+
+SUCCESS CRITERIA
+
+✓ Users understand version history immediately
+
+✓ Audit information is visible
+
+✓ Version usage is visible
+
+✓ Users receive warnings before reaching limits
+
+✓ Publishing is controlled
+
+✓ Archived versions remain recoverable
+
+✓ Version History feels like a professional release management system
