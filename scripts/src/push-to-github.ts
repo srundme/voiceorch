@@ -1,6 +1,5 @@
 /**
  * Push changed files to srundme/voiceorch main branch via GitHub Contents API.
- * Run via: pnpm --filter @workspace/scripts run push-migration-fix
  */
 import fs from "fs";
 import path from "path";
@@ -14,7 +13,7 @@ const GITHUB_TOKEN =
   process.env["GITHUB_PAT"] ?? "";
 
 if (!GITHUB_TOKEN) {
-  console.error("ERROR: No GitHub token found (tried GITHUB_PERSONAL_ACCESS_TOKEN, GITHUB_PAT)");
+  console.error("ERROR: No GitHub token found");
   process.exit(1);
 }
 
@@ -23,7 +22,7 @@ const REPO  = "voiceorch";
 const BRANCH = "main";
 
 const FILES_TO_PUSH = [
-  "artifacts/api-server/src/orchestration/adapters/stt/sarvam.ts",
+  "artifacts/api-server/src/orchestration/adapters/stt/deepgram.ts",
 ];
 
 async function ghFetch(apiPath: string, options: RequestInit = {}) {
@@ -60,7 +59,7 @@ async function pushFile(relPath: string) {
   await ghFetch(`contents/${relPath}`, {
     method: "PUT",
     body: JSON.stringify({
-      message: `fix: send Sarvam streaming STT audio as JSON base64 frames, not binary`,
+      message: `fix: send Deepgram keepalive frames to prevent idle WS timeout during agent greeting`,
       content: encoded,
       branch: BRANCH,
       ...(sha ? { sha } : {}),

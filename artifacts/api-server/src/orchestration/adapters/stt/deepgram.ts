@@ -150,6 +150,15 @@ export class DeepgramSTT implements STTAdapter {
       headers: { Authorization: `Token ${this.key}` },
     });
 
+    // Deepgram closes idle connections after ~10 s of no audio.
+    // Send a KeepAlive frame every 8 s so the WS stays open during the
+    // agent's greeting / TTS playback when the user isn't speaking yet.
+    const keepAliveInterval = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "KeepAlive" }));
+      }
+    }, 8_000);
+
     ws.on("open", () => {
       wsReady = true;
       for (const chunk of audioQueue.splice(0)) ws.send(chunk);
@@ -218,6 +227,7 @@ export class DeepgramSTT implements STTAdapter {
     });
 
     ws.on("close", () => {
+      clearInterval(keepAliveInterval);
       logger.info("Deepgram streaming STT WebSocket closed");
       onClose?.();
     });
@@ -231,6 +241,7 @@ export class DeepgramSTT implements STTAdapter {
         }
       },
       close(): void {
+        clearInterval(keepAliveInterval);
         if (ws.readyState < WebSocket.CLOSING) ws.close();
       },
     };
