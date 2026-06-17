@@ -54,6 +54,24 @@ export interface EndCallTool {
  */
 export const DEFAULT_GOODBYE_MESSAGE = "Thank you for calling. Have a great day. Goodbye!";
 
+/**
+ * Resolve the spoken goodbye for an AI-driven end-call in a single, consistent
+ * priority order so every end-call path behaves identically:
+ *   1. The `end_call` tool's own `goodbyeMessage` (most specific — wins if set)
+ *   2. The agent's first configured End Call Phrase (`endCallPhrases[0]`)
+ *   3. `DEFAULT_GOODBYE_MESSAGE` (last resort — never hang up silently)
+ */
+export function resolveGoodbyeMessage(
+  goodbyeMessage: string | undefined | null,
+  endCallPhrases: string[],
+): string {
+  const explicit = goodbyeMessage?.trim();
+  if (explicit) return explicit;
+  const firstPhrase = endCallPhrases[0]?.trim();
+  if (firstPhrase) return firstPhrase;
+  return DEFAULT_GOODBYE_MESSAGE;
+}
+
 export interface CalComTool {
   type: "cal_com";
   name: string;
@@ -153,16 +171,6 @@ export interface TransferAgentTool {
 
 export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | EndCallTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool | NativeCheckAvailabilityTool | NativeListBookingsTool | TransferColdTool | TransferWarmTool | TransferAgentTool;
 
-/**
- * Find the end_call tool in the agent's tool list and return its custom
- * goodbyeMessage. Falls back to DEFAULT_GOODBYE_MESSAGE when no end_call
- * tool exists or when it has no custom message configured.
- */
-export function resolveGoodbyeMessage(tools: AgentTool[]): string {
-  const endCall = tools.find((t): t is EndCallTool => t.type === "end_call");
-  return endCall?.goodbyeMessage || DEFAULT_GOODBYE_MESSAGE;
-}
-
 /** JSON Schema-compatible tool definition passed to LLM providers */
 export interface ToolDefinition {
   name: string;
@@ -202,6 +210,9 @@ export interface AgentConfig {
   asrModel: string | null;
   llmProvider: string;
   llmModel: string | null;
+  /** If set, used as a retry adapter when the primary LLM fails before producing any tokens. */
+  fallbackLlmProvider: string | null;
+  fallbackLlmModel: string | null;
   ttsProvider: string;
   ttsVoice: string | null;
   ttsModel: string | null;
@@ -252,6 +263,9 @@ export interface AgentConfig {
 
   // P1-E: Agent timezone (used for date/time context in system prompt)
   timezone: string;
+
+  // Call recording — when true, the in-process RecordingBuffer is finalized and stored at call end
+  recordingEnabled: boolean;
 
   // P1-F: Caller gender detection
   genderDetectionEnabled: boolean;
@@ -408,4 +422,8 @@ export interface SessionConfig {
    *  Used for telephony providers (e.g. Vobiz) that natively accept PCM, avoiding a
    *  lossy mulaw encode→decode round-trip. */
   rawPcmOutput?: boolean;
+  /** True when caller memory shows this is a returning caller (>=1 prior completed call).
+   *  When set, the opening greeting is generated from the memory-injected system prompt
+   *  (recognition-style) instead of speaking the static scripted greeting verbatim. */
+  isReturningCaller?: boolean;
 }

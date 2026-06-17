@@ -14,6 +14,7 @@ import {
   removeSession,
 } from "./sessionStore.js";
 import { destroyAudioSession } from "./audioPool.js";
+import { disposeCall } from "../services/disposition.js";
 import {
   humanPhone,
   loadCallerProfile,
@@ -161,6 +162,8 @@ export async function createSession(params: {
     asrModel: agent.asrModel,
     llmProvider: agent.llmProvider,
     llmModel: agent.llmModel,
+    fallbackLlmProvider: agent.llmFallbackProvider ?? null,
+    fallbackLlmModel: agent.llmFallbackModel ?? null,
     ttsProvider: agent.ttsProvider,
     ttsVoice: agent.ttsVoice,
     ttsModel: agent.ttsModel,
@@ -213,6 +216,8 @@ export async function createSession(params: {
     bargeInEchoGraceMs:     (agentCfg["bargeInEchoGraceMs"]    as number  | undefined) ?? 600,
     // P1-E: Agent timezone
     timezone: agentTimezone,
+    // Call recording
+    recordingEnabled:              (agentCfg["recordingEnabled"]              as boolean | undefined) ?? false,
     // P1-F: Caller gender detection
     genderDetectionEnabled:        (agentCfg["genderDetectionEnabled"]        as boolean | undefined) ?? true,
     genderDetectionMaleSalutation: (agentCfg["genderDetectionMaleSalutation"] as string  | undefined) ?? "Sir",
@@ -460,6 +465,8 @@ export async function createSession(params: {
     campaignLeadId: params.campaignLeadId ?? null,
     onAudioOut: params.onAudioOut,
     rawPcmOutput: params.telephonyProvider === "vobiz",
+    // Returning caller (>=1 prior completed call) → memory-informed recognition opening
+    isReturningCaller: (callerProfileSnapshot?.callCount ?? 0) >= 1,
     onTranscript: (speaker, text) => {
       logger.debug({ callId: callRecord.id, speaker, text: text.slice(0, 80) }, "Transcript");
       if (speaker === "user" && callerPhone) {
@@ -770,12 +777,17 @@ export async function endSession(sessionId: string): Promise<void> {
     const callStatus = session.wasTransferred ? "transferred" : "completed";
 
     // ── Upload call recording (async, non-blocking) ──────────────────────────
-    // Finalize happens concurrently; we await the URL before writing to DB.
-    const recordingUrl = await session.pipeline.getRecording().finalize(session.callId)
-      .catch((err) => {
-        logger.warn({ sessionId, err }, "Recording finalization failed");
-        return null;
-      });
+    // Only finalize/upload when the agent has Call Recording enabled, so disabled
+    // agents store nothing. Finalize happens concurrently; we await the URL before
+    // writing to DB.
+    const recordingEnabled = (session.pipeline as any).config?.agentConfig?.recordingEnabled === true;
+    const recordingUrl = recordingEnabled
+      ? await session.pipeline.getRecording().finalize(session.callId)
+          .catch((err) => {
+            logger.warn({ sessionId, err }, "Recording finalization failed");
+            return null;
+          })
+      : null;
 
     const pipelineUsage = (session.pipeline as unknown as {
       getUsageTotals?: () => { tokensSaved?: number };
@@ -1034,6 +1046,20 @@ export async function endSession(sessionId: string): Promise<void> {
             });
           }
         })();
+
+        // ── Post-call taxonomy disposition classification (fire-and-forget) ──────
+        // Uses the agent's configured Call Disposition taxonomy (agent_dispositions)
+        // and writes the result onto calls.disposition_result. No-ops when the agent
+        // has no taxonomy configured. Mutually exclusive with the legacy
+        // dispositionSchema extraction above (an agent uses one system or the other).
+        disposeCall({
+          agentId:    call.agentId,
+          callId:     session.callId,
+          transcript: transcript || null,
+          callEvents: [{ type: "duration", durationSec: durationSeconds }],
+        }).catch((dispErr) => {
+          logger.warn({ sessionId, dispErr }, "Post-call taxonomy disposition failed");
+        });
 
         // ── Post-call caller memory update + callback detection (fire-and-forget) ──
         if (session.callerPhone && transcript && transcript.length > 50) {

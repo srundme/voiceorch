@@ -1,5 +1,6 @@
 import { performance } from "perf_hooks";
 import { computeEndpointMs } from "../endpointing.js";
+import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt } from "../transcriptQuality.js";
 import type { WebSocket } from "ws";
 import { db, agentsTable, callsTable, callEventsTable, executionLogsTable, scheduledCallbacksTable, providersTable, usersTable, walletTransactionsTable, platformSettingsTable, knowledgeEntriesTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
@@ -394,15 +395,17 @@ export async function handleWebCallWebSocket(
           // This prevents a faint background speaker (distant person) producing
           // a short 1-word Sarvam/Deepgram transcript from cutting the agent off.
           if (speaking) {
+            // P0-C: Semantic barge-in — keywords bypass the word-count gate
+            const semanticOverride = isSemanticInterrupt(text);
             const wc = text.trim().split(/\s+/).length;
-            if (wc < wordsForInterruption) {
+            if (!semanticOverride && wc < wordsForInterruption) {
               logger.info({ callId, text, wc, wordsForInterruption }, "Webcall: ignoring short STT transcript during speaking");
               return;
             }
             interrupted = true;
             send({ type: "interrupted" });
             sendStatus("thinking");
-            logger.info({ callId, wc }, "Webcall: barge-in via streaming STT");
+            logger.info({ callId, wc, semanticOverride }, "Webcall: barge-in via streaming STT");
           } else if (speakingEndedAt > 0 && Date.now() - speakingEndedAt < BARGE_IN_END_GRACE_MS) {
             // Transcript arrived after speaking ended but within the end-grace window.
             // It was produced from frames fed to the STT provider *during* barge-in detection
@@ -855,6 +858,34 @@ export async function handleWebCallWebSocket(
       if (_tSttFinal === 0) _tSttFinal = performance.now(); // batch STT path: stamp after all fallbacks
       if (!userText?.trim()) { processing = false; return; }
 
+      // P0-A: Garbled transcript recovery — catch noise/garbage before it reaches the LLM
+      {
+        const { isGarbled, reason: garbledReason } = checkTranscriptQuality(userText);
+        if (isGarbled) {
+          const clarification = pickClarificationPhrase();
+          logger.warn({ callId, transcript: userText, garbledReason }, "Webcall: garbled transcript — responding with clarification");
+          history.push({ role: "assistant", content: clarification });
+          send({ type: "transcript", speaker: "agent", text: clarification });
+          try {
+            const { audio } = await tts.synthesize(clarification);
+            if (!closed) {
+              sendStatus("speaking");
+              speaking = true;
+              speakingStartedAt = Date.now();
+              for (let _ci = 0; _ci < audio.length; _ci += 3200) {
+                if (closed || interrupted) break;
+                sendSpeechAudio(audio.slice(_ci, _ci + 3200));
+                await new Promise<void>((r) => setTimeout(r, 20));
+              }
+              speaking = false;
+              speakingEndedAt = Date.now();
+            }
+          } catch { /* ignore TTS errors on clarification */ }
+          processing = false;
+          return;
+        }
+      }
+
       logExecution("STT", "response", {
         provider: agent.asrProvider,
         responsePayload: { transcript: userText },
@@ -1290,20 +1321,70 @@ export async function handleWebCallWebSocket(
       );
       } catch (llmErr) {
         clearInterval(llmKeepalive);
-        const reason = toReadableError(llmErr, "LLM error");
-        logger.error({ callId, err: llmErr }, reason);
-        logExecution("LLM", "response", {
-          provider: agent.llmProvider,
-          status: "error",
-          latencyMs: Date.now() - llmStartMs,
-          metadata: { error: reason },
-        });
-        send({ type: "error", message: reason });
-        speaking = false;
-        speakingEndedAt = Date.now();
-        processing = false;
-        if (!closed) void hangup("error", reason);
-        return;
+        // P0-B: LLM fallback — retry with fallback adapter if no tokens were produced
+        const fallbackProvider = (agent as any).llmFallbackProvider as string | null | undefined;
+        const fallbackModel = (agent as any).llmFallbackModel as string | null | undefined;
+        if (_tLlmFirstToken === null && fallbackProvider) {
+          const fallbackKey = providerKeys.get(fallbackProvider.toLowerCase());
+          if (fallbackKey) {
+            logger.warn({ callId, err: llmErr, fallbackProvider }, "Webcall: primary LLM failed (no tokens) — retrying with fallback");
+            tokenBuf = "";
+            fullReply = "";
+            inThinkBlock = false; thinkBuf = "";
+            inFnTag = false; fnBuf = "";
+            try {
+              const fallbackLlm = createLLMAdapter(fallbackProvider, fallbackKey, fallbackModel ?? null);
+              await fallbackLlm.chat(
+                history,
+                iterSystemPrompt,
+                (token: string) => {
+                  if (_tLlmFirstToken === null) _tLlmFirstToken = performance.now();
+                  fullReply += token;
+                  const afterThink = filterThinkToken(token);
+                  if (!afterThink) return;
+                  const afterFn = filterFnToken(afterThink);
+                  if (!afterFn) return;
+                  tokenBuf += afterFn;
+                  const [sentences, remainder] = extractSentences(tokenBuf);
+                  for (const s of sentences) queueSentence(s);
+                  tokenBuf = remainder;
+                },
+                (full: string) => { fullReply = full; },
+                { onUsage: (u: import("../types.js").LLMUsage) => { llmInputTokensTotal += u.inputTokens; llmOutputTokensTotal += u.outputTokens; } },
+              );
+              logger.info({ callId }, "Webcall: fallback LLM succeeded");
+            } catch (fallbackErr) {
+              const reason = toReadableError(fallbackErr, "Fallback LLM error");
+              logger.error({ callId, err: fallbackErr }, reason);
+              send({ type: "error", message: reason });
+              speaking = false; speakingEndedAt = Date.now(); processing = false;
+              if (!closed) void hangup("error", reason);
+              return;
+            }
+          } else {
+            const reason = toReadableError(llmErr, "LLM error (no fallback key)");
+            logger.error({ callId, err: llmErr }, reason);
+            send({ type: "error", message: reason });
+            speaking = false; speakingEndedAt = Date.now(); processing = false;
+            if (!closed) void hangup("error", reason);
+            return;
+          }
+        } else {
+          const reason = toReadableError(llmErr, "LLM error");
+          logger.error({ callId, err: llmErr }, reason);
+          logExecution("LLM", "response", {
+            provider: agent.llmProvider,
+            status: "error",
+            latencyMs: Date.now() - llmStartMs,
+            metadata: { error: reason },
+          });
+          send({ type: "error", message: reason });
+          speaking = false;
+          speakingEndedAt = Date.now();
+          processing = false;
+          if (!closed) void hangup("error", reason);
+          return;
+        }
       }
       clearInterval(llmKeepalive);
       logExecution("LLM", "response", {
