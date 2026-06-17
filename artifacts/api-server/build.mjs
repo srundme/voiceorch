@@ -124,6 +124,14 @@ globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
 }
 
 buildAll().catch((err) => {
+  if (err && Array.isArray(err.errors) && err.errors.length > 0) {
+    for (const e of err.errors) {
+      const loc = e.location
+        ? `${e.location.file}:${e.location.line}:${e.location.column}`
+        : "unknown location";
+      console.error(`esbuild error at ${loc}: ${e.text}`);
+    }
+  }
   console.error(err);
   process.exit(1);
 });

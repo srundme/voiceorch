@@ -1,4 +1,4 @@
-FROM node:22-slim AS builder
+FROM node:24-slim AS builder
 WORKDIR /workspace
 
 RUN npm install -g pnpm@10
@@ -22,7 +22,7 @@ RUN PORT=3000 BASE_PATH=/ pnpm --filter @workspace/dashboard run build
 
 RUN pnpm --filter @workspace/api-server run build
 
-FROM node:22-slim
+FROM node:24-slim
 WORKDIR /workspace
 
 RUN npm install -g pnpm@10
