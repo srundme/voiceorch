@@ -25,6 +25,20 @@ export function useWebcallKeyStatus() {
   return { keys, loading };
 }
 
+/** Render agent text with optional sentence highlight. */
+function AgentText({ text, highlight }: { text: string; highlight: string }) {
+  if (!highlight) return <>{text}</>;
+  const idx = text.indexOf(highlight);
+  if (idx === -1) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className="bg-primary/40 text-foreground rounded px-0.5 not-italic">{highlight}</mark>
+      {text.slice(idx + highlight.length)}
+    </>
+  );
+}
+
 export function WebCallPanel({
   agentId, agentName, autostart, callbackId, compact,
 }: {
@@ -34,10 +48,17 @@ export function WebCallPanel({
   callbackId?: number;
   compact?: boolean;
 }) {
-  const [status, setStatus]     = useState<CallStatus>("idle");
-  const [msgs, setMsgs]         = useState<Msg[]>([]);
-  const [error, setError]       = useState<string | null>(null);
-  const [duration, setDuration] = useState<number | null>(null);
+  const [status, setStatus]               = useState<CallStatus>("idle");
+  const [msgs, setMsgs]                   = useState<Msg[]>([]);
+  const [error, setError]                 = useState<string | null>(null);
+  const [duration, setDuration]           = useState<number | null>(null);
+  // #636 — token streaming: accumulate LLM tokens as a "typing" bubble
+  const [streamingText, setStreamingText] = useState<string>("");
+  // #637 — stale flag: when barge-in fires, freeze bubble instead of clearing
+  const [streamingStale, setStreamingStale] = useState<boolean>(false);
+  // #635 — sentence highlight: which sentence the agent is currently speaking
+  const [speakingSentence, setSpeakingSentence] = useState<string>("");
+
   const { keys: keyStatus, loading: keyLoading } = useWebcallKeyStatus();
   const { userId: callerUserId } = useAuth();
   const hasAutoStarted = useRef(false);
@@ -51,6 +72,8 @@ export function WebCallPanel({
   const mutedRef         = useRef(false);
   const transcriptRef    = useRef<HTMLDivElement>(null);
   const statusRef        = useRef<CallStatus>("idle");
+  // ref mirror for stale flag — safe to read inside WS message closure
+  const streamingStaleRef = useRef(false);
 
   useEffect(() => { statusRef.current = status; }, [status]);
 
@@ -58,7 +81,7 @@ export function WebCallPanel({
     if (transcriptRef.current) {
       transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
     }
-  }, [msgs]);
+  }, [msgs, streamingText]);
 
   function float32ToInt16(f32: Float32Array): Int16Array {
     const int16 = new Int16Array(f32.length);
@@ -103,6 +126,11 @@ export function WebCallPanel({
     streamRef.current = null;
     if (wsRef.current && wsRef.current.readyState < 2) wsRef.current.close();
     wsRef.current = null;
+    // clear streaming state
+    setStreamingText("");
+    setSpeakingSentence("");
+    streamingStaleRef.current = false;
+    setStreamingStale(false);
   }
 
   const startCall = useCallback(async () => {
@@ -110,6 +138,10 @@ export function WebCallPanel({
     setError(null);
     setMsgs([]);
     setDuration(null);
+    setStreamingText("");
+    setSpeakingSentence("");
+    streamingStaleRef.current = false;
+    setStreamingStale(false);
     setStatus("connecting");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -149,18 +181,44 @@ export function WebCallPanel({
         try {
           const msg = JSON.parse(e.data as string) as {
             type: string; status?: CallStatus; speaker?: "user" | "agent";
-            text?: string; durationSeconds?: number; message?: string;
+            text?: string; index?: number; durationSeconds?: number; message?: string;
           };
           if (msg.type === "ready") {
             setStatus("listening");
           } else if (msg.type === "interrupted") {
+            // #637 — freeze the streaming bubble instead of clearing it
             stopAllAudio();
             mutedRef.current = true;
+            streamingStaleRef.current = true;
+            setStreamingStale(true);
+            setSpeakingSentence("");
             setStatus("listening");
+          } else if (msg.type === "token") {
+            // #636 — accumulate LLM tokens into the streaming bubble
+            const chunk = msg.text ?? "";
+            if (streamingStaleRef.current) {
+              // New turn after barge-in — wipe stale text and start fresh (#637)
+              streamingStaleRef.current = false;
+              setStreamingStale(false);
+              setStreamingText(chunk);
+            } else {
+              setStreamingText(prev => prev + chunk);
+            }
+          } else if (msg.type === "sentence_start") {
+            // #635 — clear typing bubble; highlight this sentence in the transcript
+            setStreamingText("");
+            streamingStaleRef.current = false;
+            setStreamingStale(false);
+            setSpeakingSentence(msg.text ?? "");
           } else if (msg.type === "status" && msg.status) {
             if (msg.status === "thinking" || msg.status === "speaking") mutedRef.current = false;
+            if (msg.status === "listening") setSpeakingSentence(""); // agent done speaking
             setStatus(msg.status);
           } else if (msg.type === "transcript" && msg.speaker && msg.text) {
+            // Final transcript — clear streaming bubble, keep sentence highlight until audio finishes
+            setStreamingText("");
+            streamingStaleRef.current = false;
+            setStreamingStale(false);
             setMsgs(prev => [...prev, { speaker: msg.speaker!, text: msg.text! }]);
           } else if (msg.type === "ended") {
             setDuration(msg.durationSeconds ?? null);
@@ -216,6 +274,55 @@ export function WebCallPanel({
   const sc       = statusConfig[status];
   const isActive = status !== "idle" && status !== "ended";
 
+  // The index of the last agent message — used to apply sentence highlighting only there
+  const lastAgentMsgIdx = msgs.reduce<number>((acc, m, i) => m.speaker === "agent" ? i : acc, -1);
+
+  // Renders a single message bubble
+  function renderMsgBubble(m: Msg, i: number, sizeClass: "sm" | "xs") {
+    const isLastAgent = i === lastAgentMsgIdx;
+    const highlight   = isLastAgent && status === "speaking" ? speakingSentence : "";
+    const base = sizeClass === "xs"
+      ? "max-w-[90%] px-3 py-2 rounded-2xl text-xs leading-relaxed"
+      : "max-w-[80%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed";
+    const label = sizeClass === "xs"
+      ? "text-[9px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5"
+      : "text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1";
+    return (
+      <div key={i} className={`flex ${m.speaker === "user" ? "justify-end" : "justify-start"}`}>
+        <div className={`${base} ${
+          m.speaker === "user"
+            ? "bg-muted text-foreground rounded-br-sm"
+            : "bg-primary/15 text-foreground border border-primary/20 rounded-bl-sm"
+        }`}>
+          <p className={label}>{m.speaker === "user" ? "You" : agentName}</p>
+          {m.speaker === "agent"
+            ? <AgentText text={m.text} highlight={highlight} />
+            : m.text}
+        </div>
+      </div>
+    );
+  }
+
+  // Renders the streaming "typing" bubble that appears while LLM tokens arrive
+  function renderStreamingBubble(sizeClass: "sm" | "xs") {
+    if (!streamingText) return null;
+    const base = sizeClass === "xs"
+      ? "max-w-[90%] px-3 py-2 rounded-2xl text-xs leading-relaxed"
+      : "max-w-[80%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed";
+    const label = sizeClass === "xs"
+      ? "text-[9px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5"
+      : "text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1";
+    return (
+      <div className="flex justify-start">
+        <div className={`${base} bg-primary/10 border border-primary/10 rounded-bl-sm transition-opacity duration-300 ${streamingStale ? "opacity-35" : "opacity-100"}`}>
+          <p className={label}>{agentName}</p>
+          <span>{streamingText}</span>
+          {!streamingStale && <span className="ml-0.5 animate-pulse text-primary/70">▍</span>}
+        </div>
+      </div>
+    );
+  }
+
   if (compact) {
     return (
       <div className="flex flex-col h-full flex-1 min-h-0">
@@ -249,26 +356,16 @@ export function WebCallPanel({
           ref={transcriptRef}
           className="flex-1 overflow-y-auto p-3 space-y-2 scroll-smooth min-h-0"
         >
-          {msgs.length === 0 ? (
+          {msgs.length === 0 && !streamingText ? (
             <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground gap-2 py-6">
               <Volume2 className="h-6 w-6 opacity-20" />
               <p className="text-xs">Speak to test {agentName}</p>
             </div>
           ) : (
-            msgs.map((m, i) => (
-              <div key={i} className={`flex ${m.speaker === "user" ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[90%] px-3 py-2 rounded-2xl text-xs leading-relaxed ${
-                  m.speaker === "user"
-                    ? "bg-muted text-foreground rounded-br-sm"
-                    : "bg-primary/15 text-foreground border border-primary/20 rounded-bl-sm"
-                }`}>
-                  <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">
-                    {m.speaker === "user" ? "You" : agentName}
-                  </p>
-                  {m.text}
-                </div>
-              </div>
-            ))
+            <>
+              {msgs.map((m, i) => renderMsgBubble(m, i, "xs"))}
+              {renderStreamingBubble("xs")}
+            </>
           )}
         </div>
 
@@ -329,26 +426,16 @@ export function WebCallPanel({
             </div>
           )}
           <div ref={transcriptRef} className="h-64 overflow-y-auto space-y-3 pr-1 scroll-smooth">
-            {msgs.length === 0 ? (
+            {msgs.length === 0 && !streamingText ? (
               <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground gap-2">
                 <Volume2 className="h-8 w-8 opacity-20" />
                 <p className="text-sm">Transcript will appear here during the call.</p>
               </div>
             ) : (
-              msgs.map((m, i) => (
-                <div key={i} className={`flex ${m.speaker === "user" ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[80%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${
-                    m.speaker === "user"
-                      ? "bg-muted text-foreground rounded-br-sm"
-                      : "bg-primary/15 text-foreground border border-primary/20 rounded-bl-sm"
-                  }`}>
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
-                      {m.speaker === "user" ? "You" : agentName}
-                    </p>
-                    {m.text}
-                  </div>
-                </div>
-              ))
+              <>
+                {msgs.map((m, i) => renderMsgBubble(m, i, "sm"))}
+                {renderStreamingBubble("sm")}
+              </>
             )}
           </div>
           <div className="flex gap-3">
