@@ -122,12 +122,10 @@ export async function runScenario(
 
       onProgress({ type: "persona_message", turn, content: personaTurn.message });
 
-      if (personaTurn.shouldEnd) {
-        ended = true;
-        break;
-      }
-
       // ── Agent turn ──────────────────────────────────────────────────────────
+      // NOTE: even when personaTurn.shouldEnd is true we still run the agent
+      // turn so the agent can reply to the persona's farewell message.
+      // ended is set AFTER the agent persists its reply.
       currentStep = "agent";
       const toolsCalled: Array<{ name: string; args: Record<string, unknown> }> = [];
 
@@ -165,6 +163,11 @@ export async function runScenario(
       conversationHistory.push({ role: "assistant", content: agentReply });
 
       onProgress({ type: "agent_message", turn, content: agentReply, toolsCalled });
+
+      // If the persona signalled end of conversation, stop after the agent has replied
+      if (personaTurn.shouldEnd) {
+        ended = true;
+      }
 
       // Natural conversation end detection
       const lower = agentReply.toLowerCase();

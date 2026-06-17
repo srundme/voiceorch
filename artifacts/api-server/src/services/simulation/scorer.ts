@@ -89,9 +89,17 @@ export async function scoreRun(runId: number, successCriteria: string[]): Promis
 
   const agentMessages = messages.filter((m) => m.role === "agent");
   if (agentMessages.length === 0) {
-    const result = buildErrorResult("No agent responses found — the agent did not reply during this run");
-    await persistError(runId, result);
-    logger.warn({ runId }, "scoreRun: no agent messages, skipping evaluation");
+    const result: RunScore = {
+      overall: null,
+      pass: false,
+      metrics: [],
+      summary: "Conversation ended before the agent replied — nothing to evaluate.",
+    };
+    await db
+      .update(simulationRunsTable)
+      .set({ score: null, result: result as any, status: "completed", completedAt: new Date() })
+      .where(eq(simulationRunsTable.id, runId));
+    logger.warn({ runId }, "scoreRun: no agent messages, marking completed with note");
     return result;
   }
 

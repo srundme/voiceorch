@@ -445,9 +445,11 @@ export async function callLlmDirect(
 
     if (!triggeredToolName) break;
 
-    // Capture any text emitted alongside the tool call, then inject into history
-    const markerContent = agentText.trim()
-      ? `${agentText.trim()}\n[calling tool: ${triggeredToolName}]`
+    // Capture any text emitted alongside the tool call, then inject into history.
+    // Pre-tool text is kept in agentText so it accumulates into the final reply.
+    const preToolText = agentText.trim();
+    const markerContent = preToolText
+      ? `${preToolText}\n[calling tool: ${triggeredToolName}]`
       : `[calling tool: ${triggeredToolName}]`;
     fullHistory.push({ role: "assistant", content: markerContent });
 
@@ -459,13 +461,14 @@ export async function callLlmDirect(
       content: `[Tool result for ${triggeredToolName}]: ${toolResult}`,
     });
 
-    // Reset agentText so only the continuation text is returned as the agent response
-    agentText = "";
-
     if (triggeredToolName === "end_call") {
-      agentText = agentText || "Thank you for calling. Goodbye!";
+      if (!agentText.trim()) agentText = "Thank you for calling. Goodbye!";
       break;
     }
+
+    // Reset agentText to collect only continuation text from the next LLM call,
+    // but prepend any pre-tool text so the full reply accumulates correctly.
+    agentText = preToolText ? preToolText + " " : "";
 
     depth++;
   }
