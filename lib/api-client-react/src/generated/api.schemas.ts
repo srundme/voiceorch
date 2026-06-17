@@ -234,12 +234,25 @@ export interface AgentVersion {
   status: AgentVersionStatus;
   /** Full copy of all agent columns at publish time */
   snapshot: AgentVersionSnapshot;
+  /**
+     * Auto-detected list of changed field labels vs. previous production snapshot
+     * @nullable
+     */
+  changedFields?: string[] | null;
   /** @nullable */
   publishedBy?: string | null;
   /** @nullable */
   restoredFromVersionId?: number | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface AgentVersionsListResponse {
+  versions: AgentVersion[];
+  /** Number of non-archived published/production versions */
+  publishedCount: number;
+  /** Maximum allowed published versions (hardcoded to 10) */
+  limit: number;
 }
 
 export interface PublishAgentVersionBody {
@@ -2302,6 +2315,16 @@ export interface SchedulingCalendar {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  /**
+     * Email of the linked Google Calendar account, if any
+     * @nullable
+     */
+  connectedGoogleEmail?: string | null;
+  /**
+     * Total number of Google Calendar connections for this user
+     * @nullable
+     */
+  connectedGoogleAccountsCount?: number | null;
 }
 
 export interface SchedulingCalendarInput {
