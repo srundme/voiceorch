@@ -102,8 +102,8 @@ export const agentFormSchema = z.object({
     method: z.enum(["GET", "POST"]).optional(),
     secret: z.string().optional(),
     preToolMessage: z.string().optional(),
-    calendarId: z.string().optional(),
-    eventTypeId: z.string().optional(),
+    calendarId: z.preprocess(v => (v === "" || v == null ? undefined : Number(v)), z.number().optional()),
+    eventTypeId: z.preprocess(v => (v === "" || v == null ? undefined : Number(v)), z.number().optional()),
     targetNumber: z.string().optional(),
     holdMessage: z.string().optional(),
     targetAgentId: z.number().optional(),
@@ -197,8 +197,13 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   };
 
   const serializedTools = (rest.tools ?? []).map((t) => {
-    if (t.type !== "webhook") return t;
-    const { parameters, ...toolRest } = t;
+    const toolWithCoercedIds = {
+      ...t,
+      ...(t.calendarId != null ? { calendarId: Number(t.calendarId) } : {}),
+      ...(t.eventTypeId != null ? { eventTypeId: Number(t.eventTypeId) } : {}),
+    };
+    if (t.type !== "webhook") return toolWithCoercedIds;
+    const { parameters, ...toolRest } = toolWithCoercedIds;
     const paramList = parameters ?? [];
     const jsonSchema = paramList.length > 0 ? {
       type: "object" as const,
