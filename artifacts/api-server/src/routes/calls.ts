@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { randomBytes } from "crypto";
 import { eq, desc, and, sql, gte, gt } from "drizzle-orm";
-import { db, callsTable, callEventsTable, executionLogsTable, agentsTable, providersTable, usersTable, walletTransactionsTable, activityLogsTable, callTransfersTable, vobizAccountsTable, verifiedPhoneDestinationsTable, platformSettingsTable } from "@workspace/db";
+import { db, callsTable, callEventsTable, executionLogsTable, agentsTable, providersTable, usersTable, walletTransactionsTable, activityLogsTable, callTransfersTable, vobizAccountsTable, verifiedPhoneDestinationsTable, platformSettingsTable, phoneNumbersTable } from "@workspace/db";
 import { getAgentRateCentsPerMin } from "../services/minute-rates.js";
 import {
   InitiateCallBody,
@@ -95,6 +95,15 @@ router.post("/calls/outbound", async (req, res): Promise<void> => {
 
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+
+  // Look up agent's assigned outbound phone number (overrides provider fromNumber)
+  let agentOutboundNumber: string | null = null;
+  if ((agent as any).outboundPhoneNumberId) {
+    const [pn] = await db.select({ number: phoneNumbersTable.number })
+      .from(phoneNumbersTable)
+      .where(eq(phoneNumbersTable.id, (agent as any).outboundPhoneNumberId as number));
+    if (pn) agentOutboundNumber = pn.number;
+  }
 
   // Balance gate + max call duration limiter
   let maxDurationSeconds: number | undefined;
@@ -240,7 +249,10 @@ router.post("/calls/outbound", async (req, res): Promise<void> => {
           return;
         }
 
-        const fromNumber = numbers[Math.floor(Math.random() * numbers.length)]!;
+        // Prefer agent's assigned outbound number (if it's in the managed pool), else pick randomly
+        const fromNumber = (agentOutboundNumber && numbers.includes(agentOutboundNumber))
+          ? agentOutboundNumber
+          : numbers[Math.floor(Math.random() * numbers.length)]!;
         effectiveFromNumber = fromNumber;
         providerCallId = await dialVobiz({
           authId: managedAuthId, authToken: managedAuthToken,

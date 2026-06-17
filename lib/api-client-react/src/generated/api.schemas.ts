@@ -159,11 +159,11 @@ export interface AgentTool {
   goodbyeMessage?: string;
   /** (cal_com) Cal.com API key */
   apiKey?: string;
-  /** (cal_com / native_booking / native_reschedule / native_check_availability) Event type ID; for native_reschedule this is the target event type the rescheduled booking will be placed into */
+  /** (cal_com / native_booking / native_reschedule / native_check_availability / native_cancel / native_list_bookings) Event type ID; for native_reschedule this is the target event type the rescheduled booking will be placed into */
   eventTypeId?: number;
-  /** (native_booking / native_reschedule / native_check_availability / native_cancel) Calendar the event type belongs to — UI hint for cascading selects; for native_reschedule this is the target calendar */
+  /** (native_booking / native_reschedule / native_check_availability / native_cancel / native_list_bookings) Calendar the event type belongs to — UI hint for cascading selects; for native_reschedule this is the target calendar */
   calendarId?: number;
-  /** (cal_com / send_sms / native_booking / native_reschedule / native_check_availability) Default timezone for bookings (e.g. America/New_York) */
+  /** (cal_com / send_sms / native_booking / native_reschedule / native_check_availability / native_cancel / native_list_bookings) Default timezone for bookings (e.g. America/New_York) */
   timezone?: string;
   /** (native_booking) Friendly task name shown in the agent UI; mirrors `name` by default */
   taskName?: string;
@@ -488,6 +488,16 @@ export interface Agent {
      * @nullable
      */
   stagedPromptCoreIdentity?: string | null;
+  /**
+     * Phone number ID assigned for inbound routing to this agent
+     * @nullable
+     */
+  inboundPhoneNumberId?: number | null;
+  /**
+     * Phone number ID used as caller ID for outbound calls from this agent
+     * @nullable
+     */
+  outboundPhoneNumberId?: number | null;
   totalCalls?: number;
   successfulCalls?: number;
   /** @nullable */
@@ -555,7 +565,8 @@ export interface AgentInput {
   description?: string;
   asrProvider: string;
   asrModel?: string;
-  asrLanguage?: string;
+  /** @nullable */
+  asrLanguage?: string | null;
   asrBackgroundDenoising?: boolean;
   asrConfidenceThreshold?: number;
   asrEndOfTurnConfidence?: number;
@@ -602,12 +613,18 @@ export interface AgentInput {
      * @nullable
      */
   snapserveAgentId?: string | null;
-  /** Sliding-window context: only the last N turns are sent to the LLM */
-  contextWindowTurns?: number;
+  /**
+     * Sliding-window context: only the last N turns are sent to the LLM
+     * @nullable
+     */
+  contextWindowTurns?: number | null;
   /** Auto-compress old turns into a summary block when history exceeds threshold */
   tokenSummarizationEnabled?: boolean;
-  /** Number of turns after which summarization is triggered */
-  tokenSummarizationThresholdTurns?: number;
+  /**
+     * Number of turns after which summarization is triggered
+     * @nullable
+     */
+  tokenSummarizationThresholdTurns?: number | null;
   /** Send only the active stage block + core identity instead of the full system prompt */
   stagedPromptEnabled?: boolean;
   /** Named prompt stages (each with name + content) */
@@ -657,7 +674,8 @@ export interface AgentUpdate {
   description?: string;
   asrProvider?: string;
   asrModel?: string;
-  asrLanguage?: string;
+  /** @nullable */
+  asrLanguage?: string | null;
   asrBackgroundDenoising?: boolean;
   asrConfidenceThreshold?: number;
   asrEndOfTurnConfidence?: number;
@@ -712,18 +730,28 @@ export interface AgentUpdate {
      * @nullable
      */
   snapserveAgentId?: string | null;
-  /** Sliding-window context: only the last N turns are sent to the LLM */
-  contextWindowTurns?: number;
+  /**
+     * Sliding-window context: only the last N turns are sent to the LLM
+     * @nullable
+     */
+  contextWindowTurns?: number | null;
   /** Auto-compress old turns into a summary block when history exceeds threshold */
   tokenSummarizationEnabled?: boolean;
-  /** Number of turns after which summarization is triggered */
-  tokenSummarizationThresholdTurns?: number;
+  /**
+     * Number of turns after which summarization is triggered
+     * @nullable
+     */
+  tokenSummarizationThresholdTurns?: number | null;
   /** Send only the active stage block + core identity instead of the full system prompt */
   stagedPromptEnabled?: boolean;
   /** Named prompt stages (each with name + content) */
   stagedPromptStages?: AgentUpdateStagedPromptStagesItem[];
   /** Core identity block always included in staged-prompt mode */
   stagedPromptCoreIdentity?: string;
+  /** Phone number ID for inbound routing to this agent */
+  inboundPhoneNumberId?: number | null;
+  /** Phone number ID used as caller ID for outbound calls */
+  outboundPhoneNumberId?: number | null;
 }
 
 export interface SnapServeCostBreakdown {

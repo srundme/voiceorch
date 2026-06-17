@@ -6,6 +6,7 @@ import {
   VoicemailIcon, SlidersHorizontal, TestTube2, ChevronRight,
   Volume2, Check, X, Pencil, ChevronDown, List, Globe, BarChart3,
   User2, Sparkles, BookOpen, ToggleLeft, ToggleRight, Tag, Loader2, Square,
+  Play, Pause,
   Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
@@ -17,7 +18,7 @@ import {
   useListAgents, useGetAgent, useUpdateAgent, useToggleAgent, useDeleteAgent,
   useCreateAgent, useInitiateOutboundCall, getListAgentsQueryKey, getGetAgentQueryKey,
   useListCalls, getListCallsQueryKey, useListCalendars, customFetch,
-  useListKnowledgeSources, useRunToolTest,
+  useListKnowledgeSources, useRunToolTest, useListAmbientSounds,
 } from "@workspace/api-client-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -302,14 +303,27 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
     staleTime: 5 * 60 * 1000,
   });
 
+  // Fetch user's phone numbers for inbound/outbound assignment
+  const { data: phoneNumbersRaw } = useQuery({
+    queryKey: ["phone-numbers", "list"],
+    queryFn: () => customFetch<Array<{ id: number; number: string; countryCode: string | null }>>(`${DASH_API}/phone-numbers`),
+    staleTime: 60 * 1000,
+  });
+  const phoneNumbers = Array.isArray(phoneNumbersRaw) ? phoneNumbersRaw : [];
+
   const cartesiaOverviewOpts = useMemo(() => {
-    const baseLang = (language ?? "en-US").split("-")[0];
+    // Cartesia Sonic voices are multilingual (42 languages), so we offer every
+    // admin-whitelisted voice regardless of the agent's configured language.
+    // When the admin has whitelisted nothing, fall back to the built-in
+    // Cartesia voice list (matches the admin page's stated fallback) so the
+    // dropdown is never reduced to custom-only.
     const all = whitelistedData?.voices ?? [];
-    const filtered = all.filter(v => v.language === baseLang || v.language === language);
-    const opts = filtered.map(v => ({ value: v.id, label: v.name }));
+    const opts = all.length > 0
+      ? all.map(v => ({ value: v.id, label: v.name }))
+      : (TTS_VOICES.cartesia ?? []).filter(v => v.value !== "__custom__");
     opts.push({ value: "__custom__", label: "✎ Paste custom Voice ID…" });
     return opts;
-  }, [whitelistedData, language]);
+  }, [whitelistedData]);
 
   const ttsVoiceRaw   = ttsProvider in TTS_VOICES ? TTS_VOICES[ttsProvider] : undefined;
   const ttsVoiceFree  = ttsVoiceRaw === null;
@@ -429,6 +443,48 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
               Add own keys →
             </button>
           </div>
+
+          {/* ── Phone Number Assignment ──────────────────────────────────────── */}
+          {phoneNumbers.length > 0 && (
+            <div className="rounded-xl border border-border/60 bg-card/50 p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Phone Numbers</span>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <FormField control={form.control} name="inboundPhoneNumberId" render={({ field }) => (
+                  <FormItem className="space-y-1">
+                    <FormLabel className="text-[10px] text-muted-foreground">Inbound Number</FormLabel>
+                    <SmallSelect
+                      value={field.value ? String(field.value) : "__none__"}
+                      onChange={(v) => field.onChange(v === "__none__" ? null : parseInt(v, 10))}
+                      options={[
+                        { value: "__none__", label: "— None —" },
+                        ...phoneNumbers.map(p => ({ value: String(p.id), label: p.number })),
+                      ]}
+                      placeholder="Select number"
+                    />
+                    <p className="text-[10px] text-muted-foreground">Calls to this number route here</p>
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="outboundPhoneNumberId" render={({ field }) => (
+                  <FormItem className="space-y-1">
+                    <FormLabel className="text-[10px] text-muted-foreground">Outbound Caller ID</FormLabel>
+                    <SmallSelect
+                      value={field.value ? String(field.value) : "__none__"}
+                      onChange={(v) => field.onChange(v === "__none__" ? null : parseInt(v, 10))}
+                      options={[
+                        { value: "__none__", label: "— None —" },
+                        ...phoneNumbers.map(p => ({ value: String(p.id), label: p.number })),
+                      ]}
+                      placeholder="Select number"
+                    />
+                    <p className="text-[10px] text-muted-foreground">Caller ID for outbound calls</p>
+                  </FormItem>
+                )} />
+              </div>
+            </div>
+          )}
 
           {/* ── Inline config for selected card ─────────────────────────────── */}
           {openCard === "transcriber" && (
@@ -733,15 +789,20 @@ function VoiceTab({ form }: { form: any }) {
     staleTime: 5 * 60 * 1000,
   });
 
-  // For Cartesia: build dropdown options from whitelisted voices filtered by the agent's language
+  // For Cartesia: build dropdown options from the admin-whitelisted voices.
+  // Cartesia Sonic voices are multilingual (42 languages), so we offer every
+  // whitelisted voice regardless of the agent's configured language. When the
+  // admin has whitelisted nothing, fall back to the built-in Cartesia voice
+  // list (matches the admin page's stated fallback) so the dropdown is never
+  // reduced to custom-only.
   const cartesiaVoiceOpts = useMemo(() => {
-    const baseLang = agentLanguage.split("-")[0]; // "en-US" → "en", "hi-IN" → "hi"
     const all = whitelistedData?.voices ?? [];
-    const filtered = all.filter(v => v.language === baseLang || v.language === agentLanguage);
-    const opts = filtered.map(v => ({ value: v.id, label: v.name }));
+    const opts = all.length > 0
+      ? all.map(v => ({ value: v.id, label: v.name }))
+      : (TTS_VOICES.cartesia ?? []).filter(v => v.value !== "__custom__");
     opts.push({ value: "__custom__", label: "✎ Paste custom Voice ID…" });
     return opts;
-  }, [whitelistedData, agentLanguage]);
+  }, [whitelistedData]);
 
   // For non-Cartesia providers fall back to the hardcoded list
   const ttsVoiceRawV  = ttsProvider in TTS_VOICES ? TTS_VOICES[ttsProvider] : undefined;
@@ -778,6 +839,67 @@ function VoiceTab({ form }: { form: any }) {
 
   // Stop playback when leaving the tab / unmounting.
   useEffect(() => () => stopPreview(), [stopPreview]);
+
+  // ── Ambient (background noise) track ──────────────────────────────────────
+  const { data: ambientSounds, isLoading: ambientSoundsLoading } = useListAmbientSounds();
+  const ambientNoiseEnabled = form.watch("ambientNoiseEnabled") ?? false;
+  const ambientNoiseTrack   = form.watch("ambientNoiseTrack") ?? "";
+  const [ambientPreviewPlaying, setAmbientPreviewPlaying] = useState<string | null>(null);
+  const ambientAudioRef = useRef<HTMLAudioElement | null>(null);
+  const ambientPreviewUrlRef = useRef<string | null>(null);
+
+  // The user audio endpoint is Bearer-authenticated; <audio> can't send headers,
+  // so fetch it as an authenticated blob and play via an object URL.
+  const stopAmbientPreview = React.useCallback(() => {
+    if (ambientAudioRef.current) {
+      ambientAudioRef.current.pause();
+      ambientAudioRef.current = null;
+    }
+    if (ambientPreviewUrlRef.current) {
+      URL.revokeObjectURL(ambientPreviewUrlRef.current);
+      ambientPreviewUrlRef.current = null;
+    }
+    setAmbientPreviewPlaying(null);
+  }, []);
+
+  const previewAmbient = async (soundId: string) => {
+    if (ambientPreviewPlaying === soundId) {
+      stopAmbientPreview();
+      return;
+    }
+    stopAmbientPreview();
+    setAmbientPreviewPlaying(soundId);
+    try {
+      const blob = await customFetch<Blob>(`${DASH_API}/ambient-sounds/${soundId}/audio`, {
+        responseType: "blob",
+        timeoutMs: 30_000,
+      });
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      ambientAudioRef.current = audio;
+      ambientPreviewUrlRef.current = url;
+      audio.onended = () => stopAmbientPreview();
+      audio.onerror = () => {
+        stopAmbientPreview();
+        toast({ title: "Playback failed", description: "Could not play this ambient track.", variant: "destructive" });
+      };
+      await audio.play();
+    } catch (err) {
+      stopAmbientPreview();
+      toast({ title: "Playback failed", description: formatApiError(err), variant: "destructive" });
+    }
+  };
+
+  // Stop ambient preview on unmount.
+  useEffect(() => () => stopAmbientPreview(), [stopAmbientPreview]);
+
+  // Stop ambient preview when a different track is selected or the toggle is turned off.
+  useEffect(() => {
+    if (ambientPreviewPlaying && ambientPreviewPlaying !== ambientNoiseTrack) {
+      stopAmbientPreview();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ambientNoiseTrack, ambientNoiseEnabled]);
 
   const handlePreviewVoice = async () => {
     // Clicking while playing acts as a stop button.
@@ -996,6 +1118,51 @@ function VoiceTab({ form }: { form: any }) {
               )} />
             </>
           )}
+
+          <FormField control={form.control} name="ambientNoiseEnabled" render={({ field }) => (
+            <FormItem className="flex items-center justify-between rounded-lg border border-border/50 px-3 py-2">
+              <div><FormLabel className="text-sm">Background Noise</FormLabel>
+                <FormDescription className="text-[10px]">Play an ambient background track to make the call feel natural</FormDescription></div>
+              <FormControl><Switch checked={field.value ?? false} onCheckedChange={field.onChange} /></FormControl>
+            </FormItem>
+          )} />
+          {ambientNoiseEnabled && (
+            <FormField control={form.control} name="ambientNoiseTrack" render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-xs">Track</FormLabel>
+                {ambientSoundsLoading ? (
+                  <div className="h-8 flex items-center text-xs text-muted-foreground">Loading tracks…</div>
+                ) : !ambientSounds || ambientSounds.length === 0 ? (
+                  <div className="h-8 flex items-center text-xs text-muted-foreground italic">
+                    No ambient sounds uploaded yet — ask your admin to add some.
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Select value={field.value || undefined} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select a track" /></SelectTrigger>
+                      </FormControl>
+                      <SelectContent position="popper" className="max-h-[280px]">
+                        {ambientSounds.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <button
+                      type="button"
+                      disabled={!field.value}
+                      onClick={() => { if (field.value) void previewAmbient(field.value); }}
+                      aria-label={ambientPreviewPlaying && ambientPreviewPlaying === field.value ? "Stop preview" : "Play preview"}
+                      title={field.value ? "Preview track" : "Select a track to preview"}
+                      className="h-8 w-8 shrink-0 flex items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {ambientPreviewPlaying && ambientPreviewPlaying === field.value
+                        ? <Pause className="h-3.5 w-3.5" />
+                        : <Play className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
+                )}
+              </FormItem>
+            )} />
+          )}
         </div>
       </div>
     </div>
@@ -1184,7 +1351,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
                     </span>
                     {isOn && (
                       <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-muted/40 text-muted-foreground/60">
-                        {toolName}
+                        {fnName}
                       </span>
                     )}
                   </div>
@@ -2526,7 +2693,8 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       greetingMessage: "Hello", endCallPhrases: "", silenceTimeoutSeconds: 30,
       language: "en-US", asrLanguage: "", backchannelingEnabled: true,
       backchannelingFrequency: 0.5, backchannelPhrases: "", webhookUrl: "",
-      webhookSecret: "", noiseCancellationEnabled: true, promptVariables: [],
+      webhookSecret: "", noiseCancellationEnabled: true,
+      ambientNoiseEnabled: false, ambientNoiseTrack: "", promptVariables: [],
       vadSilenceMs: 250, bargeInEnabled: true, bargeInEnergyThreshold: 1200,
       bargeInMinFrames: 4, timezone: "", machineDetectionMode: "disabled",
       voicemailAction: "hangup",
@@ -2543,6 +2711,8 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       stagedPromptEnabled: false,
       stagedPromptStages: [],
       stagedPromptCoreIdentity: "",
+      inboundPhoneNumberId: undefined,
+      outboundPhoneNumberId: undefined,
     },
   });
 
@@ -2573,6 +2743,8 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       webhookUrl:               agent.webhookUrl ?? "",
       webhookSecret:            (agent as any).agentConfig?.webhookSecret ?? "",
       noiseCancellationEnabled: agent.noiseCancellationEnabled ?? true,
+      ambientNoiseEnabled:      (agent as any).agentConfig?.ambientNoiseEnabled ?? false,
+      ambientNoiseTrack:        (agent as any).agentConfig?.ambientNoiseTrack ?? "",
       promptVariables:          ((agent as any).agentConfig?.promptVariables ?? []) as AgentFormValues["promptVariables"],
       vadSilenceMs:             (agent as any).agentConfig?.vadSilenceMs ?? 250,
       bargeInEnabled:           (agent as any).agentConfig?.bargeInEnabled ?? true,
@@ -2603,6 +2775,8 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       stagedPromptEnabled:             (agent as any).stagedPromptEnabled ?? false,
       stagedPromptStages:              (agent as any).stagedPromptStages ?? [],
       stagedPromptCoreIdentity:        (agent as any).stagedPromptCoreIdentity ?? "",
+      inboundPhoneNumberId:            (agent as any).inboundPhoneNumberId ?? undefined,
+      outboundPhoneNumberId:           (agent as any).outboundPhoneNumberId ?? undefined,
     });
   }, [agent]);
 

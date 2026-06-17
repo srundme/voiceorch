@@ -1,7 +1,7 @@
 // agents router — supports call_transfer + webhook (custom function) tools + AMD voicemail detection
 import { Router, type IRouter } from "express";
 import { eq, and, count, desc, isNull, inArray } from "drizzle-orm";
-import { db, agentsTable, schedulingCalendarsTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callerSentencesTable, callerFactSentenceLinksTable, callerEpisodeFactLinksTable, providersTable, agentKnowledgeSourcesTable } from "@workspace/db";
+import { db, agentsTable, schedulingCalendarsTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callerSentencesTable, callerFactSentenceLinksTable, callerEpisodeFactLinksTable, providersTable, agentKnowledgeSourcesTable, phoneNumbersTable } from "@workspace/db";
 import {
   CreateAgentBody,
   UpdateAgentBody,
@@ -242,6 +242,20 @@ router.patch("/agents/:id", requireAuth, async (req, res): Promise<void> => {
   }
   if (updateSourceIds !== undefined) {
     await setAgentKnowledgeSources(agent.id, updateSourceIds);
+  }
+  // Sync phone_numbers.agent_id when inbound phone number assignment changes
+  if ("inboundPhoneNumberId" in parsed.data) {
+    await db.update(phoneNumbersTable)
+      .set({ agentId: null })
+      .where(eq(phoneNumbersTable.agentId, agent.id));
+    if (parsed.data.inboundPhoneNumberId && agent.userId) {
+      await db.update(phoneNumbersTable)
+        .set({ agentId: agent.id })
+        .where(and(
+          eq(phoneNumbersTable.id, parsed.data.inboundPhoneNumberId as number),
+          eq(phoneNumbersTable.userId, agent.userId),
+        ));
+    }
   }
   const sourceIdMap = await getKnowledgeSourceIdsByAgent([agent]);
   res.json(UpdateAgentResponse.parse(prepareAgentForResponse(agent, sourceIdMap.get(agent.id) ?? [])));
