@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
+import { diffWords, diffWordsWithSpace } from "diff";
 import { useLocation, useParams } from "wouter";
 import {
   Bot, Plus, Search, Phone, Mic, Brain, Zap, Webhook, PhoneForwarded,
@@ -2868,6 +2869,54 @@ const COMPARE_SECTIONS: Array<{ label: string; keys: string[] }> = [
   { label: "Advanced",      keys: ["agentConfig"] },
 ];
 
+function normalizeForDiff(text: string): string {
+  return text
+    .replace(/\r\n/g, "\n")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function isTextValue(raw: unknown, rendered: string): boolean {
+  if (typeof raw === "boolean" || typeof raw === "number") return false;
+  if (typeof raw === "object" && raw !== null) return true;
+  return /[\s\n]/.test(rendered) || rendered.length > 40;
+}
+
+function WordDiff({ oldText, newText, ignoreFormatting }: { oldText: string; newText: string; ignoreFormatting: boolean }) {
+  const changes = useMemo(() => {
+    const a = ignoreFormatting ? normalizeForDiff(oldText) : oldText;
+    const b = ignoreFormatting ? normalizeForDiff(newText) : newText;
+    return ignoreFormatting ? diffWords(a, b) : diffWordsWithSpace(a, b);
+  }, [oldText, newText, ignoreFormatting]);
+
+  const oldParts = changes.filter(c => !c.added);
+  const newParts = changes.filter(c => !c.removed);
+
+  return (
+    <div className="flex gap-3">
+      <pre className="whitespace-pre-wrap break-all font-mono text-[11px] flex-1 leading-relaxed">
+        {oldParts.map((c, i) =>
+          c.removed ? (
+            <span key={i} className="bg-red-500/15 text-red-400 line-through rounded-sm px-0.5">{c.value}</span>
+          ) : (
+            <span key={i}>{c.value}</span>
+          )
+        )}
+      </pre>
+      <pre className="whitespace-pre-wrap break-all font-mono text-[11px] flex-1 leading-relaxed">
+        {newParts.map((c, i) =>
+          c.added ? (
+            <span key={i} className="bg-green-500/15 text-green-400 rounded-sm px-0.5">{c.value}</span>
+          ) : (
+            <span key={i}>{c.value}</span>
+          )
+        )}
+      </pre>
+    </div>
+  );
+}
+
 function CompareView({
   agentId, baseVersion, allVersions,
   onClose,
@@ -2878,6 +2927,7 @@ function CompareView({
   onClose: () => void;
 }) {
   const [compareId, setCompareId] = useState<number | null>(null);
+  const [ignoreFormatting, setIgnoreFormatting] = useState(true);
   const compareTarget = allVersions.find(v => v.id === compareId);
 
   const { data: baseSnap } = useGetAgentVersion(agentId, baseVersion.id, {
@@ -2902,9 +2952,24 @@ function CompareView({
     const a = (baseSnap?.snapshot ?? {}) as Record<string, unknown>;
     const b = (compareSnap?.snapshot ?? {}) as Record<string, unknown>;
     return section.keys.map(key => {
-      const aVal = renderValue(a[key]);
-      const bVal = renderValue(b[key]);
+      const aRaw = a[key];
+      const bRaw = b[key];
+      const aVal = renderValue(aRaw);
+      const bVal = renderValue(bRaw);
       const changed = aVal !== bVal;
+      const useWordDiff = changed && (isTextValue(aRaw, aVal) || isTextValue(bRaw, bVal));
+
+      if (useWordDiff) {
+        return (
+          <tr key={key} className="bg-yellow-500/5">
+            <td className="py-1.5 pr-3 text-[10px] text-muted-foreground font-mono align-top w-32 shrink-0">{key}</td>
+            <td colSpan={2} className="py-1.5 pr-3 text-[11px] align-top">
+              <WordDiff oldText={aVal} newText={compareSnap ? bVal : "—"} ignoreFormatting={ignoreFormatting} />
+            </td>
+          </tr>
+        );
+      }
+
       return (
         <tr key={key} className={changed ? "bg-yellow-500/5" : ""}>
           <td className="py-1.5 pr-3 text-[10px] text-muted-foreground font-mono align-top w-32 shrink-0">{key}</td>
@@ -2921,13 +2986,21 @@ function CompareView({
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="flex items-center gap-3 px-5 py-3 border-b border-border/60 shrink-0">
+      <div className="flex items-center gap-3 px-5 py-3 border-b border-border/60 shrink-0 flex-wrap">
         <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground">
           <X className="h-4 w-4" />
         </button>
         <ArrowLeftRight className="h-4 w-4 text-primary" />
         <span className="font-semibold text-sm">Compare Versions</span>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-3 flex-wrap">
+          <label className="flex items-center gap-1.5 cursor-pointer select-none">
+            <Switch
+              checked={ignoreFormatting}
+              onCheckedChange={setIgnoreFormatting}
+              className="scale-75 origin-left"
+            />
+            <span className="text-[11px] text-muted-foreground">Ignore Formatting</span>
+          </label>
           <span className="text-xs text-muted-foreground">Comparing</span>
           <Badge variant="outline" className="text-[10px]">{baseVersion.versionNumber}: {baseVersion.versionName}</Badge>
           <span className="text-xs text-muted-foreground">vs</span>
