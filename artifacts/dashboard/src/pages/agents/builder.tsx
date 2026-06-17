@@ -18,7 +18,7 @@ import {
   useListAgents, useGetAgent, useUpdateAgent, useToggleAgent, useDeleteAgent,
   useCreateAgent, useInitiateOutboundCall, getListAgentsQueryKey, getGetAgentQueryKey,
   useListCalls, getListCallsQueryKey, useListCalendars, customFetch,
-  useListKnowledgeSources, useRunToolTest, useListAmbientSounds,
+  useListKnowledgeSources, useRunToolTest, useListAmbientSounds, useListEventTypes,
 } from "@workspace/api-client-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -1180,6 +1180,28 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
 
   const { data: calendarsData } = useListCalendars();
   const agentCalendar = (calendarsData ?? []).find((cal: any) => cal.agentId === agentId);
+  const calendarIdForEt = agentCalendar?.id;
+  const { data: agentEventTypes } = useListEventTypes(
+    calendarIdForEt ? { calendarId: calendarIdForEt } : undefined,
+    { query: { enabled: !!calendarIdForEt, queryKey: ["agent-event-types", calendarIdForEt ?? null] } }
+  );
+
+  // Reset eventTypeId on native_list_bookings whenever the assigned calendar changes
+  const prevCalendarIdRef = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (prevCalendarIdRef.current === undefined) {
+      prevCalendarIdRef.current = calendarIdForEt;
+      return;
+    }
+    if (prevCalendarIdRef.current !== calendarIdForEt) {
+      prevCalendarIdRef.current = calendarIdForEt;
+      const tools = form.getValues("tools") ?? [];
+      const idx = (tools as any[]).findIndex((t: any) => t.type === "native_list_bookings");
+      if (idx >= 0) {
+        form.setValue(`tools.${idx}.eventTypeId` as any, undefined);
+      }
+    }
+  }, [calendarIdForEt]);
 
   const [expandedSchema, setExpandedSchema] = useState<string | null>(null);
   const [expandedTest, setExpandedTest]     = useState<string | null>(null);
@@ -1371,6 +1393,44 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
                         {agentCalendar ? (agentCalendar.name || "Calendar") : "No calendar assigned yet"}
                       </span>
                     </div>
+                    {/* Event Type (native_list_bookings only) */}
+                    {type === "native_list_bookings" && (() => {
+                      const idx = nativeToolIndex(type);
+                      const toolEventTypeId = watchedTools[idx]?.eventTypeId;
+                      return (
+                        <div className="space-y-1">
+                          <label className="text-[10px] text-muted-foreground block">Event Type (optional)</label>
+                          <Select
+                            value={toolEventTypeId != null ? String(toolEventTypeId) : "__none__"}
+                            onValueChange={(v) => form.setValue(`tools.${idx}.eventTypeId` as any, v === "__none__" ? undefined : Number(v))}
+                          >
+                            <SelectTrigger className="h-7 text-xs bg-background/50"><SelectValue placeholder="Any event type" /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__" className="text-xs">Any event type</SelectItem>
+                              {(agentEventTypes ?? []).map((et: any) => (
+                                <SelectItem key={et.id} value={String(et.id)} className="text-xs">{et.title}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      );
+                    })()}
+                    {/* Timezone */}
+                    {(() => {
+                      const idx = nativeToolIndex(type);
+                      const toolTimezone = watchedTools[idx]?.timezone;
+                      return (
+                        <div className="space-y-1">
+                          <label className="text-[10px] text-muted-foreground block">Timezone (optional)</label>
+                          <SmallSelect
+                            value={toolTimezone || "__none__"}
+                            onChange={(v) => form.setValue(`tools.${idx}.timezone` as any, v === "__none__" ? undefined : v)}
+                            options={[{ value: "__none__", label: "Use caller timezone" }, ...AGENT_TIMEZONES]}
+                            placeholder="Use caller timezone"
+                          />
+                        </div>
+                      );
+                    })()}
                     {/* Action buttons */}
                     <div className="flex items-center gap-2">
                       <Button
