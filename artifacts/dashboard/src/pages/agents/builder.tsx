@@ -1280,6 +1280,7 @@ function VoiceTab({ form }: { form: any }) {
 function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined }) {
   const { fields, append, remove } = useFieldArray({ control: form.control, name: "tools" });
   const genderEnabled = form.watch("genderDetectionEnabled") ?? false;
+  const recordingEnabled = form.watch("recordingEnabled") ?? false;
   const watchedTools  = (form.watch("tools") ?? []) as any[];
   const { toast } = useToast();
 
@@ -1678,6 +1679,35 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
             </div>
           );
         })}
+
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">Recording</p>
+        {/* Call Recording card */}
+        <div className={cn("rounded-xl border transition-all duration-150", recordingEnabled ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
+          <button
+            type="button"
+            onClick={() => form.setValue("recordingEnabled", !recordingEnabled, { shouldDirty: true })}
+            className="w-full text-left p-4 flex items-start gap-3"
+          >
+            <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
+              <Mic className={cn("h-4 w-4", recordingEnabled ? "text-foreground/70" : "text-muted-foreground/35")} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="text-xs font-semibold text-foreground/80">Call Recording</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
+                Records the full audio of each call (caller and agent) and stores it on the call. When enabled, recordings appear in the Call Recording tab on the call's detail page for playback and download.
+              </p>
+            </div>
+            <div className="shrink-0 mt-1">
+              <Switch
+                checked={recordingEnabled}
+                onCheckedChange={(v) => form.setValue("recordingEnabled", v, { shouldDirty: true })}
+                onClick={e => e.stopPropagation()}
+              />
+            </div>
+          </button>
+        </div>
 
         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">Caller Intelligence</p>
         {/* Gender Identification card */}
@@ -3352,7 +3382,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       bargeInMinFrames: 4, timezone: "", machineDetectionMode: "disabled",
       voicemailAction: "hangup",
       voicemailMessage: "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
-      tools: [], genderDetectionEnabled: false,
+      tools: [], genderDetectionEnabled: false, recordingEnabled: false,
       startSpeakingWaitSecs: 0, startSpeakingOnPunctuationSecs: 0.1,
       startSpeakingOnNoPunctuationSecs: 1.5, startSpeakingOnNumberSecs: 0.5,
       stopSpeakingNumWords: 0, stopSpeakingVoiceSecs: 0.2, stopSpeakingBackOffSecs: 1,
@@ -3412,6 +3442,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       voicemailMessage:         (agent as any).agentConfig?.voicemailMessage ?? "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
       tools:                    (agent.tools ?? []) as AgentFormValues["tools"],
       genderDetectionEnabled:   (agent as any).agentConfig?.genderDetectionEnabled ?? false,
+      recordingEnabled:         (agent as any).agentConfig?.recordingEnabled ?? false,
       startSpeakingWaitSecs:            (agent as any).agentConfig?.startSpeakingPlan?.waitSeconds            ?? 0,
       startSpeakingOnPunctuationSecs:   (agent as any).agentConfig?.startSpeakingPlan?.onPunctuationSeconds   ?? 0.1,
       startSpeakingOnNoPunctuationSecs: (agent as any).agentConfig?.startSpeakingPlan?.onNoPunctuationSeconds ?? 1.5,

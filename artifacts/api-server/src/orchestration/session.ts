@@ -214,6 +214,8 @@ export async function createSession(params: {
     bargeInEchoGraceMs:     (agentCfg["bargeInEchoGraceMs"]    as number  | undefined) ?? 600,
     // P1-E: Agent timezone
     timezone: agentTimezone,
+    // Call recording
+    recordingEnabled:              (agentCfg["recordingEnabled"]              as boolean | undefined) ?? false,
     // P1-F: Caller gender detection
     genderDetectionEnabled:        (agentCfg["genderDetectionEnabled"]        as boolean | undefined) ?? true,
     genderDetectionMaleSalutation: (agentCfg["genderDetectionMaleSalutation"] as string  | undefined) ?? "Sir",
@@ -771,12 +773,17 @@ export async function endSession(sessionId: string): Promise<void> {
     const callStatus = session.wasTransferred ? "transferred" : "completed";
 
     // ── Upload call recording (async, non-blocking) ──────────────────────────
-    // Finalize happens concurrently; we await the URL before writing to DB.
-    const recordingUrl = await session.pipeline.getRecording().finalize(session.callId)
-      .catch((err) => {
-        logger.warn({ sessionId, err }, "Recording finalization failed");
-        return null;
-      });
+    // Only finalize/upload when the agent has Call Recording enabled, so disabled
+    // agents store nothing. Finalize happens concurrently; we await the URL before
+    // writing to DB.
+    const recordingEnabled = (session.pipeline as any).config?.agentConfig?.recordingEnabled === true;
+    const recordingUrl = recordingEnabled
+      ? await session.pipeline.getRecording().finalize(session.callId)
+          .catch((err) => {
+            logger.warn({ sessionId, err }, "Recording finalization failed");
+            return null;
+          })
+      : null;
 
     const pipelineUsage = (session.pipeline as unknown as {
       getUsageTotals?: () => { tokensSaved?: number };

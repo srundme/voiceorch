@@ -122,6 +122,7 @@ export const agentFormSchema = z.object({
     })).optional(),
   })).optional(),
   genderDetectionEnabled: z.boolean().optional(),
+  recordingEnabled: z.boolean().optional(),
   // Start Speaking Plan
   startSpeakingWaitSecs:          z.number().min(0).max(5).optional(),
   startSpeakingOnPunctuationSecs: z.number().min(0).max(3).optional(),
@@ -168,7 +169,7 @@ export type { AgentFormValues };
 export function buildUpdateAgentPayload(data: AgentFormValues) {
   const {
     webhookSecret, promptVariables, vadSilenceMs, bargeInEnabled, bargeInEnergyThreshold, bargeInMinFrames,
-    timezone, machineDetectionMode, voicemailAction, voicemailMessage, genderDetectionEnabled,
+    timezone, machineDetectionMode, voicemailAction, voicemailMessage, genderDetectionEnabled, recordingEnabled,
     startSpeakingWaitSecs, startSpeakingOnPunctuationSecs, startSpeakingOnNoPunctuationSecs, startSpeakingOnNumberSecs,
     stopSpeakingNumWords, stopSpeakingVoiceSecs, stopSpeakingBackOffSecs,
     complianceIrdai, complianceDpdp, complianceHipaa, complianceTrai,
@@ -191,6 +192,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   if (voicemailAction && voicemailAction !== "hangup") agentConfig["voicemailAction"] = voicemailAction;
   if (voicemailMessage) agentConfig["voicemailMessage"] = voicemailMessage;
   agentConfig["genderDetectionEnabled"] = !!genderDetectionEnabled;
+  agentConfig["recordingEnabled"] = !!recordingEnabled;
   agentConfig["ambientNoiseEnabled"] = !!ambientNoiseEnabled;
   if (ambientNoiseTrack) agentConfig["ambientNoiseTrack"] = ambientNoiseTrack;
   agentConfig["isMultilingual"] = !!isMultilingual;
@@ -418,6 +420,7 @@ export default function AgentEdit() {
       voicemailMessage: "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
       tools: [],
       genderDetectionEnabled: false,
+      recordingEnabled: false,
       snapserveAgentId: "",
       contextWindowTurns: undefined,
       tokenSummarizationEnabled: false,
@@ -620,6 +623,7 @@ export default function AgentEdit() {
       voicemailMessage:         ((agent as any).agentConfig?.voicemailMessage as string | undefined) ?? "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
       tools: (agent.tools ?? []) as AgentFormValues["tools"],
       genderDetectionEnabled: (agent as any).agentConfig?.genderDetectionEnabled ?? false,
+      recordingEnabled: (agent as any).agentConfig?.recordingEnabled ?? false,
       snapserveAgentId: (agent as any).snapserveAgentId ?? "",
       contextWindowTurns: (agent as any).contextWindowTurns ?? undefined,
       tokenSummarizationEnabled: (agent as any).tokenSummarizationEnabled ?? false,

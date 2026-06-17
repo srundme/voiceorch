@@ -243,6 +243,9 @@ export interface AgentConfig {
   // P1-E: Agent timezone (used for date/time context in system prompt)
   timezone: string;
 
+  // Call recording — when true, the in-process RecordingBuffer is finalized and stored at call end
+  recordingEnabled: boolean;
+
   // P1-F: Caller gender detection
   genderDetectionEnabled: boolean;
   genderDetectionProvider?: string;

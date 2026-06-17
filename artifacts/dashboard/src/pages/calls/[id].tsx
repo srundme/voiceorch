@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useParams } from "wouter";
 import { format, parseISO } from "date-fns";
 import {
@@ -7,7 +7,8 @@ import {
   ChevronDown, ChevronUp, Phone, Calendar, Clock, TrendingUp,
   BarChart3, Mic, Cpu, Volume2, Hash, ArrowRight, UserCheck,
   Voicemail, BookOpen, Tag, Activity, ExternalLink, Copy, CheckCircle2,
-  XCircle, PlayCircle, PauseCircle, MicOff, ScrollText
+  XCircle, PlayCircle, PauseCircle, MicOff, ScrollText,
+  Play, Pause, MoreVertical, VolumeX, Gauge
 } from "lucide-react";
 import {
   useGetCall,
@@ -29,6 +30,11 @@ import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Slider } from "@/components/ui/slider";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuPortal,
+} from "@/components/ui/dropdown-menu";
 
 interface ToolEvent {
   toolName: string;
@@ -440,6 +446,173 @@ function ExecLogRow({ entry }: { entry: ExecutionLogEvent }) {
   );
 }
 
+function formatPlayerTime(secs: number): string {
+  if (!Number.isFinite(secs) || secs < 0) return "0:00";
+  const m = Math.floor(secs / 60);
+  const s = Math.floor(secs % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+const PLAYBACK_SPEEDS = [0.5, 1, 1.5, 2] as const;
+
+function CallRecordingPlayer({ src, callId }: { src: string; callId: number | string }) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [volume, setVolume] = useState(1);
+  const [muted, setMuted] = useState(false);
+  const [speed, setSpeed] = useState<number>(1);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const onTime = () => setCurrentTime(audio.currentTime);
+    const onLoaded = () => setDuration(Number.isFinite(audio.duration) ? audio.duration : 0);
+    const onEnded = () => setIsPlaying(false);
+    const onPlay = () => setIsPlaying(true);
+    const onPause = () => setIsPlaying(false);
+    audio.addEventListener("timeupdate", onTime);
+    audio.addEventListener("loadedmetadata", onLoaded);
+    audio.addEventListener("durationchange", onLoaded);
+    audio.addEventListener("ended", onEnded);
+    audio.addEventListener("play", onPlay);
+    audio.addEventListener("pause", onPause);
+    return () => {
+      audio.removeEventListener("timeupdate", onTime);
+      audio.removeEventListener("loadedmetadata", onLoaded);
+      audio.removeEventListener("durationchange", onLoaded);
+      audio.removeEventListener("ended", onEnded);
+      audio.removeEventListener("play", onPlay);
+      audio.removeEventListener("pause", onPause);
+    };
+  }, [src]);
+
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.playbackRate = speed;
+  }, [speed]);
+
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.volume = muted ? 0 : volume;
+  }, [volume, muted]);
+
+  const togglePlay = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (audio.paused) void audio.play();
+    else audio.pause();
+  };
+
+  const handleSeek = (vals: number[]) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const t = vals[0] ?? 0;
+    audio.currentTime = t;
+    setCurrentTime(t);
+  };
+
+  const handleVolume = (vals: number[]) => {
+    const v = (vals[0] ?? 0) / 100;
+    setVolume(v);
+    setMuted(v === 0);
+  };
+
+  return (
+    <div className="w-full max-w-2xl mx-auto rounded-xl border border-border bg-card p-5">
+      <audio ref={audioRef} src={src} preload="metadata" />
+
+      <div className="flex items-center gap-4">
+        <Button
+          type="button"
+          size="icon"
+          onClick={togglePlay}
+          className="h-12 w-12 rounded-full shrink-0"
+          aria-label={isPlaying ? "Pause" : "Play"}
+        >
+          {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5 ml-0.5" />}
+        </Button>
+
+        <div className="flex-1 min-w-0">
+          <Slider
+            value={[currentTime]}
+            min={0}
+            max={duration || 0}
+            step={0.1}
+            onValueChange={handleSeek}
+            aria-label="Seek"
+          />
+          <div className="flex items-center justify-between mt-1.5 text-[11px] font-mono text-muted-foreground tabular-nums">
+            <span>{formatPlayerTime(currentTime)}</span>
+            <span>{formatPlayerTime(duration)}</span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => setMuted(m => !m)}
+            aria-label={muted ? "Unmute" : "Mute"}
+          >
+            {muted || volume === 0 ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+          </Button>
+          <Slider
+            value={[muted ? 0 : Math.round(volume * 100)]}
+            min={0}
+            max={100}
+            step={1}
+            onValueChange={handleVolume}
+            className="w-20"
+            aria-label="Volume"
+          />
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="ghost" size="icon" className="h-8 w-8" aria-label="More options">
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem asChild>
+                <a href={src} download={`call-${callId}.wav`}>
+                  <Download className="h-4 w-4 mr-2" /> Download recording
+                </a>
+              </DropdownMenuItem>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <Gauge className="h-4 w-4 mr-2" /> Playback Speed
+                </DropdownMenuSubTrigger>
+                <DropdownMenuPortal>
+                  <DropdownMenuSubContent>
+                    {PLAYBACK_SPEEDS.map(s => (
+                      <DropdownMenuItem
+                        key={s}
+                        onClick={() => setSpeed(s)}
+                        className={s === speed ? "font-semibold text-primary" : ""}
+                      >
+                        {s === 1 ? "1x (Normal)" : `${s}x`}
+                        {s === speed && <Check className="h-3.5 w-3.5 ml-auto" />}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuPortal>
+              </DropdownMenuSub>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+
+      {speed !== 1 && (
+        <div className="mt-3 text-[11px] text-muted-foreground text-right">
+          Playback speed: <span className="font-medium text-foreground/70">{speed}x</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function CallDetail() {
   const params = useParams();
   const id = parseInt(params.id || "0", 10);
@@ -608,22 +781,14 @@ export default function CallDetail() {
           </div>
           <div className="flex items-center gap-2">
             {call.recordingUrl ? (
-              <>
-                <audio
-                  controls
-                  src={call.recordingUrl}
-                  className="h-8 max-w-[200px] rounded"
-                  style={{ colorScheme: "dark" }}
-                />
-                <a
-                  href={call.recordingUrl}
-                  download={`call-${call.id}.wav`}
-                  title="Download Recording"
-                  className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground"
-                >
-                  <Download className="h-4 w-4" />
-                </a>
-              </>
+              <button
+                type="button"
+                onClick={() => setActiveTab("recording")}
+                title="View call recording"
+                className="inline-flex items-center gap-1.5 text-[11px] text-foreground/70 border border-border rounded-md px-2.5 py-1.5 hover:bg-accent hover:text-accent-foreground"
+              >
+                <Mic className="h-3 w-3" /> Recording available
+              </button>
             ) : (call.status === "completed" || call.status === "failed") ? (
               <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground/40 border border-dashed border-border rounded-md px-2.5 py-1.5">
                 <MicOff className="h-3 w-3" /> Recording not enabled
@@ -689,6 +854,9 @@ export default function CallDetail() {
                 </TabsTrigger>
                 <TabsTrigger value="logs" className="text-xs h-6 gap-1">
                   <ScrollText className="h-3 w-3" /> Logs {callLogs && callLogs.length > 0 && `(${callLogs.length})`}
+                </TabsTrigger>
+                <TabsTrigger value="recording" className="text-xs h-6 gap-1">
+                  <Mic className="h-3 w-3" /> Call Recording
                 </TabsTrigger>
                 <TabsTrigger value="metadata" className="text-xs h-6 gap-1">
                   <Hash className="h-3 w-3" /> Metadata
@@ -919,6 +1087,23 @@ export default function CallDetail() {
                     ) : (
                       <div className="text-center text-muted-foreground py-10">
                         <p className="text-sm text-foreground/40">No metadata</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="recording" className="flex-1 overflow-auto mt-2 min-h-0">
+                <Card className="h-full flex flex-col">
+                  <CardContent className="flex-1 flex items-center justify-center p-6">
+                    {call.recordingUrl ? (
+                      <CallRecordingPlayer src={call.recordingUrl} callId={call.id} />
+                    ) : (
+                      <div className="text-center text-muted-foreground py-10">
+                        <div className="h-10 w-10 rounded-xl bg-elevated border border-border flex items-center justify-center mx-auto mb-3">
+                          <MicOff className="h-5 w-5 text-muted-foreground/30" />
+                        </div>
+                        <p className="text-sm text-foreground/40">No call recording available.</p>
                       </div>
                     )}
                   </CardContent>
