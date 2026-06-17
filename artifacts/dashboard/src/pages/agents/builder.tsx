@@ -6,6 +6,7 @@ import {
   VoicemailIcon, SlidersHorizontal, TestTube2, ChevronRight,
   Volume2, Check, X, Pencil, ChevronDown, List, Globe, BarChart3,
   User2, Sparkles, BookOpen, ToggleLeft, ToggleRight, Tag, Loader2, Square,
+  Play, Pause,
   Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
@@ -17,7 +18,7 @@ import {
   useListAgents, useGetAgent, useUpdateAgent, useToggleAgent, useDeleteAgent,
   useCreateAgent, useInitiateOutboundCall, getListAgentsQueryKey, getGetAgentQueryKey,
   useListCalls, getListCallsQueryKey, useListCalendars, customFetch,
-  useListKnowledgeSources, useRunToolTest,
+  useListKnowledgeSources, useRunToolTest, useListAmbientSounds,
 } from "@workspace/api-client-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -789,6 +790,67 @@ function VoiceTab({ form }: { form: any }) {
   // Stop playback when leaving the tab / unmounting.
   useEffect(() => () => stopPreview(), [stopPreview]);
 
+  // ── Ambient (background noise) track ──────────────────────────────────────
+  const { data: ambientSounds, isLoading: ambientSoundsLoading } = useListAmbientSounds();
+  const ambientNoiseEnabled = form.watch("ambientNoiseEnabled") ?? false;
+  const ambientNoiseTrack   = form.watch("ambientNoiseTrack") ?? "";
+  const [ambientPreviewPlaying, setAmbientPreviewPlaying] = useState<string | null>(null);
+  const ambientAudioRef = useRef<HTMLAudioElement | null>(null);
+  const ambientPreviewUrlRef = useRef<string | null>(null);
+
+  // The user audio endpoint is Bearer-authenticated; <audio> can't send headers,
+  // so fetch it as an authenticated blob and play via an object URL.
+  const stopAmbientPreview = React.useCallback(() => {
+    if (ambientAudioRef.current) {
+      ambientAudioRef.current.pause();
+      ambientAudioRef.current = null;
+    }
+    if (ambientPreviewUrlRef.current) {
+      URL.revokeObjectURL(ambientPreviewUrlRef.current);
+      ambientPreviewUrlRef.current = null;
+    }
+    setAmbientPreviewPlaying(null);
+  }, []);
+
+  const previewAmbient = async (soundId: string) => {
+    if (ambientPreviewPlaying === soundId) {
+      stopAmbientPreview();
+      return;
+    }
+    stopAmbientPreview();
+    setAmbientPreviewPlaying(soundId);
+    try {
+      const blob = await customFetch<Blob>(`${DASH_API}/ambient-sounds/${soundId}/audio`, {
+        responseType: "blob",
+        timeoutMs: 30_000,
+      });
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      ambientAudioRef.current = audio;
+      ambientPreviewUrlRef.current = url;
+      audio.onended = () => stopAmbientPreview();
+      audio.onerror = () => {
+        stopAmbientPreview();
+        toast({ title: "Playback failed", description: "Could not play this ambient track.", variant: "destructive" });
+      };
+      await audio.play();
+    } catch (err) {
+      stopAmbientPreview();
+      toast({ title: "Playback failed", description: formatApiError(err), variant: "destructive" });
+    }
+  };
+
+  // Stop ambient preview on unmount.
+  useEffect(() => () => stopAmbientPreview(), [stopAmbientPreview]);
+
+  // Stop ambient preview when a different track is selected or the toggle is turned off.
+  useEffect(() => {
+    if (ambientPreviewPlaying && ambientPreviewPlaying !== ambientNoiseTrack) {
+      stopAmbientPreview();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ambientNoiseTrack, ambientNoiseEnabled]);
+
   const handlePreviewVoice = async () => {
     // Clicking while playing acts as a stop button.
     if (previewState === "playing") {
@@ -1005,6 +1067,51 @@ function VoiceTab({ form }: { form: any }) {
                 </FormItem>
               )} />
             </>
+          )}
+
+          <FormField control={form.control} name="ambientNoiseEnabled" render={({ field }) => (
+            <FormItem className="flex items-center justify-between rounded-lg border border-border/50 px-3 py-2">
+              <div><FormLabel className="text-sm">Background Noise</FormLabel>
+                <FormDescription className="text-[10px]">Play an ambient background track to make the call feel natural</FormDescription></div>
+              <FormControl><Switch checked={field.value ?? false} onCheckedChange={field.onChange} /></FormControl>
+            </FormItem>
+          )} />
+          {ambientNoiseEnabled && (
+            <FormField control={form.control} name="ambientNoiseTrack" render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-xs">Track</FormLabel>
+                {ambientSoundsLoading ? (
+                  <div className="h-8 flex items-center text-xs text-muted-foreground">Loading tracks…</div>
+                ) : !ambientSounds || ambientSounds.length === 0 ? (
+                  <div className="h-8 flex items-center text-xs text-muted-foreground italic">
+                    No ambient sounds uploaded yet — ask your admin to add some.
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Select value={field.value || undefined} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select a track" /></SelectTrigger>
+                      </FormControl>
+                      <SelectContent position="popper" className="max-h-[280px]">
+                        {ambientSounds.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <button
+                      type="button"
+                      disabled={!field.value}
+                      onClick={() => { if (field.value) void previewAmbient(field.value); }}
+                      aria-label={ambientPreviewPlaying && ambientPreviewPlaying === field.value ? "Stop preview" : "Play preview"}
+                      title={field.value ? "Preview track" : "Select a track to preview"}
+                      className="h-8 w-8 shrink-0 flex items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {ambientPreviewPlaying && ambientPreviewPlaying === field.value
+                        ? <Pause className="h-3.5 w-3.5" />
+                        : <Play className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
+                )}
+              </FormItem>
+            )} />
           )}
         </div>
       </div>
@@ -2536,7 +2643,8 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       greetingMessage: "Hello", endCallPhrases: "", silenceTimeoutSeconds: 30,
       language: "en-US", asrLanguage: "", backchannelingEnabled: true,
       backchannelingFrequency: 0.5, backchannelPhrases: "", webhookUrl: "",
-      webhookSecret: "", noiseCancellationEnabled: true, promptVariables: [],
+      webhookSecret: "", noiseCancellationEnabled: true,
+      ambientNoiseEnabled: false, ambientNoiseTrack: "", promptVariables: [],
       vadSilenceMs: 250, bargeInEnabled: true, bargeInEnergyThreshold: 1200,
       bargeInMinFrames: 4, timezone: "", machineDetectionMode: "disabled",
       voicemailAction: "hangup",
@@ -2583,6 +2691,8 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       webhookUrl:               agent.webhookUrl ?? "",
       webhookSecret:            (agent as any).agentConfig?.webhookSecret ?? "",
       noiseCancellationEnabled: agent.noiseCancellationEnabled ?? true,
+      ambientNoiseEnabled:      (agent as any).agentConfig?.ambientNoiseEnabled ?? false,
+      ambientNoiseTrack:        (agent as any).agentConfig?.ambientNoiseTrack ?? "",
       promptVariables:          ((agent as any).agentConfig?.promptVariables ?? []) as AgentFormValues["promptVariables"],
       vadSilenceMs:             (agent as any).agentConfig?.vadSilenceMs ?? 250,
       bargeInEnabled:           (agent as any).agentConfig?.bargeInEnabled ?? true,

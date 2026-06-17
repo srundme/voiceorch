@@ -80,6 +80,8 @@ export const agentFormSchema = z.object({
   webhookUrl:               z.string().optional(),
   webhookSecret:            z.string().optional(),
   noiseCancellationEnabled: z.boolean().optional(),
+  ambientNoiseEnabled:      z.boolean().optional(),
+  ambientNoiseTrack:        z.string().optional(),
   promptVariables: z.array(z.object({
     key:          z.string().min(1, "Key required"),
     defaultValue: z.string(),
@@ -166,6 +168,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     snapserveAgentId,
     contextWindowTurns, tokenSummarizationEnabled, tokenSummarizationThresholdTurns,
     stagedPromptEnabled, stagedPromptStages, stagedPromptCoreIdentity,
+    ambientNoiseEnabled, ambientNoiseTrack,
     ...rest
   } = data;
   const agentConfig: Record<string, unknown> = {};
@@ -180,6 +183,8 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   if (voicemailAction && voicemailAction !== "hangup") agentConfig["voicemailAction"] = voicemailAction;
   if (voicemailMessage) agentConfig["voicemailMessage"] = voicemailMessage;
   agentConfig["genderDetectionEnabled"] = !!genderDetectionEnabled;
+  agentConfig["ambientNoiseEnabled"] = !!ambientNoiseEnabled;
+  if (ambientNoiseTrack) agentConfig["ambientNoiseTrack"] = ambientNoiseTrack;
   agentConfig["startSpeakingPlan"] = {
     waitSeconds:            startSpeakingWaitSecs          ?? 0,
     onPunctuationSeconds:   startSpeakingOnPunctuationSecs ?? 0.1,
@@ -400,6 +405,7 @@ export default function AgentEdit() {
       greetingMessage: "Hello", endCallPhrases: "", silenceTimeoutSeconds: 30,
       language: "en-US", asrLanguage: "", backchannelingEnabled: true, backchannelingFrequency: 0.5,
       webhookUrl: "", webhookSecret: "", noiseCancellationEnabled: true,
+      ambientNoiseEnabled: false, ambientNoiseTrack: "",
       promptVariables: [], vadSilenceMs: 250, bargeInEnabled: true, bargeInEnergyThreshold: 1200, bargeInMinFrames: 4,
       timezone: "",
       machineDetectionMode: "disabled", voicemailAction: "hangup",
@@ -560,6 +566,8 @@ export default function AgentEdit() {
       webhookUrl:               agent.webhookUrl ?? "",
       webhookSecret:            ((agent as any).agentConfig?.webhookSecret as string | undefined) ?? "",
       noiseCancellationEnabled: agent.noiseCancellationEnabled ?? true,
+      ambientNoiseEnabled:      ((agent as any).agentConfig?.ambientNoiseEnabled as boolean | undefined) ?? false,
+      ambientNoiseTrack:        ((agent as any).agentConfig?.ambientNoiseTrack as string | undefined) ?? "",
       promptVariables:          (((agent as any).agentConfig?.promptVariables ?? []) as AgentFormValues["promptVariables"]),
       vadSilenceMs:             ((agent as any).agentConfig?.vadSilenceMs as number | undefined) ?? 250,
       bargeInEnabled:           ((agent as any).agentConfig?.bargeInEnabled as boolean | undefined) ?? true,
