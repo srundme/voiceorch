@@ -12,7 +12,7 @@ export type ScenarioEvent =
   | { type: "persona_message"; turn: number; content: string }
   | { type: "agent_message"; turn: number; content: string; toolsCalled?: Array<{ name: string; args: Record<string, unknown> }> }
   | { type: "tool_call"; turn: number; name: string; args: Record<string, unknown> }
-  | { type: "completed"; score: number; pass: boolean; result: unknown }
+  | { type: "completed"; score: number | null; pass: boolean; result: unknown }
   | { type: "failed"; error: string; turn?: number; step?: "validation" | "persona" | "agent" };
 
 /**

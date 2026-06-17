@@ -71,11 +71,23 @@ interface SimMessage {
   createdAt: string;
 }
 
+interface CriterionScore {
+  criterion: string;
+  score: number;
+  maxScore: number;
+  reason: string;
+}
+
 interface RunScore {
-  overall: number;
+  overall: number | null;
   pass: boolean;
   summary: string;
   metrics: Array<{ name: string; score: number; maxScore: number; notes: string }>;
+  criteriaScores?: CriterionScore[];
+  evaluationError?: boolean;
+  evaluationErrorReason?: string;
+  evaluatorPrompt?: string;
+  rawEvaluatorResponse?: string;
 }
 
 interface PersonaTemplate {
@@ -133,7 +145,14 @@ function getAuthToken(): Record<string, string> {
 
 /* ── ScoreBadge / StatusBadge ───────────────────────────────────────────────── */
 
-function ScoreBadge({ score, pass }: { score: number | null; pass?: boolean }) {
+function ScoreBadge({ score, pass, evaluationError }: { score: number | null; pass?: boolean; evaluationError?: boolean }) {
+  if (evaluationError) {
+    return (
+      <Badge className="bg-orange-600/20 text-orange-400 border-orange-600/30 gap-1">
+        <AlertTriangle className="h-2.5 w-2.5" /> Eval Error
+      </Badge>
+    );
+  }
   if (score == null) return <Badge variant="secondary">—</Badge>;
   return (
     <Badge className={cn(
@@ -148,24 +167,98 @@ function ScoreBadge({ score, pass }: { score: number | null; pass?: boolean }) {
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
-    pending:   "bg-amber-600/20 text-amber-400 border-amber-600/30",
-    running:   "bg-blue-600/20 text-blue-400 border-blue-600/30",
-    completed: "bg-emerald-600/20 text-emerald-400 border-emerald-600/30",
-    failed:    "bg-red-600/20 text-red-400 border-red-600/30",
+    pending:          "bg-amber-600/20 text-amber-400 border-amber-600/30",
+    running:          "bg-blue-600/20 text-blue-400 border-blue-600/30",
+    completed:        "bg-emerald-600/20 text-emerald-400 border-emerald-600/30",
+    failed:           "bg-red-600/20 text-red-400 border-red-600/30",
+    evaluation_error: "bg-orange-600/20 text-orange-400 border-orange-600/30",
   };
+  const label = status === "evaluation_error" ? "Eval Error" : status;
   return (
     <Badge variant="outline" className={cn("capitalize", map[status] ?? "")}>
       {status === "running" && <Loader2 className="h-2.5 w-2.5 mr-1 animate-spin" />}
-      {status}
+      {status === "evaluation_error" && <AlertTriangle className="h-2.5 w-2.5 mr-1" />}
+      {label}
     </Badge>
   );
 }
 
 /* ── ScoreCard ──────────────────────────────────────────────────────────────── */
 
+function MetricBar({ score, maxScore }: { score: number; maxScore: number }) {
+  const pct = maxScore > 0 ? (score / maxScore) * 100 : 0;
+  return (
+    <div className="h-1.5 rounded-full bg-border/60 overflow-hidden">
+      <div
+        className={cn("h-full rounded-full transition-all", pct >= 70 ? "bg-emerald-500" : "bg-red-500")}
+        style={{ width: `${pct}%` }}
+      />
+    </div>
+  );
+}
+
 function ScoreCard({ result }: { result: RunScore }) {
+  const [showMetrics, setShowMetrics] = useState(false);
+  const [showEval, setShowEval] = useState(false);
+
+  // Evaluation error state
+  if (result.evaluationError) {
+    return (
+      <div className="rounded-xl border border-orange-500/30 bg-orange-500/5 p-5 space-y-3">
+        <div className="flex items-center gap-2 text-orange-400">
+          <AlertTriangle className="h-5 w-5 shrink-0" />
+          <p className="text-sm font-semibold">Evaluation Error</p>
+        </div>
+        <p className="text-xs text-orange-300/80 leading-relaxed">
+          {result.evaluationErrorReason ?? "The evaluator failed to produce a score for this run."}
+        </p>
+        <p className="text-[10px] text-muted-foreground">
+          The conversation ran to completion but the evaluation pipeline encountered an error. Check the evaluator details below.
+        </p>
+        {(result.evaluatorPrompt || result.rawEvaluatorResponse) && (
+          <div className="space-y-1.5">
+            <button
+              type="button"
+              onClick={() => setShowEval(!showEval)}
+              className="flex w-full items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <MessageSquare className="h-3 w-3" />
+              View Evaluator Details
+              {showEval ? <ChevronUp className="h-3 w-3 ml-auto" /> : <ChevronDown className="h-3 w-3 ml-auto" />}
+            </button>
+            {showEval && (
+              <div className="space-y-2">
+                {result.evaluatorPrompt && (
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Evaluator Prompt</p>
+                    <pre className="text-[10px] text-muted-foreground bg-border/20 rounded p-2 overflow-x-auto max-h-48 whitespace-pre-wrap">
+                      {result.evaluatorPrompt.slice(0, 3000)}
+                    </pre>
+                  </div>
+                )}
+                {result.rawEvaluatorResponse && (
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Raw LLM Response</p>
+                    <pre className="text-[10px] text-muted-foreground bg-border/20 rounded p-2 overflow-x-auto max-h-48 whitespace-pre-wrap">
+                      {result.rawEvaluatorResponse.slice(0, 2000)}
+                    </pre>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const hasCriteria = (result.criteriaScores ?? []).length > 0;
+  const hasMetrics  = (result.metrics ?? []).length > 0;
+  const hasEvalData = result.evaluatorPrompt || result.rawEvaluatorResponse;
+
   return (
     <div className="rounded-xl border border-border/60 bg-card/50 p-5 space-y-4">
+      {/* Overall score */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className={cn(
@@ -174,7 +267,7 @@ function ScoreCard({ result }: { result: RunScore }) {
               ? "border-emerald-500/50 text-emerald-400"
               : "border-red-500/50 text-red-400",
           )}>
-            {result.overall}
+            {result.overall ?? "—"}
           </div>
           <div>
             <p className="text-sm font-semibold">{result.pass ? "PASSED" : "FAILED"}</p>
@@ -188,26 +281,86 @@ function ScoreCard({ result }: { result: RunScore }) {
 
       <p className="text-xs text-muted-foreground leading-relaxed">{result.summary}</p>
 
-      <div className="space-y-2">
-        {result.metrics.map((m) => (
-          <div key={m.name} className="space-y-1">
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-medium">{m.name}</span>
-              <span className="text-muted-foreground tabular-nums">{m.score}/{m.maxScore}</span>
+      {/* Per-criterion scores */}
+      {hasCriteria && (
+        <div className="space-y-2">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Success Criteria</p>
+          {result.criteriaScores!.map((cs, i) => (
+            <div key={i} className="space-y-1">
+              <div className="flex items-start justify-between text-xs gap-2">
+                <span className="font-medium leading-snug flex-1">{cs.criterion}</span>
+                <span className="text-muted-foreground tabular-nums shrink-0">{cs.score}/{cs.maxScore}</span>
+              </div>
+              <MetricBar score={cs.score} maxScore={cs.maxScore} />
+              {cs.reason && <p className="text-[10px] text-muted-foreground">{cs.reason}</p>}
             </div>
-            <div className="h-1.5 rounded-full bg-border/60 overflow-hidden">
-              <div
-                className={cn(
-                  "h-full rounded-full transition-all",
-                  m.score / m.maxScore >= 0.7 ? "bg-emerald-500" : "bg-red-500",
-                )}
-                style={{ width: `${(m.score / m.maxScore) * 100}%` }}
-              />
+          ))}
+        </div>
+      )}
+
+      {/* Metric breakdown (collapsible) */}
+      {hasMetrics && (
+        <div className="space-y-1.5">
+          <button
+            type="button"
+            onClick={() => setShowMetrics(!showMetrics)}
+            className="flex w-full items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ListChecks className="h-3 w-3" />
+            Metric Breakdown
+            {showMetrics ? <ChevronUp className="h-3 w-3 ml-auto" /> : <ChevronDown className="h-3 w-3 ml-auto" />}
+          </button>
+          {showMetrics && (
+            <div className="space-y-2 pt-1">
+              {result.metrics.map((m) => (
+                <div key={m.name} className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-medium">{m.name}</span>
+                    <span className="text-muted-foreground tabular-nums">{m.score}/{m.maxScore}</span>
+                  </div>
+                  <MetricBar score={m.score} maxScore={m.maxScore} />
+                  {m.notes && <p className="text-[10px] text-muted-foreground">{m.notes}</p>}
+                </div>
+              ))}
             </div>
-            {m.notes && <p className="text-[10px] text-muted-foreground">{m.notes}</p>}
-          </div>
-        ))}
-      </div>
+          )}
+        </div>
+      )}
+
+      {/* Full evaluation expander */}
+      {hasEvalData && (
+        <div className="space-y-1.5">
+          <button
+            type="button"
+            onClick={() => setShowEval(!showEval)}
+            className="flex w-full items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <MessageSquare className="h-3 w-3" />
+            View Full Evaluation
+            {showEval ? <ChevronUp className="h-3 w-3 ml-auto" /> : <ChevronDown className="h-3 w-3 ml-auto" />}
+          </button>
+          {showEval && (
+            <div className="space-y-2">
+              {result.evaluatorPrompt && (
+                <div className="space-y-1">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Evaluator Prompt</p>
+                  <pre className="text-[10px] text-muted-foreground bg-border/20 rounded p-2 overflow-x-auto max-h-56 whitespace-pre-wrap">
+                    {result.evaluatorPrompt.slice(0, 4000)}
+                  </pre>
+                </div>
+              )}
+              {result.rawEvaluatorResponse && (
+                <div className="space-y-1">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Raw LLM Response</p>
+                  <pre className="text-[10px] text-muted-foreground bg-border/20 rounded p-2 overflow-x-auto max-h-48 whitespace-pre-wrap">
+                    {result.rawEvaluatorResponse.slice(0, 3000)}
+                  </pre>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -937,7 +1090,9 @@ function RunViewer({ runId, onBack }: { runId: number; onBack: () => void }) {
           <Button variant="ghost" size="sm" onClick={onBack} className="h-7 px-2">← Back</Button>
           <span className="text-sm font-medium">Run #{runId}</span>
           {run && <StatusBadge status={run.status} />}
-          {run?.score != null && <ScoreBadge score={run.score} pass={run?.result?.pass} />}
+          {run?.result?.evaluationError
+            ? <ScoreBadge score={null} evaluationError />
+            : run?.score != null && <ScoreBadge score={run.score} pass={run?.result?.pass} />}
         </div>
         <div className="flex items-center gap-2">
           {(run?.status === "running" || run?.status === "pending") && (
@@ -1000,7 +1155,7 @@ interface StreamingRunState {
   runId: number | null;
   messages: LiveMessage[];
   status: "running" | "completed" | "failed";
-  score?: number;
+  score?: number | null;
   pass?: boolean;
   result?: RunScore | null;
   error?: string;
@@ -1022,8 +1177,10 @@ function StreamingRunPanel({
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="sm" onClick={onBack} className="h-7 px-2">← Back</Button>
           <span className="text-sm font-medium">{state.runId ? `Run #${state.runId}` : "Starting…"}</span>
-          <StatusBadge status={state.status} />
-          {state.score != null && <ScoreBadge score={state.score} pass={state.pass} />}
+          <StatusBadge status={state.result?.evaluationError ? "evaluation_error" : state.status} />
+          {state.result?.evaluationError
+            ? <ScoreBadge score={null} evaluationError />
+            : state.score != null && <ScoreBadge score={state.score} pass={state.pass} />}
         </div>
         {state.status === "completed" && state.runId && (
           <Button size="sm" variant="outline" onClick={onViewDetails} className="h-7">
@@ -1362,7 +1519,7 @@ function ScenarioPanel({ agentId }: { agentId: number }) {
             } else if (currentEvent === "completed") {
               setStreamingState((prev) => ({
                 ...prev, status: "completed",
-                score: payload["score"] as number,
+                score: payload["score"] as number | null,
                 pass: payload["pass"] as boolean,
                 result: (payload["result"] as RunScore | null) ?? null,
               }));
@@ -1472,7 +1629,11 @@ function ScenarioPanel({ agentId }: { agentId: number }) {
                   </td>
                   <td className="px-3 py-3">
                     {tc.lastRun
-                      ? <ScoreBadge score={tc.lastRun.score} pass={tc.lastRun.score != null && tc.lastRun.score >= 70} />
+                      ? <ScoreBadge
+                          score={tc.lastRun.score}
+                          pass={tc.lastRun.score != null && tc.lastRun.score >= 70}
+                          evaluationError={tc.lastRun.status === "evaluation_error"}
+                        />
                       : <span className="text-xs text-muted-foreground/50">—</span>}
                   </td>
                   <td className="px-3 py-3 text-xs text-muted-foreground">
