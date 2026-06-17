@@ -96,3 +96,9 @@ id = "1-RZGBnuZP_alq2YDmqBe"
 uri = "file://artifacts/pitch-deck/investor-cold-email.md"
 type = "text"
 title = "SnapServe AI — Cold Investor Outreach Email"
+
+[[outputs]]
+id = "aA1iDLtAq4Js1H-aTnNAW"
+uri = "file://HANDOVER.md"
+type = "text"
+title = "SnapServe / VoiceOrch — Architect Handover Document"
