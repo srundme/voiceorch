@@ -32,7 +32,7 @@ import {
 
 // ── Per-user concurrent call rate limit ──────────────────────────────────────
 const activeCalls = new Map<string, number>();
-const MAX_CONCURRENT_CALLS = 5;
+const PLATFORM_MAX_CONCURRENT = 15; // hard ceiling regardless of user's DB limit
 
 // ── Tuning constants ─────────────────────────────────────────────────────────
 const VAD_SILENCE_MS           = 200;   // silence window before sending audio to STT (ms)
@@ -156,22 +156,25 @@ export async function handleWebCallWebSocket(
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId));
   if (!agent) { send({ type: "error", message: "Agent not found" }); ws.close(); return; }
 
-  // Balance gate — reject before any call setup if wallet is empty
+  // Balance gate + concurrent limit — single DB fetch covers both checks
+  let effectiveConcurrentLimit = PLATFORM_MAX_CONCURRENT;
   if (agent.userId) {
-    const [user] = await db.select({ walletBalanceCents: usersTable.walletBalanceCents })
+    const [user] = await db
+      .select({ walletBalanceCents: usersTable.walletBalanceCents, concurrentLimit: usersTable.concurrentLimit })
       .from(usersTable).where(eq(usersTable.clerkId, agent.userId));
     if (user && user.walletBalanceCents <= 0) {
       send({ type: "error", message: "Insufficient balance. Please top up your wallet to start calls." });
       ws.close();
       return;
     }
+    effectiveConcurrentLimit = Math.min(user?.concurrentLimit ?? 2, PLATFORM_MAX_CONCURRENT);
   }
 
-  // ── Rate limit: max concurrent calls per user ─────────────────────────────
+  // ── Rate limit: max concurrent calls per user (DB limit, hard ceiling = 15) ─
   const rateLimitKey = agent.userId ?? `agent-${agentId}`;
   const current = activeCalls.get(rateLimitKey) ?? 0;
-  if (current >= MAX_CONCURRENT_CALLS) {
-    send({ type: "error", message: `Too many concurrent calls (max ${MAX_CONCURRENT_CALLS}). Please wait for an active call to finish.` });
+  if (current >= effectiveConcurrentLimit) {
+    send({ type: "error", message: `Too many concurrent calls (max ${effectiveConcurrentLimit}). Please wait for an active call to finish.` });
     ws.close();
     return;
   }

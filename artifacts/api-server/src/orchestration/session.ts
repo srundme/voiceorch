@@ -1,5 +1,5 @@
 import { createHmac } from "crypto";
-import { db, agentsTable, callsTable, providersTable, platformSettingsTable, campaignLeadsTable, knowledgeEntriesTable, callTransfersTable } from "@workspace/db";
+import { db, agentsTable, callsTable, providersTable, platformSettingsTable, campaignLeadsTable, knowledgeEntriesTable, callTransfersTable, usersTable } from "@workspace/db";
 import { getAttachedSourceIds, buildKnowledgeBaseBlock } from "./kb-retrieval.js";
 import { decryptKey } from "../lib/crypto.js";
 import { eq, and } from "drizzle-orm";
@@ -76,6 +76,23 @@ export async function createSession(params: {
 
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, params.agentId));
   if (!agent) throw new Error(`Agent ${params.agentId} not found`);
+
+  // ── Concurrent call limit (per user, hard ceiling = 15) ──────────────────
+  if (agent.userId) {
+    const [user] = await db
+      .select({ concurrentLimit: usersTable.concurrentLimit })
+      .from(usersTable)
+      .where(eq(usersTable.clerkId, agent.userId));
+    const effectiveLimit = Math.min(user?.concurrentLimit ?? 2, 15);
+    const activeForUser = Array.from(sessions.values()).filter(
+      s => s.agentUserId === agent.userId,
+    ).length;
+    if (activeForUser >= effectiveLimit) {
+      throw new Error(
+        `Concurrent call limit reached (${effectiveLimit}). Wait for an active call to finish.`,
+      );
+    }
+  }
 
   // Parse comma-separated end-call phrases
   const endCallPhrases = agent.endCallPhrases
