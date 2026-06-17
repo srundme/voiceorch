@@ -42,7 +42,7 @@ const SCHEDULING_TOOL_NAME_PATTERNS = [
 ];
 
 function resolveGroqModel(model: string | null): string {
-  const m = model ?? "";
+  const m = (model ?? "").trim();
   return GROQ_MODEL_REPLACEMENTS[m] ?? (m || GROQ_DEFAULT);
 }
 

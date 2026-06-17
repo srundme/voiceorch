@@ -51,6 +51,8 @@ router.get("/billing/webcall-key-status", requireAuth, async (_req, res): Promis
     sarvam:   !!sarvam,
     cartesia: !!cartesia,
     qwen:     !!qwen,
+    // "Groq" provider agents resolve the same managed Groq key as "Qwen (via Groq)"
+    groq:     !!qwen,
     openai:   !!openai,
     deepgram: !!deepgram,
   });

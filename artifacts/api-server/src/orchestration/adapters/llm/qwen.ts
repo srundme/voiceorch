@@ -38,7 +38,7 @@ export class QwenLLM implements LLMAdapter {
       apiKey,
       baseURL: "https://api.groq.com/openai/v1",
     });
-    this.model = model || DEFAULT_MODEL;
+    this.model = model?.trim() || DEFAULT_MODEL;
   }
 
   async chat(
