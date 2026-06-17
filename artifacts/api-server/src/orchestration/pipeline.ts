@@ -63,6 +63,17 @@ const BARGE_IN_ECHO_GRACE_MS  = 600;    // Suppress barge-in for 600 ms after pl
                                          // gives audio time to reach the caller before we start
                                          // counting any returning echo as a real interruption.
 
+/** BCP-47 locale → display name used in LLM language-switch instructions. */
+const LANG_DISPLAY_NAMES: Record<string, string> = {
+  "hi-IN": "Hindi", "ta-IN": "Tamil", "te-IN": "Telugu", "kn-IN": "Kannada",
+  "ml-IN": "Malayalam", "mr-IN": "Marathi", "bn-IN": "Bengali", "gu-IN": "Gujarati",
+  "pa-IN": "Punjabi", "or-IN": "Odia", "ur-IN": "Urdu",
+  "en-IN": "English", "en-US": "English", "en-GB": "English",
+  "fr-FR": "French", "de-DE": "German", "es-ES": "Spanish", "pt-BR": "Portuguese",
+  "it-IT": "Italian", "ja-JP": "Japanese", "ko-KR": "Korean", "zh-CN": "Chinese",
+  "ar-EG": "Arabic", "ru-RU": "Russian",
+};
+
 /** Transcript phrases that strongly suggest the caller is handing the phone to someone else. */
 const HANDOFF_PHRASES = [
   // English
@@ -1318,6 +1329,13 @@ export class OrchestrationPipeline {
     let systemPromptForTurn = this.agent.systemPrompt;
     const dtInjection = buildDatetimeInjection(this.agent.timezone);
     systemPromptForTurn = `${dtInjection}\n\n${systemPromptForTurn}`;
+    // Multilingual: tell the LLM which language to reply in when Azure LID has
+    // detected a specific language mid-call. Without this, the LLM may "drift"
+    // back to the agent's primary language even when the caller has switched.
+    if (this.agent.isMultilingual && this.currentLang) {
+      const langName = LANG_DISPLAY_NAMES[this.currentLang] ?? this.currentLang;
+      systemPromptForTurn += `\n\n[ACTIVE LANGUAGE] The caller is currently speaking ${langName}. Respond ONLY in ${langName} for this reply.`;
+    }
     let kbContextPromise: Promise<string | null>;
     if (this.kbPrefetchPromise) {
       kbContextPromise = this.kbPrefetchPromise;
