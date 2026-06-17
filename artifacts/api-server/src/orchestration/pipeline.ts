@@ -14,7 +14,7 @@ import { processAudioIn, processRawPcm8kIn, destroyAudioSession } from "./audioP
 import { RecordingBuffer } from "./recorder.js";
 import type { AudioProcessResult } from "./audioPool.js";
 import type { AgentConfig, AgentTool, ConversationTurn, LLMUsage, SessionConfig, StreamSTT, ToolDefinition } from "./types.js";
-import { DEFAULT_GOODBYE_MESSAGE } from "./types.js";
+import { DEFAULT_GOODBYE_MESSAGE, resolveGoodbyeMessage } from "./types.js";
 import { retrieveKbContext, retrieveKbContextMulti } from "./kb-retrieval.js";
 import { logger } from "../lib/logger.js";
 import { format, addMinutes } from "date-fns";
@@ -853,10 +853,10 @@ export class OrchestrationPipeline {
         // Speak the configured goodbye message, or a sensible default, before
         // hanging up — never drop the connection silently.
         const endCallTool = this.agent.tools.find(t => t.type === "end_call");
-        const goodbye =
-          endCallTool?.type === "end_call" && endCallTool.goodbyeMessage?.trim()
-            ? endCallTool.goodbyeMessage
-            : DEFAULT_GOODBYE_MESSAGE;
+        const goodbye = resolveGoodbyeMessage(
+          endCallTool?.type === "end_call" ? endCallTool.goodbyeMessage : undefined,
+          this.agent.endCallPhrases,
+        );
         this.conversationHistory.push({ role: "assistant", content: goodbye });
         this.config.onTranscript("agent", goodbye);
         await this.speakRaw(goodbye);
@@ -963,7 +963,7 @@ export class OrchestrationPipeline {
   private async executeEndCall(tool: AgentTool & { type: "end_call" }): Promise<void> {
     logger.info({ callId: this.config.callId }, "End Call tool invoked by LLM");
     {
-      const goodbye = tool.goodbyeMessage?.trim() ? tool.goodbyeMessage : DEFAULT_GOODBYE_MESSAGE;
+      const goodbye = resolveGoodbyeMessage(tool.goodbyeMessage, this.agent.endCallPhrases);
       this.conversationHistory.push({ role: "assistant", content: goodbye });
       this.config.onTranscript("agent", goodbye);
       await this.speakRaw(goodbye);

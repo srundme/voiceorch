@@ -54,6 +54,24 @@ export interface EndCallTool {
  */
 export const DEFAULT_GOODBYE_MESSAGE = "Thank you for calling. Have a great day. Goodbye!";
 
+/**
+ * Resolve the spoken goodbye for an AI-driven end-call in a single, consistent
+ * priority order so every end-call path behaves identically:
+ *   1. The `end_call` tool's own `goodbyeMessage` (most specific — wins if set)
+ *   2. The agent's first configured End Call Phrase (`endCallPhrases[0]`)
+ *   3. `DEFAULT_GOODBYE_MESSAGE` (last resort — never hang up silently)
+ */
+export function resolveGoodbyeMessage(
+  goodbyeMessage: string | undefined | null,
+  endCallPhrases: string[],
+): string {
+  const explicit = goodbyeMessage?.trim();
+  if (explicit) return explicit;
+  const firstPhrase = endCallPhrases[0]?.trim();
+  if (firstPhrase) return firstPhrase;
+  return DEFAULT_GOODBYE_MESSAGE;
+}
+
 export interface CalComTool {
   type: "cal_com";
   name: string;

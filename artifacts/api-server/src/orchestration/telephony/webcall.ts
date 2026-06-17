@@ -11,7 +11,7 @@ import { toReadableError } from "../utils.js";
 import { logger } from "../../lib/logger.js";
 import { RecordingBuffer } from "../recorder.js";
 import type { ConversationTurn, STTConfig, StreamSTT } from "../types.js";
-import { DEFAULT_GOODBYE_MESSAGE } from "../types.js";
+import { DEFAULT_GOODBYE_MESSAGE, resolveGoodbyeMessage } from "../types.js";
 import { decryptKey } from "../../lib/crypto.js";
 import { loadCallerContext, injectEnhancedMemory, updateCallerProfile, latchCallerName, latchCallerFact, detectCallbackRequest } from "../callerMemory.js";
 
@@ -1022,6 +1022,11 @@ export async function handleWebCallWebSocket(
 
       // ── Build tool definitions for this agent ─────────────────────────────
       const agentTools = (agent.tools ?? []) as unknown as import("../types.js").AgentTool[];
+      // Parsed End Call Phrases (raw comma-separated string → trimmed list),
+      // used to resolve the spoken goodbye for LLM-driven end-calls below.
+      const endCallPhraseList = agent.endCallPhrases
+        ? agent.endCallPhrases.split(",").map((s: string) => s.trim()).filter(Boolean)
+        : [];
 
       // Inject scheduling tool usage guide when the agent has cancel/reschedule/list-bookings tools
       const hasSchedulingNav = agentTools.some(
@@ -1250,10 +1255,13 @@ export async function handleWebCallWebSocket(
         const matchedTriggeredTool = matchToolByName(agentTools, triggeredToolName);
         if (triggeredToolName === "end_call" || matchedTriggeredTool?.type === "end_call") {
           const endTool = matchedTriggeredTool?.type === "end_call" ? matchedTriggeredTool : undefined;
-          const configured = endTool && endTool.type === "end_call" ? (endTool.goodbyeMessage ?? "") : "";
-          // Always speak a closing line — fall back to a sensible default so the
-          // call never drops silently — and record it to the transcript.
-          const goodbye = configured.trim() ? configured.trim() : DEFAULT_GOODBYE_MESSAGE;
+          // Always speak a closing line — fall back through the configured End
+          // Call Phrase then a sensible default so the call never drops silently
+          // — and record it to the transcript.
+          const goodbye = resolveGoodbyeMessage(
+            endTool && endTool.type === "end_call" ? endTool.goodbyeMessage : undefined,
+            endCallPhraseList,
+          );
           history.push({ role: "assistant", content: goodbye });
           send({ type: "transcript", speaker: "agent", text: goodbye });
           try {
@@ -1372,8 +1380,10 @@ export async function handleWebCallWebSocket(
             const matchedFnTool = matchToolByName(agentTools, fnName);
             if (fnName === "end_call" || matchedFnTool?.type === "end_call") {
               const endTool = matchedFnTool?.type === "end_call" ? matchedFnTool : undefined;
-              const configured = endTool && endTool.type === "end_call" ? (endTool.goodbyeMessage ?? "") : "";
-              const goodbye = configured.trim() ? configured.trim() : DEFAULT_GOODBYE_MESSAGE;
+              const goodbye = resolveGoodbyeMessage(
+                endTool && endTool.type === "end_call" ? endTool.goodbyeMessage : undefined,
+                endCallPhraseList,
+              );
               history.push({ role: "assistant", content: goodbye });
               send({ type: "transcript", speaker: "agent", text: goodbye });
               try {
@@ -1543,8 +1553,10 @@ export async function handleWebCallWebSocket(
             const matchedFnTool = matchToolByName(agentTools, fnName);
             if (fnName === "end_call" || matchedFnTool?.type === "end_call") {
               const endTool = matchedFnTool?.type === "end_call" ? matchedFnTool : undefined;
-              const configured = endTool && endTool.type === "end_call" ? (endTool.goodbyeMessage ?? "") : "";
-              const goodbye = configured.trim() ? configured.trim() : DEFAULT_GOODBYE_MESSAGE;
+              const goodbye = resolveGoodbyeMessage(
+                endTool && endTool.type === "end_call" ? endTool.goodbyeMessage : undefined,
+                endCallPhraseList,
+              );
               history.push({ role: "assistant", content: goodbye });
               send({ type: "transcript", speaker: "agent", text: goodbye });
               try {
