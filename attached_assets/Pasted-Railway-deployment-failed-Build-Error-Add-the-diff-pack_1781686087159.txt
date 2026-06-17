@@ -1,0 +1,57 @@
+Railway deployment failed — Build Error
+
+Add the "diff" package to the dashboard's dependencies to fix the build. The Vite build fails because builder.tsx imports diffWords and diffWordsWithSpace from "diff", but that package is not listed in artifacts/dashboard/package.json. Since the Dockerfile runs pnpm install --frozen-lockfile, only declared packages are installed and Rollup cannot resolve the import.
+
+Repository: https://github.com/srundme/voiceorch
+Branch: main · Commit: 227f47f — fix(dashboard): resolve all build-blocking TS errors
+
+  - command-center: add missing `const [, navigate] = useLocation()` in
+    CommandCenterPage body (used at line 318 in recentCalls.map onClick)
+  - codegen: run `pnpm --filter @workspace/api-spec run codegen` to generate
+    agent version hooks (useListAgentVersions, usePublishAgentVersion,
+    useGetAgentVersion, useRestoreAgentVersion, getListAgentVersionsQueryKey,
+    getGetAgentVersionQueryKey, AgentVersion type) — endpoints already existed
+    in openapi.yaml but codegen had never been run
+  - builder.tsx: push current post-merge state (includes toggle card redesign +
+    task #561 Qwen3 fix + task #566 Voice Preview button relocation)
+
+  All three errors that caused Railway builds to fail are now resolved.
+  typecheck passes with zero errors.
+Root directory: /
+Deployment ID: bc96aba5-ea50-4679-84ee-5d06ae0a4285
+Service ID: 58134806-7857-4eff-842e-d26a3f3ba0db
+Environment ID: c2f619a2-8e13-4d0b-9d26-89834a0cbe01
+
+---
+
+## Problem
+The @workspace/api-server service fails at the BUILD_IMAGE stage. The Dockerfile builds the dashboard first via `pnpm --filter @workspace/dashboard run build`, which runs `vite build`. Vite/Rollup fails with:
+```
+Rollup failed to resolve import "diff" from "/workspace/artifacts/dashboard/src/pages/agents/builder.tsx"
+```
+The build uses `pnpm install --frozen-lockfile`, so only packages declared in package.json and present in pnpm-lock.yaml are installed.
+
+## Diagnosis
+`artifacts/dashboard/src/pages/agents/builder.tsx` line 2 contains:
+```ts
+import { diffWords, diffWordsWithSpace } from "diff";
+```
+This import was added in the current commit as part of "push current post-merge state" for builder.tsx. However, the `diff` package was never added to `artifacts/dashboard/package.json`. The package has no entry in either `dependencies` or `devDependencies`, so pnpm does not install it and Rollup cannot resolve it at bundle time.
+
+## Fix
+1. **File:** `artifacts/dashboard/package.json`
+2. **Current content** (last entry in devDependencies):
+```json
+    "zod": "catalog:"
+  }
+}
+```
+3. **Replace with:**
+```json
+    "diff": "^7.0.0",
+    "zod": "catalog:"
+  }
+}
+```
+4. After editing `package.json`, run `pnpm install` from the repo root to regenerate `pnpm-lock.yaml`. Both files must be committed together.
+5. **Why:** This adds the `diff` package that `builder.tsx` imports. The `--frozen-lockfile` flag in the Dockerfile requires the lockfile to be in sync with `package.json`, so both must be updated.
