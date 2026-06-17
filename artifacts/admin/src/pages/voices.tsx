@@ -26,6 +26,7 @@ export default function Voices() {
   const [search, setSearch] = useState("");
   const [langFilter, setLangFilter] = useState("all");
   const [ownerFilter, setOwnerFilter] = useState<"all" | "mine">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "listed" | "hidden">("all");
   const [previewingId, setPreviewingId] = useState<string | null>(null);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -110,9 +111,14 @@ export default function Voices() {
         (v.description ?? "").toLowerCase().includes(search.toLowerCase());
       const matchesLang = langFilter === "all" || v.language === langFilter;
       const matchesOwner = ownerFilter === "all" || v.isOwner === true;
-      return matchesSearch && matchesLang && matchesOwner;
+      const isListed = effectiveSelected.has(v.id);
+      const matchesStatus =
+        statusFilter === "all" ||
+        (statusFilter === "listed" && isListed) ||
+        (statusFilter === "hidden" && !isListed);
+      return matchesSearch && matchesLang && matchesOwner && matchesStatus;
     });
-  }, [voices, search, langFilter, ownerFilter]);
+  }, [voices, search, langFilter, ownerFilter, statusFilter, effectiveSelected]);
 
   function toggleVoice(id: string) {
     setSelectedIds(prev => {
@@ -265,6 +271,16 @@ export default function Voices() {
                 {languages.map(l => (
                   <SelectItem key={l} value={l}>{l}</SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as "all" | "listed" | "hidden")}>
+              <SelectTrigger className="w-36 h-8 text-xs bg-muted/30" aria-label="Status filter">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                <SelectItem value="listed">Listed only</SelectItem>
+                <SelectItem value="hidden">Hidden only</SelectItem>
               </SelectContent>
             </Select>
             <Select value={ownerFilter} onValueChange={(v) => setOwnerFilter(v as "all" | "mine")}>
