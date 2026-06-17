@@ -314,7 +314,8 @@ export default function CommandCenterPage() {
                 recentCalls.map(call => (
                   <div
                     key={call.id}
-                    className="grid grid-cols-[140px_1fr_72px_64px_64px_64px_56px_64px] gap-0 px-3 py-2.5 hover:bg-accent/20 transition-colors"
+                    className="grid grid-cols-[140px_1fr_72px_64px_64px_64px_56px_64px] gap-0 px-3 py-2.5 hover:bg-accent/20 transition-colors cursor-pointer"
+                    onClick={() => navigate(`/app/calls/${call.id}`)}
                   >
                     {/* Exec ID */}
                     <p className="text-[10px] font-mono text-muted-foreground/50 truncate pr-2 self-center">
