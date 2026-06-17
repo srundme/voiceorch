@@ -500,7 +500,7 @@ export async function handleWebCallWebSocket(
       webcallProfile = webcallCtx.profile;
       for (const f of webcallCtx.facts) webcallLatchedFacts.set(f.key, f.value);
       if (webcallProfile || webcallCtx.facts.length > 0 || webcallCtx.recentCalls.length > 0) {
-        systemPrompt = injectEnhancedMemory(systemPrompt, webcallCtx);
+        systemPrompt = injectEnhancedMemory(systemPrompt, webcallCtx, { isMultilingual: isMultilingualWc });
         logger.info({ callId, agentId, callCount: webcallProfile?.callCount ?? 0, factCount: webcallCtx.facts.length, archiveCount: webcallCtx.recentCalls.length }, "Webcall caller memory injected");
         logExecution("Memory", "response", {
           responsePayload: {
@@ -947,6 +947,7 @@ export async function handleWebCallWebSocket(
       // overlaps with LLM streaming. By the time LLM finishes, sentence 1
       // audio is usually already fully collected — minimising first-audio delay.
       let sentenceJobs: Promise<Buffer>[] = [];
+      let sentenceTexts: string[] = [];  // parallel to sentenceJobs — canonical text per sentence for UI highlighting
       let tokenBuf  = "";   // filtered text waiting to be split into sentences
       let fullReply = "";   // raw LLM output (may include <think> blocks)
 
@@ -1084,6 +1085,7 @@ export async function handleWebCallWebSocket(
         // unhandledRejection before the for-loop below awaits the job.
         job.catch(() => {});
         sentenceJobs.push(job);
+        sentenceTexts.push(t);
       }
 
       // Build per-turn system prompt with datetime + language + gender injected
@@ -1105,7 +1107,11 @@ export async function handleWebCallWebSocket(
           "ar-EG": "Arabic", "ru-RU": "Russian",
         };
         const langName = LANG_NAMES[currentLangWc] ?? currentLangWc;
-        systemPromptForTurn += `\n\n[ACTIVE LANGUAGE] The caller is currently speaking ${langName}. Respond ONLY in ${langName} for this reply.`;
+        if (isMultilingualWc) {
+          systemPromptForTurn += `\n\n[ACTIVE LANGUAGE] The caller is currently speaking ${langName}. Respond ONLY in ${langName} for this reply.`;
+        } else {
+          systemPromptForTurn += `\n\n[LANGUAGE — NON-NEGOTIABLE] This agent is configured for ${langName} ONLY. You MUST respond in ${langName} regardless of any stored language_pref in caller memory or inferred language from the conversation. Do NOT switch to any other language under any circumstances.`;
+        }
       }
 
       const detectedGender = genderDetector?.gender ?? null;
@@ -1241,6 +1247,7 @@ export async function handleWebCallWebSocket(
 
       while (true) {
       sentenceJobs = [];
+      sentenceTexts = [];
       // ── Backchanneling: queue a filler phrase before LLM warms up ─────────
       // Only on the first tool iteration so we don't repeat after tool calls.
       if (toolIterations === 0 && agent.backchannelingEnabled && !interrupted) {
@@ -1303,6 +1310,7 @@ export async function handleWebCallWebSocket(
           const filtered = filterFnToken(afterThink); // strip <function=…> inline tags from TTS
           if (!filtered) return;
           tokenBuf += filtered;
+          send({ type: "token", text: filtered });
           const [sentences, rest] = extractSentences(tokenBuf);
           for (const s of sentences) queueSentence(s);
           tokenBuf = rest;
@@ -1345,6 +1353,7 @@ export async function handleWebCallWebSocket(
                   const afterFn = filterFnToken(afterThink);
                   if (!afterFn) return;
                   tokenBuf += afterFn;
+                  send({ type: "token", text: afterFn });
                   const [sentences, remainder] = extractSentences(tokenBuf);
                   for (const s of sentences) queueSentence(s);
                   tokenBuf = remainder;
@@ -1747,6 +1756,8 @@ export async function handleWebCallWebSocket(
           send({ type: "transcript", speaker: "agent", text: cleanReply });
           transcriptSent = true;
         }
+        // Signal which sentence is now playing so the UI can highlight it
+        send({ type: "sentence_start", index: i, text: sentenceTexts[i] ?? "" });
 
         for (let j = 0; j < pcmOut.length; j += AUDIO_CHUNK_BYTES) {
           if (closed || interrupted) break;
