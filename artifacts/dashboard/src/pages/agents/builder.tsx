@@ -46,6 +46,7 @@ import {
 import {
   Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage,
 } from "@/components/ui/form";
+import { Label } from "@/components/ui/label";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
@@ -571,7 +572,7 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
               <div className="text-[10px] font-bold uppercase tracking-widest text-green-400">Voice Configuration</div>
               <div className="grid grid-cols-2 gap-3">
                 <FormItem className="space-y-1">
-                  <FormLabel className="text-[10px] text-muted-foreground">Provider</FormLabel>
+                  <Label className="text-[10px] text-muted-foreground">Provider</Label>
                   <div className="h-7 px-2 flex items-center rounded-md border border-input bg-muted/40 text-xs text-muted-foreground">
                     Cartesia (Sonic)
                   </div>
@@ -974,7 +975,7 @@ function VoiceTab({ form }: { form: any }) {
         <SectionDivider label="Text-to-Speech — Provider & Voice" />
         <div className="grid grid-cols-2 gap-3">
           <FormItem className="space-y-1">
-            <FormLabel className="text-xs text-muted-foreground">Provider</FormLabel>
+            <Label className="text-xs text-muted-foreground">Provider</Label>
             <div className="h-9 px-3 flex items-center rounded-md border border-input bg-muted/40 text-sm text-muted-foreground">
               Cartesia (Sonic)
             </div>
