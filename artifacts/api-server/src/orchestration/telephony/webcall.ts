@@ -947,6 +947,7 @@ export async function handleWebCallWebSocket(
       // overlaps with LLM streaming. By the time LLM finishes, sentence 1
       // audio is usually already fully collected — minimising first-audio delay.
       let sentenceJobs: Promise<Buffer>[] = [];
+      let sentenceTexts: string[] = [];  // parallel to sentenceJobs — canonical text per sentence for UI highlighting
       let tokenBuf  = "";   // filtered text waiting to be split into sentences
       let fullReply = "";   // raw LLM output (may include <think> blocks)
 
@@ -1084,6 +1085,7 @@ export async function handleWebCallWebSocket(
         // unhandledRejection before the for-loop below awaits the job.
         job.catch(() => {});
         sentenceJobs.push(job);
+        sentenceTexts.push(t);
       }
 
       // Build per-turn system prompt with datetime + language + gender injected
@@ -1245,6 +1247,7 @@ export async function handleWebCallWebSocket(
 
       while (true) {
       sentenceJobs = [];
+      sentenceTexts = [];
       // ── Backchanneling: queue a filler phrase before LLM warms up ─────────
       // Only on the first tool iteration so we don't repeat after tool calls.
       if (toolIterations === 0 && agent.backchannelingEnabled && !interrupted) {
@@ -1307,6 +1310,7 @@ export async function handleWebCallWebSocket(
           const filtered = filterFnToken(afterThink); // strip <function=…> inline tags from TTS
           if (!filtered) return;
           tokenBuf += filtered;
+          send({ type: "token", text: filtered });
           const [sentences, rest] = extractSentences(tokenBuf);
           for (const s of sentences) queueSentence(s);
           tokenBuf = rest;
@@ -1349,6 +1353,7 @@ export async function handleWebCallWebSocket(
                   const afterFn = filterFnToken(afterThink);
                   if (!afterFn) return;
                   tokenBuf += afterFn;
+                  send({ type: "token", text: afterFn });
                   const [sentences, remainder] = extractSentences(tokenBuf);
                   for (const s of sentences) queueSentence(s);
                   tokenBuf = remainder;
@@ -1751,6 +1756,8 @@ export async function handleWebCallWebSocket(
           send({ type: "transcript", speaker: "agent", text: cleanReply });
           transcriptSent = true;
         }
+        // Signal which sentence is now playing so the UI can highlight it
+        send({ type: "sentence_start", index: i, text: sentenceTexts[i] ?? "" });
 
         for (let j = 0; j < pcmOut.length; j += AUDIO_CHUNK_BYTES) {
           if (closed || interrupted) break;

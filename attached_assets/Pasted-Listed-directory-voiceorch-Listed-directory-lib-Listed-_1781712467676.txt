@@ -1,0 +1,77 @@
+Listed directory voiceorch
+Listed directory lib
+Listed directory scripts
+Listed directory artifacts
+Listed directory db
+Listed directory src
+Listed directory api-server
+Listed directory dashboard
+Listed directory src
+Listed directory src
+Listed directory schema
+Listed directory src
+Listed directory orchestration
+Listed directory routes
+Listed directory services
+Viewed pipeline.ts:1-800
+Viewed session.ts:1-800
+Viewed types.ts:1-430
+Viewed callerMemory.ts:1-800
+Viewed app.ts:1-99
+Viewed index.ts:1-185
+Listed directory middlewares
+Listed directory adapters
+Listed directory telephony
+Listed directory llm
+Listed directory stt
+Listed directory tts
+Viewed tool-executor.ts:1-800
+Viewed agents.ts:1-238
+Viewed endpointing.ts:1-151
+Viewed sessionStore.ts:1-142
+Viewed audioPool.ts:1-198
+
+Now I have enough data to write a thorough report. Let me compile it.
+
+Viewed session.ts:1-26
+Viewed pipeline.ts:800-1000
+
+I have now done a thorough analysis of the entire codebase. Let me write the comprehensive report.
+
+Edited voiceorch_code_analysis.md
+
+Here's the full report. Let me highlight the key findings:
+
+---
+
+## Overall Verdict: **8.1/10 — Genuinely strong, with a few dangerous gaps**
+
+### ✅ What's Excellent
+- **`pipeline.ts`** is impressive engineering — adaptive endpointing, drift-compensated audio pacing, TTS abort controllers, streaming STT with exponential-backoff reconnect. These are non-trivial problems solved correctly.
+- **Caller Memory** (`callerMemory.ts`) — a Graphiti-style 3-layer knowledge graph (facts → episodes → sentences) with supersession edges. Very rare to see this in a voice platform.
+- **Audio Worker Pool** — sticky consistent-hash routing per `callId` so NoiseCanceller state doesn't drift across workers. Correct.
+- **Tool Executor** — `pg_try_advisory_xact_lock` inside a transaction for slot-level booking concurrency. This is the right way to do it.
+- **Orchestration architecture** is clean and layered — transport → session → pipeline → adapters.
+
+---
+
+### 🔴 Literally Bad (Fix These First)
+
+| # | Issue | File |
+|---|---|---|
+| 1 | **CORS is wide open** — `origin: true` mirrors any origin with `credentials: true`. CSRF risk. | `app.ts:34` |
+| 2 | **Sessions live in one in-memory `Map`** — horizontal scaling is impossible, concurrent-call limits are not enforced across instances | `session.ts:60` |
+| 3 | **`(session.pipeline as any).config`** — private field accessed via `as any`, plus an operator precedence bug (`600 + 600` not wrapped) | `session.ts:783,750` |
+| 4 | **Sequential DB hits in `createSession`** for managed provider keys — 3–4 round trips that should be one batch query | `session.ts:395-416` |
+| 5 | **No JSON schema validation** on LLM output in `runLLMExtraction` — shape errors crash silently | `callerMemory.ts:521` |
+
+### 🟡 Medium Issues
+- `webcall.ts` is **128 KB / ~3200 lines** — desperately needs splitting
+- `pipeline.ts` is **2718 lines** handling too many concerns in one class
+- Dashboard error messages ("Go to Settings → Calendar") are leaking into live voice calls
+- `void` fire-and-forget promises have no `.catch()` handlers
+
+### 📉 Biggest Gap: **Test coverage is ~2/10**
+The `computeEndpointMs`, `sanitizeToolName`, and `computeSentimentTrend` functions are pure and trivial to test — yet there are zero tests for any core orchestration logic.
+
+The full report with all scored categories, a detailed fix priority list, and per-module ratings is in the artifact above.
