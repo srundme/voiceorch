@@ -1255,11 +1255,8 @@ export class OrchestrationPipeline {
       const matchedPhrase = this.agent.endCallPhrases.find(p => lower.includes(p.toLowerCase()));
       if (matchedPhrase) {
         logger.info({ callId: this.config.callId, transcript }, "End-call phrase detected — speaking goodbye then hanging up");
-        const endCallTool = this.agent.tools.find(t => t.type === "end_call");
         const goodbyeText =
-          endCallTool?.type === "end_call" && endCallTool.goodbyeMessage?.trim()
-            ? endCallTool.goodbyeMessage
-            : DEFAULT_GOODBYE_MESSAGE;
+          this.agent.endCallPhrases[0]?.trim() || DEFAULT_GOODBYE_MESSAGE;
         this.conversationHistory.push({ role: "assistant", content: goodbyeText });
         this.config.onTranscript("agent", goodbyeText);
         await this.speakRaw(goodbyeText);

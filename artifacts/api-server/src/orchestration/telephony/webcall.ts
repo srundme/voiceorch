@@ -802,11 +802,7 @@ export async function handleWebCallWebSocket(
           if (matchedPhrase) {
             logger.info({ callId, userText }, "Webcall: end-call phrase detected — speaking goodbye then hanging up");
             processing = false;
-            const endCallTool = ((agent.tools ?? []) as unknown as import("../types.js").AgentTool[]).find((t) => t.type === "end_call");
-            const goodbyeText =
-              endCallTool?.type === "end_call" && endCallTool.goodbyeMessage?.trim()
-                ? endCallTool.goodbyeMessage
-                : DEFAULT_GOODBYE_MESSAGE;
+            const goodbyeText = phrases[0]?.trim() || DEFAULT_GOODBYE_MESSAGE;
             history.push({ role: "assistant", content: goodbyeText });
             send({ type: "transcript", speaker: "agent", text: goodbyeText });
             try {
