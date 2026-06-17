@@ -1,9 +1,9 @@
 import { db } from "@workspace/db";
-import { simulationRunsTable, simulationMessagesTable, simulationTestCasesTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { simulationRunsTable, simulationMessagesTable, simulationTestCasesTable, agentsTable } from "@workspace/db";
+import { eq, and } from "drizzle-orm";
 import { runPersonaTurn } from "./persona.js";
 import { scoreRun } from "./scorer.js";
-import { callLlmDirect } from "./chat.js";
+import { callLlmDirect, getLlmApiKey } from "./chat.js";
 import { logger } from "../../lib/logger.js";
 
 export type ScenarioProgressCallback = (event: ScenarioEvent) => void;
@@ -13,7 +13,7 @@ export type ScenarioEvent =
   | { type: "agent_message"; turn: number; content: string; toolsCalled?: Array<{ name: string; args: Record<string, unknown> }> }
   | { type: "tool_call"; turn: number; name: string; args: Record<string, unknown> }
   | { type: "completed"; score: number; pass: boolean; result: unknown }
-  | { type: "failed"; error: string };
+  | { type: "failed"; error: string; turn?: number; step?: "validation" | "persona" | "agent" };
 
 /**
  * Run a full scenario simulation: AI persona ↔ agent LLM loop.
@@ -40,6 +40,40 @@ export async function runScenario(
     return;
   }
 
+  // ── Pre-run validation ──────────────────────────────────────────────────────
+  const [agent] = await db
+    .select()
+    .from(agentsTable)
+    .where(and(eq(agentsTable.id, testCase.agentId), eq(agentsTable.userId, userId)));
+
+  if (!agent) {
+    await db
+      .update(simulationRunsTable)
+      .set({ status: "failed", completedAt: new Date() })
+      .where(eq(simulationRunsTable.id, runId));
+    onProgress({ type: "failed", error: "Agent not found", step: "validation" });
+    return;
+  }
+
+  if (!agent.systemPrompt?.trim()) {
+    await db
+      .update(simulationRunsTable)
+      .set({ status: "failed", completedAt: new Date() })
+      .where(eq(simulationRunsTable.id, runId));
+    onProgress({ type: "failed", error: "Agent has no system prompt — add one in the agent settings before running a simulation", step: "validation" });
+    return;
+  }
+
+  const llmKey = await getLlmApiKey(userId, agent.llmProvider);
+  if (!llmKey) {
+    await db
+      .update(simulationRunsTable)
+      .set({ status: "failed", completedAt: new Date() })
+      .where(eq(simulationRunsTable.id, runId));
+    onProgress({ type: "failed", error: `No API key for provider "${agent.llmProvider}" — add it in Providers`, step: "validation" });
+    return;
+  }
+
   await db
     .update(simulationRunsTable)
     .set({ status: "running", startedAt: new Date() })
@@ -60,12 +94,14 @@ export async function runScenario(
 
   let turn = 0;
   let ended = false;
+  let currentStep: "persona" | "agent" = "persona";
 
   try {
     while (turn < maxTurns && !ended) {
       turn++;
 
       // ── Persona (customer) turn ─────────────────────────────────────────────
+      currentStep = "persona";
       const personaTurn = await runPersonaTurn(
         testCase.personaPrompt,
         // Persona sees history in "user = customer, agent = assistant" framing
@@ -92,6 +128,7 @@ export async function runScenario(
       }
 
       // ── Agent turn ──────────────────────────────────────────────────────────
+      currentStep = "agent";
       const toolsCalled: Array<{ name: string; args: Record<string, unknown> }> = [];
 
       const { text: agentReply, debug } = await callLlmDirect(
@@ -147,11 +184,12 @@ export async function runScenario(
     const scored = await scoreRun(runId, testCase.successCriteria ?? []);
     onProgress({ type: "completed", score: scored.overall, pass: scored.pass, result: scored });
   } catch (err) {
-    logger.error({ runId, testCaseId, err }, "runScenario: error");
+    logger.error({ runId, testCaseId, turn, step: currentStep, err }, "runScenario: error");
     await db
       .update(simulationRunsTable)
       .set({ status: "failed", completedAt: new Date() })
       .where(eq(simulationRunsTable.id, runId));
-    onProgress({ type: "failed", error: String(err) });
+    const message = err instanceof Error ? err.message : String(err);
+    onProgress({ type: "failed", error: `Turn ${turn} (${currentStep}): ${message}`, turn, step: currentStep });
   }
 }

@@ -26,7 +26,7 @@ export interface ChatTurnResult {
 
 /* ── LLM API key resolution ──────────────────────────────────────────────────── */
 
-async function getLlmApiKey(userId: string, llmProvider: string): Promise<string | null> {
+export async function getLlmApiKey(userId: string, llmProvider: string): Promise<string | null> {
   const [row] = await db
     .select({ apiKey: providersTable.apiKey })
     .from(providersTable)
@@ -262,6 +262,9 @@ export async function runChatTurn(
     depth++;
   }
 
+  // Strip <think>...</think> blocks that Qwen3 may emit even with thinking mode disabled
+  agentText = agentText.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+
   const latencyMs = Date.now() - startMs;
 
   await db.insert(simulationMessagesTable).values({
@@ -430,6 +433,9 @@ export async function callLlmDirect(
 
     depth++;
   }
+
+  // Strip <think>...</think> blocks that Qwen3 may emit even with thinking mode disabled
+  agentText = agentText.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
 
   const latencyMs = Date.now() - startMs;
 

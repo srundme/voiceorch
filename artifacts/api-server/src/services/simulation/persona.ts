@@ -62,6 +62,7 @@ IMPORTANT: Respond ONLY with valid JSON. No markdown, no code fences.`;
         model: "qwen/qwen3-32b",
         temperature: 0.8,
         max_tokens: 256,
+        enable_thinking: false,
         messages: [
           { role: "system", content: systemPrompt },
           ...messages,
@@ -78,7 +79,9 @@ IMPORTANT: Respond ONLY with valid JSON. No markdown, no code fences.`;
 
     const data = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
     const raw = data.choices?.[0]?.message?.content ?? "";
-    const cleaned = raw.replace(/```json\n?|\n?```/g, "").trim();
+    // Strip <think>...</think> blocks that Qwen3 emits in thinking mode (safety net even with enable_thinking:false)
+    const withoutThinking = raw.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+    const cleaned = withoutThinking.replace(/```json\n?|\n?```/g, "").trim();
 
     try {
       const parsed = JSON.parse(cleaned) as { message?: string; end?: boolean };
@@ -87,7 +90,10 @@ IMPORTANT: Respond ONLY with valid JSON. No markdown, no code fences.`;
         shouldEnd: parsed.end === true,
       };
     } catch {
-      return { message: raw.trim() || "I see, thank you.", shouldEnd: false };
+      // JSON parse failed — return the sanitized text (thinking blocks and code fences already stripped)
+      // Never return raw, which may still contain <think>...</think> blocks
+      const fallback = cleaned || withoutThinking;
+      return { message: fallback || "I see, thank you.", shouldEnd: false };
     }
   } catch (err) {
     logger.error({ err }, "runPersonaTurn: fetch failed");
