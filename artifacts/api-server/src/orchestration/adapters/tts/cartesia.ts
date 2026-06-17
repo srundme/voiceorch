@@ -81,6 +81,11 @@ export class CartesiaTTS implements TTSAdapter {
     };
   }
 
+  /** Hot-swap the TTS language mid-call (multilingual mode). */
+  setLanguage(lang: string): void {
+    this.language = lang.split("-")[0];
+  }
+
   async synthesize(text: string): Promise<{ audio: Buffer; characters: number }> {
     const resp = await fetchWithRetry("https://api.cartesia.ai/tts/bytes", {
       method: "POST",
