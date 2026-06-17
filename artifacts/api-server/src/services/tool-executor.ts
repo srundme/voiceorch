@@ -930,6 +930,10 @@ export async function executeNativeReschedule(
       const connectionId = calendarConnectionId ?? (await getFirstConnectionForUser(calendar.userId))?.id ?? null;
 
       if (connectionId) {
+        logger.info(
+          { callId, bookingId, existingGoogleEventId, connectionId },
+          "Agent reschedule: syncing Google Calendar event",
+        );
         const gcalResult = existingGoogleEventId
           ? await updateCalendarEvent({
               connectionId,

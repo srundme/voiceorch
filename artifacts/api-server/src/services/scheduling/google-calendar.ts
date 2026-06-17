@@ -370,7 +370,8 @@ export async function createCalendarEvent(params: {
     return { meetLink, eventId };
   } catch (err) {
     logger.warn(
-      { err, connectionId: params.connectionId, attendeeEmail: params.attendeeEmail, summary: params.summary },
+      { err: (err as any)?.message, googleApiError: (err as any)?.response?.data,
+        connectionId: params.connectionId, attendeeEmail: params.attendeeEmail, summary: params.summary },
       "Failed to create Google Calendar event",
     );
     return null;
@@ -444,6 +445,7 @@ export async function updateCalendarEvent(params: {
     const event = await calendar.events.patch({
       calendarId: "primary",
       eventId: params.eventId,
+      conferenceDataVersion: 1,
       requestBody,
     });
     const meetLink = event.data.conferenceData?.entryPoints?.find(e => e.entryPointType === "video")?.uri ?? null;
@@ -456,7 +458,11 @@ export async function updateCalendarEvent(params: {
     );
     return { meetLink, eventId };
   } catch (err) {
-    logger.warn({ err, connectionId: params.connectionId, eventId: params.eventId }, "Failed to update Google Calendar event");
+    logger.warn(
+      { err: (err as any)?.message, googleApiError: (err as any)?.response?.data,
+        connectionId: params.connectionId, eventId: params.eventId },
+      "Failed to update Google Calendar event",
+    );
     return null;
   }
 }

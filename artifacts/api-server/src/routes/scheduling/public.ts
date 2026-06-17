@@ -558,6 +558,11 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
       if (reschedConnectionId && newBooking) {
         if (existingGoogleEventId) {
           // Patch the existing event — attendee calendar updates automatically
+          logger.info(
+            { bookingId: booking.id, newBookingId: newBooking.id, existingGoogleEventId,
+              connectionId: reschedConnectionId, newSlotStart: newBooking.slotStart, newSlotEnd: newBooking.slotEnd },
+            "Public reschedule: patching existing Google Calendar event",
+          );
           const gcalResult = await updateCalendarEvent({
             connectionId: reschedConnectionId,
             eventId: existingGoogleEventId,
@@ -578,6 +583,11 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
           }
         } else {
           // No existing event — create fresh
+          logger.info(
+            { bookingId: booking.id, newBookingId: newBooking.id, existingGoogleEventId: null,
+              connectionId: reschedConnectionId, newSlotStart: newBooking.slotStart, newSlotEnd: newBooking.slotEnd },
+            "Public reschedule: no existing Google event — creating fresh",
+          );
           const gcalResult = await createCalendarEvent({
             connectionId: reschedConnectionId,
             summary: `${eventType.name} — ${newBooking.attendeeName}`,
@@ -598,7 +608,11 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
         }
       }
     } catch (err) {
-      logger.warn({ err, bookingId: newBooking?.id, connectionId: reschedConnectionId }, "Google Calendar event creation failed on reschedule");
+      logger.warn(
+        { err: (err as any)?.message, googleApiError: (err as any)?.response?.data,
+          bookingId: newBooking?.id, connectionId: reschedConnectionId },
+        "Google Calendar event creation failed on reschedule",
+      );
     }
   })();
 

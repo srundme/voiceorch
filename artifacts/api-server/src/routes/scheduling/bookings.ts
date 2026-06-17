@@ -385,6 +385,11 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
         if (reschedConnectionId && newBooking) {
           if (existingGoogleEventId) {
             // Patch existing event — preserves Meet link, attendees get seamless update
+            logger.info(
+              { bookingId: existing.id, newBookingId: newBooking.id, existingGoogleEventId,
+                connectionId: reschedConnectionId, newSlotStart: newBooking.slotStart, newSlotEnd: newBooking.slotEnd },
+              "Authed reschedule: patching existing Google Calendar event",
+            );
             const gcalResult = await updateCalendarEvent({
               connectionId: reschedConnectionId,
               eventId: existingGoogleEventId,
@@ -405,6 +410,11 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
             }
           } else {
             // No existing Google event — create fresh
+            logger.info(
+              { bookingId: existing.id, newBookingId: newBooking.id, existingGoogleEventId: null,
+                connectionId: reschedConnectionId, newSlotStart: newBooking.slotStart, newSlotEnd: newBooking.slotEnd },
+              "Authed reschedule: no existing Google event — creating fresh",
+            );
             const gcalResult = await createCalendarEvent({
               connectionId: reschedConnectionId,
               summary: `${eventType?.name ?? "Meeting"} — ${newBooking.attendeeName}`,
@@ -425,7 +435,11 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
           }
         }
       } catch (err) {
-        logger.warn({ err, bookingId: newBooking?.id, connectionId: reschedConnectionId }, "Google Calendar event creation failed on reschedule");
+        logger.warn(
+          { err: (err as any)?.message, googleApiError: (err as any)?.response?.data,
+            bookingId: newBooking?.id, connectionId: reschedConnectionId },
+          "Google Calendar event creation failed on reschedule",
+        );
       }
     })();
 
