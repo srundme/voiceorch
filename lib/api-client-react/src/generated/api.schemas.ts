@@ -3963,6 +3963,104 @@ export interface PendriveCallerList {
 }
 
 /**
+ * @nullable
+ */
+export type SimulationTestCaseVariables = { [key: string]: unknown } | null;
+
+/**
+ * @nullable
+ */
+export type SimulationTestCaseLastRun = {
+  status?: string;
+  /** @nullable */
+  score?: number | null;
+  createdAt?: string;
+} | null;
+
+export interface SimulationTestCase {
+  id: number;
+  agentId: number;
+  userId: string;
+  name: string;
+  personaPrompt: string;
+  goal: string;
+  successCriteria: string[];
+  /** @nullable */
+  variables?: SimulationTestCaseVariables;
+  /** @nullable */
+  kbSourceId?: number | null;
+  maxTurns: number;
+  createdAt: string;
+  updatedAt?: string;
+  /** @nullable */
+  lastRun?: SimulationTestCaseLastRun;
+}
+
+export type SimulationTestCaseInputVariables = { [key: string]: unknown };
+
+export interface SimulationTestCaseInput {
+  agent_id: number;
+  name: string;
+  persona_prompt: string;
+  goal: string;
+  success_criteria?: string[];
+  variables?: SimulationTestCaseInputVariables;
+  /** @nullable */
+  kb_source_id?: number | null;
+  max_turns?: number;
+}
+
+/**
+ * @nullable
+ */
+export type SimulationRunResult = { [key: string]: unknown } | null;
+
+export interface SimulationRun {
+  id: number;
+  agentId: number;
+  /** @nullable */
+  testCaseId?: number | null;
+  userId: string;
+  status: string;
+  /** @nullable */
+  score?: number | null;
+  /** @nullable */
+  result?: SimulationRunResult;
+  /** @nullable */
+  startedAt?: string | null;
+  /** @nullable */
+  completedAt?: string | null;
+  createdAt: string;
+}
+
+/**
+ * @nullable
+ */
+export type SimulationMessageMetadata = { [key: string]: unknown } | null;
+
+export interface SimulationMessage {
+  id: number;
+  simulationRunId: number;
+  role: string;
+  content: string;
+  /** @nullable */
+  metadata?: SimulationMessageMetadata;
+  createdAt: string;
+}
+
+export type SimulationRunDetail = SimulationRun & {
+  messages?: SimulationMessage[];
+};
+
+export interface SimulationTemplate {
+  id: string;
+  name: string;
+  personaPrompt: string;
+  goal: string;
+  successCriteria: string[];
+}
+
+/**
  * Platform admin token (matches ADMIN_TOKEN env var).
  */
 export type AdminTokenParameter = string;
@@ -4535,4 +4633,31 @@ export type GetPendriveContextParams = {
 agentId: number;
 phoneNumber: string;
 };
+
+export type StartSimulationChatBody = {
+  agent_id: number;
+  /** @nullable */
+  run_id?: number | null;
+  message: string;
+};
+
+export type StartScenarioStreamBody = {
+  test_case_id: number;
+  max_turns?: number;
+};
+
+export type ListSimulationTestCasesParams = {
+agent_id: number;
+};
+
+export type ListSimulationRunsParams = {
+agent_id: number;
+};
+
+export type CreateSimulationRunBody = {
+  test_case_id: number;
+  max_turns?: number;
+};
+
+export type DownloadSimulationReport200 = { [key: string]: unknown };
 

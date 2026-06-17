@@ -37,3 +37,4 @@ export * from "./callerSentences";
 export * from "./callerFactSentenceLinks";
 export * from "./callerEpisodeFactLinks";
 export * from "./agent-versions";
+export * from "./simulation";

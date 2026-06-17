@@ -55,6 +55,7 @@ import voicesRouter from "./voices.js";
 import testToolRouter from "./test-tool.js";
 import authRouter from "./auth.js";
 import dispositionRouter from "./disposition.js";
+import simulationRouter from "./simulation.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
 const router: IRouter = Router();
@@ -129,5 +130,6 @@ router.use(webcallNotifyRouter);
 router.use(testToolRouter);
 router.use(dispositionRouter);
 router.use(agentVersionsRouter);
+router.use(simulationRouter);
 
 export default router;
