@@ -145,7 +145,11 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
               booking_id: { type: "string", description: "The booking reference ID to reschedule" },
               preferred_date: {
                 type: "string",
-                description: "Optional preferred date/time for the new slot, e.g. 'next Tuesday' or '2025-06-10T14:00'",
+                description:
+                  "The requested date/time for the new slot." +
+                  " When the caller names a specific time (e.g. '12 PM', '2:30 PM', 'noon'), pass a full ISO 8601 datetime with timezone offset, e.g. '2026-06-18T12:00:00+05:30'." +
+                  " The system will book EXACTLY that slot if available, or return the nearest alternatives — it will NEVER silently pick a different time." +
+                  " For vague preferences (e.g. 'morning', 'next Tuesday') a plain string is fine.",
               },
             },
             required: ["booking_id"],
@@ -744,11 +748,14 @@ export async function executeNativeReschedule(
       return "error: calendar is unavailable";
     }
 
-    const { searchStart, minSlotStart, timeFilter } = preferredRaw
+    const { searchStart, minSlotStart, timeFilter, isExactTime } = preferredRaw
       ? parsePreferredDate(preferredRaw, calendar.timezone)
-      : { searchStart: new Date(), minSlotStart: undefined, timeFilter: undefined };
+      : { searchStart: new Date(), minSlotStart: undefined, timeFilter: undefined, isExactTime: false };
     if (preferredRaw) {
-      logger.info({ callId, preferredRaw, searchStart, minSlotStart }, "Native reschedule: preferred date resolved");
+      logger.info(
+        { callId, preferredRaw, searchStart, minSlotStart, isExactTime },
+        "Native reschedule: preferred date resolved",
+      );
     }
     const searchEnd = new Date(searchStart.getTime() + 7 * 24 * 60 * 60 * 1000);
     let slots = await getAvailableSlots(eventType.id, format(searchStart, "yyyy-MM-dd"), format(searchEnd, "yyyy-MM-dd"));
@@ -760,9 +767,44 @@ export async function executeNativeReschedule(
       return `error: no other available slots ${rangeDesc}`;
     }
 
-    const newSlot = filteredSlots[0]!;
-    const newStart = newSlot.slotStart;
-    const newEnd = newSlot.slotEnd;
+    // ── Exact-time enforcement ──────────────────────────────────────────────
+    // When the caller supplied a specific clock time (isExactTime=true) we MUST
+    // land on that exact slot.  Auto-picking the first available slot when the
+    // requested time is unavailable causes silent, wrong reschedules.
+    let chosenSlot: TimeSlot;
+    if (isExactTime && minSlotStart) {
+      const EXACT_TOLERANCE_MS = 60_000; // 1-minute window to absorb rounding
+      const exactMatch = filteredSlots.find(
+        (s) => Math.abs(s.slotStart.getTime() - minSlotStart.getTime()) <= EXACT_TOLERANCE_MS,
+      );
+
+      const tz = calendar.timezone || "UTC";
+      const requestedLabel = formatInTimeZone(minSlotStart, tz, "EEEE, MMMM do 'at' h:mm a");
+
+      logger.info(
+        { callId, requestedLabel, exactMatch: !!exactMatch, availableCount: filteredSlots.length },
+        "Native reschedule: exact-time slot check",
+      );
+
+      if (!exactMatch) {
+        // Slot not available — surface up to 5 nearby alternatives, never auto-pick
+        const alternatives = filteredSlots
+          .slice(0, 5)
+          .map((s) => formatInTimeZone(s.slotStart, tz, "EEE MMM d 'at' h:mm a"))
+          .join("; ");
+        const altMsg = alternatives ? ` Available nearby slots: ${alternatives}` : " No nearby slots available.";
+        return `error: requested slot "${requestedLabel}" is not available.${altMsg}`;
+      }
+
+      logger.info({ callId, confirmedSlot: exactMatch.slotStart }, "Native reschedule: exact slot confirmed");
+      chosenSlot = exactMatch;
+    } else {
+      // Vague preference (morning / next Tuesday / etc.) — first available is fine
+      chosenSlot = filteredSlots[0]!;
+    }
+
+    const newStart = chosenSlot.slotStart;
+    const newEnd = chosenSlot.slotEnd;
     const lockKey = buildSlotLockKey(calendar.id, newStart);
     let newBooking: typeof bookingsTable.$inferSelect | undefined;
     let lockConflict = false;
@@ -1087,11 +1129,16 @@ export async function executeWebhookTool(
  * Parse a natural-language or ISO preferred date string into a concrete search
  * start date, an optional minimum slot start instant for time-precision, and an
  * optional time-of-day slot filter.
+ *
+ * `isExactTime` is true when the caller supplied a specific clock time (e.g.
+ * "2026-06-18T12:00" or "2026-06-18 12:00 PM").  The reschedule tool uses this
+ * to enforce exact-slot matching instead of silently falling back to the first
+ * available slot.
  */
 export function parsePreferredDate(
   raw: string,
   tz = "UTC",
-): { searchStart: Date; minSlotStart?: Date; timeFilter?: (slot: TimeSlot) => boolean } {
+): { searchStart: Date; minSlotStart?: Date; timeFilter?: (slot: TimeSlot) => boolean; isExactTime?: boolean } {
   const now = new Date();
   const lower = raw.trim().toLowerCase();
 
@@ -1146,10 +1193,11 @@ export function parsePreferredDate(
   const parsed = new Date(raw);
   if (!isNaN(parsed.getTime())) {
     const effectiveStart = parsed > now ? parsed : now;
-    const hasTimeComponent = raw.includes("T") || raw.includes(" ");
+    const hasTimeComponent = raw.includes("T") || raw.includes(":");
     return {
       searchStart: effectiveStart,
       minSlotStart: hasTimeComponent ? effectiveStart : undefined,
+      isExactTime: hasTimeComponent,
     };
   }
 
