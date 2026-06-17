@@ -80,5 +80,9 @@
     "vitest": "^4.1.7",
     "wouter": "^3.3.5",
     "zod": "catalog:"
+  },
+  "dependencies": {
+    "@types/diff": "^8.0.0",
+    "diff": "^9.0.0"
   }
 }
