@@ -720,6 +720,11 @@ export class OrchestrationPipeline {
       let ttsDone = false;
 
       const drainLoop = async (): Promise<void> => {
+        // Drift-compensated pacing: track the "ideal" next send time and adjust
+        // each sleep so that accumulated setTimeout jitter is self-corrected.
+        // Without this, late-firing timers cause VoBiz's playout buffer to underrun
+        // (gaps/glitches) because audio delivery slows below real-time.
+        let nextTick = Date.now() + 20;
         while (!this.closed && !this.bargeInRequested) {
           if (queue.length > 0) {
             const chunk = queue.shift()!;
@@ -729,7 +734,12 @@ export class OrchestrationPipeline {
               ? this.ambientStream.mixIntoMulaw(chunk)
               : chunk;
             this.config.onAudioOut(outChunk);
-            await new Promise<void>((r) => setTimeout(r, 20));
+            const delay = Math.max(0, nextTick - Date.now());
+            nextTick += 20;
+            // Prevent large accumulated debt (e.g. after a long pause or barge-in)
+            // from causing a burst of back-to-back sends on the next turn.
+            if (nextTick < Date.now() - 40) nextTick = Date.now() + 20;
+            await new Promise<void>((r) => setTimeout(r, delay));
           } else if (ttsDone) {
             break; // queue drained and TTS finished — we're done
           } else {
@@ -742,6 +752,10 @@ export class OrchestrationPipeline {
 
       let accum: Buffer[] = [];
       let accumSize = 0;
+      // Carry bytes that weren't a multiple of 4 across flush() calls so
+      // downsample16to8 never silently drops trailing PCM samples and
+      // creates click artifacts at streaming chunk boundaries.
+      let flushRemainder = Buffer.alloc(0);
 
       const flush = (): void => {
         if (accum.length === 0 || this.closed || this.bargeInRequested) {
@@ -749,9 +763,19 @@ export class OrchestrationPipeline {
           accumSize = 0;
           return;
         }
-        const pcm16k = Buffer.concat(accum);
+        const combined = flushRemainder.length > 0
+          ? Buffer.concat([flushRemainder, ...accum])
+          : Buffer.concat(accum);
         accum = [];
         accumSize = 0;
+        // Align to 4-byte boundary (two 16-bit samples) required by downsample16to8.
+        // Carry any trailing bytes into the next flush rather than dropping them.
+        const alignedLen = Math.floor(combined.length / 4) * 4;
+        flushRemainder = alignedLen < combined.length
+          ? combined.slice(alignedLen)
+          : Buffer.alloc(0);
+        if (alignedLen === 0) return;
+        const pcm16k = combined.slice(0, alignedLen);
         const pcm8k = downsample16to8(pcm16k);
         // Record agent audio (downsampled to match recording sample rate)
         this.recording.addAgentChunk(pcm8k);
