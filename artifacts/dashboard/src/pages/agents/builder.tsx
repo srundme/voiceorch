@@ -6,7 +6,7 @@ import {
   VoicemailIcon, SlidersHorizontal, TestTube2, ChevronRight,
   Volume2, Check, X, Pencil, ChevronDown, List, Globe, BarChart3,
   User2, Sparkles, BookOpen, ToggleLeft, ToggleRight, Tag, Loader2, Square,
-  Timer, ShieldCheck, Layers, Gauge, MicOff,
+  Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -16,8 +16,8 @@ import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import {
   useListAgents, useGetAgent, useUpdateAgent, useToggleAgent, useDeleteAgent,
   useCreateAgent, useInitiateOutboundCall, getListAgentsQueryKey, getGetAgentQueryKey,
-  useListCalls, getListCallsQueryKey, useListEventTypes, useListCalendars, customFetch,
-  useListKnowledgeSources,
+  useListCalls, getListCallsQueryKey, useListCalendars, customFetch,
+  useListKnowledgeSources, useRunToolTest,
 } from "@workspace/api-client-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -47,6 +47,7 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError, mapApiErrors, isDestinationUnverifiedError } from "@/lib/format-api-error";
 import {
@@ -1003,76 +1004,126 @@ function VoiceTab({ form }: { form: any }) {
 
 /* ── Tab: Tools ─────────────────────────────────────────────────────────────── */
 
-function ToolsTab({ form }: { form: any }) {
+
+
+function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
   const { fields, append, remove } = useFieldArray({ control: form.control, name: "tools" });
   const genderEnabled = form.watch("genderDetectionEnabled") ?? false;
   const watchedTools  = (form.watch("tools") ?? []) as any[];
 
-  const { data: eventTypesData } = useListEventTypes();
   const { data: calendarsData } = useListCalendars();
-  const calendarOptions = (calendarsData ?? []).map((cal: any) => ({ value: String(cal.id), label: cal.name ?? cal.slug }));
-  const eventTypeOptions = (eventTypesData ?? []).map((et: any) => ({ value: String(et.id), label: et.name ?? et.slug, calendarId: String(et.calendarId) }));
+  const agentCalendar = (calendarsData ?? []).find((cal: any) => cal.agentId === agentId);
+
+  const [expandedSchema, setExpandedSchema] = useState<string | null>(null);
+  const [expandedTest, setExpandedTest]     = useState<string | null>(null);
+  const [testArgs, setTestArgs]             = useState<Record<string, string>>({});
+  const [testResult, setTestResult]         = useState<Record<string, string | null>>({});
+
+  const runTest = useRunToolTest();
 
   const hasNativeTool = (type: string) => watchedTools.some((t: any) => t.type === type);
-  const nativeToolIndex = (type: string) => fields.findIndex((f: any) => f.type === type);
+  const nativeToolIndex = (type: string) => watchedTools.findIndex((t: any) => t.type === type);
+
+  const NATIVE_DEFAULT_NAMES: Record<string, string> = {
+    native_booking: "book_appointment",
+    native_check_availability: "check_availability",
+    native_list_bookings: "list_bookings",
+    native_reschedule: "reschedule_booking",
+    native_cancel: "cancel_booking",
+  };
 
   const toggleNativeTool = (type: string) => {
     const idx = nativeToolIndex(type);
     if (idx >= 0) {
       remove(idx);
+      setExpandedSchema(null);
+      setExpandedTest(null);
     } else {
-      append({ type: type as any, name: "", description: "" });
+      append({ type: type as any, name: NATIVE_DEFAULT_NAMES[type] ?? "", description: "" });
     }
   };
 
-  const getNativeField = (type: string, fieldName: string) => {
-    const idx = nativeToolIndex(type);
-    return idx >= 0 ? form.watch(`tools.${idx}.${fieldName}`) : undefined;
-  };
-  const setNativeField = (type: string, fieldName: string, value: any) => {
-    const idx = nativeToolIndex(type);
-    if (idx >= 0) form.setValue(`tools.${idx}.${fieldName}`, value, { shouldDirty: true });
-  };
 
   const BOOKING_TOOLS = [
-    {
-      type: "native_booking",
-      icon: <BookOpen className="h-4 w-4" />,
-      color: "emerald",
-      label: "Book Appointment",
-      description: "Lets the agent book a meeting slot for the caller. Agent collects name, email, and preferred time, then confirms the booking live.",
-      needsEventType: true,
+    { type: "native_booking",           fnName: "book_appointment",   icon: <BookOpen className="h-4 w-4" />, color: "emerald", label: "Book Appointment",    description: "Lets the agent book a meeting slot for the caller. Agent collects name, email, and preferred time, then confirms the booking live." },
+    { type: "native_check_availability", fnName: "check_availability", icon: <Sparkles className="h-4 w-4" />, color: "sky",     label: "Check Availability", description: "Enables the agent to look up open slots before suggesting a time. Use alongside Book Appointment for a natural booking flow." },
+    { type: "native_list_bookings",      fnName: "list_bookings",      icon: <List className="h-4 w-4" />,     color: "violet",  label: "List Bookings",      description: "Allows the agent to retrieve existing bookings for the caller — useful for reschedule or cancellation flows." },
+    { type: "native_reschedule",         fnName: "reschedule_booking", icon: <Pencil className="h-4 w-4" />,   color: "amber",   label: "Reschedule Booking", description: "Lets the agent reschedule an existing booking to a new time slot chosen by the caller." },
+    { type: "native_cancel",             fnName: "cancel_booking",     icon: <X className="h-4 w-4" />,        color: "red",     label: "Cancel Booking",     description: "Allows the agent to cancel an upcoming booking on the caller's request." },
+  ] as const;
+
+  const BOOKING_TOOL_SCHEMAS: Record<string, object> = {
+    native_booking: {
+      name: "book_appointment",
+      description: "Book an appointment for the caller.",
+      parameters: {
+        type: "object",
+        properties: {
+          attendee_name:  { type: "string", description: "Full name of the person being booked" },
+          attendee_email: { type: "string", description: "Email address of the person being booked" },
+          preferred_date: { type: "string", description: "Optional preferred date/time, e.g. 'next Tuesday' or '2026-06-10'" },
+          meeting_type:   { type: "string", enum: ["google_meet", "in_person"], description: "Meeting format" },
+          meeting_address: { type: "string", description: "Physical address (required when meeting_type is in_person)" },
+        },
+        required: ["attendee_name", "attendee_email"],
+      },
     },
-    {
-      type: "native_check_availability",
-      icon: <Sparkles className="h-4 w-4" />,
-      color: "sky",
-      label: "Check Availability",
-      description: "Enables the agent to look up open slots before suggesting a time. Use alongside Book Appointment for a natural booking flow.",
-      needsEventType: true,
+    native_check_availability: {
+      name: "check_availability",
+      description: "Check available appointment slots.",
+      parameters: {
+        type: "object",
+        properties: {
+          preferred_date: { type: "string", description: "Optional preferred date/time to check, e.g. 'tomorrow morning'" },
+          timezone:       { type: "string", description: "IANA timezone, e.g. 'America/New_York'" },
+        },
+        required: [],
+      },
     },
-    {
-      type: "native_list_bookings",
-      icon: <List className="h-4 w-4" />,
-      color: "violet",
-      label: "List Bookings",
-      description: "Allows the agent to retrieve existing bookings for the caller — useful for reschedule or cancellation flows.",
-      needsEventType: false,
+    native_list_bookings: {
+      name: "list_bookings",
+      description: "List existing bookings for the caller.",
+      parameters: {
+        type: "object",
+        properties: {
+          attendee_name: { type: "string", description: "Full name of the caller whose bookings to look up" },
+          timezone:      { type: "string", description: "IANA timezone for formatting dates" },
+        },
+        required: ["attendee_name"],
+      },
     },
-    {
-      type: "native_reschedule",
-      icon: <Pencil className="h-4 w-4" />,
-      color: "amber",
-      label: "Reschedule Booking",
-      description: "Lets the agent reschedule an existing booking to a new time slot chosen by the caller.",
-      needsEventType: false,
+    native_reschedule: {
+      name: "reschedule_booking",
+      description: "Reschedule an existing booking to a new time slot.",
+      parameters: {
+        type: "object",
+        properties: {
+          booking_id:     { type: "string", description: "The booking reference ID to reschedule" },
+          preferred_date: { type: "string", description: "Optional new preferred date/time" },
+        },
+        required: ["booking_id"],
+      },
     },
+    native_cancel: {
+      name: "cancel_booking",
+      description: "Cancel an upcoming booking on the caller's request.",
+      parameters: {
+        type: "object",
+        properties: {
+          booking_id: { type: "string", description: "The booking reference ID to cancel" },
+        },
+        required: ["booking_id"],
+      },
+    },
+  };
+
+  const CALL_CONTROL_TOOLS = [
     {
-      type: "native_cancel",
-      icon: <X className="h-4 w-4" />,
-      color: "red",
-      label: "Cancel Booking",
-      description: "Allows the agent to cancel an upcoming booking on the caller's request.",
+      type: "end_call",
+      icon: <PhoneOff className="h-4 w-4" />,
+      color: "slate",
+      label: "End Call",
+      description: "Lets the agent gracefully end the call when the conversation is complete.",
       needsEventType: false,
     },
   ] as const;
@@ -1083,6 +1134,7 @@ function ToolsTab({ form }: { form: any }) {
     violet:  { border: "border-violet-400/40",  bg: "bg-violet-950/10",  iconBg: "bg-violet-500/15",  iconText: "text-violet-400",  label: "text-violet-300",  badge: "bg-violet-500/20",  badgeText: "text-violet-300",  active: "" },
     amber:   { border: "border-amber-400/40",   bg: "bg-amber-950/10",   iconBg: "bg-amber-500/15",   iconText: "text-amber-400",   label: "text-amber-300",   badge: "bg-amber-500/20",   badgeText: "text-amber-300",   active: "" },
     red:     { border: "border-red-400/40",     bg: "bg-red-950/10",     iconBg: "bg-red-500/15",     iconText: "text-red-400",     label: "text-red-300",     badge: "bg-red-500/20",     badgeText: "text-red-300",     active: "" },
+    slate:   { border: "border-slate-400/40",   bg: "bg-slate-950/10",   iconBg: "bg-slate-500/15",   iconText: "text-slate-400",   label: "text-slate-300",   badge: "bg-slate-500/20",   badgeText: "text-slate-300",   active: "" },
   };
 
   return (
@@ -1097,14 +1149,147 @@ function ToolsTab({ form }: { form: any }) {
 
         {/* ── Booking Tools ── */}
         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-3">Scheduling & Bookings</p>
-        {BOOKING_TOOLS.map(({ type, icon, color, label, description, needsEventType }) => {
+        {BOOKING_TOOLS.map(({ type, fnName, icon, color, label, description }) => {
           const isOn = hasNativeTool(type);
           const c = colorMap[color];
-          const calendarId = isOn && needsEventType ? getNativeField(type, "calendarId") : undefined;
-          const eventTypeId = isOn && needsEventType ? getNativeField(type, "eventTypeId") : undefined;
-          const filteredEventTypes = calendarId
-            ? eventTypeOptions.filter((et: any) => et.calendarId === calendarId)
-            : eventTypeOptions;
+          const schemaOpen = expandedSchema === type;
+          const testOpen   = expandedTest === type;
+          const argKey = `${type}:args`;
+          const handleRunTest = async () => {
+            setTestResult((r) => ({ ...r, [type]: null }));
+            try {
+              let parsedArgs: Record<string, unknown> = {};
+              try { parsedArgs = JSON.parse(testArgs[argKey] || "{}"); } catch { parsedArgs = {}; }
+              const res = await runTest.mutateAsync({ data: { agentId, toolName: fnName, args: parsedArgs } });
+              setTestResult((r) => ({ ...r, [type]: res.result ?? JSON.stringify(res) }));
+            } catch (err: any) {
+              setTestResult((r) => ({ ...r, [type]: `Error: ${err?.message ?? String(err)}` }));
+            }
+          };
+          return (
+            <div key={type} className={cn("rounded-xl border transition-all duration-150", isOn ? `${c.border} ${c.bg}` : "border-border/60 bg-card/20")}>
+              <button
+                type="button"
+                onClick={() => toggleNativeTool(type)}
+                className="w-full text-left p-4 flex items-start gap-3"
+              >
+                <div className={cn("mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0", isOn ? c.iconBg : "bg-muted/30")}>
+                  <span className={cn(isOn ? c.iconText : "text-muted-foreground/40")}>{icon}</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                    <code className={cn("text-[11px] font-mono font-semibold", isOn ? c.label : "text-foreground/70")}>{fnName}</code>
+                    <span className={cn("text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded", isOn ? `${c.badge} ${c.badgeText}` : "bg-muted/40 text-muted-foreground/40")}>
+                      {isOn ? "ON" : "OFF"}
+                    </span>
+                    {isOn && (
+                      <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-muted/40 text-muted-foreground/60">
+                        {toolName}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground/60 leading-relaxed">{description}</p>
+                </div>
+                <div className="shrink-0 mt-0.5">
+                  {isOn ? <ToggleRight className={cn("h-5 w-5", c.iconText)} /> : <ToggleLeft className="h-5 w-5 text-muted-foreground/30" />}
+                </div>
+              </button>
+              {isOn && (
+                <div className="px-4 pb-4 -mt-1">
+                  <div className="border-t border-border/30 pt-3 space-y-2">
+                    {/* Calendar badge */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[10px] text-muted-foreground">Assigned calendar:</span>
+                      <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded", c.badge, c.badgeText)}>
+                        {agentCalendar ? (agentCalendar.name || "Calendar") : "No calendar assigned yet"}
+                      </span>
+                    </div>
+                    {/* Action buttons */}
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-6 text-[10px] px-2 gap-1"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedSchema(schemaOpen ? null : type);
+                          setExpandedTest(null);
+                        }}
+                      >
+                        <FileText className="h-3 w-3" /> View Schema
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-6 text-[10px] px-2 gap-1"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedTest(testOpen ? null : type);
+                          setExpandedSchema(null);
+                          setTestResult((r) => ({ ...r, [type]: null }));
+                        }}
+                      >
+                        <TestTube2 className="h-3 w-3" /> Test Tool
+                      </Button>
+                    </div>
+                    {/* Schema panel */}
+                    {schemaOpen && (
+                      <div className="rounded-md bg-muted/20 border border-border/30 p-3">
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-2">Function Schema</p>
+                        <pre className="text-[10px] text-muted-foreground/80 overflow-x-auto whitespace-pre-wrap font-mono leading-relaxed">
+                          {JSON.stringify(BOOKING_TOOL_SCHEMAS[type] ?? {}, null, 2)}
+                        </pre>
+                      </div>
+                    )}
+                    {/* Test panel */}
+                    {testOpen && (
+                      <div className="rounded-md bg-muted/20 border border-border/30 p-3 space-y-2">
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50">Test Tool</p>
+                        {!agentCalendar ? (
+                          <p className="text-[10px] text-amber-400/80">No calendar is assigned to this agent yet. Go to Settings → Calendar to set one up.</p>
+                        ) : (
+                          <>
+                            <div>
+                              <label className="text-[10px] text-muted-foreground block mb-1">Arguments (JSON)</label>
+                              <textarea
+                                className="w-full rounded-md border border-border/50 bg-background/50 text-[10px] font-mono p-2 min-h-[60px] resize-y focus:outline-none focus:ring-1 focus:ring-ring"
+                                placeholder={`{}`}
+                                value={testArgs[argKey] ?? "{}"}
+                                onChange={(e) => setTestArgs((a) => ({ ...a, [argKey]: e.target.value }))}
+                              />
+                            </div>
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="h-6 text-[10px] px-3"
+                              disabled={runTest.isPending}
+                              onClick={handleRunTest}
+                            >
+                              {runTest.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Run Test"}
+                            </Button>
+                            {testResult[type] != null && (
+                              <div className="rounded-md bg-background/50 border border-border/30 p-2">
+                                <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-1">Response</p>
+                                <pre className="text-[10px] text-muted-foreground/80 font-mono whitespace-pre-wrap break-all">{testResult[type]}</pre>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">Call Control</p>
+        {CALL_CONTROL_TOOLS.map(({ type, icon, color, label, description }) => {
+          const isOn = hasNativeTool(type);
+          const c = colorMap[color];
           return (
             <div key={type} className={cn("rounded-xl border transition-all duration-150", isOn ? `${c.border} ${c.bg}` : "border-border/60 bg-card/20")}>
               <button
@@ -1128,48 +1313,6 @@ function ToolsTab({ form }: { form: any }) {
                   {isOn ? <ToggleRight className={cn("h-5 w-5", c.iconText)} /> : <ToggleLeft className="h-5 w-5 text-muted-foreground/30" />}
                 </div>
               </button>
-              {isOn && needsEventType && (
-                <div className="px-4 pb-4 -mt-1">
-                  <div className="border-t border-border/30 pt-3 space-y-2">
-                    <div>
-                      <label className="text-[10px] text-muted-foreground block mb-1">Calendar</label>
-                      <Select
-                        value={calendarId ?? ""}
-                        onValueChange={(v) => {
-                          setNativeField(type, "calendarId", v);
-                          setNativeField(type, "eventTypeId", "");
-                        }}
-                      >
-                        <SelectTrigger className="h-8 text-xs">
-                          <SelectValue placeholder="Select calendar…" />
-                        </SelectTrigger>
-                        <SelectContent position="popper">
-                          {calendarOptions.map((cal: any) => (
-                            <SelectItem key={cal.value} value={cal.value} className="text-xs">{cal.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <label className="text-[10px] text-muted-foreground block mb-1">Event Type</label>
-                      <Select
-                        value={eventTypeId ?? ""}
-                        onValueChange={(v) => setNativeField(type, "eventTypeId", v)}
-                        disabled={!calendarId}
-                      >
-                        <SelectTrigger className="h-8 text-xs">
-                          <SelectValue placeholder={calendarId ? "Select event type…" : "Pick a calendar first"} />
-                        </SelectTrigger>
-                        <SelectContent position="popper">
-                          {filteredEventTypes.map((et: any) => (
-                            <SelectItem key={et.value} value={et.value} className="text-xs">{et.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           );
         })}
@@ -1699,20 +1842,43 @@ function AdvancedTab({ form }: { form: any }) {
             </div>
 
             {/* KV Cache */}
-            <div className="rounded-xl border border-border/50 bg-card/40 px-4 py-3.5 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", llmProvider === "anthropic" ? "bg-amber-500/15 text-amber-400" : "bg-muted/40 text-muted-foreground/50")}>
-                  <Zap className="h-4 w-4" />
+            {(() => {
+              const kvCacheTooltips: Record<string, string> = {
+                anthropic: "Explicit prompt caching — VoiceOrch sends cache_control breakpoints so Anthropic caches your system prompt server-side after turn 1, saving ~5× on repeated input tokens.",
+                gemini: "Google auto-caches prompts >1024 tokens on their end — no explicit configuration needed. Savings appear automatically in your Google AI usage.",
+                openai: "OpenAI silently caches prompts >1024 tokens at no extra cost — no explicit configuration needed.",
+              };
+              const kvCacheTooltip = kvCacheTooltips[llmProvider ?? ""] ??
+                "This provider does not currently support prompt caching. Consider Sliding Window or Summarization to reduce token costs.";
+              return (
+                <div className="rounded-xl border border-border/50 bg-card/40 px-4 py-3.5 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", llmProvider === "anthropic" ? "bg-amber-500/15 text-amber-400" : "bg-muted/40 text-muted-foreground/50")}>
+                      <Zap className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <p className="text-[12.5px] font-semibold text-foreground">KV Cache <span className="text-[10px] text-muted-foreground font-normal ml-1">Anthropic only</span></p>
+                      <p className="text-[10px] text-muted-foreground leading-relaxed">Auto-enabled — caches system prompt, saving ~5× on repeated input tokens</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button type="button" className="text-muted-foreground/50 hover:text-muted-foreground transition-colors cursor-default">
+                          <HelpCircle className="h-3.5 w-3.5" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="left" className="max-w-[260px] text-[11px] leading-relaxed">
+                        {kvCacheTooltip}
+                      </TooltipContent>
+                    </Tooltip>
+                    <span className={cn("text-[10.5px] font-semibold px-2.5 py-1 rounded-lg", llmProvider === "anthropic" ? "bg-amber-500/20 text-amber-300 border border-amber-500/30" : "bg-muted/40 text-muted-foreground border border-border/40")}>
+                      {llmProvider === "anthropic" ? "Active" : "N/A"}
+                    </span>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-[12.5px] font-semibold text-foreground">KV Cache <span className="text-[10px] text-muted-foreground font-normal ml-1">Anthropic only</span></p>
-                  <p className="text-[10px] text-muted-foreground leading-relaxed">Auto-enabled — caches system prompt, saving ~5× on repeated input tokens</p>
-                </div>
-              </div>
-              <span className={cn("shrink-0 text-[10.5px] font-semibold px-2.5 py-1 rounded-lg", llmProvider === "anthropic" ? "bg-amber-500/20 text-amber-300 border border-amber-500/30" : "bg-muted/40 text-muted-foreground border border-border/40")}>
-                {llmProvider === "anthropic" ? "Active" : "N/A"}
-              </span>
-            </div>
+              );
+            })()}
 
             {/* Sliding Window */}
             <FormField control={form.control} name="contextWindowTurns" render={({ field }) => (
@@ -2577,7 +2743,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
             {activeTab === "overview"  && <OverviewTab form={form} rateMap={rateMap} agent={agent} />}
             {activeTab === "prompt"    && <PromptTab form={form} />}
             {activeTab === "voice"     && <VoiceTab form={form} />}
-            {activeTab === "tools"     && <ToolsTab form={form} />}
+            {activeTab === "tools"     && <ToolsTab form={form} agentId={agentId} />}
             {activeTab === "analysis"  && <AnalysisTab form={form} agentId={agentId} />}
             {activeTab === "voicemail" && <VoicemailTab form={form} />}
             {activeTab === "advanced"  && <AdvancedTab form={form} />}
