@@ -7,6 +7,7 @@ import {
   getGetAgentQueryKey,
   getListAgentsQueryKey,
   useListCalendars,
+  useListEventTypes,
   useRunToolTest,
 } from "@workspace/api-client-react";
 import { cn } from "@/lib/utils";
@@ -70,6 +71,7 @@ export const agentFormSchema = z.object({
   temperature:       z.number().min(0).max(2).optional(),
   maxDuration:       z.number().min(10).max(3600).optional(),
   greetingMessage:          z.string().optional(),
+  firstSpeaker:             z.preprocess((v) => (v === "user" ? "user" : "assistant"), z.enum(["assistant", "user"])),
   endCallPhrases:           z.string().optional(),
   silenceTimeoutSeconds:    z.number().min(5).max(300).optional(),
   language:                 z.string().optional(),
@@ -107,6 +109,7 @@ export const agentFormSchema = z.object({
     preToolMessage: z.string().optional(),
     calendarId: z.preprocess(v => (v === "" || v == null ? undefined : Number(v)), z.number().optional()),
     eventTypeId: z.preprocess(v => (v === "" || v == null ? undefined : Number(v)), z.number().optional()),
+    timezone: z.string().optional(),
     goodbyeMessage: z.string().optional(),
     targetNumber: z.string().optional(),
     holdMessage: z.string().optional(),
@@ -145,6 +148,8 @@ export const agentFormSchema = z.object({
   stagedPromptCoreIdentity: z.string().optional(),
   inboundPhoneNumberId: z.number().optional().nullable(),
   outboundPhoneNumberId: z.number().optional().nullable(),
+  isMultilingual: z.boolean().optional(),
+  multilingualLanguages: z.array(z.string()).optional(),
 }).superRefine((data, ctx) => {
   const asrErr = getModelError(data.asrProvider, data.asrModel, ASR_MODELS);
   if (asrErr) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["asrModel"], message: asrErr });
@@ -171,6 +176,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     contextWindowTurns, tokenSummarizationEnabled, tokenSummarizationThresholdTurns,
     stagedPromptEnabled, stagedPromptStages, stagedPromptCoreIdentity,
     ambientNoiseEnabled, ambientNoiseTrack,
+    isMultilingual, multilingualLanguages,
     ...rest
   } = data;
   const agentConfig: Record<string, unknown> = {};
@@ -187,6 +193,8 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   agentConfig["genderDetectionEnabled"] = !!genderDetectionEnabled;
   agentConfig["ambientNoiseEnabled"] = !!ambientNoiseEnabled;
   if (ambientNoiseTrack) agentConfig["ambientNoiseTrack"] = ambientNoiseTrack;
+  agentConfig["isMultilingual"] = !!isMultilingual;
+  if (isMultilingual && multilingualLanguages?.length) agentConfig["multilingualLanguages"] = multilingualLanguages;
   agentConfig["startSpeakingPlan"] = {
     waitSeconds:            startSpeakingWaitSecs          ?? 0,
     onPunctuationSeconds:   startSpeakingOnPunctuationSecs ?? 0.1,
@@ -208,9 +216,9 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   const NATIVE_BOOKING_TYPES = new Set(["native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel"]);
 
   const serializedTools = (rest.tools ?? []).map((t) => {
-    // Strip calendarId/eventTypeId from native scheduling tools — runtime auto-resolves from agent's calendar
+    // For native scheduling tools: preserve timezone and eventTypeId, strip only calendarId (UI-only hint)
     if (NATIVE_BOOKING_TYPES.has(t.type)) {
-      const { calendarId: _cal, eventTypeId: _et, ...nativeTool } = t as any;
+      const { calendarId: _cal, ...nativeTool } = t as any;
       return nativeTool;
     }
     const toolWithCoercedIds = {
@@ -218,11 +226,6 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
       ...(t.calendarId != null ? { calendarId: Number(t.calendarId) } : {}),
       ...(t.eventTypeId != null ? { eventTypeId: Number(t.eventTypeId) } : {}),
     };
-    // Strip calendarId/eventTypeId from native booking tools — runtime auto-resolves from agentId
-    if (isNativeTool) {
-      const { calendarId: _c, eventTypeId: _e, ...cleanTool } = toolWithCoercedIds;
-      return cleanTool;
-    }
     if (t.type !== "webhook") return toolWithCoercedIds;
     const { parameters, ...toolRest } = toolWithCoercedIds;
     const paramList = parameters ?? [];
@@ -238,6 +241,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
 
   return {
     ...rest,
+    firstSpeaker: rest.firstSpeaker === "user" ? "user" : "assistant",
     tools: serializedTools,
     asrLanguage: rest.asrLanguage || null,
     snapserveAgentId: snapserveAgentId || null,
@@ -404,7 +408,7 @@ export default function AgentEdit() {
       llmProvider: "openai", llmModel: "", ttsProvider: "elevenlabs",
       ttsVoice: "", ttsModel: "", telephonyProvider: "twilio",
       systemPrompt: "", temperature: 0.10, maxDuration: 300,
-      greetingMessage: "Hello", endCallPhrases: "", silenceTimeoutSeconds: 30,
+      greetingMessage: "Hello", firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
       language: "en-US", asrLanguage: "", backchannelingEnabled: true, backchannelingFrequency: 0.5,
       webhookUrl: "", webhookSecret: "", noiseCancellationEnabled: true,
       ambientNoiseEnabled: false, ambientNoiseTrack: "",
@@ -431,6 +435,28 @@ export default function AgentEdit() {
 
   const { data: calendarsData } = useListCalendars();
   const agentCalendar = (calendarsData ?? []).find((cal: any) => cal.agentId === id);
+  const calendarIdForEt = agentCalendar?.id;
+  const { data: agentEventTypes } = useListEventTypes(
+    calendarIdForEt ? { calendarId: calendarIdForEt } : undefined,
+    { query: { enabled: !!calendarIdForEt, queryKey: ["agent-event-types", calendarIdForEt ?? null] } }
+  );
+
+  // Reset eventTypeId on native_list_bookings whenever the assigned calendar changes
+  const prevCalendarIdRef = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (prevCalendarIdRef.current === undefined) {
+      prevCalendarIdRef.current = calendarIdForEt;
+      return;
+    }
+    if (prevCalendarIdRef.current !== calendarIdForEt) {
+      prevCalendarIdRef.current = calendarIdForEt;
+      const tools = form.getValues("tools") ?? [];
+      const idx = (tools as any[]).findIndex((t: any) => t.type === "native_list_bookings");
+      if (idx >= 0) {
+        form.setValue(`tools.${idx}.eventTypeId` as any, undefined);
+      }
+    }
+  }, [calendarIdForEt]);
 
   const NATIVE_TOOL_TYPES = ["native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel"];
   const watchedTools = (form.watch("tools") ?? []) as any[];
@@ -558,6 +584,7 @@ export default function AgentEdit() {
       temperature:       agent.temperature ?? 0.10,
       maxDuration:       agent.maxDuration ?? 300,
       greetingMessage:         agent.greetingMessage ?? "Hello",
+      firstSpeaker:            ((agent as any).firstSpeaker === "user" ? "user" : "assistant") as AgentFormValues["firstSpeaker"],
       endCallPhrases:          agent.endCallPhrases ?? "",
       silenceTimeoutSeconds:   agent.silenceTimeoutSeconds ?? 30,
       language:                agent.language ?? "en-US",
@@ -1262,25 +1289,64 @@ export default function AgentEdit() {
                             {isOn ? <ToggleRight className={cn("h-5 w-5", c.iconText)} /> : <ToggleLeft className="h-5 w-5 text-muted-foreground/30" />}
                           </div>
                         </button>
-                        {isOn && (
-                          <div className="px-4 pb-4 -mt-1">
-                            <div className="border-t border-border/30 pt-3 flex items-center justify-between gap-2 flex-wrap">
-                              <div className="flex items-center gap-2">
-                                <span className="text-[10px] text-muted-foreground">Assigned calendar:</span>
-                                <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded", c.badge, c.badgeText)}>
-                                  {agentCalendar ? (agentCalendar.name || "Calendar") : "No calendar assigned yet"}
-                                </span>
+                        {isOn && (() => {
+                          const idx = nativeToolIndex(type);
+                          const toolTimezone = watchedTools[idx]?.timezone;
+                          const toolEventTypeId = watchedTools[idx]?.eventTypeId;
+                          return (
+                            <div className="px-4 pb-4 -mt-1">
+                              <div className="border-t border-border/30 pt-3 space-y-2">
+                                <div className="flex items-center justify-between gap-2 flex-wrap">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[10px] text-muted-foreground">Assigned calendar:</span>
+                                    <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded", c.badge, c.badgeText)}>
+                                      {agentCalendar ? (agentCalendar.name || "Calendar") : "No calendar assigned yet"}
+                                    </span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); setSchemaViewType(type); }}
+                                    className="text-[10px] text-muted-foreground/60 hover:text-foreground/80 underline underline-offset-2 transition-colors"
+                                  >
+                                    View schema
+                                  </button>
+                                </div>
+                                {type === "native_list_bookings" && (
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] text-muted-foreground block">Event Type (optional)</label>
+                                    <Select
+                                      value={toolEventTypeId != null ? String(toolEventTypeId) : "__none__"}
+                                      onValueChange={(v) => form.setValue(`tools.${idx}.eventTypeId` as any, v === "__none__" ? undefined : Number(v))}
+                                    >
+                                      <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Any event type" /></SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="__none__" className="text-xs">Any event type</SelectItem>
+                                        {(agentEventTypes ?? []).map((et: any) => (
+                                          <SelectItem key={et.id} value={String(et.id)} className="text-xs">{et.title}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                )}
+                                <div className="space-y-1">
+                                  <label className="text-[10px] text-muted-foreground block">Timezone (optional)</label>
+                                  <Select
+                                    value={toolTimezone || "__none__"}
+                                    onValueChange={(v) => form.setValue(`tools.${idx}.timezone` as any, v === "__none__" ? undefined : v)}
+                                  >
+                                    <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Use caller timezone" /></SelectTrigger>
+                                    <SelectContent className="max-h-[280px] overflow-y-auto">
+                                      <SelectItem value="__none__" className="text-xs">Use caller timezone</SelectItem>
+                                      {AGENT_TIMEZONES.map((tz) => (
+                                        <SelectItem key={tz.value} value={tz.value} className="text-xs">{tz.label}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
                               </div>
-                              <button
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); setSchemaViewType(type); }}
-                                className="text-[10px] text-muted-foreground/60 hover:text-foreground/80 underline underline-offset-2 transition-colors"
-                              >
-                                View schema
-                              </button>
                             </div>
-                          </div>
-                        )}
+                          );
+                        })()}
                       </div>
                     );
                   })}
