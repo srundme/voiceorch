@@ -1219,7 +1219,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
     if (prevCalendarIdRef.current !== calendarIdForEt) {
       prevCalendarIdRef.current = calendarIdForEt;
       const tools = form.getValues("tools") ?? [];
-      const typesToReset = ["native_booking", "native_check_availability", "native_list_bookings"];
+      const typesToReset = ["native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel"];
       (tools as any[]).forEach((t: any, idx: number) => {
         if (typesToReset.includes(t.type)) {
           form.setValue(`tools.${idx}.eventTypeId` as any, undefined);
@@ -1410,8 +1410,8 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
                         {agentCalendar ? (agentCalendar.name || "Calendar") : "No calendar assigned yet"}
                       </span>
                     </div>
-                    {/* Event Type (booking / availability / list tools) */}
-                    {(type === "native_booking" || type === "native_check_availability" || type === "native_list_bookings") && (() => {
+                    {/* Event Type (booking / availability / list / reschedule / cancel tools) */}
+                    {(type === "native_booking" || type === "native_check_availability" || type === "native_list_bookings" || type === "native_reschedule" || type === "native_cancel") && (() => {
                       const idx = nativeToolIndex(type);
                       const toolEventTypeId = watchedTools[idx]?.eventTypeId;
                       return (
