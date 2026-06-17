@@ -934,6 +934,8 @@ function VoiceTab({ form }: { form: any }) {
   const stopPreview = React.useCallback(() => {
     const audio = previewAudioRef.current;
     if (audio) {
+      audio.onended = null;
+      audio.onerror = null;
       audio.pause();
       audio.src = "";
       previewAudioRef.current = null;
