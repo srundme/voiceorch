@@ -708,7 +708,7 @@ router.patch("/calls/:id/end", async (req, res): Promise<void> => {
 });
 
 // ── GET /calls/:id/logs — per-call event log ──────────────────────────────
-router.get("/:id/logs", requireAuth, async (req, res) => {
+router.get("/calls/:id/logs", requireAuth, async (req, res) => {
   const callId = parseInt(String(req.params.id), 10);
   if (isNaN(callId)) { res.status(400).json({ error: "Invalid call id" }); return; }
 
