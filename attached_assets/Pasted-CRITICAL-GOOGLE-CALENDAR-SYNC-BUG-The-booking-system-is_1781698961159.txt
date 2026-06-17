@@ -1,0 +1,168 @@
+CRITICAL GOOGLE CALENDAR SYNC BUG
+
+The booking system is creating unsynchronized events between the organizer calendar and attendee calendar.
+
+Current setup:
+
+Organizer / Host:
+gopinwrk@gmail.com
+
+Attendee:
+ramr76562@gmail.com
+
+Observed issue:
+
+Host calendar shows:
+
+9:00 AM
+3:00 PM
+
+Attendee calendar shows:
+
+9:30 AM
+3:30 AM
+
+The events are not synchronized.
+
+--------------------------------------------------
+
+EXPECTED BEHAVIOR
+
+A booking must create ONE Google Calendar event.
+
+The event should be created in the organizer calendar:
+
+gopinwrk@gmail.com
+
+using Google Calendar API.
+
+The attendee must be added via:
+
+attendees: [
+  {
+    email: "ramr76562@gmail.com"
+  }
+]
+
+Google should automatically send the invitation.
+
+The attendee calendar must receive the SAME event.
+
+--------------------------------------------------
+
+VERIFY
+
+For every booking store:
+
+google_event_id
+
+google_meet_link
+
+organizer_email
+
+attendee_email
+
+--------------------------------------------------
+
+RESCHEDULE FLOW
+
+When rescheduling:
+
+DO NOT create a new attendee event.
+
+Update the existing Google Event ID.
+
+Use:
+
+calendar.events.patch()
+
+or
+
+calendar.events.update()
+
+using the original event id.
+
+Google will automatically propagate changes to attendees.
+
+--------------------------------------------------
+
+CANCEL FLOW
+
+When cancelling:
+
+Delete the original Google Event ID.
+
+Google should automatically remove the event from attendee calendars.
+
+--------------------------------------------------
+
+INVESTIGATE
+
+Check whether the system is:
+
+1. Creating separate events in organizer and attendee calendars
+
+OR
+
+2. Creating an event without attendees
+
+OR
+
+3. Creating duplicate events during reschedule
+
+OR
+
+4. Losing the original Google Event ID after booking
+
+--------------------------------------------------
+
+ADD DEBUG LOGGING
+
+For every booking:
+
+log:
+
+google_event_id
+organizer_email
+attendee_email
+meeting_link
+
+For every reschedule:
+
+log:
+
+old_google_event_id
+updated_google_event_id
+
+For every cancellation:
+
+log:
+
+deleted_google_event_id
+
+--------------------------------------------------
+
+SUCCESS CRITERIA
+
+Book a meeting:
+
+Host:
+gopinwrk@gmail.com
+
+Attendee:
+ramr76562@gmail.com
+
+Result:
+
+Both calendars show the SAME event.
+
+Reschedule the meeting:
+
+Both calendars update automatically.
+
+Cancel the meeting:
+
+Both calendars remove the event automatically.
+
+There must only be ONE source of truth:
+Google Event ID.

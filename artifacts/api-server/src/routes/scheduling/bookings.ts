@@ -23,6 +23,7 @@ import {
 import {
   createCalendarEvent,
   deleteCalendarEvent,
+  updateCalendarEvent,
   getFirstConnectionForUser,
 } from "../../services/scheduling/google-calendar.js";
 import { dispatchSchedulingWebhooks } from "./webhooks.js";
@@ -344,38 +345,56 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
     }
 
     // Google Calendar sync for reschedule (best-effort, non-blocking)
+    // Patch the existing event in-place so attendees get a seamless "time changed"
+    // notification rather than a cancellation + new invite.
     void (async () => {
       try {
-        // Resolve Google connection (calendar-specific or first user connection)
         const calRow = await db.execute(
           sql`SELECT google_calendar_connection_id FROM scheduling_calendars WHERE id = ${existing.calendarId}`
         );
         const calendarConnectionId = (calRow.rows[0] as any)?.google_calendar_connection_id as string | null;
         const connectionId = calendarConnectionId ?? (await getFirstConnectionForUser(clerkId))?.id ?? null;
 
-        // (a) Delete old Calendar event
-        if (existingGoogleEventId && connectionId) {
-          await deleteCalendarEvent(connectionId, existingGoogleEventId);
-        }
-
-        // (b) Create new Calendar event for the rescheduled slot
         if (connectionId && newBooking) {
-          const gcalResult = await createCalendarEvent({
-            connectionId,
-            summary: `${eventType?.name ?? "Meeting"} — ${newBooking.attendeeName}`,
-            description: newBooking.attendeeNotes ?? undefined,
-            startTime: newBooking.slotStart,
-            endTime: newBooking.slotEnd,
-            attendeeEmail: newBooking.attendeeEmail,
-            attendeeName: newBooking.attendeeName,
-            timezone: calendar?.timezone ?? "UTC",
-            hostEmail: calendar?.hostEmail,
-            additionalHosts: calendar?.additionalHosts,
-          });
-          if (gcalResult) {
-            await db.execute(
-              sql`UPDATE bookings SET meet_link = ${gcalResult.meetLink}, google_event_id = ${gcalResult.eventId} WHERE id = ${newBooking.id}`
-            );
+          if (existingGoogleEventId) {
+            // Patch existing event — preserves Meet link, attendees get seamless update
+            const gcalResult = await updateCalendarEvent({
+              connectionId,
+              eventId: existingGoogleEventId,
+              summary: `${eventType?.name ?? "Meeting"} — ${newBooking.attendeeName}`,
+              description: newBooking.attendeeNotes ?? undefined,
+              startTime: newBooking.slotStart,
+              endTime: newBooking.slotEnd,
+              attendeeEmail: newBooking.attendeeEmail,
+              attendeeName: newBooking.attendeeName,
+              timezone: calendar?.timezone ?? "UTC",
+              hostEmail: calendar?.hostEmail,
+              additionalHosts: calendar?.additionalHosts,
+            });
+            if (gcalResult) {
+              await db.execute(
+                sql`UPDATE bookings SET meet_link = ${gcalResult.meetLink}, google_event_id = ${gcalResult.eventId} WHERE id = ${newBooking.id}`
+              );
+            }
+          } else {
+            // No existing Google event — create fresh
+            const gcalResult = await createCalendarEvent({
+              connectionId,
+              summary: `${eventType?.name ?? "Meeting"} — ${newBooking.attendeeName}`,
+              description: newBooking.attendeeNotes ?? undefined,
+              startTime: newBooking.slotStart,
+              endTime: newBooking.slotEnd,
+              attendeeEmail: newBooking.attendeeEmail,
+              attendeeName: newBooking.attendeeName,
+              timezone: calendar?.timezone ?? "UTC",
+              hostEmail: calendar?.hostEmail,
+              additionalHosts: calendar?.additionalHosts,
+            });
+            if (gcalResult) {
+              await db.execute(
+                sql`UPDATE bookings SET meet_link = ${gcalResult.meetLink}, google_event_id = ${gcalResult.eventId} WHERE id = ${newBooking.id}`
+              );
+            }
           }
         }
       } catch { /* non-fatal */ }

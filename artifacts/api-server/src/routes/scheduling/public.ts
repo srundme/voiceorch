@@ -26,6 +26,7 @@ import { buildSlotLockKey } from "../../services/scheduling/lock.js";
 import {
   createCalendarEvent,
   deleteCalendarEvent,
+  updateCalendarEvent,
   getFirstConnectionForUser,
 } from "../../services/scheduling/google-calendar.js";
 import {
@@ -517,6 +518,8 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
   }
 
   // Google Calendar sync (best-effort)
+  // Reschedule patches the EXISTING event in-place so attendees get a seamless
+  // "time changed" notification rather than a cancellation + new invite.
   void (async () => {
     try {
       const calRow = await db.execute(
@@ -525,27 +528,46 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
       const calendarConnectionId = (calRow.rows[0] as any)?.google_calendar_connection_id as string | null;
       const connectionId = calendarConnectionId ?? (await getFirstConnectionForUser(booking.userId))?.id ?? null;
 
-      if (existingGoogleEventId && connectionId) {
-        await deleteCalendarEvent(connectionId, existingGoogleEventId);
-      }
-
       if (connectionId && newBooking) {
-        const gcalResult = await createCalendarEvent({
-          connectionId,
-          summary: `${eventType.name} — ${newBooking.attendeeName}`,
-          description: newBooking.attendeeNotes ?? undefined,
-          startTime: newBooking.slotStart,
-          endTime: newBooking.slotEnd,
-          attendeeEmail: newBooking.attendeeEmail,
-          attendeeName: newBooking.attendeeName,
-          timezone: calendar.timezone,
-          hostEmail: calendar.hostEmail,
-          additionalHosts: calendar.additionalHosts,
-        });
-        if (gcalResult) {
-          await db.execute(
-            sql`UPDATE bookings SET meet_link = ${gcalResult.meetLink}, google_event_id = ${gcalResult.eventId} WHERE id = ${newBooking.id}`
-          );
+        if (existingGoogleEventId) {
+          // Patch the existing event — attendee calendar updates automatically
+          const gcalResult = await updateCalendarEvent({
+            connectionId,
+            eventId: existingGoogleEventId,
+            summary: `${eventType.name} — ${newBooking.attendeeName}`,
+            description: newBooking.attendeeNotes ?? undefined,
+            startTime: newBooking.slotStart,
+            endTime: newBooking.slotEnd,
+            attendeeEmail: newBooking.attendeeEmail,
+            attendeeName: newBooking.attendeeName,
+            timezone: calendar.timezone,
+            hostEmail: calendar.hostEmail,
+            additionalHosts: calendar.additionalHosts,
+          });
+          if (gcalResult) {
+            await db.execute(
+              sql`UPDATE bookings SET meet_link = ${gcalResult.meetLink}, google_event_id = ${gcalResult.eventId} WHERE id = ${newBooking.id}`
+            );
+          }
+        } else {
+          // No existing event — create fresh
+          const gcalResult = await createCalendarEvent({
+            connectionId,
+            summary: `${eventType.name} — ${newBooking.attendeeName}`,
+            description: newBooking.attendeeNotes ?? undefined,
+            startTime: newBooking.slotStart,
+            endTime: newBooking.slotEnd,
+            attendeeEmail: newBooking.attendeeEmail,
+            attendeeName: newBooking.attendeeName,
+            timezone: calendar.timezone,
+            hostEmail: calendar.hostEmail,
+            additionalHosts: calendar.additionalHosts,
+          });
+          if (gcalResult) {
+            await db.execute(
+              sql`UPDATE bookings SET meet_link = ${gcalResult.meetLink}, google_event_id = ${gcalResult.eventId} WHERE id = ${newBooking.id}`
+            );
+          }
         }
       }
     } catch { /* non-fatal */ }

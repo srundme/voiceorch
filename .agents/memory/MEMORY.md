@@ -14,3 +14,5 @@
 - [VoBiz KYC account recovery](vobiz-kyc-recovery.md) — no GET /accounts endpoint exists; recover auth_id via GET /kyc-sessions scan matching customer_email or metadata.email
 - [Azure STT continuous LID](azure-stt-continuous-lid.md) — must send speech.context with languageId.mode:"Continuous" for mid-call language switching; default is at-start (locks to first language)
 - [Static greeting bypasses caller memory](static-greeting-bypasses-memory.md) — configured greetingMessage skips the LLM/memory; memory-aware openings must force the LLM path on both pipeline.ts and webcall.ts
+- [Google Calendar datetime format](gcal-datetime-format.md) — use formatInTimeZone (local, no Z) + timeZone; toISOString() (UTC/Z) causes timezone to be silently ignored → 30-min offset for IST users
+- [Dockerfile pnpm version pinning](dockerfile-pnpm-pin.md) — pin pnpm@X.Y.Z in BOTH Dockerfile stages; npm install -g pnpm@10 installs latest 10.x which can break --frozen-lockfile if lockfile was generated with an older minor

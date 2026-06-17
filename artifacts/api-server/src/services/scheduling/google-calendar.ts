@@ -12,6 +12,7 @@
 import { google } from "googleapis";
 import { db, googleCalendarConnectionsTable } from "@workspace/db";
 import { eq, asc, sql } from "drizzle-orm";
+import { formatInTimeZone } from "date-fns-tz";
 import { logger } from "../../lib/logger.js";
 import { encryptKey, decryptKey } from "../../lib/crypto.js";
 
@@ -328,6 +329,13 @@ export async function createCalendarEvent(params: {
     attendees.push({ email });
   }
 
+  // Use local datetime strings (no Z/offset) + timeZone field — this is the correct
+  // Google Calendar API format. Passing .toISOString() (UTC with Z) alongside timeZone
+  // causes the API to ignore the timezone hint and can produce a 30-minute offset for
+  // attendees whose calendar locale differs from IST (UTC+5:30 ≠ full-hour boundary).
+  const localStart = formatInTimeZone(params.startTime, params.timezone, "yyyy-MM-dd'T'HH:mm:ss");
+  const localEnd   = formatInTimeZone(params.endTime,   params.timezone, "yyyy-MM-dd'T'HH:mm:ss");
+
   try {
     const event = await calendar.events.insert({
       calendarId: "primary",
@@ -335,8 +343,8 @@ export async function createCalendarEvent(params: {
       requestBody: {
         summary: params.summary,
         description: params.description,
-        start: { dateTime: params.startTime.toISOString(), timeZone: params.timezone },
-        end:   { dateTime: params.endTime.toISOString(),   timeZone: params.timezone },
+        start: { dateTime: localStart, timeZone: params.timezone },
+        end:   { dateTime: localEnd,   timeZone: params.timezone },
         attendees,
         conferenceData: {
           createRequest: {
@@ -350,7 +358,12 @@ export async function createCalendarEvent(params: {
 
     const meetLink = event.data.conferenceData?.entryPoints?.find(e => e.entryPointType === "video")?.uri ?? null;
     const eventId  = event.data.id ?? "";
-    logger.info({ connectionId: params.connectionId, eventId, meetLink }, "Google Calendar event created");
+    logger.info(
+      { connectionId: params.connectionId, eventId, meetLink,
+        organizerEmail: tokens.email, attendeeEmail: params.attendeeEmail,
+        localStart, localEnd, timezone: params.timezone },
+      "Google Calendar event created",
+    );
     return { meetLink, eventId };
   } catch (err) {
     logger.warn({ err, connectionId: params.connectionId }, "Failed to create Google Calendar event");
@@ -400,10 +413,16 @@ export async function updateCalendarEvent(params: {
   if (params.summary !== undefined) requestBody["summary"] = params.summary;
   if (params.description !== undefined) requestBody["description"] = params.description;
   if (params.startTime !== undefined && params.timezone !== undefined) {
-    requestBody["start"] = { dateTime: params.startTime.toISOString(), timeZone: params.timezone };
+    requestBody["start"] = {
+      dateTime: formatInTimeZone(params.startTime, params.timezone, "yyyy-MM-dd'T'HH:mm:ss"),
+      timeZone: params.timezone,
+    };
   }
   if (params.endTime !== undefined && params.timezone !== undefined) {
-    requestBody["end"] = { dateTime: params.endTime.toISOString(), timeZone: params.timezone };
+    requestBody["end"] = {
+      dateTime: formatInTimeZone(params.endTime, params.timezone, "yyyy-MM-dd'T'HH:mm:ss"),
+      timeZone: params.timezone,
+    };
   }
   if (params.attendeeEmail !== undefined) {
     const attendees: { email: string; displayName?: string }[] = [
@@ -423,7 +442,12 @@ export async function updateCalendarEvent(params: {
     });
     const meetLink = event.data.conferenceData?.entryPoints?.find(e => e.entryPointType === "video")?.uri ?? null;
     const eventId  = event.data.id ?? params.eventId;
-    logger.info({ connectionId: params.connectionId, eventId, meetLink }, "Google Calendar event updated");
+    logger.info(
+      { connectionId: params.connectionId, eventId, meetLink,
+        organizerEmail: tokens.email, attendeeEmail: params.attendeeEmail,
+        newStart: requestBody["start"], newEnd: requestBody["end"] },
+      "Google Calendar event updated (reschedule patch)",
+    );
     return { meetLink, eventId };
   } catch (err) {
     logger.warn({ err, connectionId: params.connectionId, eventId: params.eventId }, "Failed to update Google Calendar event");
