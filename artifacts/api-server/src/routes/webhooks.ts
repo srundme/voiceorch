@@ -63,16 +63,25 @@ router.post("/webhooks/twilio/voice", async (req, res): Promise<void> => {
   }
 
   // ── Twilio signature validation ────────────────────────────────────────────
-  // Twilio signs every inbound request with HMAC-SHA1 over the full URL + POST
-  // body params. We verify against the agent's Twilio auth token so that only
-  // genuine Twilio traffic can trigger a call session (burning API credits).
+  // Twilio signs every inbound request with HMAC-SHA1 over the full URL
+  // (including query string) + sorted POST body params.
   const twilioSig = String(req.headers["x-twilio-signature"] ?? "");
   if (twilioSig) {
     const authToken = await getAgentProviderToken(agentId, "twilio");
-    if (authToken) {
+    if (!authToken) {
+      // Signature was sent but we have no key to verify it — treat as unverifiable.
+      logger.warn({ agentId }, "Twilio signature present but no provider key found — rejected");
+      if (IS_PROD) {
+        res.status(403).send("<Response><Say>Forbidden.</Say><Hangup/></Response>");
+        return;
+      }
+    } else {
       const proto = String(req.headers["x-forwarded-proto"] ?? "https");
       const host  = String(req.headers["x-forwarded-host"] ?? req.hostname);
-      const fullUrl = `${proto}://${host}${req.path}`;
+      // Twilio includes query-string params in the URL it signs (for POST requests
+      // the query string appears in the URL, body params are signed separately).
+      const queryStr = req.url?.split("?")[1] ?? "";
+      const fullUrl = `${proto}://${host}${req.path}${queryStr ? "?" + queryStr : ""}`;
       const bodyParams: Record<string, string> = {};
       for (const [k, v] of Object.entries(req.body as Record<string, unknown>)) {
         if (typeof v === "string") bodyParams[k] = v;
@@ -126,7 +135,13 @@ router.post("/webhooks/plivo/voice", async (req, res): Promise<void> => {
   const plivoNonce = String(req.headers["x-plivo-signature-v2-nonce"] ?? "");
   if (plivoSig && plivoNonce) {
     const authToken = await getAgentProviderToken(agentId, "plivo");
-    if (authToken) {
+    if (!authToken) {
+      logger.warn({ agentId }, "Plivo signature present but no provider key found — rejected");
+      if (IS_PROD) {
+        res.status(403).set("Content-Type", "text/xml").send("<Response><Speak>Forbidden.</Speak><Hangup/></Response>");
+        return;
+      }
+    } else {
       const valid = validatePlivoSignature(authToken, plivoNonce, req.path, plivoSig);
       if (!valid) {
         logger.warn({ agentId }, "Plivo signature validation failed");
