@@ -11,6 +11,7 @@ export const agentVersionsTable = pgTable("agent_versions", {
   releaseNotes: text("release_notes"),
   status: text("status").notNull().default("draft"),
   snapshot: jsonb("snapshot").notNull(),
+  changedFields: jsonb("changed_fields"),
   publishedBy: text("published_by"),
   restoredFromVersionId: integer("restored_from_version_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

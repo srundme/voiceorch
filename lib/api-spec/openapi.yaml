@@ -245,13 +245,11 @@ paths:
             type: integer
       responses:
         "200":
-          description: List of agent versions
+          description: List of agent versions with usage summary
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/AgentVersion"
+                $ref: "#/components/schemas/AgentVersionsListResponse"
         "404":
           description: Agent not found
     post:
@@ -331,6 +329,34 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AgentVersion"
+        "404":
+          description: Not found
+
+  /agents/{id}/versions/{versionId}/archive:
+    patch:
+      operationId: archiveAgentVersion
+      tags: [agents]
+      summary: Archive a published/production version (removes it from the active count)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: versionId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Version archived
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentVersion"
+        "400":
+          description: Version is already archived
         "404":
           description: Not found
 
@@ -5701,6 +5727,21 @@ components:
         id: { type: string }
         name: { type: string }
 
+    AgentVersionsListResponse:
+      type: object
+      required: [versions, publishedCount, limit]
+      properties:
+        versions:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentVersion"
+        publishedCount:
+          type: integer
+          description: "Number of non-archived published/production versions"
+        limit:
+          type: integer
+          description: "Maximum allowed published versions (hardcoded to 10)"
+
     AgentVersion:
       type: object
       required: [id, agentId, userId, versionNumber, versionName, commitDescription, status, snapshot, createdAt, updatedAt]
@@ -5727,6 +5768,11 @@ components:
           type: object
           description: "Full copy of all agent columns at publish time"
           additionalProperties: true
+        changedFields:
+          type: ["array", "null"]
+          items:
+            type: string
+          description: "Auto-detected list of changed field labels vs. previous production snapshot"
         publishedBy:
           type: ["string", "null"]
         restoredFromVersionId:

@@ -714,7 +714,8 @@ export const ListAgentVersionsParams = zod.object({
   "id": zod.coerce.number()
 })
 
-export const ListAgentVersionsResponseItem = zod.object({
+export const ListAgentVersionsResponse = zod.object({
+  "versions": zod.array(zod.object({
   "id": zod.number(),
   "agentId": zod.number(),
   "userId": zod.string(),
@@ -724,12 +725,15 @@ export const ListAgentVersionsResponseItem = zod.object({
   "releaseNotes": zod.string().nullish(),
   "status": zod.enum(['draft', 'published', 'production', 'archived', 'restored', 'deprecated']),
   "snapshot": zod.record(zod.string(), zod.unknown()).describe('Full copy of all agent columns at publish time'),
+  "changedFields": zod.array(zod.string()).nullish().describe('Auto-detected list of changed field labels vs. previous production snapshot'),
   "publishedBy": zod.string().nullish(),
   "restoredFromVersionId": zod.number().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
+})),
+  "publishedCount": zod.number().describe('Number of non-archived published\/production versions'),
+  "limit": zod.number().describe('Maximum allowed published versions (hardcoded to 10)')
 })
-export const ListAgentVersionsResponse = zod.array(ListAgentVersionsResponseItem)
 
 
 /**
@@ -772,6 +776,7 @@ export const GetAgentVersionResponse = zod.object({
   "releaseNotes": zod.string().nullish(),
   "status": zod.enum(['draft', 'published', 'production', 'archived', 'restored', 'deprecated']),
   "snapshot": zod.record(zod.string(), zod.unknown()).describe('Full copy of all agent columns at publish time'),
+  "changedFields": zod.array(zod.string()).nullish().describe('Auto-detected list of changed field labels vs. previous production snapshot'),
   "publishedBy": zod.string().nullish(),
   "restoredFromVersionId": zod.number().nullish(),
   "createdAt": zod.string(),
@@ -785,6 +790,32 @@ export const GetAgentVersionResponse = zod.object({
 export const RestoreAgentVersionParams = zod.object({
   "id": zod.coerce.number(),
   "versionId": zod.coerce.number()
+})
+
+
+/**
+ * @summary Archive a published/production version (removes it from the active count)
+ */
+export const ArchiveAgentVersionParams = zod.object({
+  "id": zod.coerce.number(),
+  "versionId": zod.coerce.number()
+})
+
+export const ArchiveAgentVersionResponse = zod.object({
+  "id": zod.number(),
+  "agentId": zod.number(),
+  "userId": zod.string(),
+  "versionNumber": zod.string().describe('Auto-assigned version label, e.g. v1, v2, v3'),
+  "versionName": zod.string(),
+  "commitDescription": zod.string(),
+  "releaseNotes": zod.string().nullish(),
+  "status": zod.enum(['draft', 'published', 'production', 'archived', 'restored', 'deprecated']),
+  "snapshot": zod.record(zod.string(), zod.unknown()).describe('Full copy of all agent columns at publish time'),
+  "changedFields": zod.array(zod.string()).nullish().describe('Auto-detected list of changed field labels vs. previous production snapshot'),
+  "publishedBy": zod.string().nullish(),
+  "restoredFromVersionId": zod.number().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
 })
 
 

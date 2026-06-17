@@ -56,6 +56,7 @@ import type {
   AgentVariableCreate,
   AgentVariableUpdate,
   AgentVersion,
+  AgentVersionsListResponse,
   AmbientSoundOption,
   AmbientSoundRecord,
   AssignPhoneNumberInput,
@@ -901,9 +902,9 @@ export const getListAgentVersionsUrl = (id: number,) => {
 /**
  * @summary List all versions for an agent
  */
-export const listAgentVersions = async (id: number, options?: RequestInit): Promise<AgentVersion[]> => {
+export const listAgentVersions = async (id: number, options?: RequestInit): Promise<AgentVersionsListResponse> => {
 
-  return customFetch<AgentVersion[]>(getListAgentVersionsUrl(id),
+  return customFetch<AgentVersionsListResponse>(getListAgentVersionsUrl(id),
   {
     ...options,
     method: 'GET'
@@ -1191,6 +1192,78 @@ export const useRestoreAgentVersion = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getRestoreAgentVersionMutationOptions(options));
+    }
+
+export const getArchiveAgentVersionUrl = (id: number,
+    versionId: number,) => {
+
+
+
+
+  return `/api/agents/${id}/versions/${versionId}/archive`
+}
+
+/**
+ * @summary Archive a published/production version (removes it from the active count)
+ */
+export const archiveAgentVersion = async (id: number,
+    versionId: number, options?: RequestInit): Promise<AgentVersion> => {
+
+  return customFetch<AgentVersion>(getArchiveAgentVersionUrl(id,versionId),
+  {
+    ...options,
+    method: 'PATCH'
+
+
+  }
+);}
+
+
+
+
+export const getArchiveAgentVersionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof archiveAgentVersion>>, TError,{id: number;versionId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof archiveAgentVersion>>, TError,{id: number;versionId: number}, TContext> => {
+
+const mutationKey = ['archiveAgentVersion'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof archiveAgentVersion>>, {id: number;versionId: number}> = (props) => {
+          const {id,versionId} = props ?? {};
+
+          return  archiveAgentVersion(id,versionId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ArchiveAgentVersionMutationResult = NonNullable<Awaited<ReturnType<typeof archiveAgentVersion>>>
+
+    export type ArchiveAgentVersionMutationError = ErrorType<void>
+
+    /**
+ * @summary Archive a published/production version (removes it from the active count)
+ */
+export const useArchiveAgentVersion = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof archiveAgentVersion>>, TError,{id: number;versionId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof archiveAgentVersion>>,
+        TError,
+        {id: number;versionId: number},
+        TContext
+      > => {
+      return useMutation(getArchiveAgentVersionMutationOptions(options));
     }
 
 export const getListCallsUrl = (params?: ListCallsParams,) => {
