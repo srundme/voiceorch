@@ -153,6 +153,7 @@ export const agentsTable = pgTable("agents", {
 
   // ── Conversation Behavior (Tier 1) ───────────────────────────────────────────
   greetingMessage: text("greeting_message"),
+  firstSpeaker: text("first_speaker").default("assistant"), // "assistant" | "user"
   endCallPhrases: text("end_call_phrases"),
   silenceTimeoutSeconds: integer("silence_timeout_seconds"),
   language: text("language"),

@@ -166,6 +166,7 @@ export async function createSession(params: {
     ttsModel: agent.ttsModel,
     telephonyProvider: agent.telephonyProvider,
     greetingMessage: agent.greetingMessage ?? null,
+    firstSpeaker: agent.firstSpeaker === "user" ? "user" : "assistant",
     endCallPhrases,
     silenceTimeoutSeconds: agent.silenceTimeoutSeconds ?? null,
     language: agent.language ?? null,

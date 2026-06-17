@@ -1628,11 +1628,15 @@ export async function handleWebCallWebSocket(
   send({ type: "ready", agentId, agentName: agent.name, callId });
   logger.info({ callId, agentId, agentName: agent.name }, "WebCall session started");
 
-  // ── Opening greeting — agent always speaks first in webcalls ─────────────
+  // ── Opening greeting ─────────────────────────────────────────────────────
   // 1. If the agent has a greetingMessage configured, play it directly (no LLM).
   // 2. Otherwise, ask the LLM to generate a contextual opening (same path as
   //    callbacks, but with a generic trigger so it works for all webcalls).
-  if (!closed) {
+  // When firstSpeaker = "user", stay silent on connect and let the caller speak
+  // first — the session keeps listening and only responds after the user speaks.
+  if (!closed && agent.firstSpeaker === "user") {
+    logger.info({ callId }, "First speaker = user — skipping opening greeting (webcall)");
+  } else if (!closed) {
     try {
       const agentTimezone = (agentCfg["timezone"] as string | undefined) || "Asia/Kolkata";
 

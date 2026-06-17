@@ -531,6 +531,12 @@ export class OrchestrationPipeline {
 
   async greet(): Promise<void> {
     if (this.closed) return;
+    // "User speaks first" — stay silent on connect; the session listens for
+    // caller audio and only responds after the user speaks.
+    if (this.agent.firstSpeaker === "user") {
+      logger.info({ callId: this.config.callId }, "First speaker = user — skipping opening greeting");
+      return;
+    }
     this.isProcessing = true;
     try {
       // IVR pre-filter: play menu, collect a digit, then fall through to normal greeting

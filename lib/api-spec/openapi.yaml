@@ -5837,6 +5837,10 @@ components:
         greetingMessage:
           type: ["string", "null"]
           description: First thing the agent says when a call connects. If blank the LLM generates an opener.
+        firstSpeaker:
+          type: ["string", "null"]
+          enum: [assistant, user, null]
+          description: Who speaks first when a call connects. "assistant" plays the greeting (or LLM opener); "user" keeps the agent silent until the caller speaks.
         endCallPhrases:
           type: ["string", "null"]
           description: Comma-separated phrases that trigger hangup (e.g. "goodbye,bye,thanks for calling")
@@ -6029,6 +6033,10 @@ components:
           type: integer
         greetingMessage:
           type: string
+        firstSpeaker:
+          type: string
+          enum: [assistant, user]
+          description: Who speaks first when a call connects. "assistant" plays the greeting (or LLM opener); "user" keeps the agent silent until the caller speaks.
         endCallPhrases:
           type: string
         silenceTimeoutSeconds:
@@ -6169,6 +6177,10 @@ components:
           type: integer
         greetingMessage:
           type: string
+        firstSpeaker:
+          type: string
+          enum: [assistant, user]
+          description: Who speaks first when a call connects. "assistant" plays the greeting (or LLM opener); "user" keeps the agent silent until the caller speaks.
         endCallPhrases:
           type: string
         silenceTimeoutSeconds:

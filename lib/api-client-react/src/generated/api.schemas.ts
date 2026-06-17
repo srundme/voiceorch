@@ -312,6 +312,18 @@ export type AgentAsrFallbackProvidersItem = {
 };
 
 /**
+ * Who speaks first when a call connects. "assistant" plays the greeting (or LLM opener); "user" keeps the agent silent until the caller speaks.
+ * @nullable
+ */
+export type AgentFirstSpeaker = typeof AgentFirstSpeaker[keyof typeof AgentFirstSpeaker] | null;
+
+
+export const AgentFirstSpeaker = {
+  assistant: 'assistant',
+  user: 'user',
+} as const;
+
+/**
  * Advanced per-tab configuration (LLM params, engine, call, inbound, WhatsApp, analytics)
  * @nullable
  */
@@ -409,6 +421,11 @@ export interface Agent {
      * @nullable
      */
   greetingMessage?: string | null;
+  /**
+     * Who speaks first when a call connects. "assistant" plays the greeting (or LLM opener); "user" keeps the agent silent until the caller speaks.
+     * @nullable
+     */
+  firstSpeaker?: AgentFirstSpeaker;
   /**
      * Comma-separated phrases that trigger hangup (e.g. "goodbye,bye,thanks for calling")
      * @nullable
@@ -592,6 +609,17 @@ export type AgentInputAsrFallbackProvidersItem = {
 };
 
 /**
+ * Who speaks first when a call connects. "assistant" plays the greeting (or LLM opener); "user" keeps the agent silent until the caller speaks.
+ */
+export type AgentInputFirstSpeaker = typeof AgentInputFirstSpeaker[keyof typeof AgentInputFirstSpeaker];
+
+
+export const AgentInputFirstSpeaker = {
+  assistant: 'assistant',
+  user: 'user',
+} as const;
+
+/**
  * Advanced per-tab configuration
  */
 export type AgentInputAgentConfig = { [key: string]: unknown };
@@ -640,6 +668,8 @@ export interface AgentInput {
   temperature?: number;
   maxDuration?: number;
   greetingMessage?: string;
+  /** Who speaks first when a call connects. "assistant" plays the greeting (or LLM opener); "user" keeps the agent silent until the caller speaks. */
+  firstSpeaker?: AgentInputFirstSpeaker;
   endCallPhrases?: string;
   silenceTimeoutSeconds?: number;
   language?: string;
@@ -706,6 +736,17 @@ export type AgentUpdateAsrFallbackProvidersItem = {
 };
 
 /**
+ * Who speaks first when a call connects. "assistant" plays the greeting (or LLM opener); "user" keeps the agent silent until the caller speaks.
+ */
+export type AgentUpdateFirstSpeaker = typeof AgentUpdateFirstSpeaker[keyof typeof AgentUpdateFirstSpeaker];
+
+
+export const AgentUpdateFirstSpeaker = {
+  assistant: 'assistant',
+  user: 'user',
+} as const;
+
+/**
  * Advanced per-tab configuration
  */
 export type AgentUpdateAgentConfig = { [key: string]: unknown };
@@ -749,6 +790,8 @@ export interface AgentUpdate {
   temperature?: number;
   maxDuration?: number;
   greetingMessage?: string;
+  /** Who speaks first when a call connects. "assistant" plays the greeting (or LLM opener); "user" keeps the agent silent until the caller speaks. */
+  firstSpeaker?: AgentUpdateFirstSpeaker;
   endCallPhrases?: string;
   silenceTimeoutSeconds?: number;
   language?: string;

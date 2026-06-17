@@ -622,15 +622,17 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-sm font-semibold">First Message</span>
-              <Select defaultValue="assistant">
-                <SelectTrigger className="h-8 w-48 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent position="popper">
-                  <SelectItem value="assistant" className="text-xs">Assistant speaks first</SelectItem>
-                  <SelectItem value="user" className="text-xs">User speaks first</SelectItem>
-                </SelectContent>
-              </Select>
+              <FormField control={form.control} name="firstSpeaker" render={({ field }) => (
+                <Select value={field.value ?? "assistant"} onValueChange={field.onChange}>
+                  <SelectTrigger className="h-8 w-48 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent position="popper">
+                    <SelectItem value="assistant" className="text-xs">Assistant speaks first</SelectItem>
+                    <SelectItem value="user" className="text-xs">User speaks first</SelectItem>
+                  </SelectContent>
+                </Select>
+              )} />
             </div>
             <FormField control={form.control} name="greetingMessage" render={({ field }) => (
               <FormItem className="space-y-0">
@@ -3169,7 +3171,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       llmProvider: "openai", llmModel: "", ttsProvider: "elevenlabs",
       ttsVoice: "", ttsModel: "", telephonyProvider: "vobiz",
       systemPrompt: "", temperature: 0.10, maxDuration: 300,
-      greetingMessage: "Hello", endCallPhrases: "", silenceTimeoutSeconds: 30,
+      greetingMessage: "Hello", firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
       language: "en-US", asrLanguage: "", backchannelingEnabled: true,
       backchannelingFrequency: 0.5, backchannelPhrases: "", webhookUrl: "",
       webhookSecret: "", noiseCancellationEnabled: true,
@@ -3212,6 +3214,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       temperature:              agent.temperature ?? 0.10,
       maxDuration:              agent.maxDuration ?? 300,
       greetingMessage:          agent.greetingMessage ?? "Hello",
+      firstSpeaker:             ((agent as any).firstSpeaker === "user" ? "user" : "assistant") as AgentFormValues["firstSpeaker"],
       endCallPhrases:           agent.endCallPhrases ?? "",
       silenceTimeoutSeconds:    agent.silenceTimeoutSeconds ?? 30,
       language:                 agent.language ?? "en-US",

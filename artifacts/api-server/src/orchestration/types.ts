@@ -252,6 +252,9 @@ export interface AgentConfig {
   wordsForInterruption: number;
   incrementalDelay: number;
 
+  // First speaker — "user" keeps the agent silent on connect until the caller speaks
+  firstSpeaker: "assistant" | "user";
+
   // P1-H: Call lifecycle
   hangupAfterLlmCall: boolean;
 
