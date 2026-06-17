@@ -631,6 +631,8 @@ export async function executeNativeListBookings(
   }
 
   try {
+    logger.debug({ callId, attendeeName }, "list_bookings: input received");
+
     // Determine authorized user for ownership scoping (same pattern as other native executors)
     const [agentCalendar] = await db
       .select({ userId: schedulingCalendarsTable.userId })
@@ -646,6 +648,7 @@ export async function executeNativeListBookings(
         .where(eq(agentsTable.id, agentId));
       authorizedUserId = agentRow?.userId ?? null;
     }
+    logger.debug({ callId, authorizedUserId }, "list_bookings: ownership resolved");
 
     // Fetch upcoming, active bookings with a case-insensitive name match.
     // Rescheduling produces two DB rows: the original row is set to status="rescheduled"
@@ -662,7 +665,6 @@ export async function executeNativeListBookings(
         status: bookingsTable.status,
         calendarId: bookingsTable.calendarId,
         eventTypeId: bookingsTable.eventTypeId,
-        googleEventId: sql<string | null>`${bookingsTable}.google_event_id`,
       })
       .from(bookingsTable)
       .where(
@@ -678,6 +680,8 @@ export async function executeNativeListBookings(
       .orderBy(bookingsTable.slotStart)
       .limit(5);
 
+    logger.debug({ callId, rowCount: owned.length, attendeeName }, "list_bookings: booking query complete");
+
     if (owned.length === 0) {
       return `no_bookings_found: no upcoming bookings found for "${attendeeName}". Ask the caller to double-check the name on their booking.`;
     }
@@ -692,6 +696,7 @@ export async function executeNativeListBookings(
       tz = cal?.timezone ?? null;
     }
     tz = tz ?? "Asia/Kolkata";
+    logger.debug({ callId, tz }, "list_bookings: timezone resolved");
 
     // Resolve event type names in bulk
     const etIds = [...new Set(owned.map((b) => b.eventTypeId))];
@@ -708,7 +713,6 @@ export async function executeNativeListBookings(
           callId,
           bookingId: b.id,
           attendeeEmail: b.attendeeEmail,
-          calendarEventId: b.googleEventId ?? null,
           slotStartUtc: b.slotStart.toISOString(),
           displayTime: dateStr,
         },
@@ -719,7 +723,7 @@ export async function executeNativeListBookings(
 
     return `bookings_found: count=${owned.length}, ${list.join(" | ")}`;
   } catch (err) {
-    logger.error({ callId, err }, "Native list-bookings tool execution failed");
+    logger.error({ callId, errMsg: (err as Error)?.message, err }, "Native list-bookings tool execution failed");
     return "error: booking lookup failed due to a technical issue";
   }
 }
