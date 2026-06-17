@@ -1341,7 +1341,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
         if (!agentId) {
           toast({ title: "Save agent first", description: "Save this agent before configuring calendar tools.", variant: "destructive" });
         } else if (!agentCalendar) {
-          toast({ title: "No calendar assigned", description: "Go to Settings → Calendar to create one for this agent.", variant: "destructive" });
+          toast({ title: "No calendar configured", description: "No calendar configured for this agent. Go to Settings → Calendar to set one up.", variant: "destructive" });
         } else if (!(agentCalendar as any).connectedGoogleEmail) {
           toast({ title: "No Google account connected", description: `Connect a Google account to the "${agentCalendar.name}" calendar in Scheduling.`, variant: "destructive" });
         } else if ((agentEventTypes ?? []).length === 0 && ["native_booking", "native_check_availability", "native_list_bookings"].includes(type)) {
