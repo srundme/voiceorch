@@ -647,17 +647,22 @@ export async function executeNativeListBookings(
       authorizedUserId = agentRow?.userId ?? null;
     }
 
-    // Fetch upcoming, non-cancelled bookings with a case-insensitive name match.
+    // Fetch upcoming, active bookings with a case-insensitive name match.
+    // Rescheduling produces two DB rows: the original row is set to status="rescheduled"
+    // and a new row is inserted for the new slot. We must exclude "rescheduled" rows here
+    // so the AI only sees the current (new) booking and not the superseded original.
     const nameLike = `%${attendeeName.toLowerCase()}%`;
     const now = new Date();
     const owned = await db
       .select({
         id: bookingsTable.id,
         attendeeName: bookingsTable.attendeeName,
+        attendeeEmail: bookingsTable.attendeeEmail,
         slotStart: bookingsTable.slotStart,
         status: bookingsTable.status,
         calendarId: bookingsTable.calendarId,
         eventTypeId: bookingsTable.eventTypeId,
+        googleEventId: sql<string | null>`${bookingsTable}.google_event_id`,
       })
       .from(bookingsTable)
       .where(
@@ -665,6 +670,7 @@ export async function executeNativeListBookings(
           sql`lower(${bookingsTable.attendeeName}) like ${nameLike}`,
           sql`${bookingsTable.slotStart} >= ${now.toISOString()}`,
           sql`${bookingsTable.status} != 'cancelled'`,
+          sql`${bookingsTable.status} != 'rescheduled'`,
           authorizedUserId ? eq(bookingsTable.userId, authorizedUserId) : sql`true`,
           tool.calendarId ? eq(bookingsTable.calendarId, tool.calendarId) : sql`true`,
         ),
@@ -697,6 +703,17 @@ export async function executeNativeListBookings(
     const list = owned.map((b) => {
       const eventName = etMap.get(b.eventTypeId) ?? "Appointment";
       const dateStr = formatInTimeZone(b.slotStart, tz, "EEE MMM d 'at' h:mm a zzz");
+      logger.debug(
+        {
+          callId,
+          bookingId: b.id,
+          attendeeEmail: b.attendeeEmail,
+          calendarEventId: b.googleEventId ?? null,
+          slotStartUtc: b.slotStart.toISOString(),
+          displayTime: dateStr,
+        },
+        "list_bookings: returning booking to AI",
+      );
       return `booking_id=${b.id}, event="${eventName}", iso_start=${b.slotStart.toISOString()}, date="${dateStr}", status="${b.status}"`;
     });
 
