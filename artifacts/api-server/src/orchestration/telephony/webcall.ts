@@ -30,6 +30,7 @@ import {
   executeNativeCancel,
   executeWebhookTool,
 } from "../../services/tool-executor.js";
+import { disposeCall } from "../../services/disposition.js";
 
 // ── Per-user concurrent call rate limit ──────────────────────────────────────
 const activeCalls = new Map<string, number>();
@@ -967,11 +968,25 @@ export async function handleWebCallWebSocket(
         sentenceJobs.push(job);
       }
 
-      // Build per-turn system prompt with datetime + gender salutation injected
+      // Build per-turn system prompt with datetime + language + gender injected
       let systemPromptForTurn = systemPrompt;
       const agentTimezone = (agentCfg["timezone"] as string | undefined) || "Asia/Kolkata";
       const dtInjection = buildDatetimeInjection(agentTimezone);
       systemPromptForTurn = `${dtInjection}\n\n${systemPromptForTurn}`;
+      // Multilingual: tell the LLM which language to reply in for this turn
+      if (isMultilingualWc && currentLangWc) {
+        const LANG_NAMES: Record<string, string> = {
+          "hi-IN": "Hindi", "ta-IN": "Tamil", "te-IN": "Telugu", "kn-IN": "Kannada",
+          "ml-IN": "Malayalam", "mr-IN": "Marathi", "bn-IN": "Bengali", "gu-IN": "Gujarati",
+          "pa-IN": "Punjabi", "or-IN": "Odia", "ur-IN": "Urdu",
+          "en-IN": "English", "en-US": "English", "en-GB": "English",
+          "fr-FR": "French", "de-DE": "German", "es-ES": "Spanish", "pt-BR": "Portuguese",
+          "it-IT": "Italian", "ja-JP": "Japanese", "ko-KR": "Korean", "zh-CN": "Chinese",
+          "ar-EG": "Arabic", "ru-RU": "Russian",
+        };
+        const langName = LANG_NAMES[currentLangWc] ?? currentLangWc;
+        systemPromptForTurn += `\n\n[ACTIVE LANGUAGE] The caller is currently speaking ${langName}. Respond ONLY in ${langName} for this reply.`;
+      }
 
       const detectedGender = genderDetector?.gender ?? null;
       if (detectedGender === "male") {
@@ -1970,6 +1985,20 @@ export async function handleWebCallWebSocket(
         }
       })();
     }
+
+    // ── Post-call taxonomy disposition classification (fire-and-forget) ──────
+    // Uses the agent's configured Call Disposition taxonomy (agent_dispositions)
+    // and writes the result onto calls.disposition_result. No-ops when the agent
+    // has no taxonomy configured. Mutually exclusive with the legacy
+    // dispositionSchema path above (a given agent uses one or the other).
+    disposeCall({
+      agentId,
+      callId,
+      transcript: transcript ?? null,
+      callEvents: [{ type: "duration", durationSec: durationSeconds }],
+    }).catch((dispErr) => {
+      logger.warn({ callId, dispErr }, "Webcall: taxonomy disposition failed");
+    });
 
     // ── Post-call webcall memory update + callback detection (fire-and-forget) ─
 
