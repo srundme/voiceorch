@@ -192,7 +192,7 @@ export default function WalletPage() {
               </div>
 
               <Button
-                className="w-full bg-primary hover:opacity-90 text-foreground font-semibold"
+                className="w-full bg-primary hover:opacity-90 text-primary-foreground font-semibold"
                 onClick={handleTopup}
                 disabled={loading}
               >
