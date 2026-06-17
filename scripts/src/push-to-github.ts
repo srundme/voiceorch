@@ -23,11 +23,8 @@ const REPO  = "voiceorch";
 const BRANCH = "main";
 
 const FILES_TO_PUSH = [
-  // Unblock drizzle SQL files from .gitignore so Railway builds can find them
-  ".gitignore",
-  // Drizzle migration SQL files (were gitignored by *.sql — now unblocked)
-  "lib/db/drizzle/0000_flashy_gargoyle.sql",
-  "lib/db/drizzle/0001_production_schema_sync.sql",
+  "lib/db/drizzle/0002_add_missing_columns.sql",
+  "lib/db/drizzle/meta/_journal.json",
 ];
 
 async function ghFetch(apiPath: string, options: RequestInit = {}) {
@@ -53,7 +50,6 @@ async function pushFile(relPath: string) {
   const content = fs.readFileSync(fullPath, "utf8");
   const encoded = Buffer.from(content, "utf8").toString("base64");
 
-  // Get current SHA so GitHub knows what to replace
   let sha: string | undefined;
   try {
     const existing = await ghFetch(`contents/${relPath}?ref=${BRANCH}`) as { sha: string };
@@ -65,7 +61,7 @@ async function pushFile(relPath: string) {
   await ghFetch(`contents/${relPath}`, {
     method: "PUT",
     body: JSON.stringify({
-      message: `fix: commit drizzle migration SQL files + unblock from .gitignore`,
+      message: `fix: add migration 0002 for llm_fallback_provider/model columns`,
       content: encoded,
       branch: BRANCH,
       ...(sha ? { sha } : {}),
