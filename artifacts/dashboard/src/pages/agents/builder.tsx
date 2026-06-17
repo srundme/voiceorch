@@ -329,8 +329,8 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
     // Show only voices matching the agent's language (e.g. "ta-IN" → "ta")
     const baseLang = (language ?? "en-US").split("-")[0]!.toLowerCase();
     const matched = all.filter(v => v.language?.toLowerCase() === baseLang);
-    const pool = matched.length > 0 ? matched : all;
-    const opts = pool.map(v => ({ value: v.id, label: v.name }));
+    // If no voices for this language, show only the custom paste option
+    const opts = matched.map(v => ({ value: v.id, label: v.name }));
     opts.push({ value: "__custom__", label: "✎ Paste custom Voice ID…" });
     return opts;
   }, [whitelistedData, language]);
@@ -812,8 +812,8 @@ function VoiceTab({ form }: { form: any }) {
     }
     const baseLang = agentLanguage.split("-")[0]!.toLowerCase();
     const matched = all.filter(v => v.language?.toLowerCase() === baseLang);
-    const pool = matched.length > 0 ? matched : all;
-    const opts = pool.map(v => ({ value: v.id, label: v.name }));
+    // If no voices for this language, show only the custom paste option
+    const opts = matched.map(v => ({ value: v.id, label: v.name }));
     opts.push({ value: "__custom__", label: "✎ Paste custom Voice ID…" });
     return opts;
   }, [whitelistedData, agentLanguage]);
