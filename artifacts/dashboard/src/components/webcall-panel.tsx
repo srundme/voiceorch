@@ -148,13 +148,23 @@ export function WebCallPanel({
       });
       streamRef.current = stream;
       const proto  = location.protocol === "https:" ? "wss" : "ws";
-      const qsParts: string[] = [];
+      // Exchange the session JWT for a short-lived single-use ticket so the
+      // JWT never appears in the WebSocket URL (and therefore never in server
+      // access logs).  The ticket is valid for 60 s and consumed on first use.
+      const sessionToken = await getToken();
+      const ticketHeaders: Record<string, string> = { "Content-Type": "application/json" };
+      if (sessionToken) ticketHeaders["Authorization"] = `Bearer ${sessionToken}`;
+      const ticketRes = await fetch("/api/webcall/ticket", {
+        method: "POST",
+        headers: ticketHeaders,
+        body: JSON.stringify({ agentId }),
+      });
+      if (!ticketRes.ok) throw new Error("Failed to obtain webcall ticket — check your session.");
+      const { ticket } = await ticketRes.json() as { ticket: string };
+      const qsParts: string[] = [`ticket=${encodeURIComponent(ticket)}`];
       if (callerUserId) qsParts.push(`callerId=${encodeURIComponent(callerUserId)}`);
       if (callbackId)   qsParts.push(`callbackId=${callbackId}`);
-      // Include the session JWT so the server can authenticate the upgrade.
-      const sessionToken = await getToken();
-      if (sessionToken) qsParts.push(`token=${encodeURIComponent(sessionToken)}`);
-      const qs = qsParts.length ? `?${qsParts.join("&")}` : "";
+      const qs = `?${qsParts.join("&")}`;
       const ws = new WebSocket(`${proto}://${location.host}/api/ws/webcall/${agentId}${qs}`);
       ws.binaryType  = "arraybuffer";
       wsRef.current  = ws;
