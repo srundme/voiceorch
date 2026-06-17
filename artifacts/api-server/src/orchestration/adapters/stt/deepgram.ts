@@ -20,6 +20,30 @@ interface DeepgramStreamMessage {
   };
 }
 
+/**
+ * Deepgram accepts regional English variants (en-US, en-IN, etc.) and a handful
+ * of other full locale codes, but for most non-English languages it only accepts
+ * the bare ISO-639-1 code (e.g. "hi" not "hi-IN", "ta" not "ta-IN").
+ * Passing an unsupported BCP-47 tag causes the streaming WS to close immediately.
+ */
+const DEEPGRAM_FULL_LOCALES = new Set([
+  "en", "en-US", "en-AU", "en-GB", "en-NZ", "en-IN", "en-IE",
+  "es-419", "es-LATAM", "es-US",
+  "fr-CA",
+  "pt-BR", "pt-PT",
+  "zh-CN", "zh-TW",
+]);
+
+function normaliseDeepgramLang(code: string | null): string | null {
+  if (!code) return null;
+  if (DEEPGRAM_FULL_LOCALES.has(code)) return code;
+  // For everything else (e.g. "hi-IN", "ta-IN", "kn-IN") strip to bare code.
+  // Deepgram Nova-2 supports hi, ta, te, kn, ml, ur, vi, id, ms, ar, fa etc.
+  // as bare language codes; regional suffixes cause a WS close.
+  const bare = code.split("-")[0];
+  return bare ?? code;
+}
+
 export class DeepgramSTT implements STTAdapter {
   constructor(
     private readonly key: string,
@@ -37,7 +61,8 @@ export class DeepgramSTT implements STTAdapter {
       sample_rate: String(sampleRate),
     });
 
-    if (this.cfg.language) params.set("language", this.cfg.language);
+    const dgLangBatch = normaliseDeepgramLang(this.cfg.language ?? null);
+    if (dgLangBatch) params.set("language", dgLangBatch);
     if (this.cfg.backgroundDenoising) params.set("noise_reduction", "true");
 
     for (const term of this.cfg.keyterms) {
@@ -91,7 +116,8 @@ export class DeepgramSTT implements STTAdapter {
       smart_format: "true",
     });
 
-    if (this.cfg.language) params.set("language", this.cfg.language);
+    const dgLang = normaliseDeepgramLang(this.cfg.language ?? null);
+    if (dgLang) params.set("language", dgLang);
     if (this.cfg.backgroundDenoising) params.set("noise_reduction", "true");
 
     if (useSmartEndpointing) {
@@ -104,8 +130,10 @@ export class DeepgramSTT implements STTAdapter {
         "Deepgram: smart endpointing enabled (utterance_end_ms)"
       );
     } else {
-      // Standard silence-based endpointing
-      params.set("endpointing", String(this.cfg.endOfTurnTimeout));
+      // Standard silence-based endpointing — Deepgram caps at 2000 ms;
+      // values above 2000 cause the WS to close immediately.
+      const endpointing = Math.min(this.cfg.endOfTurnTimeout, 2000);
+      params.set("endpointing", String(endpointing));
     }
 
     for (const term of this.cfg.keyterms) {

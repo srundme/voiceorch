@@ -37,13 +37,24 @@ const LANG_REMAP: Record<string, string> = {
   en: "en-IN", hi: "hi-IN", bn: "bn-IN", kn: "kn-IN",
   ml: "ml-IN", mr: "mr-IN", pa: "pa-IN", ta: "ta-IN",
   te: "te-IN", gu: "gu-IN", ur: "ur-IN",
+  // Odia: standard BCP-47 is "or-IN" but Sarvam uses "od-IN"
+  or: "od-IN",
 };
 
 function normaliseSarvamLang(code: string | null): string {
   if (!code) return "en-IN";
   if (VALID_SARVAM_LANG.has(code)) return code;
-  const remapped = LANG_REMAP[code.toLowerCase()];
+  const lc = code.toLowerCase();
+  // Try exact lowercase match in remap (e.g. "hi" → "hi-IN")
+  const remapped = LANG_REMAP[lc];
   if (remapped) return remapped;
+  // Try the base language part of a BCP-47 tag (e.g. "or-IN" → base "or" → "od-IN")
+  const baseCode = lc.split("-")[0];
+  if (baseCode && baseCode !== lc) {
+    const baseRemapped = LANG_REMAP[baseCode];
+    if (baseRemapped) return baseRemapped;
+  }
+  // Try appending -IN (e.g. "hi" → "hi-IN")
   const withIN = `${code}-IN`;
   if (VALID_SARVAM_LANG.has(withIN)) return withIN;
   logger.warn({ rawLang: code }, "Sarvam language unrecognised — falling back to en-IN");
