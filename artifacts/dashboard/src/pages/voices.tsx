@@ -59,6 +59,8 @@ export default function VoicesPage() {
 
   async function previewVoice(voice: Voice) {
     if (currentAudioRef.current) {
+      currentAudioRef.current.onended = null;
+      currentAudioRef.current.onerror = null;
       currentAudioRef.current.pause();
       currentAudioRef.current.src = "";
       currentAudioRef.current = null;
