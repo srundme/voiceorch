@@ -23,6 +23,7 @@ import {
   ReschedulePublicBookingByTokenResponse,
 } from "@workspace/api-zod";
 import { buildSlotLockKey } from "../../services/scheduling/lock.js";
+import { logger } from "../../lib/logger.js";
 import {
   createCalendarEvent,
   deleteCalendarEvent,
@@ -210,15 +211,28 @@ router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
   // Create Google Calendar event with Meet link (best-effort, non-blocking)
   let meetLink: string | null = null;
   let googleEventId: string | null = null;
+  let gcalConnectionId: string | null = null;
   try {
     const calRow = await db.execute(
       sql`SELECT google_calendar_connection_id FROM scheduling_calendars WHERE id = ${calendar.id}`
     );
     const calendarConnectionId = (calRow.rows[0] as any)?.google_calendar_connection_id as string | null;
-    const connectionId = calendarConnectionId ?? (await getFirstConnectionForUser(calendar.userId))?.id ?? null;
+    gcalConnectionId = calendarConnectionId ?? (await getFirstConnectionForUser(calendar.userId))?.id ?? null;
 
-    const gcalResult = connectionId ? await createCalendarEvent({
-      connectionId,
+    if (!gcalConnectionId) {
+      logger.warn(
+        { calendarId: calendar.id, calendarConnectionId, bookingId: booking.id },
+        "No Google connection found — skipping calendar event",
+      );
+    } else {
+      logger.info(
+        { calendarId: calendar.id, calendarConnectionId, connectionId: gcalConnectionId, bookingId: booking.id },
+        "Attempting Google Calendar event creation",
+      );
+    }
+
+    const gcalResult = gcalConnectionId ? await createCalendarEvent({
+      connectionId: gcalConnectionId,
       summary: `${eventType.name} — ${booking.attendeeName}`,
       description: booking.attendeeNotes ?? undefined,
       startTime: booking.slotStart,
@@ -229,6 +243,9 @@ router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
       hostEmail: calendar.hostEmail,
       additionalHosts: calendar.additionalHosts,
     }) : null;
+    if (gcalConnectionId && !gcalResult) {
+      logger.warn({ connectionId: gcalConnectionId, bookingId: booking.id }, "createCalendarEvent returned null — Google Calendar event not created");
+    }
     if (gcalResult) {
       meetLink = gcalResult.meetLink;
       googleEventId = gcalResult.eventId;
@@ -238,7 +255,9 @@ router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
         );
       }
     }
-  } catch { /* non-fatal */ }
+  } catch (err) {
+    logger.warn({ err, bookingId: booking.id, connectionId: gcalConnectionId }, "Google Calendar event creation failed");
+  }
 
   // Issue self-service tokens for this booking
   const baseUrl = getBaseUrl();
@@ -521,18 +540,26 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
   // Reschedule patches the EXISTING event in-place so attendees get a seamless
   // "time changed" notification rather than a cancellation + new invite.
   void (async () => {
+    let reschedConnectionId: string | null = null;
     try {
       const calRow = await db.execute(
         sql`SELECT google_calendar_connection_id FROM scheduling_calendars WHERE id = ${booking.calendarId}`
       );
       const calendarConnectionId = (calRow.rows[0] as any)?.google_calendar_connection_id as string | null;
-      const connectionId = calendarConnectionId ?? (await getFirstConnectionForUser(booking.userId))?.id ?? null;
+      reschedConnectionId = calendarConnectionId ?? (await getFirstConnectionForUser(booking.userId))?.id ?? null;
 
-      if (connectionId && newBooking) {
+      if (!reschedConnectionId) {
+        logger.warn(
+          { calendarId: booking.calendarId, calendarConnectionId, bookingId: newBooking?.id },
+          "No Google connection found — skipping calendar event on reschedule",
+        );
+      }
+
+      if (reschedConnectionId && newBooking) {
         if (existingGoogleEventId) {
           // Patch the existing event — attendee calendar updates automatically
           const gcalResult = await updateCalendarEvent({
-            connectionId,
+            connectionId: reschedConnectionId,
             eventId: existingGoogleEventId,
             summary: `${eventType.name} — ${newBooking.attendeeName}`,
             description: newBooking.attendeeNotes ?? undefined,
@@ -552,7 +579,7 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
         } else {
           // No existing event — create fresh
           const gcalResult = await createCalendarEvent({
-            connectionId,
+            connectionId: reschedConnectionId,
             summary: `${eventType.name} — ${newBooking.attendeeName}`,
             description: newBooking.attendeeNotes ?? undefined,
             startTime: newBooking.slotStart,
@@ -570,7 +597,9 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
           }
         }
       }
-    } catch { /* non-fatal */ }
+    } catch (err) {
+      logger.warn({ err, bookingId: newBooking?.id, connectionId: reschedConnectionId }, "Google Calendar event creation failed on reschedule");
+    }
   })();
 
   // Issue new reschedule token for the new booking

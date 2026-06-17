@@ -185,7 +185,10 @@ export async function getValidAccessToken(connectionId: string): Promise<{
     .where(eq(googleCalendarConnectionsTable.id, connectionId))
     .limit(1);
   const row = rows[0];
-  if (!row) return null;
+  if (!row) {
+    logger.warn({ connectionId }, "Google connection not found in DB");
+    return null;
+  }
 
   const accessToken  = decryptKey(row.accessToken);
   const refreshToken = row.refreshToken ? decryptKey(row.refreshToken) : "";
@@ -366,7 +369,10 @@ export async function createCalendarEvent(params: {
     );
     return { meetLink, eventId };
   } catch (err) {
-    logger.warn({ err, connectionId: params.connectionId }, "Failed to create Google Calendar event");
+    logger.warn(
+      { err, connectionId: params.connectionId, attendeeEmail: params.attendeeEmail, summary: params.summary },
+      "Failed to create Google Calendar event",
+    );
     return null;
   }
 }
