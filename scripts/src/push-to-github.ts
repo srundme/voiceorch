@@ -22,7 +22,7 @@ const REPO  = "voiceorch";
 const BRANCH = "main";
 
 const FILES_TO_PUSH = [
-  "artifacts/api-server/src/orchestration/adapters/stt/deepgram.ts",
+  "artifacts/api-server/src/orchestration/telephony/webcall.ts",
 ];
 
 async function ghFetch(apiPath: string, options: RequestInit = {}) {
@@ -59,7 +59,7 @@ async function pushFile(relPath: string) {
   await ghFetch(`contents/${relPath}`, {
     method: "PUT",
     body: JSON.stringify({
-      message: `fix: send Deepgram keepalive frames to prevent idle WS timeout during agent greeting`,
+      message: `fix: show Listening status in streaming STT path after agent finishes speaking`,
       content: encoded,
       branch: BRANCH,
       ...(sha ? { sha } : {}),

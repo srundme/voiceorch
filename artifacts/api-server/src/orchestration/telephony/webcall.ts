@@ -2601,6 +2601,9 @@ export async function handleWebCallWebSocket(
     // Streaming STT path: send all audio directly to the provider WebSocket —
     // no local VAD accumulation needed (provider handles endpointing server-side).
     if (streamSTT) {
+      // Mirror the batch-path UX: show "listening" when the user is actually speaking
+      // so the UI doesn't stay stuck on "Speaking…" after the agent finishes.
+      if (!processing && rms > SPEECH_RMS_THRESHOLD) sendStatus("listening");
       streamSTT.sendAudio(Buffer.from(data));
       return;
     }
