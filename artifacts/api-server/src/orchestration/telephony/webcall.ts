@@ -368,8 +368,6 @@ export async function handleWebCallWebSocket(
   }
 
   const agentCfgWc = (agent.agentConfig ?? {}) as Record<string, unknown>;
-  const isMultilingualWc = (agentCfgWc["isMultilingual"] as boolean | undefined) ?? false;
-  const multilingualLanguagesWc = (agentCfgWc["multilingualLanguages"] as string[] | undefined) ?? [];
 
   const sttConfig: STTConfig = {
     language: agent.asrLanguage || agent.language || null,
@@ -383,10 +381,6 @@ export async function handleWebCallWebSocket(
     smartEndpointing: agent.asrSmartEndpointing ?? "off",
     autoFallback: agent.asrAutoFallback ?? false,
     fallbackProviders: (agent.asrFallbackProviders as Array<{ provider: string; model: string | null }> | null | undefined) ?? [],
-    // Multilingual: pass all configured languages as Azure LID candidates
-    ...(isMultilingualWc && multilingualLanguagesWc.length > 0
-      ? { candidateLanguages: multilingualLanguagesWc }
-      : {}),
   };
 
   const sttExtraConfig = providerKeys.get(`${agent.asrProvider?.toLowerCase()}:extraConfig`) ?? null;
@@ -398,22 +392,16 @@ export async function handleWebCallWebSocket(
   let streamSTT: StreamSTT | null = null;
   // Transcript received from streaming STT WebSocket — consumed by process()
   let streamingTranscriptPending: string | null = null;
-  // When multilingual is OFF, prefer asrLanguage over language for TTS —
-  // setting the Transcriber to kn-IN signals intent for the whole agent to run
-  // in Kannada, not just ASR. When multilingual is ON, language hot-swaps via
-  // setLanguage() so we use the primary agent.language as the initial locale.
-  const agentLanguage = (!isMultilingualWc && agent.asrLanguage)
-    ? agent.asrLanguage
-    : (agent.language ?? null);
+  // Prefer asrLanguage over language for TTS — setting the Transcriber to
+  // kn-IN signals intent for the whole agent to run in Kannada, not just ASR.
+  const agentLanguage = agent.asrLanguage ?? agent.language ?? null;
   const ttsExtraConfig = agent.ttsProvider === "sarvam"
     ? JSON.stringify({ language: agentLanguage ?? "en-IN" })
     : null;
   const tts = createTTSAdapter(agent.ttsProvider, ttsKey, agent.ttsVoice, agent.ttsModel, ttsExtraConfig, agentLanguage);
 
-  // Multilingual: tracks the current detected language for TTS hot-swap.
-  // Initialised from agentLanguage so the per-turn LLM language injection
-  // fires from turn 1 even in non-multilingual mode (e.g. kn-IN from start).
-  let currentLangWc: string = agentLanguage ?? "";
+  // Tracks the configured agent language for per-turn LLM language injection.
+  const currentLangWc: string = agentLanguage ?? "";
 
   // ── Create call DB record ─────────────────────────────────────────────────
   const [callRecord] = await db.insert(callsTable).values({
@@ -481,16 +469,8 @@ export async function handleWebCallWebSocket(
   if (stt.transcribeStream) {
     try {
       streamSTT = stt.transcribeStream(
-        (text, isFinal, detectedLanguage) => {
+        (text, isFinal) => {
           if (!isFinal || !text.trim() || closed) return;
-          // Multilingual: hot-swap TTS language when Azure LID detects a switch
-          if (detectedLanguage && isMultilingualWc && detectedLanguage !== currentLangWc) {
-            currentLangWc = detectedLanguage;
-            if (typeof (tts as unknown as { setLanguage?: (l: string) => void }).setLanguage === "function") {
-              (tts as unknown as { setLanguage: (l: string) => void }).setLanguage(detectedLanguage);
-            }
-            logger.info({ callId, lang: detectedLanguage }, "Webcall multilingual: language switched mid-call");
-          }
           // Barge-in: if agent is speaking, only interrupt if the transcript
           // meets the same wordsForInterruption gate as energy-based barge-in.
           // This prevents a faint background speaker (distant person) producing
@@ -601,7 +581,7 @@ export async function handleWebCallWebSocket(
       webcallProfile = webcallCtx.profile;
       for (const f of webcallCtx.facts) webcallLatchedFacts.set(f.key, f.value);
       if (webcallProfile || webcallCtx.facts.length > 0 || webcallCtx.recentCalls.length > 0) {
-        systemPrompt = injectEnhancedMemory(systemPrompt, webcallCtx, { isMultilingual: isMultilingualWc });
+        systemPrompt = injectEnhancedMemory(systemPrompt, webcallCtx);
         logger.info({ callId, agentId, callCount: webcallProfile?.callCount ?? 0, factCount: webcallCtx.facts.length, archiveCount: webcallCtx.recentCalls.length }, "Webcall caller memory injected");
         logExecution("Memory", "response", {
           responsePayload: {
@@ -1195,8 +1175,6 @@ export async function handleWebCallWebSocket(
       const dtInjection = buildDatetimeInjection(agentTimezone);
       systemPromptForTurn = `${dtInjection}\n\n${systemPromptForTurn}`;
       // Tell the LLM which language to reply in for this turn.
-      // Fires in both multilingual mode (Azure LID detected switch) and
-      // non-multilingual mode (seeded from agentLanguage at call start).
       if (currentLangWc) {
         const LANG_NAMES: Record<string, string> = {
           "hi-IN": "Hindi", "ta-IN": "Tamil", "te-IN": "Telugu", "kn-IN": "Kannada",
@@ -1208,11 +1186,7 @@ export async function handleWebCallWebSocket(
           "ar-EG": "Arabic", "ru-RU": "Russian",
         };
         const langName = LANG_NAMES[currentLangWc] ?? currentLangWc;
-        if (isMultilingualWc) {
-          systemPromptForTurn += `\n\n[ACTIVE LANGUAGE] The caller is currently speaking ${langName}. Respond ONLY in ${langName} for this reply.`;
-        } else {
-          systemPromptForTurn += `\n\n[LANGUAGE — NON-NEGOTIABLE] This agent is configured for ${langName} ONLY. You MUST respond in ${langName} regardless of any stored language_pref in caller memory or inferred language from the conversation. Do NOT switch to any other language under any circumstances.`;
-        }
+        systemPromptForTurn += `\n\n[LANGUAGE — NON-NEGOTIABLE] This agent is configured for ${langName} ONLY. You MUST respond in ${langName} regardless of any stored language_pref in caller memory or inferred language from the conversation. Do NOT switch to any other language under any circumstances.`;
       }
 
       const detectedGender = genderDetector?.gender ?? null;

@@ -224,7 +224,7 @@ export class OrchestrationPipeline {
   // Gender detection — fires once per call using early caller speech
   private genderDetector: GenderDetector | GenderDetectorML | GenderDetectorMLv2;
 
-  // Multilingual — tracks the active language detected by Azure LID
+  // Tracks the configured agent language for per-turn LLM language injection.
   private currentLang: string = "";
 
   constructor(config: SessionConfig) {
@@ -270,11 +270,7 @@ export class OrchestrationPipeline {
     const ttsKey = keys.get(this.agent.ttsProvider);
     if (!ttsKey) throw new Error(`No API key found for TTS provider: ${this.agent.ttsProvider}`);
 
-    // Multilingual: pass all configured languages as Azure LID candidates
     const sttCfg = this.agent.sttConfig;
-    if (this.agent.isMultilingual && this.agent.multilingualLanguages.length > 0) {
-      sttCfg.candidateLanguages = this.agent.multilingualLanguages;
-    }
 
     this.stt = createSTTAdapter(
       this.agent.asrProvider, sttKey, this.agent.asrModel,
@@ -357,25 +353,10 @@ export class OrchestrationPipeline {
     if (!this.stt.transcribeStream) return;
     try {
       this.streamSTT = this.stt.transcribeStream(
-        (text, isFinal, detectedLanguage) => {
+        (text, isFinal) => {
           if (!isFinal || !text.trim() || this.closed) return;
           this.streamSTTReconnectAttempts = 0; // reset backoff on successful transcript
           this.resetHangupTimer();
-          // Multilingual: hot-swap TTS language when Azure LID detects a switch
-          if (
-            detectedLanguage &&
-            this.agent.isMultilingual &&
-            detectedLanguage !== this.currentLang
-          ) {
-            this.currentLang = detectedLanguage;
-            if (typeof (this.tts as unknown as { setLanguage?: (l: string) => void }).setLanguage === "function") {
-              (this.tts as unknown as { setLanguage: (l: string) => void }).setLanguage(detectedLanguage);
-            }
-            logger.info(
-              { callId: this.config.callId, lang: detectedLanguage },
-              "Multilingual: language switched mid-call",
-            );
-          }
           void this.handleStreamingTranscript(text, Date.now());
         },
         () => {
@@ -1527,17 +1508,12 @@ export class OrchestrationPipeline {
     let systemPromptForTurn = this.agent.systemPrompt;
     const dtInjection = buildDatetimeInjection(this.agent.timezone);
     systemPromptForTurn = `${dtInjection}\n\n${systemPromptForTurn}`;
-    // Tell the LLM which language to reply in. Fires in multilingual mode
-    // (Azure LID detected a switch) and non-multilingual mode (seeded from
-    // agentLanguage at setup). Prevents Tamil/Hindi drift when agent is
-    // configured for a specific Indic language but system prompt is in English.
+    // Tell the LLM which language to reply in — prevents Indic language drift
+    // when the agent is configured for a specific locale but the system prompt
+    // is written in English.
     if (this.currentLang) {
       const langName = LANG_DISPLAY_NAMES[this.currentLang] ?? this.currentLang;
-      if (this.agent.isMultilingual) {
-        systemPromptForTurn += `\n\n[ACTIVE LANGUAGE] The caller is currently speaking ${langName}. Respond ONLY in ${langName} for this reply.`;
-      } else {
-        systemPromptForTurn += `\n\n[LANGUAGE — NON-NEGOTIABLE] This agent is configured for ${langName} ONLY. You MUST respond in ${langName} regardless of any stored language_pref in caller memory or inferred language from the conversation. Do NOT switch to any other language under any circumstances.`;
-      }
+      systemPromptForTurn += `\n\n[LANGUAGE — NON-NEGOTIABLE] This agent is configured for ${langName} ONLY. You MUST respond in ${langName} regardless of any stored language_pref in caller memory or inferred language from the conversation. Do NOT switch to any other language under any circumstances.`;
     }
     let kbContextPromise: Promise<string | null>;
     if (this.kbPrefetchPromise) {

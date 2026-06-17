@@ -274,10 +274,8 @@ const STALE_DAYS = 90;  // facts older than this get a stale marker
 export function injectEnhancedMemory(
   systemPrompt: string,
   ctx: CallerContext,
-  opts: { isMultilingual?: boolean } = {},
 ): string {
   const { profile, facts, recentCalls } = ctx;
-  const isMultilingual = opts.isMultilingual ?? false;
 
   const lines: string[] = ["=== CALLER MEMORY — NEVER FORGETS ==="];
 
@@ -325,9 +323,9 @@ export function injectEnhancedMemory(
   const displayFacts = facts.filter(f => {
     if (f.key === "name") return false;
     if (f.confidence < 0.5) return false;
-    // Suppress language_pref for non-multilingual agents — it would instruct
-    // the LLM to respond in a stored language that the agent is not configured for.
-    if (f.key === "language_pref" && !isMultilingual) return false;
+    // Always suppress language_pref — agents have a fixed configured language;
+    // stored preferences must not override it.
+    if (f.key === "language_pref") return false;
     return true;
   });
   if (displayFacts.length > 0) {

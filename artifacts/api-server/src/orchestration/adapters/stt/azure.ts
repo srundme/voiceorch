@@ -165,10 +165,8 @@ export class AzureSTT implements STTAdapter {
 
     // For Indic locales, automatically add English (India) as a candidate so
     // code-switched Hinglish / Tamil-English speech is recognized correctly.
-    // STTConfig.candidateLanguages (multilingual mode) > extraConfig.candidateLocales > auto Indic default.
-    if (cfg.candidateLanguages?.length) {
-      this.candidateLocales = cfg.candidateLanguages.map(normalizeLocale);
-    } else if (extra.candidateLocales) {
+    // extraConfig.candidateLocales can override; otherwise auto-detect from locale.
+    if (extra.candidateLocales) {
       this.candidateLocales = extra.candidateLocales.map(normalizeLocale);
     } else if (INDIC_LOCALES.has(this.language)) {
       this.candidateLocales = [this.language, "en-IN"].filter(
@@ -306,8 +304,8 @@ export class AzureSTT implements STTAdapter {
         );
 
         // ② Speech context — language detection mode + phrase list
-        // languageId.mode "Continuous" re-detects language on every utterance
-        // instead of locking in at-start — essential for mid-call switching.
+        // Use AtStart mode (detect language once per utterance) for Indic
+        // code-switching. Continuous mode adds latency and is not needed.
         if (this.candidateLocales.length > 1 || this.cfg.keyterms.length > 0) {
           const ctx: Record<string, unknown> = {
             phraseDetection: {
@@ -317,7 +315,7 @@ export class AzureSTT implements STTAdapter {
             },
           };
           if (this.candidateLocales.length > 1) {
-            ctx.languageId = { mode: "Continuous", priority: "PrioritizeLatency" };
+            ctx.languageId = { mode: "AtStart", priority: "PrioritizeLatency" };
           }
           if (this.cfg.keyterms.length > 0) {
             ctx.phraseList = {

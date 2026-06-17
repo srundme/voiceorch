@@ -196,8 +196,6 @@ export interface STTConfig {
   smartEndpointing: string;
   autoFallback: boolean;
   fallbackProviders: Array<{ provider: string; model: string | null }>;
-  /** Candidate locales for Azure LID (multi-language detection). */
-  candidateLanguages?: string[];
 }
 
 export interface AgentConfig {
@@ -314,10 +312,6 @@ export interface AgentConfig {
   stagedPromptEnabled: boolean;
   stagedPromptStages: Array<{ name: string; content: string }>;
   stagedPromptCoreIdentity: string | null;
-
-  // Multilingual
-  isMultilingual: boolean;
-  multilingualLanguages: string[];
 }
 
 export interface ProviderKey {

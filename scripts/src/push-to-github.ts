@@ -23,6 +23,11 @@ const BRANCH = "main";
 
 const FILES_TO_PUSH = [
   "artifacts/api-server/src/orchestration/telephony/webcall.ts",
+  "artifacts/api-server/src/orchestration/pipeline.ts",
+  "artifacts/api-server/src/orchestration/adapters/stt/azure.ts",
+  "artifacts/api-server/src/orchestration/types.ts",
+  "artifacts/api-server/src/orchestration/session.ts",
+  "artifacts/api-server/src/orchestration/callerMemory.ts",
   "artifacts/dashboard/src/components/webcall-panel.tsx",
 ];
 
@@ -60,7 +65,7 @@ async function pushFile(relPath: string) {
   await ghFetch(`contents/${relPath}`, {
     method: "PUT",
     body: JSON.stringify({
-      message: `fix: stream LLM tokens progressively to UI (text appears word by word)`,
+      message: `refactor: remove multilingual module — restore stable single-language orchestration`,
       content: encoded,
       branch: BRANCH,
       ...(sha ? { sha } : {}),
