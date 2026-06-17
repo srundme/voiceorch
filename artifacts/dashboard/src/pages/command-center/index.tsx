@@ -1,128 +1,29 @@
-import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
-  Monitor, Phone, PhoneCall, PhoneIncoming, CalendarDays,
-  ArrowRightLeft, AlertTriangle, XCircle, CheckCircle2, ThumbsUp,
-  TrendingUp, RefreshCw, Activity,
-  Clock, Layers, User,
+  Terminal, RefreshCw, Activity, Zap, CheckCircle2, XCircle,
+  Clock, AlertTriangle, Server, Key, Layers, Bot,
+  Cpu, Radio, AudioWaveform, Phone, BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-/* ── API fetch helpers ───────────────────────────────────────────────────── */
+import {
+  useGetDashboardStats,
+  useListCalls,
+  useListProviders,
+  useListAgents,
+  useListActivityLogs,
+  getGetDashboardStatsQueryKey,
+  getListCallsQueryKey,
+  getListProvidersQueryKey,
+  getListAgentsQueryKey,
+  getListActivityLogsQueryKey,
+} from "@workspace/api-client-react";
+import type { Call, ProviderConfig, ActivityLog, Agent } from "@workspace/api-client-react";
 
-async function fetchKpis() {
-  const r = await fetch("/api/command-center/kpis", {
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-  });
-  if (!r.ok) throw new Error("Failed to fetch KPIs");
-  return r.json() as Promise<{
-    liveCalls: number; queued: number; callbacksDue: number;
-    incomingCalls: number; bookingsToday: number; transfersToday: number;
-    noPickup: number; failed: number; connected: number; interested: number;
-  }>;
-}
+/* ── helpers ──────────────────────────────────────────────────────────────── */
 
-async function fetchLiveOps(limit = 50) {
-  const r = await fetch(`/api/command-center/live-ops?limit=${limit}`, {
-    credentials: "include",
-  });
-  if (!r.ok) throw new Error("Failed to fetch live ops");
-  const data = await r.json() as { rows: LiveOpsRow[] };
-  return data.rows;
-}
-
-async function fetchActivityStream(limit = 30) {
-  const r = await fetch(`/api/command-center/activity-stream?limit=${limit}`, {
-    credentials: "include",
-  });
-  if (!r.ok) throw new Error("Failed to fetch activity stream");
-  const data = await r.json() as { events: ActivityEvent[] };
-  return data.events;
-}
-
-/* ── Types ─────────────────────────────────────────────────────────────────── */
-
-interface LiveOpsRow {
-  leadId: number;
-  phone: string;
-  name: string | null;
-  campaignId: number;
-  campaignName: string;
-  batchId: number | null;
-  batchName: string | null;
-  callStatus: string;
-  disposition: string | null;
-  operationalOutcome: string;
-  durationSeconds: number | null;
-  lastActivityAt: string | null;
-  createdAt: string;
-}
-
-interface ActivityEvent {
-  id: number;
-  type: string;
-  resourceType: string | null;
-  resourceId: string | null;
-  description: string;
-  createdAt: string;
-}
-
-/* ── Status + outcome display helpers ─────────────────────────────────────── */
-
-const CALL_STATUS_LABELS: Record<string, string> = {
-  pending:     "Queued",
-  calling:     "Calling",
-  connected:   "Connected",
-  completed:   "Completed",
-  transferred: "Transferred",
-  failed:      "Failed",
-  skipped:     "Skipped",
-  exhausted:   "Exhausted",
-};
-
-const OUTCOME_LABELS: Record<string, string> = {
-  pending:              "—",
-  booking_created:      "Booked",
-  transfer_completed:   "Transferred",
-  callback_requested:   "Callback",
-  interest_confirmed:   "Interested",
-  no_contact:           "No Pickup",
-  dnc_blocked:          "DNC",
-  failed:               "Failed",
-};
-
-function callStatusBadge(status: string) {
-  const map: Record<string, string> = {
-    pending:     "bg-zinc-800 text-zinc-400",
-    calling:     "bg-blue-500/20 text-blue-400 animate-pulse",
-    connected:   "bg-emerald-500/20 text-emerald-400",
-    completed:   "bg-zinc-700 text-zinc-300",
-    transferred: "bg-purple-500/20 text-purple-400",
-    failed:      "bg-red-500/20 text-red-400",
-    skipped:     "bg-amber-500/20 text-amber-400",
-    exhausted:   "bg-red-800/30 text-red-400",
-  };
-  return map[status] ?? "bg-zinc-800 text-zinc-400";
-}
-
-function outcomeBadge(outcome: string) {
-  const map: Record<string, string> = {
-    pending:            "text-zinc-500",
-    booking_created:    "text-emerald-400",
-    transfer_completed: "text-purple-400",
-    callback_requested: "text-amber-400",
-    interest_confirmed: "text-blue-400",
-    no_contact:         "text-zinc-500",
-    dnc_blocked:        "text-red-500",
-    failed:             "text-red-400",
-  };
-  return map[outcome] ?? "text-zinc-500";
-}
-
-function relativeTime(iso: string | null): string {
+function relativeTime(iso: string | null | undefined): string {
   if (!iso) return "—";
-  const diff = Date.now() - new Date(iso).getTime();
-  const s = Math.floor(diff / 1000);
+  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
   if (s < 60)  return `${s}s ago`;
   const m = Math.floor(s / 60);
   if (m < 60)  return `${m}m ago`;
@@ -132,246 +33,314 @@ function relativeTime(iso: string | null): string {
 }
 
 function shortTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
+  return new Date(iso).toLocaleTimeString("en-US", {
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+  });
 }
+
+function fmtMs(ms: number | null | undefined): string {
+  if (ms == null) return "—";
+  return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`;
+}
+
+function fmtDuration(s: number | null | undefined): string {
+  if (s == null) return "—";
+  if (s < 60) return `${s}s`;
+  return `${Math.floor(s / 60)}m ${s % 60}s`;
+}
+
+function statusColors(status: string) {
+  const map: Record<string, string> = {
+    completed:   "bg-emerald-500/15 text-emerald-400",
+    active:      "bg-emerald-500/15 text-emerald-400",
+    calling:     "bg-blue-500/15 text-blue-400 animate-pulse",
+    connected:   "bg-blue-500/15 text-blue-400",
+    failed:      "bg-red-500/15 text-red-400",
+    error:       "bg-red-500/15 text-red-400",
+    transferred: "bg-purple-500/15 text-purple-400",
+    pending:     "bg-zinc-700 text-zinc-400",
+    queued:      "bg-zinc-700 text-zinc-400",
+    inactive:    "bg-zinc-700 text-zinc-500",
+  };
+  return map[status] ?? "bg-zinc-800 text-zinc-400";
+}
+
+function eventDot(eventType: string) {
+  if (eventType.includes("created") || eventType.includes("started")) return "bg-emerald-400";
+  if (eventType.includes("failed") || eventType.includes("error"))    return "bg-red-400";
+  if (eventType.includes("ended")  || eventType.includes("deleted"))  return "bg-zinc-500";
+  return "bg-blue-400";
+}
+
+const PROVIDER_TYPE_ICON: Record<string, React.ElementType> = {
+  asr:        AudioWaveform,
+  llm:        Cpu,
+  tts:        Radio,
+  telephony:  Phone,
+  orchestration: Server,
+};
+
+const PROVIDER_TYPE_LABEL: Record<string, string> = {
+  asr: "ASR", llm: "LLM", tts: "TTS", telephony: "Telephony", orchestration: "Orch",
+};
 
 /* ── KPI Card ──────────────────────────────────────────────────────────────── */
 
-interface KpiCardProps {
-  label: string;
-  value: number;
-  icon: React.ElementType;
-  color: string;
-  href?: string;
-  pulse?: boolean;
-  loading?: boolean;
-}
-
-function KpiCard({ label, value, icon: Icon, color, href, pulse, loading }: KpiCardProps) {
+function KpiCard({
+  label, value, sub, icon: Icon, color, href, loading,
+}: {
+  label: string; value: string | number; sub?: string;
+  icon: React.ElementType; color: string; href?: string; loading?: boolean;
+}) {
   const [, navigate] = useLocation();
-
   return (
     <button
       onClick={() => href && navigate(href)}
       className={cn(
-        "group relative flex flex-col gap-2 rounded-xl border border-border bg-card p-4 text-left transition-all duration-150",
-        href ? "cursor-pointer hover:border-border/80 hover:bg-accent/30" : "cursor-default",
+        "group flex flex-col gap-2 rounded-xl border border-border bg-card p-4 text-left transition-all",
+        href ? "cursor-pointer hover:border-border/70 hover:bg-accent/20" : "cursor-default",
       )}
     >
       <div className="flex items-center justify-between">
-        <span className="text-[11px] font-semibold tracking-[0.08em] uppercase text-muted-foreground/60">
-          {label}
-        </span>
-        <div className={cn("rounded-md p-1.5", color.replace("text-", "bg-").replace("-400", "-500/15"))}>
+        <span className="text-[10px] font-semibold tracking-[0.09em] uppercase text-muted-foreground/50">{label}</span>
+        <div className={cn("rounded-md p-1.5 opacity-80", color.replace("text-", "bg-").replace("-400", "-500/15"))}>
           <Icon className={cn("w-3.5 h-3.5", color)} />
         </div>
       </div>
-
       {loading ? (
-        <div className="h-8 w-16 rounded animate-pulse bg-muted" />
+        <div className="h-7 w-20 rounded animate-pulse bg-muted" />
       ) : (
-        <div className={cn("text-[28px] font-bold tabular-nums leading-none", pulse && value > 0 ? color : "text-foreground")}>
-          {value.toLocaleString()}
+        <div className="flex items-baseline gap-2">
+          <span className="text-[26px] font-bold tabular-nums leading-none text-foreground">{value}</span>
+          {sub && <span className="text-[11px] text-muted-foreground/50 leading-none">{sub}</span>}
         </div>
-      )}
-
-      {pulse && value > 0 && (
-        <span className={cn("absolute top-3 right-3 flex h-1.5 w-1.5")}>
-          <span className={cn("animate-ping absolute inline-flex h-full w-full rounded-full opacity-60", color.replace("text-", "bg-"))} />
-          <span className={cn("relative inline-flex rounded-full h-1.5 w-1.5", color.replace("text-", "bg-"))} />
-        </span>
       )}
     </button>
   );
 }
 
-/* ── Queue Health mini bar ─────────────────────────────────────────────────── */
+/* ── Latency badge ─────────────────────────────────────────────────────────── */
 
-interface QueueBarProps {
-  label: string;
-  value: number;
-  total: number;
-  color: string;
+function LatencyBadge({ ms }: { ms: number | null | undefined }) {
+  if (ms == null) return <span className="text-[11px] text-muted-foreground/30 font-mono">—</span>;
+  const color = ms < 400 ? "text-emerald-400" : ms < 900 ? "text-amber-400" : "text-red-400";
+  return <span className={cn("text-[11px] font-mono tabular-nums", color)}>{fmtMs(ms)}</span>;
 }
 
-function QueueBar({ label, value, total, color }: QueueBarProps) {
-  const pct = total > 0 ? (value / total) * 100 : 0;
+/* ── Provider group row ────────────────────────────────────────────────────── */
+
+function ProviderRow({ providers }: { providers: ProviderConfig[] }) {
+  const active = providers.filter(p => p.isActive);
+  const Icon = PROVIDER_TYPE_ICON[providers[0].providerType] ?? Server;
+  const label = PROVIDER_TYPE_LABEL[providers[0].providerType] ?? providers[0].providerType;
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center justify-between text-[11px]">
-        <span className="text-muted-foreground/70">{label}</span>
-        <span className="tabular-nums font-medium text-foreground/80">{value.toLocaleString()}</span>
+    <div className="flex items-center gap-3 py-2 border-b border-border/40 last:border-0">
+      <div className="flex items-center gap-1.5 w-20 shrink-0">
+        <Icon className="w-3 h-3 text-muted-foreground/40" />
+        <span className="text-[11px] font-semibold text-muted-foreground/60">{label}</span>
       </div>
-      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-        <div
-          className={cn("h-full rounded-full transition-all duration-500", color)}
-          style={{ width: `${pct}%` }}
-        />
+      <div className="flex flex-wrap gap-1.5 flex-1 min-w-0">
+        {providers.map(p => (
+          <span
+            key={p.id}
+            className={cn(
+              "text-[10px] px-1.5 py-0.5 rounded font-mono",
+              p.isActive ? "bg-emerald-500/10 text-emerald-400" : "bg-zinc-800 text-zinc-500 line-through",
+            )}
+          >
+            {p.providerName}
+          </span>
+        ))}
       </div>
+      <span className="text-[10px] text-muted-foreground/30 shrink-0">
+        {active.length}/{providers.length}
+      </span>
     </div>
   );
 }
 
-/* ── Main page ─────────────────────────────────────────────────────────────── */
+/* ── Agent health mini row ─────────────────────────────────────────────────── */
+
+function AgentRow({ agent }: { agent: Agent }) {
+  const [, navigate] = useLocation();
+  return (
+    <div
+      className="flex items-center gap-2.5 py-1.5 border-b border-border/40 last:border-0 cursor-pointer hover:bg-accent/20 transition-colors px-0"
+      onClick={() => navigate(`/app/agents/${agent.id}`)}
+    >
+      <span className={cn(
+        "inline-block w-1.5 h-1.5 rounded-full shrink-0",
+        agent.status === "active" ? "bg-emerald-400" : "bg-zinc-600",
+      )} />
+      <span className="text-[11px] text-foreground/70 truncate flex-1">{agent.name}</span>
+      <span className={cn("text-[10px] px-1.5 py-0.5 rounded", statusColors(agent.status))}>
+        {agent.status}
+      </span>
+    </div>
+  );
+}
+
+/* ── Page ──────────────────────────────────────────────────────────────────── */
 
 export default function CommandCenterPage() {
-  const kpis = useQuery({
-    queryKey: ["command-center-kpis"],
-    queryFn: fetchKpis,
-    refetchInterval: 10_000,
-    staleTime: 8_000,
-  });
+  const stats = useGetDashboardStats({ query: { queryKey: getGetDashboardStatsQueryKey(), refetchInterval: 15_000, staleTime: 12_000 } });
+  const callsQ = useListCalls(undefined, { query: { queryKey: getListCallsQueryKey(), refetchInterval: 10_000, staleTime: 8_000 } });
+  const providers = useListProviders({ query: { queryKey: getListProvidersQueryKey(), refetchInterval: 30_000, staleTime: 25_000 } });
+  const agents = useListAgents({ query: { queryKey: getListAgentsQueryKey(), refetchInterval: 30_000, staleTime: 25_000 } });
+  const activity = useListActivityLogs({ limit: 25 }, { query: { queryKey: getListActivityLogsQueryKey({ limit: 25 }), refetchInterval: 15_000, staleTime: 12_000 } });
 
-  const liveOps = useQuery({
-    queryKey: ["command-center-live-ops"],
-    queryFn: () => fetchLiveOps(50),
-    refetchInterval: 10_000,
-    staleTime: 8_000,
-  });
+  const s = stats.data;
+  const calls: Call[] = callsQ.data ?? [];
+  const recentCalls = calls.slice(0, 25);
+  const allProviders: ProviderConfig[] = providers.data ?? [];
+  const allAgents: Agent[] = agents.data ?? [];
+  const events: ActivityLog[] = activity.data ?? [];
 
-  const activityStream = useQuery({
-    queryKey: ["command-center-activity-stream"],
-    queryFn: () => fetchActivityStream(30),
-    refetchInterval: 15_000,
-    staleTime: 12_000,
-  });
+  const isLoading = stats.isLoading;
+  const isFetching = stats.isFetching || callsQ.isFetching;
 
-  const k = kpis.data;
-  const rows = liveOps.data ?? [];
-  const events = activityStream.data ?? [];
+  /* provider groups */
+  const providerGroups = allProviders.reduce<Record<string, ProviderConfig[]>>((acc, p) => {
+    acc[p.providerType] = [...(acc[p.providerType] ?? []), p];
+    return acc;
+  }, {});
+  const groupOrder = ["asr", "llm", "tts", "telephony", "orchestration"];
 
-  // Queue health totals for the right panel
-  const queueTotal = rows.length;
-  const queueCalling  = rows.filter(r => r.callStatus === "calling").length;
-  const queuePending  = rows.filter(r => r.callStatus === "pending").length;
-  const queueComplete = rows.filter(r => r.callStatus === "completed" || r.callStatus === "transferred").length;
-  const queueFailed   = rows.filter(r => r.callStatus === "failed" || r.callStatus === "skipped").length;
-
-  const isLoading = kpis.isLoading;
-  const lastUpdated = kpis.dataUpdatedAt ? new Date(kpis.dataUpdatedAt) : null;
+  /* latency averages across recent calls */
+  const callsWithLatency = recentCalls.filter(c => c.sttLatencyMs || c.llmLatencyMs || c.ttsFirstChunkMs);
+  const avg = (fn: (c: Call) => number | null | undefined) => {
+    const vals = callsWithLatency.map(fn).filter((v): v is number => v != null);
+    if (!vals.length) return null;
+    return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+  };
+  const avgStt = avg(c => c.sttLatencyMs);
+  const avgLlm = avg(c => c.llmLatencyMs);
+  const avgTts = avg(c => c.ttsFirstChunkMs);
 
   return (
-    <div className="flex flex-col gap-6 p-6 min-h-full">
+    <div className="flex flex-col gap-5 p-6 min-h-full">
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <Monitor className="w-5 h-5 text-muted-foreground/50" />
+          <Terminal className="w-4 h-4 text-muted-foreground/50" />
           <div>
             <h1 className="text-[15px] font-semibold text-foreground leading-tight">Command Center</h1>
-            <p className="text-[11px] text-muted-foreground/50 leading-tight mt-0.5">Live operational dashboard</p>
+            <p className="text-[11px] text-muted-foreground/40 leading-tight mt-0.5">Developer operations console</p>
           </div>
         </div>
-        <div className="flex items-center gap-2 text-[11px] text-muted-foreground/40">
-          {(kpis.isFetching || liveOps.isFetching) && (
-            <RefreshCw className="w-3 h-3 animate-spin" />
-          )}
-          {lastUpdated && (
-            <span>Updated {relativeTime(lastUpdated.toISOString())}</span>
-          )}
+        <div className="flex items-center gap-3 text-[11px] text-muted-foreground/30">
+          {isFetching && <RefreshCw className="w-3 h-3 animate-spin" />}
+          <span className="font-mono">auto-refresh 10s</span>
         </div>
       </div>
 
-      {/* ── KPI Cards (10) ─────────────────────────────────────────────────── */}
+      {/* ── KPI Row ─────────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        <KpiCard label="Live Calls"       value={k?.liveCalls      ?? 0} icon={Phone}         color="text-blue-400"   href="/app/calls"     pulse   loading={isLoading} />
-        <KpiCard label="Queued"           value={k?.queued         ?? 0} icon={Layers}         color="text-zinc-400"   href="/app/campaigns"         loading={isLoading} />
-        <KpiCard label="Callbacks Due"    value={k?.callbacksDue   ?? 0} icon={PhoneCall}      color="text-amber-400"  href="/app/callbacks"  pulse  loading={isLoading} />
-        <KpiCard label="Incoming Calls"   value={k?.incomingCalls  ?? 0} icon={PhoneIncoming}  color="text-purple-400" href="/app/incoming"           loading={isLoading} />
-        <KpiCard label="Bookings Today"   value={k?.bookingsToday  ?? 0} icon={CalendarDays}   color="text-emerald-400" href="/app/scheduling"        loading={isLoading} />
-        <KpiCard label="Transfers Today"  value={k?.transfersToday ?? 0} icon={ArrowRightLeft} color="text-violet-400" href="/app/transfers"          loading={isLoading} />
-        <KpiCard label="No Pickup"        value={k?.noPickup       ?? 0} icon={AlertTriangle}  color="text-amber-500"  href="/app/campaigns"         loading={isLoading} />
-        <KpiCard label="Failed"           value={k?.failed         ?? 0} icon={XCircle}        color="text-red-400"    href="/app/campaigns"         loading={isLoading} />
-        <KpiCard label="Connected"        value={k?.connected      ?? 0} icon={CheckCircle2}   color="text-emerald-400" href="/app/campaigns"        loading={isLoading} />
-        <KpiCard label="Interested"       value={k?.interested     ?? 0} icon={ThumbsUp}       color="text-blue-400"   href="/app/campaigns"         loading={isLoading} />
+        <KpiCard label="Active Agents"   value={s?.activeAgents ?? 0} sub={`/ ${s?.totalAgents ?? 0}`}   icon={Bot}      color="text-emerald-400" href="/app/agents"    loading={isLoading} />
+        <KpiCard label="Calls Today"     value={s?.callsToday ?? 0}                                        icon={Activity} color="text-blue-400"    href="/app/calls"    loading={isLoading} />
+        <KpiCard label="Success Rate"    value={s ? `${s.successRate.toFixed(1)}%` : "—"}                  icon={CheckCircle2} color="text-green-400"                    loading={isLoading} />
+        <KpiCard label="Avg STT Latency" value={avgStt != null ? fmtMs(avgStt) : "—"}                      icon={Zap}      color="text-amber-400"                        loading={callsQ.isLoading} />
+        <KpiCard label="Providers"       value={allProviders.filter(p => p.isActive).length} sub="active"  icon={Key}      color="text-violet-400" href="/app/providers" loading={providers.isLoading} />
       </div>
 
-      {/* ── Main body: Feed + Right Panel ──────────────────────────────────── */}
+      {/* ── Latency strip ───────────────────────────────────────────────────── */}
+      {(avgStt != null || avgLlm != null || avgTts != null) && (
+        <div className="flex items-center gap-6 px-4 py-2.5 rounded-lg border border-border bg-muted/20 text-[11px]">
+          <span className="text-muted-foreground/40 font-semibold uppercase tracking-wide text-[10px]">Pipeline P50 (last {callsWithLatency.length} calls)</span>
+          <div className="flex items-center gap-1.5">
+            <AudioWaveform className="w-3 h-3 text-muted-foreground/30" />
+            <span className="text-muted-foreground/50">STT</span>
+            <LatencyBadge ms={avgStt} />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Cpu className="w-3 h-3 text-muted-foreground/30" />
+            <span className="text-muted-foreground/50">LLM TTFT</span>
+            <LatencyBadge ms={avgLlm} />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Radio className="w-3 h-3 text-muted-foreground/30" />
+            <span className="text-muted-foreground/50">TTS First Chunk</span>
+            <LatencyBadge ms={avgTts} />
+          </div>
+        </div>
+      )}
+
+      {/* ── Main body ───────────────────────────────────────────────────────── */}
       <div className="flex gap-5 min-h-0">
 
-        {/* ── Live Ops Feed ─────────────────────────────────────────────── */}
+        {/* ── Calls feed ──────────────────────────────────────────────────── */}
         <div className="flex flex-col gap-3 flex-1 min-w-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Activity className="w-3.5 h-3.5 text-muted-foreground/40" />
-              <span className="text-[12px] font-semibold text-foreground/80">Live Operations Feed</span>
-              {liveOps.isFetching && <RefreshCw className="w-3 h-3 animate-spin text-muted-foreground/30" />}
+              <span className="text-[12px] font-semibold text-foreground/80">Recent Calls</span>
+              {callsQ.isFetching && <RefreshCw className="w-3 h-3 animate-spin text-muted-foreground/30" />}
             </div>
-            <span className="text-[11px] text-muted-foreground/40">{rows.length} leads · auto-refresh 10s</span>
+            <button
+              onClick={() => {}}
+              className="flex items-center gap-1 text-[11px] text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors"
+            >
+              <BarChart3 className="w-3 h-3" />
+              <span>{recentCalls.length} calls</span>
+            </button>
           </div>
 
           <div className="rounded-xl border border-border overflow-hidden">
-            {/* Table header */}
-            <div className="grid grid-cols-[1fr_1.2fr_1fr_80px_100px_100px_70px_90px] gap-0 border-b border-border bg-muted/30 px-3 py-2">
-              {["Lead", "Campaign", "Batch", "Status", "Disposition", "Outcome", "Duration", "Last Activity"].map(h => (
-                <span key={h} className="text-[10px] font-semibold tracking-[0.08em] uppercase text-muted-foreground/40 truncate">
+            {/* header */}
+            <div className="grid grid-cols-[140px_1fr_72px_64px_64px_64px_56px_64px] gap-0 border-b border-border bg-muted/30 px-3 py-2">
+              {["Exec ID", "Agent", "Status", "STT", "LLM", "TTS", "Dur", "Cost"].map(h => (
+                <span key={h} className="text-[10px] font-semibold tracking-[0.07em] uppercase text-muted-foreground/35 truncate">
                   {h}
                 </span>
               ))}
             </div>
-
-            {/* Table rows */}
-            <div className="divide-y divide-border/50 max-h-[400px] overflow-y-auto">
-              {liveOps.isLoading ? (
+            {/* rows */}
+            <div className="divide-y divide-border/40 max-h-[460px] overflow-y-auto">
+              {callsQ.isLoading ? (
                 Array.from({ length: 8 }).map((_, i) => (
-                  <div key={i} className="grid grid-cols-[1fr_1.2fr_1fr_80px_100px_100px_70px_90px] gap-0 px-3 py-2.5">
+                  <div key={i} className="grid grid-cols-[140px_1fr_72px_64px_64px_64px_56px_64px] gap-0 px-3 py-2.5">
                     {Array.from({ length: 8 }).map((_, j) => (
                       <div key={j} className="h-3 rounded animate-pulse bg-muted w-4/5" />
                     ))}
                   </div>
                 ))
-              ) : rows.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 gap-2 text-muted-foreground/40">
-                  <Monitor className="w-8 h-8 opacity-30" />
-                  <p className="text-[12px]">No leads in the system yet</p>
+              ) : recentCalls.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 gap-2 text-muted-foreground/30">
+                  <Terminal className="w-7 h-7 opacity-30" />
+                  <p className="text-[12px]">No calls yet</p>
                 </div>
               ) : (
-                rows.map(row => (
+                recentCalls.map(call => (
                   <div
-                    key={row.leadId}
-                    className="grid grid-cols-[1fr_1.2fr_1fr_80px_100px_100px_70px_90px] gap-0 px-3 py-2.5 hover:bg-accent/30 transition-colors cursor-default"
+                    key={call.id}
+                    className="grid grid-cols-[140px_1fr_72px_64px_64px_64px_56px_64px] gap-0 px-3 py-2.5 hover:bg-accent/20 transition-colors"
                   >
-                    {/* Lead */}
-                    <div className="flex items-center gap-1.5 min-w-0 pr-2">
-                      <User className="w-3 h-3 shrink-0 text-muted-foreground/30" />
-                      <div className="min-w-0">
-                        {row.name && <p className="text-[11px] font-medium text-foreground/80 truncate leading-tight">{row.name}</p>}
-                        <p className="text-[10px] text-muted-foreground/50 truncate leading-tight font-mono">{row.phone}</p>
-                      </div>
-                    </div>
-
-                    {/* Campaign */}
-                    <p className="text-[11px] text-muted-foreground/70 truncate pr-2 self-center">{row.campaignName}</p>
-
-                    {/* Batch */}
-                    <p className="text-[11px] text-muted-foreground/50 truncate pr-2 self-center">{row.batchName ?? "—"}</p>
-
+                    {/* Exec ID */}
+                    <p className="text-[10px] font-mono text-muted-foreground/50 truncate pr-2 self-center">
+                      {call.executionId ?? `#${call.id}`}
+                    </p>
+                    {/* Agent */}
+                    <p className="text-[11px] text-foreground/70 truncate pr-2 self-center">{call.agentName}</p>
                     {/* Status */}
                     <div className="self-center pr-1">
-                      <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-md", callStatusBadge(row.callStatus))}>
-                        {CALL_STATUS_LABELS[row.callStatus] ?? row.callStatus}
+                      <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium", statusColors(call.status))}>
+                        {call.status}
                       </span>
                     </div>
-
-                    {/* Disposition */}
-                    <p className="text-[11px] text-muted-foreground/50 truncate pr-2 self-center">
-                      {row.disposition ?? "—"}
-                    </p>
-
-                    {/* Outcome */}
-                    <p className={cn("text-[11px] font-medium truncate pr-2 self-center", outcomeBadge(row.operationalOutcome))}>
-                      {OUTCOME_LABELS[row.operationalOutcome] ?? row.operationalOutcome}
-                    </p>
-
+                    {/* STT */}
+                    <div className="self-center"><LatencyBadge ms={call.sttLatencyMs} /></div>
+                    {/* LLM */}
+                    <div className="self-center"><LatencyBadge ms={call.llmLatencyMs} /></div>
+                    {/* TTS */}
+                    <div className="self-center"><LatencyBadge ms={call.ttsFirstChunkMs} /></div>
                     {/* Duration */}
                     <p className="text-[11px] text-muted-foreground/50 self-center font-mono">
-                      {row.durationSeconds != null ? `${row.durationSeconds}s` : "—"}
+                      {fmtDuration(call.durationSeconds)}
                     </p>
-
-                    {/* Last Activity */}
-                    <p className="text-[11px] text-muted-foreground/40 self-center truncate">
-                      {relativeTime(row.lastActivityAt)}
+                    {/* Cost */}
+                    <p className="text-[11px] text-muted-foreground/40 self-center font-mono">
+                      {call.costCents != null ? `$${(call.costCents / 100).toFixed(3)}` : "—"}
                     </p>
                   </div>
                 ))
@@ -379,43 +348,36 @@ export default function CommandCenterPage() {
             </div>
           </div>
 
-          {/* ── System Activity Stream ──────────────────────────────────── */}
-          <div className="flex flex-col gap-3 mt-2">
+          {/* ── System Event Log ──────────────────────────────────────────── */}
+          <div className="flex flex-col gap-3 mt-1">
             <div className="flex items-center gap-2">
               <Clock className="w-3.5 h-3.5 text-muted-foreground/40" />
-              <span className="text-[12px] font-semibold text-foreground/80">System Activity Stream</span>
-              {activityStream.isFetching && <RefreshCw className="w-3 h-3 animate-spin text-muted-foreground/30" />}
+              <span className="text-[12px] font-semibold text-foreground/80">System Event Log</span>
+              {activity.isFetching && <RefreshCw className="w-3 h-3 animate-spin text-muted-foreground/30" />}
             </div>
-
             <div className="rounded-xl border border-border bg-card overflow-hidden">
-              <div className="divide-y divide-border/40 max-h-[280px] overflow-y-auto">
-                {activityStream.isLoading ? (
+              <div className="divide-y divide-border/40 max-h-[220px] overflow-y-auto">
+                {activity.isLoading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <div key={i} className="flex items-center gap-3 px-4 py-2.5">
-                      <div className="h-3 w-10 rounded animate-pulse bg-muted shrink-0" />
+                      <div className="h-3 w-12 rounded animate-pulse bg-muted shrink-0" />
                       <div className="h-3 rounded animate-pulse bg-muted flex-1" />
                     </div>
                   ))
                 ) : events.length === 0 ? (
-                  <div className="flex items-center justify-center py-10 text-muted-foreground/30 text-[12px]">
-                    No activity yet
+                  <div className="flex items-center justify-center py-8 text-muted-foreground/30 text-[12px]">
+                    No events yet
                   </div>
                 ) : (
                   events.map(ev => (
-                    <div key={ev.id} className="flex items-start gap-3 px-4 py-2.5 hover:bg-accent/20 transition-colors">
-                      <span className="text-[10px] text-muted-foreground/30 font-mono shrink-0 pt-0.5 w-11">
+                    <div key={ev.id} className="flex items-center gap-3 px-4 py-2 hover:bg-accent/20 transition-colors">
+                      <span className="text-[10px] font-mono text-muted-foreground/30 shrink-0 w-16">
                         {shortTime(ev.createdAt)}
                       </span>
-                      <div className="flex flex-col gap-0.5 min-w-0">
-                        <p className="text-[11px] font-medium text-foreground/70 truncate">{ev.description}</p>
-                        {ev.resourceType && (
-                          <p className="text-[10px] text-muted-foreground/30 truncate">
-                            {ev.resourceType}{ev.resourceId ? ` #${ev.resourceId}` : ""}
-                          </p>
-                        )}
-                      </div>
-                      <span className="text-[10px] text-muted-foreground/30 shrink-0 ml-auto font-mono">
-                        {ev.type}
+                      <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", eventDot(ev.eventType))} />
+                      <p className="text-[11px] text-foreground/60 flex-1 truncate">{ev.description}</p>
+                      <span className="text-[10px] font-mono text-muted-foreground/30 shrink-0 ml-auto">
+                        {ev.eventType}
                       </span>
                     </div>
                   ))
@@ -425,92 +387,91 @@ export default function CommandCenterPage() {
           </div>
         </div>
 
-        {/* ── Right Panel ───────────────────────────────────────────────── */}
-        <div className="flex flex-col gap-4 w-72 shrink-0">
+        {/* ── Right panel ─────────────────────────────────────────────────── */}
+        <div className="flex flex-col gap-4 w-64 shrink-0">
 
-          {/* Queue Health */}
-          <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-3">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="w-3.5 h-3.5 text-muted-foreground/40" />
-              <span className="text-[12px] font-semibold text-foreground/80">Queue Health</span>
+          {/* Provider Health */}
+          <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-2">
+            <div className="flex items-center gap-2 mb-1">
+              <Layers className="w-3.5 h-3.5 text-muted-foreground/40" />
+              <span className="text-[12px] font-semibold text-foreground/80">Provider Health</span>
             </div>
-            <div className="flex flex-col gap-2.5">
-              <QueueBar label="Calling"   value={queueCalling}  total={queueTotal} color="bg-blue-500" />
-              <QueueBar label="Queued"    value={queuePending}  total={queueTotal} color="bg-zinc-500" />
-              <QueueBar label="Completed" value={queueComplete} total={queueTotal} color="bg-emerald-500" />
-              <QueueBar label="Failed"    value={queueFailed}   total={queueTotal} color="bg-red-500" />
-            </div>
-            {queueTotal > 0 && (
-              <p className="text-[10px] text-muted-foreground/30 text-right tabular-nums">
-                {queueTotal.toLocaleString()} leads total
-              </p>
+            {providers.isLoading ? (
+              Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="h-4 rounded animate-pulse bg-muted" />
+              ))
+            ) : allProviders.length === 0 ? (
+              <div className="flex items-center gap-2 py-3 text-muted-foreground/30 text-[11px]">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                No providers configured
+              </div>
+            ) : (
+              groupOrder
+                .filter(t => providerGroups[t]?.length)
+                .map(t => <ProviderRow key={t} providers={providerGroups[t]} />)
+            )}
+            {!providers.isLoading && allProviders.length > 0 && (
+              <div className="flex items-center justify-between mt-1 pt-2 border-t border-border/40">
+                <span className="text-[10px] text-muted-foreground/30">
+                  {allProviders.filter(p => p.isActive).length} active · {allProviders.filter(p => !p.isActive).length} inactive
+                </span>
+              </div>
             )}
           </div>
 
-          {/* Recent Bookings */}
-          <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-3">
-            <div className="flex items-center justify-between">
+          {/* Agent Status */}
+          <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-2">
+            <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2">
-                <CalendarDays className="w-3.5 h-3.5 text-muted-foreground/40" />
-                <span className="text-[12px] font-semibold text-foreground/80">Recent Bookings</span>
+                <Bot className="w-3.5 h-3.5 text-muted-foreground/40" />
+                <span className="text-[12px] font-semibold text-foreground/80">Agents</span>
               </div>
-              <span className="text-[11px] font-semibold tabular-nums text-emerald-400">
-                {k?.bookingsToday ?? 0} today
-              </span>
+              <div className="flex items-center gap-2 text-[10px]">
+                <span className="text-emerald-400 font-semibold">{allAgents.filter(a => a.status === "active").length} active</span>
+                <span className="text-muted-foreground/30">·</span>
+                <span className="text-zinc-500">{allAgents.filter(a => a.status !== "active").length} off</span>
+              </div>
             </div>
-            <div className="flex flex-col gap-0">
-              {rows
-                .filter(r => r.operationalOutcome === "booking_created")
-                .slice(0, 5)
-                .map(r => (
-                  <div key={r.leadId} className="flex items-center justify-between py-1.5 border-b border-border/40 last:border-0">
-                    <div className="min-w-0">
-                      <p className="text-[11px] font-medium text-foreground/70 truncate">{r.name ?? r.phone}</p>
-                      <p className="text-[10px] text-muted-foreground/40 truncate">{r.campaignName}</p>
-                    </div>
-                    <span className="text-[10px] text-muted-foreground/30 ml-2 shrink-0">
-                      {relativeTime(r.lastActivityAt)}
-                    </span>
-                  </div>
-                ))}
-              {rows.filter(r => r.operationalOutcome === "booking_created").length === 0 && (
-                <p className="text-[11px] text-muted-foreground/30 py-2">No bookings yet</p>
+            <div className="max-h-[240px] overflow-y-auto -mx-1 px-1">
+              {agents.isLoading ? (
+                Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="h-4 rounded animate-pulse bg-muted my-1.5" />
+                ))
+              ) : allAgents.length === 0 ? (
+                <p className="text-[11px] text-muted-foreground/30 py-2">No agents yet</p>
+              ) : (
+                allAgents.map(a => <AgentRow key={a.id} agent={a} />)
               )}
             </div>
           </div>
 
-          {/* Recent Transfers */}
-          <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <ArrowRightLeft className="w-3.5 h-3.5 text-muted-foreground/40" />
-                <span className="text-[12px] font-semibold text-foreground/80">Recent Transfers</span>
+          {/* Error Calls */}
+          {calls.filter(c => c.status === "failed").length > 0 && (
+            <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4 flex flex-col gap-2">
+              <div className="flex items-center gap-2 mb-1">
+                <XCircle className="w-3.5 h-3.5 text-red-400" />
+                <span className="text-[12px] font-semibold text-red-400/80">Failed Calls</span>
+                <span className="ml-auto text-[11px] font-semibold tabular-nums text-red-400">
+                  {calls.filter(c => c.status === "failed").length}
+                </span>
               </div>
-              <span className="text-[11px] font-semibold tabular-nums text-violet-400">
-                {k?.transfersToday ?? 0} today
-              </span>
-            </div>
-            <div className="flex flex-col gap-0">
-              {rows
-                .filter(r => r.operationalOutcome === "transfer_completed")
-                .slice(0, 5)
-                .map(r => (
-                  <div key={r.leadId} className="flex items-center justify-between py-1.5 border-b border-border/40 last:border-0">
-                    <div className="min-w-0">
-                      <p className="text-[11px] font-medium text-foreground/70 truncate">{r.name ?? r.phone}</p>
-                      <p className="text-[10px] text-muted-foreground/40 truncate">{r.campaignName}</p>
-                    </div>
-                    <span className="text-[10px] text-muted-foreground/30 ml-2 shrink-0">
-                      {relativeTime(r.lastActivityAt)}
-                    </span>
+              {calls
+                .filter(c => c.status === "failed")
+                .slice(0, 4)
+                .map(c => (
+                  <div key={c.id} className="flex flex-col gap-0.5 py-1.5 border-b border-red-500/10 last:border-0">
+                    <p className="text-[10px] font-mono text-muted-foreground/40 truncate">
+                      {c.executionId ?? `#${c.id}`}
+                    </p>
+                    <p className="text-[11px] text-foreground/60 truncate">{c.agentName}</p>
+                    {c.errorMessage && (
+                      <p className="text-[10px] text-red-400/70 truncate">{c.errorMessage}</p>
+                    )}
+                    <p className="text-[10px] text-muted-foreground/30">{relativeTime(c.createdAt)}</p>
                   </div>
                 ))}
-              {rows.filter(r => r.operationalOutcome === "transfer_completed").length === 0 && (
-                <p className="text-[11px] text-muted-foreground/30 py-2">No transfers yet</p>
-              )}
             </div>
-          </div>
-
+          )}
         </div>
       </div>
     </div>
