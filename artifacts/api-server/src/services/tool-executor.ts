@@ -29,6 +29,57 @@ import type { AgentTool, ToolDefinition } from "../orchestration/types.js";
 import { logger } from "../lib/logger.js";
 import type { TimeSlot } from "./scheduling/slot-engine.js";
 
+// ── Tool name sanitization ────────────────────────────────────────────────────
+
+/** Fallback name used when sanitization produces an empty string. */
+const FALLBACK_TOOL_NAME = "tool";
+
+/**
+ * Normalize an arbitrary, user-entered tool name into a function name that is
+ * valid across every LLM provider we support (Gemini, OpenAI, Anthropic, etc.).
+ *
+ * Gemini rejects an entire request with a 400 "Invalid function name" error if
+ * any `functionDeclarations[].name` contains spaces, non-ASCII characters (e.g.
+ * Tamil text), or other disallowed symbols. To stay safe across all providers we
+ * restrict to the common intersection: `[A-Za-z0-9_]`, must start with a letter
+ * or underscore, max 64 chars (OpenAI/Anthropic limit; Gemini allows 128).
+ *
+ * Deterministic + idempotent: the same input always maps to the same output, and
+ * sanitizing an already-valid name is a no-op. This lets us sanitize names both
+ * when building tool definitions (outbound) and when matching tool calls returned
+ * by the LLM (inbound) without drift.
+ */
+export function sanitizeToolName(name: string): string {
+  // Decompose accented characters then drop anything outside [A-Za-z0-9_].
+  let s = (name ?? "").normalize("NFKD").replace(/[^a-zA-Z0-9_]/g, "_");
+  // Collapse runs of underscores and trim leading/trailing ones.
+  s = s.replace(/_+/g, "_").replace(/^_+|_+$/g, "");
+  // Must start with a letter or underscore — prefix one if it starts with a digit.
+  if (/^[0-9]/.test(s)) s = "_" + s;
+  // Enforce the 64-char max (re-trim a trailing underscore left by the slice).
+  if (s.length > 64) s = s.slice(0, 64).replace(/_+$/g, "");
+  // Fall back to a safe default if nothing usable survived.
+  if (!s) s = FALLBACK_TOOL_NAME;
+  return s;
+}
+
+/**
+ * Find the tool an LLM invoked, matching against the same sanitized name that was
+ * sent in the outbound tool definitions. Tries the raw name first (valid
+ * snake_case tools behave exactly as before), then the sanitized forms so tools
+ * whose stored names contain spaces/non-ASCII still resolve to the right tool.
+ */
+export function matchToolByName<T extends { name: string }>(
+  tools: T[],
+  calledName: string,
+): T | undefined {
+  return (
+    tools.find((t) => t.name === calledName) ??
+    tools.find((t) => sanitizeToolName(t.name) === calledName) ??
+    tools.find((t) => sanitizeToolName(t.name) === sanitizeToolName(calledName))
+  );
+}
+
 // ── Tool definitions builder ──────────────────────────────────────────────────
 
 /**
@@ -49,7 +100,7 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
         },
       ];
 
-  return [
+  const defs: ToolDefinition[] = [
     ...builtInEndCall,
     ...tools.map((t): ToolDefinition => {
       if (t.type === "native_booking") {
@@ -222,6 +273,12 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
       };
     }),
   ];
+
+  // Normalize every function name to a provider-safe form before it reaches any
+  // LLM adapter. Done in one place so custom tools, native scheduling, transfers,
+  // webhook, and the built-in end_call all stay valid (e.g. Gemini 400 "Invalid
+  // function name" on spaces/non-ASCII names).
+  return defs.map((d) => ({ ...d, name: sanitizeToolName(d.name) }));
 }
 
 // ── Native scheduling executors ───────────────────────────────────────────────
@@ -244,7 +301,7 @@ export async function executeNativeBooking(
 
   try {
     const [agentCalendar] = await db
-      .select({ userId: schedulingCalendarsTable.userId })
+      .select({ id: schedulingCalendarsTable.id, userId: schedulingCalendarsTable.userId })
       .from(schedulingCalendarsTable)
       .where(eq(schedulingCalendarsTable.agentId, agentId));
     let authorizedUserId: string | null = null;
@@ -258,7 +315,24 @@ export async function executeNativeBooking(
       authorizedUserId = agentRow?.userId ?? null;
     }
 
-    const [eventType] = await db.select().from(eventTypesTable).where(eq(eventTypesTable.id, tool.eventTypeId));
+    // Always auto-resolve event type from agent's calendar first; legacy stored eventTypeId is a fallback only
+    let resolvedEventTypeId: number | undefined;
+    if (agentCalendar?.id) {
+      const [firstEt] = await db
+        .select({ id: eventTypesTable.id })
+        .from(eventTypesTable)
+        .where(and(eq(eventTypesTable.calendarId, agentCalendar.id), eq(eventTypesTable.isActive, true)))
+        .limit(1);
+      resolvedEventTypeId = firstEt?.id;
+    }
+    if (!resolvedEventTypeId && tool.eventTypeId) {
+      resolvedEventTypeId = tool.eventTypeId;
+    }
+    if (!resolvedEventTypeId) {
+      return JSON.stringify({ error: "no_event_type", message: "No event type configured for this agent's calendar. Go to Settings → Calendar to create one." });
+    }
+
+    const [eventType] = await db.select().from(eventTypesTable).where(eq(eventTypesTable.id, resolvedEventTypeId));
     if (!eventType || !eventType.isActive) {
       return "error: the appointment type is unavailable";
     }
@@ -273,7 +347,7 @@ export async function executeNativeBooking(
 
     if (authorizedUserId && calendar.userId !== authorizedUserId) {
       logger.warn(
-        { callId, eventTypeId: tool.eventTypeId, authorizedUserId, calendarUserId: calendar.userId },
+        { callId, eventTypeId: resolvedEventTypeId, authorizedUserId, calendarUserId: calendar.userId },
         "Native booking: event type ownership mismatch — rejected",
       );
       return "error: the appointment type is unavailable";
@@ -286,12 +360,12 @@ export async function executeNativeBooking(
       logger.info({ callId, preferredRaw, searchStart, minSlotStart }, "Native booking: preferred date resolved");
     }
     const searchEnd = new Date(searchStart.getTime() + 7 * 24 * 60 * 60 * 1000);
-    let slots = await getAvailableSlots(tool.eventTypeId, format(searchStart, "yyyy-MM-dd"), format(searchEnd, "yyyy-MM-dd"));
+    let slots = await getAvailableSlots(eventType.id, format(searchStart, "yyyy-MM-dd"), format(searchEnd, "yyyy-MM-dd"));
     if (minSlotStart) slots = slots.filter((s) => s.slotStart >= minSlotStart);
     if (timeFilter) slots = slots.filter(timeFilter);
     if (slots.length === 0) {
       const rangeDesc = preferredRaw ? `on or after "${preferredRaw}"` : "in the next 7 days";
-      logger.info({ callId, eventTypeId: tool.eventTypeId }, `Native booking: no available slots ${rangeDesc}`);
+      logger.info({ callId, eventTypeId: eventType.id }, `Native booking: no available slots ${rangeDesc}`);
       return `error: no available slots ${rangeDesc}`;
     }
 
@@ -454,7 +528,7 @@ export async function executeNativeCheckAvailability(
 
   try {
     const [agentCalendar] = await db
-      .select({ userId: schedulingCalendarsTable.userId })
+      .select({ id: schedulingCalendarsTable.id, userId: schedulingCalendarsTable.userId })
       .from(schedulingCalendarsTable)
       .where(eq(schedulingCalendarsTable.agentId, agentId));
     let authorizedUserId: string | null = null;
@@ -468,7 +542,24 @@ export async function executeNativeCheckAvailability(
       authorizedUserId = agentRow?.userId ?? null;
     }
 
-    const [eventType] = await db.select().from(eventTypesTable).where(eq(eventTypesTable.id, tool.eventTypeId));
+    // Always auto-resolve event type from agent's calendar first; legacy stored eventTypeId is a fallback only
+    let resolvedEventTypeId: number | undefined;
+    if (agentCalendar?.id) {
+      const [firstEt] = await db
+        .select({ id: eventTypesTable.id })
+        .from(eventTypesTable)
+        .where(and(eq(eventTypesTable.calendarId, agentCalendar.id), eq(eventTypesTable.isActive, true)))
+        .limit(1);
+      resolvedEventTypeId = firstEt?.id;
+    }
+    if (!resolvedEventTypeId && tool.eventTypeId) {
+      resolvedEventTypeId = tool.eventTypeId;
+    }
+    if (!resolvedEventTypeId) {
+      return JSON.stringify({ error: "no_event_type", message: "No event type configured for this agent's calendar. Go to Settings → Calendar to create one." });
+    }
+
+    const [eventType] = await db.select().from(eventTypesTable).where(eq(eventTypesTable.id, resolvedEventTypeId));
     if (!eventType || !eventType.isActive) {
       return "error: the appointment type is unavailable";
     }
@@ -480,7 +571,7 @@ export async function executeNativeCheckAvailability(
       return "error: the calendar is unavailable";
     }
     if (authorizedUserId && calendar.userId !== authorizedUserId) {
-      logger.warn({ callId, eventTypeId: tool.eventTypeId }, "Native check-availability: ownership mismatch — rejected");
+      logger.warn({ callId, eventTypeId: resolvedEventTypeId }, "Native check-availability: ownership mismatch — rejected");
       return "error: the appointment type is unavailable";
     }
 
@@ -488,7 +579,7 @@ export async function executeNativeCheckAvailability(
       ? parsePreferredDate(preferredRaw, calendar.timezone)
       : { searchStart: new Date(), minSlotStart: undefined, timeFilter: undefined };
     const searchEnd = new Date(searchStart.getTime() + 7 * 24 * 60 * 60 * 1000);
-    let slots = await getAvailableSlots(tool.eventTypeId, format(searchStart, "yyyy-MM-dd"), format(searchEnd, "yyyy-MM-dd"));
+    let slots = await getAvailableSlots(eventType.id, format(searchStart, "yyyy-MM-dd"), format(searchEnd, "yyyy-MM-dd"));
     if (minSlotStart) slots = slots.filter((s) => s.slotStart >= minSlotStart);
     if (timeFilter) slots = slots.filter(timeFilter);
 
