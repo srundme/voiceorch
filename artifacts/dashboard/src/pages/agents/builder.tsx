@@ -968,6 +968,32 @@ function VoiceTab({ form }: { form: any }) {
     }
   };
 
+  const previewVoiceControl = (
+    <div className="flex items-center gap-2 pt-1">
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        onClick={handlePreviewVoice}
+        disabled={!ttsVoice || previewState === "loading"}
+        className="h-9 text-sm gap-2 font-medium"
+      >
+        {previewState === "loading" ? (
+          <><Loader2 className="h-4 w-4 animate-spin" /> Generating…</>
+        ) : previewState === "playing" ? (
+          <><Square className="h-4 w-4" /> Stop</>
+        ) : (
+          <><Play className="h-4 w-4 fill-current" /> Preview Voice</>
+        )}
+      </Button>
+      {!ttsVoice && (
+        <span className="text-[10px] text-muted-foreground">
+          Select a voice to preview
+        </span>
+      )}
+    </div>
+  );
+
   return (
     <div className="relative p-6 overflow-y-auto h-full space-y-6">
 
@@ -1001,6 +1027,7 @@ function VoiceTab({ form }: { form: any }) {
                     ))}
                   </SelectContent>
                 </Select>
+                {previewVoiceControl}
               </FormItem>
             )} />
           )}
@@ -1054,34 +1081,10 @@ function VoiceTab({ form }: { form: any }) {
                     ? "Find voice IDs in the ElevenLabs Voice Lab"
                     : "Provider-specific voice identifier"}
               </FormDescription>
+              {ttsVoiceOptsV.length === 0 && previewVoiceControl}
             </FormItem>
           )} />
         )}
-
-        {/* Preview the currently selected voice */}
-        <div className="flex items-center gap-3 pt-1">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handlePreviewVoice}
-            disabled={!ttsVoice || previewState === "loading"}
-            className="h-9 text-sm gap-2"
-          >
-            {previewState === "loading" ? (
-              <><Loader2 className="h-4 w-4 animate-spin" /> Generating…</>
-            ) : previewState === "playing" ? (
-              <><Square className="h-4 w-4" /> Stop</>
-            ) : (
-              <><Volume2 className="h-4 w-4" /> Preview Voice</>
-            )}
-          </Button>
-          <span className="text-[10px] text-muted-foreground">
-            {ttsVoice
-              ? "Plays a short sample using the selected voice"
-              : "Select a voice to preview"}
-          </span>
-        </div>
       </div>
 
       {/* ── Behavioral settings ── */}
