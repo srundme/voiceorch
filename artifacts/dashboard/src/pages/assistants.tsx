@@ -1382,6 +1382,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
     description: string;
     preToolMessage: string;
   }>(null);
+  const lastNativeBookingRef = useRef<{ calendarId: number | null; eventTypeId: number | null }>({ calendarId: null, eventTypeId: null });
   const modalParams = bookingModal?.calendarId ? { calendarId: bookingModal.calendarId } : undefined;
   const { data: modalEventTypes, isLoading: modalEventTypesLoading } = useListEventTypes(
     modalParams,
@@ -2315,7 +2316,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                   { label: "Call Transfer",    icon: PhoneForwarded, onClick: () => { setAgentTools(prev => [...prev, { type: "call_transfer" as const, name: "transfer_to_human", description: "Transfer the call to a human agent when the caller requests escalation.", transferTo: "", warmHandoffMessage: "" }]); setDirty(true); } },
                   { label: "End Call",         icon: PhoneOff,       onClick: () => { setAgentTools(prev => [...prev, { type: "end_call" as const, name: "end_call", description: "End the call when the conversation is complete.", goodbyeMessage: "" }]); setDirty(true); } },
                   { label: "Cal.com",          icon: Clock,          onClick: () => { setAgentTools(prev => [...prev, { type: "cal_com" as const, name: "book_appointment", description: "Book an appointment on Cal.com when the caller wants to schedule.", apiKey: "", eventTypeId: 0, timezone: "UTC" }]); setDirty(true); } },
-                  { label: "Book Appointment", icon: CalendarPlus,   onClick: () => setBookingModal({ calendarId: null, eventTypeId: null, timezone: "UTC", taskName: "book_appointment", description: "Book an appointment when the caller wants to schedule a meeting.", preToolMessage: "" }) },
+                  { label: "Book Appointment", icon: CalendarPlus,   onClick: () => { const existing = agentTools.find(t => t.type === "native_booking"); const last = existing ? { calendarId: existing.calendarId ?? null, eventTypeId: existing.eventTypeId ?? null } : lastNativeBookingRef.current; setBookingModal({ calendarId: last.calendarId, eventTypeId: last.eventTypeId, timezone: "UTC", taskName: "book_appointment", description: "Book an appointment when the caller wants to schedule a meeting.", preToolMessage: "" }); } },
                   { label: "Availability",     icon: CalendarCheck,  onClick: () => { setAgentTools(prev => [...prev, { type: "native_check_availability" as const, name: "check_availability", description: "Check available slots when the caller asks what times are open.", eventTypeId: 0 }]); setDirty(true); } },
                   { label: "Reschedule",       icon: CalendarClock,  onClick: () => { setAgentTools(prev => [...prev, { type: "native_reschedule" as const, name: "reschedule_appointment", description: "Reschedule an existing booking when the caller provides their booking reference.", timezone: "UTC" }]); setDirty(true); } },
                   { label: "Cancel Booking",   icon: CalendarX,      onClick: () => { setAgentTools(prev => [...prev, { type: "native_cancel" as const, name: "cancel_appointment", description: "Cancel an existing booking when the caller provides their booking reference." }]); setDirty(true); } },
@@ -2357,7 +2358,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                           : tool.type === "native_list_bookings" ? "Look Up Booking" : "Custom Function"}
                       </span>
                     </div>
-                    <button type="button" onClick={() => { setAgentTools(prev => prev.filter((_, i) => i !== idx)); setDirty(true); }} className="text-muted-foreground hover:text-foreground transition-colors">
+                    <button type="button" onClick={() => { const removing = agentTools[idx]; if (removing.type === "native_booking") { lastNativeBookingRef.current = { calendarId: removing.calendarId ?? null, eventTypeId: removing.eventTypeId ?? null }; } setAgentTools(prev => prev.filter((_, i) => i !== idx)); setDirty(true); }} className="text-muted-foreground hover:text-foreground transition-colors">
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
