@@ -50,6 +50,7 @@ export const ListAgentsResponseItem = zod.object({
   "temperature": zod.number().nullish(),
   "maxDuration": zod.number().nullish().describe('Max call duration in seconds'),
   "greetingMessage": zod.string().nullish().describe('First thing the agent says when a call connects. If blank the LLM generates an opener.'),
+  "firstSpeaker": zod.union([zod.literal('assistant'),zod.literal('user'),zod.literal(null)]).nullish().describe('Who speaks first when a call connects. \"assistant\" plays the greeting (or LLM opener); \"user\" keeps the agent silent until the caller speaks.'),
   "endCallPhrases": zod.string().nullish().describe('Comma-separated phrases that trigger hangup (e.g. \"goodbye,bye,thanks for calling\")'),
   "silenceTimeoutSeconds": zod.number().nullish().describe('Hang up automatically after this many seconds of caller silence'),
   "language": zod.string().nullish().describe('Primary language code passed to ASR \/ TTS (e.g. en-US, es, fr, hi)'),
@@ -160,6 +161,7 @@ export const CreateAgentBody = zod.object({
   "temperature": zod.number().optional(),
   "maxDuration": zod.number().optional(),
   "greetingMessage": zod.string().optional(),
+  "firstSpeaker": zod.enum(['assistant', 'user']).optional().describe('Who speaks first when a call connects. \"assistant\" plays the greeting (or LLM opener); \"user\" keeps the agent silent until the caller speaks.'),
   "endCallPhrases": zod.string().optional(),
   "silenceTimeoutSeconds": zod.number().optional(),
   "language": zod.string().optional(),
@@ -250,6 +252,7 @@ export const GetAgentResponse = zod.object({
   "temperature": zod.number().nullish(),
   "maxDuration": zod.number().nullish().describe('Max call duration in seconds'),
   "greetingMessage": zod.string().nullish().describe('First thing the agent says when a call connects. If blank the LLM generates an opener.'),
+  "firstSpeaker": zod.union([zod.literal('assistant'),zod.literal('user'),zod.literal(null)]).nullish().describe('Who speaks first when a call connects. \"assistant\" plays the greeting (or LLM opener); \"user\" keeps the agent silent until the caller speaks.'),
   "endCallPhrases": zod.string().nullish().describe('Comma-separated phrases that trigger hangup (e.g. \"goodbye,bye,thanks for calling\")'),
   "silenceTimeoutSeconds": zod.number().nullish().describe('Hang up automatically after this many seconds of caller silence'),
   "language": zod.string().nullish().describe('Primary language code passed to ASR \/ TTS (e.g. en-US, es, fr, hi)'),
@@ -363,6 +366,7 @@ export const UpdateAgentBody = zod.object({
   "temperature": zod.number().optional(),
   "maxDuration": zod.number().optional(),
   "greetingMessage": zod.string().optional(),
+  "firstSpeaker": zod.enum(['assistant', 'user']).optional().describe('Who speaks first when a call connects. \"assistant\" plays the greeting (or LLM opener); \"user\" keeps the agent silent until the caller speaks.'),
   "endCallPhrases": zod.string().optional(),
   "silenceTimeoutSeconds": zod.number().optional(),
   "language": zod.string().optional(),
@@ -458,6 +462,7 @@ export const UpdateAgentResponse = zod.object({
   "temperature": zod.number().nullish(),
   "maxDuration": zod.number().nullish().describe('Max call duration in seconds'),
   "greetingMessage": zod.string().nullish().describe('First thing the agent says when a call connects. If blank the LLM generates an opener.'),
+  "firstSpeaker": zod.union([zod.literal('assistant'),zod.literal('user'),zod.literal(null)]).nullish().describe('Who speaks first when a call connects. \"assistant\" plays the greeting (or LLM opener); \"user\" keeps the agent silent until the caller speaks.'),
   "endCallPhrases": zod.string().nullish().describe('Comma-separated phrases that trigger hangup (e.g. \"goodbye,bye,thanks for calling\")'),
   "silenceTimeoutSeconds": zod.number().nullish().describe('Hang up automatically after this many seconds of caller silence'),
   "language": zod.string().nullish().describe('Primary language code passed to ASR \/ TTS (e.g. en-US, es, fr, hi)'),
@@ -576,6 +581,7 @@ export const ToggleAgentResponse = zod.object({
   "temperature": zod.number().nullish(),
   "maxDuration": zod.number().nullish().describe('Max call duration in seconds'),
   "greetingMessage": zod.string().nullish().describe('First thing the agent says when a call connects. If blank the LLM generates an opener.'),
+  "firstSpeaker": zod.union([zod.literal('assistant'),zod.literal('user'),zod.literal(null)]).nullish().describe('Who speaks first when a call connects. \"assistant\" plays the greeting (or LLM opener); \"user\" keeps the agent silent until the caller speaks.'),
   "endCallPhrases": zod.string().nullish().describe('Comma-separated phrases that trigger hangup (e.g. \"goodbye,bye,thanks for calling\")'),
   "silenceTimeoutSeconds": zod.number().nullish().describe('Hang up automatically after this many seconds of caller silence'),
   "language": zod.string().nullish().describe('Primary language code passed to ASR \/ TTS (e.g. en-US, es, fr, hi)'),
@@ -698,6 +704,87 @@ export const GetAgentSnapserveExecutionsResponse = zod.object({
   "hangup_provider_code": zod.string().nullish()
 }).optional()
 })).optional()
+})
+
+
+/**
+ * @summary List all versions for an agent
+ */
+export const ListAgentVersionsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListAgentVersionsResponseItem = zod.object({
+  "id": zod.number(),
+  "agentId": zod.number(),
+  "userId": zod.string(),
+  "versionNumber": zod.string().describe('Auto-assigned version label, e.g. v1, v2, v3'),
+  "versionName": zod.string(),
+  "commitDescription": zod.string(),
+  "releaseNotes": zod.string().nullish(),
+  "status": zod.enum(['draft', 'published', 'production', 'archived', 'restored', 'deprecated']),
+  "snapshot": zod.record(zod.string(), zod.unknown()).describe('Full copy of all agent columns at publish time'),
+  "publishedBy": zod.string().nullish(),
+  "restoredFromVersionId": zod.number().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+export const ListAgentVersionsResponse = zod.array(ListAgentVersionsResponseItem)
+
+
+/**
+ * @summary Publish a new version snapshot of the agent
+ */
+export const PublishAgentVersionParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const publishAgentVersionBodyVersionNameMax = 120;
+
+export const publishAgentVersionBodyCommitDescriptionMax = 500;
+
+export const publishAgentVersionBodyReleaseNotesMax = 2000;
+
+
+
+export const PublishAgentVersionBody = zod.object({
+  "versionName": zod.string().min(1).max(publishAgentVersionBodyVersionNameMax),
+  "commitDescription": zod.string().min(1).max(publishAgentVersionBodyCommitDescriptionMax),
+  "releaseNotes": zod.string().max(publishAgentVersionBodyReleaseNotesMax).optional()
+})
+
+
+/**
+ * @summary Fetch a single agent version snapshot
+ */
+export const GetAgentVersionParams = zod.object({
+  "id": zod.coerce.number(),
+  "versionId": zod.coerce.number()
+})
+
+export const GetAgentVersionResponse = zod.object({
+  "id": zod.number(),
+  "agentId": zod.number(),
+  "userId": zod.string(),
+  "versionNumber": zod.string().describe('Auto-assigned version label, e.g. v1, v2, v3'),
+  "versionName": zod.string(),
+  "commitDescription": zod.string(),
+  "releaseNotes": zod.string().nullish(),
+  "status": zod.enum(['draft', 'published', 'production', 'archived', 'restored', 'deprecated']),
+  "snapshot": zod.record(zod.string(), zod.unknown()).describe('Full copy of all agent columns at publish time'),
+  "publishedBy": zod.string().nullish(),
+  "restoredFromVersionId": zod.number().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary Create a new draft by restoring a previous version snapshot
+ */
+export const RestoreAgentVersionParams = zod.object({
+  "id": zod.coerce.number(),
+  "versionId": zod.coerce.number()
 })
 
 
@@ -5601,5 +5688,178 @@ export const PendriveArchiveResponse = zod.object({
   "factsExtracted": zod.number(),
   "episodeId": zod.number()
 })
+
+
+/**
+ * @summary Start or continue a manual chat turn (SSE stream)
+ */
+export const StartSimulationChatBody = zod.object({
+  "agent_id": zod.number(),
+  "run_id": zod.number().nullish(),
+  "message": zod.string()
+})
+
+
+/**
+ * @summary Start a scenario simulation run and stream progress via SSE
+ */
+export const startScenarioStreamBodyMaxTurnsDefault = 20;
+
+export const StartScenarioStreamBody = zod.object({
+  "test_case_id": zod.number(),
+  "max_turns": zod.number().default(startScenarioStreamBodyMaxTurnsDefault)
+})
+
+
+/**
+ * @summary List test cases for an agent
+ */
+export const ListSimulationTestCasesQueryParams = zod.object({
+  "agent_id": zod.coerce.number()
+})
+
+export const ListSimulationTestCasesResponseItem = zod.object({
+  "id": zod.number(),
+  "agentId": zod.number(),
+  "userId": zod.string(),
+  "name": zod.string(),
+  "personaPrompt": zod.string(),
+  "goal": zod.string(),
+  "successCriteria": zod.array(zod.string()),
+  "variables": zod.object({
+
+}).passthrough().nullish(),
+  "kbSourceId": zod.number().nullish(),
+  "maxTurns": zod.number(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string().optional(),
+  "lastRun": zod.object({
+  "status": zod.string().optional(),
+  "score": zod.number().nullish(),
+  "createdAt": zod.string().optional()
+}).nullish()
+})
+export const ListSimulationTestCasesResponse = zod.array(ListSimulationTestCasesResponseItem)
+
+
+/**
+ * @summary Create a test case
+ */
+export const createSimulationTestCaseBodyMaxTurnsDefault = 20;
+
+export const CreateSimulationTestCaseBody = zod.object({
+  "agent_id": zod.number(),
+  "name": zod.string(),
+  "persona_prompt": zod.string(),
+  "goal": zod.string(),
+  "success_criteria": zod.array(zod.string()).optional(),
+  "variables": zod.object({
+
+}).passthrough().optional(),
+  "kb_source_id": zod.number().nullish(),
+  "max_turns": zod.number().default(createSimulationTestCaseBodyMaxTurnsDefault)
+})
+
+
+/**
+ * @summary Delete a test case
+ */
+export const DeleteSimulationTestCaseParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary List simulation runs for an agent
+ */
+export const ListSimulationRunsQueryParams = zod.object({
+  "agent_id": zod.coerce.number()
+})
+
+export const ListSimulationRunsResponseItem = zod.object({
+  "id": zod.number(),
+  "agentId": zod.number(),
+  "testCaseId": zod.number().nullish(),
+  "userId": zod.string(),
+  "status": zod.string(),
+  "score": zod.number().nullish(),
+  "result": zod.object({
+
+}).passthrough().nullish(),
+  "startedAt": zod.string().nullish(),
+  "completedAt": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+export const ListSimulationRunsResponse = zod.array(ListSimulationRunsResponseItem)
+
+
+/**
+ * @summary Start a scenario simulation run
+ */
+export const createSimulationRunBodyMaxTurnsDefault = 20;
+
+export const CreateSimulationRunBody = zod.object({
+  "test_case_id": zod.number(),
+  "max_turns": zod.number().default(createSimulationRunBodyMaxTurnsDefault)
+})
+
+
+/**
+ * @summary Get run status and messages
+ */
+export const GetSimulationRunParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetSimulationRunResponse = zod.object({
+  "id": zod.number(),
+  "agentId": zod.number(),
+  "testCaseId": zod.number().nullish(),
+  "userId": zod.string(),
+  "status": zod.string(),
+  "score": zod.number().nullish(),
+  "result": zod.object({
+
+}).passthrough().nullish(),
+  "startedAt": zod.string().nullish(),
+  "completedAt": zod.string().nullish(),
+  "createdAt": zod.string()
+}).and(zod.object({
+  "messages": zod.array(zod.object({
+  "id": zod.number(),
+  "simulationRunId": zod.number(),
+  "role": zod.string(),
+  "content": zod.string(),
+  "metadata": zod.object({
+
+}).passthrough().nullish(),
+  "createdAt": zod.string()
+})).optional()
+}))
+
+
+/**
+ * @summary Download run report as JSON
+ */
+export const DownloadSimulationReportParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DownloadSimulationReportResponse = zod.object({
+
+}).passthrough()
+
+
+/**
+ * @summary List built-in persona templates
+ */
+export const ListSimulationTemplatesResponseItem = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "personaPrompt": zod.string(),
+  "goal": zod.string(),
+  "successCriteria": zod.array(zod.string())
+})
+export const ListSimulationTemplatesResponse = zod.array(ListSimulationTemplatesResponseItem)
 
 

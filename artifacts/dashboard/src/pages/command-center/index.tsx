@@ -183,6 +183,7 @@ function AgentRow({ agent }: { agent: Agent }) {
 /* ── Page ──────────────────────────────────────────────────────────────────── */
 
 export default function CommandCenterPage() {
+  const [, navigate] = useLocation();
   const stats = useGetDashboardStats({ query: { queryKey: getGetDashboardStatsQueryKey(), refetchInterval: 15_000, staleTime: 12_000 } });
   const callsQ = useListCalls(undefined, { query: { queryKey: getListCallsQueryKey(), refetchInterval: 10_000, staleTime: 8_000 } });
   const providers = useListProviders({ query: { queryKey: getListProvidersQueryKey(), refetchInterval: 30_000, staleTime: 25_000 } });

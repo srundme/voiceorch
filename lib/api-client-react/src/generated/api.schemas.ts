@@ -204,6 +204,59 @@ export interface AmbientSoundOption {
   name: string;
 }
 
+export type AgentVersionStatus = typeof AgentVersionStatus[keyof typeof AgentVersionStatus];
+
+
+export const AgentVersionStatus = {
+  draft: 'draft',
+  published: 'published',
+  production: 'production',
+  archived: 'archived',
+  restored: 'restored',
+  deprecated: 'deprecated',
+} as const;
+
+/**
+ * Full copy of all agent columns at publish time
+ */
+export type AgentVersionSnapshot = { [key: string]: unknown };
+
+export interface AgentVersion {
+  id: number;
+  agentId: number;
+  userId: string;
+  /** Auto-assigned version label, e.g. v1, v2, v3 */
+  versionNumber: string;
+  versionName: string;
+  commitDescription: string;
+  /** @nullable */
+  releaseNotes?: string | null;
+  status: AgentVersionStatus;
+  /** Full copy of all agent columns at publish time */
+  snapshot: AgentVersionSnapshot;
+  /** @nullable */
+  publishedBy?: string | null;
+  /** @nullable */
+  restoredFromVersionId?: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PublishAgentVersionBody {
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  versionName: string;
+  /**
+     * @minLength 1
+     * @maxLength 500
+     */
+  commitDescription: string;
+  /** @maxLength 2000 */
+  releaseNotes?: string;
+}
+
 /**
  * managed = platform master keys; byop = user-supplied keys
  * @nullable
@@ -257,6 +310,18 @@ export type AgentAsrFallbackProvidersItem = {
   /** @nullable */
   model?: string | null;
 };
+
+/**
+ * Who speaks first when a call connects. "assistant" plays the greeting (or LLM opener); "user" keeps the agent silent until the caller speaks.
+ * @nullable
+ */
+export type AgentFirstSpeaker = typeof AgentFirstSpeaker[keyof typeof AgentFirstSpeaker] | null;
+
+
+export const AgentFirstSpeaker = {
+  assistant: 'assistant',
+  user: 'user',
+} as const;
 
 /**
  * Advanced per-tab configuration (LLM params, engine, call, inbound, WhatsApp, analytics)
@@ -356,6 +421,11 @@ export interface Agent {
      * @nullable
      */
   greetingMessage?: string | null;
+  /**
+     * Who speaks first when a call connects. "assistant" plays the greeting (or LLM opener); "user" keeps the agent silent until the caller speaks.
+     * @nullable
+     */
+  firstSpeaker?: AgentFirstSpeaker;
   /**
      * Comma-separated phrases that trigger hangup (e.g. "goodbye,bye,thanks for calling")
      * @nullable
@@ -539,6 +609,17 @@ export type AgentInputAsrFallbackProvidersItem = {
 };
 
 /**
+ * Who speaks first when a call connects. "assistant" plays the greeting (or LLM opener); "user" keeps the agent silent until the caller speaks.
+ */
+export type AgentInputFirstSpeaker = typeof AgentInputFirstSpeaker[keyof typeof AgentInputFirstSpeaker];
+
+
+export const AgentInputFirstSpeaker = {
+  assistant: 'assistant',
+  user: 'user',
+} as const;
+
+/**
  * Advanced per-tab configuration
  */
 export type AgentInputAgentConfig = { [key: string]: unknown };
@@ -587,6 +668,8 @@ export interface AgentInput {
   temperature?: number;
   maxDuration?: number;
   greetingMessage?: string;
+  /** Who speaks first when a call connects. "assistant" plays the greeting (or LLM opener); "user" keeps the agent silent until the caller speaks. */
+  firstSpeaker?: AgentInputFirstSpeaker;
   endCallPhrases?: string;
   silenceTimeoutSeconds?: number;
   language?: string;
@@ -653,6 +736,17 @@ export type AgentUpdateAsrFallbackProvidersItem = {
 };
 
 /**
+ * Who speaks first when a call connects. "assistant" plays the greeting (or LLM opener); "user" keeps the agent silent until the caller speaks.
+ */
+export type AgentUpdateFirstSpeaker = typeof AgentUpdateFirstSpeaker[keyof typeof AgentUpdateFirstSpeaker];
+
+
+export const AgentUpdateFirstSpeaker = {
+  assistant: 'assistant',
+  user: 'user',
+} as const;
+
+/**
  * Advanced per-tab configuration
  */
 export type AgentUpdateAgentConfig = { [key: string]: unknown };
@@ -696,6 +790,8 @@ export interface AgentUpdate {
   temperature?: number;
   maxDuration?: number;
   greetingMessage?: string;
+  /** Who speaks first when a call connects. "assistant" plays the greeting (or LLM opener); "user" keeps the agent silent until the caller speaks. */
+  firstSpeaker?: AgentUpdateFirstSpeaker;
   endCallPhrases?: string;
   silenceTimeoutSeconds?: number;
   language?: string;
@@ -3910,6 +4006,104 @@ export interface PendriveCallerList {
 }
 
 /**
+ * @nullable
+ */
+export type SimulationTestCaseVariables = { [key: string]: unknown } | null;
+
+/**
+ * @nullable
+ */
+export type SimulationTestCaseLastRun = {
+  status?: string;
+  /** @nullable */
+  score?: number | null;
+  createdAt?: string;
+} | null;
+
+export interface SimulationTestCase {
+  id: number;
+  agentId: number;
+  userId: string;
+  name: string;
+  personaPrompt: string;
+  goal: string;
+  successCriteria: string[];
+  /** @nullable */
+  variables?: SimulationTestCaseVariables;
+  /** @nullable */
+  kbSourceId?: number | null;
+  maxTurns: number;
+  createdAt: string;
+  updatedAt?: string;
+  /** @nullable */
+  lastRun?: SimulationTestCaseLastRun;
+}
+
+export type SimulationTestCaseInputVariables = { [key: string]: unknown };
+
+export interface SimulationTestCaseInput {
+  agent_id: number;
+  name: string;
+  persona_prompt: string;
+  goal: string;
+  success_criteria?: string[];
+  variables?: SimulationTestCaseInputVariables;
+  /** @nullable */
+  kb_source_id?: number | null;
+  max_turns?: number;
+}
+
+/**
+ * @nullable
+ */
+export type SimulationRunResult = { [key: string]: unknown } | null;
+
+export interface SimulationRun {
+  id: number;
+  agentId: number;
+  /** @nullable */
+  testCaseId?: number | null;
+  userId: string;
+  status: string;
+  /** @nullable */
+  score?: number | null;
+  /** @nullable */
+  result?: SimulationRunResult;
+  /** @nullable */
+  startedAt?: string | null;
+  /** @nullable */
+  completedAt?: string | null;
+  createdAt: string;
+}
+
+/**
+ * @nullable
+ */
+export type SimulationMessageMetadata = { [key: string]: unknown } | null;
+
+export interface SimulationMessage {
+  id: number;
+  simulationRunId: number;
+  role: string;
+  content: string;
+  /** @nullable */
+  metadata?: SimulationMessageMetadata;
+  createdAt: string;
+}
+
+export type SimulationRunDetail = SimulationRun & {
+  messages?: SimulationMessage[];
+};
+
+export interface SimulationTemplate {
+  id: string;
+  name: string;
+  personaPrompt: string;
+  goal: string;
+  successCriteria: string[];
+}
+
+/**
  * Platform admin token (matches ADMIN_TOKEN env var).
  */
 export type AdminTokenParameter = string;
@@ -4482,4 +4676,31 @@ export type GetPendriveContextParams = {
 agentId: number;
 phoneNumber: string;
 };
+
+export type StartSimulationChatBody = {
+  agent_id: number;
+  /** @nullable */
+  run_id?: number | null;
+  message: string;
+};
+
+export type StartScenarioStreamBody = {
+  test_case_id: number;
+  max_turns?: number;
+};
+
+export type ListSimulationTestCasesParams = {
+agent_id: number;
+};
+
+export type ListSimulationRunsParams = {
+agent_id: number;
+};
+
+export type CreateSimulationRunBody = {
+  test_case_id: number;
+  max_turns?: number;
+};
+
+export type DownloadSimulationReport200 = { [key: string]: unknown };
 
