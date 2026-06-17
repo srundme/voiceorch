@@ -59,7 +59,7 @@ function isWsRateLimited(ip: string): boolean {
   return entry.count > WS_RATE_MAX_PER_MIN;
 }
 
-server.on("upgrade", (request, socket, head) => {
+server.on("upgrade", (request, socket, head) => { void (async () => {
   const url = request.url ?? "";
 
   // Match /api/ws/<provider>/<agentId>[?pt=1]
@@ -107,6 +107,25 @@ server.on("upgrade", (request, socket, head) => {
       socket.destroy();
       return;
     }
+    // Verify the authenticated user actually owns this agent — prevents one
+    // tenant from burning another tenant's API keys by guessing agentIds.
+    try {
+      const [agent] = await db
+        .select({ userId: agentsTable.userId })
+        .from(agentsTable)
+        .where(eq(agentsTable.id, agentId));
+      if (!agent || agent.userId !== payload.sub) {
+        logger.warn({ agentId, sub: payload.sub, agentUserId: agent?.userId }, "Webcall WebSocket rejected: agent ownership mismatch");
+        socket.write("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n");
+        socket.destroy();
+        return;
+      }
+    } catch (err) {
+      logger.error({ err, agentId }, "Webcall ownership check failed");
+      socket.write("HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n");
+      socket.destroy();
+      return;
+    }
   }
 
   wss.handleUpgrade(request, socket, head, (ws: import("ws").WebSocket) => {
@@ -118,7 +137,7 @@ server.on("upgrade", (request, socket, head) => {
       case "webcall":  void handleWebCallWebSocket(ws, agentId, callerId, callbackId, promptVariables);                              break;
     }
   });
-});
+})(); });
 
 /**
  * One-shot idempotent migration: upgrade agents still using the legacy
