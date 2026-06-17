@@ -70,6 +70,12 @@ describe("buildSchema", () => {
     const schema = buildSchema(cfg) as any;
     expect(schema.additionalProperties).toBe(false);
   });
+
+  it("requires every property key (OpenAI strict-mode compatible)", () => {
+    const schema = buildSchema(cfgWithDomain) as any;
+    const required: string[] = schema.required;
+    expect(required).toEqual(expect.arrayContaining(Object.keys(schema.properties)));
+  });
 });
 
 // ── buildPrompt ───────────────────────────────────────────────────────────────
@@ -104,6 +110,16 @@ describe("buildPrompt", () => {
   it("does not include domain instructions when empty", () => {
     const prompt = buildPrompt(cfg);
     expect(prompt).not.toContain("domain-specific");
+  });
+
+  it("instructs the model to emit the literal output keys", () => {
+    const prompt = buildPrompt(cfg);
+    expect(prompt).toContain("OUTPUT FORMAT");
+    expect(prompt).toContain('"primary"');
+    expect(prompt).toContain('"sub"');
+    expect(prompt).toContain('"confidence"');
+    // category keys are listed as the allowed values for primary
+    expect(prompt).toContain('"SALE_CLOSED"');
   });
 });
 
@@ -227,5 +243,44 @@ describe("validate", () => {
     const out = { primary: "NOT_INTERESTED", sub: "no_need", confidence: 0.6, evidence: "e", summary: "s" };
     const result = validate(cfg, out, []);
     expect(result.needsReview).toBe(true);
+  });
+
+  // ── casing / whitespace normalization ───────────────────────────────────────
+
+  const singleCat: DispositionConfig = {
+    agentId: 2,
+    taxonomy: { intent: ["interested", "not interested", "partially interested"] },
+    domainFields: [],
+    rules: [],
+  };
+
+  it("normalizes a wrong-case primary back to the configured taxonomy key", () => {
+    const out = { primary: "Intent", sub: "interested", confidence: 0.95, evidence: "yes", summary: "s" };
+    const result = validate(singleCat, out, []);
+    expect(result.primary).toBe("intent"); // normalized to configured key casing
+    expect(result.sub).toBe("interested");
+    expect(result.confidence).toBe(0.95); // not penalized — it was a valid match
+  });
+
+  it("trims surrounding whitespace on primary and sub", () => {
+    const out = { primary: "  intent ", sub: " interested  ", confidence: 0.9, evidence: "e", summary: "s" };
+    const result = validate(singleCat, out, []);
+    expect(result.primary).toBe("intent");
+    expect(result.sub).toBe("interested");
+  });
+
+  it("normalizes a wrong-case sub back to the configured value without penalty", () => {
+    const out = { primary: "intent", sub: "Not Interested", confidence: 0.8, evidence: "e", summary: "s" };
+    const result = validate(singleCat, out, []);
+    expect(result.sub).toBe("not interested");
+    expect(result.confidence).toBe(0.8);
+  });
+
+  it("snaps an out-of-list sub on a valid category to a non-empty first sub", () => {
+    const out = { primary: "intent", sub: "totally_made_up", confidence: 0.9, evidence: "e", summary: "s" };
+    const result = validate(singleCat, out, []);
+    expect(result.sub).toBe("interested"); // first valid sub
+    expect(result.sub).not.toBe("");
+    expect(result.confidence).toBeLessThanOrEqual(0.5);
   });
 });

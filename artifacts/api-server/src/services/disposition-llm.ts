@@ -19,6 +19,17 @@ async function getSetting(key: string): Promise<string | null> {
   return row?.value ?? null;
 }
 
+/**
+ * Appends the JSON Schema to the system prompt so providers that only support
+ * `json_object` mode (Groq/Qwen, Sarvam) still emit the exact expected keys.
+ */
+function withSchemaInstruction(systemPrompt: string, schema: Record<string, unknown>): string {
+  return `${systemPrompt}
+
+Your JSON response MUST conform exactly to this JSON Schema (use these exact top-level keys, no others):
+${JSON.stringify(schema)}`;
+}
+
 class OpenAIDispositionLLM implements DispositionLLM {
   private client: OpenAI;
   private model: string;
@@ -30,13 +41,18 @@ class OpenAIDispositionLLM implements DispositionLLM {
 
   async extract(
     systemPrompt: string,
-    _schema: Record<string, unknown>,
+    schema: Record<string, unknown>,
     transcript: string,
   ): Promise<Record<string, unknown>> {
+    // OpenAI supports strict structured output — constrain the model to the
+    // built JSON Schema so it must emit the exact `primary`/`sub` keys.
     const response = await this.client.chat.completions.create({
       model: this.model,
       temperature: 0,
-      response_format: { type: "json_object" },
+      response_format: {
+        type: "json_schema",
+        json_schema: { name: "disposition", strict: true, schema },
+      },
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: `TRANSCRIPT:\n${transcript}` },
@@ -61,17 +77,18 @@ class QwenDispositionLLM implements DispositionLLM {
 
   async extract(
     systemPrompt: string,
-    _schema: Record<string, unknown>,
+    schema: Record<string, unknown>,
     transcript: string,
   ): Promise<Record<string, unknown>> {
     // Prepend /no_think to disable Qwen3 extended reasoning — we only need the
-    // structured JSON, not a reasoning chain.
+    // structured JSON, not a reasoning chain. Groq json_object mode does not
+    // enforce a schema, so the schema is embedded in the prompt instead.
     const response = await this.client.chat.completions.create({
       model: this.model,
       temperature: 0,
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: `/no_think\n${systemPrompt}` },
+        { role: "system", content: `/no_think\n${withSchemaInstruction(systemPrompt, schema)}` },
         { role: "user", content: `TRANSCRIPT:\n${transcript}` },
       ],
     });
@@ -94,15 +111,16 @@ class SarvamDispositionLLM implements DispositionLLM {
 
   async extract(
     systemPrompt: string,
-    _schema: Record<string, unknown>,
+    schema: Record<string, unknown>,
     transcript: string,
   ): Promise<Record<string, unknown>> {
+    // Sarvam json_object mode does not enforce a schema, so embed it in the prompt.
     const response = await this.client.chat.completions.create({
       model: this.model,
       temperature: 0,
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: systemPrompt },
+        { role: "system", content: withSchemaInstruction(systemPrompt, schema) },
         { role: "user", content: `TRANSCRIPT:\n${transcript}` },
       ],
     });

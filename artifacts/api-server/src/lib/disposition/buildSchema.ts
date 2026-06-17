@@ -27,10 +27,13 @@ export function buildSchema(cfg: DispositionConfig): Record<string, unknown> {
     }
   }
 
+  // OpenAI structured-output strict mode requires every property key to be
+  // listed in `required` (nullable fields express optionality via their type),
+  // so include all keys — the core five plus any domain fields.
   return {
     type: "object",
     properties,
-    required: ["primary", "sub", "confidence", "evidence", "summary"],
+    required: Object.keys(properties),
     additionalProperties: false,
   };
 }

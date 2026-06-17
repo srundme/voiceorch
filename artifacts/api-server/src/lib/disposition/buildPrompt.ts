@@ -7,6 +7,10 @@ import type { DispositionConfig } from "./types.js";
 export function buildPrompt(cfg: DispositionConfig): string {
   const taxonomyJson = JSON.stringify(cfg.taxonomy, null, 2);
 
+  const categoryKeys = Object.keys(cfg.taxonomy);
+  const exampleKey = categoryKeys[0] ?? "category";
+  const exampleSub = cfg.taxonomy[exampleKey]?.[0] ?? "value";
+
   const domainInstructions =
     cfg.domainFields.length > 0
       ? `\nAlso extract these domain-specific fields (set to null if not determinable):\n${cfg.domainFields
@@ -35,5 +39,15 @@ RULES:
 - sub MUST belong to the chosen primary per the taxonomy above
 ${domainInstructions}
 
-Respond ONLY with valid JSON matching the required schema. No markdown, no extra keys.`;
+OUTPUT FORMAT — respond with a single JSON object using EXACTLY these keys:
+- "primary": one of the taxonomy category keys verbatim (one of: ${categoryKeys.map((k) => `"${k}"`).join(", ")})
+- "sub": one of the allowed values listed under the chosen "primary" in the taxonomy above
+- "confidence": a number from 0.0 to 1.0
+- "evidence": a single verbatim customer line (empty string if none)
+- "summary": one short sentence describing the outcome
+
+Example shape (values illustrative only):
+{"primary": "${exampleKey}", "sub": "${exampleSub}", "confidence": 0.9, "evidence": "...", "summary": "..."}
+
+Respond ONLY with valid JSON using the keys above. No markdown, no extra keys.`;
 }

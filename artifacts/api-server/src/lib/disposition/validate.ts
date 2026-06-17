@@ -40,15 +40,29 @@ export function validate(
   out: Record<string, unknown>,
   events: CallEvent[],
 ): DispositionResult {
-  const primary = String(out["primary"] ?? "");
-  let sub = String(out["sub"] ?? "");
+  const rawPrimary = String(out["primary"] ?? "").trim();
+  let sub = String(out["sub"] ?? "").trim();
   let confidence =
     typeof out["confidence"] === "number" ? Math.max(0, Math.min(1, out["confidence"])) : 0;
   const evidence = String(out["evidence"] ?? "");
   const summary = String(out["summary"] ?? "");
 
+  // Normalize the primary back to the configured taxonomy key, tolerating
+  // casing/whitespace differences (e.g. "Intent" → "intent"). Falls back to the
+  // raw value when no taxonomy key matches (genuinely-invalid classification).
+  const matchedKey = Object.keys(cfg.taxonomy).find(
+    (k) => k.toLowerCase() === rawPrimary.toLowerCase(),
+  );
+  const primary = matchedKey ?? rawPrimary;
+
+  // Match the sub against the chosen category's allowed values case-insensitively,
+  // normalizing to the configured value. If it's out of list, snap to the first
+  // valid sub (keeps a non-empty sub) and cap confidence.
   const validSubs: string[] = cfg.taxonomy[primary] ?? [];
-  if (!validSubs.includes(sub)) {
+  const matchedSub = validSubs.find((s) => s.toLowerCase() === sub.toLowerCase());
+  if (matchedSub) {
+    sub = matchedSub;
+  } else if (!validSubs.includes(sub)) {
     sub = validSubs[0] ?? sub;
     confidence = Math.min(confidence, 0.5);
   }
