@@ -26,7 +26,46 @@ export interface ChatTurnResult {
 
 /* ── LLM API key resolution ──────────────────────────────────────────────────── */
 
-export async function getLlmApiKey(userId: string, llmProvider: string): Promise<string | null> {
+// Provider name → platform_settings key (mirrors session.ts MANAGED map + all LLM providers)
+const LLM_MANAGED: Record<string, string> = {
+  openai:    "managed_openai_key",
+  gemini:    "managed_gemini_key",
+  google:    "managed_gemini_key",
+  groq:      "managed_qwen_key",
+  qwen:      "managed_qwen_key",
+  anthropic: "managed_anthropic_key",
+  deepseek:  "managed_deepseek_key",
+  mistral:   "managed_mistral_key",
+  cohere:    "managed_cohere_key",
+};
+
+async function getPlatformKey(settingsKey: string): Promise<string | null> {
+  try {
+    const [row] = await db
+      .select({ value: platformSettingsTable.value })
+      .from(platformSettingsTable)
+      .where(eq(platformSettingsTable.key, settingsKey));
+    return row?.value ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function getLlmApiKey(
+  userId: string,
+  llmProvider: string,
+  isManaged = false,
+): Promise<string | null> {
+  const normalizedProvider = llmProvider.toLowerCase();
+  const managedSettingsKey = LLM_MANAGED[normalizedProvider];
+
+  // Managed agents: platform key takes priority over user's own key
+  if (isManaged && managedSettingsKey) {
+    const managed = await getPlatformKey(managedSettingsKey);
+    if (managed) return managed;
+  }
+
+  // BYOP path: check user's configured provider key first
   const [row] = await db
     .select({ apiKey: providersTable.apiKey })
     .from(providersTable)
@@ -36,16 +75,14 @@ export async function getLlmApiKey(userId: string, llmProvider: string): Promise
     return decryptKey(row.apiKey);
   }
 
-  if (llmProvider === "groq" || llmProvider === "qwen") {
-    try {
-      const [setting] = await db
-        .select({ value: platformSettingsTable.value })
-        .from(platformSettingsTable)
-        .where(eq(platformSettingsTable.key, "managed_qwen_key"));
-      if (setting?.value) return setting.value;
-    } catch {
-      // fall through
-    }
+  // Fallback: platform managed key (for all providers that have one)
+  if (managedSettingsKey) {
+    const managed = await getPlatformKey(managedSettingsKey);
+    if (managed) return managed;
+  }
+
+  // Final env-var fallback for Groq/Qwen
+  if (normalizedProvider === "groq" || normalizedProvider === "qwen") {
     return (process.env["GROQ_API_KEY"] ?? "").trim() || null;
   }
 
@@ -129,7 +166,7 @@ export async function runChatTurn(
 
   const llmProvider = agent.llmProvider;
   const llmModel = agent.llmModel ?? null;
-  const apiKey = await getLlmApiKey(userId, llmProvider);
+  const apiKey = await getLlmApiKey(userId, llmProvider, agent.agentMode === "managed");
 
   if (!apiKey) {
     throw new Error(`No API key found for LLM provider "${llmProvider}". Add it in the Providers section.`);
@@ -322,7 +359,7 @@ export async function callLlmDirect(
 
   if (!agent) throw new Error(`Agent ${agentId} not found`);
 
-  const apiKey = await getLlmApiKey(userId, agent.llmProvider);
+  const apiKey = await getLlmApiKey(userId, agent.llmProvider, agent.agentMode === "managed");
   if (!apiKey) {
     throw new Error(
       `No API key found for LLM provider "${agent.llmProvider}". Add it in the Providers section.`,
