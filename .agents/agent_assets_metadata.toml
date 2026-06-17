@@ -102,3 +102,9 @@ id = "aA1iDLtAq4Js1H-aTnNAW"
 uri = "file://HANDOVER.md"
 type = "text"
 title = "SnapServe / VoiceOrch — Architect Handover Document"
+
+[[outputs]]
+id = "8o14UJsnwZkwJB7lhMBxb"
+uri = "file://HANDOVER.pdf"
+type = "pdf"
+title = "SnapServe / VoiceOrch — Architect Handover (PDF)"
