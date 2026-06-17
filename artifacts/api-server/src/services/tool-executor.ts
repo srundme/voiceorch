@@ -328,10 +328,6 @@ export async function executeNativeBooking(
     if (!resolvedEventTypeId && tool.eventTypeId) {
       resolvedEventTypeId = tool.eventTypeId;
     }
-    // Fall back to stored eventTypeId for legacy configs that haven't been re-saved yet
-    if (!resolvedEventTypeId && tool.eventTypeId) {
-      resolvedEventTypeId = tool.eventTypeId;
-    }
     if (!resolvedEventTypeId) {
       return JSON.stringify({ error: "no_event_type", message: "No event type configured for this agent's calendar. Go to Settings → Calendar to create one." });
     }
@@ -556,10 +552,6 @@ export async function executeNativeCheckAvailability(
         .limit(1);
       resolvedEventTypeId = firstEt?.id;
     }
-    if (!resolvedEventTypeId && tool.eventTypeId) {
-      resolvedEventTypeId = tool.eventTypeId;
-    }
-    // Fall back to stored eventTypeId for legacy configs that haven't been re-saved yet
     if (!resolvedEventTypeId && tool.eventTypeId) {
       resolvedEventTypeId = tool.eventTypeId;
     }

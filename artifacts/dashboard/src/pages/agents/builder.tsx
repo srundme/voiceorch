@@ -1205,7 +1205,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
     { query: { enabled: !!calendarIdForEt, queryKey: ["agent-event-types", calendarIdForEt ?? null] } }
   );
 
-  // Reset eventTypeId on native_list_bookings whenever the assigned calendar changes
+  // Reset eventTypeId on booking tools whenever the assigned calendar changes
   const prevCalendarIdRef = useRef<number | undefined>(undefined);
   useEffect(() => {
     if (prevCalendarIdRef.current === undefined) {
@@ -1215,10 +1215,12 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
     if (prevCalendarIdRef.current !== calendarIdForEt) {
       prevCalendarIdRef.current = calendarIdForEt;
       const tools = form.getValues("tools") ?? [];
-      const idx = (tools as any[]).findIndex((t: any) => t.type === "native_list_bookings");
-      if (idx >= 0) {
-        form.setValue(`tools.${idx}.eventTypeId` as any, undefined);
-      }
+      const typesToReset = ["native_booking", "native_check_availability", "native_list_bookings"];
+      (tools as any[]).forEach((t: any, idx: number) => {
+        if (typesToReset.includes(t.type)) {
+          form.setValue(`tools.${idx}.eventTypeId` as any, undefined);
+        }
+      });
     }
   }, [calendarIdForEt]);
 
@@ -1412,8 +1414,8 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
                         {agentCalendar ? (agentCalendar.name || "Calendar") : "No calendar assigned yet"}
                       </span>
                     </div>
-                    {/* Event Type (native_list_bookings only) */}
-                    {type === "native_list_bookings" && (() => {
+                    {/* Event Type (booking / availability / list tools) */}
+                    {(type === "native_booking" || type === "native_check_availability" || type === "native_list_bookings") && (() => {
                       const idx = nativeToolIndex(type);
                       const toolEventTypeId = watchedTools[idx]?.eventTypeId;
                       return (
