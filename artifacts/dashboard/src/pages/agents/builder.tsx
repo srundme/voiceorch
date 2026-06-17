@@ -63,26 +63,28 @@ import {
 import { useMinuteRatesMap, computeAgentRateCents } from "@/hooks/use-minute-rates";
 import { DestinationOtpDialog } from "@/components/destination-otp-dialog";
 import { WebCallPanel } from "@/components/webcall-panel";
+import { SimulationTab } from "./builder/SimulationTab";
 
 const _DASH_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const DASH_API   = `${_DASH_BASE}/api`;
 
 /* ── Types ──────────────────────────────────────────────────────────────────── */
 
-type TabId = "overview" | "prompt" | "voice" | "tools" | "analysis" | "voicemail" | "advanced" | "logs" | "versions";
+type TabId = "overview" | "prompt" | "voice" | "tools" | "analysis" | "voicemail" | "advanced" | "logs" | "versions" | "simulation";
 
 interface TabDef { id: TabId; label: string; icon: React.ReactNode }
 
 const TABS: TabDef[] = [
-  { id: "overview",   label: "Overview",   icon: <Bot className="h-3.5 w-3.5" /> },
-  { id: "prompt",     label: "Prompt",     icon: <FileText className="h-3.5 w-3.5" /> },
-  { id: "voice",      label: "Voice",      icon: <Mic className="h-3.5 w-3.5" /> },
-  { id: "tools",      label: "Tools",      icon: <Wrench className="h-3.5 w-3.5" /> },
-  { id: "analysis",   label: "Analysis",   icon: <BarChart3 className="h-3.5 w-3.5" /> },
-  { id: "voicemail",  label: "Voicemail",  icon: <VoicemailIcon className="h-3.5 w-3.5" /> },
-  { id: "advanced",   label: "Advanced",   icon: <SlidersHorizontal className="h-3.5 w-3.5" /> },
-  { id: "logs",       label: "Logs",       icon: <List className="h-3.5 w-3.5" /> },
-  { id: "versions",   label: "Versions",   icon: <History className="h-3.5 w-3.5" /> },
+  { id: "overview",    label: "Overview",    icon: <Bot className="h-3.5 w-3.5" /> },
+  { id: "prompt",      label: "Prompt",      icon: <FileText className="h-3.5 w-3.5" /> },
+  { id: "voice",       label: "Voice",       icon: <Mic className="h-3.5 w-3.5" /> },
+  { id: "tools",       label: "Tools",       icon: <Wrench className="h-3.5 w-3.5" /> },
+  { id: "analysis",    label: "Analysis",    icon: <BarChart3 className="h-3.5 w-3.5" /> },
+  { id: "voicemail",   label: "Voicemail",   icon: <VoicemailIcon className="h-3.5 w-3.5" /> },
+  { id: "advanced",    label: "Advanced",    icon: <SlidersHorizontal className="h-3.5 w-3.5" /> },
+  { id: "logs",        label: "Logs",        icon: <List className="h-3.5 w-3.5" /> },
+  { id: "versions",    label: "Versions",    icon: <History className="h-3.5 w-3.5" /> },
+  { id: "simulation",  label: "Simulation",  icon: <TestTube2 className="h-3.5 w-3.5" /> },
 ];
 
 /* ── Small helpers ──────────────────────────────────────────────────────────── */
@@ -319,12 +321,19 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
 
   const cartesiaOverviewOpts = useMemo(() => {
     const all = whitelistedData?.voices ?? [];
-    const opts = all.length > 0
-      ? all.map(v => ({ value: v.id, label: v.name }))
-      : (TTS_VOICES.cartesia ?? []).filter(v => v.value !== "__custom__");
+    if (all.length === 0) {
+      const opts = [...(TTS_VOICES.cartesia ?? []).filter(v => v.value !== "__custom__")];
+      opts.push({ value: "__custom__", label: "✎ Paste custom Voice ID…" });
+      return opts;
+    }
+    // Show only voices matching the agent's language (e.g. "ta-IN" → "ta")
+    const baseLang = (language ?? "en-US").split("-")[0]!.toLowerCase();
+    const matched = all.filter(v => v.language?.toLowerCase() === baseLang);
+    const pool = matched.length > 0 ? matched : all;
+    const opts = pool.map(v => ({ value: v.id, label: v.name }));
     opts.push({ value: "__custom__", label: "✎ Paste custom Voice ID…" });
     return opts;
-  }, [whitelistedData]);
+  }, [whitelistedData, language]);
 
   const ttsVoiceRaw   = ttsProvider in TTS_VOICES ? TTS_VOICES[ttsProvider] : undefined;
   const ttsVoiceFree  = ttsVoiceRaw === null;
@@ -790,17 +799,24 @@ function VoiceTab({ form }: { form: any }) {
     staleTime: 5 * 60 * 1000,
   });
 
-  // For Cartesia: show all admin-whitelisted voices regardless of agent language.
-  // Cartesia Sonic voices are multilingual, so every voice works with any language.
-  // When the whitelist is empty, fall back to the built-in Cartesia voice list.
+  // For Cartesia: show only voices matching the agent's transcriber language.
+  // e.g. "ta-IN" → show only "ta" voices; "te-IN" → "te"; "en-US" → "en".
+  // Falls back to all whitelisted voices if none match the language.
+  // Falls back to built-in list if whitelist is empty.
   const cartesiaVoiceOpts = useMemo(() => {
     const all = whitelistedData?.voices ?? [];
-    const opts = all.length > 0
-      ? all.map(v => ({ value: v.id, label: v.name }))
-      : (TTS_VOICES.cartesia ?? []).filter(v => v.value !== "__custom__");
+    if (all.length === 0) {
+      const opts = [...(TTS_VOICES.cartesia ?? []).filter(v => v.value !== "__custom__")];
+      opts.push({ value: "__custom__", label: "✎ Paste custom Voice ID…" });
+      return opts;
+    }
+    const baseLang = agentLanguage.split("-")[0]!.toLowerCase();
+    const matched = all.filter(v => v.language?.toLowerCase() === baseLang);
+    const pool = matched.length > 0 ? matched : all;
+    const opts = pool.map(v => ({ value: v.id, label: v.name }));
     opts.push({ value: "__custom__", label: "✎ Paste custom Voice ID…" });
     return opts;
-  }, [whitelistedData]);
+  }, [whitelistedData, agentLanguage]);
 
   // For non-Cartesia providers fall back to the hardcoded list
   const ttsVoiceRawV  = ttsProvider in TTS_VOICES ? TTS_VOICES[ttsProvider] : undefined;
@@ -3380,6 +3396,10 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       ) : activeTab === "versions" ? (
         <div className="flex-1 min-h-0 overflow-hidden">
           <VersionsTab agentId={agent.id} />
+        </div>
+      ) : activeTab === "simulation" ? (
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <SimulationTab agentId={agentId} />
         </div>
       ) : (
         <Form {...form}>
