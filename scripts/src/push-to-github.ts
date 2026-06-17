@@ -23,8 +23,7 @@ const REPO  = "voiceorch";
 const BRANCH = "main";
 
 const FILES_TO_PUSH = [
-  "lib/db/drizzle/0002_add_missing_columns.sql",
-  "lib/db/drizzle/meta/_journal.json",
+  "artifacts/api-server/src/orchestration/adapters/stt/sarvam.ts",
 ];
 
 async function ghFetch(apiPath: string, options: RequestInit = {}) {
@@ -61,7 +60,7 @@ async function pushFile(relPath: string) {
   await ghFetch(`contents/${relPath}`, {
     method: "PUT",
     body: JSON.stringify({
-      message: `fix: add migration 0002 for llm_fallback_provider/model columns`,
+      message: `fix: send Sarvam streaming STT audio as JSON base64 frames, not binary`,
       content: encoded,
       branch: BRANCH,
       ...(sha ? { sha } : {}),

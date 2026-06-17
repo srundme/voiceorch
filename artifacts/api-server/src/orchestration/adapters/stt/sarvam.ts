@@ -216,13 +216,18 @@ export class SarvamSTT implements STTAdapter {
       safetyTimer = setTimeout(() => emitFinal("safety"), SAFETY_MS);
     }
 
+    /** Encode a PCM Buffer into the JSON text frame Sarvam requires. */
+    function sendAudioFrame(chunk: Buffer): void {
+      ws.send(JSON.stringify({ audio_chunk: chunk.toString("base64") }));
+    }
+
     const ws = new WebSocket(wsUrl, {
       headers: { "api-subscription-key": this.key },
     });
 
     ws.on("open", () => {
       wsReady = true;
-      for (const chunk of audioQueue.splice(0)) ws.send(chunk);
+      for (const chunk of audioQueue.splice(0)) sendAudioFrame(chunk);
       logger.info(
         { model: apiModel, lang: this.langCode },
         "Sarvam streaming STT WebSocket opened",
@@ -302,7 +307,7 @@ export class SarvamSTT implements STTAdapter {
     return {
       sendAudio(chunk: Buffer): void {
         if (ws.readyState === WebSocket.OPEN) {
-          ws.send(chunk);
+          sendAudioFrame(chunk);
         } else if (!wsReady && !closing) {
           audioQueue.push(chunk);
         }
