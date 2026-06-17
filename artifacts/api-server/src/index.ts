@@ -1,4 +1,4 @@
-// trigger rebuild — custom function webhook tool + lockfile fix
+// trigger rebuild — multilingual complete (pipeline + session + webcall)
 import http from "http";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
