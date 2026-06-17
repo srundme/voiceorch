@@ -22,6 +22,7 @@ import { buildDatetimeInjection } from "../datetimeInject.js";
 import { getAttachedSourceIds, buildKnowledgeBaseBlock } from "../kb-retrieval.js";
 import {
   buildToolDefs,
+  matchToolByName,
   executeNativeBooking,
   executeNativeCheckAvailability,
   executeNativeListBookings,
@@ -1216,8 +1217,9 @@ export async function handleWebCallWebSocket(
         }
 
         // Handle built-in end_call
-        if (triggeredToolName === "end_call") {
-          const endTool = agentTools.find((t) => t.type === "end_call" && t.name === triggeredToolName);
+        const matchedTriggeredTool = matchToolByName(agentTools, triggeredToolName);
+        if (triggeredToolName === "end_call" || matchedTriggeredTool?.type === "end_call") {
+          const endTool = matchedTriggeredTool?.type === "end_call" ? matchedTriggeredTool : undefined;
           const configured = endTool && endTool.type === "end_call" ? (endTool.goodbyeMessage ?? "") : "";
           // Always speak a closing line — fall back to a sensible default so the
           // call never drops silently — and record it to the transcript.
@@ -1253,7 +1255,7 @@ export async function handleWebCallWebSocket(
           status: "info",
         });
         try {
-          const tool = agentTools.find((t) => t.name === triggeredToolName);
+          const tool = matchToolByName(agentTools, triggeredToolName);
           if (!tool) {
             logger.warn({ callId, triggeredToolName }, "Webcall: LLM called unknown tool — ignoring");
           } else if (tool.type === "native_booking") {
@@ -1337,8 +1339,9 @@ export async function handleWebCallWebSocket(
 
             history.push({ role: "assistant", content: `[calling tool: ${fnName}]` });
 
-            if (fnName === "end_call") {
-              const endTool = agentTools.find((t) => t.type === "end_call" && t.name === fnName);
+            const matchedFnTool = matchToolByName(agentTools, fnName);
+            if (fnName === "end_call" || matchedFnTool?.type === "end_call") {
+              const endTool = matchedFnTool?.type === "end_call" ? matchedFnTool : undefined;
               const configured = endTool && endTool.type === "end_call" ? (endTool.goodbyeMessage ?? "") : "";
               const goodbye = configured.trim() ? configured.trim() : DEFAULT_GOODBYE_MESSAGE;
               history.push({ role: "assistant", content: goodbye });
@@ -1360,7 +1363,7 @@ export async function handleWebCallWebSocket(
 
             let inlineFnResult: string | undefined;
             try {
-              const tool = agentTools.find((t) => t.name === fnName);
+              const tool = matchToolByName(agentTools, fnName);
               if (tool) {
                 if (tool.type === "native_booking") {
                   inlineFnResult = await executeNativeBooking(callId, agentId, tool, fnArgs);
@@ -1507,8 +1510,9 @@ export async function handleWebCallWebSocket(
             history.push({ role: "assistant", content: cleanReply || `[calling tool: ${fnName}]` });
 
             // Built-in end_call
-            if (fnName === "end_call") {
-              const endTool = agentTools.find((t) => t.type === "end_call" && t.name === fnName);
+            const matchedFnTool = matchToolByName(agentTools, fnName);
+            if (fnName === "end_call" || matchedFnTool?.type === "end_call") {
+              const endTool = matchedFnTool?.type === "end_call" ? matchedFnTool : undefined;
               const configured = endTool && endTool.type === "end_call" ? (endTool.goodbyeMessage ?? "") : "";
               const goodbye = configured.trim() ? configured.trim() : DEFAULT_GOODBYE_MESSAGE;
               history.push({ role: "assistant", content: goodbye });
@@ -1531,7 +1535,7 @@ export async function handleWebCallWebSocket(
             // Route through the shared executor
             let inlineFnResult: string | undefined;
             try {
-              const tool = agentTools.find((t) => t.name === fnName);
+              const tool = matchToolByName(agentTools, fnName);
               if (tool) {
                 if (tool.type === "native_booking") {
                   inlineFnResult = await executeNativeBooking(callId, agentId, tool, fnArgs);

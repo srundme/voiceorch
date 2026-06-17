@@ -2,7 +2,7 @@ import { db, agentsTable, providersTable, platformSettingsTable } from "@workspa
 import { simulationRunsTable, simulationMessagesTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { createLLMAdapter } from "../../orchestration/adapters/llm/index.js";
-import { buildToolDefs } from "../tool-executor.js";
+import { buildToolDefs, matchToolByName } from "../tool-executor.js";
 import { retrieveKbContextMulti } from "../../orchestration/kb-retrieval.js";
 import { decryptKey } from "../../lib/crypto.js";
 import { logger } from "../../lib/logger.js";
@@ -63,7 +63,7 @@ async function executeSimulationTool(
 ): Promise<string> {
   if (toolName === "end_call") return "call_ended";
 
-  const tool = agentTools.find((t) => t.name === toolName);
+  const tool = matchToolByName(agentTools, toolName);
   if (!tool) return "success";
 
   switch (tool.type) {

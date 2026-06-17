@@ -28,6 +28,7 @@ import { sendBookingCreatedEmail, sendBookingCancelledEmail, sendBookingReschedu
 import { dispatchSchedulingWebhooks } from "../routes/scheduling/webhooks.js";
 import {
   buildToolDefs,
+  matchToolByName,
   executeNativeBooking as sharedExecuteNativeBooking,
   executeNativeCheckAvailability as sharedExecuteNativeCheckAvailability,
   executeNativeListBookings as sharedExecuteNativeListBookings,
@@ -800,7 +801,7 @@ export class OrchestrationPipeline {
   // ── Tool execution ───────────────────────────────────────────────────────────
 
   private async handleToolCall(toolName: string, args: Record<string, unknown>): Promise<string | undefined> {
-    const tool = this.agent.tools.find((t) => t.name === toolName);
+    const tool = matchToolByName(this.agent.tools, toolName);
     if (!tool) {
       // Built-in end_call: always available even if not explicitly in agent tools
       if (toolName === "end_call") {

@@ -22,8 +22,27 @@ import {
   generateAgentPrompt,
   type WizardInputs,
 } from "../services/prompt-template.js";
+import { sanitizeToolName } from "../services/tool-executor.js";
 
 const router: IRouter = Router();
+
+/**
+ * Auto-normalize every tool's LLM-facing `name` to a provider-safe function name
+ * before it is persisted, so invalid names (spaces, non-ASCII, etc.) can't be
+ * silently stored and later rejected by Gemini at call time. Runtime
+ * sanitization covers legacy rows; this keeps newly saved data clean too.
+ */
+function normalizeToolNames(data: Record<string, unknown>): void {
+  const tools = data["tools"];
+  if (!Array.isArray(tools)) return;
+  data["tools"] = tools.map((t) => {
+    if (t && typeof t === "object" && typeof (t as Record<string, unknown>)["name"] === "string") {
+      const tool = t as Record<string, unknown>;
+      return { ...tool, name: sanitizeToolName(tool["name"] as string) };
+    }
+    return t;
+  });
+}
 
 function maskLeadToken(token: string | null | undefined): string | null {
   if (!token) return null;
@@ -113,6 +132,7 @@ router.post("/agents", requireAuth, async (req, res): Promise<void> => {
   const wizardInputs = (rawBody["wizardInputs"] ?? null) as WizardInputs | null;
 
   const insertData: Record<string, unknown> = { ...parsed.data, userId: clerkId };
+  normalizeToolNames(insertData);
   // knowledgeSourceIds is an M:N association, not an agents column — extract before insert.
   const createSourceIds = Array.isArray(insertData["knowledgeSourceIds"])
     ? (insertData["knowledgeSourceIds"] as number[])
@@ -212,6 +232,7 @@ router.patch("/agents/:id", requireAuth, async (req, res): Promise<void> => {
     return;
   }
   const updateData: Record<string, unknown> = { ...parsed.data };
+  normalizeToolNames(updateData);
   // knowledgeSourceIds is an M:N association, not an agents column — extract before update.
   const updateSourceIds = Array.isArray(updateData["knowledgeSourceIds"])
     ? (updateData["knowledgeSourceIds"] as number[])
