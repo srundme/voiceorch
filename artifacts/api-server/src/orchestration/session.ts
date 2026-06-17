@@ -166,6 +166,7 @@ export async function createSession(params: {
     ttsModel: agent.ttsModel,
     telephonyProvider: agent.telephonyProvider,
     greetingMessage: agent.greetingMessage ?? null,
+    firstSpeaker: agent.firstSpeaker === "user" ? "user" : "assistant",
     endCallPhrases,
     silenceTimeoutSeconds: agent.silenceTimeoutSeconds ?? null,
     language: agent.language ?? null,
@@ -235,6 +236,9 @@ export async function createSession(params: {
     stagedPromptEnabled: agent.stagedPromptEnabled ?? false,
     stagedPromptStages: (agent.stagedPromptStages as Array<{ name: string; content: string }> | null) ?? [],
     stagedPromptCoreIdentity: agent.stagedPromptCoreIdentity ?? null,
+    // Multilingual
+    isMultilingual: (agentCfg["isMultilingual"] as boolean | undefined) ?? false,
+    multilingualLanguages: (agentCfg["multilingualLanguages"] as string[] | undefined) ?? [],
   };
 
   // ── Parallel pre-fetch: caller memory + campaign lead + knowledge base ───────
