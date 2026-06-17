@@ -1,4 +1,5 @@
 import { performance } from "perf_hooks";
+import { computeEndpointMs } from "../endpointing.js";
 import type { WebSocket } from "ws";
 import { db, agentsTable, callsTable, callEventsTable, executionLogsTable, scheduledCallbacksTable, providersTable, usersTable, walletTransactionsTable, platformSettingsTable, knowledgeEntriesTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
@@ -749,6 +750,9 @@ export async function handleWebCallWebSocket(
   let _tFirstAudioOut:  number | null = null;
   let _tTurnFillerPlayed = false;
   let _llmStreamActive  = false;
+  // Adaptive endpoint: set by scheduleSilenceFlush(), captured+reset in process()
+  let _lastEndpointMs: number | null = null;
+  let _lastEndpointReason = "";
 
   // ── Recording ─────────────────────────────────────────────────────────────
   // Stereo WAV: L=caller (16 kHz from browser), R=agent (TTS pre-amplification)
@@ -773,6 +777,12 @@ export async function handleWebCallWebSocket(
     _tFirstAudioOut   = null;
     _tTurnFillerPlayed = false;
     _llmStreamActive  = false;
+    // Capture adaptive endpoint decision (set by scheduleSilenceFlush).
+    // null when turn was triggered by streaming STT path.
+    const _thisEndpointMs = _lastEndpointMs;
+    const _thisEndpointReason = _lastEndpointReason || "n/a";
+    _lastEndpointMs = null;
+    _lastEndpointReason = "";
     sendStatus("thinking");
 
     try {
@@ -1839,6 +1849,8 @@ export async function handleWebCallWebSocket(
           tts_ttfb_ms:           _tts_ttfb_ms,
           return_ms:             _return_ms,
           total_ms:              _total_ms,
+          endpoint_ms:           _thisEndpointMs,
+          endpoint_reason:       _thisEndpointReason,
           asrProvider:           agent.asrProvider,
           llmProvider:           agent.llmProvider,
           ttsProvider:           agent.ttsProvider,
@@ -1866,7 +1878,23 @@ export async function handleWebCallWebSocket(
 
   function scheduleSilenceFlush() {
     if (silenceTimer || processing) return;
-    silenceTimer = setTimeout(() => { silenceTimer = null; void process(); }, agentVadSilenceMs);
+    // ── Adaptive endpoint window ─────────────────────────────────────────────
+    const lastAgentText = [...history].reverse()
+      .find(t => t.role === "assistant")?.content ?? "";
+    const partialTranscript = streamingTranscriptPending ?? "";
+    // audioChunks holds 16kHz PCM16: 16000 samples/s × 2 bytes = 32 bytes/ms
+    const audioBufferMs = Math.round(
+      audioChunks.reduce((s, b) => s + b.length, 0) / 32
+    );
+    const { ms, reason } = computeEndpointMs({
+      lastAgentText,
+      partialTranscript,
+      audioBufferMs,
+      baseSilenceMs: agentVadSilenceMs,
+    });
+    _lastEndpointMs = ms;
+    _lastEndpointReason = reason;
+    silenceTimer = setTimeout(() => { silenceTimer = null; void process(); }, ms);
   }
 
   function clearSilenceTimer() {

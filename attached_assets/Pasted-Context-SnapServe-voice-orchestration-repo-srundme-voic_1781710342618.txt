@@ -1,0 +1,19 @@
+Context: SnapServe voice orchestration, repo srundme/voiceorch. Current endpointing is a flat VAD_SILENCE_MS = 250 in orchestration/pipeline.ts — it treats a complete answer ("yes") and an unfinished one ("my policy number is four two—") identically, causing the agent to interrupt callers mid-utterance. This is the top caller-perceived quality issue. Replace flat silence with adaptive (semantic) endpointing. Do not change the streaming architecture.
+Step 0 — Check what the ASR already gives. Before building, inspect the ASR adapters (DeepgramSTT especially). Report whether Deepgram's native endpointing, utterance_end_ms, and speech_final are already being consumed, or whether we're ignoring them and running flat VAD on top. If the ASR exposes utterance-complete signals, prefer wiring those in over reinventing them.
+Step 1 — Adaptive silence window. Replace the single VAD_SILENCE_MS constant with a function computeEndpointMs(partialTranscript, context) that returns a variable silence window based on the latest partial transcript:
+
+Short / clearly-complete utterance (affirmations, single words, ends in terminal punctuation from STT: "yes", "correct", "no thank you") → flush fast, ~150ms. Snappy.
+Trailing-incomplete signals → wait longer, ~600–800ms:
+
+ends in a digit while in a digit-collection context (see Step 2)
+ends in a conjunction or dangling word ("and", "so", "my", "the", "it's", "um", "uh")
+very short partial that's likely mid-thought
+
+
+Default / neutral → keep ~250ms.
+
+Make all thresholds named constants, not magic numbers.
+Step 2 — Digit-collection mode (critical for insurance). When the agent's last turn asked for a number (policy number, phone, DOB, OTP) — detect via a flag the LLM/tool layer can set, or via simple keyword match on the agent's prompt — enter a "collecting digits" state where the endpoint window is held long (~800ms+) and only closes when the caller clearly stops (no new digits for the full window). This stops the agent interrupting someone reading "four... two... seven... nine."
+Step 3 — Mirror in webcall.ts. Same logic, separate code path (§2.4). It will drift otherwise.
+Step 4 — Prove it with the existing metric. We already log turn_latency per turn. Add an endpoint_ms field showing the actual silence window used that turn, so I can confirm short utterances flush fast and digit-strings wait — without hurting return_ms on quick answers.
+Show me the diff and a few example transcripts with the endpoint window each one would trigger. Don't touch barge-in or TTS in this change — endpointing only.
