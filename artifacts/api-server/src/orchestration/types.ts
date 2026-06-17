@@ -67,7 +67,8 @@ export interface NativeBookingTool {
   type: "native_booking";
   name: string;
   description: string;
-  eventTypeId: number;
+  /** Optional: auto-resolved from agent's calendar at runtime when absent */
+  eventTypeId?: number;
   /** Optional: parent calendar id (used by UI for cascading dropdowns; runtime resolves from event type) */
   calendarId?: number;
   /** Optional default timezone for confirmation messages */
@@ -104,7 +105,8 @@ export interface NativeCheckAvailabilityTool {
   type: "native_check_availability";
   name: string;
   description: string;
-  eventTypeId: number;
+  /** Optional: auto-resolved from agent's calendar at runtime when absent */
+  eventTypeId?: number;
   /** Optional: parent calendar id (UI only) */
   calendarId?: number;
   /** Optional timezone used when phrasing slot times back to the caller */
@@ -176,6 +178,8 @@ export interface STTConfig {
   smartEndpointing: string;
   autoFallback: boolean;
   fallbackProviders: Array<{ provider: string; model: string | null }>;
+  /** Candidate locales for Azure LID (multi-language detection). */
+  candidateLanguages?: string[];
 }
 
 export interface AgentConfig {
@@ -250,6 +254,9 @@ export interface AgentConfig {
   wordsForInterruption: number;
   incrementalDelay: number;
 
+  // First speaker — "user" keeps the agent silent on connect until the caller speaks
+  firstSpeaker: "assistant" | "user";
+
   // P1-H: Call lifecycle
   hangupAfterLlmCall: boolean;
 
@@ -283,6 +290,10 @@ export interface AgentConfig {
   stagedPromptEnabled: boolean;
   stagedPromptStages: Array<{ name: string; content: string }>;
   stagedPromptCoreIdentity: string | null;
+
+  // Multilingual
+  isMultilingual: boolean;
+  multilingualLanguages: string[];
 }
 
 export interface ProviderKey {
