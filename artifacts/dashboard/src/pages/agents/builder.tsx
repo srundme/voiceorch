@@ -303,6 +303,14 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
     staleTime: 5 * 60 * 1000,
   });
 
+  // Fetch user's phone numbers for inbound/outbound assignment
+  const { data: phoneNumbersRaw } = useQuery({
+    queryKey: ["phone-numbers", "list"],
+    queryFn: () => customFetch<Array<{ id: number; number: string; countryCode: string | null }>>(`${DASH_API}/phone-numbers`),
+    staleTime: 60 * 1000,
+  });
+  const phoneNumbers = Array.isArray(phoneNumbersRaw) ? phoneNumbersRaw : [];
+
   const cartesiaOverviewOpts = useMemo(() => {
     // Cartesia Sonic voices are multilingual (42 languages), so we offer every
     // admin-whitelisted voice regardless of the agent's configured language.
@@ -435,6 +443,48 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
               Add own keys →
             </button>
           </div>
+
+          {/* ── Phone Number Assignment ──────────────────────────────────────── */}
+          {phoneNumbers.length > 0 && (
+            <div className="rounded-xl border border-border/60 bg-card/50 p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Phone Numbers</span>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <FormField control={form.control} name="inboundPhoneNumberId" render={({ field }) => (
+                  <FormItem className="space-y-1">
+                    <FormLabel className="text-[10px] text-muted-foreground">Inbound Number</FormLabel>
+                    <SmallSelect
+                      value={field.value ? String(field.value) : "__none__"}
+                      onChange={(v) => field.onChange(v === "__none__" ? null : parseInt(v, 10))}
+                      options={[
+                        { value: "__none__", label: "— None —" },
+                        ...phoneNumbers.map(p => ({ value: String(p.id), label: p.number })),
+                      ]}
+                      placeholder="Select number"
+                    />
+                    <p className="text-[10px] text-muted-foreground">Calls to this number route here</p>
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="outboundPhoneNumberId" render={({ field }) => (
+                  <FormItem className="space-y-1">
+                    <FormLabel className="text-[10px] text-muted-foreground">Outbound Caller ID</FormLabel>
+                    <SmallSelect
+                      value={field.value ? String(field.value) : "__none__"}
+                      onChange={(v) => field.onChange(v === "__none__" ? null : parseInt(v, 10))}
+                      options={[
+                        { value: "__none__", label: "— None —" },
+                        ...phoneNumbers.map(p => ({ value: String(p.id), label: p.number })),
+                      ]}
+                      placeholder="Select number"
+                    />
+                    <p className="text-[10px] text-muted-foreground">Caller ID for outbound calls</p>
+                  </FormItem>
+                )} />
+              </div>
+            </div>
+          )}
 
           {/* ── Inline config for selected card ─────────────────────────────── */}
           {openCard === "transcriber" && (
@@ -2661,6 +2711,8 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       stagedPromptEnabled: false,
       stagedPromptStages: [],
       stagedPromptCoreIdentity: "",
+      inboundPhoneNumberId: undefined,
+      outboundPhoneNumberId: undefined,
     },
   });
 
@@ -2723,6 +2775,8 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       stagedPromptEnabled:             (agent as any).stagedPromptEnabled ?? false,
       stagedPromptStages:              (agent as any).stagedPromptStages ?? [],
       stagedPromptCoreIdentity:        (agent as any).stagedPromptCoreIdentity ?? "",
+      inboundPhoneNumberId:            (agent as any).inboundPhoneNumberId ?? undefined,
+      outboundPhoneNumberId:           (agent as any).outboundPhoneNumberId ?? undefined,
     });
   }, [agent]);
 

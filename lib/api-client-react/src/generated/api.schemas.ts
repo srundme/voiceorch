@@ -488,6 +488,16 @@ export interface Agent {
      * @nullable
      */
   stagedPromptCoreIdentity?: string | null;
+  /**
+     * Phone number ID assigned for inbound routing to this agent
+     * @nullable
+     */
+  inboundPhoneNumberId?: number | null;
+  /**
+     * Phone number ID used as caller ID for outbound calls from this agent
+     * @nullable
+     */
+  outboundPhoneNumberId?: number | null;
   totalCalls?: number;
   successfulCalls?: number;
   /** @nullable */
@@ -738,6 +748,10 @@ export interface AgentUpdate {
   stagedPromptStages?: AgentUpdateStagedPromptStagesItem[];
   /** Core identity block always included in staged-prompt mode */
   stagedPromptCoreIdentity?: string;
+  /** Phone number ID for inbound routing to this agent */
+  inboundPhoneNumberId?: number | null;
+  /** Phone number ID used as caller ID for outbound calls */
+  outboundPhoneNumberId?: number | null;
 }
 
 export interface SnapServeCostBreakdown {

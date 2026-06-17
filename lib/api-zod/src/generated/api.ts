@@ -109,6 +109,8 @@ export const ListAgentsResponseItem = zod.object({
   "content": zod.string().optional()
 })).nullish().describe('Named prompt stages (each with name + content)'),
   "stagedPromptCoreIdentity": zod.string().nullish().describe('Core identity block always included in staged-prompt mode'),
+  "inboundPhoneNumberId": zod.number().nullish().describe('Phone number ID assigned for inbound routing to this agent'),
+  "outboundPhoneNumberId": zod.number().nullish().describe('Phone number ID used as caller ID for outbound calls from this agent'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -307,6 +309,8 @@ export const GetAgentResponse = zod.object({
   "content": zod.string().optional()
 })).nullish().describe('Named prompt stages (each with name + content)'),
   "stagedPromptCoreIdentity": zod.string().nullish().describe('Core identity block always included in staged-prompt mode'),
+  "inboundPhoneNumberId": zod.number().nullish().describe('Phone number ID assigned for inbound routing to this agent'),
+  "outboundPhoneNumberId": zod.number().nullish().describe('Phone number ID used as caller ID for outbound calls from this agent'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -418,7 +422,9 @@ export const UpdateAgentBody = zod.object({
   "name": zod.string().optional(),
   "content": zod.string().optional()
 })).optional().describe('Named prompt stages (each with name + content)'),
-  "stagedPromptCoreIdentity": zod.string().optional().describe('Core identity block always included in staged-prompt mode')
+  "stagedPromptCoreIdentity": zod.string().optional().describe('Core identity block always included in staged-prompt mode'),
+  "inboundPhoneNumberId": zod.number().nullish().describe('Phone number ID for inbound routing to this agent'),
+  "outboundPhoneNumberId": zod.number().nullish().describe('Phone number ID used as caller ID for outbound calls')
 })
 
 export const UpdateAgentResponse = zod.object({
@@ -511,6 +517,8 @@ export const UpdateAgentResponse = zod.object({
   "content": zod.string().optional()
 })).nullish().describe('Named prompt stages (each with name + content)'),
   "stagedPromptCoreIdentity": zod.string().nullish().describe('Core identity block always included in staged-prompt mode'),
+  "inboundPhoneNumberId": zod.number().nullish().describe('Phone number ID assigned for inbound routing to this agent'),
+  "outboundPhoneNumberId": zod.number().nullish().describe('Phone number ID used as caller ID for outbound calls from this agent'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),
@@ -627,6 +635,8 @@ export const ToggleAgentResponse = zod.object({
   "content": zod.string().optional()
 })).nullish().describe('Named prompt stages (each with name + content)'),
   "stagedPromptCoreIdentity": zod.string().nullish().describe('Core identity block always included in staged-prompt mode'),
+  "inboundPhoneNumberId": zod.number().nullish().describe('Phone number ID assigned for inbound routing to this agent'),
+  "outboundPhoneNumberId": zod.number().nullish().describe('Phone number ID used as caller ID for outbound calls from this agent'),
   "totalCalls": zod.number().optional(),
   "successfulCalls": zod.number().optional(),
   "avgDurationSeconds": zod.number().nullish(),

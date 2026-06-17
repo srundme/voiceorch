@@ -5589,6 +5589,12 @@ components:
         stagedPromptCoreIdentity:
           type: ["string", "null"]
           description: "Core identity block always included in staged-prompt mode"
+        inboundPhoneNumberId:
+          type: ["integer", "null"]
+          description: "Phone number ID assigned for inbound routing to this agent"
+        outboundPhoneNumberId:
+          type: ["integer", "null"]
+          description: "Phone number ID used as caller ID for outbound calls from this agent"
         totalCalls:
           type: integer
         successfulCalls:
@@ -5905,6 +5911,14 @@ components:
         stagedPromptCoreIdentity:
           type: string
           description: "Core identity block always included in staged-prompt mode"
+        inboundPhoneNumberId:
+          type: integer
+          nullable: true
+          description: "Phone number ID for inbound routing to this agent"
+        outboundPhoneNumberId:
+          type: integer
+          nullable: true
+          description: "Phone number ID used as caller ID for outbound calls"
 
     # ── SnapServe Executions ─────────────────────────────────────────────────────
     SnapServeCostBreakdown:

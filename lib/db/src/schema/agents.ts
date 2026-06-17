@@ -212,6 +212,10 @@ export const agentsTable = pgTable("agents", {
   stagedPromptStages: jsonb("staged_prompt_stages").$type<Array<{ name: string; content: string }>>(),
   stagedPromptCoreIdentity: text("staged_prompt_core_identity"),
 
+  // ── Phone Number Assignments ─────────────────────────────────────────────────
+  inboundPhoneNumberId:  integer("inbound_phone_number_id"),
+  outboundPhoneNumberId: integer("outbound_phone_number_id"),
+
   // ── Stats ────────────────────────────────────────────────────────────────────
   totalCalls: integer("total_calls").notNull().default(0),
   successfulCalls: integer("successful_calls").notNull().default(0),

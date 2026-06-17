@@ -1,0 +1,472 @@
+# Feature Request: Agent Version Control, Certification & Publishing System
+
+## IMPORTANT: ANALYZE FIRST, IMPLEMENT SECOND
+
+Before implementing this feature:
+
+1. Analyze the current Agent architecture.
+2. Analyze how agent configurations are currently stored.
+3. Analyze prompts, tools, knowledge base, memory, voice settings, and agent configuration storage.
+4. Analyze current publishing workflows (if any exist).
+5. Analyze current database schema.
+6. Analyze current UI architecture.
+
+Do not blindly implement this specification.
+
+If existing patterns or systems already exist, extend and reuse them.
+
+The final implementation should feel like a native SnapServe feature.
+
+---
+
+# Why This Feature Is Needed
+
+Building AI agents is an iterative process.
+
+Users continuously modify:
+
+* Prompts
+* Tools
+* Knowledge Bases
+* Memory Settings
+* Voice Settings
+* Call Logic
+* Appointment Booking Flows
+* CRM Workflows
+
+A single change can accidentally break an agent that was previously working perfectly.
+
+Today there is no safe way to:
+
+* Save working versions
+* Track changes
+* Compare versions
+* Restore previous versions
+* Publish stable releases
+
+This creates risk.
+
+Users need confidence that once an agent is working correctly, they can save it as a stable version and recover it at any time.
+
+The goal is to bring GitHub-style versioning and releases to AI Agents.
+
+---
+
+# Core Concept
+
+An Agent should always have:
+
+1. Draft Version
+2. Production Version
+
+Draft:
+
+Used for experimentation and edits.
+
+Production:
+
+Used for real calls and live traffic.
+
+Users should be able to modify drafts freely without affecting production.
+
+---
+
+# Agent Development Workflow
+
+Step 1
+
+User creates an agent.
+
+Step 2
+
+User configures:
+
+* Prompt
+* Voice
+* Knowledge Base
+* Tools
+* Memory
+* Webhooks
+* Booking Settings
+
+Step 3
+
+User tests the agent.
+
+Using:
+
+* Chat Testing
+* AI Simulation Testing
+* Real Test Calls
+
+Step 4
+
+User refines the agent until satisfied.
+
+Step 5
+
+User decides:
+
+"This agent is working correctly and is ready for production."
+
+Step 6
+
+User clicks:
+
+Publish Version
+
+Step 7
+
+System creates a permanent version snapshot.
+
+Step 8
+
+That version becomes the active production version.
+
+---
+
+# Publish Workflow
+
+Add a Publish button inside the Agent Builder.
+
+When clicked:
+
+Open Publish Modal.
+
+---
+
+## Publish Modal
+
+### Version Name
+
+Required
+
+Examples:
+
+Health Insurance V1
+
+Dental Outbound V2
+
+Appointment Booking Flow Update
+
+---
+
+### Commit Description
+
+Required
+
+Purpose:
+
+Document exactly what changed.
+
+Examples:
+
+Added policy renewal handling.
+
+Improved objection handling.
+
+Updated Care Insurance knowledge base.
+
+Added appointment booking tools.
+
+Improved lead qualification workflow.
+
+Fixed memory injection issue.
+
+Optimized tool calling logic.
+
+---
+
+### Release Notes
+
+Optional
+
+Long-form release notes.
+
+---
+
+### Auto Create Draft
+
+Enabled by default.
+
+After publishing:
+
+Production Version remains locked.
+
+A new Draft is automatically created for future changes.
+
+---
+
+# What Gets Saved In A Version
+
+A Version Snapshot should contain:
+
+* Prompt
+* System Instructions
+* Welcome Messages
+* Dynamic Variables
+* Voice Settings
+* Language Settings
+* Provider Settings
+* Tool Configuration
+* Knowledge Base Assignments
+* Memory Settings
+* Call Settings
+* Webhook Settings
+* Security Settings
+* Advanced Settings
+* Post Call Extraction Settings
+
+Everything required to recreate the exact agent behavior.
+
+---
+
+# Production Version
+
+Only ONE version can be Production.
+
+Example:
+
+Production Version
+
+V1.3.0
+
+Published By:
+Gopi
+
+Published Date:
+June 17, 2026
+
+Status:
+Production
+
+All real calls should use this version.
+
+---
+
+# Draft Version
+
+Drafts are editable.
+
+Production versions are immutable.
+
+Users can continue experimenting safely without affecting live calls.
+
+---
+
+# Version History
+
+Create a dedicated Version History page.
+
+Display:
+
+Version Number
+
+Version Name
+
+Commit Description
+
+Created By
+
+Created Date
+
+Status
+
+Actions
+
+---
+
+Actions
+
+View
+
+Compare
+
+Restore
+
+Duplicate
+
+Publish
+
+---
+
+# Compare Versions
+
+Allow side-by-side comparison.
+
+Show differences in:
+
+Prompt
+
+Tools
+
+Knowledge Base
+
+Memory
+
+Voice
+
+Settings
+
+Variables
+
+Webhooks
+
+This helps users understand exactly what changed.
+
+---
+
+# Restore Version
+
+Critical Feature.
+
+If a user breaks an agent:
+
+They should be able to restore a previous working version.
+
+Workflow:
+
+Select Version
+
+↓
+
+Restore
+
+↓
+
+Create New Draft
+
+↓
+
+Review
+
+↓
+
+Publish
+
+Never overwrite an existing version.
+
+Never directly replace production.
+
+Always restore into a new draft.
+
+---
+
+# One-Click Recovery
+
+Add:
+
+Restore Last Working Version
+
+This should instantly create a draft from the most recent stable production version.
+
+Useful when users accidentally break an agent.
+
+---
+
+# Version Statuses
+
+Draft
+
+Published
+
+Production
+
+Archived
+
+Restored
+
+Deprecated
+
+---
+
+# Audit Trail
+
+Track:
+
+Created By
+
+Modified By
+
+Published By
+
+Restored By
+
+Timestamp
+
+Version Notes
+
+Commit Description
+
+Workspace
+
+This is important for future team collaboration.
+
+---
+
+# Safety Requirements
+
+Version Restore must NEVER restore:
+
+* Call Logs
+* Conversation History
+* CRM Data
+* Leads
+* Bookings
+* Analytics
+* Execution Logs
+* Customer Data
+
+Only restore:
+
+Agent Configuration
+
+---
+
+# Future Team Collaboration
+
+Design the architecture so that future versions can support:
+
+* Multiple editors
+* Approval workflows
+* Review process
+* Change requests
+* Release management
+
+Even if not implemented now.
+
+---
+
+# Success Criteria
+
+A user should be able to:
+
+✓ Build an agent
+
+✓ Test the agent
+
+✓ Run simulations
+
+✓ Validate tools
+
+✓ Validate memory
+
+✓ Validate knowledge
+
+✓ Publish a stable version
+
+✓ Add a Version Name
+
+✓ Add a Commit Description
+
+✓ Track change history
+
+✓ Compare versions
+
+✓ Restore previous versions
+
+✓ Recover broken agents
+
+✓ Maintain a stable production version
+
+The system should feel similar to GitHub Releases, but specifically designed for AI Agents and Voice AI workflows.
