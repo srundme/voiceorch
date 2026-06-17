@@ -18,6 +18,7 @@ const BASE: AgentFormValues = {
   temperature: 0.7,
   maxDuration: 600,
   greetingMessage: "Hello! How can I help you today?",
+  firstSpeaker: "assistant",
   endCallPhrases: "goodbye, bye",
   silenceTimeoutSeconds: 30,
   language: "en-US",

@@ -71,7 +71,7 @@ export const agentFormSchema = z.object({
   temperature:       z.number().min(0).max(2).optional(),
   maxDuration:       z.number().min(10).max(3600).optional(),
   greetingMessage:          z.string().optional(),
-  firstSpeaker:             z.enum(["assistant", "user"]).optional(),
+  firstSpeaker:             z.preprocess((v) => (v === "user" ? "user" : "assistant"), z.enum(["assistant", "user"])),
   endCallPhrases:           z.string().optional(),
   silenceTimeoutSeconds:    z.number().min(5).max(300).optional(),
   language:                 z.string().optional(),
@@ -236,6 +236,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
 
   return {
     ...rest,
+    firstSpeaker: rest.firstSpeaker === "user" ? "user" : "assistant",
     tools: serializedTools,
     asrLanguage: rest.asrLanguage || null,
     snapserveAgentId: snapserveAgentId || null,

@@ -630,7 +630,7 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
             <div className="flex items-center justify-between">
               <span className="text-sm font-semibold">First Message</span>
               <FormField control={form.control} name="firstSpeaker" render={({ field }) => (
-                <Select value={field.value ?? "assistant"} onValueChange={field.onChange}>
+                <Select value={field.value === "user" ? "user" : "assistant"} onValueChange={field.onChange}>
                   <SelectTrigger className="h-8 w-48 text-xs">
                     <SelectValue />
                   </SelectTrigger>
