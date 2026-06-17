@@ -1,0 +1,187 @@
+RESCHEDULE FLOW BUG - CONTEXT LOSS
+
+The issue is NOT in the reschedule tool.
+
+The issue is in the conversation orchestration layer.
+
+Evidence:
+
+Current booking:
+Booking ID 28
+Date: June 18
+Time: 12:00 PM
+
+User requested:
+"Can the 12:30"
+
+Expected interpretation:
+
+June 18 at 12:30 PM
+
+Actual behavior:
+
+The agent previously called:
+
+check_availability(
+preferred_date="2026-06-19"
+)
+
+which means the booking date context was lost.
+
+The agent started checking availability for an entirely different day.
+
+---
+
+REQUIRED FIX
+
+When a booking is selected for rescheduling:
+
+Persist the following in conversation state:
+
+selected_booking_id
+selected_booking_date
+selected_booking_time
+selected_event_type
+
+Example:
+
+{
+"booking_id": 28,
+"date": "2026-06-18",
+"time": "12:00 PM",
+"event": "one to one booking"
+}
+
+---
+
+FOLLOW-UP TIME REFERENCES
+
+If the user says:
+
+"12:30"
+
+or
+
+"Move it to 1 PM"
+
+or
+
+"Can we do 2:30 instead"
+
+the system must interpret:
+
+same booking
+same date
+
+unless the user explicitly changes the date.
+
+Example:
+
+Current booking:
+June 18 at 12:00 PM
+
+User:
+"Can we do 12:30?"
+
+Interpret as:
+
+June 18 at 12:30 PM
+
+NOT
+
+June 19 at 12:30 PM
+
+NOT
+
+next available day
+
+---
+
+CHECK AVAILABILITY
+
+When checking availability during a reschedule:
+
+Default preferred_date must be:
+
+selected_booking_date
+
+unless the user explicitly asks for another day.
+
+---
+
+RESCHEDULE STATE MACHINE
+
+Step 1
+
+List bookings
+
+Step 2
+
+User selects booking
+
+Step 3
+
+Store booking in session state
+
+Step 4
+
+User proposes new time
+
+Step 5
+
+Check availability using SAME DATE
+
+Step 6
+
+If available:
+
+Ask for confirmation
+
+Step 7
+
+Execute reschedule
+
+Step 8
+
+Clear selected booking state
+
+---
+
+ADD DEBUG LOGGING
+
+Log:
+
+selected_booking_id
+selected_booking_date
+selected_booking_time
+resolved_requested_datetime
+
+before every:
+
+check_availability
+
+and
+
+reschedule_booking
+
+call.
+
+This will make future debugging easy.
+
+---
+
+SUCCESS CRITERIA
+
+Current booking:
+June 18 at 12 PM
+
+User:
+"Can we make it 12:30?"
+
+Tool call must use:
+
+June 18 at 12:30 PM
+
+not June 19.
+
+The booking context must remain attached throughout the entire reschedule flow.
