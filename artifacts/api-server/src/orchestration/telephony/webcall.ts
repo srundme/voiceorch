@@ -32,7 +32,7 @@ import {
 
 // ── Per-user concurrent call rate limit ──────────────────────────────────────
 const activeCalls = new Map<string, number>();
-const PLATFORM_MAX_CONCURRENT = 15; // hard ceiling regardless of user's DB limit
+const DEFAULT_CONCURRENT_LIMIT = 15; // default when user row has no value
 
 // ── Tuning constants ─────────────────────────────────────────────────────────
 const VAD_SILENCE_MS           = 200;   // silence window before sending audio to STT (ms)
@@ -157,7 +157,7 @@ export async function handleWebCallWebSocket(
   if (!agent) { send({ type: "error", message: "Agent not found" }); ws.close(); return; }
 
   // Balance gate + concurrent limit — single DB fetch covers both checks
-  let effectiveConcurrentLimit = PLATFORM_MAX_CONCURRENT;
+  let effectiveConcurrentLimit = DEFAULT_CONCURRENT_LIMIT;
   if (agent.userId) {
     const [user] = await db
       .select({ walletBalanceCents: usersTable.walletBalanceCents, concurrentLimit: usersTable.concurrentLimit })
@@ -167,7 +167,7 @@ export async function handleWebCallWebSocket(
       ws.close();
       return;
     }
-    effectiveConcurrentLimit = Math.min(user?.concurrentLimit ?? 2, PLATFORM_MAX_CONCURRENT);
+    effectiveConcurrentLimit = user?.concurrentLimit ?? DEFAULT_CONCURRENT_LIMIT;
   }
 
   // ── Rate limit: max concurrent calls per user (DB limit, hard ceiling = 15) ─

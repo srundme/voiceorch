@@ -15,7 +15,7 @@ export const usersTable = pgTable("users", {
   passwordHash: text("password_hash"),
   apiKey: text("api_key").unique(),
   orgKey: text("org_key").unique(),
-  concurrentLimit: integer("concurrent_limit").notNull().default(2),
+  concurrentLimit: integer("concurrent_limit").notNull().default(15),
   onboardingCompleted: boolean("onboarding_completed").notNull().default(false),
   onboardingData: jsonb("onboarding_data"),
   preferences: jsonb("preferences").$type<{ theme?: "light" | "dark" | "system" }>(),

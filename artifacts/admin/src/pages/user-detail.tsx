@@ -1,4 +1,4 @@
-import { useUserDetail, useAdjustWallet } from "@/hooks/use-admin-api";
+import { useUserDetail, useAdjustWallet, useSetConcurrentLimit } from "@/hooks/use-admin-api";
 import { formatCentsToDollars, formatDuration } from "@/lib/api";
 import { format } from "date-fns";
 import { useParams, Link } from "wouter";
@@ -25,7 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ArrowLeft, Wallet, PhoneCall, Bot, Activity } from "lucide-react";
+import { ArrowLeft, Wallet, PhoneCall, Bot, Activity, Zap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
 
@@ -33,11 +33,15 @@ export default function UserDetail() {
   const { clerkId } = useParams<{ clerkId: string }>();
   const { data, isLoading } = useUserDetail(clerkId || "");
   const adjustWallet = useAdjustWallet(clerkId || "");
+  const setConcurrentLimit = useSetConcurrentLimit(clerkId || "");
   const { toast } = useToast();
 
   const [walletModalOpen, setWalletModalOpen] = useState(false);
   const [adjustmentDollars, setAdjustmentDollars] = useState("");
   const [adjustmentDesc, setAdjustmentDesc] = useState("");
+
+  const [concurrentModalOpen, setConcurrentModalOpen] = useState(false);
+  const [newConcurrentLimit, setNewConcurrentLimit] = useState("");
 
   const handleAdjustWallet = () => {
     const amount = parseFloat(adjustmentDollars);
@@ -45,7 +49,6 @@ export default function UserDetail() {
       toast({ title: "Invalid amount", variant: "destructive" });
       return;
     }
-
     const cents = Math.round(amount * 100);
     adjustWallet.mutate(
       { adjustmentCents: cents, description: adjustmentDesc || "Admin manual adjustment" },
@@ -58,6 +61,27 @@ export default function UserDetail() {
         },
         onError: (err) => {
           toast({ title: "Failed to adjust wallet", description: formatApiError(err), variant: "destructive" });
+        }
+      }
+    );
+  };
+
+  const handleSetConcurrentLimit = () => {
+    const limit = parseInt(newConcurrentLimit, 10);
+    if (isNaN(limit) || limit < 1) {
+      toast({ title: "Invalid limit", description: "Must be a positive integer", variant: "destructive" });
+      return;
+    }
+    setConcurrentLimit.mutate(
+      { concurrentLimit: limit },
+      {
+        onSuccess: () => {
+          toast({ title: `Concurrent limit set to ${limit}` });
+          setConcurrentModalOpen(false);
+          setNewConcurrentLimit("");
+        },
+        onError: (err) => {
+          toast({ title: "Failed to set limit", description: formatApiError(err), variant: "destructive" });
         }
       }
     );
@@ -98,8 +122,8 @@ export default function UserDetail() {
             <div className={`text-3xl font-bold font-mono ${user.walletBalanceCents < 0 ? 'text-destructive' : ''}`}>
               {formatCentsToDollars(user.walletBalanceCents || 0)}
             </div>
-            <Button 
-              className="w-full mt-4" 
+            <Button
+              className="w-full mt-4"
               variant="outline"
               onClick={() => setWalletModalOpen(true)}
             >
@@ -108,13 +132,37 @@ export default function UserDetail() {
           </CardContent>
         </Card>
 
-        <Card className="md:col-span-3">
+        <Card className="md:col-span-1">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+              <Zap className="h-4 w-4" /> Concurrent Calls
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold font-mono">
+              {user.concurrentLimit ?? 15}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">max simultaneous calls</p>
+            <Button
+              className="w-full mt-4"
+              variant="outline"
+              onClick={() => {
+                setNewConcurrentLimit(String(user.concurrentLimit ?? 15));
+                setConcurrentModalOpen(true);
+              }}
+            >
+              Set Limit
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="md:col-span-2">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-2">
               <Activity className="text-muted-foreground h-4 w-4" /> Profile Info
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <CardContent className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <span className="block text-muted-foreground text-xs uppercase mb-1">Name</span>
               <span className="font-medium">{user.name || "N/A"}</span>
@@ -269,6 +317,7 @@ export default function UserDetail() {
         </Card>
       </div>
 
+      {/* Wallet adjustment dialog */}
       <Dialog open={walletModalOpen} onOpenChange={setWalletModalOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
@@ -304,6 +353,43 @@ export default function UserDetail() {
             <Button variant="outline" onClick={() => setWalletModalOpen(false)}>Cancel</Button>
             <Button onClick={handleAdjustWallet} disabled={adjustWallet.isPending || !adjustmentDollars}>
               {adjustWallet.isPending ? "Applying..." : "Apply Adjustment"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Concurrent limit dialog */}
+      <Dialog open={concurrentModalOpen} onOpenChange={setConcurrentModalOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Set Concurrent Call Limit</DialogTitle>
+            <DialogDescription>
+              Set how many simultaneous calls {user.email} can run. Current limit: <strong>{user.concurrentLimit ?? 15}</strong>.
+              Users start at 15 by default and can purchase additional slots.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="concurrent-limit">Concurrent Call Limit</Label>
+              <Input
+                id="concurrent-limit"
+                type="number"
+                min="1"
+                step="1"
+                placeholder="e.g. 15"
+                value={newConcurrentLimit}
+                onChange={(e) => setNewConcurrentLimit(e.target.value)}
+                className="font-mono"
+              />
+              <p className="text-xs text-muted-foreground">
+                Set to a lower number to restrict, or higher to grant extra capacity. Minimum is 1.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConcurrentModalOpen(false)}>Cancel</Button>
+            <Button onClick={handleSetConcurrentLimit} disabled={setConcurrentLimit.isPending || !newConcurrentLimit}>
+              {setConcurrentLimit.isPending ? "Saving..." : "Save Limit"}
             </Button>
           </DialogFooter>
         </DialogContent>
