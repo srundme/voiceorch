@@ -38,8 +38,6 @@ import leadWorkspaceRouter from "./lead-workspace.js";
 import platformAnalyticsRouter from "./platform-analytics.js";
 import searchRouter from "./search.js";
 import agentVariablesRouter from "./agent-variables.js";
-import agentVersionsRouter from "./agent-versions.js";
-
 import batchImportRunsRouter from "./batch-import-runs.js";
 import schedulingRouter from "./scheduling/index.js";
 import kycRouter from "./kyc.js";
@@ -55,8 +53,6 @@ import voicesRouter from "./voices.js";
 import testToolRouter from "./test-tool.js";
 import authRouter from "./auth.js";
 import dispositionRouter from "./disposition.js";
-import simulationRouter from "./simulation.js";
-import docsRouter from "./docs.js";
 import webcallTicketRouter from "./webcall-ticket.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
@@ -76,9 +72,6 @@ router.use(adminPromptTemplatesRouter);
 // Public campaign lead webhook — must be before provisionUser (no Clerk session needed)
 router.use(campaignWebhookRouter);
 
-
-// Public docs routes — changelog API (no session required)
-router.use(docsRouter);
 
 // Public auth routes — Google login redirect + callback (no session required)
 router.use(authRouter);
@@ -134,8 +127,6 @@ router.use(billingRouter);
 router.use(webcallNotifyRouter);
 router.use(testToolRouter);
 router.use(dispositionRouter);
-router.use(agentVersionsRouter);
-router.use(simulationRouter);
 router.use(webcallTicketRouter);
 
 export default router;
