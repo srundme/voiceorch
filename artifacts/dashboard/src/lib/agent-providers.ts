@@ -19,13 +19,7 @@ export const LLM_PROVIDERS = [
 ];
 
 export const TTS_PROVIDERS = [
-  { value: "elevenlabs", label: "ElevenLabs" },
-  { value: "openai",     label: "OpenAI TTS" },
-  { value: "cartesia",   label: "Cartesia (Sonic)" },
-  { value: "azure",      label: "Azure TTS" },
-  { value: "aws_polly",  label: "AWS Polly" },
-  { value: "deepgram",   label: "Deepgram TTS" },
-  { value: "sarvam",     label: "Sarvam (Bulbul)" },
+  { value: "cartesia", label: "Cartesia (Sonic)" },
 ];
 
 export const TELEPHONY_PROVIDERS = [
