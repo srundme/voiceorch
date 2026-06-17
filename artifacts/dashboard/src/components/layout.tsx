@@ -355,6 +355,18 @@ function SidebarContent({
         )}
       </div>
 
+      {/* Docs shortcut */}
+      <div className="px-2 pb-1.5 shrink-0">
+        <Link
+          href="/docs"
+          onClick={onNavClick}
+          className="flex items-center gap-2.5 px-2.5 py-[6.5px] rounded-lg text-[13px] text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors duration-100 w-full"
+        >
+          <BookOpen className="w-[14px] h-[14px] shrink-0 text-muted-foreground/45" />
+          {!collapsed && <span>Documentation</span>}
+        </Link>
+      </div>
+
       {/* Footer */}
       <div className="px-2 pb-2.5 pt-2 shrink-0 border-t border-sidebar-border">
         <div className="flex items-center gap-2 px-2.5 py-1.5">
