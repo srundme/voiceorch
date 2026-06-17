@@ -662,9 +662,12 @@ export async function executeNativeListBookings(
         attendeeName: bookingsTable.attendeeName,
         attendeeEmail: bookingsTable.attendeeEmail,
         slotStart: bookingsTable.slotStart,
+        slotEnd: bookingsTable.slotEnd,
         status: bookingsTable.status,
         calendarId: bookingsTable.calendarId,
         eventTypeId: bookingsTable.eventTypeId,
+        googleEventId: bookingsTable.googleEventId,
+        rescheduledFromId: bookingsTable.rescheduledFromId,
       })
       .from(bookingsTable)
       .where(
@@ -695,8 +698,13 @@ export async function executeNativeListBookings(
         .where(eq(schedulingCalendarsTable.id, owned[0].calendarId));
       tz = cal?.timezone ?? null;
     }
+    const tzFallback = !tz;
     tz = tz ?? "Asia/Kolkata";
-    logger.debug({ callId, tz }, "list_bookings: timezone resolved");
+    if (tzFallback) {
+      logger.warn({ callId, tz }, "list_bookings: timezone fell back to Asia/Kolkata default — check agent/calendar timezone config");
+    } else {
+      logger.debug({ callId, tz }, "list_bookings: timezone resolved");
+    }
 
     // Resolve event type names in bulk
     const etIds = [...new Set(owned.map((b) => b.eventTypeId))];
@@ -708,20 +716,39 @@ export async function executeNativeListBookings(
     const list = owned.map((b) => {
       const eventName = etMap.get(b.eventTypeId) ?? "Appointment";
       const dateStr = formatInTimeZone(b.slotStart, tz, "EEE MMM d 'at' h:mm a zzz");
+      const endDateStr = formatInTimeZone(b.slotEnd, tz, "h:mm a zzz");
       logger.debug(
         {
           callId,
           bookingId: b.id,
           attendeeEmail: b.attendeeEmail,
           slotStartUtc: b.slotStart.toISOString(),
+          slotEndUtc: b.slotEnd.toISOString(),
           displayTime: dateStr,
+          googleEventId: b.googleEventId,
+          rescheduledFromId: b.rescheduledFromId,
         },
         "list_bookings: returning booking to AI",
       );
-      return `booking_id=${b.id}, event="${eventName}", iso_start=${b.slotStart.toISOString()}, date="${dateStr}", status="${b.status}"`;
+      const parts = [
+        `booking_id=${b.id}`,
+        `event="${eventName}"`,
+        `iso_start=${b.slotStart.toISOString()}`,
+        `iso_end=${b.slotEnd.toISOString()}`,
+        `date="${dateStr} – ${endDateStr}"`,
+        `status="${b.status}"`,
+      ];
+      if (b.googleEventId) parts.push(`google_event_id="${b.googleEventId}"`);
+      if (b.rescheduledFromId != null) parts.push(`rescheduled_from_booking_id=${b.rescheduledFromId}`);
+      return parts.join(", ");
     });
 
-    return `bookings_found: count=${owned.length}, ${list.join(" | ")}`;
+    const rescheduleNotes = owned
+      .filter((b) => b.rescheduledFromId != null)
+      .map((b) => `booking #${b.id} replaced original booking #${b.rescheduledFromId}`);
+
+    const suffix = rescheduleNotes.length > 0 ? ` | notes: ${rescheduleNotes.join("; ")}` : "";
+    return `bookings_found: count=${owned.length}, ${list.join(" | ")}${suffix}`;
   } catch (err) {
     logger.error({ callId, errMsg: (err as Error)?.message, err }, "Native list-bookings tool execution failed");
     return "error: booking lookup failed due to a technical issue";

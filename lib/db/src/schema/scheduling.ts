@@ -81,6 +81,8 @@ export const bookingsTable = pgTable("bookings", {
   bookedVia: text("booked_via").notNull().default("web"),
   cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
   rescheduledFromId: integer("rescheduled_from_id"),
+  googleEventId: text("google_event_id"),
+  meetLink: text("meet_link"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

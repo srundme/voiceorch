@@ -40,8 +40,8 @@ function formatBooking(b: typeof bookingsTable.$inferSelect) {
     cancelledAt: b.cancelledAt?.toISOString() ?? null,
     createdAt: b.createdAt.toISOString(),
     updatedAt: b.updatedAt.toISOString(),
-    meetLink: (b as any).meetLink ?? null,
-    googleEventId: (b as any).googleEventId ?? null,
+    meetLink: b.meetLink ?? null,
+    googleEventId: b.googleEventId ?? null,
   };
 }
 
@@ -209,9 +209,9 @@ router.post("/scheduling/bookings", requireAuth, async (req, res): Promise<void>
       meetLink = gcalResult.meetLink;
       googleEventId = gcalResult.eventId;
       if (meetLink || googleEventId) {
-        await db.execute(
-          sql`UPDATE bookings SET meet_link = ${meetLink}, google_event_id = ${googleEventId} WHERE id = ${booking.id}`
-        );
+        await db.update(bookingsTable)
+          .set({ meetLink, googleEventId })
+          .where(eq(bookingsTable.id, booking.id));
       }
     }
   } catch (err) {
@@ -257,11 +257,7 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
     .where(and(eq(bookingsTable.id, params.data.id), eq(bookingsTable.userId, clerkId)));
   if (!existing) { res.status(404).json({ error: "Booking not found" }); return; }
 
-  // Fetch google_event_id explicitly — it exists in the DB but is not in the Drizzle schema type
-  const existingGcalRow = await db.execute(
-    sql`SELECT google_event_id FROM bookings WHERE id = ${existing.id}`
-  );
-  const existingGoogleEventId = (existingGcalRow.rows[0] as any)?.google_event_id as string | null ?? null;
+  const existingGoogleEventId = existing.googleEventId ?? null;
 
   const [eventType] = await db.select().from(eventTypesTable).where(eq(eventTypesTable.id, existing.eventTypeId));
   const [calendar] = await db.select().from(schedulingCalendarsTable).where(eq(schedulingCalendarsTable.id, existing.calendarId));
@@ -404,9 +400,9 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
               additionalHosts: calendar?.additionalHosts,
             });
             if (gcalResult) {
-              await db.execute(
-                sql`UPDATE bookings SET meet_link = ${gcalResult.meetLink}, google_event_id = ${gcalResult.eventId} WHERE id = ${newBooking.id}`
-              );
+              await db.update(bookingsTable)
+                .set({ meetLink: gcalResult.meetLink, googleEventId: gcalResult.eventId })
+                .where(eq(bookingsTable.id, newBooking.id));
             }
           } else {
             // No existing Google event — create fresh
@@ -428,9 +424,9 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
               additionalHosts: calendar?.additionalHosts,
             });
             if (gcalResult) {
-              await db.execute(
-                sql`UPDATE bookings SET meet_link = ${gcalResult.meetLink}, google_event_id = ${gcalResult.eventId} WHERE id = ${newBooking.id}`
-              );
+              await db.update(bookingsTable)
+                .set({ meetLink: gcalResult.meetLink, googleEventId: gcalResult.eventId })
+                .where(eq(bookingsTable.id, newBooking.id));
             }
           }
         }

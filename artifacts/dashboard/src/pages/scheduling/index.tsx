@@ -158,36 +158,65 @@ export default function SchedulingPage() {
                   </TableCell>
                 </TableRow>
               )}
-              {bookings?.map(b => (
-                <TableRow
-                  key={b.id}
-                  className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => navigate(`${BASE}/app/scheduling/bookings/${b.id}`)}
-                >
-                  <TableCell>
-                    <div className="flex flex-col">
-                      <span className="font-medium text-sm">{b.attendeeName}</span>
-                      <span className="text-xs text-muted-foreground">{b.attendeeEmail}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-col">
-                      <span className="text-sm">{format(parseISO(b.slotStart), "MMM d, yyyy")}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {format(parseISO(b.slotStart), "h:mm a")} – {format(parseISO(b.slotEnd), "h:mm a")}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell>{statusBadge(b.status)}</TableCell>
-                  <TableCell>{sourceBadge(b.bookedVia)}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {format(parseISO(b.createdAt), "MMM d")}
-                  </TableCell>
-                  <TableCell>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                  </TableCell>
-                </TableRow>
-              ))}
+              {(() => {
+                // Build a map from old booking ID → new booking ID for reschedule chains
+                const replacedByMap = new Map<number, number>();
+                bookings?.forEach(b => {
+                  if (b.rescheduledFromId != null) {
+                    replacedByMap.set(b.rescheduledFromId, b.id);
+                  }
+                });
+                return bookings?.map(b => (
+                  <TableRow
+                    key={b.id}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => navigate(`${BASE}/app/scheduling/bookings/${b.id}`)}
+                  >
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="font-medium text-sm">{b.attendeeName}</span>
+                        <span className="text-xs text-muted-foreground">{b.attendeeEmail}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="text-sm">{format(parseISO(b.slotStart), "MMM d, yyyy")}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {format(parseISO(b.slotStart), "h:mm a")} – {format(parseISO(b.slotEnd), "h:mm a")}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-1">
+                        {statusBadge(b.status)}
+                        {b.status === "rescheduled" && replacedByMap.has(b.id) && (
+                          <span className="text-xs text-muted-foreground">
+                            → <span
+                              className="text-primary hover:underline cursor-pointer"
+                              onClick={e => { e.stopPropagation(); navigate(`${BASE}/app/scheduling/bookings/${replacedByMap.get(b.id)}`); }}
+                            >#{replacedByMap.get(b.id)}</span>
+                          </span>
+                        )}
+                        {b.rescheduledFromId != null && (
+                          <span className="text-xs text-muted-foreground">
+                            from <span
+                              className="text-primary hover:underline cursor-pointer"
+                              onClick={e => { e.stopPropagation(); navigate(`${BASE}/app/scheduling/bookings/${b.rescheduledFromId}`); }}
+                            >#{b.rescheduledFromId}</span>
+                          </span>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>{sourceBadge(b.bookedVia)}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {format(parseISO(b.createdAt), "MMM d")}
+                    </TableCell>
+                    <TableCell>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    </TableCell>
+                  </TableRow>
+                ));
+              })()}
             </TableBody>
           </Table>
         </CardContent>
