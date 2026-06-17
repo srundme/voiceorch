@@ -1,0 +1,687 @@
+# Feature Request: Agent Simulation Testing (Chat + Persona-Based Testing)
+
+IMPORTANT:
+
+Before making any changes:
+
+1. Create a separate feature branch.
+2. Do NOT modify existing call flows.
+3. Do NOT modify voice calling.
+4. Do NOT modify agent execution.
+5. Do NOT modify tools.
+6. Do NOT modify memory.
+7. Do NOT modify appointment booking.
+8. Do NOT modify CRM.
+9. Do NOT modify analytics.
+10. Do NOT modify production agent behavior.
+
+This must be implemented as a completely isolated feature.
+
+--------------------------------------------------
+
+# Objective
+
+Build a Simulation Testing module similar to Retell AI.
+
+The purpose is to allow users to test an AI Agent before deployment.
+
+Users should be able to:
+
+1. Manually chat with the agent.
+2. Run simulated conversations.
+3. Test different customer personas.
+4. Validate prompts.
+5. Validate tool calling.
+6. Validate variable injection.
+7. Validate memory behavior.
+8. Validate appointment booking flows.
+9. Validate lead qualification flows.
+
+This feature should work WITHOUT making actual phone calls.
+
+--------------------------------------------------
+
+# New Navigation
+
+Agent
+
+→ Overview
+→ Prompt
+→ Voice
+→ Tools
+→ Analysis
+→ Advanced
+→ Logs
+→ Simulation
+
+Add a new tab:
+
+Simulation
+
+--------------------------------------------------
+
+# Simulation Module
+
+Inside Simulation create two sections:
+
+1. Manual Chat Testing
+2. Scenario Simulation Testing
+
+--------------------------------------------------
+
+# SECTION 1
+
+# Manual Chat Testing
+
+Purpose:
+
+Allow users to chat directly with the agent.
+
+Like ChatGPT.
+
+Without making a phone call.
+
+--------------------------------------------------
+
+UI
+
+Left Side
+
+Chat Window
+
+User Messages
+
+Agent Responses
+
+Tool Call Indicators
+
+System Events
+
+--------------------------------------------------
+
+Right Side
+
+Debug Panel
+
+Show:
+
+Variables Injected
+
+Memory Retrieved
+
+Knowledge Retrieved
+
+Tools Called
+
+Latency
+
+Token Usage
+
+Resolved Prompt
+
+--------------------------------------------------
+
+Example
+
+User:
+
+I need health insurance.
+
+Agent:
+
+Sure.
+May I know your age?
+
+User:
+
+32
+
+Agent:
+
+Do you already have a health insurance policy?
+
+--------------------------------------------------
+
+# Manual Chat Requirements
+
+Must use the SAME backend flow as voice calls.
+
+Same:
+
+- Prompt
+- Tools
+- Knowledge Base
+- Memory
+- Variables
+
+Only difference:
+
+Input = Text
+
+instead of
+
+Input = Voice
+
+--------------------------------------------------
+
+# SECTION 2
+
+# Scenario Simulation Testing
+
+Purpose
+
+Automatically simulate a realistic prospect.
+
+The AI Agent talks to another AI User Persona.
+
+This helps users test conversations at scale.
+
+--------------------------------------------------
+
+Example Use Case
+
+Agent Type:
+
+Health Insurance Sales Agent
+
+Possible Prospects:
+
+Fresh Buyer
+
+Existing Policy Holder
+
+Porting Customer
+
+Renewal Customer
+
+Price Sensitive Customer
+
+Interested But Not Ready
+
+Customer Asking For Advisor
+
+Customer Comparing Competitors
+
+Customer Looking For Family Plan
+
+Senior Citizen Customer
+
+--------------------------------------------------
+
+# Create Test Case Modal
+
+Create New Test Case
+
+Fields:
+
+--------------------------------------------------
+
+Name
+
+Example:
+
+Fresh Buyer Scenario
+
+--------------------------------------------------
+
+User Persona
+
+Example:
+
+You are a 32 year old software engineer.
+
+You have never purchased health insurance.
+
+You are interested but cautious.
+
+You compare plans before buying.
+
+Ask realistic questions.
+
+Do not immediately agree.
+
+--------------------------------------------------
+
+Goal
+
+Example:
+
+Determine whether the AI successfully explains the benefits of health insurance and collects contact details.
+
+--------------------------------------------------
+
+Success Criteria
+
+Example:
+
+- Agent explains policy benefits.
+- Agent asks qualification questions.
+- Agent captures customer intent.
+- Agent offers advisor callback.
+
+--------------------------------------------------
+
+Variables
+
+Optional
+
+Example:
+
+{
+  "first_name": "Gopi",
+  "age": 32,
+  "city": "Bangalore"
+}
+
+--------------------------------------------------
+
+Knowledge Context
+
+Optional
+
+Select KB
+
+--------------------------------------------------
+
+Save Test Case
+
+--------------------------------------------------
+
+# Simulation Engine
+
+When user clicks:
+
+Run Simulation
+
+System should:
+
+Step 1
+
+Load Agent
+
+Step 2
+
+Load User Persona
+
+Step 3
+
+Start conversation
+
+Step 4
+
+Generate realistic user responses
+
+Step 5
+
+Allow agent to respond
+
+Step 6
+
+Continue until:
+
+- Goal achieved
+- Conversation completed
+- Maximum turns reached
+
+--------------------------------------------------
+
+# Conversation Viewer
+
+Display:
+
+User Persona Messages
+
+Agent Messages
+
+Tool Calls
+
+System Events
+
+Timeline
+
+--------------------------------------------------
+
+Example
+
+Prospect:
+
+I already have a health insurance policy.
+
+Agent:
+
+Great.
+Are you looking for renewal or porting?
+
+Prospect:
+
+I am looking for porting.
+
+Agent:
+
+May I know why you want to switch providers?
+
+--------------------------------------------------
+
+# Tool Call Visibility
+
+Show whenever tools execute.
+
+Example:
+
+Tool Called:
+
+check_availability()
+
+Input:
+
+{
+  "date": "2026-06-20"
+}
+
+Output:
+
+{
+  "available_slots": ["10 AM","11 AM"]
+}
+
+--------------------------------------------------
+
+# Variable Testing
+
+Allow users to inject variables.
+
+Example
+
+Template:
+
+Hello {first_name}
+
+Variables:
+
+{
+ "first_name":"Gopi"
+}
+
+Resolved Prompt:
+
+Hello Gopi
+
+Display all three.
+
+--------------------------------------------------
+
+# Memory Testing
+
+Allow memory injection testing.
+
+Show:
+
+Memory Retrieved
+
+Memory Added
+
+Memory Updated
+
+--------------------------------------------------
+
+# Knowledge Base Testing
+
+Show:
+
+Chunks Retrieved
+
+Similarity Scores
+
+Knowledge Injected
+
+--------------------------------------------------
+
+# Simulation Results
+
+After simulation completes show:
+
+Overall Score
+
+Pass / Fail
+
+--------------------------------------------------
+
+Metrics
+
+Conversation Quality
+
+Qualification Accuracy
+
+Tool Usage Accuracy
+
+Knowledge Accuracy
+
+Prompt Compliance
+
+Goal Completion
+
+--------------------------------------------------
+
+Example
+
+Score:
+
+92/100
+
+PASS
+
+--------------------------------------------------
+
+# Simulation Report
+
+Generate downloadable report.
+
+Include:
+
+Agent Name
+
+Scenario Name
+
+Conversation Transcript
+
+Tools Used
+
+Variables Used
+
+Knowledge Retrieved
+
+Memory Retrieved
+
+Final Score
+
+Pass/Fail
+
+--------------------------------------------------
+
+Formats
+
+PDF
+
+JSON
+
+--------------------------------------------------
+
+# Batch Simulation
+
+Allow multiple simulations.
+
+Example
+
+Run:
+
+Fresh Buyer
+
+Renewal Customer
+
+Porting Customer
+
+Advisor Callback Scenario
+
+Price Sensitive Customer
+
+--------------------------------------------------
+
+Display
+
+Scenario
+
+Status
+
+Score
+
+Duration
+
+Pass/Fail
+
+--------------------------------------------------
+
+# Health Insurance Example Library
+
+Provide sample templates.
+
+Fresh Insurance Buyer
+
+Existing Insurance Holder
+
+Porting Customer
+
+Renewal Customer
+
+Senior Citizen Customer
+
+Family Floater Customer
+
+Customer Wants Lowest Premium
+
+Customer Wants Maximum Coverage
+
+Customer Wants Advisor Callback
+
+Customer Comparing Competitors
+
+--------------------------------------------------
+
+# Architecture Requirements
+
+Create separate services:
+
+SimulationService
+
+PersonaEngine
+
+ScenarioRunner
+
+SimulationReportGenerator
+
+SimulationStorage
+
+DO NOT reuse production call execution tables.
+
+Create separate simulation tables.
+
+--------------------------------------------------
+
+# Database Tables
+
+simulation_test_cases
+
+id
+
+agent_id
+
+name
+
+persona_prompt
+
+goal
+
+success_criteria
+
+variables
+
+created_at
+
+--------------------------------------------------
+
+simulation_runs
+
+id
+
+agent_id
+
+test_case_id
+
+status
+
+score
+
+result
+
+started_at
+
+completed_at
+
+--------------------------------------------------
+
+simulation_messages
+
+id
+
+simulation_run_id
+
+role
+
+message
+
+metadata
+
+timestamp
+
+--------------------------------------------------
+
+# Safety Requirement
+
+Simulation must never:
+
+- Place real calls
+- Send SMS
+- Send Emails
+- Trigger outbound campaigns
+- Trigger billing events
+
+Simulation must be sandbox-only.
+
+--------------------------------------------------
+
+# Success Criteria
+
+Users can:
+
+✓ Chat manually with their AI Agent
+
+✓ Test prompts without making calls
+
+✓ Simulate realistic customer personas
+
+✓ Validate tools
+
+✓ Validate memory
+
+✓ Validate knowledge retrieval
+
+✓ Validate variable injection
+
+✓ Run multiple test scenarios
+
+✓ Generate reports
+
+✓ Measure agent quality before deployment
+
+Most importantly:
+
+This must be implemented as a completely isolated testing environment that does not affect any existing production functionality.
