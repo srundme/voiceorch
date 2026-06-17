@@ -52,13 +52,12 @@ export function WebCallPanel({
   const [msgs, setMsgs]                   = useState<Msg[]>([]);
   const [error, setError]                 = useState<string | null>(null);
   const [duration, setDuration]           = useState<number | null>(null);
-  // #636 — token streaming: accumulate LLM tokens as a "typing" bubble
+  // token streaming: accumulate LLM tokens as a "typing" bubble
   const [streamingText, setStreamingText] = useState<string>("");
-  // #637 — stale flag: when barge-in fires, freeze bubble instead of clearing
+  // stale flag: when barge-in fires, freeze bubble instead of clearing
   const [streamingStale, setStreamingStale] = useState<boolean>(false);
-  // #635 — sentence highlight: which sentence the agent is currently speaking
+  // sentence highlight: which sentence the agent is currently speaking
   const [speakingSentence, setSpeakingSentence] = useState<string>("");
-
   const { keys: keyStatus, loading: keyLoading } = useWebcallKeyStatus();
   const { userId: callerUserId } = useAuth();
   const hasAutoStarted = useRef(false);
@@ -185,9 +184,12 @@ export function WebCallPanel({
           };
           if (msg.type === "ready") {
             setStatus("listening");
+          } else if (msg.type === "token" && msg.text) {
+            setStreaming(msg.text);
           } else if (msg.type === "interrupted") {
             // #637 — freeze the streaming bubble instead of clearing it
             stopAllAudio();
+            setStreaming(null);
             mutedRef.current = true;
             streamingStaleRef.current = true;
             setStreamingStale(true);
@@ -222,10 +224,12 @@ export function WebCallPanel({
             setMsgs(prev => [...prev, { speaker: msg.speaker!, text: msg.text! }]);
           } else if (msg.type === "ended") {
             setDuration(msg.durationSeconds ?? null);
+            setStreaming(null);
             setStatus("ended");
             cleanup();
           } else if (msg.type === "error") {
             setError(msg.message ?? "An error occurred");
+            setStreaming(null);
             setStatus("idle");
             cleanup();
           }
