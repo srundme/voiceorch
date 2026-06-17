@@ -46,10 +46,13 @@ const _GENDER_SERVICE_BASE = (process.env["GENDER_SERVICE_URL"] ?? "http://local
 const GENDER_ML_SERVICE_URL = `${_GENDER_SERVICE_BASE}/voice-analysis/gender-ml-v2`;
 
 // Startup warning so misconfigured deployments are caught in logs immediately.
-if (process.env["GENDER_SERVICE_URL"] && process.env["GENDER_SERVICE_URL"].includes("/gender-ml")) {
+if (process.env["GENDER_SERVICE_URL"] && (
+  process.env["GENDER_SERVICE_URL"].includes("/gender-ml") ||
+  process.env["GENDER_SERVICE_URL"].includes("/voice-analysis")
+)) {
   rootLogger.warn(
     { configured: process.env["GENDER_SERVICE_URL"] },
-    "GENDER_SERVICE_URL should be a bare host URL (e.g. http://host:5000), not a full path. The /voice-analysis/gender-ml-v2 suffix is appended automatically.",
+    "GENDER_SERVICE_URL should be a bare host URL (e.g. http://host:5000). The /voice-analysis/gender-ml-v2 suffix is appended automatically — do not include any path in this env var.",
   );
 }
 
