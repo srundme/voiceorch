@@ -448,8 +448,21 @@ export async function executeNativeBooking(
       return "error: slot was just taken — no booking created";
     }
 
-    const dateStr = format(slotStart, "EEEE, MMMM do 'at' h:mm a");
-    logger.info({ callId, bookingId: booking.id, slotStart, attendeeEmail }, "Native booking created");
+    const tz = calendar.timezone || "UTC";
+    const dateStr = formatInTimeZone(slotStart, tz, "EEEE, MMMM do 'at' h:mm a zzz");
+    logger.info(
+      {
+        callId,
+        bookingId: booking.id,
+        attendeeEmail,
+        requested_datetime: preferredRaw,
+        requested_timezone: tz,
+        stored_datetime: slotStart.toISOString(),
+        stored_timezone: "UTC (postgres timestamptz)",
+        returned_slot: dateStr,
+      },
+      "Native booking created",
+    );
 
     // Create Google Calendar event with Meet link (best-effort, non-blocking)
     let meetLink: string | null = null;
@@ -684,7 +697,7 @@ export async function executeNativeListBookings(
     const list = owned.map((b) => {
       const eventName = etMap.get(b.eventTypeId) ?? "Appointment";
       const dateStr = formatInTimeZone(b.slotStart, tz, "EEE MMM d 'at' h:mm a zzz");
-      return `booking_id=${b.id}, event="${eventName}", date="${dateStr}", status="${b.status}"`;
+      return `booking_id=${b.id}, event="${eventName}", iso_start=${b.slotStart.toISOString()}, date="${dateStr}", status="${b.status}"`;
     });
 
     return `bookings_found: count=${owned.length}, ${list.join(" | ")}`;
@@ -878,8 +891,26 @@ export async function executeNativeReschedule(
       return "error: slot was just taken — reschedule failed";
     }
 
-    const dateStr = format(newStart, "EEEE, MMMM do 'at' h:mm a");
-    logger.info({ callId, oldBookingId: bookingId, newBookingId: newBooking.id }, "Native reschedule complete");
+    const tz = calendar.timezone || "UTC";
+    const dateStr = formatInTimeZone(newStart, tz, "EEEE, MMMM do 'at' h:mm a zzz");
+
+    // Google Calendar sync info for debug logging (filled in below)
+    const gcalStart = formatInTimeZone(newStart, tz, "yyyy-MM-dd'T'HH:mm:ss");
+    logger.info(
+      {
+        callId,
+        oldBookingId: bookingId,
+        newBookingId: newBooking.id,
+        requested_datetime: preferredRaw,
+        requested_timezone: tz,
+        stored_datetime: newStart.toISOString(),
+        stored_timezone: "UTC (postgres timestamptz)",
+        google_event_start: gcalStart,
+        google_event_timezone: tz,
+        returned_slot: dateStr,
+      },
+      "Native reschedule complete",
+    );
 
     // Google Calendar sync: patch the existing event in-place (best-effort)
     // Using patch/update instead of delete+create so attendees get a seamless
