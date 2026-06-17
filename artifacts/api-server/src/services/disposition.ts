@@ -1,4 +1,4 @@
-import { db, agentDispositionsTable, callDispositionsTable } from "@workspace/db";
+import { db, agentDispositionsTable, callDispositionsTable, callsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 import {
@@ -144,5 +144,30 @@ async function persistResult(
     });
   } catch (err) {
     logger.error({ agentId, callId, err }, "disposition: failed to persist result");
+  }
+
+  // Also persist a flat, display-friendly representation onto the call record
+  // (calls.disposition_result) so the call log table + detail panel can read it.
+  // Shape: { <category>: <chosen value>, confidence, summary }. Skip failure
+  // fallbacks (no LLM / empty transcript / extraction error) so we never clobber
+  // the column with placeholder values like NOT_CONNECTED.
+  if (!result.error && result.primary && result.sub) {
+    const flat: Record<string, string | number | boolean> = {
+      [result.primary]: result.sub,
+    };
+    if (typeof result.confidence === "number") flat["confidence"] = result.confidence;
+    if (result.summary) flat["summary"] = result.summary;
+    try {
+      await db
+        .update(callsTable)
+        .set({ dispositionResult: flat })
+        .where(eq(callsTable.id, callId));
+      logger.info(
+        { agentId, callId, primary: result.primary, sub: result.sub, confidence: result.confidence },
+        "disposition: persisted taxonomy classification onto call",
+      );
+    } catch (err) {
+      logger.error({ agentId, callId, err }, "disposition: failed to persist flat result onto call");
+    }
   }
 }

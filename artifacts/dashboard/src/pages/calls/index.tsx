@@ -49,6 +49,19 @@ const formatMs = (ms?: number | null) => {
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`;
 };
 
+// Reserved meta keys in calls.dispositionResult that are NOT classification values.
+const DISPOSITION_META_KEYS = new Set(["confidence", "summary"]);
+
+/** Extract the human-readable disposition value(s) from a call's dispositionResult. */
+function getDispositionValues(
+  result: Record<string, string | number | boolean | null> | null | undefined,
+): string[] {
+  if (!result || typeof result !== "object") return [];
+  return Object.entries(result)
+    .filter(([k, v]) => !DISPOSITION_META_KEYS.has(k) && v != null && v !== "")
+    .map(([, v]) => String(v));
+}
+
 function StatusBadge({ status }: { status: string }) {
   const configs: Record<string, { label: string; icon: React.ReactNode; variant: string; bg: string; text: string; border: string; dot: string }> = {
     completed: {
@@ -481,6 +494,7 @@ export default function CallsList() {
                 <TableHead className="w-[90px]">Exec ID</TableHead>
                 <TableHead>Agent</TableHead>
                 <TableHead className="w-[110px]">Status</TableHead>
+                <TableHead className="w-[130px]">Disposition</TableHead>
                 <TableHead>Contact</TableHead>
                 <TableHead className="w-[80px]">Duration</TableHead>
                 <TableHead className="w-[140px]">Latency</TableHead>
@@ -496,6 +510,7 @@ export default function CallsList() {
                     <TableCell><Skeleton className="h-3 w-24" /></TableCell>
                     <TableCell><Skeleton className="h-3 w-16" /></TableCell>
                     <TableCell><Skeleton className="h-3 w-28" /></TableCell>
+                    <TableCell><Skeleton className="h-5 w-20 rounded-md" /></TableCell>
                     <TableCell><Skeleton className="h-5 w-20 rounded-md" /></TableCell>
                     <TableCell><Skeleton className="h-3 w-28" /></TableCell>
                     <TableCell><Skeleton className="h-3 w-10" /></TableCell>
@@ -544,8 +559,26 @@ export default function CallsList() {
                         <StatusBadge status={call.status} />
                       </TableCell>
                       <TableCell>
-                        {/* disposition chips placeholder — awaiting full feature */}
-                        {null}
+                        {(() => {
+                          const values = getDispositionValues(
+                            (call as any).dispositionResult,
+                          );
+                          if (values.length === 0) {
+                            return <span className="text-muted-foreground/25 text-[10px]">—</span>;
+                          }
+                          return (
+                            <div className="flex flex-wrap gap-1">
+                              {values.map((v, i) => (
+                                <span
+                                  key={i}
+                                  className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-elevated border border-border text-foreground/70 capitalize"
+                                >
+                                  {v}
+                                </span>
+                              ))}
+                            </div>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell>
                         <div className="text-xs font-mono text-foreground/70">
@@ -623,7 +656,7 @@ export default function CallsList() {
                 })
               ) : (
                 <TableRow>
-                  <TableCell colSpan={10} className="h-64 text-center border-0">
+                  <TableCell colSpan={11} className="h-64 text-center border-0">
                     <div className="flex flex-col items-center justify-center gap-3 text-muted-foreground/30">
                       <div className="h-12 w-12 rounded-2xl bg-elevated border border-border flex items-center justify-center">
                         <Phone className="h-6 w-6" />

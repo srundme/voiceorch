@@ -14,6 +14,7 @@ import {
   removeSession,
 } from "./sessionStore.js";
 import { destroyAudioSession } from "./audioPool.js";
+import { disposeCall } from "../services/disposition.js";
 import {
   humanPhone,
   loadCallerProfile,
@@ -1034,6 +1035,20 @@ export async function endSession(sessionId: string): Promise<void> {
             });
           }
         })();
+
+        // ── Post-call taxonomy disposition classification (fire-and-forget) ──────
+        // Uses the agent's configured Call Disposition taxonomy (agent_dispositions)
+        // and writes the result onto calls.disposition_result. No-ops when the agent
+        // has no taxonomy configured. Mutually exclusive with the legacy
+        // dispositionSchema extraction above (an agent uses one system or the other).
+        disposeCall({
+          agentId:    call.agentId,
+          callId:     session.callId,
+          transcript: transcript || null,
+          callEvents: [{ type: "duration", durationSec: durationSeconds }],
+        }).catch((dispErr) => {
+          logger.warn({ sessionId, dispErr }, "Post-call taxonomy disposition failed");
+        });
 
         // ── Post-call caller memory update + callback detection (fire-and-forget) ──
         if (session.callerPhone && transcript && transcript.length > 50) {

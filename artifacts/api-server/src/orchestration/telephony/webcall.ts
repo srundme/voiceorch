@@ -30,6 +30,7 @@ import {
   executeNativeCancel,
   executeWebhookTool,
 } from "../../services/tool-executor.js";
+import { disposeCall } from "../../services/disposition.js";
 
 // ── Per-user concurrent call rate limit ──────────────────────────────────────
 const activeCalls = new Map<string, number>();
@@ -1970,6 +1971,20 @@ export async function handleWebCallWebSocket(
         }
       })();
     }
+
+    // ── Post-call taxonomy disposition classification (fire-and-forget) ──────
+    // Uses the agent's configured Call Disposition taxonomy (agent_dispositions)
+    // and writes the result onto calls.disposition_result. No-ops when the agent
+    // has no taxonomy configured. Mutually exclusive with the legacy
+    // dispositionSchema path above (a given agent uses one or the other).
+    disposeCall({
+      agentId,
+      callId,
+      transcript: transcript ?? null,
+      callEvents: [{ type: "duration", durationSec: durationSeconds }],
+    }).catch((dispErr) => {
+      logger.warn({ callId, dispErr }, "Webcall: taxonomy disposition failed");
+    });
 
     // ── Post-call webcall memory update + callback detection (fire-and-forget) ─
 
