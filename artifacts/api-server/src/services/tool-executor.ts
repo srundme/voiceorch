@@ -22,6 +22,7 @@ import {
 import {
   createCalendarEvent,
   deleteCalendarEvent,
+  updateCalendarEvent,
   getFirstConnectionForUser,
 } from "./scheduling/google-calendar.js";
 import { dispatchSchedulingWebhooks } from "../routes/scheduling/webhooks.js";
@@ -880,7 +881,9 @@ export async function executeNativeReschedule(
     const dateStr = format(newStart, "EEEE, MMMM do 'at' h:mm a");
     logger.info({ callId, oldBookingId: bookingId, newBookingId: newBooking.id }, "Native reschedule complete");
 
-    // Google Calendar sync: delete the old event, create a new one with a Meet link (best-effort)
+    // Google Calendar sync: patch the existing event in-place (best-effort)
+    // Using patch/update instead of delete+create so attendees get a seamless
+    // "time changed" notification rather than a cancellation + new invite.
     let meetLink: string | null = null;
     try {
       const oldGcalRow = await db.execute(
@@ -895,22 +898,33 @@ export async function executeNativeReschedule(
         ?.google_calendar_connection_id ?? null;
       const connectionId = calendarConnectionId ?? (await getFirstConnectionForUser(calendar.userId))?.id ?? null;
 
-      if (existingGoogleEventId && connectionId) {
-        await deleteCalendarEvent(connectionId, existingGoogleEventId);
-      }
       if (connectionId) {
-        const gcalResult = await createCalendarEvent({
-          connectionId,
-          summary: `${eventType.name} — ${newBooking.attendeeName}`,
-          description: newBooking.attendeeNotes ?? undefined,
-          startTime: newBooking.slotStart,
-          endTime: newBooking.slotEnd,
-          attendeeEmail: newBooking.attendeeEmail,
-          attendeeName: newBooking.attendeeName,
-          timezone: calendar.timezone,
-          hostEmail: calendar.hostEmail,
-          additionalHosts: calendar.additionalHosts,
-        });
+        const gcalResult = existingGoogleEventId
+          ? await updateCalendarEvent({
+              connectionId,
+              eventId: existingGoogleEventId,
+              summary: `${eventType.name} — ${newBooking.attendeeName}`,
+              description: newBooking.attendeeNotes ?? undefined,
+              startTime: newBooking.slotStart,
+              endTime: newBooking.slotEnd,
+              attendeeEmail: newBooking.attendeeEmail,
+              attendeeName: newBooking.attendeeName,
+              timezone: calendar.timezone,
+              hostEmail: calendar.hostEmail,
+              additionalHosts: calendar.additionalHosts,
+            })
+          : await createCalendarEvent({
+              connectionId,
+              summary: `${eventType.name} — ${newBooking.attendeeName}`,
+              description: newBooking.attendeeNotes ?? undefined,
+              startTime: newBooking.slotStart,
+              endTime: newBooking.slotEnd,
+              attendeeEmail: newBooking.attendeeEmail,
+              attendeeName: newBooking.attendeeName,
+              timezone: calendar.timezone,
+              hostEmail: calendar.hostEmail,
+              additionalHosts: calendar.additionalHosts,
+            });
         if (gcalResult) {
           meetLink = gcalResult.meetLink;
           await db.execute(
