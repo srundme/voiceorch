@@ -153,6 +153,16 @@ export interface TransferAgentTool {
 
 export type AgentTool = CallTransferTool | WebhookTool | SendSmsTool | EndCallTool | CalComTool | NativeBookingTool | NativeRescheduleTool | NativeCancelTool | NativeCheckAvailabilityTool | NativeListBookingsTool | TransferColdTool | TransferWarmTool | TransferAgentTool;
 
+/**
+ * Find the end_call tool in the agent's tool list and return its custom
+ * goodbyeMessage. Falls back to DEFAULT_GOODBYE_MESSAGE when no end_call
+ * tool exists or when it has no custom message configured.
+ */
+export function resolveGoodbyeMessage(tools: AgentTool[]): string {
+  const endCall = tools.find((t): t is EndCallTool => t.type === "end_call");
+  return endCall?.goodbyeMessage || DEFAULT_GOODBYE_MESSAGE;
+}
+
 /** JSON Schema-compatible tool definition passed to LLM providers */
 export interface ToolDefinition {
   name: string;
