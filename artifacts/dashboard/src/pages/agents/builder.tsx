@@ -8,6 +8,8 @@ import {
   User2, Sparkles, BookOpen, ToggleLeft, ToggleRight, Tag, Loader2, Square,
   Play, Pause,
   Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff,
+  History, GitBranch, Eye, RotateCcw, ChevronUp, AlertTriangle, ArrowLeftRight,
+  Upload,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -19,7 +21,10 @@ import {
   useCreateAgent, useInitiateOutboundCall, getListAgentsQueryKey, getGetAgentQueryKey,
   useListCalls, getListCallsQueryKey, useListCalendars, customFetch,
   useListKnowledgeSources, useRunToolTest, useListAmbientSounds, useListEventTypes,
+  useListAgentVersions, usePublishAgentVersion, useGetAgentVersion, useRestoreAgentVersion,
+  getListAgentVersionsQueryKey, getGetAgentVersionQueryKey,
 } from "@workspace/api-client-react";
+import type { AgentVersion } from "@workspace/api-client-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -64,7 +69,7 @@ const DASH_API   = `${_DASH_BASE}/api`;
 
 /* ── Types ──────────────────────────────────────────────────────────────────── */
 
-type TabId = "overview" | "prompt" | "voice" | "tools" | "analysis" | "voicemail" | "advanced" | "logs";
+type TabId = "overview" | "prompt" | "voice" | "tools" | "analysis" | "voicemail" | "advanced" | "logs" | "versions";
 
 interface TabDef { id: TabId; label: string; icon: React.ReactNode }
 
@@ -77,6 +82,7 @@ const TABS: TabDef[] = [
   { id: "voicemail",  label: "Voicemail",  icon: <VoicemailIcon className="h-3.5 w-3.5" /> },
   { id: "advanced",   label: "Advanced",   icon: <SlidersHorizontal className="h-3.5 w-3.5" /> },
   { id: "logs",       label: "Logs",       icon: <List className="h-3.5 w-3.5" /> },
+  { id: "versions",   label: "Versions",   icon: <History className="h-3.5 w-3.5" /> },
 ];
 
 /* ── Small helpers ──────────────────────────────────────────────────────────── */
@@ -313,20 +319,12 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
 
   const cartesiaOverviewOpts = useMemo(() => {
     const all = whitelistedData?.voices ?? [];
-    const fallback = (TTS_VOICES.cartesia ?? []).filter(v => v.value !== "__custom__");
-    if (all.length === 0) {
-      const opts = [...fallback];
-      opts.push({ value: "__custom__", label: "✎ Paste custom Voice ID…" });
-      return opts;
-    }
-    // Filter by agent's base language code (e.g. "ta-IN" → "ta", "en-US" → "en")
-    const baseLang = (language ?? "en-US").split("-")[0]!.toLowerCase();
-    const langMatches = all.filter(v => v.language?.toLowerCase() === baseLang);
-    const pool = langMatches.length > 0 ? langMatches : all;
-    const opts = pool.map(v => ({ value: v.id, label: v.name }));
+    const opts = all.length > 0
+      ? all.map(v => ({ value: v.id, label: v.name }))
+      : (TTS_VOICES.cartesia ?? []).filter(v => v.value !== "__custom__");
     opts.push({ value: "__custom__", label: "✎ Paste custom Voice ID…" });
     return opts;
-  }, [whitelistedData, language]);
+  }, [whitelistedData]);
 
   const ttsVoiceRaw   = ttsProvider in TTS_VOICES ? TTS_VOICES[ttsProvider] : undefined;
   const ttsVoiceFree  = ttsVoiceRaw === null;
@@ -792,25 +790,17 @@ function VoiceTab({ form }: { form: any }) {
     staleTime: 5 * 60 * 1000,
   });
 
-  // For Cartesia: build dropdown from whitelisted voices filtered by agent language.
-  // Base language code is extracted from the agent language (e.g. "ta-IN" → "ta").
-  // If no voices match the agent's language, show all whitelisted voices.
+  // For Cartesia: show all admin-whitelisted voices regardless of agent language.
+  // Cartesia Sonic voices are multilingual, so every voice works with any language.
   // When the whitelist is empty, fall back to the built-in Cartesia voice list.
   const cartesiaVoiceOpts = useMemo(() => {
     const all = whitelistedData?.voices ?? [];
-    const fallback = (TTS_VOICES.cartesia ?? []).filter(v => v.value !== "__custom__");
-    if (all.length === 0) {
-      const opts = [...fallback];
-      opts.push({ value: "__custom__", label: "✎ Paste custom Voice ID…" });
-      return opts;
-    }
-    const baseLang = agentLanguage.split("-")[0]!.toLowerCase();
-    const langMatches = all.filter(v => v.language?.toLowerCase() === baseLang);
-    const pool = langMatches.length > 0 ? langMatches : all;
-    const opts = pool.map(v => ({ value: v.id, label: v.name }));
+    const opts = all.length > 0
+      ? all.map(v => ({ value: v.id, label: v.name }))
+      : (TTS_VOICES.cartesia ?? []).filter(v => v.value !== "__custom__");
     opts.push({ value: "__custom__", label: "✎ Paste custom Voice ID…" });
     return opts;
-  }, [whitelistedData, agentLanguage]);
+  }, [whitelistedData]);
 
   // For non-Cartesia providers fall back to the hardcoded list
   const ttsVoiceRawV  = ttsProvider in TTS_VOICES ? TTS_VOICES[ttsProvider] : undefined;
@@ -2730,6 +2720,410 @@ function LogsTab({ agentId }: { agentId: number }) {
   );
 }
 
+/* ── Version status badge ────────────────────────────────────────────────────── */
+
+function VersionStatusBadge({ status }: { status: string }) {
+  const cfg: Record<string, { label: string; className: string }> = {
+    production: { label: "Production",  className: "bg-green-500/15 text-green-400 border-green-500/30" },
+    published:  { label: "Published",   className: "bg-blue-500/15 text-blue-400 border-blue-500/30" },
+    draft:      { label: "Draft",       className: "bg-muted/40 text-muted-foreground border-border" },
+    restored:   { label: "Restored",    className: "bg-amber-500/15 text-amber-400 border-amber-500/30" },
+    archived:   { label: "Archived",    className: "bg-muted/20 text-muted-foreground/60 border-border/40" },
+    deprecated: { label: "Deprecated",  className: "bg-muted/20 text-muted-foreground/60 border-border/40" },
+  };
+  const { label, className } = cfg[status] ?? cfg["draft"]!;
+  return <Badge variant="outline" className={cn("text-[10px] h-5 px-1.5", className)}>{label}</Badge>;
+}
+
+/* ── Publish version modal ───────────────────────────────────────────────────── */
+
+function PublishVersionModal({
+  open, onOpenChange, agentId, onSuccess,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  agentId: number;
+  onSuccess: (v: AgentVersion) => void;
+}) {
+  const [versionName, setVersionName] = useState("");
+  const [commitDesc, setCommitDesc] = useState("");
+  const [releaseNotes, setReleaseNotes] = useState("");
+  const { toast } = useToast();
+  const publish = usePublishAgentVersion();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!versionName.trim()) return;
+    if (!commitDesc.trim()) return;
+    try {
+      const result = await publish.mutateAsync({
+        id: agentId,
+        data: {
+          versionName: versionName.trim(),
+          commitDescription: commitDesc.trim(),
+          releaseNotes: releaseNotes.trim() || undefined,
+        },
+      });
+      toast({ title: `Published ${result.versionNumber}`, description: `"${result.versionName}" is now live in Production.` });
+      setVersionName(""); setCommitDesc(""); setReleaseNotes("");
+      onOpenChange(false);
+      onSuccess(result);
+    } catch (err: any) {
+      toast({ title: "Publish failed", description: err?.message ?? "Unknown error", variant: "destructive" });
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[500px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Upload className="h-4 w-4 text-primary" /> Publish New Version
+          </DialogTitle>
+          <DialogDescription>
+            Snapshot the current agent config and promote it to Production. The previous Production version becomes Published (frozen).
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 pt-1">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium">Version name <span className="text-destructive">*</span></label>
+            <Input
+              value={versionName}
+              onChange={e => setVersionName(e.target.value)}
+              placeholder="e.g. Initial release, Customer support v2…"
+              className="h-9"
+              autoFocus
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium">What changed? <span className="text-destructive">*</span></label>
+            <Textarea
+              value={commitDesc}
+              onChange={e => setCommitDesc(e.target.value)}
+              placeholder="Describe the key changes in this version…"
+              className="min-h-[80px] text-sm resize-none"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">Release notes <span className="text-[10px]">(optional)</span></label>
+            <Textarea
+              value={releaseNotes}
+              onChange={e => setReleaseNotes(e.target.value)}
+              placeholder="Additional notes for stakeholders…"
+              className="min-h-[60px] text-sm resize-none"
+            />
+          </div>
+          <div className="flex items-center gap-2 rounded-lg border border-border/50 bg-muted/20 px-3 py-2.5 text-[11px] text-muted-foreground">
+            <GitBranch className="h-3.5 w-3.5 shrink-0" />
+            <span>A new draft is automatically kept on the live agent row — you can keep editing after publishing.</span>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button
+              type="submit"
+              disabled={publish.isPending || !versionName.trim() || !commitDesc.trim()}
+              className="gap-1.5"
+            >
+              <Upload className="h-3.5 w-3.5" />
+              {publish.isPending ? "Publishing…" : "Publish Version"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ── Compare view (frontend-only diff) ───────────────────────────────────────── */
+
+const COMPARE_SECTIONS: Array<{ label: string; keys: string[] }> = [
+  { label: "Prompt",        keys: ["systemPrompt", "greetingMessage", "endCallPhrases"] },
+  { label: "ASR",           keys: ["asrProvider", "asrModel", "asrLanguage", "asrBackgroundDenoising", "asrConfidenceThreshold", "asrKeyterms", "asrSmartEndpointing"] },
+  { label: "LLM",           keys: ["llmProvider", "llmModel", "temperature"] },
+  { label: "TTS / Voice",   keys: ["ttsProvider", "ttsVoice", "ttsModel"] },
+  { label: "Telephony",     keys: ["telephonyProvider"] },
+  { label: "Call Settings", keys: ["maxDuration", "silenceTimeoutSeconds", "language", "webhookUrl", "noiseCancellationEnabled", "backchannelingEnabled"] },
+  { label: "Advanced",      keys: ["agentConfig"] },
+];
+
+function CompareView({
+  agentId, baseVersion, allVersions,
+  onClose,
+}: {
+  agentId: number;
+  baseVersion: AgentVersion;
+  allVersions: Omit<AgentVersion, "snapshot">[];
+  onClose: () => void;
+}) {
+  const [compareId, setCompareId] = useState<number | null>(null);
+  const compareTarget = allVersions.find(v => v.id === compareId);
+
+  const { data: baseSnap } = useGetAgentVersion(agentId, baseVersion.id, {
+    query: { queryKey: getGetAgentVersionQueryKey(agentId, baseVersion.id) },
+  });
+  const { data: compareSnap } = useGetAgentVersion(agentId, compareId ?? -1, {
+    query: {
+      queryKey: getGetAgentVersionQueryKey(agentId, compareId ?? -1),
+      enabled: compareId != null,
+    },
+  });
+
+  const otherVersions = allVersions.filter(v => v.id !== baseVersion.id);
+
+  const renderValue = (val: unknown): string => {
+    if (val === null || val === undefined) return "—";
+    if (typeof val === "object") return JSON.stringify(val, null, 2);
+    return String(val);
+  };
+
+  const renderDiff = (section: typeof COMPARE_SECTIONS[number]) => {
+    const a = (baseSnap?.snapshot ?? {}) as Record<string, unknown>;
+    const b = (compareSnap?.snapshot ?? {}) as Record<string, unknown>;
+    return section.keys.map(key => {
+      const aVal = renderValue(a[key]);
+      const bVal = renderValue(b[key]);
+      const changed = aVal !== bVal;
+      return (
+        <tr key={key} className={changed ? "bg-yellow-500/5" : ""}>
+          <td className="py-1.5 pr-3 text-[10px] text-muted-foreground font-mono align-top w-32 shrink-0">{key}</td>
+          <td className={cn("py-1.5 pr-3 text-[11px] align-top", changed && "text-red-400 line-through opacity-60")}>
+            <pre className="whitespace-pre-wrap break-all font-mono">{aVal}</pre>
+          </td>
+          <td className={cn("py-1.5 text-[11px] align-top", changed && "text-green-400")}>
+            {compareSnap ? <pre className="whitespace-pre-wrap break-all font-mono">{bVal}</pre> : <span className="text-muted-foreground/40 italic">—</span>}
+          </td>
+        </tr>
+      );
+    });
+  };
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      <div className="flex items-center gap-3 px-5 py-3 border-b border-border/60 shrink-0">
+        <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground">
+          <X className="h-4 w-4" />
+        </button>
+        <ArrowLeftRight className="h-4 w-4 text-primary" />
+        <span className="font-semibold text-sm">Compare Versions</span>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Comparing</span>
+          <Badge variant="outline" className="text-[10px]">{baseVersion.versionNumber}: {baseVersion.versionName}</Badge>
+          <span className="text-xs text-muted-foreground">vs</span>
+          <Select value={compareId != null ? String(compareId) : "__none__"} onValueChange={v => setCompareId(v === "__none__" ? null : parseInt(v, 10))}>
+            <SelectTrigger className="h-7 w-48 text-xs">
+              <SelectValue placeholder="Pick version…" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__" className="text-xs">Pick version…</SelectItem>
+              {otherVersions.map(v => (
+                <SelectItem key={v.id} value={String(v.id)} className="text-xs">{v.versionNumber}: {v.versionName}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-5 space-y-6">
+        {!compareId && (
+          <div className="flex items-center justify-center h-40 text-sm text-muted-foreground">
+            Select a version to compare against
+          </div>
+        )}
+        {compareId && COMPARE_SECTIONS.map(section => (
+          <div key={section.label} className="space-y-2">
+            <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{section.label}</div>
+            <div className="rounded-lg border border-border/50 overflow-hidden">
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-border/40 bg-muted/20">
+                    <th className="text-left py-1.5 px-3 font-medium text-[10px] text-muted-foreground w-32">Field</th>
+                    <th className="text-left py-1.5 px-3 font-medium text-[10px] text-muted-foreground">{baseVersion.versionNumber}</th>
+                    <th className="text-left py-1.5 px-3 font-medium text-[10px] text-muted-foreground">{compareTarget?.versionNumber ?? "…"}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/20">
+                  {renderDiff(section)}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ── Versions tab ────────────────────────────────────────────────────────────── */
+
+function VersionsTab({ agentId }: { agentId: number }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [, navigate] = useLocation();
+  const [compareVersion, setCompareVersion] = useState<AgentVersion | null>(null);
+  const [restoreTarget, setRestoreTarget] = useState<Omit<AgentVersion, "snapshot"> | null>(null);
+
+  const { data: versions = [], isLoading } = useListAgentVersions(agentId);
+  const restore = useRestoreAgentVersion();
+
+  const productionVersion = versions.find(v => v.status === "production");
+
+  const handleRestoreLatest = () => {
+    if (!productionVersion) return;
+    setRestoreTarget(productionVersion);
+  };
+
+  const handleConfirmRestore = async () => {
+    if (!restoreTarget) return;
+    try {
+      const result = await restore.mutateAsync({ id: agentId, versionId: restoreTarget.id });
+      queryClient.invalidateQueries({ queryKey: getListAgentVersionsQueryKey(agentId) });
+      queryClient.invalidateQueries({ queryKey: ["agents", agentId] });
+      toast({ title: "Restored", description: `Created draft from ${restoreTarget.versionNumber}: ${restoreTarget.versionName}.` });
+      setRestoreTarget(null);
+      navigate(`/app/agents/${agentId}`);
+    } catch (err: any) {
+      toast({ title: "Restore failed", description: err?.message ?? "Unknown error", variant: "destructive" });
+    }
+  };
+
+  if (compareVersion) {
+    return (
+      <CompareView
+        agentId={agentId}
+        baseVersion={compareVersion}
+        allVersions={versions}
+        onClose={() => setCompareVersion(null)}
+      />
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Header strip */}
+      <div className="flex items-center justify-between px-5 py-3 border-b border-border/60 shrink-0">
+        <div className="flex items-center gap-2 text-sm font-semibold">
+          <History className="h-4 w-4 text-primary" />
+          Version History
+          <Badge variant="outline" className="text-[10px] h-5 px-1.5 ml-1">{versions.length}</Badge>
+        </div>
+        {productionVersion && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs gap-1.5"
+            onClick={handleRestoreLatest}
+          >
+            <RotateCcw className="h-3 w-3" />
+            Restore Last Working Version
+          </Button>
+        )}
+      </div>
+
+      {/* Version list */}
+      <div className="flex-1 overflow-y-auto">
+        {isLoading && (
+          <div className="flex items-center justify-center h-40">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        )}
+        {!isLoading && versions.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-60 gap-3 text-center px-6">
+            <div className="h-12 w-12 rounded-xl bg-muted/30 border border-border/50 flex items-center justify-center">
+              <History className="h-6 w-6 text-muted-foreground/40" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-medium">No versions yet</p>
+              <p className="text-xs text-muted-foreground">Click <strong>Publish</strong> in the toolbar to create your first stable snapshot.</p>
+            </div>
+          </div>
+        )}
+        {!isLoading && versions.length > 0 && (
+          <div className="divide-y divide-border/40">
+            {(versions as Omit<AgentVersion, "snapshot">[]).map((v) => (
+              <div key={v.id} className="flex items-start gap-4 px-5 py-4 hover:bg-muted/10 transition-colors">
+                {/* Version badge */}
+                <div className="shrink-0 mt-0.5">
+                  <span className="inline-flex items-center justify-center h-7 w-10 rounded-md bg-muted/30 border border-border/50 text-[11px] font-mono font-bold text-foreground/80">
+                    {v.versionNumber}
+                  </span>
+                </div>
+
+                {/* Details */}
+                <div className="flex-1 min-w-0 space-y-0.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium truncate">{v.versionName}</span>
+                    <VersionStatusBadge status={v.status} />
+                    {v.restoredFromVersionId && (
+                      <Badge variant="outline" className="text-[10px] h-5 px-1.5 text-muted-foreground">
+                        <RotateCcw className="h-2.5 w-2.5 mr-1" /> restored
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground truncate">{v.commitDescription}</p>
+                  <p className="text-[10px] text-muted-foreground/60">
+                    {v.publishedBy ? `by ${v.publishedBy.slice(0, 8)}… · ` : ""}
+                    {format(new Date(v.createdAt), "MMM d, yyyy HH:mm")}
+                  </p>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs gap-1"
+                    onClick={() => setCompareVersion(v as AgentVersion)}
+                  >
+                    <ArrowLeftRight className="h-3 w-3" /> Compare
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs gap-1"
+                    onClick={() => setRestoreTarget(v)}
+                    disabled={restore.isPending}
+                  >
+                    <RotateCcw className="h-3 w-3" /> Restore
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Restore confirmation dialog */}
+      <Dialog open={!!restoreTarget} onOpenChange={open => { if (!open) setRestoreTarget(null); }}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-400" /> Restore Version
+            </DialogTitle>
+            <DialogDescription>
+              This will create a new draft from <strong>{restoreTarget?.versionNumber}: {restoreTarget?.versionName}</strong>. Your current draft will be replaced with this snapshot. Call logs and analytics are not affected.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setRestoreTarget(null)}>Cancel</Button>
+            <Button
+              type="button"
+              disabled={restore.isPending}
+              onClick={handleConfirmRestore}
+              className="gap-1.5"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              {restore.isPending ? "Restoring…" : "Restore Draft"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 /* ── Agent editor panel ─────────────────────────────────────────────────────── */
 
 function AgentEditorPanel({ agentId }: { agentId: number }) {
@@ -2738,6 +3132,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
   const [callNumber, setCallNumber] = useState("");
   const [otpOpen, setOtpOpen] = useState(false);
   const [pendingNumber, setPendingNumber] = useState("");
+  const [publishModalOpen, setPublishModalOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const rateMap = useMinuteRatesMap();
@@ -2939,6 +3334,9 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
             <Save className="h-3.5 w-3.5" />
             {updateAgent.isPending ? "Saving…" : "Save"}
           </Button>
+          <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => setPublishModalOpen(true)}>
+            <Upload className="h-3.5 w-3.5" /> Publish
+          </Button>
           <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => setCallDialog(true)}>
             <Phone className="h-3.5 w-3.5" /> Call
           </Button>
@@ -2979,6 +3377,10 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
         <div className="flex-1 min-h-0 overflow-hidden">
           <LogsTab agentId={agent.id} />
         </div>
+      ) : activeTab === "versions" ? (
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <VersionsTab agentId={agent.id} />
+        </div>
       ) : (
         <Form {...form}>
           <form onSubmit={e => e.preventDefault()} className="flex-1 min-h-0 overflow-hidden">
@@ -3014,6 +3416,17 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
         </DialogContent>
       </Dialog>
       {otpOpen && <DestinationOtpDialog open={otpOpen} phoneNumber={pendingNumber} onClose={() => setOtpOpen(false)} onVerified={() => setOtpOpen(false)} />}
+
+      {/* Publish version modal */}
+      <PublishVersionModal
+        open={publishModalOpen}
+        onOpenChange={setPublishModalOpen}
+        agentId={agentId}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: getListAgentVersionsQueryKey(agentId) });
+          setActiveTab("versions");
+        }}
+      />
     </div>
   );
 }
