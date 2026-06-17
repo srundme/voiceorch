@@ -6,7 +6,7 @@ import {
   VoicemailIcon, SlidersHorizontal, TestTube2, ChevronRight,
   Volume2, Check, X, Pencil, ChevronDown, List, Globe, BarChart3,
   User2, Sparkles, BookOpen, ToggleLeft, ToggleRight, Tag, Loader2, Square,
-  Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle,
+  Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -1043,6 +1043,11 @@ function ToolsTab({ form }: { form: any }) {
       description: "Allows the agent to cancel an upcoming booking on the caller's request.",
       supportsPreToolMessage: true,
     },
+    end_call: {
+      name: "end_call",
+      description: "Gracefully ends the call when the conversation is complete.",
+      supportsPreToolMessage: false,
+    },
   };
 
   const toggleNativeTool = (type: string) => {
@@ -1107,12 +1112,24 @@ function ToolsTab({ form }: { form: any }) {
     },
   ] as const;
 
+  const CALL_CONTROL_TOOLS = [
+    {
+      type: "end_call",
+      icon: <PhoneOff className="h-4 w-4" />,
+      color: "slate",
+      label: "End Call",
+      description: "Lets the agent gracefully end the call when the conversation is complete.",
+      needsEventType: false,
+    },
+  ] as const;
+
   const colorMap: Record<string, { border: string; bg: string; iconBg: string; iconText: string; label: string; badge: string; badgeText: string; active: string }> = {
     emerald: { border: "border-emerald-400/40", bg: "bg-emerald-950/10", iconBg: "bg-emerald-500/15", iconText: "text-emerald-400", label: "text-emerald-300", badge: "bg-emerald-500/20", badgeText: "text-emerald-300", active: "" },
     sky:     { border: "border-sky-400/40",     bg: "bg-sky-950/10",     iconBg: "bg-sky-500/15",     iconText: "text-sky-400",     label: "text-sky-300",     badge: "bg-sky-500/20",     badgeText: "text-sky-300",     active: "" },
     violet:  { border: "border-violet-400/40",  bg: "bg-violet-950/10",  iconBg: "bg-violet-500/15",  iconText: "text-violet-400",  label: "text-violet-300",  badge: "bg-violet-500/20",  badgeText: "text-violet-300",  active: "" },
     amber:   { border: "border-amber-400/40",   bg: "bg-amber-950/10",   iconBg: "bg-amber-500/15",   iconText: "text-amber-400",   label: "text-amber-300",   badge: "bg-amber-500/20",   badgeText: "text-amber-300",   active: "" },
     red:     { border: "border-red-400/40",     bg: "bg-red-950/10",     iconBg: "bg-red-500/15",     iconText: "text-red-400",     label: "text-red-300",     badge: "bg-red-500/20",     badgeText: "text-red-300",     active: "" },
+    slate:   { border: "border-slate-400/40",   bg: "bg-slate-950/10",   iconBg: "bg-slate-500/15",   iconText: "text-slate-400",   label: "text-slate-300",   badge: "bg-slate-500/20",   badgeText: "text-slate-300",   active: "" },
   };
 
   return (
@@ -1232,6 +1249,73 @@ function ToolsTab({ form }: { form: any }) {
                         />
                       </div>
                     )}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">Call Control</p>
+        {CALL_CONTROL_TOOLS.map(({ type, icon, color, label, description }) => {
+          const isOn = hasNativeTool(type);
+          const c = colorMap[color];
+          const toolDefaults = NATIVE_TOOL_DEFAULTS[type];
+          return (
+            <div key={type} className={cn("rounded-xl border transition-all duration-150", isOn ? `${c.border} ${c.bg}` : "border-border/60 bg-card/20")}>
+              <button
+                type="button"
+                onClick={() => toggleNativeTool(type)}
+                className="w-full text-left p-4 flex items-start gap-3"
+              >
+                <div className={cn("mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0", isOn ? c.iconBg : "bg-muted/30")}>
+                  <span className={cn(isOn ? c.iconText : "text-muted-foreground/40")}>{icon}</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className={cn("text-xs font-semibold", isOn ? c.label : "text-foreground/80")}>{label}</span>
+                    <span className={cn("text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded", isOn ? `${c.badge} ${c.badgeText}` : "bg-muted/40 text-muted-foreground/40")}>
+                      {isOn ? "ON" : "OFF"}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground/60 leading-relaxed">{description}</p>
+                </div>
+                <div className="shrink-0 mt-0.5">
+                  {isOn ? <ToggleRight className={cn("h-5 w-5", c.iconText)} /> : <ToggleLeft className="h-5 w-5 text-muted-foreground/30" />}
+                </div>
+              </button>
+              {isOn && (
+                <div className="px-4 pb-4 -mt-1">
+                  <div className="border-t border-border/30 pt-3 space-y-3">
+                    <div>
+                      <label className="text-[10px] text-muted-foreground block mb-1">Function Name</label>
+                      <Input
+                        className="h-8 text-xs font-mono bg-muted/20 border-border/50"
+                        value={getNativeField(type, "name") ?? toolDefaults?.name ?? ""}
+                        onChange={(e) => setNativeField(type, "name", e.target.value)}
+                        placeholder={toolDefaults?.name ?? "function_name"}
+                      />
+                      <p className="text-[10px] text-muted-foreground/50 mt-1">Use this name in your prompt when instructing the agent to call this tool.</p>
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-muted-foreground block mb-1">Description (Prompt)</label>
+                      <Textarea
+                        className="text-xs min-h-[72px] resize-none bg-muted/20 border-border/50"
+                        value={getNativeField(type, "description") ?? toolDefaults?.description ?? ""}
+                        onChange={(e) => setNativeField(type, "description", e.target.value)}
+                        placeholder={toolDefaults?.description ?? "Describe when the LLM should invoke this tool…"}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-muted-foreground block mb-1">Goodbye Message</label>
+                      <Textarea
+                        className="text-xs min-h-[60px] resize-none bg-muted/20 border-border/50"
+                        value={getNativeField(type, "goodbyeMessage") ?? ""}
+                        onChange={(e) => setNativeField(type, "goodbyeMessage", e.target.value)}
+                        placeholder="Thank you for calling! Have a great day."
+                      />
+                      <p className="text-[10px] text-muted-foreground/50 mt-1">Spoken to the caller just before the call ends. Leave blank to hang up silently.</p>
+                    </div>
                   </div>
                 </div>
               )}

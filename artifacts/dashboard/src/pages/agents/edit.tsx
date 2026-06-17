@@ -104,6 +104,7 @@ export const agentFormSchema = z.object({
     preToolMessage: z.string().optional(),
     calendarId: z.preprocess(v => (v === "" || v == null ? undefined : Number(v)), z.number().optional()),
     eventTypeId: z.preprocess(v => (v === "" || v == null ? undefined : Number(v)), z.number().optional()),
+    goodbyeMessage: z.string().optional(),
     targetNumber: z.string().optional(),
     holdMessage: z.string().optional(),
     targetAgentId: z.number().optional(),
