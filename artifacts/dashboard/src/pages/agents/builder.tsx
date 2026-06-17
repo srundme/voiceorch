@@ -319,20 +319,12 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
 
   const cartesiaOverviewOpts = useMemo(() => {
     const all = whitelistedData?.voices ?? [];
-    const fallback = (TTS_VOICES.cartesia ?? []).filter(v => v.value !== "__custom__");
-    if (all.length === 0) {
-      const opts = [...fallback];
-      opts.push({ value: "__custom__", label: "✎ Paste custom Voice ID…" });
-      return opts;
-    }
-    // Filter by agent's base language code (e.g. "ta-IN" → "ta", "en-US" → "en")
-    const baseLang = (language ?? "en-US").split("-")[0]!.toLowerCase();
-    const langMatches = all.filter(v => v.language?.toLowerCase() === baseLang);
-    const pool = langMatches.length > 0 ? langMatches : all;
-    const opts = pool.map(v => ({ value: v.id, label: v.name }));
+    const opts = all.length > 0
+      ? all.map(v => ({ value: v.id, label: v.name }))
+      : (TTS_VOICES.cartesia ?? []).filter(v => v.value !== "__custom__");
     opts.push({ value: "__custom__", label: "✎ Paste custom Voice ID…" });
     return opts;
-  }, [whitelistedData, language]);
+  }, [whitelistedData]);
 
   const ttsVoiceRaw   = ttsProvider in TTS_VOICES ? TTS_VOICES[ttsProvider] : undefined;
   const ttsVoiceFree  = ttsVoiceRaw === null;
@@ -798,25 +790,17 @@ function VoiceTab({ form }: { form: any }) {
     staleTime: 5 * 60 * 1000,
   });
 
-  // For Cartesia: build dropdown from whitelisted voices filtered by agent language.
-  // Base language code is extracted from the agent language (e.g. "ta-IN" → "ta").
-  // If no voices match the agent's language, show all whitelisted voices.
+  // For Cartesia: show all admin-whitelisted voices regardless of agent language.
+  // Cartesia Sonic voices are multilingual, so every voice works with any language.
   // When the whitelist is empty, fall back to the built-in Cartesia voice list.
   const cartesiaVoiceOpts = useMemo(() => {
     const all = whitelistedData?.voices ?? [];
-    const fallback = (TTS_VOICES.cartesia ?? []).filter(v => v.value !== "__custom__");
-    if (all.length === 0) {
-      const opts = [...fallback];
-      opts.push({ value: "__custom__", label: "✎ Paste custom Voice ID…" });
-      return opts;
-    }
-    const baseLang = agentLanguage.split("-")[0]!.toLowerCase();
-    const langMatches = all.filter(v => v.language?.toLowerCase() === baseLang);
-    const pool = langMatches.length > 0 ? langMatches : all;
-    const opts = pool.map(v => ({ value: v.id, label: v.name }));
+    const opts = all.length > 0
+      ? all.map(v => ({ value: v.id, label: v.name }))
+      : (TTS_VOICES.cartesia ?? []).filter(v => v.value !== "__custom__");
     opts.push({ value: "__custom__", label: "✎ Paste custom Voice ID…" });
     return opts;
-  }, [whitelistedData, agentLanguage]);
+  }, [whitelistedData]);
 
   // For non-Cartesia providers fall back to the hardcoded list
   const ttsVoiceRawV  = ttsProvider in TTS_VOICES ? TTS_VOICES[ttsProvider] : undefined;
