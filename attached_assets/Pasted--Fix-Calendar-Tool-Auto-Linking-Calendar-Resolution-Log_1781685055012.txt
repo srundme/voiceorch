@@ -1,0 +1,433 @@
+# Fix Calendar Tool Auto-Linking & Calendar Resolution Logic
+
+## IMPORTANT: ANALYZE FIRST, IMPLEMENT SECOND
+
+Before making any changes:
+
+1. Analyze the current Calendar architecture.
+2. Analyze Agent → Calendar relationships.
+3. Analyze Agent → Tool relationships.
+4. Analyze Google Calendar account linking.
+5. Analyze how booking tools currently resolve calendars.
+6. Analyze how Google Meet generation works.
+7. Analyze existing database relationships.
+
+Do NOT patch the UI only.
+
+Fix the underlying calendar resolution architecture.
+
+---
+
+# Current Product Design
+
+SnapServe uses an INTERNAL Calendar System.
+
+Unlike Retell AI + Cal.com:
+
+We DO NOT want users manually entering:
+
+- API Keys
+- Event Type IDs
+- Calendar IDs
+
+Those are implementation details.
+
+The platform should manage them automatically.
+
+---
+
+# Expected Architecture
+
+Every Agent automatically has ONE SnapServe Calendar.
+
+Example:
+
+Agent:
+Health Insurance Agent
+
+↓
+
+SnapServe Calendar:
+Health Insurance Calendar
+
+---
+
+Agent:
+Dental Clinic Agent
+
+↓
+
+SnapServe Calendar:
+Dental Clinic Calendar
+
+---
+
+Agent:
+Real Estate Agent
+
+↓
+
+SnapServe Calendar:
+Real Estate Calendar
+
+---
+
+This relationship already exists inside Settings → Calendar.
+
+The calendar is already linked to the agent.
+
+Therefore the tools should automatically know which calendar to use.
+
+The user should NOT need to manually select a calendar again inside tools.
+
+---
+
+# Current Problem
+
+Inside Agent Tools:
+
+book_appointment
+
+check_availability
+
+list_bookings
+
+reschedule_booking
+
+cancel_booking
+
+all show:
+
+"No calendar assigned yet"
+
+even though:
+
+Settings → Calendar
+
+already has a calendar associated with the agent.
+
+This creates confusion and duplicates configuration.
+
+---
+
+# Required Behavior
+
+When a calendar tool is enabled:
+
+The system should automatically resolve:
+
+Agent
+
+↓
+
+Assigned SnapServe Calendar
+
+↓
+
+Connected Google Account
+
+↓
+
+Available Event Types
+
+No additional setup required.
+
+---
+
+# Tool Behavior
+
+Example:
+
+Agent:
+Sarii
+
+↓
+
+SnapServe Calendar:
+Sarii Calendar
+
+↓
+
+Google Account:
+gopinwrk@gmail.com
+
+↓
+
+Event Types:
+- Test 1 to 1
+- Discovery Call
+- Consultation
+
+---
+
+When the user opens:
+
+book_appointment
+
+The tool should automatically detect:
+
+Assigned Calendar:
+Sarii Calendar
+
+Connected Account:
+gopinwrk@gmail.com
+
+Available Event Types:
+[Test 1 to 1, Discovery Call, Consultation]
+
+---
+
+No "No calendar assigned yet" message should appear.
+
+---
+
+# Calendar Resolution Logic
+
+The booking tools should resolve calendars automatically.
+
+Pseudo Flow:
+
+Current Agent
+
+↓
+
+Find Agent Calendar
+
+↓
+
+Load Calendar Configuration
+
+↓
+
+Load Connected Google Account(s)
+
+↓
+
+Load Event Types
+
+↓
+
+Populate Tool Settings
+
+---
+
+# Multiple Google Account Support
+
+Critical Requirement
+
+One SnapServe Calendar may have multiple Google Accounts connected.
+
+Example:
+
+Sales Team Calendar
+
+Connected Accounts:
+
+sales@company.com
+
+appointments@company.com
+
+manager@company.com
+
+---
+
+The tool should NOT require manual API configuration.
+
+The Calendar should decide which Google account handles bookings.
+
+---
+
+# Required UI Changes
+
+Inside Tool Cards:
+
+Replace:
+
+"No calendar assigned yet"
+
+with:
+
+Assigned Calendar:
+Sarii Calendar
+
+Connected Account:
+gopinwrk@gmail.com
+
+or
+
+Connected Accounts:
+3 Accounts
+
+---
+
+# Event Type Dropdown
+
+Load event types automatically from the assigned calendar.
+
+Example:
+
+Event Type
+
+▼ Discovery Call
+
+▼ Consultation
+
+▼ Demo
+
+▼ Any Event Type
+
+---
+
+The user should only choose:
+
+Which event type this tool should use.
+
+NOT which calendar.
+
+The calendar is already known.
+
+---
+
+# Calendar Ownership Rules
+
+One Agent
+
+↓
+
+One SnapServe Calendar
+
+One Calendar
+
+↓
+
+Many Event Types
+
+One Calendar
+
+↓
+
+One or More Google Accounts
+
+---
+
+This should be enforced consistently throughout the platform.
+
+---
+
+# Migration Logic
+
+For existing agents:
+
+Automatically detect:
+
+Agent → Calendar relationship
+
+and backfill tool configuration.
+
+No manual user action required.
+
+---
+
+# Validation
+
+When enabling:
+
+book_appointment
+
+check_availability
+
+reschedule_booking
+
+cancel_booking
+
+list_bookings
+
+the system should validate:
+
+✓ Agent has calendar
+
+✓ Calendar exists
+
+✓ Calendar active
+
+✓ At least one Google account connected
+
+✓ Event types available
+
+---
+
+If validation fails:
+
+Display the exact issue.
+
+Example:
+
+"No Google account connected to this calendar."
+
+or
+
+"No event types found."
+
+instead of:
+
+"No calendar assigned yet"
+
+---
+
+# Success Criteria
+
+For every agent:
+
+✓ Calendar automatically resolved
+
+✓ Booking tools automatically linked
+
+✓ No manual calendar assignment required
+
+✓ Event types load automatically
+
+✓ Google accounts resolved automatically
+
+✓ Existing agents migrated automatically
+
+✓ No duplicate configuration
+
+✓ Internal SnapServe calendar architecture remains the source of truth
+
+The user should only create a calendar once inside Settings → Calendar.
+
+Every calendar-related tool should automatically use that calendar without requiring additional setup.
+
+---
+
+# After Fix
+
+1. Verify:
+   - Book Appointment
+   - Check Availability
+   - List Bookings
+   - Reschedule Booking
+   - Cancel Booking
+   - Google Calendar Integration
+   - Google Meet Generation
+
+2. Test with:
+   - Single Google Account
+   - Multiple Google Accounts
+
+3. Ensure no regressions to existing booking functionality.
+
+4. Commit changes.
+
+Commit Message:
+
+fix(calendar-tools): auto-resolve agent calendar and connected google accounts for booking tools
+
+5. Push changes to Git.
+
+Provide:
+
+- Commit SHA
+- Files Changed
+- Architecture Summary
+- Migration Summary

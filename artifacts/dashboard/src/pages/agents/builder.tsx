@@ -1378,31 +1378,23 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
             }
           };
           return (
-            <div key={type} className={cn("rounded-xl border transition-all duration-150", isOn ? `${c.border} ${c.bg}` : "border-border/60 bg-card/20")}>
+            <div key={type} className={cn("rounded-xl border transition-all duration-150", isOn ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
               <button
                 type="button"
                 onClick={() => toggleNativeTool(type)}
                 className="w-full text-left p-4 flex items-start gap-3"
               >
-                <div className={cn("mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0", isOn ? c.iconBg : "bg-muted/30")}>
-                  <span className={cn(isOn ? c.iconText : "text-muted-foreground/40")}>{icon}</span>
+                <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
+                  <span className={cn(isOn ? "text-foreground/70" : "text-muted-foreground/35")}>{icon}</span>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                    <code className={cn("text-[11px] font-mono font-semibold", isOn ? c.label : "text-foreground/70")}>{fnName}</code>
-                    <span className={cn("text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded", isOn ? `${c.badge} ${c.badgeText}` : "bg-muted/40 text-muted-foreground/40")}>
-                      {isOn ? "ON" : "OFF"}
-                    </span>
-                    {isOn && (
-                      <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-muted/40 text-muted-foreground/60">
-                        {fnName}
-                      </span>
-                    )}
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <code className="text-[11px] font-mono font-semibold text-foreground/80">{fnName}</code>
                   </div>
                   <p className="text-[11px] text-muted-foreground/60 leading-relaxed">{description}</p>
                 </div>
-                <div className="shrink-0 mt-0.5">
-                  {isOn ? <ToggleRight className={cn("h-5 w-5", c.iconText)} /> : <ToggleLeft className="h-5 w-5 text-muted-foreground/30" />}
+                <div className="shrink-0 mt-1">
+                  <Switch checked={isOn} onCheckedChange={() => toggleNativeTool(type)} onClick={e => e.stopPropagation()} />
                 </div>
               </button>
               {isOn && (
@@ -1540,26 +1532,23 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
           const isOn = hasNativeTool(type);
           const c = colorMap[color];
           return (
-            <div key={type} className={cn("rounded-xl border transition-all duration-150", isOn ? `${c.border} ${c.bg}` : "border-border/60 bg-card/20")}>
+            <div key={type} className={cn("rounded-xl border transition-all duration-150", isOn ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
               <button
                 type="button"
                 onClick={() => toggleNativeTool(type)}
                 className="w-full text-left p-4 flex items-start gap-3"
               >
-                <div className={cn("mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0", isOn ? c.iconBg : "bg-muted/30")}>
-                  <span className={cn(isOn ? c.iconText : "text-muted-foreground/40")}>{icon}</span>
+                <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
+                  <span className={cn(isOn ? "text-foreground/70" : "text-muted-foreground/35")}>{icon}</span>
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
-                    <span className={cn("text-xs font-semibold", isOn ? c.label : "text-foreground/80")}>{label}</span>
-                    <span className={cn("text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded", isOn ? `${c.badge} ${c.badgeText}` : "bg-muted/40 text-muted-foreground/40")}>
-                      {isOn ? "ON" : "OFF"}
-                    </span>
+                    <span className="text-xs font-semibold text-foreground/80">{label}</span>
                   </div>
                   <p className="text-[11px] text-muted-foreground/60 leading-relaxed">{description}</p>
                 </div>
-                <div className="shrink-0 mt-0.5">
-                  {isOn ? <ToggleRight className={cn("h-5 w-5", c.iconText)} /> : <ToggleLeft className="h-5 w-5 text-muted-foreground/30" />}
+                <div className="shrink-0 mt-1">
+                  <Switch checked={isOn} onCheckedChange={() => toggleNativeTool(type)} onClick={e => e.stopPropagation()} />
                 </div>
               </button>
             </div>
@@ -1568,50 +1557,32 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
 
         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">Caller Intelligence</p>
         {/* Gender Identification card */}
-        <button
-          type="button"
-          onClick={() => form.setValue("genderDetectionEnabled", !genderEnabled, { shouldDirty: true })}
-          className={cn(
-            "w-full text-left rounded-xl border p-4 transition-all duration-150 flex items-start gap-3",
-            genderEnabled
-              ? "border-pink-400/40 bg-pink-950/10"
-              : "border-border/60 bg-card/20 hover:bg-card/40"
-          )}
-        >
-          <div className={cn(
-            "mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0",
-            genderEnabled ? "bg-pink-500/15" : "bg-muted/30"
-          )}>
-            <User2 className={cn("h-4 w-4", genderEnabled ? "text-pink-400" : "text-muted-foreground/40")} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-0.5">
-              <span className={cn("text-xs font-semibold", genderEnabled ? "text-pink-300" : "text-foreground/80")}>
-                Gender Identification
-              </span>
-              <span className={cn(
-                "text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded",
-                genderEnabled ? "bg-pink-500/20 text-pink-300" : "bg-muted/40 text-muted-foreground/40"
-              )}>
-                {genderEnabled ? "ON" : "OFF"}
-              </span>
+        <div className={cn("rounded-xl border transition-all duration-150", genderEnabled ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
+          <button
+            type="button"
+            onClick={() => form.setValue("genderDetectionEnabled", !genderEnabled, { shouldDirty: true })}
+            className="w-full text-left p-4 flex items-start gap-3"
+          >
+            <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
+              <User2 className={cn("h-4 w-4", genderEnabled ? "text-foreground/70" : "text-muted-foreground/35")} />
             </div>
-            <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
-              Detects caller gender from voice at the start of the call. When enabled, the agent uses gender-appropriate salutations — "Sir", "Ma'am", or a neutral fallback.
-            </p>
-            {genderEnabled && (
-              <p className="text-[10px] text-pink-400/70 mt-1.5 flex items-center gap-1">
-                <Sparkles className="h-3 w-3" /> Active — gender salutation will be applied on every call
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="text-xs font-semibold text-foreground/80">Gender Identification</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
+                Detects caller gender from voice at the start of the call. When enabled, the agent uses gender-appropriate salutations — "Sir", "Ma'am", or a neutral fallback.
               </p>
-            )}
-          </div>
-          <div className="shrink-0 mt-0.5">
-            {genderEnabled
-              ? <ToggleRight className="h-5 w-5 text-pink-400" />
-              : <ToggleLeft className="h-5 w-5 text-muted-foreground/30" />
-            }
-          </div>
-        </button>
+            </div>
+            <div className="shrink-0 mt-1">
+              <Switch
+                checked={genderEnabled}
+                onCheckedChange={(v) => form.setValue("genderDetectionEnabled", v, { shouldDirty: true })}
+                onClick={e => e.stopPropagation()}
+              />
+            </div>
+          </button>
+        </div>
       </div>
       </div>
 
