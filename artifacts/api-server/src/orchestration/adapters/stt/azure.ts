@@ -61,7 +61,7 @@ function parseFrame(raw: string): { path: string; body: string } | null {
 interface AzurePhraseBody {
   RecognitionStatus?: string;
   DisplayText?: string;
-  NBest?: Array<{ Confidence?: number; Display?: string }>;
+  NBest?: Array<{ Confidence?: number; Display?: string; Language?: string }>;
 }
 
 interface AzureHypothesisBody {
@@ -154,8 +154,10 @@ export class AzureSTT implements STTAdapter {
 
     // For Indic locales, automatically add English (India) as a candidate so
     // code-switched Hinglish / Tamil-English speech is recognized correctly.
-    // Custom candidateLocales in extraConfig override this default.
-    if (extra.candidateLocales) {
+    // STTConfig.candidateLanguages (multilingual mode) > extraConfig.candidateLocales > auto Indic default.
+    if (cfg.candidateLanguages?.length) {
+      this.candidateLocales = cfg.candidateLanguages.map(normalizeLocale);
+    } else if (extra.candidateLocales) {
       this.candidateLocales = extra.candidateLocales.map(normalizeLocale);
     } else if (INDIC_LOCALES.has(this.language)) {
       this.candidateLocales = [this.language, "en-IN"].filter(
@@ -240,7 +242,7 @@ export class AzureSTT implements STTAdapter {
   // ── Streaming WebSocket ───────────────────────────────────────────────────
 
   transcribeStream(
-    onTranscript: (text: string, isFinal: boolean) => void,
+    onTranscript: (text: string, isFinal: boolean, detectedLanguage?: string) => void,
     onClose?: () => void,
   ): StreamSTT {
     const params = this.buildParams();
@@ -371,7 +373,12 @@ export class AzureSTT implements STTAdapter {
             return;
           }
 
-          onTranscript(text, true);
+          // Pass detected language when Azure LID returns one (multilingual mode).
+          const detectedLang = best?.Language
+            ? normalizeLocale(best.Language)
+            : undefined;
+
+          onTranscript(text, true, detectedLang);
         } catch {
           // malformed JSON — ignore
         }
