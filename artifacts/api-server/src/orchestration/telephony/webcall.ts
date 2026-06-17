@@ -22,6 +22,7 @@ import { buildDatetimeInjection } from "../datetimeInject.js";
 import { getAttachedSourceIds, buildKnowledgeBaseBlock } from "../kb-retrieval.js";
 import {
   buildToolDefs,
+  matchToolByName,
   executeNativeBooking,
   executeNativeCheckAvailability,
   executeNativeListBookings,
@@ -260,6 +261,10 @@ export async function handleWebCallWebSocket(
     return;
   }
 
+  const agentCfgWc = (agent.agentConfig ?? {}) as Record<string, unknown>;
+  const isMultilingualWc = (agentCfgWc["isMultilingual"] as boolean | undefined) ?? false;
+  const multilingualLanguagesWc = (agentCfgWc["multilingualLanguages"] as string[] | undefined) ?? [];
+
   const sttConfig: STTConfig = {
     language: agent.asrLanguage || agent.language || null,
     backgroundDenoising: agent.asrBackgroundDenoising ?? false,
@@ -272,6 +277,10 @@ export async function handleWebCallWebSocket(
     smartEndpointing: agent.asrSmartEndpointing ?? "off",
     autoFallback: agent.asrAutoFallback ?? false,
     fallbackProviders: (agent.asrFallbackProviders as Array<{ provider: string; model: string | null }> | null | undefined) ?? [],
+    // Multilingual: pass all configured languages as Azure LID candidates
+    ...(isMultilingualWc && multilingualLanguagesWc.length > 0
+      ? { candidateLanguages: multilingualLanguagesWc }
+      : {}),
   };
 
   const sttExtraConfig = providerKeys.get(`${agent.asrProvider?.toLowerCase()}:extraConfig`) ?? null;
@@ -288,6 +297,9 @@ export async function handleWebCallWebSocket(
     ? JSON.stringify({ language: agentLanguage ?? "en-IN" })
     : null;
   const tts = createTTSAdapter(agent.ttsProvider, ttsKey, agent.ttsVoice, agent.ttsModel, ttsExtraConfig, agentLanguage);
+
+  // Multilingual: tracks the current detected language for TTS hot-swap
+  let currentLangWc: string = "";
 
   // ── Create call DB record ─────────────────────────────────────────────────
   const [callRecord] = await db.insert(callsTable).values({
@@ -355,8 +367,16 @@ export async function handleWebCallWebSocket(
   if (stt.transcribeStream) {
     try {
       streamSTT = stt.transcribeStream(
-        (text, isFinal) => {
+        (text, isFinal, detectedLanguage) => {
           if (!isFinal || !text.trim() || closed) return;
+          // Multilingual: hot-swap TTS language when Azure LID detects a switch
+          if (detectedLanguage && isMultilingualWc && detectedLanguage !== currentLangWc) {
+            currentLangWc = detectedLanguage;
+            if (typeof (tts as unknown as { setLanguage?: (l: string) => void }).setLanguage === "function") {
+              (tts as unknown as { setLanguage: (l: string) => void }).setLanguage(detectedLanguage);
+            }
+            logger.info({ callId, lang: detectedLanguage }, "Webcall multilingual: language switched mid-call");
+          }
           // Barge-in: if agent is speaking, only interrupt if the transcript
           // meets the same wordsForInterruption gate as energy-based barge-in.
           // This prevents a faint background speaker (distant person) producing
@@ -1216,8 +1236,9 @@ export async function handleWebCallWebSocket(
         }
 
         // Handle built-in end_call
-        if (triggeredToolName === "end_call") {
-          const endTool = agentTools.find((t) => t.type === "end_call" && t.name === triggeredToolName);
+        const matchedTriggeredTool = matchToolByName(agentTools, triggeredToolName);
+        if (triggeredToolName === "end_call" || matchedTriggeredTool?.type === "end_call") {
+          const endTool = matchedTriggeredTool?.type === "end_call" ? matchedTriggeredTool : undefined;
           const configured = endTool && endTool.type === "end_call" ? (endTool.goodbyeMessage ?? "") : "";
           // Always speak a closing line — fall back to a sensible default so the
           // call never drops silently — and record it to the transcript.
@@ -1253,7 +1274,7 @@ export async function handleWebCallWebSocket(
           status: "info",
         });
         try {
-          const tool = agentTools.find((t) => t.name === triggeredToolName);
+          const tool = matchToolByName(agentTools, triggeredToolName);
           if (!tool) {
             logger.warn({ callId, triggeredToolName }, "Webcall: LLM called unknown tool — ignoring");
           } else if (tool.type === "native_booking") {
@@ -1337,8 +1358,9 @@ export async function handleWebCallWebSocket(
 
             history.push({ role: "assistant", content: `[calling tool: ${fnName}]` });
 
-            if (fnName === "end_call") {
-              const endTool = agentTools.find((t) => t.type === "end_call" && t.name === fnName);
+            const matchedFnTool = matchToolByName(agentTools, fnName);
+            if (fnName === "end_call" || matchedFnTool?.type === "end_call") {
+              const endTool = matchedFnTool?.type === "end_call" ? matchedFnTool : undefined;
               const configured = endTool && endTool.type === "end_call" ? (endTool.goodbyeMessage ?? "") : "";
               const goodbye = configured.trim() ? configured.trim() : DEFAULT_GOODBYE_MESSAGE;
               history.push({ role: "assistant", content: goodbye });
@@ -1360,7 +1382,7 @@ export async function handleWebCallWebSocket(
 
             let inlineFnResult: string | undefined;
             try {
-              const tool = agentTools.find((t) => t.name === fnName);
+              const tool = matchToolByName(agentTools, fnName);
               if (tool) {
                 if (tool.type === "native_booking") {
                   inlineFnResult = await executeNativeBooking(callId, agentId, tool, fnArgs);
@@ -1507,8 +1529,9 @@ export async function handleWebCallWebSocket(
             history.push({ role: "assistant", content: cleanReply || `[calling tool: ${fnName}]` });
 
             // Built-in end_call
-            if (fnName === "end_call") {
-              const endTool = agentTools.find((t) => t.type === "end_call" && t.name === fnName);
+            const matchedFnTool = matchToolByName(agentTools, fnName);
+            if (fnName === "end_call" || matchedFnTool?.type === "end_call") {
+              const endTool = matchedFnTool?.type === "end_call" ? matchedFnTool : undefined;
               const configured = endTool && endTool.type === "end_call" ? (endTool.goodbyeMessage ?? "") : "";
               const goodbye = configured.trim() ? configured.trim() : DEFAULT_GOODBYE_MESSAGE;
               history.push({ role: "assistant", content: goodbye });
@@ -1531,7 +1554,7 @@ export async function handleWebCallWebSocket(
             // Route through the shared executor
             let inlineFnResult: string | undefined;
             try {
-              const tool = agentTools.find((t) => t.name === fnName);
+              const tool = matchToolByName(agentTools, fnName);
               if (tool) {
                 if (tool.type === "native_booking") {
                   inlineFnResult = await executeNativeBooking(callId, agentId, tool, fnArgs);
@@ -1628,11 +1651,15 @@ export async function handleWebCallWebSocket(
   send({ type: "ready", agentId, agentName: agent.name, callId });
   logger.info({ callId, agentId, agentName: agent.name }, "WebCall session started");
 
-  // ── Opening greeting — agent always speaks first in webcalls ─────────────
+  // ── Opening greeting ─────────────────────────────────────────────────────
   // 1. If the agent has a greetingMessage configured, play it directly (no LLM).
   // 2. Otherwise, ask the LLM to generate a contextual opening (same path as
   //    callbacks, but with a generic trigger so it works for all webcalls).
-  if (!closed) {
+  // When firstSpeaker = "user", stay silent on connect and let the caller speak
+  // first — the session keeps listening and only responds after the user speaks.
+  if (!closed && agent.firstSpeaker === "user") {
+    logger.info({ callId }, "First speaker = user — skipping opening greeting (webcall)");
+  } else if (!closed) {
     try {
       const agentTimezone = (agentCfg["timezone"] as string | undefined) || "Asia/Kolkata";
 
