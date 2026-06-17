@@ -262,6 +262,102 @@ const DIRECTION_COLORS: Record<string, string> = {
   system:   "bg-gray-500/15 text-gray-400 border-gray-500/25",
 };
 
+const PREVIEW_MAX = 160;
+
+function getLogPreview(entry: ExecutionLogEvent): string | null {
+  const rq = entry.requestPayload as Record<string, unknown> | null;
+  const rs = entry.responsePayload as Record<string, unknown> | null;
+  const md = entry.metadata as Record<string, unknown> | null;
+  const { component, direction } = entry;
+
+  if (component === "STT" && direction === "response")
+    return (rs?.transcript as string) ?? null;
+
+  if (component === "LLM" && direction === "response")
+    return (rs?.text as string) ?? null;
+
+  if (component === "LLM" && direction === "request") {
+    const preview = (rq?.systemPromptPreview as string) ?? null;
+    const model   = rq?.model as string | undefined;
+    const hist    = rq?.historyLength as number | undefined;
+    const tools   = (rq?.tools as string[])?.join(", ");
+    const meta = [model, hist != null ? `${hist} msgs` : null, tools ? `tools: ${tools}` : null].filter(Boolean).join(" · ");
+    return [meta, preview].filter(Boolean).join("\n") || null;
+  }
+
+  if (component === "TTS" && direction === "request")
+    return (rq?.text as string) ?? null;
+
+  if (component === "TTS" && direction === "response") {
+    const bytes = rs?.audioBytes as number | undefined;
+    const len   = rs?.textLength as number | undefined;
+    return [bytes != null ? `${(bytes / 1024).toFixed(1)} KB audio` : null, len != null ? `${len} chars` : null].filter(Boolean).join(", ") || null;
+  }
+
+  if (component === "Memory" && direction === "response") {
+    const factCount = rs?.factCount as number | undefined;
+    const profile   = rs?.profile as Record<string, unknown> | undefined;
+    const name      = profile?.name as string | undefined;
+    const parts = [name ? `caller: ${name}` : null, factCount != null ? `${factCount} facts` : null].filter(Boolean);
+    const facts = rs?.facts as Record<string, unknown> | undefined;
+    if (facts) {
+      const items = Object.entries(facts).slice(0, 3).map(([k, v]) => `${k}: ${v}`);
+      parts.push(...items);
+    }
+    return parts.join(" · ") || null;
+  }
+
+  if (component === "Knowledge" && direction === "response") {
+    const count   = rs?.chunksCount as number | undefined;
+    const sources = rs?.sources as string[] | undefined;
+    return [count != null ? `${count} chunks` : null, sources?.slice(0, 2).join(", ")].filter(Boolean).join(" — ") || null;
+  }
+
+  if (component === "VariableResolver") {
+    const preview = (rs?.resolvedPromptPreview as string) ?? (rq?.variables ? `vars: ${Object.keys(rq.variables as object).join(", ")}` : null);
+    return preview ?? null;
+  }
+
+  if (component === "Tool" && direction === "request") {
+    const tool = rq?.tool as string | undefined;
+    const args = rq?.args;
+    return [tool, args != null ? JSON.stringify(args).substring(0, 80) : null].filter(Boolean).join(" ") || null;
+  }
+
+  if (component === "Tool" && direction === "response") {
+    return (rs?.result as string) ?? (rs?.error as string) ?? (md?.error as string) ?? null;
+  }
+
+  if (component === "Agent") {
+    const name = rq?.agentName as string | undefined;
+    const asr  = rq?.asrProvider as string | undefined;
+    const llm  = rq?.llmProvider as string | undefined;
+    const tts  = rq?.ttsProvider as string | undefined;
+    const dur  = rq?.durationMs as number | undefined;
+    if (dur != null) return `Call ended · ${(dur / 1000).toFixed(1)}s`;
+    return [name, [asr, llm, tts].filter(Boolean).join(" · ")].filter(Boolean).join(" — ") || null;
+  }
+
+  return null;
+}
+
+function LogDataCell({ preview }: { preview: string | null }) {
+  const [expanded, setExpanded] = useState(false);
+  if (!preview) return <span className="text-white/15 text-xs">—</span>;
+  const isLong = preview.length > PREVIEW_MAX;
+  const shown  = !isLong || expanded ? preview : preview.slice(0, PREVIEW_MAX) + "…";
+  return (
+    <div className="min-w-0" onClick={e => { if (isLong) { e.stopPropagation(); setExpanded(v => !v); } }}>
+      <span className="text-white/60 text-xs leading-relaxed whitespace-pre-wrap break-words">{shown}</span>
+      {isLong && (
+        <button className="ml-1.5 text-[10px] text-primary/60 hover:text-primary underline-offset-2 hover:underline whitespace-nowrap">
+          {expanded ? "↑ Show less" : "↓ Show more"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function JsonViewer({ data }: { data: Record<string, unknown> }) {
   const [copied, setCopied] = useState(false);
   const str = JSON.stringify(data, null, 2);
@@ -289,22 +385,23 @@ function ExecLogRow({ entry }: { entry: ExecutionLogEvent }) {
   return (
     <div className={`border-b border-white/5 ${hasPayload ? "cursor-pointer hover:bg-white/[0.03]" : ""}`}>
       <div
-        className="grid items-center gap-2 px-3 py-2.5 text-xs select-none"
-        style={{ gridTemplateColumns: "130px 80px 120px 100px 70px 60px 16px" }}
+        className="grid items-start gap-2 px-3 py-2.5 text-xs select-none"
+        style={{ gridTemplateColumns: "130px minmax(0,1fr) 80px 120px 100px 70px 60px 16px" }}
         onClick={() => { if (hasPayload) setExpanded(e => !e); }}
       >
-        <span className="font-mono text-white/35 tabular-nums">{ts}</span>
-        <span className={`inline-flex items-center justify-center border rounded text-[10px] font-medium px-1.5 py-0.5 ${dirCls}`}>
+        <span className="font-mono text-white/35 tabular-nums pt-0.5">{ts}</span>
+        <LogDataCell preview={getLogPreview(entry)} />
+        <span className={`inline-flex items-center justify-center border rounded text-[10px] font-medium px-1.5 py-0.5 mt-0.5 ${dirCls}`}>
           {entry.direction}
         </span>
-        <span className={`inline-flex items-center justify-center border rounded text-[10px] font-semibold px-1.5 py-0.5 ${compCls}`}>
+        <span className={`inline-flex items-center justify-center border rounded text-[10px] font-semibold px-1.5 py-0.5 mt-0.5 ${compCls}`}>
           {entry.component}
         </span>
-        <span className="text-white/45 truncate">{entry.provider ?? <span className="text-white/20">—</span>}</span>
-        <span className="font-mono text-white/35 tabular-nums text-right">
+        <span className="text-white/45 truncate pt-0.5">{entry.provider ?? <span className="text-white/20">—</span>}</span>
+        <span className="font-mono text-white/35 tabular-nums text-right pt-0.5">
           {entry.latencyMs != null ? (entry.latencyMs >= 1000 ? `${(entry.latencyMs / 1000).toFixed(1)}s` : `${entry.latencyMs}ms`) : <span className="text-white/15">—</span>}
         </span>
-        <span className={`inline-flex items-center justify-center text-[9px] font-bold uppercase rounded px-1 py-0.5 ${
+        <span className={`inline-flex items-center justify-center text-[9px] font-bold uppercase rounded px-1 py-0.5 mt-0.5 ${
           entry.status === "error" ? "bg-red-500/20 text-red-400" :
           entry.status === "success" ? "bg-emerald-500/15 text-emerald-400" :
           "bg-white/5 text-white/30"
@@ -313,8 +410,8 @@ function ExecLogRow({ entry }: { entry: ExecutionLogEvent }) {
         </span>
         {hasPayload ? (
           expanded
-            ? <ChevronUp className="h-3 w-3 text-white/25" />
-            : <ChevronDown className="h-3 w-3 text-white/25" />
+            ? <ChevronUp className="h-3 w-3 text-white/25 mt-0.5" />
+            : <ChevronDown className="h-3 w-3 text-white/25 mt-0.5" />
         ) : <span />}
       </div>
       {expanded && hasPayload && (
@@ -754,9 +851,10 @@ export default function CallDetail() {
                   {callLogs && callLogs.length > 0 && (
                     <div
                       className="grid items-center gap-2 px-3 py-1.5 border-b border-white/8 bg-[#0f0f0f] shrink-0 text-[9px] uppercase tracking-widest text-white/20 font-semibold"
-                      style={{ gridTemplateColumns: "130px 80px 120px 100px 70px 60px 16px" }}
+                      style={{ gridTemplateColumns: "130px minmax(0,1fr) 80px 120px 100px 70px 60px 16px" }}
                     >
                       <span>Timestamp</span>
+                      <span>Log data</span>
                       <span>Direction</span>
                       <span>Component</span>
                       <span>Provider</span>
