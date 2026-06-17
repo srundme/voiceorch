@@ -18,6 +18,7 @@ import { DEFAULT_GOODBYE_MESSAGE, resolveGoodbyeMessage } from "./types.js";
 import { retrieveKbContext, retrieveKbContextMulti } from "./kb-retrieval.js";
 import { performance } from "perf_hooks";
 import { computeEndpointMs } from "./endpointing.js";
+import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt } from "./transcriptQuality.js";
 import { logger } from "../lib/logger.js";
 import { format, addMinutes } from "date-fns";
 import { toZonedTime, formatInTimeZone } from "date-fns-tz";
@@ -117,6 +118,7 @@ export class OrchestrationPipeline {
   private agent: AgentConfig;
   private stt: ReturnType<typeof createSTTAdapter>;
   private llm: ReturnType<typeof createLLMAdapter>;
+  private fallbackLlm: ReturnType<typeof createLLMAdapter> | null = null;
   private tts: ReturnType<typeof createTTSAdapter>;
 
   private audioBuffer: Buffer[] = [];
@@ -280,6 +282,14 @@ export class OrchestrationPipeline {
       sttCfg
     );
     this.llm = createLLMAdapter(this.agent.llmProvider, llmKey, this.agent.llmModel);
+    // P0-B: Initialise fallback LLM adapter if the agent has one configured and the key is available
+    if (this.agent.fallbackLlmProvider) {
+      const fallbackKey = keys.get(this.agent.fallbackLlmProvider);
+      if (fallbackKey) {
+        this.fallbackLlm = createLLMAdapter(this.agent.fallbackLlmProvider, fallbackKey, this.agent.fallbackLlmModel ?? null);
+        logger.info({ callId: config.callId, fallbackProvider: this.agent.fallbackLlmProvider }, "Fallback LLM adapter initialised");
+      }
+    }
     // AgentConfig.language already holds asrLanguage || agent.language
     // (merged in session.ts). Use it directly for TTS language.
     const agentLanguage = this.agent.language ?? null;
@@ -412,19 +422,26 @@ export class OrchestrationPipeline {
     this.inSpeechSegment = false;
 
     if (this.bargeInEnabled && this.isPlaying && !this.bargeInRequested) {
-      // Accumulate word count across streaming callbacks for this user turn and
-      // only fire barge-in once the wordsForInterruption threshold is reached,
-      // matching the behaviour of the energy-based path in batch STT mode.
-      const wordCount = transcript.trim().split(/\s+/).filter(Boolean).length;
-      this.streamingBargeInWordCount += wordCount;
-      const threshold = this.agent.wordsForInterruption ?? 2;
-      if (this.streamingBargeInWordCount >= threshold) {
+      // P0-C: Semantic barge-in — certain keywords bypass the word-count gate entirely
+      if (isSemanticInterrupt(transcript)) {
         this.bargeInRequested = true;
         this.bargeInCallback?.();
-        logger.info(
-          { callId: this.config.callId, words: this.streamingBargeInWordCount, threshold },
-          "Barge-in detected (streaming STT)",
-        );
+        logger.info({ callId: this.config.callId, transcript }, "Semantic barge-in triggered (streaming STT)");
+      } else {
+        // Accumulate word count across streaming callbacks for this user turn and
+        // only fire barge-in once the wordsForInterruption threshold is reached,
+        // matching the behaviour of the energy-based path in batch STT mode.
+        const wordCount = transcript.trim().split(/\s+/).filter(Boolean).length;
+        this.streamingBargeInWordCount += wordCount;
+        const threshold = this.agent.wordsForInterruption ?? 2;
+        if (this.streamingBargeInWordCount >= threshold) {
+          this.bargeInRequested = true;
+          this.bargeInCallback?.();
+          logger.info(
+            { callId: this.config.callId, words: this.streamingBargeInWordCount, threshold },
+            "Barge-in detected (streaming STT)",
+          );
+        }
       }
     } else if (!this.isPlaying) {
       // Agent is not currently playing — keep the accumulator at zero so the
@@ -1397,6 +1414,19 @@ export class OrchestrationPipeline {
     // ── Guardrail route check ──
     // Fast word-overlap classifier — runs before the main LLM to intercept
     // sensitive or off-topic utterances and play a canned response instead.
+    // P0-A: Garbled transcript recovery — catch noise/garbage before it reaches the LLM
+    const { isGarbled, reason: garbledReason } = checkTranscriptQuality(transcript);
+    if (isGarbled) {
+      const clarification = pickClarificationPhrase();
+      logger.warn({ callId: this.config.callId, transcript, garbledReason }, "Garbled transcript — responding with clarification");
+      this.conversationHistory.push({ role: "assistant", content: clarification });
+      this.config.onTranscript("agent", clarification);
+      this.config.onConversationUpdate?.(this.conversationHistory);
+      this.isPlaying = true;
+      try { await this.playSentence(clarification); } finally { this.isPlaying = false; }
+      return;
+    }
+
     const guardrailResponse = this.checkGuardrailRoutes(transcript);
     if (guardrailResponse !== null) {
       logger.info({ callId: this.config.callId, transcript }, "Guardrail route triggered");
@@ -1752,14 +1782,59 @@ export class OrchestrationPipeline {
     } catch (llmErr) {
       if (fillerTimer) { clearTimeout(fillerTimer); fillerTimer = null; }
       _agnostTurn?.end(String(llmErr), false);
-      const reason = toReadableError(llmErr, "LLM error");
-      logger.error({ callId: this.config.callId, err: llmErr }, reason);
-      this.config.onFatalError?.(reason);
-      allEnqueued = true;
-      const w = wakePlayer as (() => void) | null; wakePlayer = null;
-      if (w) w();
-      await playPromise;
-      throw llmErr;
+      // P0-B: LLM fallback — if primary failed before producing any tokens, retry with fallback adapter
+      if (this.fallbackLlm && llmFirstTokenAt === null) {
+        logger.warn({ callId: this.config.callId, err: llmErr, fallbackProvider: this.agent.fallbackLlmProvider }, "Primary LLM failed (no tokens) — retrying with fallback LLM");
+        llmResponse = "";
+        pendingText  = "";
+        try {
+          await this.fallbackLlm.chat(
+            historyForLlm,
+            systemPromptForTurn,
+            (token) => {
+              if (!llmFirstTokenAt) {
+                llmFirstTokenAt = Date.now();
+                this._tTurnLlmFirstToken = performance.now();
+              }
+              llmResponse += token;
+              const afterThink = filterThinkToken(token);
+              if (!afterThink) return;
+              const filtered = filterFnTag(afterThink);
+              if (!filtered) return;
+              pendingText += filtered;
+              const { sentences, remainder } = extractSentences(pendingText);
+              for (const s of sentences) enqueue(s);
+              pendingText = remainder;
+            },
+            (fullText) => { llmResponse = fullText; },
+            { onUsage: (usage) => {
+                this.hasRealLlmUsage = true;
+                this.llmInputTokensTotal += usage.inputTokens;
+                this.llmOutputTokensTotal += usage.outputTokens;
+              },
+            },
+          );
+          logger.info({ callId: this.config.callId }, "Fallback LLM succeeded");
+        } catch (fallbackErr) {
+          const reason = toReadableError(fallbackErr, "Fallback LLM error");
+          logger.error({ callId: this.config.callId, err: fallbackErr }, reason);
+          this.config.onFatalError?.(reason);
+          allEnqueued = true;
+          const w = wakePlayer as (() => void) | null; wakePlayer = null;
+          if (w) w();
+          await playPromise;
+          throw fallbackErr;
+        }
+      } else {
+        const reason = toReadableError(llmErr, "LLM error");
+        logger.error({ callId: this.config.callId, err: llmErr }, reason);
+        this.config.onFatalError?.(reason);
+        allEnqueued = true;
+        const w = wakePlayer as (() => void) | null; wakePlayer = null;
+        if (w) w();
+        await playPromise;
+        throw llmErr;
+      }
     }
     // Safety net: clear filler timer if LLM completed without streaming any tokens
     // (e.g. pure tool-call response that never invokes onToken)

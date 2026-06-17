@@ -16,3 +16,5 @@
 - [Static greeting bypasses caller memory](static-greeting-bypasses-memory.md) — configured greetingMessage skips the LLM/memory; memory-aware openings must force the LLM path on both pipeline.ts and webcall.ts
 - [Google Calendar datetime format](gcal-datetime-format.md) — use formatInTimeZone (local, no Z) + timeZone; toISOString() (UTC/Z) causes timezone to be silently ignored → 30-min offset for IST users
 - [Dockerfile pnpm version pinning](dockerfile-pnpm-pin.md) — pin pnpm@X.Y.Z in BOTH Dockerfile stages; npm install -g pnpm@10 installs latest 10.x which can break --frozen-lockfile if lockfile was generated with an older minor
+- [Webcall extractSentences tuple shape](webcall-extract-sentences.md) — extractSentences in webcall.ts returns [string[], string] tuple (NOT object); pipeline.ts uses a named-return object — verify shape before copying between files
+- [LLM fallback chain pattern](llm-fallback-pattern.md) — fallbackLlm initialised at call start in pipeline.ts; fires only when primary throws AND llmFirstTokenAt===null; webcall reads raw agent row for fallback fields (cast as any)

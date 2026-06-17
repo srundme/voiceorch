@@ -1,0 +1,77 @@
+Issue: Live Test UI Does Not Stream Assistant Responses in Real-Time
+
+Observed Behavior:
+During Live Test conversations, the agent starts speaking immediately, but the message bubble remains empty until the response is completely generated.
+
+Once the agent finishes speaking (or most of the response is generated), the entire text appears at once in the chat window.
+
+Expected Behavior:
+The assistant response should stream token-by-token (or word-by-word) in the UI while the model is generating the response.
+
+For example:
+
+Assistant starts speaking:
+"Hello Gopi! I see you're calling again..."
+
+At the same time, the text bubble should gradually populate:
+
+Hello
+Hello Gopi!
+Hello Gopi! I see
+Hello Gopi! I see you're
+Hello Gopi! I see you're calling again...
+
+This is the behavior users expect from modern AI chat interfaces such as ChatGPT, Claude, Gemini, etc.
+
+Current User Experience:
+1. User sends a message.
+2. Agent enters "Thinking..." state.
+3. Agent starts speaking.
+4. No text is visible while the response is being generated.
+5. Entire message suddenly appears after generation completes.
+
+This creates several problems:
+- UI feels frozen during generation.
+- User cannot follow along while the agent is speaking.
+- Voice and text are out of sync.
+- Response feels slower than it actually is.
+- Poor debugging experience during testing.
+
+Investigation Required:
+
+1. Verify whether LLM streaming is enabled.
+   - Are tokens being streamed from the backend?
+   - Or is the backend waiting for the full completion before returning text?
+
+2. Verify frontend rendering behavior.
+   - Is the UI buffering the response and rendering only after completion?
+   - If streaming events are available, why are they not displayed incrementally?
+
+3. Verify voice/text synchronization.
+   - TTS should begin as soon as the first tokens arrive.
+   - UI text should update simultaneously with the streamed tokens.
+
+4. Compare behavior with:
+   - Live Test
+   - Simulation
+   - Browser Calls
+   - Real Calls
+
+5. Check websocket/SSE events.
+   - Are token chunks being emitted?
+   - Are they reaching the frontend?
+   - Is the frontend consuming them correctly?
+
+Expected Fix:
+The assistant message should render progressively while the response is being generated and spoken.
+
+Desired Flow:
+User Message
+→ Thinking...
+→ First tokens arrive
+→ Text starts typing in the bubble
+→ TTS starts speaking
+→ Text continues streaming in real time
+→ Response completes
+
+This will make the interaction feel significantly faster and provide a much better testing and debugging experience.

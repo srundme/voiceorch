@@ -1,0 +1,75 @@
+Issue: Agent Language Switching Between English and Kannada Despite English-Only Configuration
+
+Observed Behavior:
+The agent is configured strictly for English, but during testing it intermittently responds in Kannada and English.
+
+Current Configuration:
+- Transcriber Language: English (India)
+- Transcriber Provider: Azure Speech
+- Voice Provider: Cartesia (Sonic)
+- Voice: Nora
+- Multilingual Mode: OFF
+- Agent Prompt: English only
+- No language switching instructions in the prompt
+
+Expected Behavior:
+The agent should consistently:
+- Listen in English
+- Think in English
+- Respond in English
+
+Actual Behavior:
+- Agent occasionally generates responses in Kannada.
+- Language output is unstable and switches between English and Kannada across interactions.
+- This occurs even when Multilingual Mode is disabled.
+- Voice testing and Live Test exhibit the same behavior.
+
+Investigation Required:
+
+1. Memory Injection
+   - Verify whether a stored memory such as:
+     language_pref = Kannada
+     is being injected into the prompt.
+   - Check whether memory is overriding the agent configuration.
+
+2. Language Detection Logic
+   - Determine whether the system is auto-detecting language from user speech.
+   - Verify whether auto-detection remains active even when Multilingual Mode is OFF.
+
+3. LLM Prompt Construction
+   - Inspect the final prompt sent to the LLM.
+   - Check if any hidden instructions, memory facts, CRM fields, or variables are instructing the model to respond in Kannada.
+
+4. Voice Layer
+   - Verify whether Cartesia Sonic is automatically switching language based on detected text.
+   - Confirm that TTS is receiving English text from the LLM.
+
+5. Live Test vs Production Call
+   - Compare the prompt/context used in:
+     - Live Test
+     - Browser Call
+     - Real Call
+   - Confirm that all three paths enforce the same language constraints.
+
+6. Configuration Priority
+   Please confirm the intended priority order:
+
+   Agent Language Configuration
+   > Multilingual Mode
+   > User Memory Language Preference
+   > Auto Language Detection
+
+   If the agent is configured as English-only, memory should not be able to force Kannada responses.
+
+Expected Fix:
+When:
+- Language = English (India)
+- Multilingual Mode = OFF
+
+The system must:
+- Ignore stored language preferences
+- Disable automatic language switching
+- Force all LLM responses to English
+- Force all TTS output to English
+
+Please investigate the language-selection pipeline and identify why Kannada responses are being generated despite the English-only configuration.

@@ -145,6 +145,8 @@ export const agentsTable = pgTable("agents", {
   asrFallbackProviders: json("asr_fallback_providers").$type<Array<{provider: string; model: string | null}>>(),
   llmProvider: text("llm_provider").notNull(),
   llmModel: text("llm_model"),
+  llmFallbackProvider: text("llm_fallback_provider"),
+  llmFallbackModel: text("llm_fallback_model"),
   ttsProvider: text("tts_provider").notNull(),
   ttsVoice: text("tts_voice"),
   ttsModel: text("tts_model"),

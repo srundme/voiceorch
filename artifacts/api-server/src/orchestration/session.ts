@@ -162,6 +162,8 @@ export async function createSession(params: {
     asrModel: agent.asrModel,
     llmProvider: agent.llmProvider,
     llmModel: agent.llmModel,
+    fallbackLlmProvider: agent.llmFallbackProvider ?? null,
+    fallbackLlmModel: agent.llmFallbackModel ?? null,
     ttsProvider: agent.ttsProvider,
     ttsVoice: agent.ttsVoice,
     ttsModel: agent.ttsModel,

@@ -210,6 +210,9 @@ export interface AgentConfig {
   asrModel: string | null;
   llmProvider: string;
   llmModel: string | null;
+  /** If set, used as a retry adapter when the primary LLM fails before producing any tokens. */
+  fallbackLlmProvider: string | null;
+  fallbackLlmModel: string | null;
   ttsProvider: string;
   ttsVoice: string | null;
   ttsModel: string | null;
