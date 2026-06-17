@@ -16,8 +16,8 @@ import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import {
   useListAgents, useGetAgent, useUpdateAgent, useToggleAgent, useDeleteAgent,
   useCreateAgent, useInitiateOutboundCall, getListAgentsQueryKey, getGetAgentQueryKey,
-  useListCalls, getListCallsQueryKey, useListEventTypes, useListCalendars, customFetch,
-  useListKnowledgeSources,
+  useListCalls, getListCallsQueryKey, useListCalendars, customFetch,
+  useListKnowledgeSources, useRunToolTest,
 } from "@workspace/api-client-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -1004,15 +1004,74 @@ function VoiceTab({ form }: { form: any }) {
 
 /* ── Tab: Tools ─────────────────────────────────────────────────────────────── */
 
-function ToolsTab({ form }: { form: any }) {
+const TOOL_FN_NAMES: Record<string, string> = {
+  native_booking: "book_appointment",
+  native_check_availability: "check_availability",
+  native_list_bookings: "list_bookings",
+  native_reschedule: "reschedule_booking",
+  native_cancel: "cancel_booking",
+  end_call: "end_call",
+};
+
+const TOOL_SCHEMAS: Record<string, object> = {
+  native_booking: {
+    type: "object",
+    properties: {
+      attendee_name: { type: "string", description: "Full name of the person being booked" },
+      attendee_email: { type: "string", description: "Email address of the person being booked" },
+      preferred_date: { type: "string", description: "Optional preferred date/time, e.g. 'next Tuesday', '2025-06-10'" },
+      meeting_type: { type: "string", enum: ["google_meet", "in_person"], description: "Where the meeting takes place" },
+      meeting_address: { type: "string", description: "Physical address — only required when meeting_type is in_person" },
+    },
+    required: ["attendee_name", "attendee_email"],
+  },
+  native_check_availability: {
+    type: "object",
+    properties: {
+      preferred_date: { type: "string", description: "Optional preferred date/time, e.g. 'next Tuesday'" },
+      timezone: { type: "string", description: "IANA timezone, e.g. 'America/New_York'" },
+    },
+    required: [],
+  },
+  native_list_bookings: {
+    type: "object",
+    properties: {
+      attendee_name: { type: "string", description: "Full name of the caller whose bookings to look up" },
+      timezone: { type: "string", description: "IANA timezone, e.g. 'America/New_York'" },
+    },
+    required: ["attendee_name"],
+  },
+  native_reschedule: {
+    type: "object",
+    properties: {
+      booking_id: { type: "string", description: "The booking reference ID to reschedule" },
+      preferred_date: { type: "string", description: "Optional preferred date/time for the new slot" },
+    },
+    required: ["booking_id"],
+  },
+  native_cancel: {
+    type: "object",
+    properties: {
+      booking_id: { type: "string", description: "The booking reference ID to cancel" },
+    },
+    required: ["booking_id"],
+  },
+};
+
+function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
   const { fields, append, remove } = useFieldArray({ control: form.control, name: "tools" });
   const genderEnabled = form.watch("genderDetectionEnabled") ?? false;
   const watchedTools  = (form.watch("tools") ?? []) as any[];
 
-  const { data: eventTypesData } = useListEventTypes();
   const { data: calendarsData } = useListCalendars();
-  const calendarOptions = (calendarsData ?? []).map((cal: any) => ({ value: String(cal.id), label: cal.name ?? cal.slug }));
-  const eventTypeOptions = (eventTypesData ?? []).map((et: any) => ({ value: String(et.id), label: et.name ?? et.slug, calendarId: String(et.calendarId) }));
+  const agentCalendar = (calendarsData ?? []).find((cal: any) => cal.agentId === agentId);
+
+  const [expandedSchema, setExpandedSchema] = useState<string | null>(null);
+  const [expandedTest, setExpandedTest]     = useState<string | null>(null);
+  const [testArgs, setTestArgs]             = useState<Record<string, string>>({});
+  const [testResult, setTestResult]         = useState<Record<string, string | null>>({});
+
+  const runTest = useRunToolTest();
 
   const hasNativeTool = (type: string) => watchedTools.some((t: any) => t.type === type);
   const nativeToolIndex = (type: string) => watchedTools.findIndex((t: any) => t.type === type);
@@ -1021,18 +1080,16 @@ function ToolsTab({ form }: { form: any }) {
     const idx = nativeToolIndex(type);
     if (idx >= 0) {
       remove(idx);
+      setExpandedSchema(null);
+      setExpandedTest(null);
     } else {
-      append({ type: type as any, name: "", description: "" });
+      append({ type: type as any, name: TOOL_FN_NAMES[type] ?? "", description: "" });
     }
   };
 
-  const getNativeField = (type: string, fieldName: string) => {
+  const getNativeToolName = (type: string): string => {
     const idx = nativeToolIndex(type);
-    return idx >= 0 ? form.watch(`tools.${idx}.${fieldName}`) : undefined;
-  };
-  const setNativeField = (type: string, fieldName: string, value: any) => {
-    const idx = nativeToolIndex(type);
-    if (idx >= 0) form.setValue(`tools.${idx}.${fieldName}`, value, { shouldDirty: true });
+    return idx >= 0 ? (form.watch(`tools.${idx}.name`) || TOOL_FN_NAMES[type] || type) : (TOOL_FN_NAMES[type] ?? type);
   };
 
   const BOOKING_TOOLS = [
@@ -1110,14 +1167,24 @@ function ToolsTab({ form }: { form: any }) {
 
         {/* ── Booking Tools ── */}
         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-3">Scheduling & Bookings</p>
-        {BOOKING_TOOLS.map(({ type, icon, color, label, description, needsEventType }) => {
+        {BOOKING_TOOLS.map(({ type, icon, color, label, description }) => {
           const isOn = hasNativeTool(type);
           const c = colorMap[color];
-          const calendarId = isOn && needsEventType ? getNativeField(type, "calendarId") : undefined;
-          const eventTypeId = isOn && needsEventType ? getNativeField(type, "eventTypeId") : undefined;
-          const filteredEventTypes = calendarId
-            ? eventTypeOptions.filter((et: any) => et.calendarId === calendarId)
-            : eventTypeOptions;
+          const toolName = getNativeToolName(type);
+          const schemaOpen = expandedSchema === type;
+          const testOpen   = expandedTest === type;
+          const argKey = `${type}:args`;
+          const handleRunTest = async () => {
+            setTestResult((r) => ({ ...r, [type]: null }));
+            try {
+              let parsedArgs: Record<string, unknown> = {};
+              try { parsedArgs = JSON.parse(testArgs[argKey] || "{}"); } catch { parsedArgs = {}; }
+              const res = await runTest.mutateAsync({ data: { agentId, toolName, args: parsedArgs } });
+              setTestResult((r) => ({ ...r, [type]: res.result ?? JSON.stringify(res) }));
+            } catch (err: any) {
+              setTestResult((r) => ({ ...r, [type]: `Error: ${err?.message ?? String(err)}` }));
+            }
+          };
           return (
             <div key={type} className={cn("rounded-xl border transition-all duration-150", isOn ? `${c.border} ${c.bg}` : "border-border/60 bg-card/20")}>
               <button
@@ -1129,11 +1196,16 @@ function ToolsTab({ form }: { form: any }) {
                   <span className={cn(isOn ? c.iconText : "text-muted-foreground/40")}>{icon}</span>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
+                  <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                     <span className={cn("text-xs font-semibold", isOn ? c.label : "text-foreground/80")}>{label}</span>
                     <span className={cn("text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded", isOn ? `${c.badge} ${c.badgeText}` : "bg-muted/40 text-muted-foreground/40")}>
                       {isOn ? "ON" : "OFF"}
                     </span>
+                    {isOn && (
+                      <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-muted/40 text-muted-foreground/60">
+                        {toolName}
+                      </span>
+                    )}
                   </div>
                   <p className="text-[11px] text-muted-foreground/60 leading-relaxed">{description}</p>
                 </div>
@@ -1141,45 +1213,91 @@ function ToolsTab({ form }: { form: any }) {
                   {isOn ? <ToggleRight className={cn("h-5 w-5", c.iconText)} /> : <ToggleLeft className="h-5 w-5 text-muted-foreground/30" />}
                 </div>
               </button>
-              {isOn && needsEventType && (
+              {isOn && (
                 <div className="px-4 pb-4 -mt-1">
                   <div className="border-t border-border/30 pt-3 space-y-2">
-                    <div>
-                      <label className="text-[10px] text-muted-foreground block mb-1">Calendar</label>
-                      <Select
-                        value={calendarId ?? ""}
-                        onValueChange={(v) => {
-                          setNativeField(type, "calendarId", v);
-                          setNativeField(type, "eventTypeId", "");
+                    {/* Calendar badge */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[10px] text-muted-foreground">Assigned calendar:</span>
+                      <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded", c.badge, c.badgeText)}>
+                        {agentCalendar ? (agentCalendar.name || "Calendar") : "No calendar assigned yet"}
+                      </span>
+                    </div>
+                    {/* Action buttons */}
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-6 text-[10px] px-2 gap-1"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedSchema(schemaOpen ? null : type);
+                          setExpandedTest(null);
                         }}
                       >
-                        <SelectTrigger className="h-8 text-xs">
-                          <SelectValue placeholder="Select calendar…" />
-                        </SelectTrigger>
-                        <SelectContent position="popper">
-                          {calendarOptions.map((cal: any) => (
-                            <SelectItem key={cal.value} value={cal.value} className="text-xs">{cal.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <label className="text-[10px] text-muted-foreground block mb-1">Event Type</label>
-                      <Select
-                        value={eventTypeId ?? ""}
-                        onValueChange={(v) => setNativeField(type, "eventTypeId", v)}
-                        disabled={!calendarId}
+                        <FileText className="h-3 w-3" /> View Schema
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-6 text-[10px] px-2 gap-1"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedTest(testOpen ? null : type);
+                          setExpandedSchema(null);
+                          setTestResult((r) => ({ ...r, [type]: null }));
+                        }}
                       >
-                        <SelectTrigger className="h-8 text-xs">
-                          <SelectValue placeholder={calendarId ? "Select event type…" : "Pick a calendar first"} />
-                        </SelectTrigger>
-                        <SelectContent position="popper">
-                          {filteredEventTypes.map((et: any) => (
-                            <SelectItem key={et.value} value={et.value} className="text-xs">{et.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        <TestTube2 className="h-3 w-3" /> Test Tool
+                      </Button>
                     </div>
+                    {/* Schema panel */}
+                    {schemaOpen && (
+                      <div className="rounded-md bg-muted/20 border border-border/30 p-3">
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-2">Function Schema</p>
+                        <pre className="text-[10px] text-muted-foreground/80 overflow-x-auto whitespace-pre-wrap font-mono leading-relaxed">
+                          {JSON.stringify(TOOL_SCHEMAS[type] ?? {}, null, 2)}
+                        </pre>
+                      </div>
+                    )}
+                    {/* Test panel */}
+                    {testOpen && (
+                      <div className="rounded-md bg-muted/20 border border-border/30 p-3 space-y-2">
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50">Test Tool</p>
+                        {!agentCalendar ? (
+                          <p className="text-[10px] text-amber-400/80">No calendar is assigned to this agent yet. Go to Settings → Calendar to set one up.</p>
+                        ) : (
+                          <>
+                            <div>
+                              <label className="text-[10px] text-muted-foreground block mb-1">Arguments (JSON)</label>
+                              <textarea
+                                className="w-full rounded-md border border-border/50 bg-background/50 text-[10px] font-mono p-2 min-h-[60px] resize-y focus:outline-none focus:ring-1 focus:ring-ring"
+                                placeholder={`{}`}
+                                value={testArgs[argKey] ?? "{}"}
+                                onChange={(e) => setTestArgs((a) => ({ ...a, [argKey]: e.target.value }))}
+                              />
+                            </div>
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="h-6 text-[10px] px-3"
+                              disabled={runTest.isPending}
+                              onClick={handleRunTest}
+                            >
+                              {runTest.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Run Test"}
+                            </Button>
+                            {testResult[type] != null && (
+                              <div className="rounded-md bg-background/50 border border-border/30 p-2">
+                                <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-1">Response</p>
+                                <pre className="text-[10px] text-muted-foreground/80 font-mono whitespace-pre-wrap break-all">{testResult[type]}</pre>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -2644,7 +2762,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
             {activeTab === "overview"  && <OverviewTab form={form} rateMap={rateMap} agent={agent} />}
             {activeTab === "prompt"    && <PromptTab form={form} />}
             {activeTab === "voice"     && <VoiceTab form={form} />}
-            {activeTab === "tools"     && <ToolsTab form={form} />}
+            {activeTab === "tools"     && <ToolsTab form={form} agentId={agentId} />}
             {activeTab === "analysis"  && <AnalysisTab form={form} agentId={agentId} />}
             {activeTab === "voicemail" && <VoicemailTab form={form} />}
             {activeTab === "advanced"  && <AdvancedTab form={form} />}

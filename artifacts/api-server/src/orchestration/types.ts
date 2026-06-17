@@ -67,7 +67,8 @@ export interface NativeBookingTool {
   type: "native_booking";
   name: string;
   description: string;
-  eventTypeId: number;
+  /** Optional: auto-resolved from agent's calendar at runtime when absent */
+  eventTypeId?: number;
   /** Optional: parent calendar id (used by UI for cascading dropdowns; runtime resolves from event type) */
   calendarId?: number;
   /** Optional default timezone for confirmation messages */
@@ -104,7 +105,8 @@ export interface NativeCheckAvailabilityTool {
   type: "native_check_availability";
   name: string;
   description: string;
-  eventTypeId: number;
+  /** Optional: auto-resolved from agent's calendar at runtime when absent */
+  eventTypeId?: number;
   /** Optional: parent calendar id (UI only) */
   calendarId?: number;
   /** Optional timezone used when phrasing slot times back to the caller */

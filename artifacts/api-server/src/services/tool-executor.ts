@@ -244,7 +244,7 @@ export async function executeNativeBooking(
 
   try {
     const [agentCalendar] = await db
-      .select({ userId: schedulingCalendarsTable.userId })
+      .select({ id: schedulingCalendarsTable.id, userId: schedulingCalendarsTable.userId })
       .from(schedulingCalendarsTable)
       .where(eq(schedulingCalendarsTable.agentId, agentId));
     let authorizedUserId: string | null = null;
@@ -258,7 +258,23 @@ export async function executeNativeBooking(
       authorizedUserId = agentRow?.userId ?? null;
     }
 
-    const [eventType] = await db.select().from(eventTypesTable).where(eq(eventTypesTable.id, tool.eventTypeId));
+    // Auto-resolve eventTypeId: if absent on the tool, find the first active event type for this agent's calendar
+    let resolvedEventTypeId = tool.eventTypeId;
+    if (!resolvedEventTypeId && agentCalendar?.id) {
+      const [firstEt] = await db
+        .select({ id: eventTypesTable.id })
+        .from(eventTypesTable)
+        .where(and(eq(eventTypesTable.calendarId, agentCalendar.id), eq(eventTypesTable.isActive, true)))
+        .limit(1);
+      if (!firstEt) {
+        return JSON.stringify({ error: "no_event_type", message: "No event type configured for this agent's calendar. Go to Settings → Calendar to create one." });
+      }
+      resolvedEventTypeId = firstEt.id;
+    }
+
+    const [eventType] = resolvedEventTypeId
+      ? await db.select().from(eventTypesTable).where(eq(eventTypesTable.id, resolvedEventTypeId))
+      : [];
     if (!eventType || !eventType.isActive) {
       return "error: the appointment type is unavailable";
     }
@@ -273,7 +289,7 @@ export async function executeNativeBooking(
 
     if (authorizedUserId && calendar.userId !== authorizedUserId) {
       logger.warn(
-        { callId, eventTypeId: tool.eventTypeId, authorizedUserId, calendarUserId: calendar.userId },
+        { callId, eventTypeId: resolvedEventTypeId, authorizedUserId, calendarUserId: calendar.userId },
         "Native booking: event type ownership mismatch — rejected",
       );
       return "error: the appointment type is unavailable";
@@ -286,12 +302,12 @@ export async function executeNativeBooking(
       logger.info({ callId, preferredRaw, searchStart, minSlotStart }, "Native booking: preferred date resolved");
     }
     const searchEnd = new Date(searchStart.getTime() + 7 * 24 * 60 * 60 * 1000);
-    let slots = await getAvailableSlots(tool.eventTypeId, format(searchStart, "yyyy-MM-dd"), format(searchEnd, "yyyy-MM-dd"));
+    let slots = await getAvailableSlots(eventType.id, format(searchStart, "yyyy-MM-dd"), format(searchEnd, "yyyy-MM-dd"));
     if (minSlotStart) slots = slots.filter((s) => s.slotStart >= minSlotStart);
     if (timeFilter) slots = slots.filter(timeFilter);
     if (slots.length === 0) {
       const rangeDesc = preferredRaw ? `on or after "${preferredRaw}"` : "in the next 7 days";
-      logger.info({ callId, eventTypeId: tool.eventTypeId }, `Native booking: no available slots ${rangeDesc}`);
+      logger.info({ callId, eventTypeId: eventType.id }, `Native booking: no available slots ${rangeDesc}`);
       return `error: no available slots ${rangeDesc}`;
     }
 
@@ -454,7 +470,7 @@ export async function executeNativeCheckAvailability(
 
   try {
     const [agentCalendar] = await db
-      .select({ userId: schedulingCalendarsTable.userId })
+      .select({ id: schedulingCalendarsTable.id, userId: schedulingCalendarsTable.userId })
       .from(schedulingCalendarsTable)
       .where(eq(schedulingCalendarsTable.agentId, agentId));
     let authorizedUserId: string | null = null;
@@ -468,7 +484,23 @@ export async function executeNativeCheckAvailability(
       authorizedUserId = agentRow?.userId ?? null;
     }
 
-    const [eventType] = await db.select().from(eventTypesTable).where(eq(eventTypesTable.id, tool.eventTypeId));
+    // Auto-resolve eventTypeId: if absent on the tool, find the first active event type for this agent's calendar
+    let resolvedEventTypeId = tool.eventTypeId;
+    if (!resolvedEventTypeId && agentCalendar?.id) {
+      const [firstEt] = await db
+        .select({ id: eventTypesTable.id })
+        .from(eventTypesTable)
+        .where(and(eq(eventTypesTable.calendarId, agentCalendar.id), eq(eventTypesTable.isActive, true)))
+        .limit(1);
+      if (!firstEt) {
+        return JSON.stringify({ error: "no_event_type", message: "No event type configured for this agent's calendar. Go to Settings → Calendar to create one." });
+      }
+      resolvedEventTypeId = firstEt.id;
+    }
+
+    const [eventType] = resolvedEventTypeId
+      ? await db.select().from(eventTypesTable).where(eq(eventTypesTable.id, resolvedEventTypeId))
+      : [];
     if (!eventType || !eventType.isActive) {
       return "error: the appointment type is unavailable";
     }
@@ -480,7 +512,7 @@ export async function executeNativeCheckAvailability(
       return "error: the calendar is unavailable";
     }
     if (authorizedUserId && calendar.userId !== authorizedUserId) {
-      logger.warn({ callId, eventTypeId: tool.eventTypeId }, "Native check-availability: ownership mismatch — rejected");
+      logger.warn({ callId, eventTypeId: resolvedEventTypeId }, "Native check-availability: ownership mismatch — rejected");
       return "error: the appointment type is unavailable";
     }
 
@@ -488,7 +520,7 @@ export async function executeNativeCheckAvailability(
       ? parsePreferredDate(preferredRaw, calendar.timezone)
       : { searchStart: new Date(), minSlotStart: undefined, timeFilter: undefined };
     const searchEnd = new Date(searchStart.getTime() + 7 * 24 * 60 * 60 * 1000);
-    let slots = await getAvailableSlots(tool.eventTypeId, format(searchStart, "yyyy-MM-dd"), format(searchEnd, "yyyy-MM-dd"));
+    let slots = await getAvailableSlots(eventType.id, format(searchStart, "yyyy-MM-dd"), format(searchEnd, "yyyy-MM-dd"));
     if (minSlotStart) slots = slots.filter((s) => s.slotStart >= minSlotStart);
     if (timeFilter) slots = slots.filter(timeFilter);
 

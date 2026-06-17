@@ -6,8 +6,8 @@ import {
   useUpdateAgent,
   getGetAgentQueryKey,
   getListAgentsQueryKey,
-  useListEventTypes,
   useListCalendars,
+  useRunToolTest,
 } from "@workspace/api-client-react";
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
@@ -197,12 +197,19 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     trai:  !!complianceTrai,
   };
 
+  const NATIVE_BOOKING_TYPES = new Set(["native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel"]);
   const serializedTools = (rest.tools ?? []).map((t) => {
+    const isNativeTool = NATIVE_BOOKING_TYPES.has(t.type);
     const toolWithCoercedIds = {
       ...t,
       ...(t.calendarId != null ? { calendarId: Number(t.calendarId) } : {}),
       ...(t.eventTypeId != null ? { eventTypeId: Number(t.eventTypeId) } : {}),
     };
+    // Strip calendarId/eventTypeId from native booking tools — runtime auto-resolves from agentId
+    if (isNativeTool) {
+      const { calendarId: _c, eventTypeId: _e, ...cleanTool } = toolWithCoercedIds;
+      return cleanTool;
+    }
     if (t.type !== "webhook") return toolWithCoercedIds;
     const { parameters, ...toolRest } = toolWithCoercedIds;
     const paramList = parameters ?? [];
@@ -408,26 +415,23 @@ export default function AgentEdit() {
     name: "tools",
   });
 
-  const { data: eventTypesData } = useListEventTypes();
   const { data: calendarsData } = useListCalendars();
-  const calendarOptions = (calendarsData ?? []).map((cal: any) => ({ value: String(cal.id), label: cal.name ?? cal.slug }));
-  const eventTypeOptions = (eventTypesData ?? []).map((et: any) => ({ value: String(et.id), label: et.name ?? et.slug, calendarId: String(et.calendarId) }));
+  const agentCalendar = (calendarsData ?? []).find((cal: any) => cal.agentId === id);
 
   const NATIVE_TOOL_TYPES = ["native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel"];
   const watchedTools = (form.watch("tools") ?? []) as any[];
   const hasNativeTool = (type: string) => watchedTools.some((t: any) => t.type === type);
   const nativeToolIndex = (type: string) => watchedTools.findIndex((t: any) => t.type === type);
+  const EDIT_TOOL_FN_NAMES: Record<string, string> = {
+    native_booking: "book_appointment",
+    native_check_availability: "check_availability",
+    native_list_bookings: "list_bookings",
+    native_reschedule: "reschedule_booking",
+    native_cancel: "cancel_booking",
+  };
   const toggleNativeTool = (type: string) => {
     const idx = nativeToolIndex(type);
-    if (idx >= 0) { removeTool(idx); } else { appendTool({ type: type as any, name: "", description: "" }); }
-  };
-  const getNativeField = (type: string, fieldName: string) => {
-    const idx = nativeToolIndex(type);
-    return idx >= 0 ? form.watch(`tools.${idx}.${fieldName}` as any) : undefined;
-  };
-  const setNativeField = (type: string, fieldName: string, value: any) => {
-    const idx = nativeToolIndex(type);
-    if (idx >= 0) form.setValue(`tools.${idx}.${fieldName}` as any, value, { shouldDirty: true });
+    if (idx >= 0) { removeTool(idx); } else { appendTool({ type: type as any, name: EDIT_TOOL_FN_NAMES[type] ?? "", description: "" }); }
   };
 
   const BOOKING_TOOLS = [
@@ -1145,14 +1149,10 @@ export default function AgentEdit() {
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-2">Scheduling & Bookings</p>
                 <div className="space-y-2">
-                  {BOOKING_TOOLS.map(({ type, icon, color, label, description, needsEventType }) => {
+                  {BOOKING_TOOLS.map(({ type, icon, color, label, description }) => {
                     const isOn = hasNativeTool(type);
                     const c = bookingColorMap[color];
-                    const calendarId = isOn && needsEventType ? getNativeField(type, "calendarId") : undefined;
-                    const eventTypeId = isOn && needsEventType ? getNativeField(type, "eventTypeId") : undefined;
-                    const filteredEventTypes = calendarId
-                      ? eventTypeOptions.filter((et: any) => et.calendarId === calendarId)
-                      : eventTypeOptions;
+                    const fnName = EDIT_TOOL_FN_NAMES[type] ?? type;
                     return (
                       <div key={type} className={cn("rounded-xl border transition-all duration-150", isOn ? `${c.border} ${c.bg}` : "border-border/60 bg-card/20")}>
                         <button
@@ -1164,11 +1164,14 @@ export default function AgentEdit() {
                             <span className={cn(isOn ? c.iconText : "text-muted-foreground/40")}>{icon}</span>
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-0.5">
+                            <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                               <span className={cn("text-xs font-semibold", isOn ? c.label : "text-foreground/80")}>{label}</span>
                               <span className={cn("text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded", isOn ? `${c.badge} ${c.badgeText}` : "bg-muted/40 text-muted-foreground/40")}>
                                 {isOn ? "ON" : "OFF"}
                               </span>
+                              {isOn && (
+                                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-muted/40 text-muted-foreground/60">{fnName}</span>
+                              )}
                             </div>
                             <p className="text-[11px] text-muted-foreground/60 leading-relaxed">{description}</p>
                           </div>
@@ -1176,44 +1179,14 @@ export default function AgentEdit() {
                             {isOn ? <ToggleRight className={cn("h-5 w-5", c.iconText)} /> : <ToggleLeft className="h-5 w-5 text-muted-foreground/30" />}
                           </div>
                         </button>
-                        {isOn && needsEventType && (
+                        {isOn && (
                           <div className="px-4 pb-4 -mt-1">
-                            <div className="border-t border-border/30 pt-3 space-y-2">
-                              <div>
-                                <label className="text-[10px] text-muted-foreground block mb-1">Calendar</label>
-                                <Select
-                                  value={calendarId ?? ""}
-                                  onValueChange={(v) => {
-                                    setNativeField(type, "calendarId", v);
-                                    setNativeField(type, "eventTypeId", "");
-                                  }}
-                                >
-                                  <SelectTrigger className="h-8 text-xs">
-                                    <SelectValue placeholder="Select calendar…" />
-                                  </SelectTrigger>
-                                  <SelectContent position="popper">
-                                    {calendarOptions.map((cal: any) => (
-                                      <SelectItem key={cal.value} value={cal.value} className="text-xs">{cal.label}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <div>
-                                <label className="text-[10px] text-muted-foreground block mb-1">Event Type</label>
-                                <Select
-                                  value={eventTypeId ?? ""}
-                                  onValueChange={(v) => setNativeField(type, "eventTypeId", v)}
-                                  disabled={!calendarId}
-                                >
-                                  <SelectTrigger className="h-8 text-xs">
-                                    <SelectValue placeholder={calendarId ? "Select event type…" : "Pick a calendar first"} />
-                                  </SelectTrigger>
-                                  <SelectContent position="popper">
-                                    {filteredEventTypes.map((et: any) => (
-                                      <SelectItem key={et.value} value={et.value} className="text-xs">{et.label}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                            <div className="border-t border-border/30 pt-3">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-[10px] text-muted-foreground">Assigned calendar:</span>
+                                <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded", c.badge, c.badgeText)}>
+                                  {agentCalendar ? (agentCalendar.name || "Calendar") : "No calendar assigned yet"}
+                                </span>
                               </div>
                             </div>
                           </div>
