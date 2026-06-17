@@ -1,8 +1,8 @@
-# Build: 2026-06-15 — remove pgvector, add admin panel at /admin-ui/
+# Build: 2026-06-17 — pin pnpm to exact version matching lockfile generator
 FROM node:22-slim AS builder
 WORKDIR /workspace
 
-RUN npm install -g pnpm@10
+RUN npm install -g pnpm@10.26.1
 
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY tsconfig.base.json tsconfig.json ./
@@ -30,7 +30,7 @@ RUN pnpm --filter @workspace/api-server run build
 FROM node:22-slim
 WORKDIR /workspace
 
-RUN npm install -g pnpm@10
+RUN npm install -g pnpm@10.26.1
 
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY lib/db/package.json ./lib/db/
