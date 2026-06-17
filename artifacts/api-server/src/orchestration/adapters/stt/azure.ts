@@ -284,27 +284,28 @@ export class AzureSTT implements STTAdapter {
         ),
       );
 
-      // ② Speech context — phrase list for keyterm boosting
-      if (this.cfg.keyterms.length > 0) {
-        ws.send(
-          textFrame(
-            "speech.context",
-            JSON.stringify({
-              phraseDetection: {
-                onInterim: { resultType: "Always" },
-                onSuccess: { resultType: "Always" },
-                mode: "Conversation",
-              },
-              phraseList: {
-                onRecognition: {
-                  enabled: true,
-                  phrases: this.cfg.keyterms,
-                },
-              },
-            }),
-            requestId,
-          ),
-        );
+      // ② Speech context — language detection mode + phrase list
+      // Always sent when we have LID candidates or keyterms to configure.
+      // languageId.mode "Continuous" tells Azure to re-detect the language on
+      // every utterance instead of locking in at-start — essential for mid-call
+      // language switching (e.g. Tamil → Hindi).
+      if (this.candidateLocales.length > 1 || this.cfg.keyterms.length > 0) {
+        const ctx: Record<string, unknown> = {
+          phraseDetection: {
+            onInterim: { resultType: "Always" },
+            onSuccess: { resultType: "Always" },
+            mode: "Conversation",
+          },
+        };
+        if (this.candidateLocales.length > 1) {
+          ctx.languageId = { mode: "Continuous", priority: "PrioritizeLatency" };
+        }
+        if (this.cfg.keyterms.length > 0) {
+          ctx.phraseList = {
+            onRecognition: { enabled: true, phrases: this.cfg.keyterms },
+          };
+        }
+        ws.send(textFrame("speech.context", JSON.stringify(ctx), requestId));
       }
 
       // ③ Flush any audio queued before the socket was ready
