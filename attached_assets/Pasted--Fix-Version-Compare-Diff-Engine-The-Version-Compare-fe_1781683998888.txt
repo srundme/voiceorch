@@ -1,0 +1,259 @@
+# Fix Version Compare Diff Engine
+
+The Version Compare feature is working, but the diff visualization is inaccurate.
+
+Currently, when comparing two agent versions, the UI is not correctly highlighting changes.
+
+This creates confusion because users cannot clearly see what was actually modified between versions.
+
+---
+
+# Expected Behavior
+
+The compare view should work similar to:
+
+- GitHub Compare
+- GitLab Compare
+- VS Code Source Control
+- Retell Version Compare
+
+Users must immediately understand:
+
+1. What was removed
+2. What was added
+3. What was modified
+4. What remained unchanged
+
+---
+
+# Current Problem
+
+When I compare two versions:
+
+Version A
+
+vs
+
+Version B
+
+the system is displaying large blocks of text and not accurately marking individual changes.
+
+Some text that was modified should appear as deleted (red) and newly added (green), but currently it is not being detected correctly.
+
+---
+
+# Required Fix
+
+Implement a proper diff engine.
+
+Do NOT use simple string comparison.
+
+Do NOT use simple line matching.
+
+Use a real text diff algorithm.
+
+Examples:
+
+- Myers Diff Algorithm
+- Diff Match Patch
+- Monaco Diff Engine
+- Similar production-grade diff implementation
+
+---
+
+# Display Rules
+
+## Deleted Content
+
+Show in RED
+
+Strike Through
+
+Example:
+
+~~Old prompt content~~
+
+---
+
+## Added Content
+
+Show in GREEN
+
+Example:
+
+New prompt content
+
+---
+
+## Modified Content
+
+If a line changed:
+
+Show old content in RED
+
+Show new content in GREEN
+
+Example:
+
+RED:
+Ask customer if they need insurance.
+
+GREEN:
+Ask customer if they currently have insurance.
+
+---
+
+# Word Level Diff
+
+Critical Requirement
+
+If only a few words changed:
+
+DO NOT mark the entire paragraph as changed.
+
+Example:
+
+Old:
+
+Ask customer about insurance.
+
+New:
+
+Ask customer about health insurance.
+
+Only highlight:
+
+health
+
+in green.
+
+The rest should remain unchanged.
+
+---
+
+# Prompt Compare
+
+This is especially important for prompts.
+
+Prompts can contain:
+
+- Hundreds of lines
+- Multiple sections
+- Variables
+- Instructions
+- Tool guidance
+
+Users must quickly identify exactly what changed.
+
+---
+
+# Side-by-Side View
+
+Keep current side-by-side layout.
+
+Left:
+
+Old Version
+
+Right:
+
+New Version
+
+But apply proper diff highlighting.
+
+---
+
+# Ignore Formatting Option
+
+Add toggle:
+
+Ignore Formatting Changes
+
+When enabled:
+
+Ignore:
+
+- Extra spaces
+- Line breaks
+- Tabs
+- Empty lines
+
+Only compare actual content changes.
+
+---
+
+# Version Compare Coverage
+
+Apply diff engine to:
+
+- Prompt
+- Welcome Message
+- Voice Settings
+- Tool Configurations
+- Knowledge Base Assignments
+- Memory Settings
+- Variables
+- Webhooks
+- Advanced Settings
+
+---
+
+# Performance
+
+Prompts may exceed:
+
+10,000+ characters
+
+The comparison must remain responsive.
+
+Use optimized diff generation.
+
+---
+
+# Validation Example
+
+Old Prompt:
+
+You are a health insurance advisor.
+
+Ask customer about insurance.
+
+New Prompt:
+
+You are a professional health insurance advisor.
+
+Ask customer about current insurance.
+
+Expected Result:
+
+Deleted (Red):
+"You are a health insurance advisor."
+
+Added (Green):
+"You are a professional health insurance advisor."
+
+Deleted (Red):
+"Ask customer about insurance."
+
+Added (Green):
+"Ask customer about current insurance."
+
+---
+
+# Success Criteria
+
+When comparing versions:
+
+✓ Every removed word appears in red
+
+✓ Every added word appears in green
+
+✓ Modified text is accurately highlighted
+
+✓ Users can immediately identify changes
+
+✓ Prompt changes are visible at word level
+
+✓ Comparison behaves similarly to GitHub or VS Code diff viewers
+
+The compare view should become trustworthy enough that users can confidently review prompt changes before publishing or restoring a version.
