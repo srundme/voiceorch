@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { db, agentsTable, callsTable, callEventsTable, scheduledCallbacksTable, providersTable, usersTable, walletTransactionsTable, platformSettingsTable, knowledgeEntriesTable } from "@workspace/db";
+import { db, agentsTable, callsTable, callEventsTable, executionLogsTable, scheduledCallbacksTable, providersTable, usersTable, walletTransactionsTable, platformSettingsTable, knowledgeEntriesTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { createSTTAdapter } from "../adapters/stt/index.js";
 import { createLLMAdapter } from "../adapters/llm/index.js";
@@ -302,17 +302,41 @@ export async function handleWebCallWebSocket(
   const history: ConversationTurn[] = [];
   let closed      = false;
 
-  // ── Per-call event logger (fire-and-forget, never blocks the call) ────────
-  function callLog(level: "info" | "warn" | "error", event: string, data?: Record<string, unknown>) {
-    void db.insert(callEventsTable).values({ callId, level, event, data: data ?? null }).catch(() => {});
+  // ── Per-call execution logger (fire-and-forget, never blocks the call) ────
+  function logExecution(
+    component: string,
+    direction: "request" | "response" | "system",
+    opts: {
+      provider?: string;
+      status?: "success" | "error" | "info";
+      latencyMs?: number;
+      requestPayload?: Record<string, unknown>;
+      responsePayload?: Record<string, unknown>;
+      metadata?: Record<string, unknown>;
+    } = {}
+  ) {
+    void db.insert(executionLogsTable).values({
+      callId, agentId,
+      component, direction,
+      provider: opts.provider ?? null,
+      status: opts.status ?? "info",
+      latencyMs: opts.latencyMs ?? null,
+      requestPayload: opts.requestPayload ?? null,
+      responsePayload: opts.responsePayload ?? null,
+      metadata: opts.metadata ?? null,
+    }).catch(() => {});
   }
 
-  callLog("info", "call.start", {
-    agentId,
-    asrProvider: agent.asrProvider,
-    llmProvider: agent.llmProvider,
-    ttsProvider: agent.ttsProvider,
-    ttsVoice: agent.ttsVoice ?? null,
+  logExecution("Agent", "system", {
+    requestPayload: {
+      agentId,
+      agentName: agent.name,
+      asrProvider: agent.asrProvider,
+      llmProvider: agent.llmProvider,
+      ttsProvider: agent.ttsProvider,
+      ttsVoice: agent.ttsVoice ?? null,
+    },
+    status: "info",
   });
 
   // ── Per-call usage accumulators (written to usage_events on hangup) ──────
@@ -431,6 +455,15 @@ export async function handleWebCallWebSocket(
       if (webcallProfile || webcallCtx.facts.length > 0 || webcallCtx.recentCalls.length > 0) {
         systemPrompt = injectEnhancedMemory(systemPrompt, webcallCtx);
         logger.info({ callId, agentId, callCount: webcallProfile?.callCount ?? 0, factCount: webcallCtx.facts.length, archiveCount: webcallCtx.recentCalls.length }, "Webcall caller memory injected");
+        logExecution("Memory", "response", {
+          responsePayload: {
+            profile: webcallProfile ? { name: webcallProfile.name, callCount: webcallProfile.callCount } : null,
+            factCount: webcallCtx.facts.length,
+            facts: Object.fromEntries(webcallCtx.facts.map(f => [f.key, f.value])),
+            recentCallsCount: webcallCtx.recentCalls.length,
+          },
+          status: "success",
+        });
       }
     } catch (memErr) {
       logger.warn({ callId, agentId, memErr }, "Failed to load webcall caller context — continuing without memory");
@@ -498,6 +531,13 @@ export async function handleWebCallWebSocket(
     systemPrompt = systemPrompt
       .replace(/\{\{(\w+)\}\}/g, (m, k: string) => resolveVar(k, m))
       .replace(/\{(\w+)\}/g,     (m, k: string) => resolveVar(k, m));
+    const resolvedVars: Record<string, string> = {};
+    for (const [k, v] of Object.entries(builtinVars)) resolvedVars[k] = v;
+    logExecution("VariableResolver", "system", {
+      requestPayload: { variables: resolvedVars },
+      responsePayload: { resolvedPromptPreview: systemPrompt.substring(0, 600) },
+      status: "info",
+    });
   }
 
   // ── Knowledge base injection (all attached sources) ──────────────────────
@@ -515,6 +555,14 @@ export async function handleWebCallWebSocket(
         ].join("\n\n");
         systemPrompt = `${kbBlock}\n\n${systemPrompt}`;
         logger.info({ callId, knowledgeSourceIds: kbSourceIds }, "Webcall: knowledge base injected into system prompt");
+        logExecution("Knowledge", "response", {
+          responsePayload: {
+            sourceIds: kbSourceIds,
+            injected: true,
+            preview: entriesBlock.substring(0, 400),
+          },
+          status: "success",
+        });
       }
     } catch (kbErr) {
       logger.warn({ callId, knowledgeSourceIds: kbSourceIds, kbErr }, "Webcall: failed to load knowledge base — continuing without it");
@@ -696,7 +744,11 @@ export async function handleWebCallWebSocket(
 
       if (!userText?.trim()) { processing = false; return; }
 
-      callLog("info", "stt.result", { text: userText, provider: agent.asrProvider });
+      logExecution("STT", "response", {
+        provider: agent.asrProvider,
+        responsePayload: { transcript: userText },
+        status: "success",
+      });
       send({ type: "transcript", speaker: "user", text: userText });
       history.push({ role: "user", content: userText });
 
@@ -846,6 +898,12 @@ export async function handleWebCallWebSocket(
         const t = text.trim();
         if (!t) return;
         ttsCharactersTotal += t.length;
+        const ttsReqStart = Date.now();
+        logExecution("TTS", "request", {
+          provider: agent.ttsProvider,
+          requestPayload: { text: t },
+          status: "info",
+        });
         // Kick off synthesis immediately so it runs in parallel with LLM streaming.
         // If synthesizeStream is available, use it to collect the full audio via
         // HTTP streaming (potentially faster than waiting for the full response).
@@ -858,11 +916,23 @@ export async function handleWebCallWebSocket(
             await tts.synthesizeStream!(t, (c) => chunks.push(c), () => {});
             const audio = Buffer.concat(chunks);
             logger.info({ callId, sentenceText: t, audioBytes: audio.length }, "TTS sentence synthesized");
+            logExecution("TTS", "response", {
+              provider: agent.ttsProvider,
+              responsePayload: { audioBytes: audio.length, textLength: t.length },
+              latencyMs: Date.now() - ttsReqStart,
+              status: "success",
+            });
             return withTailSilence(audio);
           })();
         } else {
           job = tts.synthesize(t).then(({ audio }) => {
             logger.info({ callId, sentenceText: t, audioBytes: audio.length }, "TTS sentence synthesized");
+            logExecution("TTS", "response", {
+              provider: agent.ttsProvider,
+              responsePayload: { audioBytes: audio.length, textLength: t.length },
+              latencyMs: Date.now() - ttsReqStart,
+              status: "success",
+            });
             return withTailSilence(audio);
           });
         }
@@ -1029,6 +1099,18 @@ export async function handleWebCallWebSocket(
         try { ws.ping(); } catch { /* ignore */ }
       }, 8_000);
 
+      const llmStartMs = Date.now();
+      logExecution("LLM", "request", {
+        provider: agent.llmProvider,
+        requestPayload: {
+          model: (agent as any).llmModel ?? "default",
+          systemPromptPreview: systemPromptForTurn.substring(0, 800),
+          historyLength: history.length,
+          tools: attachTools ? toolDefs.map((t: any) => t.function?.name ?? t.name).filter(Boolean) : [],
+        },
+        status: "info",
+      });
+
       try {
        await llm.chat(
         history,
@@ -1060,7 +1142,12 @@ export async function handleWebCallWebSocket(
         clearInterval(llmKeepalive);
         const reason = toReadableError(llmErr, "LLM error");
         logger.error({ callId, err: llmErr }, reason);
-        callLog("error", "llm.error", { message: reason, provider: agent.llmProvider });
+        logExecution("LLM", "response", {
+          provider: agent.llmProvider,
+          status: "error",
+          latencyMs: Date.now() - llmStartMs,
+          metadata: { error: reason },
+        });
         send({ type: "error", message: reason });
         speaking = false;
         speakingEndedAt = Date.now();
@@ -1069,11 +1156,18 @@ export async function handleWebCallWebSocket(
         return;
       }
       clearInterval(llmKeepalive);
-      callLog("info", "llm.response", {
-        text: fullReply.replace(/<think>[\s\S]*?<\/think>/g, "").replace(/<function[\s\S]*?>/g, "").trim().substring(0, 600),
+      logExecution("LLM", "response", {
         provider: agent.llmProvider,
-        inputTokens: llmInputTokensTotal,
-        outputTokens: llmOutputTokensTotal,
+        responsePayload: {
+          text: fullReply.replace(/<think>[\s\S]*?<\/think>/g, "").replace(/<function[\s\S]*?>/g, "").trim().substring(0, 1500),
+        },
+        latencyMs: Date.now() - llmStartMs,
+        status: "success",
+        metadata: {
+          inputTokens: llmInputTokensTotal,
+          outputTokens: llmOutputTokensTotal,
+          model: (agent as any).llmModel ?? "default",
+        },
       });
 
       // The LLM token stream occasionally ends a few words early while fullReply
@@ -1147,7 +1241,12 @@ export async function handleWebCallWebSocket(
 
         // Execute the tool via the shared executor
         let toolResult: string | undefined;
-        callLog("info", "tool.call", { tool: triggeredToolName, args: triggeredToolArgs });
+        let toolHadError = false;
+        const toolStartMs = Date.now();
+        logExecution("Tool", "request", {
+          requestPayload: { tool: triggeredToolName, args: triggeredToolArgs },
+          status: "info",
+        });
         try {
           const tool = agentTools.find((t) => t.name === triggeredToolName);
           if (!tool) {
@@ -1169,11 +1268,24 @@ export async function handleWebCallWebSocket(
           }
         } catch (toolErr) {
           logger.error({ callId, err: toolErr, triggeredToolName }, "Webcall: tool execution error");
-          callLog("error", "tool.error", { tool: triggeredToolName, message: toolErr instanceof Error ? toolErr.message : String(toolErr) });
+          toolHadError = true;
+          logExecution("Tool", "response", {
+            requestPayload: { tool: triggeredToolName },
+            responsePayload: { error: toolErr instanceof Error ? toolErr.message : String(toolErr) },
+            latencyMs: Date.now() - toolStartMs,
+            status: "error",
+          });
           toolResult = "error: tool execution failed";
         }
 
-        callLog("info", "tool.result", { tool: triggeredToolName, result: (toolResult ?? "unavailable").substring(0, 400) });
+        if (!toolHadError) {
+          logExecution("Tool", "response", {
+            requestPayload: { tool: triggeredToolName },
+            responsePayload: { result: (toolResult ?? "unavailable").substring(0, 800) },
+            latencyMs: Date.now() - toolStartMs,
+            status: "success",
+          });
+        }
         // Record the tool result so the next turn can speak or act on it.
         // (Same marker pattern as pipeline.ts continueWithToolResult — also
         // surfaces in the dashboard "Tool Calls" panel via the transcript.)
@@ -1646,11 +1758,15 @@ export async function handleWebCallWebSocket(
 
     const endedAt         = new Date();
     const durationSeconds = Math.floor((endedAt.getTime() - startedAt.getTime()) / 1000);
-    callLog(reason === "error" ? "error" : "info", "call.end", {
-      reason,
-      durationSeconds,
-      turns: history.filter(t => t.role === "assistant").length,
-      ...(errorDetail ? { error: errorDetail instanceof Error ? errorDetail.message : String(errorDetail) } : {}),
+    logExecution("Agent", "system", {
+      requestPayload: {
+        event: "call.end",
+        reason,
+        durationSeconds,
+        turns: history.filter(t => t.role === "assistant").length,
+        ...(errorDetail ? { error: errorDetail instanceof Error ? errorDetail.message : String(errorDetail) } : {}),
+      },
+      status: reason === "error" ? "error" : "info",
     });
     const transcript      = history.map(t => `${t.role === "user" ? "Caller" : "Agent"}: ${t.content}`).join("\n");
 

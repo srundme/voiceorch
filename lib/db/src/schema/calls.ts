@@ -49,3 +49,24 @@ export const callEventsTable = pgTable("call_events", {
 }, (t) => [index("call_events_call_id_idx").on(t.callId)]);
 
 export type CallEvent = typeof callEventsTable.$inferSelect;
+
+// ── Execution Logs — rich per-call debugging timeline ─────────────────────
+export const executionLogsTable = pgTable("execution_logs", {
+  id: serial("id").primaryKey(),
+  callId: integer("call_id").notNull().references(() => callsTable.id, { onDelete: "cascade" }),
+  agentId: integer("agent_id"),
+  ts: timestamp("ts", { withTimezone: true }).notNull().defaultNow(),
+  component: text("component").notNull(),   // Agent | STT | LLM | TTS | Tool | Memory | Knowledge | VariableResolver | Webhook
+  provider: text("provider"),               // Deepgram | OpenAI | ElevenLabs | …
+  direction: text("direction").notNull(),   // request | response | system
+  status: text("status").notNull().default("info"), // success | error | info
+  latencyMs: integer("latency_ms"),
+  requestPayload: json("request_payload").$type<Record<string, unknown>>(),
+  responsePayload: json("response_payload").$type<Record<string, unknown>>(),
+  metadata: json("metadata").$type<Record<string, unknown>>(),
+}, (t) => [
+  index("execution_logs_call_id_idx").on(t.callId),
+  index("execution_logs_ts_idx").on(t.ts),
+]);
+
+export type ExecutionLog = typeof executionLogsTable.$inferSelect;
