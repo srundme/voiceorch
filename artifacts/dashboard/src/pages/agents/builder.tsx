@@ -1531,8 +1531,8 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                         </span>
                       </div>
                     )}
-                    {/* Event Type (booking / availability / list tools) */}
-                    {(type === "native_booking" || type === "native_check_availability" || type === "native_list_bookings") && (() => {
+                    {/* Event Type (all booking tools) */}
+                    {(() => {
                       const idx = nativeToolIndex(type);
                       const toolEventTypeId = watchedTools[idx]?.eventTypeId;
                       return (
@@ -1547,7 +1547,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                             <SelectContent>
                               <SelectItem value="__none__" className="text-xs">Any event type</SelectItem>
                               {(agentEventTypes ?? []).map((et: any) => (
-                                <SelectItem key={et.id} value={String(et.id)} className="text-xs">{et.title}</SelectItem>
+                                <SelectItem key={et.id} value={String(et.id)} className="text-xs">{et.name}</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>

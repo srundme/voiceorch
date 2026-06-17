@@ -1,0 +1,276 @@
+# Fix Calendar Booking Tools Architecture
+
+## Current Situation
+
+The booking tools UI is incomplete and currently unusable.
+
+The platform already supports:
+
+✓ Agent Calendars
+✓ Google Calendar Connection
+✓ Event Creation
+✓ Event Types
+✓ Booking Infrastructure
+
+However the booking tools are not properly wired together.
+
+This is blocking appointment booking functionality.
+
+---
+
+# Problem 1
+
+Book Appointment
+
+The Event Type dropdown is not loading the event types that already exist for the assigned calendar.
+
+Current:
+
+Book Appointment
+
+Assigned Calendar:
+Sarii test cal
+
+Event Type:
+
+Any Event Type
+
+Only one option appears.
+
+Expected:
+
+Any Event Type
+
+Discovery Call
+
+Consultation
+
+Demo
+
+Test 1 to 1
+
+etc.
+
+The tool must automatically load all event types belonging to the assigned calendar.
+
+---
+
+# Problem 2
+
+Check Availability
+
+Same issue.
+
+The Event Type dropdown is empty.
+
+This tool cannot properly check availability without knowing which event type availability should be checked.
+
+Expected:
+
+Load all event types from the assigned calendar.
+
+---
+
+# Problem 3
+
+Reschedule Booking
+
+Currently:
+
+No Event Type selection exists.
+
+No Calendar Configuration exists.
+
+No linkage exists.
+
+Expected:
+
+Reschedule Booking should use:
+
+Assigned Calendar
+
+Selected Event Type
+
+Connected Google Account
+
+Without this the agent cannot know which booking should be rescheduled.
+
+---
+
+# Problem 4
+
+Cancel Booking
+
+Currently:
+
+No Event Type selection exists.
+
+No Calendar Configuration exists.
+
+Expected:
+
+Allow configuration similar to:
+
+Book Appointment
+
+Check Availability
+
+The tool must know which calendar bookings belong to.
+
+---
+
+# Problem 5
+
+List Bookings
+
+Currently:
+
+No Event Type selection exists.
+
+No Calendar linkage exists.
+
+Expected:
+
+Allow:
+
+Assigned Calendar
+
+Selected Event Type
+
+This allows the agent to retrieve only relevant bookings.
+
+---
+
+# Required Architecture
+
+All booking tools should use the same shared source.
+
+Agent
+
+↓
+
+Assigned Calendar
+
+↓
+
+Calendar Event Types
+
+↓
+
+Google Account
+
+↓
+
+Booking Tools
+
+---
+
+# Shared Resolver
+
+Build a shared booking resolver.
+
+Every tool should use it.
+
+Tools:
+
+book_appointment
+
+check_availability
+
+list_bookings
+
+reschedule_booking
+
+cancel_booking
+
+must all consume the same:
+
+Calendar Resolver
+
+Event Type Resolver
+
+Google Account Resolver
+
+Do not duplicate logic.
+
+---
+
+# UI Requirements
+
+For every booking tool:
+
+Display:
+
+Assigned Calendar
+
+Connected Account
+
+Event Type Dropdown
+
+Timezone
+
+View Schema
+
+Test Tool
+
+Consistent across all tools.
+
+---
+
+# Event Type Loading
+
+The dropdown must load:
+
+Calendar Event Types
+
+from the assigned calendar.
+
+If none exist:
+
+Display:
+
+"No Event Types Found"
+
+instead of silently showing:
+
+"Any Event Type"
+
+---
+
+# Debugging
+
+Before fixing:
+
+Verify:
+
+1. Calendar ID
+2. Event Type Records
+3. Event Type Calendar Mapping
+4. API Response
+5. Frontend Dropdown Binding
+
+Identify exactly where the chain breaks.
+
+---
+
+# Success Criteria
+
+✓ Book Appointment loads event types
+
+✓ Check Availability loads event types
+
+✓ List Bookings supports event type selection
+
+✓ Reschedule Booking supports event type selection
+
+✓ Cancel Booking supports event type selection
+
+✓ All tools use the assigned calendar automatically
+
+✓ All tools use the same shared resolver
+
+✓ Existing calendars work without migration
+
+This is a booking tools architecture fix, not just a UI fix.
+
+The goal is that every booking-related tool becomes fully functional and uses the agent's assigned calendar and event types consistently.
