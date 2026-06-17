@@ -4,6 +4,11 @@ import type { TTSAdapter } from "../../types.js";
  * ElevenLabs — Text-to-Speech REST API
  * Docs: https://elevenlabs.io/docs/api-reference/text-to-speech
  * Supports streaming via /stream endpoint for lower TTFAB.
+ *
+ * IMPORTANT: output_format must be a URL query parameter, NOT a JSON body field.
+ * Setting Accept: audio/mpeg overrides output_format and returns compressed MP3,
+ * which the pipeline would decode as raw PCM → garbage audio. Use no Accept header
+ * (defaults to audio/pcm when output_format=pcm_*) or Accept: *//*
  */
 export class ElevenLabsTTS implements TTSAdapter {
   private key: string;
@@ -18,28 +23,34 @@ export class ElevenLabsTTS implements TTSAdapter {
     this.modelId = "eleven_turbo_v2_5";
   }
 
+  /** Build the full URL with output_format as a query parameter (required by ElevenLabs API). */
+  private buildUrl(path: string): string {
+    const url = new URL(`https://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}${path}`);
+    url.searchParams.set("output_format", "pcm_16000");
+    return url.toString();
+  }
+
   private buildBody(text: string): string {
     return JSON.stringify({
       text,
       model_id: this.modelId,
       voice_settings: { stability: 0.5, similarity_boost: 0.75 },
-      output_format: "pcm_16000",
     });
   }
 
+  private get commonHeaders() {
+    return {
+      "xi-api-key": this.key,
+      "Content-Type": "application/json",
+    };
+  }
+
   async synthesize(text: string): Promise<{ audio: Buffer; characters: number }> {
-    const resp = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}`,
-      {
-        method: "POST",
-        headers: {
-          "xi-api-key": this.key,
-          "Content-Type": "application/json",
-          Accept: "audio/mpeg",
-        },
-        body: this.buildBody(text),
-      }
-    );
+    const resp = await fetch(this.buildUrl(""), {
+      method: "POST",
+      headers: this.commonHeaders,
+      body: this.buildBody(text),
+    });
 
     if (!resp.ok) {
       const err = await resp.text();
@@ -51,6 +62,7 @@ export class ElevenLabsTTS implements TTSAdapter {
 
   /**
    * Streaming synthesis via ElevenLabs /stream endpoint.
+   * Returns raw 16kHz PCM chunks (output_format=pcm_16000 query param).
    * First PCM chunk arrives before full synthesis completes.
    */
   async synthesizeStream(
@@ -59,19 +71,12 @@ export class ElevenLabsTTS implements TTSAdapter {
     onDone: (characters: number) => void,
     signal?: AbortSignal
   ): Promise<void> {
-    const resp = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/stream`,
-      {
-        method: "POST",
-        headers: {
-          "xi-api-key": this.key,
-          "Content-Type": "application/json",
-          Accept: "audio/mpeg",
-        },
-        body: this.buildBody(text),
-        signal,
-      }
-    );
+    const resp = await fetch(this.buildUrl("/stream"), {
+      method: "POST",
+      headers: this.commonHeaders,
+      body: this.buildBody(text),
+      signal,
+    });
 
     if (!resp.ok) {
       const err = await resp.text();
