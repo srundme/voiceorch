@@ -220,69 +220,80 @@ export async function createSession(params: {
     stagedPromptCoreIdentity: agent.stagedPromptCoreIdentity ?? null,
   };
 
-  // ── Cross-call caller memory (3-layer: profile + facts + archive) ──────────
+  // ── Parallel pre-fetch: caller memory + campaign lead + knowledge base ───────
+  // All three are independent DB reads — fire simultaneously to avoid sequential
+  // round-trips that add 20-60 ms to call setup latency.
   const callerPhone = humanPhone(params.fromNumber, params.toNumber);
   let callerProfileSnapshot: CallerProfile | null = null;
-  // Track facts latched mid-call to avoid re-writing facts the DB already has
   let latchedFactsMap = new Map<string, string>();
-  if (callerPhone) {
-    try {
-      const callerCtx = await loadCallerContext(params.agentId, callerPhone);
-      callerProfileSnapshot = callerCtx.profile;
-      for (const f of callerCtx.facts) latchedFactsMap.set(f.key, f.value);
-      if (callerProfileSnapshot || callerCtx.facts.length > 0 || callerCtx.recentCalls.length > 0) {
-        agentConfig.systemPrompt = injectEnhancedMemory(agentConfig.systemPrompt, callerCtx);
-        logger.info(
-          { agentId: params.agentId, callerPhone, callCount: callerProfileSnapshot?.callCount ?? 0, factCount: callerCtx.facts.length, archiveCount: callerCtx.recentCalls.length },
-          "Caller memory injected into system prompt"
-        );
-      }
-    } catch (memErr) {
-      logger.warn({ agentId: params.agentId, callerPhone, memErr }, "Failed to load caller context — continuing without memory");
+
+  const [callerCtxResult, campaignLeadResult, kbEntriesResult] = await Promise.all([
+    // 1. Caller memory (3-layer: profile + facts + archive)
+    callerPhone
+      ? loadCallerContext(params.agentId, callerPhone).catch((memErr) => {
+          logger.warn({ agentId: params.agentId, callerPhone, memErr }, "Failed to load caller context — continuing without memory");
+          return null;
+        })
+      : Promise.resolve(null),
+
+    // 2. Campaign lead variables
+    params.campaignLeadId
+      ? db.select().from(campaignLeadsTable).where(eq(campaignLeadsTable.id, params.campaignLeadId))
+          .then(([lead]) => lead ?? null)
+          .catch((leadErr) => {
+            logger.warn({ campaignLeadId: params.campaignLeadId, leadErr }, "Failed to load campaign lead — continuing without lead vars");
+            return null;
+          })
+      : Promise.resolve(null),
+
+    // 3. Knowledge base (all attached sources)
+    agentConfig.knowledgeSourceIds.length > 0
+      ? buildKnowledgeBaseBlock(agentConfig.knowledgeSourceIds).catch((kbErr) => {
+          logger.warn({ agentId: params.agentId, knowledgeSourceIds: agentConfig.knowledgeSourceIds, kbErr }, "Failed to load knowledge base — continuing without it");
+          return null;
+        })
+      : Promise.resolve(null),
+  ]);
+
+  // Apply caller memory to system prompt
+  if (callerCtxResult) {
+    callerProfileSnapshot = callerCtxResult.profile;
+    for (const f of callerCtxResult.facts) latchedFactsMap.set(f.key, f.value);
+    if (callerProfileSnapshot || callerCtxResult.facts.length > 0 || callerCtxResult.recentCalls.length > 0) {
+      agentConfig.systemPrompt = injectEnhancedMemory(agentConfig.systemPrompt, callerCtxResult);
+      logger.info(
+        { agentId: params.agentId, callerPhone, callCount: callerProfileSnapshot?.callCount ?? 0, factCount: callerCtxResult.facts.length, archiveCount: callerCtxResult.recentCalls.length },
+        "Caller memory injected into system prompt"
+      );
     }
   }
 
   // ── Resolve dynamic variables in system prompt ─────────────────────────────
-  // Supports both {{var}} and {var} syntax.
-  // Priority order (lowest → highest): system defaults < agent promptVariables < inbound customParameters
   const now = new Date();
-  // Load campaign lead data if a campaignLeadId was supplied
   let campaignLeadVars: Record<string, string> = {};
-  if (params.campaignLeadId) {
-    try {
-      const [lead] = await db.select().from(campaignLeadsTable).where(eq(campaignLeadsTable.id, params.campaignLeadId));
-      if (lead) {
-        campaignLeadVars = {
-          phone:  lead.phone,
-          name:   lead.name  ?? "",
-          email:  lead.email ?? "",
-          ...lead.leadData,
-        };
-        logger.info({ campaignLeadId: params.campaignLeadId, phone: lead.phone }, "Campaign lead vars loaded into session");
-      }
-    } catch (leadErr) {
-      logger.warn({ campaignLeadId: params.campaignLeadId, leadErr }, "Failed to load campaign lead — continuing without lead vars");
-    }
+  if (campaignLeadResult) {
+    campaignLeadVars = {
+      phone:  campaignLeadResult.phone,
+      name:   campaignLeadResult.name  ?? "",
+      email:  campaignLeadResult.email ?? "",
+      ...campaignLeadResult.leadData,
+    };
+    logger.info({ campaignLeadId: params.campaignLeadId, phone: campaignLeadResult.phone }, "Campaign lead vars loaded into session");
   }
 
   const dynVars: Record<string, string> = {
-    // System-provided built-in variables
     to_number:     params.toNumber,
     from_number:   params.fromNumber,
     agent_name:    agent.name,
     caller_number: params.fromNumber,
     date: now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" }),
-    // P1-A: Agent-level prompt variable defaults (user-defined in agent config)
     ...Object.fromEntries(agentConfig.promptVariables.map(v => [v.key, v.defaultValue])),
-    // Campaign lead data overrides agent defaults
     ...campaignLeadVars,
-    // P1-A: Inbound call parameters override everything (e.g. Vobiz customParameters)
     ...Object.fromEntries(Object.entries(params.customParameters ?? {}).map(([k, v]) => [k, v])),
   };
 
-  // Replace both {{var}} and {var} — but skip {caller_salutation} (runtime only)
   const resolveVar = (key: string, fullMatch: string): string => {
-    if (key === "caller_salutation") return fullMatch;   // deferred to pipeline
+    if (key === "caller_salutation") return fullMatch;
     return key in dynVars ? dynVars[key]! : fullMatch;
   };
 
@@ -290,27 +301,20 @@ export async function createSession(params: {
     .replace(/\{\{(\w+)\}\}/g, (m, k: string) => resolveVar(k, m))
     .replace(/\{(\w+)\}/g,     (m, k: string) => resolveVar(k, m));
 
-  // ── Knowledge base injection (all attached sources) ──────────────────────
-  if (agentConfig.knowledgeSourceIds.length > 0) {
-    try {
-      const entriesBlock = await buildKnowledgeBaseBlock(agentConfig.knowledgeSourceIds);
-      if (entriesBlock) {
-        const kbBlock = [
-          "=== KNOWLEDGE BASE ===",
-          "Use the following information to answer questions accurately. Always prefer this over your general training data.",
-          "",
-          entriesBlock,
-          "=== END KNOWLEDGE BASE ===",
-        ].join("\n\n");
-        agentConfig.systemPrompt = `${kbBlock}\n\n${agentConfig.systemPrompt}`;
-        logger.info(
-          { agentId: params.agentId, knowledgeSourceIds: agentConfig.knowledgeSourceIds },
-          "Knowledge base injected into system prompt"
-        );
-      }
-    } catch (kbErr) {
-      logger.warn({ agentId: params.agentId, knowledgeSourceIds: agentConfig.knowledgeSourceIds, kbErr }, "Failed to load knowledge base — continuing without it");
-    }
+  // Apply knowledge base (prepended so it sits at the top of the final prompt)
+  if (kbEntriesResult) {
+    const kbBlock = [
+      "=== KNOWLEDGE BASE ===",
+      "Use the following information to answer questions accurately. Always prefer this over your general training data.",
+      "",
+      kbEntriesResult,
+      "=== END KNOWLEDGE BASE ===",
+    ].join("\n\n");
+    agentConfig.systemPrompt = `${kbBlock}\n\n${agentConfig.systemPrompt}`;
+    logger.info(
+      { agentId: params.agentId, knowledgeSourceIds: agentConfig.knowledgeSourceIds },
+      "Knowledge base injected into system prompt"
+    );
   }
 
   // Scope provider keys to this agent's owner.
