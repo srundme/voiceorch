@@ -17,6 +17,7 @@ import type { AgentConfig, AgentTool, ConversationTurn, LLMUsage, SessionConfig,
 import { DEFAULT_GOODBYE_MESSAGE, resolveGoodbyeMessage } from "./types.js";
 import { retrieveKbContext, retrieveKbContextMulti } from "./kb-retrieval.js";
 import { performance } from "perf_hooks";
+import { computeEndpointMs } from "./endpointing.js";
 import { logger } from "../lib/logger.js";
 import { format, addMinutes } from "date-fns";
 import { toZonedTime, formatInTimeZone } from "date-fns-tz";
@@ -177,6 +178,9 @@ export class OrchestrationPipeline {
   private _tTurnLlmFirstClause: number | null = null; // first complete clause flushed to TTS queue
   private _tTurnTtsFirstByte:   number | null = null; // first TTS audio chunk from provider
   private _tTurnFirstAudioOut:  number | null = null; // first audio chunk written to onAudioOut
+  // Adaptive endpoint: set by scheduleSilenceFlush(), captured+reset in processTurn()
+  private _lastEndpointMs: number | null = null;
+  private _lastEndpointReason = "";
   private _fillerPlayedThisTurn = false;
 
   // Usage accumulators — updated on every LLM call and every TTS synthesis.
@@ -691,10 +695,26 @@ export class OrchestrationPipeline {
 
   private scheduleSilenceFlush(): void {
     if (this.silenceTimer) return;
+    // ── Adaptive endpoint window ───────────────────────────────────────────
+    const lastAgentText = [...this.conversationHistory].reverse()
+      .find(t => t.role === "assistant")?.content ?? "";
+    const partialTranscript = this.pendingTranscript?.text ?? "";
+    // audioBuffer holds 8kHz 8-bit PCM: 8000 bytes/s → 1 ms ≈ 8 bytes
+    const audioBufferMs = Math.round(
+      this.audioBuffer.reduce((s, b) => s + b.length, 0) / 8
+    );
+    const { ms, reason } = computeEndpointMs({
+      lastAgentText,
+      partialTranscript,
+      audioBufferMs,
+      baseSilenceMs: this.vadSilenceMs,
+    });
+    this._lastEndpointMs = ms;
+    this._lastEndpointReason = reason;
     this.silenceTimer = setTimeout(() => {
       this.silenceTimer = null;
       void this.flushAndProcess();
-    }, this.vadSilenceMs);
+    }, ms);
   }
 
   /** Reset (or start) the silence-hangup countdown. Fires onCallEnd if no speech for silenceTimeoutSeconds. */
@@ -1339,6 +1359,12 @@ export class OrchestrationPipeline {
     this._tTurnTtsFirstByte   = null;
     this._tTurnFirstAudioOut  = null;
     this._fillerPlayedThisTurn = false;
+    // Capture adaptive endpoint decision for this turn (set by scheduleSilenceFlush);
+    // null when turn was triggered by streaming STT (Deepgram handles endpointing there).
+    const _thisEndpointMs = this._lastEndpointMs;
+    const _thisEndpointReason = this._lastEndpointReason || "n/a";
+    this._lastEndpointMs = null;
+    this._lastEndpointReason = "";
 
     logger.info({ callId: this.config.callId, transcript, sttLatencyMs }, "Processing turn");
 
@@ -1864,6 +1890,8 @@ export class OrchestrationPipeline {
         tts_ttfb_ms:           _tts_ttfb_ms,
         return_ms:             _return_ms,
         total_ms:              _total_ms,
+        endpoint_ms:           _thisEndpointMs,
+        endpoint_reason:       _thisEndpointReason,
         asrProvider:           this.agent.asrProvider,
         llmProvider:           this.agent.llmProvider,
         ttsProvider:           this.agent.ttsProvider,
