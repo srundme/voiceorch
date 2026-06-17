@@ -5,26 +5,54 @@ const NAV_GROUPS = [
     title: "Getting Started",
     items: [
       { title: "Introduction", slug: "introduction" },
+      { title: "Platform Concepts", slug: "platform-concepts" },
       { title: "Quick Start", slug: "quick-start" },
-      { title: "Authentication", slug: "authentication" }
-    ]
+      { title: "Authentication", slug: "authentication" },
+    ],
   },
   {
-    title: "Core Concepts",
+    title: "Building Agents",
     items: [
-      { title: "Agents", slug: "agents" },
-      { title: "Providers", slug: "providers" },
-      { title: "Scheduling", slug: "scheduling" },
-      { title: "Campaigns", slug: "campaigns" }
-    ]
+      { title: "Agent Overview", slug: "agents" },
+      { title: "Agent Builder", slug: "agent-builder" },
+      { title: "Prompting Guide", slug: "prompting-guide" },
+      { title: "Tools & Functions", slug: "tools" },
+      { title: "Knowledge Base", slug: "knowledge-base" },
+    ],
+  },
+  {
+    title: "Providers",
+    items: [
+      { title: "Overview", slug: "providers" },
+      { title: "ASR / Speech-to-Text", slug: "asr-providers" },
+      { title: "LLM Providers", slug: "llm-providers" },
+      { title: "TTS / Text-to-Speech", slug: "tts-providers" },
+      { title: "Telephony", slug: "telephony-providers" },
+    ],
+  },
+  {
+    title: "Campaigns",
+    items: [
+      { title: "Overview", slug: "campaigns" },
+      { title: "Managing Leads", slug: "managing-leads" },
+    ],
+  },
+  {
+    title: "Scheduling",
+    items: [
+      { title: "Overview", slug: "scheduling" },
+      { title: "Google Calendar", slug: "google-calendar" },
+    ],
   },
   {
     title: "Reference",
     items: [
+      { title: "Webhooks", slug: "webhooks" },
       { title: "API Reference", slug: "api-reference" },
-      { title: "Changelog", slug: "changelog" }
-    ]
-  }
+      { title: "Pricing & Usage", slug: "pricing" },
+      { title: "Changelog", slug: "changelog" },
+    ],
+  },
 ];
 
 export function DocsSidebar({ activeSection }: { activeSection: string }) {
