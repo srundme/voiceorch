@@ -1,0 +1,424 @@
+```text
+# Calendar Tools Regression Fix & Restore Previous Architecture
+
+We recently made changes to the Agent → Tools → Calendar Booking section and it has regressed significantly.
+
+Before making any changes, investigate Git history, Replit checkpoints, deployment history, and previous versions from approximately 5 days ago.
+
+## Goal
+
+Restore ONLY the Calendar Tools functionality and UI to how it worked approximately 5 days ago.
+
+DO NOT revert:
+
+- Execution Logs
+- Agent Settings
+- CRM
+- Memory
+- Calling Infrastructure
+- Voice Providers
+- Other recent platform improvements
+
+Only restore the Calendar Tools module.
+
+---
+
+## Current Problem
+
+The current implementation has converted everything into generic platform toggles:
+
+- Book Appointment
+- Check Availability
+- List Bookings
+- Reschedule Booking
+- Cancel Booking
+
+with:
+
+- Calendar dropdown
+- Event Type dropdown
+
+This is not the expected architecture.
+
+The current implementation feels like a configuration screen rather than actual AI tool definitions.
+
+---
+
+## Expected Architecture
+
+SnapServe uses an INTERNAL booking system.
+
+We DO NOT use Cal.com APIs.
+
+We DO NOT require:
+
+- API Key
+- Event Type ID
+- External Booking Credentials
+
+Unlike Retell AI.
+
+Retell requires users to manually configure:
+
+- API Key
+- Event Type ID
+- Timezone
+
+because they are connecting to Cal.com.
+
+SnapServe should NOT work this way.
+
+---
+
+## How SnapServe Should Work
+
+### Agent Creation
+
+Whenever a Voice Agent is created:
+
+Automatically create:
+
+Agent Calendar
+
+Example:
+
+Agent Name:
+Sarii
+
+Automatically Created Calendar:
+Sarii Calendar
+
+This calendar is already managed by the platform.
+
+---
+
+## Calendar Configuration Layer
+
+Settings → Calendar
+
+This page should remain responsible for:
+
+- Connecting Google Calendar
+- Connecting Google Meet
+- Assigning accounts
+- Calendar ownership
+- Calendar configuration
+
+Example:
+
+Settings
+→ Calendar
+→ Google Account Connected
+→ Google Meet Enabled
+
+This part is correct.
+
+---
+
+## Agent Tool Layer
+
+Agent → Tools
+
+This page should NOT be responsible for configuring calendars.
+
+Instead, it should expose callable AI tools.
+
+The agent should automatically use its assigned calendar.
+
+---
+
+## Expected Tool Structure
+
+Each calendar capability should exist as an actual AI function.
+
+Example:
+
+Function Name:
+check_availability
+
+Description:
+Checks available appointment slots in the assigned calendar.
+
+Uses:
+Sarii Calendar
+
+Enabled:
+True
+
+---
+
+Function Name:
+book_appointment
+
+Description:
+Books an appointment into the assigned calendar.
+
+Uses:
+Sarii Calendar
+
+Enabled:
+True
+
+---
+
+Function Name:
+list_bookings
+
+Description:
+Retrieves upcoming bookings.
+
+Uses:
+Sarii Calendar
+
+Enabled:
+True
+
+---
+
+Function Name:
+reschedule_booking
+
+Description:
+Moves an existing booking.
+
+Uses:
+Sarii Calendar
+
+Enabled:
+True
+
+---
+
+Function Name:
+cancel_booking
+
+Description:
+Cancels an existing booking.
+
+Uses:
+Sarii Calendar
+
+Enabled:
+True
+
+---
+
+## Why Function Names Matter
+
+These tool names are critical because:
+
+- LLM Tool Calling depends on them
+- Execution Logs depend on them
+- Debugging depends on them
+- Future analytics depend on them
+
+Example:
+
+User:
+"What slots do you have tomorrow?"
+
+Tool Invoked:
+
+check_availability()
+
+---
+
+User:
+"Book me for 3 PM"
+
+Tool Invoked:
+
+book_appointment()
+
+---
+
+User:
+"Cancel my appointment"
+
+Tool Invoked:
+
+cancel_booking()
+
+---
+
+These tool names must appear in:
+
+- Execution Logs
+- Tool Logs
+- Agent Debugging
+- Analytics
+
+Currently this visibility is missing.
+
+---
+
+## Calendar Selection Logic
+
+The calendar should automatically come from the agent.
+
+Example:
+
+Agent:
+Sarii
+
+Assigned Calendar:
+Sarii Calendar
+
+The tools should automatically use:
+
+Sarii Calendar
+
+without requiring:
+
+- Event Type Dropdown
+- Manual Calendar Selection Every Time
+- API Keys
+- Event IDs
+
+The relationship already exists.
+
+Reuse it.
+
+---
+
+## Suspected Root Cause
+
+It appears that a recent change accidentally merged:
+
+Settings → Calendar Configuration Layer
+
+with
+
+Agent → Tool Execution Layer
+
+These should be separate systems.
+
+Calendar Configuration:
+Settings → Calendar
+
+Tool Usage:
+Agent → Tools
+
+Please verify if this regression occurred during the recent refactor.
+
+---
+
+## Investigation Required
+
+Please provide a report:
+
+1. What changed in the Calendar Tools module within the last 5 days?
+2. Which commit introduced the current toggle-based UI?
+3. Is there a checkpoint or commit that contains the previous implementation?
+4. Can only the Calendar Tools module be reverted?
+5. What files were modified?
+6. What backend logic was changed?
+7. What database schema changes were introduced?
+
+Do NOT make destructive changes before reporting findings.
+
+---
+
+## If Previous Version Exists
+
+Restore only:
+
+- Calendar Tools UI
+- Calendar Tool Backend Logic
+- Tool Invocation Logic
+
+Leave all other recent changes intact.
+
+---
+
+## If Previous Version Cannot Be Restored
+
+Rebuild the Calendar Tools module using the architecture described above.
+
+---
+
+## Additional Requirement
+
+Each tool card should display:
+
+- Function Name
+- Description
+- Assigned Calendar
+- Enabled / Disabled Toggle
+- Tool Status
+- Test Tool Button
+- View Schema Button
+
+Example:
+
+check_availability
+Checks open slots in assigned calendar.
+
+Calendar:
+Sarii Calendar
+
+[Enabled]
+
+[Test Tool]
+[View Schema]
+
+---
+
+## Execution Logs Integration
+
+When a tool is executed, logs must show:
+
+Timestamp
+
+Tool Name:
+check_availability
+
+Input:
+{
+  "date": "2026-06-20"
+}
+
+Output:
+{
+  "available_slots": [
+    "10:00 AM",
+    "11:00 AM"
+  ]
+}
+
+Execution Time:
+124ms
+
+Status:
+Success
+
+---
+
+## Success Criteria
+
+After the fix:
+
+✓ Every agent automatically has an assigned calendar
+
+✓ Calendar tools are actual AI functions
+
+✓ Function names are visible
+
+✓ Tool calls appear in Execution Logs
+
+✓ Google Calendar integration still works
+
+✓ Google Meet generation still works
+
+✓ No API Key fields
+
+✓ No Event Type ID fields
+
+✓ No Cal.com-style configuration
+
+✓ Agent uses its assigned calendar automatically
+
+✓ Behavior matches the implementation that existed approximately 5 days ago
+
+Please investigate first, provide findings, then restore or rebuild only the Calendar Tools module.
+```
