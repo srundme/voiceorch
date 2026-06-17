@@ -2112,19 +2112,28 @@ export async function handleWebCallWebSocket(
         speakingStartedAt = Date.now();
 
         let greetAudio: Buffer;
-        if (tts.synthesizeStream) {
-          const chunks: Buffer[] = [];
-          await tts.synthesizeStream(greetingText, (c) => chunks.push(c), () => {});
-          greetAudio = withTailSilence(Buffer.concat(chunks));
-        } else {
-          const { audio } = await tts.synthesize(greetingText);
-          greetAudio = withTailSilence(audio);
-        }
+        try {
+          if (tts.synthesizeStream) {
+            const chunks: Buffer[] = [];
+            await tts.synthesizeStream(greetingText, (c) => chunks.push(c), () => {});
+            greetAudio = withTailSilence(Buffer.concat(chunks));
+          } else {
+            const { audio } = await tts.synthesize(greetingText);
+            greetAudio = withTailSilence(audio);
+          }
 
-        for (let j = 0; j < greetAudio.length; j += AUDIO_CHUNK_BYTES) {
-          if (closed || interrupted) break;
-          sendSpeechAudio(greetAudio.slice(j, j + AUDIO_CHUNK_BYTES));
-          await new Promise<void>(r => setTimeout(r, 40));
+          for (let j = 0; j < greetAudio.length; j += AUDIO_CHUNK_BYTES) {
+            if (closed || interrupted) break;
+            const chunk = greetAudio.slice(j, j + AUDIO_CHUNK_BYTES);
+            recording.addAgentChunk(chunk);
+            sendSpeechAudio(chunk);
+            await new Promise<void>(r => setTimeout(r, 40));
+          }
+        } catch (ttsErr) {
+          logger.error({ callId, ttsErr }, "Greeting TTS synthesis failed");
+          send({ type: "error", message: "TTS synthesis failed during greeting" });
+          if (!closed) void hangup("error", ttsErr instanceof Error ? ttsErr.message : String(ttsErr));
+          return;
         }
 
         speaking = false;

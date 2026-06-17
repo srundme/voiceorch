@@ -87,10 +87,14 @@ export class RecordingBuffer {
 
       const objectName = `recordings/call-${callId}-${Date.now()}.wav`;
       const gcs        = makeGcsClient();
-      await gcs.bucket(bucketId).file(objectName).save(wav, {
+      const uploadPromise = gcs.bucket(bucketId).file(objectName).save(wav, {
         contentType: "audio/wav",
         metadata: { cacheControl: "private, max-age=86400" },
       });
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("GCS upload timed out after 10s")), 10_000),
+      );
+      await Promise.race([uploadPromise, timeoutPromise]);
 
       const url = `/api/storage/objects/${objectName}`;
       logger.info({ callId, objectName, bytes: wav.length }, "Recording uploaded");
