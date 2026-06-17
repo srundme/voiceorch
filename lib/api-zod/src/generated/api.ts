@@ -5900,3 +5900,17 @@ export const ListSimulationTemplatesResponseItem = zod.object({
 export const ListSimulationTemplatesResponse = zod.array(ListSimulationTemplatesResponseItem)
 
 
+/**
+ * Returns a 64-hex-char token valid for 60 seconds and usable exactly once. The frontend passes it as ?ticket= on the WS URL so the session JWT never appears in server access logs.
+
+ * @summary Issue a short-lived single-use ticket for a webcall WebSocket upgrade
+ */
+export const CreateWebcallTicketBody = zod.object({
+  "agentId": zod.number()
+})
+
+export const CreateWebcallTicketResponse = zod.object({
+  "ticket": zod.string().describe('64-hex-char single-use token, valid for 60 s')
+})
+
+

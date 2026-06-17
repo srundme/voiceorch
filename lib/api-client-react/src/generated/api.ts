@@ -108,6 +108,8 @@ import type {
   CreateCallbackFromIncoming200,
   CreateCallbackFromIncomingBody,
   CreateSimulationRunBody,
+  CreateWebcallTicket200,
+  CreateWebcallTicketBody,
   CsvImportBody,
   CsvImportResult,
   DailyCallVolume,
@@ -18719,4 +18721,77 @@ export function useListSimulationTemplates<TData = Awaited<ReturnType<typeof lis
 
 
 
+
+export const getCreateWebcallTicketUrl = () => {
+
+
+
+
+  return `/api/webcall/ticket`
+}
+
+/**
+ * Returns a 64-hex-char token valid for 60 seconds and usable exactly once. The frontend passes it as ?ticket= on the WS URL so the session JWT never appears in server access logs.
+
+ * @summary Issue a short-lived single-use ticket for a webcall WebSocket upgrade
+ */
+export const createWebcallTicket = async (createWebcallTicketBody: CreateWebcallTicketBody, options?: RequestInit): Promise<CreateWebcallTicket200> => {
+
+  return customFetch<CreateWebcallTicket200>(getCreateWebcallTicketUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createWebcallTicketBody,)
+  }
+);}
+
+
+
+
+export const getCreateWebcallTicketMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createWebcallTicket>>, TError,{data: BodyType<CreateWebcallTicketBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createWebcallTicket>>, TError,{data: BodyType<CreateWebcallTicketBody>}, TContext> => {
+
+const mutationKey = ['createWebcallTicket'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createWebcallTicket>>, {data: BodyType<CreateWebcallTicketBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createWebcallTicket(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateWebcallTicketMutationResult = NonNullable<Awaited<ReturnType<typeof createWebcallTicket>>>
+    export type CreateWebcallTicketMutationBody = BodyType<CreateWebcallTicketBody>
+    export type CreateWebcallTicketMutationError = ErrorType<void>
+
+    /**
+ * @summary Issue a short-lived single-use ticket for a webcall WebSocket upgrade
+ */
+export const useCreateWebcallTicket = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createWebcallTicket>>, TError,{data: BodyType<CreateWebcallTicketBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createWebcallTicket>>,
+        TError,
+        {data: BodyType<CreateWebcallTicketBody>},
+        TContext
+      > => {
+      return useMutation(getCreateWebcallTicketMutationOptions(options));
+    }
 

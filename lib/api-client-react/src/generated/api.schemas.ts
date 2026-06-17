@@ -4727,3 +4727,12 @@ export type CreateSimulationRunBody = {
 
 export type DownloadSimulationReport200 = { [key: string]: unknown };
 
+export type CreateWebcallTicketBody = {
+  agentId: number;
+};
+
+export type CreateWebcallTicket200 = {
+  /** 64-hex-char single-use token, valid for 60 s */
+  ticket: string;
+};
+
