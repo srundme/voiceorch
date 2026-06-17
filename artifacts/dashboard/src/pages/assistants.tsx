@@ -1371,28 +1371,19 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
   const { data: kbs } = useListKnowledgeSources();
   const { data: eventTypes } = useListEventTypes();
   const { data: calendars } = useListCalendars();
+  const agentCalendar = (calendars ?? []).find((c: any) => c.agentId === agentId);
+  const agentEventTypes = (eventTypes ?? []).filter((et: any) => et.calendarId === agentCalendar?.id);
   const { data: ambientSounds, isLoading: ambientSoundsLoading } = useListAmbientSounds();
 
   // ── Booking-tool modal state (Tools tab) ───────────────────────────────
   const [bookingModal, setBookingModal] = useState<null | {
-    calendarId: number | null;
     eventTypeId: number | null;
     timezone: string;
     taskName: string;
     description: string;
     preToolMessage: string;
   }>(null);
-  const lastNativeBookingRef = useRef<{ calendarId: number | null; eventTypeId: number | null }>({ calendarId: null, eventTypeId: null });
-  const modalParams = bookingModal?.calendarId ? { calendarId: bookingModal.calendarId } : undefined;
-  const { data: modalEventTypes, isLoading: modalEventTypesLoading } = useListEventTypes(
-    modalParams,
-    {
-      query: {
-        enabled: bookingModal !== null && bookingModal.calendarId !== null,
-        queryKey: ["modal-event-types", modalParams?.calendarId ?? null],
-      },
-    },
-  );
+  const lastNativeBookingRef = useRef<{ eventTypeId: number | null }>({ eventTypeId: null });
 
   // ── Tab 1 — Agent ───────────────────────────────────────────────
   const [agentName, setAgentName]                           = useState("");
@@ -2316,7 +2307,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                   { label: "Call Transfer",    icon: PhoneForwarded, onClick: () => { setAgentTools(prev => [...prev, { type: "call_transfer" as const, name: "transfer_to_human", description: "Transfer the call to a human agent when the caller requests escalation.", transferTo: "", warmHandoffMessage: "" }]); setDirty(true); } },
                   { label: "End Call",         icon: PhoneOff,       onClick: () => { setAgentTools(prev => [...prev, { type: "end_call" as const, name: "end_call", description: "End the call when the conversation is complete.", goodbyeMessage: "" }]); setDirty(true); } },
                   { label: "Cal.com",          icon: Clock,          onClick: () => { setAgentTools(prev => [...prev, { type: "cal_com" as const, name: "book_appointment", description: "Book an appointment on Cal.com when the caller wants to schedule.", apiKey: "", eventTypeId: 0, timezone: "UTC" }]); setDirty(true); } },
-                  { label: "Book Appointment", icon: CalendarPlus,   onClick: () => { const existing = agentTools.find(t => t.type === "native_booking"); const last = existing ? { calendarId: existing.calendarId ?? null, eventTypeId: existing.eventTypeId ?? null } : lastNativeBookingRef.current; setBookingModal({ calendarId: last.calendarId, eventTypeId: last.eventTypeId, timezone: "UTC", taskName: "book_appointment", description: "Book an appointment when the caller wants to schedule a meeting.", preToolMessage: "" }); } },
+                  { label: "Book Appointment", icon: CalendarPlus,   onClick: () => { const existing = agentTools.find(t => t.type === "native_booking"); const last = existing ? { eventTypeId: existing.eventTypeId ?? null } : lastNativeBookingRef.current; setBookingModal({ eventTypeId: last.eventTypeId, timezone: "UTC", taskName: "book_appointment", description: "Book an appointment when the caller wants to schedule a meeting.", preToolMessage: "" }); } },
                   { label: "Availability",     icon: CalendarCheck,  onClick: () => { setAgentTools(prev => [...prev, { type: "native_check_availability" as const, name: "check_availability", description: "Check available slots when the caller asks what times are open.", eventTypeId: 0 }]); setDirty(true); } },
                   { label: "Reschedule",       icon: CalendarClock,  onClick: () => { setAgentTools(prev => [...prev, { type: "native_reschedule" as const, name: "reschedule_appointment", description: "Reschedule an existing booking when the caller provides their booking reference.", timezone: "UTC" }]); setDirty(true); } },
                   { label: "Cancel Booking",   icon: CalendarX,      onClick: () => { setAgentTools(prev => [...prev, { type: "native_cancel" as const, name: "cancel_appointment", description: "Cancel an existing booking when the caller provides their booking reference." }]); setDirty(true); } },
@@ -2358,7 +2349,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                           : tool.type === "native_list_bookings" ? "Look Up Booking" : "Custom Function"}
                       </span>
                     </div>
-                    <button type="button" onClick={() => { const removing = agentTools[idx]; if (removing.type === "native_booking") { lastNativeBookingRef.current = { calendarId: removing.calendarId ?? null, eventTypeId: removing.eventTypeId ?? null }; } setAgentTools(prev => prev.filter((_, i) => i !== idx)); setDirty(true); }} className="text-muted-foreground hover:text-foreground transition-colors">
+                    <button type="button" onClick={() => { const removing = agentTools[idx]; if (removing.type === "native_booking") { lastNativeBookingRef.current = { eventTypeId: removing.eventTypeId ?? null }; } setAgentTools(prev => prev.filter((_, i) => i !== idx)); setDirty(true); }} className="text-muted-foreground hover:text-foreground transition-colors">
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
@@ -2423,21 +2414,33 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                   </>}
                   {tool.type === "native_booking" && (
                     <div className="space-y-2">
-                      <div className="grid grid-cols-2 gap-3">
-                        {(() => { const calMissing = !!tool.calendarId && !(calendars ?? []).some(c => c.id === tool.calendarId); const filteredEts = (eventTypes ?? []).filter(et => !tool.calendarId || et.calendarId === tool.calendarId); const etMissing = !!tool.eventTypeId && !filteredEts.some(et => et.id === tool.eventTypeId); return (<>
-                        <div className="space-y-1"><p className="text-xs text-muted-foreground">Calendar</p>
-                          <Select value={calMissing ? undefined : (tool.calendarId ? String(tool.calendarId) : undefined)} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, calendarId: parseInt(v) || undefined, eventTypeId: 0 }; setAgentTools(n); setDirty(true); }}>
-                            <SelectTrigger className={`bg-card border-border text-xs h-8 ${calMissing ? "text-destructive" : "text-foreground"}`}><SelectValue placeholder={calMissing ? "Calendar removed — pick another" : "Select calendar…"} /></SelectTrigger>
-                            <SelectContent>{(calendars ?? []).map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}{(calendars ?? []).length === 0 && <SelectItem value="__none" disabled>No calendars — create one in Scheduling</SelectItem>}</SelectContent>
-                          </Select>
+                      {!agentCalendar ? (
+                        <p className="text-[10px] text-amber-400/80">No calendar found for this agent. Go to <strong>Settings → Calendar</strong> to create one.</p>
+                      ) : !(agentCalendar as any).connectedGoogleEmail ? (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs text-muted-foreground">Calendar:</span>
+                          <span className="text-xs font-medium text-foreground">{(agentCalendar as any).name}</span>
+                          <span className="text-[10px] text-amber-400/80">No Google account connected to this calendar.</span>
                         </div>
-                        <div className="space-y-1"><p className="text-xs text-muted-foreground">Event Type</p>
-                          <Select value={etMissing ? undefined : (tool.eventTypeId ? String(tool.eventTypeId) : undefined)} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, eventTypeId: parseInt(v) || 0 }; setAgentTools(n); setDirty(true); }} disabled={!tool.calendarId && !calMissing}>
-                            <SelectTrigger className={`bg-card border-border text-xs h-8 ${etMissing ? "text-destructive" : "text-foreground"}`}><SelectValue placeholder={etMissing ? "Event type removed — pick another" : (tool.calendarId ? "Select event type…" : "Pick a calendar first")} /></SelectTrigger>
-                            <SelectContent>{filteredEts.map(et => <SelectItem key={et.id} value={String(et.id)}>{et.name} ({et.durationMinutes} min)</SelectItem>)}</SelectContent>
-                          </Select>
+                      ) : (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs text-muted-foreground">Calendar:</span>
+                          <span className="text-xs font-medium text-foreground">{(agentCalendar as any).name}</span>
+                          <span className="text-[10px] text-muted-foreground/60">
+                            {(agentCalendar as any).connectedGoogleAccountsCount > 1
+                              ? `${(agentCalendar as any).connectedGoogleAccountsCount} accounts`
+                              : (agentCalendar as any).connectedGoogleEmail}
+                          </span>
                         </div>
-                        </>); })()}
+                      )}
+                      <div className="space-y-1"><p className="text-xs text-muted-foreground">Event Type</p>
+                        <Select value={tool.eventTypeId ? String(tool.eventTypeId) : undefined} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, eventTypeId: parseInt(v) || 0 }; setAgentTools(n); setDirty(true); }} disabled={!agentCalendar}>
+                          <SelectTrigger className="bg-card border-border text-foreground text-xs h-8"><SelectValue placeholder={agentCalendar ? "Select event type…" : "Set up a calendar first"} /></SelectTrigger>
+                          <SelectContent>
+                            {agentEventTypes.map((et: any) => <SelectItem key={et.id} value={String(et.id)}>{et.name} ({et.durationMinutes} min)</SelectItem>)}
+                            {agentEventTypes.length === 0 && agentCalendar && <SelectItem value="__none" disabled>No event types — create one in Settings → Calendar</SelectItem>}
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div className="space-y-1"><p className="text-xs text-muted-foreground">Timezone</p>
                         <Select value={tool.timezone ?? "UTC"} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, timezone: v }; setAgentTools(n); setDirty(true); }}>
@@ -2445,26 +2448,37 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                           <SelectContent>{["UTC","America/New_York","America/Chicago","America/Denver","America/Los_Angeles","Europe/London","Europe/Paris","Asia/Kolkata","Asia/Singapore","Asia/Tokyo","Australia/Sydney"].map(tz => <SelectItem key={tz} value={tz}>{tz}</SelectItem>)}</SelectContent>
                         </Select>
                       </div>
-                      {!tool.eventTypeId && <p className="text-[10px] text-muted-foreground">⚠ Event type not selected — booking will fail at runtime.</p>}
+                      {!tool.eventTypeId && agentCalendar && <p className="text-[10px] text-muted-foreground">⚠ Event type not selected — booking will fail at runtime.</p>}
                     </div>
                   )}
                   {tool.type === "native_check_availability" && (
                     <div className="space-y-2">
-                      <div className="grid grid-cols-2 gap-3">
-                        {(() => { const calMissing = !!tool.calendarId && !(calendars ?? []).some(c => c.id === tool.calendarId); const filteredEts = (eventTypes ?? []).filter(et => !tool.calendarId || et.calendarId === tool.calendarId); const etMissing = !!tool.eventTypeId && !filteredEts.some(et => et.id === tool.eventTypeId); return (<>
-                        <div className="space-y-1"><p className="text-xs text-muted-foreground">Calendar</p>
-                          <Select value={calMissing ? undefined : (tool.calendarId ? String(tool.calendarId) : undefined)} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, calendarId: parseInt(v) || undefined, eventTypeId: 0 }; setAgentTools(n); setDirty(true); }}>
-                            <SelectTrigger className={`bg-card border-border text-xs h-8 ${calMissing ? "text-destructive" : "text-foreground"}`}><SelectValue placeholder={calMissing ? "Calendar removed — pick another" : "Select calendar…"} /></SelectTrigger>
-                            <SelectContent>{(calendars ?? []).map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}{(calendars ?? []).length === 0 && <SelectItem value="__none" disabled>No calendars — create one in Scheduling</SelectItem>}</SelectContent>
-                          </Select>
+                      {!agentCalendar ? (
+                        <p className="text-[10px] text-amber-400/80">No calendar found for this agent. Go to <strong>Settings → Calendar</strong> to create one.</p>
+                      ) : !(agentCalendar as any).connectedGoogleEmail ? (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs text-muted-foreground">Calendar:</span>
+                          <span className="text-xs font-medium text-foreground">{(agentCalendar as any).name}</span>
+                          <span className="text-[10px] text-amber-400/80">No Google account connected to this calendar.</span>
                         </div>
-                        <div className="space-y-1"><p className="text-xs text-muted-foreground">Event Type</p>
-                          <Select value={etMissing ? undefined : (tool.eventTypeId ? String(tool.eventTypeId) : undefined)} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, eventTypeId: parseInt(v) || 0 }; setAgentTools(n); setDirty(true); }} disabled={!tool.calendarId && !calMissing}>
-                            <SelectTrigger className={`bg-card border-border text-xs h-8 ${etMissing ? "text-destructive" : "text-foreground"}`}><SelectValue placeholder={etMissing ? "Event type removed — pick another" : (tool.calendarId ? "Select event type…" : "Pick a calendar first")} /></SelectTrigger>
-                            <SelectContent>{filteredEts.map(et => <SelectItem key={et.id} value={String(et.id)}>{et.name} ({et.durationMinutes} min)</SelectItem>)}</SelectContent>
-                          </Select>
+                      ) : (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs text-muted-foreground">Calendar:</span>
+                          <span className="text-xs font-medium text-foreground">{(agentCalendar as any).name}</span>
+                          <span className="text-[10px] text-muted-foreground/60">
+                            {(agentCalendar as any).connectedGoogleAccountsCount > 1
+                              ? `${(agentCalendar as any).connectedGoogleAccountsCount} accounts`
+                              : (agentCalendar as any).connectedGoogleEmail}
+                          </span>
                         </div>
-                        </>); })()}
+                      )}
+                      <div className="space-y-1"><p className="text-xs text-muted-foreground">Event Type</p>
+                        <Select value={tool.eventTypeId ? String(tool.eventTypeId) : undefined} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, eventTypeId: parseInt(v) || 0 }; setAgentTools(n); setDirty(true); }} disabled={!agentCalendar}>
+                          <SelectTrigger className="bg-card border-border text-foreground text-xs h-8"><SelectValue placeholder={agentCalendar ? "Select event type…" : "Set up a calendar first"} /></SelectTrigger>
+                          <SelectContent>
+                            {agentEventTypes.map((et: any) => <SelectItem key={et.id} value={String(et.id)}>{et.name} ({et.durationMinutes} min)</SelectItem>)}
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div className="space-y-1"><p className="text-xs text-muted-foreground">Timezone</p>
                         <Select value={tool.timezone ?? "UTC"} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, timezone: v }; setAgentTools(n); setDirty(true); }}>
@@ -2476,47 +2490,55 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                   )}
                   {tool.type === "native_reschedule" && (
                     <div className="space-y-2">
-                      <div className="grid grid-cols-2 gap-3">
-                        {(() => { const calMissing = !!tool.calendarId && !(calendars ?? []).some(c => c.id === tool.calendarId); const filteredEts = (eventTypes ?? []).filter(et => !tool.calendarId || et.calendarId === tool.calendarId); const etMissing = !!tool.eventTypeId && !filteredEts.some(et => et.id === tool.eventTypeId); return (<>
-                        <div className="space-y-1"><p className="text-xs text-muted-foreground">Calendar</p>
-                          <Select value={calMissing ? undefined : (tool.calendarId ? String(tool.calendarId) : undefined)} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, calendarId: parseInt(v) || undefined, eventTypeId: undefined }; setAgentTools(n); setDirty(true); }}>
-                            <SelectTrigger className={`bg-card border-border text-xs h-8 ${calMissing ? "text-destructive" : "text-foreground"}`}><SelectValue placeholder={calMissing ? "Calendar removed — pick another" : "Original booking's calendar"} /></SelectTrigger>
-                            <SelectContent>{(calendars ?? []).map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}{(calendars ?? []).length === 0 && <SelectItem value="__none" disabled>No calendars — create one in Scheduling</SelectItem>}</SelectContent>
-                          </Select>
+                      {!agentCalendar ? (
+                        <p className="text-[10px] text-amber-400/80">No calendar found for this agent. Go to <strong>Settings → Calendar</strong> to create one.</p>
+                      ) : !(agentCalendar as any).connectedGoogleEmail ? (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs text-muted-foreground">Calendar:</span>
+                          <span className="text-xs font-medium text-foreground">{(agentCalendar as any).name}</span>
+                          <span className="text-[10px] text-amber-400/80">No Google account connected to this calendar.</span>
                         </div>
-                        <div className="space-y-1"><p className="text-xs text-muted-foreground">Event Type</p>
-                          <Select value={etMissing ? undefined : (tool.eventTypeId ? String(tool.eventTypeId) : undefined)} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, eventTypeId: parseInt(v) || undefined }; setAgentTools(n); setDirty(true); }} disabled={!tool.calendarId && !calMissing}>
-                            <SelectTrigger className={`bg-card border-border text-xs h-8 ${etMissing ? "text-destructive" : "text-foreground"}`}><SelectValue placeholder={etMissing ? "Event type removed — pick another" : (tool.calendarId ? "Select event type…" : "Pick a calendar first")} /></SelectTrigger>
-                            <SelectContent>{filteredEts.map(et => <SelectItem key={et.id} value={String(et.id)}>{et.name} ({et.durationMinutes} min)</SelectItem>)}</SelectContent>
-                          </Select>
+                      ) : (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs text-muted-foreground">Calendar:</span>
+                          <span className="text-xs font-medium text-foreground">{(agentCalendar as any).name}</span>
+                          <span className="text-[10px] text-muted-foreground/60">
+                            {(agentCalendar as any).connectedGoogleAccountsCount > 1
+                              ? `${(agentCalendar as any).connectedGoogleAccountsCount} accounts`
+                              : (agentCalendar as any).connectedGoogleEmail}
+                          </span>
                         </div>
-                        </>); })()}
-                      </div>
+                      )}
                       <div className="space-y-1"><p className="text-xs text-muted-foreground">Timezone</p>
                         <Select value={tool.timezone ?? "UTC"} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, timezone: v }; setAgentTools(n); setDirty(true); }}>
                           <SelectTrigger className="bg-card border-border text-foreground text-xs h-8"><SelectValue /></SelectTrigger>
                           <SelectContent>{["UTC","America/New_York","America/Chicago","America/Denver","America/Los_Angeles","Europe/London","Europe/Paris","Asia/Kolkata","Asia/Singapore","Asia/Tokyo","Australia/Sydney"].map(tz => <SelectItem key={tz} value={tz}>{tz}</SelectItem>)}</SelectContent>
                         </Select>
                       </div>
-                      <p className="text-[10px] text-muted-foreground">Leave calendar/event type blank to reschedule within the original booking's calendar and event type.</p>
+                      <p className="text-[10px] text-muted-foreground">The agent auto-resolves the booking calendar at call time.</p>
                     </div>
                   )}
                   {tool.type === "native_cancel" && (
                     <div className="space-y-2">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1"><p className="text-xs text-muted-foreground">Calendar</p>
-                          <Select value={tool.calendarId ? String(tool.calendarId) : undefined} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, calendarId: parseInt(v) || undefined, eventTypeId: 0 }; setAgentTools(n); setDirty(true); }}>
-                            <SelectTrigger className="bg-card border-border text-foreground text-xs h-8"><SelectValue placeholder="Select calendar…" /></SelectTrigger>
-                            <SelectContent>{(calendars ?? []).map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}{(calendars ?? []).length === 0 && <SelectItem value="__none" disabled>No calendars — create one in Scheduling</SelectItem>}</SelectContent>
-                          </Select>
+                      {!agentCalendar ? (
+                        <p className="text-[10px] text-amber-400/80">No calendar found for this agent. Go to <strong>Settings → Calendar</strong> to create one.</p>
+                      ) : !(agentCalendar as any).connectedGoogleEmail ? (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs text-muted-foreground">Calendar:</span>
+                          <span className="text-xs font-medium text-foreground">{(agentCalendar as any).name}</span>
+                          <span className="text-[10px] text-amber-400/80">No Google account connected to this calendar.</span>
                         </div>
-                        <div className="space-y-1"><p className="text-xs text-muted-foreground">Event Type (optional)</p>
-                          <Select value={tool.eventTypeId ? String(tool.eventTypeId) : undefined} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, eventTypeId: parseInt(v) || undefined }; setAgentTools(n); setDirty(true); }} disabled={!tool.calendarId}>
-                            <SelectTrigger className="bg-card border-border text-foreground text-xs h-8"><SelectValue placeholder={tool.calendarId ? "Select event type…" : "Pick a calendar first"} /></SelectTrigger>
-                            <SelectContent>{(eventTypes ?? []).filter(et => !tool.calendarId || et.calendarId === tool.calendarId).map(et => <SelectItem key={et.id} value={String(et.id)}>{et.name} ({et.durationMinutes} min)</SelectItem>)}</SelectContent>
-                          </Select>
+                      ) : (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs text-muted-foreground">Calendar:</span>
+                          <span className="text-xs font-medium text-foreground">{(agentCalendar as any).name}</span>
+                          <span className="text-[10px] text-muted-foreground/60">
+                            {(agentCalendar as any).connectedGoogleAccountsCount > 1
+                              ? `${(agentCalendar as any).connectedGoogleAccountsCount} accounts`
+                              : (agentCalendar as any).connectedGoogleEmail}
+                          </span>
                         </div>
-                      </div>
+                      )}
                       <div className="space-y-1"><p className="text-xs text-muted-foreground">Timezone</p>
                         <Select value={tool.timezone ?? "UTC"} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, timezone: v }; setAgentTools(n); setDirty(true); }}>
                           <SelectTrigger className="bg-card border-border text-foreground text-xs h-8"><SelectValue /></SelectTrigger>
@@ -2527,20 +2549,29 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                   )}
                   {tool.type === "native_list_bookings" && (
                     <div className="space-y-2">
-                      <div className="space-y-1"><p className="text-xs text-muted-foreground">Calendar (optional — limit search to one calendar)</p>
-                        <Select value={tool.calendarId ? String(tool.calendarId) : "__all"} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, calendarId: v === "__all" ? undefined : (parseInt(v) || undefined), eventTypeId: undefined }; setAgentTools(n); setDirty(true); }}>
-                          <SelectTrigger className="bg-card border-border text-foreground text-xs h-8"><SelectValue placeholder="All calendars" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__all">All calendars</SelectItem>
-                            {(calendars ?? []).map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
-                            {(calendars ?? []).length === 0 && <SelectItem value="__none" disabled>No calendars — create one in Scheduling</SelectItem>}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                      {!agentCalendar ? (
+                        <p className="text-[10px] text-amber-400/80">No calendar found for this agent. Go to <strong>Settings → Calendar</strong> to create one.</p>
+                      ) : !(agentCalendar as any).connectedGoogleEmail ? (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs text-muted-foreground">Calendar:</span>
+                          <span className="text-xs font-medium text-foreground">{(agentCalendar as any).name}</span>
+                          <span className="text-[10px] text-amber-400/80">No Google account connected to this calendar.</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs text-muted-foreground">Calendar:</span>
+                          <span className="text-xs font-medium text-foreground">{(agentCalendar as any).name}</span>
+                          <span className="text-[10px] text-muted-foreground/60">
+                            {(agentCalendar as any).connectedGoogleAccountsCount > 1
+                              ? `${(agentCalendar as any).connectedGoogleAccountsCount} accounts`
+                              : (agentCalendar as any).connectedGoogleEmail}
+                          </span>
+                        </div>
+                      )}
                       <div className="space-y-1"><p className="text-xs text-muted-foreground">Event Type (optional)</p>
-                        <Select value={tool.eventTypeId ? String(tool.eventTypeId) : undefined} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, eventTypeId: parseInt(v) || undefined }; setAgentTools(n); setDirty(true); }} disabled={!tool.calendarId}>
-                          <SelectTrigger className="bg-card border-border text-foreground text-xs h-8"><SelectValue placeholder={tool.calendarId ? "Select event type…" : "Pick a calendar first"} /></SelectTrigger>
-                          <SelectContent>{(eventTypes ?? []).filter(et => !tool.calendarId || et.calendarId === tool.calendarId).map(et => <SelectItem key={et.id} value={String(et.id)}>{et.name} ({et.durationMinutes} min)</SelectItem>)}</SelectContent>
+                        <Select value={tool.eventTypeId ? String(tool.eventTypeId) : undefined} onValueChange={v => { const n = [...agentTools]; n[idx] = { ...tool, eventTypeId: parseInt(v) || undefined }; setAgentTools(n); setDirty(true); }} disabled={!agentCalendar}>
+                          <SelectTrigger className="bg-card border-border text-foreground text-xs h-8"><SelectValue placeholder={agentCalendar ? "Select event type…" : "Set up a calendar first"} /></SelectTrigger>
+                          <SelectContent>{agentEventTypes.map((et: any) => <SelectItem key={et.id} value={String(et.id)}>{et.name} ({et.durationMinutes} min)</SelectItem>)}</SelectContent>
                         </Select>
                       </div>
                       <div className="space-y-1"><p className="text-xs text-muted-foreground">Timezone</p>
@@ -3202,27 +3233,37 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
           </DialogHeader>
           {bookingModal && (
             <div className="space-y-3 py-1">
-              <div className="space-y-1">
-                <Label className="text-xs">Calendar <span className="text-foreground">*</span></Label>
-                <Select value={bookingModal.calendarId ? String(bookingModal.calendarId) : ""} onValueChange={v => {
-                  setBookingModal({ ...bookingModal, calendarId: parseInt(v) || null, eventTypeId: null });
-                }}>
-                  <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select a calendar…" /></SelectTrigger>
-                  <SelectContent>
-                    {(calendars ?? []).length === 0
-                      ? <SelectItem value="__none" disabled>No calendars — create one in Scheduling</SelectItem>
-                      : (calendars ?? []).map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)
-                    }
-                  </SelectContent>
-                </Select>
+              {/* Auto-resolved calendar status */}
+              <div className="rounded-lg border border-border/40 bg-muted/30 px-3 py-2">
+                {!agentCalendar ? (
+                  <p className="text-xs text-amber-400/80">No calendar assigned to this agent. Go to <strong>Settings → Calendar</strong> to create one.</p>
+                ) : !(agentCalendar as any).connectedGoogleEmail ? (
+                  <div className="space-y-0.5">
+                    <p className="text-xs text-muted-foreground">Calendar: <span className="font-medium text-foreground">{(agentCalendar as any).name}</span></p>
+                    <p className="text-[11px] text-amber-400/80">No Google account connected to this calendar.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-0.5">
+                    <p className="text-xs text-muted-foreground">Calendar: <span className="font-medium text-foreground">{(agentCalendar as any).name}</span></p>
+                    <p className="text-[11px] text-muted-foreground/60">
+                      {(agentCalendar as any).connectedGoogleAccountsCount > 1
+                        ? `${(agentCalendar as any).connectedGoogleAccountsCount} Google accounts connected`
+                        : (agentCalendar as any).connectedGoogleEmail}
+                    </p>
+                  </div>
+                )}
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Event Type <span className="text-foreground">*</span></Label>
-                <Select value={bookingModal.eventTypeId ? String(bookingModal.eventTypeId) : ""} onValueChange={v => setBookingModal({ ...bookingModal, eventTypeId: parseInt(v) || null })} disabled={!bookingModal.calendarId || modalEventTypesLoading}>
-                  <SelectTrigger className="h-9 text-sm"><SelectValue placeholder={!bookingModal.calendarId ? "Pick a calendar first" : modalEventTypesLoading ? "Loading…" : "Select an event type…"} /></SelectTrigger>
+                <Select
+                  value={bookingModal.eventTypeId ? String(bookingModal.eventTypeId) : ""}
+                  onValueChange={v => setBookingModal({ ...bookingModal, eventTypeId: parseInt(v) || null })}
+                  disabled={!agentCalendar}
+                >
+                  <SelectTrigger className="h-9 text-sm"><SelectValue placeholder={agentCalendar ? "Select an event type…" : "Set up a calendar first"} /></SelectTrigger>
                   <SelectContent>
-                    {(modalEventTypes ?? []).map(et => <SelectItem key={et.id} value={String(et.id)}>{et.name} ({et.durationMinutes} min)</SelectItem>)}
-                    {bookingModal.calendarId && !modalEventTypesLoading && (modalEventTypes ?? []).length === 0 && <SelectItem value="__none" disabled>No event types for this calendar</SelectItem>}
+                    {agentEventTypes.map((et: any) => <SelectItem key={et.id} value={String(et.id)}>{et.name} ({et.durationMinutes} min)</SelectItem>)}
+                    {agentCalendar && agentEventTypes.length === 0 && <SelectItem value="__none" disabled>No event types found — create one in Scheduling</SelectItem>}
                   </SelectContent>
                 </Select>
               </div>
@@ -3242,10 +3283,9 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
             <Button variant="outline" onClick={() => setBookingModal(null)}>Cancel</Button>
             <Button onClick={() => {
               if (!bookingModal) return;
-              if (!bookingModal.calendarId) { toast({ title: "Calendar is required", variant: "destructive" }); return; }
               if (!bookingModal.eventTypeId) { toast({ title: "Event type is required", variant: "destructive" }); return; }
               const taskName = (bookingModal.taskName || "book_appointment").trim();
-              const next: AgentToolLocal = { type: "native_booking", name: taskName, description: bookingModal.description || "Book an appointment when the caller wants to schedule a meeting.", eventTypeId: bookingModal.eventTypeId, calendarId: bookingModal.calendarId, timezone: bookingModal.timezone, taskName, preToolMessage: bookingModal.preToolMessage || undefined };
+              const next: AgentToolLocal = { type: "native_booking", name: taskName, description: bookingModal.description || "Book an appointment when the caller wants to schedule a meeting.", eventTypeId: bookingModal.eventTypeId, timezone: bookingModal.timezone, taskName, preToolMessage: bookingModal.preToolMessage || undefined };
               setAgentTools(prev => [...prev, next]);
               setDirty(true); setBookingModal(null);
               toast({ title: "Booking tool added" });

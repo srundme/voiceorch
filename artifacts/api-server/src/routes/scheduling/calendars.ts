@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, and } from "drizzle-orm";
-import { db, schedulingCalendarsTable, agentsTable } from "@workspace/db";
+import { eq, and, count } from "drizzle-orm";
+import { db, schedulingCalendarsTable, agentsTable, googleCalendarConnectionsTable } from "@workspace/db";
 import { requireAuth } from "../../middlewares/requireAuth.js";
 import {
   CreateCalendarBody,
@@ -15,12 +15,57 @@ import {
 
 const router: IRouter = Router();
 
+async function getGoogleAccountsCount(userId: string): Promise<number> {
+  const [row] = await db
+    .select({ total: count() })
+    .from(googleCalendarConnectionsTable)
+    .where(eq(googleCalendarConnectionsTable.userId, userId));
+  return row?.total ?? 0;
+}
+
+async function enrichCalendarRow(row: typeof schedulingCalendarsTable.$inferSelect, googleAccountsCount: number) {
+  let connectedGoogleEmail: string | null = null;
+  if (row.googleCalendarConnectionId) {
+    const [conn] = await db
+      .select({ email: googleCalendarConnectionsTable.email })
+      .from(googleCalendarConnectionsTable)
+      .where(eq(googleCalendarConnectionsTable.id, row.googleCalendarConnectionId));
+    connectedGoogleEmail = conn?.email ?? null;
+  }
+  return { ...row, connectedGoogleEmail, connectedGoogleAccountsCount: googleAccountsCount };
+}
+
 router.get("/scheduling/calendars", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
+
   const rows = await db.select().from(schedulingCalendarsTable)
     .where(eq(schedulingCalendarsTable.userId, clerkId))
     .orderBy(schedulingCalendarsTable.createdAt);
-  res.json(ListCalendarsResponse.parse(rows));
+
+  const googleAccountsCount = await getGoogleAccountsCount(clerkId);
+
+  // Batch-fetch all linked connection emails in one query
+  const connectionIds = rows
+    .map(r => r.googleCalendarConnectionId)
+    .filter((id): id is string => id != null);
+
+  const emailMap: Record<string, string> = {};
+  if (connectionIds.length > 0) {
+    const { inArray } = await import("drizzle-orm");
+    const conns = await db
+      .select({ id: googleCalendarConnectionsTable.id, email: googleCalendarConnectionsTable.email })
+      .from(googleCalendarConnectionsTable)
+      .where(inArray(googleCalendarConnectionsTable.id, connectionIds));
+    for (const c of conns) emailMap[c.id] = c.email;
+  }
+
+  const enriched = rows.map(r => ({
+    ...r,
+    connectedGoogleEmail: r.googleCalendarConnectionId ? (emailMap[r.googleCalendarConnectionId] ?? null) : null,
+    connectedGoogleAccountsCount: googleAccountsCount,
+  }));
+
+  res.json(ListCalendarsResponse.parse(enriched));
 });
 
 router.post("/scheduling/calendars", requireAuth, async (req, res): Promise<void> => {
@@ -34,7 +79,7 @@ router.post("/scheduling/calendars", requireAuth, async (req, res): Promise<void
   const [row] = await db.insert(schedulingCalendarsTable)
     .values({ ...parsed.data, userId: clerkId })
     .returning();
-  res.status(201).json(GetCalendarResponse.parse(row));
+  res.status(201).json(GetCalendarResponse.parse({ ...row, connectedGoogleEmail: null, connectedGoogleAccountsCount: 0 }));
 });
 
 router.get("/scheduling/calendars/:id", requireAuth, async (req, res): Promise<void> => {
@@ -44,7 +89,9 @@ router.get("/scheduling/calendars/:id", requireAuth, async (req, res): Promise<v
   const [row] = await db.select().from(schedulingCalendarsTable)
     .where(and(eq(schedulingCalendarsTable.id, params.data.id), eq(schedulingCalendarsTable.userId, clerkId)));
   if (!row) { res.status(404).json({ error: "Calendar not found" }); return; }
-  res.json(GetCalendarResponse.parse(row));
+  const googleAccountsCount = await getGoogleAccountsCount(clerkId);
+  const enriched = await enrichCalendarRow(row, googleAccountsCount);
+  res.json(GetCalendarResponse.parse(enriched));
 });
 
 router.patch("/scheduling/calendars/:id", requireAuth, async (req, res): Promise<void> => {
@@ -58,7 +105,7 @@ router.patch("/scheduling/calendars/:id", requireAuth, async (req, res): Promise
     .where(and(eq(schedulingCalendarsTable.id, params.data.id), eq(schedulingCalendarsTable.userId, clerkId)))
     .returning();
   if (!row) { res.status(404).json({ error: "Calendar not found" }); return; }
-  res.json(UpdateCalendarResponse.parse(row));
+  res.json(UpdateCalendarResponse.parse({ ...row, connectedGoogleEmail: null, connectedGoogleAccountsCount: null }));
 });
 
 // ── Link / unlink a Google Calendar connection to a scheduling calendar ──────

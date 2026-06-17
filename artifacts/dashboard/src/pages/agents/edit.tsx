@@ -472,7 +472,19 @@ export default function AgentEdit() {
 
   const toggleNativeTool = (type: string) => {
     const idx = nativeToolIndex(type);
-    if (idx >= 0) { removeTool(idx); } else { appendTool({ type: type as any, name: EDIT_TOOL_FN_NAMES[type] ?? "", description: "" }); }
+    if (idx >= 0) { removeTool(idx); } else {
+      appendTool({ type: type as any, name: EDIT_TOOL_FN_NAMES[type] ?? "", description: "" });
+      const bookingTypes = ["native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel"];
+      if (bookingTypes.includes(type)) {
+        if (!agentCalendar) {
+          toast({ title: "No calendar assigned", description: "Go to Settings → Calendar to create one for this agent.", variant: "destructive" });
+        } else if (!(agentCalendar as any).connectedGoogleEmail) {
+          toast({ title: "No Google account connected", description: `Connect a Google account to the "${agentCalendar.name}" calendar in Scheduling.`, variant: "destructive" });
+        } else if ((agentEventTypes ?? []).length === 0 && ["native_booking", "native_check_availability", "native_list_bookings"].includes(type)) {
+          toast({ title: "No event types found", description: "Create an event type in Scheduling before using this tool.", variant: "destructive" });
+        }
+      }
+    }
   };
 
   const BOOKING_TOOLS = [
@@ -1297,11 +1309,26 @@ export default function AgentEdit() {
                             <div className="px-4 pb-4 -mt-1">
                               <div className="border-t border-border/30 pt-3 space-y-2">
                                 <div className="flex items-center justify-between gap-2 flex-wrap">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-[10px] text-muted-foreground">Assigned calendar:</span>
-                                    <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded", c.badge, c.badgeText)}>
-                                      {agentCalendar ? (agentCalendar.name || "Calendar") : "No calendar assigned yet"}
-                                    </span>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    {!agentCalendar ? (
+                                      <p className="text-[10px] text-amber-400/80">No calendar found. Go to <span className="font-medium">Settings → Calendar</span> to create one.</p>
+                                    ) : !(agentCalendar as any).connectedGoogleEmail ? (
+                                      <>
+                                        <span className="text-[10px] text-muted-foreground">Assigned calendar:</span>
+                                        <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded", c.badge, c.badgeText)}>{agentCalendar.name || "Calendar"}</span>
+                                        <span className="text-[10px] text-amber-400/80">No Google account connected.</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span className="text-[10px] text-muted-foreground">Assigned calendar:</span>
+                                        <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded", c.badge, c.badgeText)}>{agentCalendar.name || "Calendar"}</span>
+                                        <span className="text-[10px] text-muted-foreground/60">
+                                          {(agentCalendar as any).connectedGoogleAccountsCount > 1
+                                            ? `${(agentCalendar as any).connectedGoogleAccountsCount} accounts`
+                                            : (agentCalendar as any).connectedGoogleEmail}
+                                        </span>
+                                      </>
+                                    )}
                                   </div>
                                   <button
                                     type="button"
@@ -1317,6 +1344,7 @@ export default function AgentEdit() {
                                     <Select
                                       value={toolEventTypeId != null ? String(toolEventTypeId) : "__none__"}
                                       onValueChange={(v) => form.setValue(`tools.${idx}.eventTypeId` as any, v === "__none__" ? undefined : Number(v))}
+                                      disabled={!agentCalendar}
                                     >
                                       <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Any event type" /></SelectTrigger>
                                       <SelectContent>
@@ -1326,7 +1354,13 @@ export default function AgentEdit() {
                                         ))}
                                       </SelectContent>
                                     </Select>
+                                    {agentCalendar && (agentEventTypes ?? []).length === 0 && (
+                                      <p className="text-[10px] text-amber-400/80">No event types found for this calendar. Create one in Scheduling.</p>
+                                    )}
                                   </div>
+                                )}
+                                {agentCalendar && (agentEventTypes ?? []).length === 0 && type !== "native_list_bookings" && ["native_booking", "native_check_availability"].includes(type) && (
+                                  <p className="text-[10px] text-amber-400/80">No event types found for this calendar. Create one in Scheduling.</p>
                                 )}
                                 <div className="space-y-1">
                                   <label className="text-[10px] text-muted-foreground block">Timezone (optional)</label>

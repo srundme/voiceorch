@@ -2302,6 +2302,16 @@ export interface SchedulingCalendar {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  /**
+     * Email of the linked Google Calendar account, if any
+     * @nullable
+     */
+  connectedGoogleEmail?: string | null;
+  /**
+     * Total number of Google Calendar connections for this user
+     * @nullable
+     */
+  connectedGoogleAccountsCount?: number | null;
 }
 
 export interface SchedulingCalendarInput {

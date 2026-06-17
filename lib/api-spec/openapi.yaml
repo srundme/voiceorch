@@ -7858,6 +7858,12 @@ components:
         updatedAt:
           type: string
           format: date-time
+        connectedGoogleEmail:
+          type: ["string", "null"]
+          description: Email of the linked Google Calendar account, if any
+        connectedGoogleAccountsCount:
+          type: ["integer", "null"]
+          description: Total number of Google Calendar connections for this user
 
     SchedulingCalendarInput:
       type: object

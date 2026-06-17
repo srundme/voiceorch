@@ -1277,13 +1277,14 @@ function VoiceTab({ form }: { form: any }) {
 
 
 
-function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
+function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined }) {
   const { fields, append, remove } = useFieldArray({ control: form.control, name: "tools" });
   const genderEnabled = form.watch("genderDetectionEnabled") ?? false;
   const watchedTools  = (form.watch("tools") ?? []) as any[];
+  const { toast } = useToast();
 
   const { data: calendarsData } = useListCalendars();
-  const agentCalendar = (calendarsData ?? []).find((cal: any) => cal.agentId === agentId);
+  const agentCalendar = agentId ? (calendarsData ?? []).find((cal: any) => cal.agentId === agentId) : undefined;
   const calendarIdForEt = agentCalendar?.id;
   const { data: agentEventTypes } = useListEventTypes(
     calendarIdForEt ? { calendarId: calendarIdForEt } : undefined,
@@ -1335,6 +1336,18 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
       setExpandedTest(null);
     } else {
       append({ type: type as any, name: NATIVE_DEFAULT_NAMES[type] ?? "", description: "" });
+      const bookingTypes = ["native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel"];
+      if (bookingTypes.includes(type)) {
+        if (!agentId) {
+          toast({ title: "Save agent first", description: "Save this agent before configuring calendar tools.", variant: "destructive" });
+        } else if (!agentCalendar) {
+          toast({ title: "No calendar assigned", description: "Go to Settings → Calendar to create one for this agent.", variant: "destructive" });
+        } else if (!(agentCalendar as any).connectedGoogleEmail) {
+          toast({ title: "No Google account connected", description: `Connect a Google account to the "${agentCalendar.name}" calendar in Scheduling.`, variant: "destructive" });
+        } else if ((agentEventTypes ?? []).length === 0 && ["native_booking", "native_check_availability", "native_list_bookings"].includes(type)) {
+          toast({ title: "No event types found", description: "Create an event type in Scheduling before using this tool.", variant: "destructive" });
+        }
+      }
     }
   };
 
@@ -1455,7 +1468,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
             try {
               let parsedArgs: Record<string, unknown> = {};
               try { parsedArgs = JSON.parse(testArgs[argKey] || "{}"); } catch { parsedArgs = {}; }
-              const res = await runTest.mutateAsync({ data: { agentId, toolName: fnName, args: parsedArgs } });
+              const res = await runTest.mutateAsync({ data: { agentId: agentId!, toolName: fnName, args: parsedArgs } });
               setTestResult((r) => ({ ...r, [type]: res.result ?? JSON.stringify(res) }));
             } catch (err: any) {
               setTestResult((r) => ({ ...r, [type]: `Error: ${err?.message ?? String(err)}` }));
@@ -1484,15 +1497,38 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
               {isOn && (
                 <div className="px-4 pb-4 -mt-1">
                   <div className="border-t border-border/30 pt-3 space-y-2">
-                    {/* Calendar badge */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[10px] text-muted-foreground">Assigned calendar:</span>
-                      <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded", c.badge, c.badgeText)}>
-                        {agentCalendar ? (agentCalendar.name || "Calendar") : "No calendar assigned yet"}
-                      </span>
-                    </div>
-                    {/* Event Type (booking / availability / list / reschedule / cancel tools) */}
-                    {(type === "native_booking" || type === "native_check_availability" || type === "native_list_bookings" || type === "native_reschedule" || type === "native_cancel") && (() => {
+                    {/* Calendar status block */}
+                    {!agentId ? (
+                      <p className="text-[10px] text-amber-400/80">
+                        Save this agent first, then configure calendar tools in <span className="font-medium">Settings → Calendar</span>.
+                      </p>
+                    ) : !agentCalendar ? (
+                      <p className="text-[10px] text-amber-400/80">
+                        No calendar found for this agent. Go to <span className="font-medium">Settings → Calendar</span> to create one.
+                      </p>
+                    ) : !(agentCalendar as any).connectedGoogleEmail ? (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] text-muted-foreground">Assigned calendar:</span>
+                        <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded", c.badge, c.badgeText)}>
+                          {agentCalendar.name || "Calendar"}
+                        </span>
+                        <span className="text-[10px] text-amber-400/80">No Google account connected to this calendar.</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] text-muted-foreground">Assigned calendar:</span>
+                        <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded", c.badge, c.badgeText)}>
+                          {agentCalendar.name || "Calendar"}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground/60">
+                          {(agentCalendar as any).connectedGoogleAccountsCount > 1
+                            ? `${(agentCalendar as any).connectedGoogleAccountsCount} accounts`
+                            : (agentCalendar as any).connectedGoogleEmail}
+                        </span>
+                      </div>
+                    )}
+                    {/* Event Type (booking / availability / list tools) */}
+                    {(type === "native_booking" || type === "native_check_availability" || type === "native_list_bookings") && (() => {
                       const idx = nativeToolIndex(type);
                       const toolEventTypeId = watchedTools[idx]?.eventTypeId;
                       return (
@@ -1501,6 +1537,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
                           <Select
                             value={toolEventTypeId != null ? String(toolEventTypeId) : "__none__"}
                             onValueChange={(v) => form.setValue(`tools.${idx}.eventTypeId` as any, v === "__none__" ? undefined : Number(v))}
+                            disabled={!agentCalendar}
                           >
                             <SelectTrigger className="h-7 text-xs bg-background/50"><SelectValue placeholder="Any event type" /></SelectTrigger>
                             <SelectContent>
@@ -1510,6 +1547,9 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
                               ))}
                             </SelectContent>
                           </Select>
+                          {agentCalendar && (agentEventTypes ?? []).length === 0 && (
+                            <p className="text-[10px] text-amber-400/80">No event types found for this calendar. Create one in Scheduling.</p>
+                          )}
                         </div>
                       );
                     })()}

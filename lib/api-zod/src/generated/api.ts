@@ -3939,7 +3939,9 @@ export const ListCalendarsResponseItem = zod.object({
   "additionalHosts": zod.array(zod.string()).nullish().describe('Additional host\/organizer email addresses notified on every booking and added as calendar attendees'),
   "isActive": zod.boolean(),
   "createdAt": zod.coerce.date(),
-  "updatedAt": zod.coerce.date()
+  "updatedAt": zod.coerce.date(),
+  "connectedGoogleEmail": zod.string().nullish().describe('Email of the linked Google Calendar account, if any'),
+  "connectedGoogleAccountsCount": zod.number().nullish().describe('Total number of Google Calendar connections for this user')
 })
 export const ListCalendarsResponse = zod.array(ListCalendarsResponseItem)
 
@@ -3976,7 +3978,9 @@ export const GetCalendarResponse = zod.object({
   "additionalHosts": zod.array(zod.string()).nullish().describe('Additional host\/organizer email addresses notified on every booking and added as calendar attendees'),
   "isActive": zod.boolean(),
   "createdAt": zod.coerce.date(),
-  "updatedAt": zod.coerce.date()
+  "updatedAt": zod.coerce.date(),
+  "connectedGoogleEmail": zod.string().nullish().describe('Email of the linked Google Calendar account, if any'),
+  "connectedGoogleAccountsCount": zod.number().nullish().describe('Total number of Google Calendar connections for this user')
 })
 
 
@@ -4005,7 +4009,9 @@ export const UpdateCalendarResponse = zod.object({
   "additionalHosts": zod.array(zod.string()).nullish().describe('Additional host\/organizer email addresses notified on every booking and added as calendar attendees'),
   "isActive": zod.boolean(),
   "createdAt": zod.coerce.date(),
-  "updatedAt": zod.coerce.date()
+  "updatedAt": zod.coerce.date(),
+  "connectedGoogleEmail": zod.string().nullish().describe('Email of the linked Google Calendar account, if any'),
+  "connectedGoogleAccountsCount": zod.number().nullish().describe('Total number of Google Calendar connections for this user')
 })
 
 
