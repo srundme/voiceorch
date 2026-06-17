@@ -1184,7 +1184,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
                     </span>
                     {isOn && (
                       <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-muted/40 text-muted-foreground/60">
-                        {toolName}
+                        {fnName}
                       </span>
                     )}
                   </div>
