@@ -83,7 +83,7 @@ export async function createSession(params: {
       .select({ concurrentLimit: usersTable.concurrentLimit })
       .from(usersTable)
       .where(eq(usersTable.clerkId, agent.userId));
-    const effectiveLimit = Math.min(user?.concurrentLimit ?? 2, 15);
+    const effectiveLimit = user?.concurrentLimit ?? 15;
     const activeForUser = Array.from(sessions.values()).filter(
       s => s.agentUserId === agent.userId,
     ).length;

@@ -201,6 +201,33 @@ router.patch("/admin/users/:clerkId/wallet", async (req, res): Promise<void> => 
   }
 });
 
+router.patch("/admin/users/:clerkId/concurrent-limit", async (req, res): Promise<void> => {
+  try {
+    const { clerkId } = req.params;
+    const { concurrentLimit } = req.body as { concurrentLimit: number };
+
+    if (typeof concurrentLimit !== "number" || !Number.isInteger(concurrentLimit) || concurrentLimit < 1) {
+      res.status(400).json({ error: "concurrentLimit must be a positive integer >= 1" });
+      return;
+    }
+
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId!));
+    if (!user) { res.status(404).json({ error: "User not found" }); return; }
+
+    const [updated] = await db
+      .update(usersTable)
+      .set({ concurrentLimit })
+      .where(eq(usersTable.clerkId, clerkId!))
+      .returning({ concurrentLimit: usersTable.concurrentLimit });
+
+    logger.info({ clerkId, concurrentLimit }, "Admin set concurrent call limit");
+    res.json({ concurrentLimit: updated?.concurrentLimit });
+  } catch (err) {
+    req.log.error({ err }, "admin/users/:clerkId/concurrent-limit failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // ─── Finance ─────────────────────────────────────────────────────────────────
 
 router.get("/admin/finance/summary", async (req, res): Promise<void> => {

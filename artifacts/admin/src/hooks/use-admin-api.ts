@@ -44,6 +44,21 @@ export function useAdjustWallet(clerkId: string) {
   });
 }
 
+export function useSetConcurrentLimit(clerkId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { concurrentLimit: number }) =>
+      adminFetch<{ concurrentLimit: number }>(`/users/${clerkId}/concurrent-limit`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "users", clerkId] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+    },
+  });
+}
+
 // Finance
 export function useFinanceSummary() {
   return useQuery({
