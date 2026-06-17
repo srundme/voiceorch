@@ -18,7 +18,7 @@ import {
   useListAgents, useGetAgent, useUpdateAgent, useToggleAgent, useDeleteAgent,
   useCreateAgent, useInitiateOutboundCall, getListAgentsQueryKey, getGetAgentQueryKey,
   useListCalls, getListCallsQueryKey, useListCalendars, customFetch,
-  useListKnowledgeSources, useRunToolTest, useListAmbientSounds,
+  useListKnowledgeSources, useRunToolTest, useListAmbientSounds, useListEventTypes,
 } from "@workspace/api-client-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -312,18 +312,21 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
   const phoneNumbers = Array.isArray(phoneNumbersRaw) ? phoneNumbersRaw : [];
 
   const cartesiaOverviewOpts = useMemo(() => {
-    // Cartesia Sonic voices are multilingual (42 languages), so we offer every
-    // admin-whitelisted voice regardless of the agent's configured language.
-    // When the admin has whitelisted nothing, fall back to the built-in
-    // Cartesia voice list (matches the admin page's stated fallback) so the
-    // dropdown is never reduced to custom-only.
     const all = whitelistedData?.voices ?? [];
-    const opts = all.length > 0
-      ? all.map(v => ({ value: v.id, label: v.name }))
-      : (TTS_VOICES.cartesia ?? []).filter(v => v.value !== "__custom__");
+    const fallback = (TTS_VOICES.cartesia ?? []).filter(v => v.value !== "__custom__");
+    if (all.length === 0) {
+      const opts = [...fallback];
+      opts.push({ value: "__custom__", label: "✎ Paste custom Voice ID…" });
+      return opts;
+    }
+    // Filter by agent's base language code (e.g. "ta-IN" → "ta", "en-US" → "en")
+    const baseLang = (language ?? "en-US").split("-")[0]!.toLowerCase();
+    const langMatches = all.filter(v => v.language?.toLowerCase() === baseLang);
+    const pool = langMatches.length > 0 ? langMatches : all;
+    const opts = pool.map(v => ({ value: v.id, label: v.name }));
     opts.push({ value: "__custom__", label: "✎ Paste custom Voice ID…" });
     return opts;
-  }, [whitelistedData]);
+  }, [whitelistedData, language]);
 
   const ttsVoiceRaw   = ttsProvider in TTS_VOICES ? TTS_VOICES[ttsProvider] : undefined;
   const ttsVoiceFree  = ttsVoiceRaw === null;
@@ -789,20 +792,25 @@ function VoiceTab({ form }: { form: any }) {
     staleTime: 5 * 60 * 1000,
   });
 
-  // For Cartesia: build dropdown options from the admin-whitelisted voices.
-  // Cartesia Sonic voices are multilingual (42 languages), so we offer every
-  // whitelisted voice regardless of the agent's configured language. When the
-  // admin has whitelisted nothing, fall back to the built-in Cartesia voice
-  // list (matches the admin page's stated fallback) so the dropdown is never
-  // reduced to custom-only.
+  // For Cartesia: build dropdown from whitelisted voices filtered by agent language.
+  // Base language code is extracted from the agent language (e.g. "ta-IN" → "ta").
+  // If no voices match the agent's language, show all whitelisted voices.
+  // When the whitelist is empty, fall back to the built-in Cartesia voice list.
   const cartesiaVoiceOpts = useMemo(() => {
     const all = whitelistedData?.voices ?? [];
-    const opts = all.length > 0
-      ? all.map(v => ({ value: v.id, label: v.name }))
-      : (TTS_VOICES.cartesia ?? []).filter(v => v.value !== "__custom__");
+    const fallback = (TTS_VOICES.cartesia ?? []).filter(v => v.value !== "__custom__");
+    if (all.length === 0) {
+      const opts = [...fallback];
+      opts.push({ value: "__custom__", label: "✎ Paste custom Voice ID…" });
+      return opts;
+    }
+    const baseLang = agentLanguage.split("-")[0]!.toLowerCase();
+    const langMatches = all.filter(v => v.language?.toLowerCase() === baseLang);
+    const pool = langMatches.length > 0 ? langMatches : all;
+    const opts = pool.map(v => ({ value: v.id, label: v.name }));
     opts.push({ value: "__custom__", label: "✎ Paste custom Voice ID…" });
     return opts;
-  }, [whitelistedData]);
+  }, [whitelistedData, agentLanguage]);
 
   // For non-Cartesia providers fall back to the hardcoded list
   const ttsVoiceRawV  = ttsProvider in TTS_VOICES ? TTS_VOICES[ttsProvider] : undefined;
@@ -1180,6 +1188,28 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
 
   const { data: calendarsData } = useListCalendars();
   const agentCalendar = (calendarsData ?? []).find((cal: any) => cal.agentId === agentId);
+  const calendarIdForEt = agentCalendar?.id;
+  const { data: agentEventTypes } = useListEventTypes(
+    calendarIdForEt ? { calendarId: calendarIdForEt } : undefined,
+    { query: { enabled: !!calendarIdForEt, queryKey: ["agent-event-types", calendarIdForEt ?? null] } }
+  );
+
+  // Reset eventTypeId on native_list_bookings whenever the assigned calendar changes
+  const prevCalendarIdRef = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (prevCalendarIdRef.current === undefined) {
+      prevCalendarIdRef.current = calendarIdForEt;
+      return;
+    }
+    if (prevCalendarIdRef.current !== calendarIdForEt) {
+      prevCalendarIdRef.current = calendarIdForEt;
+      const tools = form.getValues("tools") ?? [];
+      const idx = (tools as any[]).findIndex((t: any) => t.type === "native_list_bookings");
+      if (idx >= 0) {
+        form.setValue(`tools.${idx}.eventTypeId` as any, undefined);
+      }
+    }
+  }, [calendarIdForEt]);
 
   const [expandedSchema, setExpandedSchema] = useState<string | null>(null);
   const [expandedTest, setExpandedTest]     = useState<string | null>(null);
@@ -1371,6 +1401,44 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number }) {
                         {agentCalendar ? (agentCalendar.name || "Calendar") : "No calendar assigned yet"}
                       </span>
                     </div>
+                    {/* Event Type (native_list_bookings only) */}
+                    {type === "native_list_bookings" && (() => {
+                      const idx = nativeToolIndex(type);
+                      const toolEventTypeId = watchedTools[idx]?.eventTypeId;
+                      return (
+                        <div className="space-y-1">
+                          <label className="text-[10px] text-muted-foreground block">Event Type (optional)</label>
+                          <Select
+                            value={toolEventTypeId != null ? String(toolEventTypeId) : "__none__"}
+                            onValueChange={(v) => form.setValue(`tools.${idx}.eventTypeId` as any, v === "__none__" ? undefined : Number(v))}
+                          >
+                            <SelectTrigger className="h-7 text-xs bg-background/50"><SelectValue placeholder="Any event type" /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__" className="text-xs">Any event type</SelectItem>
+                              {(agentEventTypes ?? []).map((et: any) => (
+                                <SelectItem key={et.id} value={String(et.id)} className="text-xs">{et.title}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      );
+                    })()}
+                    {/* Timezone */}
+                    {(() => {
+                      const idx = nativeToolIndex(type);
+                      const toolTimezone = watchedTools[idx]?.timezone;
+                      return (
+                        <div className="space-y-1">
+                          <label className="text-[10px] text-muted-foreground block">Timezone (optional)</label>
+                          <SmallSelect
+                            value={toolTimezone || "__none__"}
+                            onChange={(v) => form.setValue(`tools.${idx}.timezone` as any, v === "__none__" ? undefined : v)}
+                            options={[{ value: "__none__", label: "Use caller timezone" }, ...AGENT_TIMEZONES]}
+                            placeholder="Use caller timezone"
+                          />
+                        </div>
+                      );
+                    })()}
                     {/* Action buttons */}
                     <div className="flex items-center gap-2">
                       <Button
