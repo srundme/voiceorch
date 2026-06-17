@@ -55,6 +55,7 @@ import type {
   AgentVariable,
   AgentVariableCreate,
   AgentVariableUpdate,
+  AgentVersion,
   AmbientSoundOption,
   AmbientSoundRecord,
   AssignPhoneNumberInput,
@@ -223,6 +224,7 @@ import type {
   PublicEventType,
   PublicNow,
   PublicRescheduleByTokenBody,
+  PublishAgentVersionBody,
   PurchasePhoneNumberInput,
   RedialBatchNoPickup200,
   RedialCampaignNoPickup200,
@@ -876,6 +878,309 @@ export function useGetAgentSnapserveExecutions<TData = Awaited<ReturnType<typeof
 
 
 
+
+export const getListAgentVersionsUrl = (id: number,) => {
+
+
+
+
+  return `/api/agents/${id}/versions`
+}
+
+/**
+ * @summary List all versions for an agent
+ */
+export const listAgentVersions = async (id: number, options?: RequestInit): Promise<AgentVersion[]> => {
+
+  return customFetch<AgentVersion[]>(getListAgentVersionsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAgentVersionsQueryKey = (id: number,) => {
+    return [
+    `/api/agents/${id}/versions`
+    ] as const;
+    }
+
+
+export const getListAgentVersionsQueryOptions = <TData = Awaited<ReturnType<typeof listAgentVersions>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAgentVersions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAgentVersionsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAgentVersions>>> = ({ signal }) => listAgentVersions(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAgentVersions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAgentVersionsQueryResult = NonNullable<Awaited<ReturnType<typeof listAgentVersions>>>
+export type ListAgentVersionsQueryError = ErrorType<void>
+
+
+/**
+ * @summary List all versions for an agent
+ */
+
+export function useListAgentVersions<TData = Awaited<ReturnType<typeof listAgentVersions>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAgentVersions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAgentVersionsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getPublishAgentVersionUrl = (id: number,) => {
+
+
+
+
+  return `/api/agents/${id}/versions`
+}
+
+/**
+ * @summary Publish a new version snapshot of the agent
+ */
+export const publishAgentVersion = async (id: number,
+    publishAgentVersionBody: PublishAgentVersionBody, options?: RequestInit): Promise<AgentVersion> => {
+
+  return customFetch<AgentVersion>(getPublishAgentVersionUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      publishAgentVersionBody,)
+  }
+);}
+
+
+
+
+export const getPublishAgentVersionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof publishAgentVersion>>, TError,{id: number;data: BodyType<PublishAgentVersionBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof publishAgentVersion>>, TError,{id: number;data: BodyType<PublishAgentVersionBody>}, TContext> => {
+
+const mutationKey = ['publishAgentVersion'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof publishAgentVersion>>, {id: number;data: BodyType<PublishAgentVersionBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  publishAgentVersion(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PublishAgentVersionMutationResult = NonNullable<Awaited<ReturnType<typeof publishAgentVersion>>>
+    export type PublishAgentVersionMutationBody = BodyType<PublishAgentVersionBody>
+    export type PublishAgentVersionMutationError = ErrorType<void>
+
+    /**
+ * @summary Publish a new version snapshot of the agent
+ */
+export const usePublishAgentVersion = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof publishAgentVersion>>, TError,{id: number;data: BodyType<PublishAgentVersionBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof publishAgentVersion>>,
+        TError,
+        {id: number;data: BodyType<PublishAgentVersionBody>},
+        TContext
+      > => {
+      return useMutation(getPublishAgentVersionMutationOptions(options));
+    }
+
+export const getGetAgentVersionUrl = (id: number,
+    versionId: number,) => {
+
+
+
+
+  return `/api/agents/${id}/versions/${versionId}`
+}
+
+/**
+ * @summary Fetch a single agent version snapshot
+ */
+export const getAgentVersion = async (id: number,
+    versionId: number, options?: RequestInit): Promise<AgentVersion> => {
+
+  return customFetch<AgentVersion>(getGetAgentVersionUrl(id,versionId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAgentVersionQueryKey = (id: number,
+    versionId: number,) => {
+    return [
+    `/api/agents/${id}/versions/${versionId}`
+    ] as const;
+    }
+
+
+export const getGetAgentVersionQueryOptions = <TData = Awaited<ReturnType<typeof getAgentVersion>>, TError = ErrorType<void>>(id: number,
+    versionId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAgentVersion>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAgentVersionQueryKey(id,versionId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAgentVersion>>> = ({ signal }) => getAgentVersion(id,versionId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id && versionId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAgentVersion>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAgentVersionQueryResult = NonNullable<Awaited<ReturnType<typeof getAgentVersion>>>
+export type GetAgentVersionQueryError = ErrorType<void>
+
+
+/**
+ * @summary Fetch a single agent version snapshot
+ */
+
+export function useGetAgentVersion<TData = Awaited<ReturnType<typeof getAgentVersion>>, TError = ErrorType<void>>(
+ id: number,
+    versionId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAgentVersion>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAgentVersionQueryOptions(id,versionId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getRestoreAgentVersionUrl = (id: number,
+    versionId: number,) => {
+
+
+
+
+  return `/api/agents/${id}/versions/${versionId}/restore`
+}
+
+/**
+ * @summary Create a new draft by restoring a previous version snapshot
+ */
+export const restoreAgentVersion = async (id: number,
+    versionId: number, options?: RequestInit): Promise<AgentVersion> => {
+
+  return customFetch<AgentVersion>(getRestoreAgentVersionUrl(id,versionId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRestoreAgentVersionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreAgentVersion>>, TError,{id: number;versionId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof restoreAgentVersion>>, TError,{id: number;versionId: number}, TContext> => {
+
+const mutationKey = ['restoreAgentVersion'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof restoreAgentVersion>>, {id: number;versionId: number}> = (props) => {
+          const {id,versionId} = props ?? {};
+
+          return  restoreAgentVersion(id,versionId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RestoreAgentVersionMutationResult = NonNullable<Awaited<ReturnType<typeof restoreAgentVersion>>>
+
+    export type RestoreAgentVersionMutationError = ErrorType<void>
+
+    /**
+ * @summary Create a new draft by restoring a previous version snapshot
+ */
+export const useRestoreAgentVersion = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreAgentVersion>>, TError,{id: number;versionId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof restoreAgentVersion>>,
+        TError,
+        {id: number;versionId: number},
+        TContext
+      > => {
+      return useMutation(getRestoreAgentVersionMutationOptions(options));
+    }
 
 export const getListCallsUrl = (params?: ListCallsParams,) => {
   const normalizedParams = new URLSearchParams();

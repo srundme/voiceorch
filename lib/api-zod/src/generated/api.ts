@@ -702,6 +702,87 @@ export const GetAgentSnapserveExecutionsResponse = zod.object({
 
 
 /**
+ * @summary List all versions for an agent
+ */
+export const ListAgentVersionsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListAgentVersionsResponseItem = zod.object({
+  "id": zod.number(),
+  "agentId": zod.number(),
+  "userId": zod.string(),
+  "versionNumber": zod.string().describe('Auto-assigned version label, e.g. v1, v2, v3'),
+  "versionName": zod.string(),
+  "commitDescription": zod.string(),
+  "releaseNotes": zod.string().nullish(),
+  "status": zod.enum(['draft', 'published', 'production', 'archived', 'restored', 'deprecated']),
+  "snapshot": zod.record(zod.string(), zod.unknown()).describe('Full copy of all agent columns at publish time'),
+  "publishedBy": zod.string().nullish(),
+  "restoredFromVersionId": zod.number().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+export const ListAgentVersionsResponse = zod.array(ListAgentVersionsResponseItem)
+
+
+/**
+ * @summary Publish a new version snapshot of the agent
+ */
+export const PublishAgentVersionParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const publishAgentVersionBodyVersionNameMax = 120;
+
+export const publishAgentVersionBodyCommitDescriptionMax = 500;
+
+export const publishAgentVersionBodyReleaseNotesMax = 2000;
+
+
+
+export const PublishAgentVersionBody = zod.object({
+  "versionName": zod.string().min(1).max(publishAgentVersionBodyVersionNameMax),
+  "commitDescription": zod.string().min(1).max(publishAgentVersionBodyCommitDescriptionMax),
+  "releaseNotes": zod.string().max(publishAgentVersionBodyReleaseNotesMax).optional()
+})
+
+
+/**
+ * @summary Fetch a single agent version snapshot
+ */
+export const GetAgentVersionParams = zod.object({
+  "id": zod.coerce.number(),
+  "versionId": zod.coerce.number()
+})
+
+export const GetAgentVersionResponse = zod.object({
+  "id": zod.number(),
+  "agentId": zod.number(),
+  "userId": zod.string(),
+  "versionNumber": zod.string().describe('Auto-assigned version label, e.g. v1, v2, v3'),
+  "versionName": zod.string(),
+  "commitDescription": zod.string(),
+  "releaseNotes": zod.string().nullish(),
+  "status": zod.enum(['draft', 'published', 'production', 'archived', 'restored', 'deprecated']),
+  "snapshot": zod.record(zod.string(), zod.unknown()).describe('Full copy of all agent columns at publish time'),
+  "publishedBy": zod.string().nullish(),
+  "restoredFromVersionId": zod.number().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary Create a new draft by restoring a previous version snapshot
+ */
+export const RestoreAgentVersionParams = zod.object({
+  "id": zod.coerce.number(),
+  "versionId": zod.coerce.number()
+})
+
+
+/**
  * @summary List calls with optional agent filter
  */
 export const ListCallsQueryParams = zod.object({

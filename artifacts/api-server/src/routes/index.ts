@@ -38,6 +38,7 @@ import leadWorkspaceRouter from "./lead-workspace.js";
 import platformAnalyticsRouter from "./platform-analytics.js";
 import searchRouter from "./search.js";
 import agentVariablesRouter from "./agent-variables.js";
+import agentVersionsRouter from "./agent-versions.js";
 
 import batchImportRunsRouter from "./batch-import-runs.js";
 import schedulingRouter from "./scheduling/index.js";
@@ -127,5 +128,6 @@ router.use(billingRouter);
 router.use(webcallNotifyRouter);
 router.use(testToolRouter);
 router.use(dispositionRouter);
+router.use(agentVersionsRouter);
 
 export default router;

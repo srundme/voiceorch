@@ -204,6 +204,59 @@ export interface AmbientSoundOption {
   name: string;
 }
 
+export type AgentVersionStatus = typeof AgentVersionStatus[keyof typeof AgentVersionStatus];
+
+
+export const AgentVersionStatus = {
+  draft: 'draft',
+  published: 'published',
+  production: 'production',
+  archived: 'archived',
+  restored: 'restored',
+  deprecated: 'deprecated',
+} as const;
+
+/**
+ * Full copy of all agent columns at publish time
+ */
+export type AgentVersionSnapshot = { [key: string]: unknown };
+
+export interface AgentVersion {
+  id: number;
+  agentId: number;
+  userId: string;
+  /** Auto-assigned version label, e.g. v1, v2, v3 */
+  versionNumber: string;
+  versionName: string;
+  commitDescription: string;
+  /** @nullable */
+  releaseNotes?: string | null;
+  status: AgentVersionStatus;
+  /** Full copy of all agent columns at publish time */
+  snapshot: AgentVersionSnapshot;
+  /** @nullable */
+  publishedBy?: string | null;
+  /** @nullable */
+  restoredFromVersionId?: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PublishAgentVersionBody {
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  versionName: string;
+  /**
+     * @minLength 1
+     * @maxLength 500
+     */
+  commitDescription: string;
+  /** @maxLength 2000 */
+  releaseNotes?: string;
+}
+
 /**
  * managed = platform master keys; byop = user-supplied keys
  * @nullable

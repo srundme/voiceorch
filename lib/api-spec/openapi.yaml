@@ -229,6 +229,109 @@ paths:
         "502":
           description: Network error reaching SnapServe API
 
+  # ── Agent Versions ──────────────────────────────────────────────────────────
+  /agents/{id}/versions:
+    get:
+      operationId: listAgentVersions
+      tags: [agents]
+      summary: List all versions for an agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of agent versions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgentVersion"
+        "404":
+          description: Agent not found
+    post:
+      operationId: publishAgentVersion
+      tags: [agents]
+      summary: Publish a new version snapshot of the agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PublishAgentVersionBody"
+      responses:
+        "201":
+          description: Version published
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentVersion"
+        "400":
+          description: Validation error
+        "404":
+          description: Agent not found
+
+  /agents/{id}/versions/{versionId}:
+    get:
+      operationId: getAgentVersion
+      tags: [agents]
+      summary: Fetch a single agent version snapshot
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: versionId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Agent version with full snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentVersion"
+        "404":
+          description: Not found
+
+  /agents/{id}/versions/{versionId}/restore:
+    post:
+      operationId: restoreAgentVersion
+      tags: [agents]
+      summary: Create a new draft by restoring a previous version snapshot
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: versionId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "201":
+          description: Restored draft version
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentVersion"
+        "404":
+          description: Not found
+
   # ── Calls ───────────────────────────────────────────────────────────────────
   /calls:
     get:
@@ -5406,6 +5509,57 @@ components:
       properties:
         id: { type: string }
         name: { type: string }
+
+    AgentVersion:
+      type: object
+      required: [id, agentId, userId, versionNumber, versionName, commitDescription, status, snapshot, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        agentId:
+          type: integer
+        userId:
+          type: string
+        versionNumber:
+          type: string
+          description: "Auto-assigned version label, e.g. v1, v2, v3"
+        versionName:
+          type: string
+        commitDescription:
+          type: string
+        releaseNotes:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [draft, published, production, archived, restored, deprecated]
+        snapshot:
+          type: object
+          description: "Full copy of all agent columns at publish time"
+          additionalProperties: true
+        publishedBy:
+          type: ["string", "null"]
+        restoredFromVersionId:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+
+    PublishAgentVersionBody:
+      type: object
+      required: [versionName, commitDescription]
+      properties:
+        versionName:
+          type: string
+          minLength: 1
+          maxLength: 120
+        commitDescription:
+          type: string
+          minLength: 1
+          maxLength: 500
+        releaseNotes:
+          type: string
+          maxLength: 2000
 
     Agent:
       type: object
