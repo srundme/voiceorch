@@ -1,0 +1,499 @@
+Build an "Execution Logs" feature similar to Bolna AI for our Voice AI Orchestration Platform.
+
+## Objective
+
+Create a complete execution logging and debugging system that records every step of the AI conversation pipeline.
+
+The purpose of this feature is to help developers, QA teams, and customers understand:
+
+1. What was sent to the LLM.
+2. What the LLM responded with.
+3. What the STT provider returned.
+4. What was sent to the TTS provider.
+5. What tools were called.
+6. What variables were injected.
+7. Whether memory/context was correctly passed.
+8. Whether prompts are behaving as expected.
+
+This feature should act as a "Conversation Debugger".
+
+--------------------------------------------------
+
+## Why this feature is important
+
+When building Voice AI agents, debugging is difficult because users only hear the final voice output.
+
+Developers need visibility into:
+
+- STT input
+- STT output
+- Prompt construction
+- Variable replacement
+- Memory injection
+- LLM request
+- LLM response
+- Tool execution
+- TTS request
+- TTS response
+
+Example:
+
+Agent Prompt:
+
+Hello {first_name}, how can I help you?
+
+Variables:
+
+{
+  "first_name": "Gopi"
+}
+
+What is actually sent to the LLM:
+
+Hello Gopi, how can I help you?
+
+Developers must be able to verify that:
+
+- Variables were replaced correctly
+- Memory was injected correctly
+- Tool outputs were injected correctly
+- Prompt templates are functioning correctly
+
+This greatly reduces debugging time.
+
+--------------------------------------------------
+
+## Navigation
+
+Call Logs
+   -> Open Call
+      -> Transcript
+      -> Tools
+      -> Logs
+      -> Metadata
+
+Create a new tab:
+
+"Execution Logs"
+
+--------------------------------------------------
+
+## Execution Logs Timeline
+
+Display logs in chronological order.
+
+Columns:
+
+Timestamp
+Direction
+Component
+Provider
+Latency
+Status
+Log Data
+
+--------------------------------------------------
+
+## Components
+
+Possible Components:
+
+1. STT
+2. LLM
+3. TTS
+4. Tool
+5. Memory
+6. Variable Resolver
+7. Workflow Engine
+8. Webhook
+9. API
+10. Agent
+
+--------------------------------------------------
+
+## Direction Values
+
+Request
+Response
+System
+
+--------------------------------------------------
+
+## Example Timeline
+
+15:01:01.001
+Request
+STT
+Deepgram
+
+Audio Stream Received
+
+--------------------------------
+
+15:01:01.320
+Response
+STT
+Deepgram
+
+Transcript:
+"Yes"
+
+--------------------------------
+
+15:01:01.500
+System
+Variable Resolver
+
+Template Variables:
+
+{
+  "first_name": "Gopi",
+  "city": "Bangalore"
+}
+
+--------------------------------
+
+15:01:01.520
+Request
+LLM
+OpenAI
+
+Resolved Prompt:
+
+You are an insurance advisor.
+
+Customer Name: Gopi
+
+Ask about knee pain.
+
+--------------------------------
+
+15:01:02.100
+Response
+LLM
+OpenAI
+
+Generated Response:
+
+Hello Gopi.
+Are you looking for treatment for yourself or a family member?
+
+--------------------------------
+
+15:01:02.200
+Request
+TTS
+ElevenLabs
+
+Text:
+
+Hello Gopi.
+Are you looking for treatment for yourself or a family member?
+
+--------------------------------
+
+15:01:02.700
+Response
+TTS
+ElevenLabs
+
+Audio Generated Successfully
+
+--------------------------------
+
+15:01:05.000
+Request
+Tool
+
+check_availability()
+
+{
+  "date": "2026-06-20"
+}
+
+--------------------------------
+
+15:01:05.500
+Response
+Tool
+
+{
+  "slots": [
+      "10:00 AM",
+      "11:00 AM"
+  ]
+}
+
+--------------------------------------------------
+
+## LLM Debug View
+
+When user clicks an LLM log entry:
+
+Show:
+
+### Model
+
+GPT-4.1 Mini
+
+### Temperature
+
+0.3
+
+### Input Prompt
+
+(Fully Resolved Prompt)
+
+System Prompt
+Memory
+Knowledge
+Variables
+Conversation History
+
+All merged together exactly as sent to the model.
+
+### Variable Resolution
+
+Before:
+
+Hello {first_name}
+
+After:
+
+Hello Gopi
+
+--------------------------------
+
+### Tokens
+
+Input Tokens
+Output Tokens
+Total Tokens
+
+--------------------------------
+
+### Latency
+
+LLM Processing Time
+
+--------------------------------------------------
+
+## Variable Injection Viewer
+
+Very important.
+
+Store:
+
+Prompt Template
+
+Example:
+
+Hello {first_name}
+
+Variables
+
+{
+  "first_name": "Gopi"
+}
+
+Resolved Prompt
+
+Hello Gopi
+
+Display all 3 versions.
+
+This helps customers verify that dynamic variables are working correctly.
+
+--------------------------------------------------
+
+## Memory Injection Viewer
+
+Show:
+
+Memory Retrieved
+
+Example:
+
+{
+  "preferred_language": "Hindi",
+  "insurance_type": "Health"
+}
+
+Show exactly what memory was injected into the prompt.
+
+--------------------------------------------------
+
+## Knowledge Base Injection Viewer
+
+Show:
+
+Knowledge Documents Retrieved
+
+Similarity Score
+
+Chunks Sent To LLM
+
+Final Prompt Context
+
+--------------------------------------------------
+
+## Tool Logs
+
+For every tool execution store:
+
+Tool Name
+
+Input Payload
+
+Output Payload
+
+Execution Time
+
+Success / Failure
+
+Error Message
+
+--------------------------------------------------
+
+## Search and Filters
+
+Filters:
+
+Component
+Provider
+Direction
+Success/Failed
+Date Range
+
+Search:
+
+Search all logs by keyword.
+
+--------------------------------------------------
+
+## Download Logs
+
+Allow export:
+
+JSON
+CSV
+
+Downloaded logs must contain:
+
+timestamp
+component
+provider
+direction
+request
+response
+latency
+status
+
+--------------------------------------------------
+
+## Database Schema
+
+ExecutionLogs
+
+id
+call_id
+agent_id
+timestamp
+component
+provider
+direction
+status
+latency_ms
+request_payload
+response_payload
+metadata
+created_at
+
+Indexes:
+
+call_id
+agent_id
+timestamp
+
+--------------------------------------------------
+
+## Backend Requirements
+
+Every pipeline step must emit an event.
+
+Example:
+
+logExecution({
+  callId,
+  component: "LLM",
+  provider: "OpenAI",
+  direction: "request",
+  payload: resolvedPrompt
+})
+
+logExecution({
+  callId,
+  component: "LLM",
+  provider: "OpenAI",
+  direction: "response",
+  payload: llmResponse
+})
+
+Do this for:
+
+- STT Request
+- STT Response
+- Variable Resolution
+- Memory Retrieval
+- Knowledge Retrieval
+- LLM Request
+- LLM Response
+- Tool Request
+- Tool Response
+- TTS Request
+- TTS Response
+- Webhook Request
+- Webhook Response
+
+--------------------------------------------------
+
+## UI Requirements
+
+Dark Theme
+
+Real-time streaming logs
+
+Auto-scroll option
+
+Expandable rows
+
+JSON viewer
+
+Syntax highlighting
+
+Copy button
+
+Download button
+
+Show latency badges
+
+Show success/failure badges
+
+--------------------------------------------------
+
+## Success Criteria
+
+A developer should be able to open a call and answer:
+
+1. What did the user say?
+2. What did STT return?
+3. What exact prompt was sent to the LLM?
+4. Were variables correctly replaced?
+5. Was memory injected?
+6. Was knowledge injected?
+7. Which tools were executed?
+8. What did the tools return?
+9. What text was sent to TTS?
+10. Why did the AI respond the way it did?
+
+The Execution Logs page should become the primary debugging console for the entire Voice AI orchestration platform.

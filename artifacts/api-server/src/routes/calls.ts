@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { randomBytes } from "crypto";
 import { eq, desc, and, sql, gte, gt } from "drizzle-orm";
-import { db, callsTable, callEventsTable, agentsTable, providersTable, usersTable, walletTransactionsTable, activityLogsTable, callTransfersTable, vobizAccountsTable, verifiedPhoneDestinationsTable, platformSettingsTable } from "@workspace/db";
+import { db, callsTable, callEventsTable, executionLogsTable, agentsTable, providersTable, usersTable, walletTransactionsTable, activityLogsTable, callTransfersTable, vobizAccountsTable, verifiedPhoneDestinationsTable, platformSettingsTable } from "@workspace/db";
 import { getAgentRateCentsPerMin } from "../services/minute-rates.js";
 import {
   InitiateCallBody,
@@ -720,9 +720,9 @@ router.get("/:id/logs", requireAuth, async (req, res) => {
   if (!call) { res.status(404).json({ error: "Call not found" }); return; }
   if (call.userId && call.userId !== clerkId) { res.status(403).json({ error: "Forbidden" }); return; }
 
-  const events = await db.select().from(callEventsTable)
-    .where(eq(callEventsTable.callId, callId))
-    .orderBy(callEventsTable.ts);
+  const events = await db.select().from(executionLogsTable)
+    .where(eq(executionLogsTable.callId, callId))
+    .orderBy(executionLogsTable.ts);
 
   res.json(events);
 });

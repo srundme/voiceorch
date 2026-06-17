@@ -230,13 +230,117 @@ function DetailRow({ label, value, icon, highlight }: { label: string; value: Re
   );
 }
 
-interface CallLogEvent {
+interface ExecutionLogEvent {
   id: number;
   callId: number;
+  agentId: number | null;
   ts: string;
-  level: "info" | "warn" | "error";
-  event: string;
-  data: Record<string, unknown> | null;
+  component: string;
+  provider: string | null;
+  direction: string;
+  status: string;
+  latencyMs: number | null;
+  requestPayload: Record<string, unknown> | null;
+  responsePayload: Record<string, unknown> | null;
+  metadata: Record<string, unknown> | null;
+}
+
+const COMPONENT_COLORS: Record<string, string> = {
+  Agent:            "bg-slate-500/20 text-slate-300 border-slate-500/30",
+  STT:              "bg-violet-500/20 text-violet-300 border-violet-500/30",
+  LLM:              "bg-amber-500/20 text-amber-300 border-amber-500/30",
+  TTS:              "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
+  Tool:             "bg-orange-500/20 text-orange-300 border-orange-500/30",
+  Memory:           "bg-sky-500/20 text-sky-300 border-sky-500/30",
+  Knowledge:        "bg-teal-500/20 text-teal-300 border-teal-500/30",
+  VariableResolver: "bg-pink-500/20 text-pink-300 border-pink-500/30",
+  Webhook:          "bg-rose-500/20 text-rose-300 border-rose-500/30",
+};
+const DIRECTION_COLORS: Record<string, string> = {
+  request:  "bg-blue-500/15 text-blue-300 border-blue-500/25",
+  response: "bg-green-500/15 text-green-300 border-green-500/25",
+  system:   "bg-gray-500/15 text-gray-400 border-gray-500/25",
+};
+
+function JsonViewer({ data }: { data: Record<string, unknown> }) {
+  const [copied, setCopied] = useState(false);
+  const str = JSON.stringify(data, null, 2);
+  return (
+    <div className="relative group">
+      <button
+        onClick={() => { navigator.clipboard.writeText(str); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
+        className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity bg-white/10 hover:bg-white/20 rounded px-1.5 py-0.5 text-[9px] text-white/60 font-mono"
+      >
+        {copied ? "copied!" : "copy"}
+      </button>
+      <pre className="text-[11px] font-mono text-white/70 bg-black/30 rounded p-3 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed border border-white/5">
+        {str}
+      </pre>
+    </div>
+  );
+}
+
+function ExecLogRow({ entry }: { entry: ExecutionLogEvent }) {
+  const [expanded, setExpanded] = useState(false);
+  const ts = new Date(entry.ts).toISOString().replace("T", " ").substring(11, 23);
+  const compCls = COMPONENT_COLORS[entry.component] ?? "bg-gray-500/15 text-gray-400 border-gray-500/25";
+  const dirCls  = DIRECTION_COLORS[entry.direction] ?? "bg-gray-500/15 text-gray-400 border-gray-500/25";
+  const hasPayload = !!(entry.requestPayload || entry.responsePayload || entry.metadata);
+  return (
+    <div className={`border-b border-white/5 ${hasPayload ? "cursor-pointer hover:bg-white/[0.03]" : ""}`}>
+      <div
+        className="grid items-center gap-2 px-3 py-2.5 text-xs select-none"
+        style={{ gridTemplateColumns: "130px 80px 120px 100px 70px 60px 16px" }}
+        onClick={() => { if (hasPayload) setExpanded(e => !e); }}
+      >
+        <span className="font-mono text-white/35 tabular-nums">{ts}</span>
+        <span className={`inline-flex items-center justify-center border rounded text-[10px] font-medium px-1.5 py-0.5 ${dirCls}`}>
+          {entry.direction}
+        </span>
+        <span className={`inline-flex items-center justify-center border rounded text-[10px] font-semibold px-1.5 py-0.5 ${compCls}`}>
+          {entry.component}
+        </span>
+        <span className="text-white/45 truncate">{entry.provider ?? <span className="text-white/20">—</span>}</span>
+        <span className="font-mono text-white/35 tabular-nums text-right">
+          {entry.latencyMs != null ? (entry.latencyMs >= 1000 ? `${(entry.latencyMs / 1000).toFixed(1)}s` : `${entry.latencyMs}ms`) : <span className="text-white/15">—</span>}
+        </span>
+        <span className={`inline-flex items-center justify-center text-[9px] font-bold uppercase rounded px-1 py-0.5 ${
+          entry.status === "error" ? "bg-red-500/20 text-red-400" :
+          entry.status === "success" ? "bg-emerald-500/15 text-emerald-400" :
+          "bg-white/5 text-white/30"
+        }`}>
+          {entry.status === "error" ? "ERR" : entry.status === "success" ? "OK" : "—"}
+        </span>
+        {hasPayload ? (
+          expanded
+            ? <ChevronUp className="h-3 w-3 text-white/25" />
+            : <ChevronDown className="h-3 w-3 text-white/25" />
+        ) : <span />}
+      </div>
+      {expanded && hasPayload && (
+        <div className="px-3 pb-3 space-y-2">
+          {entry.requestPayload && Object.keys(entry.requestPayload).length > 0 && (
+            <div>
+              <p className="text-[9px] text-white/25 uppercase tracking-widest mb-1 font-semibold">Request</p>
+              <JsonViewer data={entry.requestPayload} />
+            </div>
+          )}
+          {entry.responsePayload && Object.keys(entry.responsePayload).length > 0 && (
+            <div>
+              <p className="text-[9px] text-white/25 uppercase tracking-widest mb-1 font-semibold">Response</p>
+              <JsonViewer data={entry.responsePayload} />
+            </div>
+          )}
+          {entry.metadata && Object.keys(entry.metadata).length > 0 && (
+            <div>
+              <p className="text-[9px] text-white/25 uppercase tracking-widest mb-1 font-semibold">Metadata</p>
+              <JsonViewer data={entry.metadata} />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function CallDetail() {
@@ -255,7 +359,7 @@ export default function CallDetail() {
     query: { enabled: !!agentId, queryKey: getGetAgentQueryKey(agentId!) }
   });
 
-  const { data: callLogs, isLoading: logsLoading } = useQuery<CallLogEvent[]>({
+  const { data: callLogs, isLoading: logsLoading } = useQuery<ExecutionLogEvent[]>({
     queryKey: ["call-logs", id],
     enabled: !!id,
     queryFn: async () => {
@@ -266,6 +370,11 @@ export default function CallDetail() {
       return r.json();
     },
   });
+
+  const [logSearch, setLogSearch]   = useState("");
+  const [logComponent, setLogComponent] = useState("all");
+  const [logDirection, setLogDirection] = useState("all");
+  const [logStatus, setLogStatus]   = useState("all");
 
   const updateDisposition = useUpdateCallDisposition();
   const [editing, setEditing] = useState(false);
@@ -590,13 +699,78 @@ export default function CallDetail() {
                 </Card>
               </TabsContent>
 
-              <TabsContent value="logs" className="flex-1 overflow-auto mt-2 min-h-0">
-                <Card className="h-full flex flex-col overflow-hidden bg-[#0d0d0d] border-border">
-                  <CardContent className="p-0 flex-1 overflow-auto font-mono text-xs">
+              <TabsContent value="logs" className="flex-1 mt-2 min-h-0 flex flex-col">
+                <Card className="flex-1 flex flex-col overflow-hidden bg-[#0b0b0b] border-white/8 min-h-0">
+                  {/* Filters bar */}
+                  {callLogs && callLogs.length > 0 && (
+                    <div className="flex items-center gap-2 px-3 py-2 border-b border-white/8 bg-[#0f0f0f] shrink-0 flex-wrap">
+                      <input
+                        value={logSearch}
+                        onChange={e => setLogSearch(e.target.value)}
+                        placeholder="Search logs…"
+                        className="h-6 px-2 text-[11px] rounded bg-white/5 border border-white/10 text-white/70 placeholder:text-white/20 focus:outline-none focus:border-white/20 w-36"
+                      />
+                      <select value={logComponent} onChange={e => setLogComponent(e.target.value)}
+                        className="h-6 px-1.5 text-[11px] rounded bg-white/5 border border-white/10 text-white/60 focus:outline-none focus:border-white/20">
+                        <option value="all">All Components</option>
+                        {Array.from(new Set(callLogs.map(l => l.component))).sort().map(c => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                      <select value={logDirection} onChange={e => setLogDirection(e.target.value)}
+                        className="h-6 px-1.5 text-[11px] rounded bg-white/5 border border-white/10 text-white/60 focus:outline-none focus:border-white/20">
+                        <option value="all">All Directions</option>
+                        <option value="request">Request</option>
+                        <option value="response">Response</option>
+                        <option value="system">System</option>
+                      </select>
+                      <select value={logStatus} onChange={e => setLogStatus(e.target.value)}
+                        className="h-6 px-1.5 text-[11px] rounded bg-white/5 border border-white/10 text-white/60 focus:outline-none focus:border-white/20">
+                        <option value="all">All Status</option>
+                        <option value="success">Success</option>
+                        <option value="error">Error</option>
+                        <option value="info">Info</option>
+                      </select>
+                      <div className="flex-1" />
+                      <span className="text-[10px] text-white/25 font-mono">
+                        {callLogs.length} event{callLogs.length !== 1 ? "s" : ""}
+                      </span>
+                      <button
+                        onClick={() => {
+                          const blob = new Blob([JSON.stringify(callLogs, null, 2)], { type: "application/json" });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url; a.download = `call-${id}-logs.json`; a.click();
+                          URL.revokeObjectURL(url);
+                        }}
+                        className="flex items-center gap-1 h-6 px-2 text-[10px] rounded bg-white/5 border border-white/10 text-white/50 hover:bg-white/10 hover:text-white/70 transition-colors"
+                      >
+                        <Download className="h-2.5 w-2.5" /> JSON
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Table header */}
+                  {callLogs && callLogs.length > 0 && (
+                    <div
+                      className="grid items-center gap-2 px-3 py-1.5 border-b border-white/8 bg-[#0f0f0f] shrink-0 text-[9px] uppercase tracking-widest text-white/20 font-semibold"
+                      style={{ gridTemplateColumns: "130px 80px 120px 100px 70px 60px 16px" }}
+                    >
+                      <span>Timestamp</span>
+                      <span>Direction</span>
+                      <span>Component</span>
+                      <span>Provider</span>
+                      <span className="text-right">Latency</span>
+                      <span>Status</span>
+                      <span />
+                    </div>
+                  )}
+
+                  <div className="flex-1 overflow-auto min-h-0">
                     {logsLoading ? (
-                      <div className="flex items-center justify-center h-full text-muted-foreground/40 gap-2">
+                      <div className="flex items-center justify-center h-full text-white/20 gap-2">
                         <ScrollText className="h-4 w-4 animate-pulse" />
-                        <span>Loading logs…</span>
+                        <span className="text-xs">Loading logs…</span>
                       </div>
                     ) : !callLogs || callLogs.length === 0 ? (
                       <div className="flex flex-col items-center justify-center h-full text-center py-10">
@@ -606,42 +780,28 @@ export default function CallDetail() {
                         <p className="text-sm text-white/30">No logs recorded</p>
                         <p className="text-xs text-white/20 mt-1">Logs are captured for new calls going forward</p>
                       </div>
-                    ) : (
-                      <div className="p-3 space-y-0.5">
-                        {callLogs.map((entry) => {
-                          const ts = new Date(entry.ts).toISOString().replace("T", " ").substring(0, 23);
-                          const levelColor =
-                            entry.level === "error" ? "text-red-400" :
-                            entry.level === "warn"  ? "text-amber-400" :
-                            "text-emerald-400";
-                          const eventColor =
-                            entry.event.startsWith("call.")  ? "text-sky-400" :
-                            entry.event.startsWith("stt.")   ? "text-violet-400" :
-                            entry.event.startsWith("llm.")   ? "text-amber-300" :
-                            entry.event.startsWith("tool.")  ? "text-orange-400" :
-                            "text-white/60";
-                          const dataStr = entry.data
-                            ? JSON.stringify(entry.data, null, 0)
-                                .replace(/^\{/, "")
-                                .replace(/\}$/, "")
-                                .replace(/"([^"]+)":/g, "$1=")
-                                .replace(/,(?=")/g, "  ")
-                                .replace(/"/g, "")
-                            : "";
-                          return (
-                            <div key={entry.id} className="flex gap-2 items-start py-0.5 hover:bg-white/5 rounded px-1 group">
-                              <span className="text-white/25 shrink-0 tabular-nums">{ts}</span>
-                              <span className={`shrink-0 uppercase w-9 tabular-nums font-bold ${levelColor}`}>{entry.level}</span>
-                              <span className={`shrink-0 font-semibold ${eventColor}`}>{entry.event}</span>
-                              {dataStr && (
-                                <span className="text-white/45 break-all leading-relaxed">{dataStr}</span>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </CardContent>
+                    ) : (() => {
+                      const q = logSearch.toLowerCase();
+                      const filtered = callLogs.filter(e => {
+                        if (logComponent !== "all" && e.component !== logComponent) return false;
+                        if (logDirection !== "all" && e.direction !== logDirection) return false;
+                        if (logStatus !== "all" && e.status !== logStatus) return false;
+                        if (q) {
+                          const hay = JSON.stringify(e).toLowerCase();
+                          if (!hay.includes(q)) return false;
+                        }
+                        return true;
+                      });
+                      if (filtered.length === 0) {
+                        return (
+                          <div className="flex flex-col items-center justify-center h-full text-center py-10">
+                            <p className="text-xs text-white/25">No matching events</p>
+                          </div>
+                        );
+                      }
+                      return filtered.map(entry => <ExecLogRow key={entry.id} entry={entry} />);
+                    })()}
+                  </div>
                 </Card>
               </TabsContent>
 
