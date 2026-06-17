@@ -16,7 +16,7 @@ import { handleTwilioWebSocket } from "./orchestration/telephony/twilio.js";
 import { handlePlivoWebSocket } from "./orchestration/telephony/plivo.js";
 import { handleVobizWebSocket } from "./orchestration/telephony/vobiz.js";
 import { handleWebCallWebSocket } from "./orchestration/telephony/webcall.js";
-import { verifySessionToken } from "./lib/session.js";
+import { consumeTicket } from "./lib/webcall-ticket.js";
 
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { db } from "@workspace/db";
@@ -93,39 +93,28 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
     ? (() => { try { return JSON.parse(qs.get("variables")!) as Record<string, string>; } catch { return undefined; } })()
     : undefined;
 
-  // ── Webcall JWT authentication ─────────────────────────────────────────────
+  // ── Webcall ticket authentication ─────────────────────────────────────────
   // Twilio/Plivo/VoBiz upgrades come from the telephony provider (server-to-server)
-  // and are not user-initiated, so we skip JWT enforcement for those providers.
+  // and are not user-initiated — no ticket required for those providers.
+  //
   // Webcall connections are initiated directly from a user's browser and MUST
-  // carry a valid platform session token to prevent API-key burning.
+  // present a short-lived single-use ticket (issued via POST /api/webcall/ticket).
+  // Using a ticket instead of a raw JWT keeps the session token out of the WS
+  // URL and therefore out of server access logs.
+  //
+  // Ownership is already verified when the ticket is issued; we only need to
+  // consume it here. If consumption fails (expired, wrong agentId, already used)
+  // the upgrade is rejected.
+  //
+  // NOTE: platform-managed agents have userId = null and correctly fail ticket
+  // issuance. If public/demo agents are ever needed, add an explicit allow path
+  // (e.g. agent.webcallPublic flag or admin-role bypass) in webcall-ticket.ts.
   if (provider === "webcall") {
-    const token = qs.get("token") ?? "";
-    const payload = token ? verifySessionToken(token) : null;
-    if (!payload) {
-      logger.warn({ agentId, remoteIp }, "Webcall WebSocket rejected: missing or invalid JWT");
+    const ticket = qs.get("ticket") ?? "";
+    const result = ticket ? consumeTicket(ticket, agentId) : null;
+    if (!result) {
+      logger.warn({ agentId, remoteIp }, "Webcall WebSocket rejected: missing, expired, or already-used ticket");
       socket.write("HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n");
-      socket.destroy();
-      return;
-    }
-    // Verify the authenticated user actually owns this agent — prevents one
-    // tenant from burning another tenant's API keys by guessing agentIds.
-    try {
-      const [agent] = await db
-        .select({ userId: agentsTable.userId })
-        .from(agentsTable)
-        .where(eq(agentsTable.id, agentId));
-      // NOTE: platform-managed agents have userId = null and correctly fail
-      // this check. If public/demo agents are ever needed, add an explicit
-      // allow path (e.g. agent.webcallPublic flag or admin-role bypass).
-      if (!agent || agent.userId !== payload.sub) {
-        logger.warn({ agentId, sub: payload.sub, agentUserId: agent?.userId }, "Webcall WebSocket rejected: agent ownership mismatch");
-        socket.write("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n");
-        socket.destroy();
-        return;
-      }
-    } catch (err) {
-      logger.error({ err, agentId }, "Webcall ownership check failed");
-      socket.write("HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n");
       socket.destroy();
       return;
     }
