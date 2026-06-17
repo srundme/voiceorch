@@ -9,6 +9,7 @@
     "backfill-user-identity": "tsx ./src/backfill-user-identity.ts",
     "wipe-beta-data": "tsx ./src/wipe-beta-data.ts",
     "loadtest-calls": "tsx ./src/loadtest-calls.ts",
+    "push-stt-fixes": "tsx ./src/push-stt-fixes.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
