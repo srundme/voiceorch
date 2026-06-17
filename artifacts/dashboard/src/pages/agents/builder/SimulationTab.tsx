@@ -84,6 +84,7 @@ interface RunScore {
   summary: string;
   metrics: Array<{ name: string; score: number; maxScore: number; notes: string }>;
   criteriaScores?: CriterionScore[];
+  criteriaSource?: "user_defined" | "auto_generated" | "replaced_mismatch";
   evaluationError?: boolean;
   evaluationErrorReason?: string;
   evaluatorPrompt?: string;
@@ -96,6 +97,12 @@ interface PersonaTemplate {
   personaPrompt: string;
   goal: string;
   successCriteria: string[];
+}
+
+interface TemplateCategory {
+  id: string;
+  label: string;
+  templates: PersonaTemplate[];
 }
 
 interface DebugInfo {
@@ -284,7 +291,29 @@ function ScoreCard({ result }: { result: RunScore }) {
       {/* Per-criterion scores */}
       {hasCriteria && (
         <div className="space-y-2">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Success Criteria</p>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Success Criteria</p>
+            {result.criteriaSource === "auto_generated" && (
+              <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-blue-500/10 text-blue-400 border-blue-500/30">
+                <Sparkles className="h-2.5 w-2.5 mr-1" />Auto-generated from agent config
+              </Badge>
+            )}
+            {result.criteriaSource === "replaced_mismatch" && (
+              <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-amber-500/10 text-amber-400 border-amber-500/30">
+                <Sparkles className="h-2.5 w-2.5 mr-1" />Auto-derived — stored criteria didn't match this agent
+              </Badge>
+            )}
+            {result.criteriaSource === "user_defined" && (
+              <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-emerald-500/10 text-emerald-400 border-emerald-500/30">
+                User-defined
+              </Badge>
+            )}
+          </div>
+          {result.criteriaSource === "replaced_mismatch" && (
+            <p className="text-[10px] text-amber-400/80 leading-relaxed">
+              Stored criteria were not relevant to this agent — criteria were auto-derived from the agent's system prompt.
+            </p>
+          )}
           {result.criteriaScores!.map((cs, i) => (
             <div key={i} className="space-y-1">
               <div className="flex items-start justify-between text-xs gap-2">
@@ -771,13 +800,14 @@ function formFromTestCase(tc: TestCase): TestCaseFormState {
 function TestCaseFormFields({
   form,
   onChange,
-  templates,
+  categories,
 }: {
   form: TestCaseFormState;
   onChange: (patch: Partial<TestCaseFormState>) => void;
-  templates?: PersonaTemplate[];
+  categories?: TemplateCategory[];
 }) {
   const [showTemplates, setShowTemplates] = useState(false);
+  const [openCategory, setOpenCategory] = useState<string | null>(null);
 
   const applyTemplate = (t: PersonaTemplate) => {
     onChange({
@@ -787,7 +817,10 @@ function TestCaseFormFields({
       successCriteria: t.successCriteria.join("\n"),
     });
     setShowTemplates(false);
+    setOpenCategory(null);
   };
+
+  const hasCategories = categories && categories.length > 0;
 
   return (
     <div className="space-y-4 py-2">
@@ -818,7 +851,7 @@ function TestCaseFormFields({
 
       <div className="space-y-1.5">
         <label className="text-xs font-medium">
-          Success Criteria <span className="text-muted-foreground font-normal">(one per line)</span>
+          Success Criteria <span className="text-muted-foreground font-normal">(one per line — leave blank to auto-generate from agent config)</span>
         </label>
         <Textarea
           value={form.successCriteria}
@@ -861,7 +894,7 @@ function TestCaseFormFields({
         </div>
       </div>
 
-      {templates && templates.length > 0 && (
+      {hasCategories && (
         <div className="border border-border/60 rounded-lg overflow-hidden">
           <button
             type="button"
@@ -875,13 +908,33 @@ function TestCaseFormFields({
             {showTemplates ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </button>
           {showTemplates && (
-            <div className="border-t border-border/60 divide-y divide-border/40 max-h-56 overflow-y-auto">
-              {templates.map((t) => (
-                <button key={t.id} type="button" onClick={() => applyTemplate(t)}
-                  className="w-full text-left px-4 py-2.5 hover:bg-card/40 transition-colors">
-                  <p className="text-sm font-medium">{t.name}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{t.goal}</p>
-                </button>
+            <div className="border-t border-border/60 max-h-72 overflow-y-auto">
+              {categories!.map((cat) => (
+                <div key={cat.id}>
+                  <button
+                    type="button"
+                    onClick={() => setOpenCategory(openCategory === cat.id ? null : cat.id)}
+                    className="w-full flex items-center justify-between px-4 py-2 bg-muted/30 hover:bg-muted/50 transition-colors border-b border-border/40"
+                  >
+                    <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                      {cat.label}
+                    </span>
+                    {openCategory === cat.id
+                      ? <ChevronUp className="h-3 w-3 text-muted-foreground" />
+                      : <ChevronDown className="h-3 w-3 text-muted-foreground" />}
+                  </button>
+                  {openCategory === cat.id && (
+                    <div className="divide-y divide-border/40">
+                      {cat.templates.map((t) => (
+                        <button key={t.id} type="button" onClick={() => applyTemplate(t)}
+                          className="w-full text-left px-4 py-2.5 hover:bg-card/40 transition-colors">
+                          <p className="text-sm font-medium">{t.name}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{t.goal}</p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           )}
@@ -906,7 +959,7 @@ function CreateTestCaseModal({
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: templates } = useQuery<PersonaTemplate[]>({
+  const { data: templateData } = useQuery<{ categories: TemplateCategory[] }>({
     queryKey: ["simulation-templates"],
     queryFn: () => customFetch(`${API}/simulation/templates`),
     staleTime: Infinity,
@@ -965,7 +1018,7 @@ function CreateTestCaseModal({
         <TestCaseFormFields
           form={form}
           onChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
-          templates={templates}
+          categories={templateData?.categories}
         />
         <DialogFooter>
           <Button type="button" variant="outline" onClick={handleClose} disabled={saving}>Cancel</Button>

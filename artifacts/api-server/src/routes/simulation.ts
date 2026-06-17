@@ -11,7 +11,7 @@ import { eq, and, desc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { runChatTurn } from "../services/simulation/chat.js";
 import { runScenario } from "../services/simulation/scenario-runner.js";
-import { HEALTH_INSURANCE_TEMPLATES } from "../services/simulation/templates.js";
+import { TEMPLATE_CATEGORIES } from "../services/simulation/templates.js";
 import { logger } from "../lib/logger.js";
 
 const router = Router();
@@ -418,7 +418,7 @@ router.get("/simulation/runs/:id/report", async (req: Request, res: Response): P
 // ── GET /simulation/templates ─────────────────────────────────────────────────
 
 router.get("/simulation/templates", (_req: Request, res: Response): void => {
-  res.json(HEALTH_INSURANCE_TEMPLATES);
+  res.json({ categories: TEMPLATE_CATEGORIES });
 });
 
 export default router;

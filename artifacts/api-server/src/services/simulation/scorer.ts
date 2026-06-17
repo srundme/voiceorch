@@ -36,6 +36,7 @@ export interface RunScore {
   metrics: ScoreMetric[];
   summary: string;
   criteriaScores?: CriterionScore[];
+  criteriaSource?: "user_defined" | "auto_generated" | "replaced_mismatch";
   evaluationError?: boolean;
   evaluationErrorReason?: string;
   evaluatorPrompt?: string;
@@ -64,6 +65,105 @@ async function persistError(runId: number, result: RunScore): Promise<void> {
     .update(simulationRunsTable)
     .set({ score: null, result: result as any, status: "evaluation_error", completedAt: new Date() })
     .where(eq(simulationRunsTable.id, runId));
+}
+
+/**
+ * Derive evaluation criteria appropriate to the agent's role.
+ *
+ * - If existingCriteria is non-empty and a system prompt is available, ask the
+ *   LLM whether the stored criteria match the agent's domain. If clearly
+ *   mismatched, auto-generate replacements.
+ * - If existingCriteria is empty and a system prompt is available, always
+ *   auto-generate 3-4 criteria.
+ * - If no system prompt, fall through to whatever was passed in.
+ */
+async function deriveAgentCriteria(
+  agentSystemPrompt: string,
+  existingCriteria: string[],
+  llmKey: string,
+): Promise<{ criteria: string[]; source: "user_defined" | "auto_generated" | "replaced_mismatch" }> {
+  if (!agentSystemPrompt.trim()) {
+    return { criteria: existingCriteria, source: "user_defined" };
+  }
+
+  const promptSnippet = agentSystemPrompt.slice(0, 600);
+
+  if (existingCriteria.length === 0) {
+    // Always generate when no criteria defined
+    const generated = await callCriteriaLlm(promptSnippet, null, llmKey);
+    if (generated) return { criteria: generated, source: "auto_generated" };
+    return { criteria: existingCriteria, source: "user_defined" };
+  }
+
+  // Check if existing criteria match the agent's domain
+  const checkPrompt = `Agent system prompt (excerpt):
+"${promptSnippet}"
+
+Stored evaluation criteria:
+${existingCriteria.map((c, i) => `${i + 1}. ${c}`).join("\n")}
+
+Do these criteria match the agent's actual role and domain? Reply with ONLY valid JSON: {"match": true} or {"match": false, "generated": ["<criterion 1>", "<criterion 2>", "<criterion 3>"]}
+Generate 3-4 concise, relevant criteria if not a match. No markdown, no extra text.`;
+
+  try {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${llmKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "qwen/qwen3-32b",
+        temperature: 0.1,
+        max_tokens: 300,
+        messages: [{ role: "user", content: checkPrompt }],
+      }),
+    });
+
+    if (!response.ok) return { criteria: existingCriteria, source: "user_defined" };
+
+    const data = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    const raw = stripThinkTags(data.choices?.[0]?.message?.content ?? "")
+      .replace(/```json\n?|\n?```/g, "")
+      .trim();
+
+    const parsed = JSON.parse(raw) as { match: boolean; generated?: string[] };
+    if (parsed.match === false && Array.isArray(parsed.generated) && parsed.generated.length > 0) {
+      return { criteria: parsed.generated, source: "replaced_mismatch" };
+    }
+    return { criteria: existingCriteria, source: "user_defined" };
+  } catch {
+    return { criteria: existingCriteria, source: "user_defined" };
+  }
+}
+
+async function callCriteriaLlm(promptSnippet: string, _hint: null, llmKey: string): Promise<string[] | null> {
+  const genPrompt = `Agent system prompt (excerpt):
+"${promptSnippet}"
+
+Generate 3-4 concise, measurable evaluation criteria for testing this agent's performance. Each criterion should be a single short sentence. Reply ONLY with valid JSON array of strings, no markdown, no extra text. Example: ["Criterion one", "Criterion two", "Criterion three"]`;
+
+  try {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${llmKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "qwen/qwen3-32b",
+        temperature: 0.2,
+        max_tokens: 250,
+        messages: [{ role: "user", content: genPrompt }],
+      }),
+    });
+
+    if (!response.ok) return null;
+
+    const data = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    const raw = stripThinkTags(data.choices?.[0]?.message?.content ?? "")
+      .replace(/```json\n?|\n?```/g, "")
+      .trim();
+    const parsed = JSON.parse(raw) as string[];
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -103,7 +203,7 @@ export async function scoreRun(runId: number, successCriteria: string[]): Promis
     return result;
   }
 
-  // Fetch agent system prompt for Prompt Compliance evaluation
+  // Fetch agent system prompt for Prompt Compliance evaluation and criteria derivation
   let agentSystemPrompt = "";
   try {
     const [run] = await db
@@ -152,9 +252,18 @@ export async function scoreRun(runId: number, successCriteria: string[]): Promis
     return result;
   }
 
+  // Derive appropriate criteria (may replace mismatched stored criteria or auto-generate)
+  const { criteria: effectiveCriteria, source: criteriaSource } = await deriveAgentCriteria(
+    agentSystemPrompt,
+    successCriteria,
+    key,
+  );
+
+  logger.info({ runId, criteriaSource, criteriaCount: effectiveCriteria.length }, "scoreRun: criteria derived");
+
   const criteriaBlock =
-    successCriteria.length > 0
-      ? `USER-DEFINED SUCCESS CRITERIA (score each 0–10 separately in criteriaScores):\n${successCriteria.map((c, i) => `${i + 1}. ${c}`).join("\n")}`
+    effectiveCriteria.length > 0
+      ? `SUCCESS CRITERIA (score each 0–10 separately in criteriaScores):\n${effectiveCriteria.map((c, i) => `${i + 1}. ${c}`).join("\n")}`
       : "No explicit success criteria defined. Evaluate on overall conversation quality.";
 
   const systemPromptBlock = agentSystemPrompt
@@ -162,9 +271,9 @@ export async function scoreRun(runId: number, successCriteria: string[]): Promis
     : "Agent system prompt not available.";
 
   const criteriaScoresSchema =
-    successCriteria.length > 0
+    effectiveCriteria.length > 0
       ? `  "criteriaScores": [
-    ${successCriteria.map((c) => `{"criterion":${JSON.stringify(c)},"score":<0-10>,"maxScore":10,"reason":"<brief>"}`).join(",\n    ")}
+    ${effectiveCriteria.map((c) => `{"criterion":${JSON.stringify(c)},"score":<0-10>,"maxScore":10,"reason":"<brief>"}`).join(",\n    ")}
   ],`
       : `  "criteriaScores": [],`;
 
@@ -188,7 +297,7 @@ Score the agent on these 6 metrics (0-20 each, total 0-120, normalised to 0-100)
 Compute overall as: Math.round((sum_of_6_scores / 120) * 100)
 Pass = overall >= 70
 
-Also score each user-defined criterion individually (0-10 each) in criteriaScores.
+Also score each criterion individually (0-10 each) in criteriaScores.
 
 Respond ONLY with valid JSON (no markdown, no code fences, no <think> blocks):
 {
@@ -266,6 +375,9 @@ ${criteriaScoresSchema}
     }
     scored.pass = (scored.overall ?? 0) >= 70;
 
+    // Attach criteria source so the frontend can show the correct badge
+    scored.criteriaSource = criteriaSource;
+
     // Store evaluator prompt and raw response for transparency
     scored.evaluatorPrompt = prompt;
     scored.rawEvaluatorResponse = raw;
@@ -280,7 +392,7 @@ ${criteriaScoresSchema}
       .set({ score: scored.overall, result: scored as any, status: "completed", completedAt: new Date() })
       .where(eq(simulationRunsTable.id, runId));
 
-    logger.info({ runId, overall: scored.overall, pass: scored.pass }, "scoreRun: completed");
+    logger.info({ runId, overall: scored.overall, pass: scored.pass, criteriaSource }, "scoreRun: completed");
     return scored;
   } catch (err) {
     const result = buildErrorResult(

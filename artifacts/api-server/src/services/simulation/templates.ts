@@ -6,6 +6,12 @@ export interface PersonaTemplate {
   successCriteria: string[];
 }
 
+export interface TemplateCategory {
+  id: string;
+  label: string;
+  templates: PersonaTemplate[];
+}
+
 export const HEALTH_INSURANCE_TEMPLATES: PersonaTemplate[] = [
   {
     id: "hi-first-time-buyer",
@@ -138,6 +144,86 @@ export const HEALTH_INSURANCE_TEMPLATES: PersonaTemplate[] = [
   },
 ];
 
+export const CALENDAR_BOOKING_TEMPLATES: PersonaTemplate[] = [
+  {
+    id: "cb-first-time-booker",
+    name: "First-Time Appointment Booker",
+    personaPrompt:
+      "You are Alex, a 31-year-old who has never used an AI scheduling assistant before. You want to book a 30-minute introductory call with a consultant for sometime next week. You are not sure what slots are available and may ask the agent to suggest a few options. You are polite and slightly hesitant about confirming until you're sure the time works for you.",
+    goal: "Successfully book a 30-minute introductory call for next week.",
+    successCriteria: [
+      "Agent offers at least two available time slot options",
+      "Agent confirms the booking with date, time, and duration",
+      "Agent provides a confirmation or reference for the booking",
+    ],
+  },
+  {
+    id: "cb-reschedule-request",
+    name: "Reschedule Request",
+    personaPrompt:
+      "You are Jamie, a 28-year-old who had a meeting booked for tomorrow at 2pm but something urgent has come up. You need to reschedule to a different day this week, preferably in the afternoon. You are apologetic but need to move quickly. You already have the original booking reference.",
+    goal: "Cancel the existing booking and reschedule to a different afternoon slot this week.",
+    successCriteria: [
+      "Agent acknowledges the existing booking and cancels it",
+      "Agent offers alternative afternoon slots",
+      "Agent confirms the new booking with updated time",
+    ],
+  },
+  {
+    id: "cb-availability-enquiry",
+    name: "Availability Enquiry",
+    personaPrompt:
+      "You are Sam, a 45-year-old busy professional. You are not ready to book yet but want to know what slots are available over the next 3 days so you can plan your schedule. You may ask about multiple days in sequence. You are efficient, no-nonsense, and want clear concise answers.",
+    goal: "Find out what appointment slots are available over the next 3 days without booking yet.",
+    successCriteria: [
+      "Agent lists available slots for at least 2 days",
+      "Agent communicates slot details clearly (date, time, duration)",
+      "Agent offers to book a slot if the user decides",
+    ],
+  },
+  {
+    id: "cb-multi-slot-picker",
+    name: "Multi-Slot Picker",
+    personaPrompt:
+      "You are Morgan, a 37-year-old who needs to book two separate 1-hour sessions in the same week — one for a strategy review and one for a follow-up. You want them on different days and not back to back. You may ask the agent to check availability for both at once or sequentially.",
+    goal: "Book two separate 1-hour sessions on different days in the same week.",
+    successCriteria: [
+      "Agent handles the request for two separate bookings",
+      "Agent confirms both bookings are on different days",
+      "Agent provides confirmation details for each session",
+    ],
+  },
+  {
+    id: "cb-timezone-aware-booking",
+    name: "Cross-Timezone Booking",
+    personaPrompt:
+      "You are Priya, a 33-year-old based in Singapore (SGT, UTC+8). You are trying to book a call with a team located in London. You want to find a slot that works during your business hours (9am-6pm SGT) and you'd like the agent to confirm what time that is in London. You are detail-oriented and will ask for clarification if the times seem off.",
+    goal: "Book a meeting that falls within Singapore business hours and confirm the equivalent London time.",
+    successCriteria: [
+      "Agent correctly presents slot times in the user's timezone",
+      "Agent confirms the equivalent time in the other timezone when asked",
+      "Agent successfully books the slot with correct timezone handling",
+    ],
+  },
+];
+
+export const TEMPLATE_CATEGORIES: TemplateCategory[] = [
+  {
+    id: "health-insurance",
+    label: "Health Insurance",
+    templates: HEALTH_INSURANCE_TEMPLATES,
+  },
+  {
+    id: "calendar-booking",
+    label: "Calendar & Scheduling",
+    templates: CALENDAR_BOOKING_TEMPLATES,
+  },
+];
+
 export function getTemplateById(id: string): PersonaTemplate | undefined {
-  return HEALTH_INSURANCE_TEMPLATES.find((t) => t.id === id);
+  for (const category of TEMPLATE_CATEGORIES) {
+    const found = category.templates.find((t) => t.id === id);
+    if (found) return found;
+  }
+  return undefined;
 }
