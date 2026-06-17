@@ -1,3 +1,4 @@
+import { performance } from "perf_hooks";
 import type { WebSocket } from "ws";
 import { db, agentsTable, callsTable, callEventsTable, executionLogsTable, scheduledCallbacksTable, providersTable, usersTable, walletTransactionsTable, platformSettingsTable, knowledgeEntriesTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
@@ -149,6 +150,7 @@ export async function handleWebCallWebSocket(
   // (matching the live telephony pipeline, which mixes ambient into every TTS chunk).
   // The silence-fill interval is gated on `speaking`, so it never double-sends here.
   function sendSpeechAudio(pcm16k: Buffer) {
+    if (_tFirstAudioOut === null) _tFirstAudioOut = performance.now();
     const amplified = amplifyPcm(pcm16k, TTS_VOLUME_GAIN);
     const out = ambientStream ? ambientStream.mixIntoPcm16k(amplified) : amplified;
     sendAudio(out);
@@ -737,6 +739,17 @@ export async function handleWebCallWebSocket(
   // inter-syllable dips. Only reset after BARGE_IN_LOW_RESET consecutive low frames.
   const BARGE_IN_LOW_RESET = 5;    // ~200ms of silence resets the barge-in run
 
+  // ── Per-turn latency instrumentation (monotonic via performance.now()) ─────
+  let _webcallTurnIdx   = 0;
+  let _tVadFlush        = 0;   // when VAD flush was scheduled → audio dispatched to STT
+  let _tSttFinal        = 0;   // when STT returned transcript
+  let _tLlmFirstToken:  number | null = null;
+  let _tLlmFirstClause: number | null = null;
+  let _tTtsFirstByte:   number | null = null;
+  let _tFirstAudioOut:  number | null = null;
+  let _tTurnFillerPlayed = false;
+  let _llmStreamActive  = false;
+
   // ── Recording ─────────────────────────────────────────────────────────────
   // Stereo WAV: L=caller (16 kHz from browser), R=agent (TTS pre-amplification)
   const recording = new RecordingBuffer(16000);
@@ -751,6 +764,15 @@ export async function handleWebCallWebSocket(
 
     processing  = true;
     interrupted = false;
+    const _curTurnIdx = ++_webcallTurnIdx;
+    _tVadFlush        = performance.now();
+    _tSttFinal        = 0;
+    _tLlmFirstToken   = null;
+    _tLlmFirstClause  = null;
+    _tTtsFirstByte    = null;
+    _tFirstAudioOut   = null;
+    _tTurnFillerPlayed = false;
+    _llmStreamActive  = false;
     sendStatus("thinking");
 
     try {
@@ -758,6 +780,7 @@ export async function handleWebCallWebSocket(
       let userText: string | null | undefined;
       if (streamTranscript) {
         userText = streamTranscript;
+        _tSttFinal = performance.now(); // streaming STT: transcript arrived from provider
         audioChunks.splice(0); // discard any stale barge-in frames — streaming STT already covered them
       } else {
         const rawPcm = Buffer.concat(audioChunks.splice(0));
@@ -819,6 +842,7 @@ export async function handleWebCallWebSocket(
         }
       }
 
+      if (_tSttFinal === 0) _tSttFinal = performance.now(); // batch STT path: stamp after all fallbacks
       if (!userText?.trim()) { processing = false; return; }
 
       logExecution("STT", "response", {
@@ -970,6 +994,9 @@ export async function handleWebCallWebSocket(
       function queueSentence(text: string) {
         const t = text.trim();
         if (!t) return;
+        if (_llmStreamActive && _tLlmFirstClause === null) {
+          _tLlmFirstClause = performance.now();
+        }
         ttsCharactersTotal += t.length;
         const ttsReqStart = Date.now();
         logExecution("TTS", "request", {
@@ -986,7 +1013,10 @@ export async function handleWebCallWebSocket(
         if (tts.synthesizeStream) {
           job = (async () => {
             const chunks: Buffer[] = [];
-            await tts.synthesizeStream!(t, (c) => chunks.push(c), () => {});
+            await tts.synthesizeStream!(t, (c) => {
+              if (_tTtsFirstByte === null) _tTtsFirstByte = performance.now();
+              chunks.push(c);
+            }, () => {});
             const audio = Buffer.concat(chunks);
             logger.info({ callId, sentenceText: t, audioBytes: audio.length }, "TTS sentence synthesized");
             logExecution("TTS", "response", {
@@ -1225,6 +1255,7 @@ export async function handleWebCallWebSocket(
         history,
         iterSystemPrompt,
         (token) => {
+          if (_tLlmFirstToken === null) { _tLlmFirstToken = performance.now(); _llmStreamActive = true; }
           fullReply += token;                         // keep raw (for cleaning later)
           const afterThink = filterThinkToken(token); // strip <think>…</think>
           if (!afterThink) return;                    // token was entirely inside a think block
@@ -1783,6 +1814,36 @@ export async function handleWebCallWebSocket(
       if (hangupAfterLlmCall && !closed) {
         logger.info({ callId }, "Webcall: hangupAfterLlmCall — ending call");
         void hangup("normal");
+      }
+      {
+        const _tEnd = performance.now();
+        const _stt_ms = _tSttFinal > 0 && _tVadFlush > 0
+          ? Math.round(_tSttFinal - _tVadFlush) : null;
+        const _llm_ttft_ms = _tLlmFirstToken !== null && _tSttFinal > 0
+          ? Math.round(_tLlmFirstToken - _tSttFinal) : null;
+        const _llm_ttft_to_clause_ms = _tLlmFirstClause !== null && _tLlmFirstToken !== null
+          ? Math.round(_tLlmFirstClause - _tLlmFirstToken) : null;
+        const _tts_ttfb_ms = _tTtsFirstByte !== null && _tSttFinal > 0
+          ? Math.round(_tTtsFirstByte - _tSttFinal) : null;
+        const _return_ms = _tFirstAudioOut !== null && _tSttFinal > 0
+          ? Math.round(_tFirstAudioOut - _tSttFinal) : null;
+        const _total_ms = _tVadFlush > 0 ? Math.round(_tEnd - _tVadFlush) : null;
+        logger.info({
+          evt:                   "turn_latency",
+          path:                  "webcall",
+          callId,
+          turnIndex:             _curTurnIdx,
+          stt_ms:                _stt_ms,
+          llm_ttft_ms:           _llm_ttft_ms,
+          llm_ttft_to_clause_ms: _llm_ttft_to_clause_ms,
+          tts_ttfb_ms:           _tts_ttfb_ms,
+          return_ms:             _return_ms,
+          total_ms:              _total_ms,
+          asrProvider:           agent.asrProvider,
+          llmProvider:           agent.llmProvider,
+          ttsProvider:           agent.ttsProvider,
+          fillerPlayed:          _tTurnFillerPlayed,
+        }, "turn_latency");
       }
       processing = false;
       return;

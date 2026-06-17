@@ -8,15 +8,18 @@
     "seed-provider-pricing": "tsx ./src/seed-provider-pricing.ts",
     "backfill-user-identity": "tsx ./src/backfill-user-identity.ts",
     "wipe-beta-data": "tsx ./src/wipe-beta-data.ts",
+    "loadtest-calls": "tsx ./src/loadtest-calls.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@clerk/backend": "^3.4.14",
     "@workspace/db": "workspace:*",
-    "drizzle-orm": "catalog:"
+    "drizzle-orm": "catalog:",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "@types/ws": "^8.5.14",
     "tsx": "catalog:"
   }
 }

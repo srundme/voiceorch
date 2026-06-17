@@ -5,6 +5,7 @@ import { AssemblyAISTT } from "./assemblyai.js";
 import { SarvamSTT } from "./sarvam.js";
 import { CartesiaSTT } from "./cartesia.js";
 import { DeepgramSTT } from "./deepgram.js";
+import { STUB_PROVIDERS_ENABLED, createStubSTT } from "../stubs.js";
 
 export function createSTTAdapter(
   provider: string,
@@ -13,6 +14,7 @@ export function createSTTAdapter(
   extraConfig: string | null,
   cfg: STTConfig
 ): STTAdapter {
+  if (STUB_PROVIDERS_ENABLED) return createStubSTT();
   switch (provider.toLowerCase()) {
     case "azure":
       return new AzureSTT(apiKey, model, extraConfig, cfg);

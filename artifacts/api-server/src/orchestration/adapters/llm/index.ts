@@ -8,12 +8,14 @@ import { DeepSeekLLM } from "./deepseek.js";
 import { AnthropicLLM } from "./anthropic.js";
 import { MistralLLM } from "./mistral.js";
 import { CohereLLM } from "./cohere.js";
+import { STUB_PROVIDERS_ENABLED, createStubLLM } from "../stubs.js";
 
 export function createLLMAdapter(
   provider: string,
   apiKey: string,
   model: string | null
 ): LLMAdapter {
+  if (STUB_PROVIDERS_ENABLED) return createStubLLM();
   switch (provider.toLowerCase()) {
     case "openai":
       return new OpenAILLM(apiKey, model);
