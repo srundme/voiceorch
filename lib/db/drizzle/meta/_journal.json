@@ -8,6 +8,13 @@
       "when": 1781539061605,
       "tag": "0000_flashy_gargoyle",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1781693800000,
+      "tag": "0001_production_schema_sync",
+      "breakpoints": true
     }
   ]
 }
