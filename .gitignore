@@ -51,3 +51,8 @@ Thumbs.db
 # Database backups
 *.sql
 backup.sql
+
+# Drizzle migration SQL files must be committed — the Dockerfile COPYs them
+# into the production image and drizzle-orm/migrator reads them at startup.
+# Without them in git, Railway builds fail with "No file *.sql found".
+!lib/db/drizzle/*.sql

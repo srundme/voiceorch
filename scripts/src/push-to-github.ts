@@ -1,5 +1,5 @@
 /**
- * Push two changed files to srundme/voiceorch main branch via GitHub Contents API.
+ * Push changed files to srundme/voiceorch main branch via GitHub Contents API.
  * Run via: pnpm --filter @workspace/scripts run push-migration-fix
  */
 import fs from "fs";
@@ -23,12 +23,15 @@ const REPO  = "voiceorch";
 const BRANCH = "main";
 
 const FILES_TO_PUSH = [
-  "artifacts/api-server/src/orchestration/adapters/stt/azure.ts",
-  "artifacts/api-server/src/orchestration/telephony/webcall.ts",
+  // Unblock drizzle SQL files from .gitignore so Railway builds can find them
+  ".gitignore",
+  // Drizzle migration SQL files (were gitignored by *.sql — now unblocked)
+  "lib/db/drizzle/0000_flashy_gargoyle.sql",
+  "lib/db/drizzle/0001_production_schema_sync.sql",
 ];
 
-async function ghFetch(path: string, options: RequestInit = {}) {
-  const url = `https://api.github.com/repos/${OWNER}/${REPO}/${path}`;
+async function ghFetch(apiPath: string, options: RequestInit = {}) {
+  const url = `https://api.github.com/repos/${OWNER}/${REPO}/${apiPath}`;
   const res = await fetch(url, {
     ...options,
     headers: {
@@ -40,7 +43,7 @@ async function ghFetch(path: string, options: RequestInit = {}) {
   });
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`GitHub API ${res.status} for ${path}: ${body}`);
+    throw new Error(`GitHub API ${res.status} for ${apiPath}: ${body}`);
   }
   return res.json();
 }
@@ -56,13 +59,13 @@ async function pushFile(relPath: string) {
     const existing = await ghFetch(`contents/${relPath}?ref=${BRANCH}`) as { sha: string };
     sha = existing.sha;
   } catch {
-    console.log(`  ${relPath}: not found on remote — will create`);
+    console.log(`  ${relPath}: new file — will create`);
   }
 
   await ghFetch(`contents/${relPath}`, {
     method: "PUT",
     body: JSON.stringify({
-      message: `fix: STT locale normalisation + webcall extractSentences Indic support`,
+      message: `fix: commit drizzle migration SQL files + unblock from .gitignore`,
       content: encoded,
       branch: BRANCH,
       ...(sha ? { sha } : {}),
@@ -77,7 +80,7 @@ async function main() {
   for (const f of FILES_TO_PUSH) {
     await pushFile(f);
   }
-  console.log("Done.");
+  console.log("Done — Railway will redeploy automatically.");
 }
 
 main().catch((err) => {
