@@ -12,8 +12,8 @@ import {
 } from "@workspace/api-client-react";
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
-import { z } from "zod";
 import { useForm, useWatch, useFieldArray } from "react-hook-form";
+import { agentFormSchema, type AgentFormValues } from "./edit.schema";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -54,117 +54,7 @@ import {
   getModelError,
 } from "@/lib/agent-providers";
 
-/* ── Form schema ──────────────────────────────────────────────────────────── */
-
-export const agentFormSchema = z.object({
-  name:              z.string().min(1, "Name is required"),
-  description:       z.string().optional(),
-  asrProvider:       z.string().min(1, "ASR Provider is required"),
-  asrModel:          z.string().optional(),
-  llmProvider:       z.string().min(1, "LLM Provider is required"),
-  llmModel:          z.string().optional(),
-  ttsProvider:       z.string().min(1, "TTS Provider is required"),
-  ttsVoice:          z.string().optional(),
-  ttsModel:          z.string().optional(),
-  telephonyProvider: z.string().min(1, "Telephony Provider is required"),
-  systemPrompt:      z.string().min(1, "System prompt is required"),
-  temperature:       z.number().min(0).max(2).optional(),
-  maxDuration:       z.number().min(10).max(3600).optional(),
-  greetingMessage:          z.string().optional(),
-  firstSpeaker:             z.preprocess((v) => (v === "user" ? "user" : "assistant"), z.enum(["assistant", "user"])),
-  endCallPhrases:           z.string().optional(),
-  silenceTimeoutSeconds:    z.number().min(5).max(300).optional(),
-  language:                 z.string().optional(),
-  asrLanguage:              z.string().optional(),
-  backchannelingEnabled:    z.boolean().optional(),
-  backchannelingFrequency:  z.number().min(0).max(1).optional(),
-  backchannelPhrases:       z.string().optional(),
-  webhookUrl:               z.string().optional(),
-  webhookSecret:            z.string().optional(),
-  noiseCancellationEnabled: z.boolean().optional(),
-  ambientNoiseEnabled:      z.boolean().optional(),
-  ambientNoiseTrack:        z.string().optional(),
-  promptVariables: z.array(z.object({
-    key:          z.string().min(1, "Key required"),
-    defaultValue: z.string(),
-    description:  z.string().optional(),
-  })).optional(),
-  vadSilenceMs:           z.number().min(50).max(2000).optional(),
-  bargeInEnabled:         z.boolean().optional(),
-  bargeInEnergyThreshold: z.number().min(100).max(5000).optional(),
-  bargeInMinFrames:       z.number().min(1).max(20).optional(),
-  timezone:               z.string().optional(),
-  machineDetectionMode:   z.enum(["disabled", "enable", "detect_message_end"]).optional(),
-  voicemailAction:        z.enum(["hangup", "leave_message", "continue"]).optional(),
-  voicemailMessage:       z.string().optional(),
-  tools: z.array(z.object({
-    type: z.enum(["call_transfer", "webhook", "send_sms", "end_call", "cal_com", "native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel", "transfer_cold", "transfer_warm", "transfer_agent"]),
-    name: z.string().optional(),
-    description: z.string().optional(),
-    transferTo: z.string().optional(),
-    warmHandoffMessage: z.string().optional(),
-    url: z.string().optional(),
-    method: z.enum(["GET", "POST"]).optional(),
-    secret: z.string().optional(),
-    preToolMessage: z.string().optional(),
-    calendarId: z.preprocess(v => (v === "" || v == null ? undefined : Number(v)), z.number().optional()),
-    eventTypeId: z.preprocess(v => (v === "" || v == null ? undefined : Number(v)), z.number().optional()),
-    timezone: z.string().optional(),
-    goodbyeMessage: z.string().optional(),
-    targetNumber: z.string().optional(),
-    holdMessage: z.string().optional(),
-    targetAgentId: z.number().optional(),
-    parameters: z.array(z.object({
-      paramName: z.string().min(1, "Name required"),
-      dataType: z.enum(["string", "number", "boolean"]),
-      paramDescription: z.string().optional(),
-      required: z.boolean().optional(),
-    })).optional(),
-  })).optional(),
-  genderDetectionEnabled: z.boolean().optional(),
-  recordingEnabled: z.boolean().optional(),
-  // Start Speaking Plan
-  startSpeakingWaitSecs:          z.number().min(0).max(5).optional(),
-  startSpeakingOnPunctuationSecs: z.number().min(0).max(3).optional(),
-  startSpeakingOnNoPunctuationSecs: z.number().min(0).max(3).optional(),
-  startSpeakingOnNumberSecs:      z.number().min(0).max(3).optional(),
-  // Stop Speaking Plan
-  stopSpeakingNumWords:    z.number().min(0).max(10).optional(),
-  stopSpeakingVoiceSecs:   z.number().min(0).max(0.5).optional(),
-  stopSpeakingBackOffSecs: z.number().min(0).max(10).optional(),
-  // Compliance
-  complianceIrdai: z.boolean().optional(),
-  complianceDpdp:  z.boolean().optional(),
-  complianceHipaa: z.boolean().optional(),
-  complianceTrai:  z.boolean().optional(),
-  snapserveAgentId: z.string().optional(),
-  // Centralized Agent Knowledge — attached knowledge source IDs (M:N)
-  knowledgeSourceIds: z.array(z.number()).optional(),
-  // Token Optimization
-  contextWindowTurns: z.number().min(1).max(1000).optional().nullable(),
-  tokenSummarizationEnabled: z.boolean().optional(),
-  tokenSummarizationThresholdTurns: z.number().min(5).max(500).optional().nullable(),
-  stagedPromptEnabled: z.boolean().optional(),
-  stagedPromptStages: z.array(z.object({ name: z.string(), content: z.string() })).optional(),
-  stagedPromptCoreIdentity: z.string().optional(),
-  inboundPhoneNumberId: z.number().optional().nullable(),
-  outboundPhoneNumberId: z.number().optional().nullable(),
-  isMultilingual: z.boolean().optional(),
-  multilingualLanguages: z.array(z.string()).optional(),
-}).superRefine((data, ctx) => {
-  const asrErr = getModelError(data.asrProvider, data.asrModel, ASR_MODELS);
-  if (asrErr) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["asrModel"], message: asrErr });
-
-  const llmErr = getModelError(data.llmProvider, data.llmModel, LLM_MODELS);
-  if (llmErr) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["llmModel"], message: llmErr });
-
-  const ttsErr = getModelError(data.ttsProvider, data.ttsModel, TTS_MODELS);
-  if (ttsErr) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["ttsModel"], message: ttsErr });
-});
-
-type AgentFormValues = z.infer<typeof agentFormSchema>;
-
-export type { AgentFormValues };
+export type { AgentFormValues } from "./edit.schema";
 
 export function buildUpdateAgentPayload(data: AgentFormValues) {
   const {
@@ -454,10 +344,12 @@ export default function AgentEdit() {
     if (prevCalendarIdRef.current !== calendarIdForEt) {
       prevCalendarIdRef.current = calendarIdForEt;
       const tools = form.getValues("tools") ?? [];
-      const idx = (tools as any[]).findIndex((t: any) => t.type === "native_list_bookings");
-      if (idx >= 0) {
-        form.setValue(`tools.${idx}.eventTypeId` as any, undefined);
-      }
+      const typesToReset = ["native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel"];
+      (tools as any[]).forEach((t: any, idx: number) => {
+        if (typesToReset.includes(t.type)) {
+          form.setValue(`tools.${idx}.eventTypeId` as any, undefined);
+        }
+      });
     }
   }, [calendarIdForEt]);
 

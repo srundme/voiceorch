@@ -30,7 +30,8 @@ import type { AgentVersion } from "@workspace/api-client-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { agentFormSchema, buildUpdateAgentPayload, StagedPromptEditor } from "./edit";
+import { agentFormSchema } from "./edit.schema";
+import { buildUpdateAgentPayload, StagedPromptEditor } from "./edit";
 import type { AgentFormValues } from "./edit";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { UpdateAgentBody } from "@workspace/api-zod";
-import { buildUpdateAgentPayload, agentFormSchema } from "./edit";
+import { agentFormSchema } from "./edit.schema";
+import { buildUpdateAgentPayload } from "./edit";
 import type { AgentFormValues } from "./edit";
 
 const BASE: AgentFormValues = {
