@@ -10,6 +10,7 @@
     "backfill-user-identity": "tsx ./src/backfill-user-identity.ts",
     "wipe-beta-data": "tsx ./src/wipe-beta-data.ts",
     "loadtest-calls": "tsx ./src/loadtest-calls.ts",
+    "sync-to-github": "tsx ./src/sync-to-github.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
