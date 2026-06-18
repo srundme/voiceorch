@@ -1,72 +1,104 @@
 /**
- * Minimal object storage serving route for call recordings.
- * Streams objects directly from GCS to the client.
+ * Call recording serving route — streams WAV bytes stored in PostgreSQL.
  *
- * GET /storage/objects/*  — serve a stored object (e.g. a recording WAV)
+ * GET /storage/recordings/:callId — serve a call's recording (audio/wav).
+ *   - Requires an authenticated session (Bearer header or ?token= query).
+ *   - Enforces ownership: only the user who owns the call may fetch it.
+ *   - Supports HTTP Range requests so the audio player can seek/scrub.
  */
 import { Router, type IRouter } from "express";
-import { Storage } from "@google-cloud/storage";
-
-const SIDECAR = "http://127.0.0.1:1106";
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
-function makeGcsClient(): Storage {
-  return new Storage({
-    credentials: {
-      audience: "replit",
-      subject_token_type: "access_token",
-      token_url: `${SIDECAR}/token`,
-      type: "external_account",
-      credential_source: {
-        url: `${SIDECAR}/credential`,
-        format: { type: "json", subject_token_field_name: "access_token" },
-      },
-      universe_domain: "googleapis.com",
-    } as any,
-    projectId: "",
-  });
-}
-
-const gcs = makeGcsClient();
+import { eq, desc } from "drizzle-orm";
+import { db, callsTable, callRecordingsTable, agentsTable } from "@workspace/db";
+import { requireAuth } from "../middlewares/requireAuth.js";
 
 const router: IRouter = Router();
 
-router.get("/storage/objects/*path", async (req, res): Promise<void> => {
-  const bucketId = process.env["DEFAULT_OBJECT_STORAGE_BUCKET_ID"];
-  if (!bucketId) {
-    res.status(503).json({ error: "Object storage not configured" });
+router.get("/storage/recordings/:callId", requireAuth, async (req, res): Promise<void> => {
+  const rawId = (req.params as { callId?: string | string[] }).callId;
+  const idStr = Array.isArray(rawId) ? rawId[0] ?? "" : rawId ?? "";
+  const callId = Number.parseInt(idStr, 10);
+  if (!Number.isFinite(callId)) {
+    res.status(400).json({ error: "Invalid call id" });
     return;
   }
 
-  const raw = (req.params as { path?: string | string[] }).path ?? "";
-  const objectPath = Array.isArray(raw) ? raw.join("/") : raw;
-  if (!objectPath) {
-    res.status(400).json({ error: "Missing object path" });
+  const clerkId = (req as unknown as { clerkUserId?: string }).clerkUserId ?? null;
+
+  // Ownership: call.userId must match the requester, or (for legacy rows where
+  // userId is null) the call's agent must belong to the requester.
+  const [call] = await db
+    .select({ id: callsTable.id, userId: callsTable.userId, agentId: callsTable.agentId })
+    .from(callsTable)
+    .where(eq(callsTable.id, callId));
+  if (!call) {
+    res.status(404).json({ error: "Recording not found" });
     return;
   }
-
-  try {
-    const file = gcs.bucket(bucketId).file(objectPath);
-    const [exists] = await file.exists();
-    if (!exists) {
-      res.status(404).json({ error: "Object not found" });
+  if (call.userId && call.userId !== clerkId) {
+    res.status(404).json({ error: "Recording not found" });
+    return;
+  }
+  if (!call.userId) {
+    const [agent] = await db
+      .select({ userId: agentsTable.userId })
+      .from(agentsTable)
+      .where(eq(agentsTable.id, call.agentId));
+    if (agent?.userId && agent.userId !== clerkId) {
+      res.status(404).json({ error: "Recording not found" });
       return;
     }
+  }
 
-    const [meta] = await file.getMetadata();
-    const contentType = (meta["contentType"] as string | undefined) ?? "application/octet-stream";
-    const size        = meta["size"] as string | number | undefined;
+  const [rec] = await db
+    .select({
+      audio: callRecordingsTable.audio,
+      contentType: callRecordingsTable.contentType,
+      byteSize: callRecordingsTable.byteSize,
+    })
+    .from(callRecordingsTable)
+    .where(eq(callRecordingsTable.callId, callId))
+    .orderBy(desc(callRecordingsTable.id))
+    .limit(1);
 
-    res.setHeader("Content-Type", contentType);
-    res.setHeader("Cache-Control", "private, max-age=86400");
-    if (size != null) res.setHeader("Content-Length", String(size));
+  if (!rec) {
+    res.status(404).json({ error: "Recording not found" });
+    return;
+  }
 
-    file.createReadStream().pipe(res);
-  } catch (err) {
-    if (!res.headersSent) {
-      res.status(500).json({ error: "Failed to serve object" });
+  const audio = rec.audio;
+  const total = audio.length;
+  const contentType = rec.contentType || "audio/wav";
+
+  res.setHeader("Accept-Ranges", "bytes");
+  res.setHeader("Content-Type", contentType);
+  res.setHeader("Cache-Control", "private, max-age=86400");
+
+  const rangeHeader = req.headers["range"];
+  if (rangeHeader) {
+    const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader);
+    if (match) {
+      const startStr = match[1] ?? "";
+      const endStr = match[2] ?? "";
+      let start = startStr ? Number.parseInt(startStr, 10) : 0;
+      let end = endStr ? Number.parseInt(endStr, 10) : total - 1;
+      if (Number.isNaN(start)) start = 0;
+      if (Number.isNaN(end) || end >= total) end = total - 1;
+      if (start > end || start >= total) {
+        res.status(416).setHeader("Content-Range", `bytes */${total}`);
+        res.end();
+        return;
+      }
+      const chunk = audio.subarray(start, end + 1);
+      res.status(206);
+      res.setHeader("Content-Range", `bytes ${start}-${end}/${total}`);
+      res.setHeader("Content-Length", String(chunk.length));
+      res.end(chunk);
+      return;
     }
   }
+
+  res.setHeader("Content-Length", String(total));
+  res.end(audio);
 });
 
 export default router;

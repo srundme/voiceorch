@@ -27,6 +27,46 @@ import { format, formatDistanceToNow } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useLocation } from "wouter";
+import { useAuth } from "@/lib/auth";
+
+/**
+ * Plays a call recording served from the authenticated
+ * `/api/storage/recordings/:callId` endpoint. The endpoint requires a Bearer
+ * token, so we fetch it as a blob and play it via an object URL.
+ */
+function RecordingAudio({ src, className }: { src: string; className?: string }) {
+  const { getToken } = useAuth();
+  const [objUrl, setObjUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let revoked: string | null = null;
+    let cancelled = false;
+    (async () => {
+      try {
+        setError(null);
+        const token = await getToken();
+        const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+        const r = await fetch(src, { headers });
+        if (!r.ok) throw new Error(`Failed to load recording (${r.status})`);
+        const blob = await r.blob();
+        if (cancelled) return;
+        const url = URL.createObjectURL(blob);
+        revoked = url;
+        setObjUrl(url);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load recording");
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (revoked) URL.revokeObjectURL(revoked);
+    };
+  }, [src, getToken]);
+
+  if (error) return <p className="text-xs text-destructive">{error}</p>;
+  return <audio controls src={objUrl ?? undefined} className={className} />;
+}
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
@@ -205,7 +245,7 @@ function ExecutionCard({ exec, idx }: { exec: ExecutionItem; idx: number }) {
           {call?.recordingUrl && (
             <div>
               <p className="text-[9px] text-muted-foreground/40 uppercase tracking-widest mb-1.5">Recording</p>
-              <audio controls src={call.recordingUrl} className="w-full h-8" />
+              <RecordingAudio src={call.recordingUrl} className="w-full h-8" />
             </div>
           )}
 

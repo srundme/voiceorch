@@ -457,12 +457,42 @@ const PLAYBACK_SPEEDS = [0.5, 1, 1.5, 2] as const;
 
 function CallRecordingPlayer({ src, callId }: { src: string; callId: number | string }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const { getToken } = useAuth();
+  const [objUrl, setObjUrl] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
   const [muted, setMuted] = useState(false);
   const [speed, setSpeed] = useState<number>(1);
+
+  // The recording endpoint requires a Bearer token, so fetch it as an
+  // authenticated blob and play it via an object URL.
+  useEffect(() => {
+    let revoked: string | null = null;
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoadError(null);
+        const token = await getToken();
+        const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+        const r = await fetch(src, { headers });
+        if (!r.ok) throw new Error(`Failed to load recording (${r.status})`);
+        const blob = await r.blob();
+        if (cancelled) return;
+        const url = URL.createObjectURL(blob);
+        revoked = url;
+        setObjUrl(url);
+      } catch (e) {
+        if (!cancelled) setLoadError(e instanceof Error ? e.message : "Failed to load recording");
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (revoked) URL.revokeObjectURL(revoked);
+    };
+  }, [src, getToken]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -519,7 +549,10 @@ function CallRecordingPlayer({ src, callId }: { src: string; callId: number | st
 
   return (
     <div className="w-full max-w-2xl mx-auto rounded-xl border border-border bg-card p-5">
-      <audio ref={audioRef} src={src} preload="metadata" />
+      <audio ref={audioRef} src={objUrl ?? undefined} preload="metadata" />
+      {loadError && (
+        <p className="text-xs text-destructive mb-3">{loadError}</p>
+      )}
 
       <div className="flex items-center gap-4">
         <Button
@@ -576,7 +609,7 @@ function CallRecordingPlayer({ src, callId }: { src: string; callId: number | st
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
               <DropdownMenuItem asChild>
-                <a href={src} download={`call-${callId}.wav`}>
+                <a href={objUrl ?? undefined} download={`call-${callId}.wav`}>
                   <Download className="h-4 w-4 mr-2" /> Download recording
                 </a>
               </DropdownMenuItem>

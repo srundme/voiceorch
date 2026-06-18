@@ -1,7 +1,14 @@
-import { pgTable, text, serial, timestamp, integer, json, index } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, json, index, customType } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { agentsTable } from "./agents";
+
+/** Raw binary column (PostgreSQL `bytea`) stored/returned as a Node Buffer. */
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType() {
+    return "bytea";
+  },
+});
 
 export const callsTable = pgTable("calls", {
   id: serial("id").primaryKey(),
@@ -39,6 +46,21 @@ export const callsTable = pgTable("calls", {
 export const insertCallSchema = createInsertSchema(callsTable).omit({ id: true, createdAt: true });
 export type InsertCall = z.infer<typeof insertCallSchema>;
 export type Call = typeof callsTable.$inferSelect;
+
+// ── Call Recordings — encoded WAV blobs stored directly in Postgres ────────
+// Kept in a separate table (not a column on `calls`) so the binary audio is
+// never loaded by normal call list/detail queries.
+export const callRecordingsTable = pgTable("call_recordings", {
+  id: serial("id").primaryKey(),
+  callId: integer("call_id").notNull().references(() => callsTable.id, { onDelete: "cascade" }),
+  audio: bytea("audio").notNull(),
+  contentType: text("content_type").notNull().default("audio/wav"),
+  byteSize: integer("byte_size").notNull(),
+  sampleRate: integer("sample_rate").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("call_recordings_call_id_idx").on(t.callId)]);
+
+export type CallRecording = typeof callRecordingsTable.$inferSelect;
 
 export const callEventsTable = pgTable("call_events", {
   id: serial("id").primaryKey(),
