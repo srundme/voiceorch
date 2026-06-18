@@ -22,9 +22,25 @@ const REPO  = "voiceorch";
 const BRANCH = "main";
 
 const FILES_TO_PUSH = [
+  // Multilingual removal
+  "artifacts/api-server/src/orchestration/telephony/webcall.ts",
+  "artifacts/api-server/src/orchestration/pipeline.ts",
+  "artifacts/api-server/src/orchestration/adapters/stt/azure.ts",
+  "artifacts/api-server/src/orchestration/types.ts",
+  "artifacts/api-server/src/orchestration/session.ts",
+  "artifacts/api-server/src/orchestration/callerMemory.ts",
+  "artifacts/dashboard/src/components/webcall-panel.tsx",
+  // Migration fixes + agents route guard
+  "artifacts/api-server/src/routes/agents.ts",
+  "artifacts/api-server/src/index.ts",
   "lib/db/drizzle/0003_catch_all_missing_columns.sql",
   "lib/db/drizzle/0004_create_missing_tables.sql",
   "lib/db/drizzle/meta/_journal.json",
+  // Push script itself
+  "scripts/src/push-to-github.ts",
+  // Memory
+  ".agents/memory/MEMORY.md",
+  ".agents/memory/drizzle-bootstrap-migration-gap.md",
 ];
 
 async function ghFetch(apiPath: string, options: RequestInit = {}) {
@@ -61,7 +77,7 @@ async function pushFile(relPath: string) {
   await ghFetch(`contents/${relPath}`, {
     method: "PUT",
     body: JSON.stringify({
-      message: `fix: add migration 0004 — CREATE TABLE for all missing tables (agent_knowledge_sources, agent_dispositions, call_events, call_dispositions, execution_logs, agent_versions, simulation_*)`,
+      message: `sync: full Replit→GitHub sync — multilingual removal, migration 0003/0004, agents route guard, bootstrapMigrationJournal`,
       content: encoded,
       branch: BRANCH,
       ...(sha ? { sha } : {}),
