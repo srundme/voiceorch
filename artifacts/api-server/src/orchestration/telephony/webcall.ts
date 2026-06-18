@@ -2195,6 +2195,12 @@ export async function handleWebCallWebSocket(
   send({ type: "ready", agentId, agentName: agent.name, callId });
   logger.info({ callId, agentId, agentName: agent.name }, "WebCall session started");
 
+  // Declared (but not yet armed) before the opening greeting so that a greeting
+  // TTS failure can call hangup() — which clears maxTimer — without hitting a
+  // temporal-dead-zone ReferenceError that would crash the Node process and
+  // leave the call stuck `in_progress`. The timer is armed after the greeting.
+  let maxTimer: ReturnType<typeof setTimeout> | undefined;
+
   // ── Opening greeting ─────────────────────────────────────────────────────
   // 1. If the agent has a greetingMessage configured, play it directly (no LLM).
   // 2. Otherwise, ask the LLM to generate a contextual opening (same path as
@@ -2325,7 +2331,7 @@ export async function handleWebCallWebSocket(
     }
   }
 
-  const maxTimer = setTimeout(() => { void hangup("timeout"); }, (agent.maxDuration ?? 600) * 1000);
+  maxTimer = setTimeout(() => { void hangup("timeout"); }, (agent.maxDuration ?? 600) * 1000);
 
   // ── Hangup ────────────────────────────────────────────────────────────────
   // ── Ambient noise interval (webcall) ──────────────────────────────────────
@@ -2347,7 +2353,7 @@ export async function handleWebCallWebSocket(
     closed = true;
     if (streamSTT) { try { streamSTT.close(); } catch { /* best-effort */ } streamSTT = null; }
     if (ambientInterval) { clearInterval(ambientInterval); ambientInterval = null; }
-    clearTimeout(maxTimer);
+    if (maxTimer) { clearTimeout(maxTimer); maxTimer = undefined; }
     clearSilenceTimer();
     if (hangupSilenceTimer) { clearTimeout(hangupSilenceTimer); hangupSilenceTimer = null; }
 
@@ -2384,12 +2390,19 @@ export async function handleWebCallWebSocket(
     try {
       // Finalize recording — only when the "Record Calls" toggle is on
       const recordingEnabled = (agentCfg["recordingEnabled"] as boolean | undefined) ?? false;
-      const recordingUrl = recordingEnabled
-        ? await recording.finalize(callId).catch((err) => {
-            logger.warn({ callId, err }, "WebCall recording upload failed");
-            return null;
-          })
-        : null;
+      let recordingUrl: string | null = null;
+      let recordingError: string | null = null;
+      if (recordingEnabled) {
+        const result = await recording.finalize(callId).catch((err) => {
+          logger.error({ callId, err }, "WebCall recording finalize threw");
+          return { url: null, error: err instanceof Error ? err.message : String(err) };
+        });
+        recordingUrl = result.url;
+        recordingError = result.error;
+        if (recordingError) {
+          logger.error({ callId, recordingError }, "WebCall recording finalize failed");
+        }
+      }
 
       await db.update(callsTable).set({
         status: isFailed ? "failed" : "completed",
@@ -2398,6 +2411,7 @@ export async function handleWebCallWebSocket(
         transcript: transcript || null,
         ...(errorMessage ? { errorMessage } : {}),
         ...(recordingUrl ? { recordingUrl } : {}),
+        ...(recordingError ? { recordingError } : {}),
       }).where(eq(callsTable.id, callId));
 
       const [ag] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId));

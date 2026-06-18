@@ -66,16 +66,26 @@ export class RecordingBuffer {
 
   /**
    * Encodes a stereo WAV from the captured tracks and uploads it to GCS.
-   * Returns the serving URL (`/api/storage/objects/...`) or null if there
-   * is no audio or object storage is not configured.
+   *
+   * Returns `{ url, error }`:
+   * - On success: `{ url: "/api/storage/objects/...", error: null }`.
+   * - When no audio was captured: `{ url: null, error: null }` (nothing to
+   *   upload — not a failure).
+   * - When object storage is misconfigured or the upload throws/times out:
+   *   `{ url: null, error: <reason> }` so the caller can persist and surface
+   *   the failure to the user instead of silently swallowing it.
    */
-  async finalize(callId: number): Promise<string | null> {
-    if (!this.hasData) return null;
+  async finalize(callId: number): Promise<RecordingResult> {
+    if (!this.hasData) {
+      logger.warn({ callId }, "Recording: no audio captured — nothing to upload");
+      return { url: null, error: null };
+    }
 
     const bucketId = process.env["DEFAULT_OBJECT_STORAGE_BUCKET_ID"];
     if (!bucketId) {
-      logger.warn({ callId }, "Recording: DEFAULT_OBJECT_STORAGE_BUCKET_ID not set — skipping");
-      return null;
+      const error = "Object storage is not configured (DEFAULT_OBJECT_STORAGE_BUCKET_ID missing)";
+      logger.error({ callId }, "Recording: DEFAULT_OBJECT_STORAGE_BUCKET_ID not set — cannot upload recording");
+      return { url: null, error };
     }
 
     try {
@@ -98,12 +108,21 @@ export class RecordingBuffer {
 
       const url = `/api/storage/objects/${objectName}`;
       logger.info({ callId, objectName, bytes: wav.length }, "Recording uploaded");
-      return url;
+      return { url, error: null };
     } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
       logger.error({ callId, err }, "Recording upload failed");
-      return null;
+      return { url: null, error };
     }
   }
+}
+
+/** Result of {@link RecordingBuffer.finalize}. */
+export interface RecordingResult {
+  /** Serving URL of the uploaded recording, or null when none was produced. */
+  url: string | null;
+  /** Failure reason when recording was attempted but could not be stored. */
+  error: string | null;
 }
 
 /**

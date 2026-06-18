@@ -13,6 +13,7 @@ export const callsTable = pgTable("calls", {
   durationSeconds: integer("duration_seconds"),
   transcript: text("transcript"),
   recordingUrl: text("recording_url"),
+  recordingError: text("recording_error"),
   callSummary: text("call_summary"),
   errorMessage: text("error_message"),
   executionId: text("execution_id"),

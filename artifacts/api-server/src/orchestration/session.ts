@@ -778,13 +778,20 @@ export async function endSession(sessionId: string): Promise<void> {
     // agents store nothing. Finalize happens concurrently; we await the URL before
     // writing to DB.
     const recordingEnabled = (session.pipeline as any).config?.agentConfig?.recordingEnabled === true;
-    const recordingUrl = recordingEnabled
-      ? await session.pipeline.getRecording().finalize(session.callId)
-          .catch((err) => {
-            logger.warn({ sessionId, err }, "Recording finalization failed");
-            return null;
-          })
-      : null;
+    let recordingUrl: string | null = null;
+    let recordingError: string | null = null;
+    if (recordingEnabled) {
+      const result = await session.pipeline.getRecording().finalize(session.callId)
+        .catch((err) => {
+          logger.error({ sessionId, callId: session.callId, err }, "Recording finalize threw");
+          return { url: null, error: err instanceof Error ? err.message : String(err) };
+        });
+      recordingUrl = result.url;
+      recordingError = result.error;
+      if (recordingError) {
+        logger.error({ sessionId, callId: session.callId, recordingError }, "Recording finalize failed");
+      }
+    }
 
     const pipelineUsage = (session.pipeline as unknown as {
       getUsageTotals?: () => { tokensSaved?: number };
@@ -801,6 +808,7 @@ export async function endSession(sessionId: string): Promise<void> {
       ttsFirstChunkMs: avgTtsMs,
       ...(tokensSavedValue > 0 ? { tokensSaved: tokensSavedValue } : {}),
       ...(recordingUrl ? { recordingUrl } : {}),
+      ...(recordingError ? { recordingError } : {}),
       ...(session.wasTransferred && session.transferredTo
         ? { metadata: JSON.stringify({ transferredTo: session.transferredTo }) }
         : {}),

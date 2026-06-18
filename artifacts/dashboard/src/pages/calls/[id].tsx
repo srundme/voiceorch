@@ -789,10 +789,25 @@ export default function CallDetail() {
               >
                 <Mic className="h-3 w-3" /> Recording available
               </button>
+            ) : (call.recordingEnabled && call.recordingError) ? (
+              <button
+                type="button"
+                onClick={() => setActiveTab("recording")}
+                title="Recording failed — view details"
+                className="inline-flex items-center gap-1.5 text-[11px] text-destructive border border-destructive/40 rounded-md px-2.5 py-1.5 hover:bg-destructive/10"
+              >
+                <AlertTriangle className="h-3 w-3" /> Recording failed
+              </button>
             ) : (call.status === "completed" || call.status === "failed") ? (
-              <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground/40 border border-dashed border-border rounded-md px-2.5 py-1.5">
-                <MicOff className="h-3 w-3" /> Recording not enabled
-              </span>
+              call.recordingEnabled ? (
+                <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground/40 border border-dashed border-border rounded-md px-2.5 py-1.5">
+                  <MicOff className="h-3 w-3" /> Recording unavailable
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground/40 border border-dashed border-border rounded-md px-2.5 py-1.5">
+                  <MicOff className="h-3 w-3" /> Recording not enabled
+                </span>
+              )
             ) : null}
           </div>
         </div>
@@ -1098,12 +1113,37 @@ export default function CallDetail() {
                   <CardContent className="flex-1 flex items-center justify-center p-6">
                     {call.recordingUrl ? (
                       <CallRecordingPlayer src={call.recordingUrl} callId={call.id} />
-                    ) : (
+                    ) : (call.recordingEnabled && call.recordingError) ? (
+                      <div className="text-center max-w-md py-10">
+                        <div className="h-10 w-10 rounded-xl bg-destructive/10 border border-destructive/30 flex items-center justify-center mx-auto mb-3">
+                          <AlertTriangle className="h-5 w-5 text-destructive" />
+                        </div>
+                        <p className="text-sm font-medium text-foreground/80">Recording failed</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Recording was enabled for this call, but it could not be saved:
+                        </p>
+                        <p className="text-xs font-mono text-destructive mt-2 break-words">{call.recordingError}</p>
+                      </div>
+                    ) : !call.recordingEnabled ? (
                       <div className="text-center text-muted-foreground py-10">
                         <div className="h-10 w-10 rounded-xl bg-elevated border border-border flex items-center justify-center mx-auto mb-3">
                           <MicOff className="h-5 w-5 text-muted-foreground/30" />
                         </div>
-                        <p className="text-sm text-foreground/40">No call recording available.</p>
+                        <p className="text-sm text-foreground/40">Recording was not enabled for this call.</p>
+                      </div>
+                    ) : (call.status === "completed" || call.status === "failed") ? (
+                      <div className="text-center text-muted-foreground py-10">
+                        <div className="h-10 w-10 rounded-xl bg-elevated border border-border flex items-center justify-center mx-auto mb-3">
+                          <MicOff className="h-5 w-5 text-muted-foreground/30" />
+                        </div>
+                        <p className="text-sm text-foreground/40">Recording was enabled, but no audio was captured for this call.</p>
+                      </div>
+                    ) : (
+                      <div className="text-center text-muted-foreground py-10">
+                        <div className="h-10 w-10 rounded-xl bg-elevated border border-border flex items-center justify-center mx-auto mb-3">
+                          <Mic className="h-5 w-5 text-muted-foreground/30" />
+                        </div>
+                        <p className="text-sm text-foreground/40">Recording is still finalizing…</p>
                       </div>
                     )}
                   </CardContent>

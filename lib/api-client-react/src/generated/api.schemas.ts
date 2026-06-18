@@ -960,6 +960,16 @@ export interface Call {
   transcript?: string | null;
   /** @nullable */
   recordingUrl?: string | null;
+  /**
+     * Whether the "Record Calls" toggle was enabled on the agent for this call
+     * @nullable
+     */
+  recordingEnabled?: boolean | null;
+  /**
+     * Reason the recording failed to finalize/upload when recording was enabled
+     * @nullable
+     */
+  recordingError?: string | null;
   /** @nullable */
   errorMessage?: string | null;
   /** @nullable */

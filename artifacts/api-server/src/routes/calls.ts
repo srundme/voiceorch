@@ -34,10 +34,15 @@ function parseLatencyBody(body: unknown): { sttLatencyMs?: number; llmLatencyMs?
 const router: IRouter = Router();
 
 async function enrichCall(call: typeof callsTable.$inferSelect) {
-  const [agent] = await db.select({ name: agentsTable.name }).from(agentsTable).where(eq(agentsTable.id, call.agentId));
+  const [agent] = await db
+    .select({ name: agentsTable.name, agentConfig: agentsTable.agentConfig })
+    .from(agentsTable)
+    .where(eq(agentsTable.id, call.agentId));
+  const recordingEnabled = agent?.agentConfig?.recordingEnabled ?? false;
   return {
     ...call,
     agentName: agent?.name ?? "Unknown Agent",
+    recordingEnabled,
     endedAt: call.endedAt?.toISOString() ?? null,
     createdAt: call.createdAt.toISOString(),
   };

@@ -6467,6 +6467,12 @@ components:
           type: ["string", "null"]
         recordingUrl:
           type: ["string", "null"]
+        recordingEnabled:
+          type: ["boolean", "null"]
+          description: Whether the "Record Calls" toggle was enabled on the agent for this call
+        recordingError:
+          type: ["string", "null"]
+          description: Reason the recording failed to finalize/upload when recording was enabled
         errorMessage:
           type: ["string", "null"]
         metadata:
