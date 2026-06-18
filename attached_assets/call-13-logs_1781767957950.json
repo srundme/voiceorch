@@ -1,0 +1,490 @@
+[
+  {
+    "id": 341,
+    "callId": 13,
+    "agentId": 2,
+    "ts": "2026-06-18T07:26:12.655Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 2,
+      "agentName": "New Agent",
+      "asrProvider": "azure",
+      "llmProvider": "google",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "79a125e8-cd45-4c13-8a67-188112f4dd22"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 342,
+    "callId": 13,
+    "agentId": 2,
+    "ts": "2026-06-18T07:26:12.672Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "agent_name": "New Agent",
+        "date": "Thursday, June 18, 2026",
+        "caller_number": "browser"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "You are a helpful AI voice assistant."
+    },
+    "metadata": null
+  },
+  {
+    "id": 343,
+    "callId": 13,
+    "agentId": 2,
+    "ts": "2026-06-18T07:26:16.107Z",
+    "component": "STT",
+    "provider": "azure",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "ஹலோ."
+    },
+    "metadata": null
+  },
+  {
+    "id": 344,
+    "callId": 13,
+    "agentId": 2,
+    "ts": "2026-06-18T07:26:16.211Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[CURRENT DATE & TIME] Thursday, June 18, 2026 at 12:56 PM GMT+5:30 (Asia/Kolkata)\n\nYou are a helpful AI voice assistant.\n\n[LANGUAGE — NON-NEGOTIABLE] This agent is configured for Tamil ONLY. You MUST respond in Tamil regardless of any stored language_pref in caller memory or inferred language from the conversation. Do NOT switch to any other language under any circumstances.\n\n[CALLBACK SCHEDULING] If the user asks you to call them back after a delay (e.g. \"call me back in 10 minutes\", \"remind me in an hour\"), you MUST agree and confirm the request. Say something like \"Sure, I'll call you back in X minutes.\" Do NOT say you are unable to schedule callbacks or make outbound calls — the platform will automatically schedule and deliver the callback. Simply confirm the time and end the conversat",
+      "historyLength": 2,
+      "tools": [
+        "end_call"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 345,
+    "callId": 13,
+    "agentId": 2,
+    "ts": "2026-06-18T07:26:17.510Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1300,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "வணக்கம். நான் உங்களுக்கு எப்படி உதவ முடியும்?"
+    },
+    "metadata": {
+      "inputTokens": 259,
+      "outputTokens": 10,
+      "model": "gemini-2.5-flash"
+    }
+  },
+  {
+    "id": 346,
+    "callId": 13,
+    "agentId": 2,
+    "ts": "2026-06-18T07:26:17.511Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "வணக்கம். நான் உங்களுக்கு எப்பட"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 347,
+    "callId": 13,
+    "agentId": 2,
+    "ts": "2026-06-18T07:26:18.173Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 664,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 61440,
+      "textLength": 30
+    },
+    "metadata": null
+  },
+  {
+    "id": 348,
+    "callId": 13,
+    "agentId": 2,
+    "ts": "2026-06-18T07:26:24.094Z",
+    "component": "STT",
+    "provider": "azure",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "சொல்லுங்க நீங்க எப்படி இருக்கீங்க."
+    },
+    "metadata": null
+  },
+  {
+    "id": 349,
+    "callId": 13,
+    "agentId": 2,
+    "ts": "2026-06-18T07:26:24.196Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[CURRENT DATE & TIME] Thursday, June 18, 2026 at 12:56 PM GMT+5:30 (Asia/Kolkata)\n\nYou are a helpful AI voice assistant.\n\n[LANGUAGE — NON-NEGOTIABLE] This agent is configured for Tamil ONLY. You MUST respond in Tamil regardless of any stored language_pref in caller memory or inferred language from the conversation. Do NOT switch to any other language under any circumstances.\n\n[CALLBACK SCHEDULING] If the user asks you to call them back after a delay (e.g. \"call me back in 10 minutes\", \"remind me in an hour\"), you MUST agree and confirm the request. Say something like \"Sure, I'll call you back in X minutes.\" Do NOT say you are unable to schedule callbacks or make outbound calls — the platform will automatically schedule and deliver the callback. Simply confirm the time and end the conversat",
+      "historyLength": 4,
+      "tools": [
+        "end_call"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 350,
+    "callId": 13,
+    "agentId": 2,
+    "ts": "2026-06-18T07:26:25.316Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "நான் ஒரு வாய்ஸ் அசிஸ்டன்ட். எனக்கு உணர்வுகள் கிடையாது. அதனால்"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 352,
+    "callId": 13,
+    "agentId": 2,
+    "ts": "2026-06-18T07:26:25.445Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1249,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "நான் ஒரு வாய்ஸ் அசிஸ்டன்ட். எனக்கு உணர்வுகள் கிடையாது. அதனால், நான் நலமாக இருக்கிறேன் அல்லது நலமில்லாமல் இருக்கிறேன் என்று சொல்ல முடியாது. நான் எப்போதும் உங்களுடன் பேசத் தயாராக இருக்கிறேன். உங்களுக்கு ஏதேனும் உதவி வேண்டுமானால் கேட்கலாம்."
+    },
+    "metadata": {
+      "inputTokens": 541,
+      "outputTokens": 67,
+      "model": "gemini-2.5-flash"
+    }
+  },
+  {
+    "id": 351,
+    "callId": 13,
+    "agentId": 2,
+    "ts": "2026-06-18T07:26:25.445Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "நான் நலமாக இருக்கிறேன் அல்லது நலமில்லாமல் இருக்கிறேன் என்று சொல்ல முடியாது. நான் எப்போதும் உங்களுடன் பேசத் தயாராக இருக்கிறேன். உங்களுக்கு ஏதேனும் உதவி வேண்டுமா"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 353,
+    "callId": 13,
+    "agentId": 2,
+    "ts": "2026-06-18T07:26:26.267Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 952,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 125438,
+      "textLength": 61
+    },
+    "metadata": null
+  },
+  {
+    "id": 354,
+    "callId": 13,
+    "agentId": 2,
+    "ts": "2026-06-18T07:26:27.053Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1609,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 261116,
+      "textLength": 159
+    },
+    "metadata": null
+  },
+  {
+    "id": 355,
+    "callId": 13,
+    "agentId": 2,
+    "ts": "2026-06-18T07:26:42.071Z",
+    "component": "STT",
+    "provider": "azure",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "ஆமா வேண்டும்."
+    },
+    "metadata": null
+  },
+  {
+    "id": 356,
+    "callId": 13,
+    "agentId": 2,
+    "ts": "2026-06-18T07:26:42.173Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[CURRENT DATE & TIME] Thursday, June 18, 2026 at 12:56 PM GMT+5:30 (Asia/Kolkata)\n\nYou are a helpful AI voice assistant.\n\n[LANGUAGE — NON-NEGOTIABLE] This agent is configured for Tamil ONLY. You MUST respond in Tamil regardless of any stored language_pref in caller memory or inferred language from the conversation. Do NOT switch to any other language under any circumstances.\n\n[CALLBACK SCHEDULING] If the user asks you to call them back after a delay (e.g. \"call me back in 10 minutes\", \"remind me in an hour\"), you MUST agree and confirm the request. Say something like \"Sure, I'll call you back in X minutes.\" Do NOT say you are unable to schedule callbacks or make outbound calls — the platform will automatically schedule and deliver the callback. Simply confirm the time and end the conversat",
+      "historyLength": 6,
+      "tools": [
+        "end_call"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 357,
+    "callId": 13,
+    "agentId": 2,
+    "ts": "2026-06-18T07:26:44.464Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2291,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "என்ன உதவி வேண்டும் என்று சொல்லுங்கள்."
+    },
+    "metadata": {
+      "inputTokens": 886,
+      "outputTokens": 76,
+      "model": "gemini-2.5-flash"
+    }
+  },
+  {
+    "id": 358,
+    "callId": 13,
+    "agentId": 2,
+    "ts": "2026-06-18T07:26:44.464Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "என்ன உதவி வேண்டும் என்"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 359,
+    "callId": 13,
+    "agentId": 2,
+    "ts": "2026-06-18T07:26:45.033Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 570,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 48638,
+      "textLength": 22
+    },
+    "metadata": null
+  },
+  {
+    "id": 360,
+    "callId": 13,
+    "agentId": 2,
+    "ts": "2026-06-18T07:26:51.112Z",
+    "component": "STT",
+    "provider": "azure",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "எம்பயர் கார்த்திக்."
+    },
+    "metadata": null
+  },
+  {
+    "id": 361,
+    "callId": 13,
+    "agentId": 2,
+    "ts": "2026-06-18T07:26:51.214Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[CURRENT DATE & TIME] Thursday, June 18, 2026 at 12:56 PM GMT+5:30 (Asia/Kolkata)\n\nYou are a helpful AI voice assistant.\n\n[LANGUAGE — NON-NEGOTIABLE] This agent is configured for Tamil ONLY. You MUST respond in Tamil regardless of any stored language_pref in caller memory or inferred language from the conversation. Do NOT switch to any other language under any circumstances.\n\n[CALLBACK SCHEDULING] If the user asks you to call them back after a delay (e.g. \"call me back in 10 minutes\", \"remind me in an hour\"), you MUST agree and confirm the request. Say something like \"Sure, I'll call you back in X minutes.\" Do NOT say you are unable to schedule callbacks or make outbound calls — the platform will automatically schedule and deliver the callback. Simply confirm the time and end the conversat",
+      "historyLength": 8,
+      "tools": [
+        "end_call"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 362,
+    "callId": 13,
+    "agentId": 2,
+    "ts": "2026-06-18T07:26:52.021Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "மன்னிக்கவும், நீங்கள் குறிப்பிட்ட பெயரை என்னால் புரிந்து கொள்ள முடியவில்லை."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 363,
+    "callId": 13,
+    "agentId": 2,
+    "ts": "2026-06-18T07:26:52.213Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "நீங்கள் எழுத்துக்கூட்டிச்"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 364,
+    "callId": 13,
+    "agentId": 2,
+    "ts": "2026-06-18T07:26:52.213Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 999,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "மன்னிக்கவும், நீங்கள் குறிப்பிட்ட பெயரை என்னால் புரிந்து கொள்ள முடியவில்லை. நீங்கள் எழுத்துக்கூட்டிச் சொல்ல முடியுமா?"
+    },
+    "metadata": {
+      "inputTokens": 1247,
+      "outputTokens": 100,
+      "model": "gemini-2.5-flash"
+    }
+  },
+  {
+    "id": 365,
+    "callId": 13,
+    "agentId": 2,
+    "ts": "2026-06-18T07:26:52.775Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 563,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 48638,
+      "textLength": 25
+    },
+    "metadata": null
+  },
+  {
+    "id": 366,
+    "callId": 13,
+    "agentId": 2,
+    "ts": "2026-06-18T07:26:52.896Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 877,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 120318,
+      "textLength": 75
+    },
+    "metadata": null
+  },
+  {
+    "id": 367,
+    "callId": 13,
+    "agentId": 2,
+    "ts": "2026-06-18T07:26:56.243Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "event": "call.end",
+      "reason": "disconnected",
+      "durationSeconds": 43,
+      "turns": 5
+    },
+    "responsePayload": null,
+    "metadata": null
+  }
+]
