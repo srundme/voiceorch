@@ -2,11 +2,11 @@ import { useState, useMemo } from "react";
 import { Link } from "wouter";
 import {
   Brain, Search, Phone, FileText, Layers, Clock, MoreVertical, Plus, Bot,
-  Loader2, ChevronRight, Pencil, Calendar, Cpu, Mic, Volume2, PhoneCall,
-  ArrowDownLeft, ArrowUpRight, Globe, Sparkles,
+  Loader2, ChevronRight, Pencil, Calendar,
+  ArrowDownLeft, ArrowUpRight, Globe, Sparkles, Star, ArrowRight, ExternalLink,
+  MapPin, DollarSign, Bell, HelpCircle, User, Tag, BarChart3, Hash, MessageSquare,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
@@ -50,6 +50,26 @@ function formatDate(iso: string | null | undefined): string {
   return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
+function formatDateTime(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  const date = d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return `${date} · ${time}`;
+}
+
+function episodeTime(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  const now = new Date();
+  const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  if (d.toDateString() === now.toDateString()) return `Today, ${time}`;
+  const yest = new Date(now);
+  yest.setDate(now.getDate() - 1);
+  if (d.toDateString() === yest.toDateString()) return `Yesterday, ${time}`;
+  return `${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}, ${time}`;
+}
+
 function formatDuration(seconds?: number | null): string {
   if (!seconds) return "—";
   const mins = Math.floor(seconds / 60);
@@ -64,6 +84,15 @@ function initials(name: string): string {
   return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase();
 }
 
+function humanize(key: string): string {
+  return key
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, c => c.toUpperCase());
+}
+
 type Direction = "Inbound" | "Outbound" | "Web";
 function callDirection(call: Call): Direction {
   let meta: Record<string, unknown> = {};
@@ -73,6 +102,40 @@ function callDirection(call: Call): Direction {
   if (call.toNumber === "webcall" || call.fromNumber === "browser" || meta["channel"] === "webcall") return "Web";
   if (meta["providerCallId"]) return "Outbound";
   return "Inbound";
+}
+
+/* ─── Deterministic fact icon mapping ────────────────────────────────────── */
+type FactStyle = { Icon: typeof FileText; cls: string };
+const FACT_PALETTE: FactStyle[] = [
+  { Icon: FileText,        cls: "text-rose-400 bg-rose-500/10 border-rose-500/20" },
+  { Icon: MapPin,          cls: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" },
+  { Icon: HelpCircle,      cls: "text-blue-400 bg-blue-500/10 border-blue-500/20" },
+  { Icon: DollarSign,      cls: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
+  { Icon: Bell,            cls: "text-violet-400 bg-violet-500/10 border-violet-500/20" },
+  { Icon: Clock,           cls: "text-teal-400 bg-teal-500/10 border-teal-500/20" },
+  { Icon: User,            cls: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20" },
+  { Icon: Tag,             cls: "text-fuchsia-400 bg-fuchsia-500/10 border-fuchsia-500/20" },
+];
+
+const FACT_KEYWORDS: Array<{ test: RegExp; style: FactStyle }> = [
+  { test: /(location|address|city|area|region|place)/i, style: { Icon: MapPin,      cls: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" } },
+  { test: /(budget|price|cost|range|amount|payment|salary|income)/i, style: { Icon: DollarSign, cls: "text-amber-400 bg-amber-500/10 border-amber-500/20" } },
+  { test: /(follow|reminder|next step|action)/i, style: { Icon: Bell,        cls: "text-violet-400 bg-violet-500/10 border-violet-500/20" } },
+  { test: /(time|schedule|when|date|appointment|preference)/i, style: { Icon: Clock,       cls: "text-teal-400 bg-teal-500/10 border-teal-500/20" } },
+  { test: /(concern|question|issue|problem|objection)/i, style: { Icon: HelpCircle,  cls: "text-blue-400 bg-blue-500/10 border-blue-500/20" } },
+  { test: /(interest|policy|product|plan|service|offer)/i, style: { Icon: FileText,    cls: "text-rose-400 bg-rose-500/10 border-rose-500/20" } },
+  { test: /(name|contact|person|customer|client|caller)/i, style: { Icon: User,        cls: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20" } },
+  { test: /(email|phone|number|mobile)/i, style: { Icon: Hash,        cls: "text-sky-400 bg-sky-500/10 border-sky-500/20" } },
+  { test: /(note|comment|message|detail|summary)/i, style: { Icon: MessageSquare, cls: "text-indigo-400 bg-indigo-500/10 border-indigo-500/20" } },
+];
+
+function factStyle(key: string): FactStyle {
+  for (const { test, style } of FACT_KEYWORDS) {
+    if (test.test(key)) return style;
+  }
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+  return FACT_PALETTE[hash % FACT_PALETTE.length]!;
 }
 
 /* ─── Avatar ─────────────────────────────────────────────────────────────── */
@@ -124,16 +187,210 @@ function AgentCard({ agent, selected, onClick }: { agent: AgentMemorySummary; se
 }
 
 /* ─── Right panel: stat card ─────────────────────────────────────────────── */
-function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: React.ReactNode }) {
+function StatCard({
+  icon, iconCls, label, value,
+}: {
+  icon: React.ReactNode;
+  iconCls: string;
+  label: string;
+  value: React.ReactNode;
+}) {
   return (
-    <div className="rounded-xl border border-border bg-card p-4">
-      <div className="flex items-center gap-2 text-muted-foreground mb-2">
+    <div className="rounded-xl border border-border bg-card p-4 flex items-center gap-3.5">
+      <div className={`w-11 h-11 rounded-xl border flex items-center justify-center shrink-0 ${iconCls}`}>
         {icon}
-        <span className="text-[11px] uppercase tracking-wide font-medium">{label}</span>
       </div>
-      <p className="text-[20px] font-semibold text-foreground tabular-nums leading-none">{value}</p>
+      <div className="min-w-0">
+        <p className="text-[22px] font-semibold text-foreground tabular-nums leading-none">{value}</p>
+        <p className="text-[11.5px] text-muted-foreground mt-1.5">{label}</p>
+      </div>
     </div>
   );
+}
+
+/* ─── Panel header (section title + count) ───────────────────────────────── */
+function PanelHeader({ title, count }: { title: string; count?: number }) {
+  return (
+    <div className="flex items-center justify-between mb-3.5">
+      <h3 className="text-[13.5px] font-semibold text-foreground">{title}</h3>
+      {count != null && (
+        <span className="text-[11px] text-muted-foreground tabular-nums">{count}</span>
+      )}
+    </div>
+  );
+}
+
+function ViewAllLink({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="mt-4 inline-flex items-center gap-1 text-[12px] font-medium text-blue-400 hover:text-blue-300 transition-colors"
+    >
+      {label}
+      <ArrowRight className="w-3.5 h-3.5" />
+    </button>
+  );
+}
+
+/* ─── Facts ──────────────────────────────────────────────────────────────── */
+function FactCard({ fact }: { fact: AgentMemoryFact }) {
+  const { Icon, cls } = factStyle(fact.key);
+  return (
+    <div className="rounded-xl border border-border bg-elevated/40 p-3 flex items-start gap-3">
+      <div className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 ${cls}`}>
+        <Icon className="w-4 h-4" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] text-muted-foreground truncate">{humanize(fact.key)}</p>
+        <p className="text-[12.5px] font-medium text-foreground break-words leading-snug mt-0.5">{fact.value}</p>
+      </div>
+    </div>
+  );
+}
+
+function FactsGrid({ facts }: { facts: AgentMemoryFact[] }) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+      {facts.map(f => <FactCard key={f.id} fact={f} />)}
+    </div>
+  );
+}
+
+function FactsTab({ agentId }: { agentId: number }) {
+  const { data, isLoading } = useListAgentMemoryFacts(agentId);
+  const facts = (data ?? []) as AgentMemoryFact[];
+
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+        {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}
+      </div>
+    );
+  }
+  if (facts.length === 0) {
+    return <p className="text-[12.5px] text-muted-foreground py-8 text-center">No facts extracted across this agent’s conversations yet.</p>;
+  }
+  return <FactsGrid facts={facts} />;
+}
+
+/* ─── Episodes ───────────────────────────────────────────────────────────── */
+function EpisodeTimeline({ episodes }: { episodes: AgentMemoryEpisode[] }) {
+  return (
+    <ol className="relative">
+      {episodes.map((ep, i) => (
+        <li key={ep.id} className="relative pl-6 pb-5 last:pb-0">
+          {i < episodes.length - 1 && (
+            <span className="absolute left-[3.5px] top-3 bottom-0 w-px bg-border" />
+          )}
+          <span className="absolute left-0 top-1.5 w-2 h-2 rounded-full bg-blue-400 ring-4 ring-blue-500/10" />
+          <p className="text-[12px] font-semibold text-foreground">{episodeTime(ep.createdAt)}</p>
+          {ep.summary ? (
+            <p className="text-[12px] text-muted-foreground leading-relaxed mt-1">{ep.summary}</p>
+          ) : (
+            <p className="text-[12px] text-muted-foreground/70 italic mt-1">No summary available.</p>
+          )}
+          {ep.callId != null && (
+            <Link
+              href={`/app/calls/${ep.callId}`}
+              className="text-[11px] text-blue-400 hover:text-blue-300 inline-flex items-center gap-1 mt-1.5"
+            >
+              View call <ChevronRight className="w-3 h-3" />
+            </Link>
+          )}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function EpisodesTab({ agentId }: { agentId: number }) {
+  const { data, isLoading } = useListAgentMemoryEpisodes(agentId);
+  const episodes = useMemo(
+    () => ((data ?? []) as AgentMemoryEpisode[]).slice().sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+    [data],
+  );
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4 pl-6">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="space-y-2">
+            <Skeleton className="h-3 w-28" />
+            <Skeleton className="h-3 w-full" />
+            <Skeleton className="h-3 w-4/5" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+  if (episodes.length === 0) {
+    return <p className="text-[12.5px] text-muted-foreground py-8 text-center">No conversation episodes recorded for this agent yet.</p>;
+  }
+  return <EpisodeTimeline episodes={episodes} />;
+}
+
+/* ─── Call History ───────────────────────────────────────────────────────── */
+function DirectionBadge({ direction }: { direction: Direction }) {
+  const cfg: Record<Direction, { label: string; icon: React.ReactNode; cls: string }> = {
+    Inbound:  { label: "Incoming", icon: <ArrowDownLeft className="w-2.5 h-2.5" />, cls: "text-blue-400 bg-blue-500/10 border-blue-500/20" },
+    Outbound: { label: "Outgoing", icon: <ArrowUpRight className="w-2.5 h-2.5" />,  cls: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" },
+    Web:      { label: "Web",      icon: <Globe className="w-2.5 h-2.5" />,         cls: "text-violet-400 bg-violet-500/10 border-violet-500/20" },
+  };
+  const c = cfg[direction];
+  return (
+    <span className={`inline-flex items-center gap-1 text-[10px] font-medium rounded-md border px-1.5 py-0.5 ${c.cls}`}>
+      {c.icon}{c.label}
+    </span>
+  );
+}
+
+function CallRow({ call }: { call: Call }) {
+  return (
+    <div className="flex items-center gap-3 py-3">
+      <div className="flex-1 min-w-0">
+        <p className="text-[11px] text-muted-foreground">{formatDateTime(call.createdAt)}</p>
+        <div className="flex items-center gap-2 mt-1">
+          <span className="text-[12.5px] font-semibold text-foreground">Call #{call.id}</span>
+          <DirectionBadge direction={callDirection(call)} />
+        </div>
+        <p className="text-[11px] text-muted-foreground mt-1 truncate">
+          Duration: {formatDuration(call.durationSeconds)} · Agent: {call.agentName}
+        </p>
+      </div>
+      <Button variant="outline" size="sm" asChild className="shrink-0">
+        <Link href={`/app/calls/${call.id}`}>
+          <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
+          View details
+        </Link>
+      </Button>
+    </div>
+  );
+}
+
+function CallList({ calls }: { calls: Call[] }) {
+  return (
+    <div className="divide-y divide-border">
+      {calls.map(call => <CallRow key={call.id} call={call} />)}
+    </div>
+  );
+}
+
+function CallHistoryTab({ agentId }: { agentId: number }) {
+  const { data, isLoading } = useListCalls({ agentId });
+  const calls = (data ?? []) as Call[];
+
+  if (isLoading) {
+    return (
+      <div className="space-y-2">
+        {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-16 w-full rounded-lg" />)}
+      </div>
+    );
+  }
+  if (calls.length === 0) {
+    return <p className="text-[12.5px] text-muted-foreground py-8 text-center">No calls recorded for this agent yet.</p>;
+  }
+  return <CallList calls={calls} />;
 }
 
 /* ─── Add Note dialog ────────────────────────────────────────────────────── */
@@ -199,176 +456,134 @@ function AddNoteDialog({
   );
 }
 
-/* ─── Right panel: Overview tab ──────────────────────────────────────────── */
-function OverviewTab({ agent, summary }: { agent: Agent | undefined; summary: AgentMemorySummary }) {
+/* ─── Overview tab: 2×2 dashboard grid ───────────────────────────────────── */
+function AgentInfoCard({ agent, summary }: { agent: Agent | undefined; summary: AgentMemorySummary }) {
   const rows: Array<{ icon: React.ReactNode; label: string; value: React.ReactNode }> = [
-    { icon: <Bot className="w-3.5 h-3.5" />, label: "Status", value: agent
-        ? <Badge variant="outline" className="text-[10.5px] capitalize">{agent.status}</Badge>
-        : "—" },
-    { icon: <Cpu className="w-3.5 h-3.5" />, label: "LLM Provider", value: agent?.llmProvider ?? "—" },
-    { icon: <Mic className="w-3.5 h-3.5" />, label: "ASR Provider", value: agent?.asrProvider ?? "—" },
-    { icon: <Volume2 className="w-3.5 h-3.5" />, label: "TTS Provider", value: agent?.ttsProvider ?? "—" },
-    { icon: <Calendar className="w-3.5 h-3.5" />, label: "Created", value: formatDate(summary.createdAt) },
-    { icon: <Clock className="w-3.5 h-3.5" />, label: "Last Active", value: timeAgo(summary.lastActiveAt) },
+    { icon: <Bot className="w-3.5 h-3.5" />,      label: "Agent Name",   value: summary.agentName },
+    { icon: <Calendar className="w-3.5 h-3.5" />, label: "Date Created", value: formatDate(summary.createdAt) },
+    { icon: <Clock className="w-3.5 h-3.5" />,    label: "Last Active",  value: timeAgo(summary.lastActiveAt) },
+    { icon: <Phone className="w-3.5 h-3.5" />,    label: "Total Calls",  value: summary.totalCalls },
+    {
+      icon: <FileText className="w-3.5 h-3.5" />,
+      label: "Notes",
+      value: agent?.description
+        ? <span className="whitespace-pre-wrap">{agent.description}</span>
+        : <span className="text-muted-foreground italic font-normal">No note yet</span>,
+    },
   ];
 
   return (
-    <div className="space-y-5">
-      <div className="rounded-xl border border-border bg-card overflow-hidden">
-        <div className="px-4 py-2.5 border-b border-border bg-elevated">
-          <h3 className="text-[12px] font-semibold text-foreground">Agent Information</h3>
-        </div>
-        <div className="divide-y divide-border">
-          {rows.map(r => (
-            <div key={r.label} className="flex items-center gap-3 px-4 py-2.5">
-              <div className="text-muted-foreground/60">{r.icon}</div>
-              <span className="text-[12px] text-muted-foreground flex-1">{r.label}</span>
-              <span className="text-[12px] font-medium text-foreground capitalize">{r.value}</span>
+    <div className="rounded-xl border border-border bg-card p-4">
+      <PanelHeader title="Agent Information" />
+      <div className="divide-y divide-border">
+        {rows.map(r => (
+          <div key={r.label} className="flex items-start justify-between gap-6 py-3 first:pt-1">
+            <div className="flex items-center gap-2.5 text-muted-foreground shrink-0">
+              <span className="text-muted-foreground/60">{r.icon}</span>
+              <span className="text-[12px]">{r.label}</span>
             </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="rounded-xl border border-border bg-card overflow-hidden">
-        <div className="px-4 py-2.5 border-b border-border bg-elevated">
-          <h3 className="text-[12px] font-semibold text-foreground">Note</h3>
-        </div>
-        <div className="px-4 py-3">
-          {agent?.description ? (
-            <p className="text-[12.5px] text-foreground leading-relaxed whitespace-pre-wrap">{agent.description}</p>
-          ) : (
-            <p className="text-[12px] text-muted-foreground italic">No note yet. Use “Add Note” to add context for this agent.</p>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ─── Right panel: Facts tab ─────────────────────────────────────────────── */
-function FactsTab({ agentId }: { agentId: number }) {
-  const { data, isLoading } = useListAgentMemoryFacts(agentId);
-  const facts = (data ?? []) as AgentMemoryFact[];
-
-  if (isLoading) {
-    return (
-      <div className="flex flex-wrap gap-2">
-        {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-7 w-32 rounded-lg" />)}
-      </div>
-    );
-  }
-  if (facts.length === 0) {
-    return <p className="text-[12.5px] text-muted-foreground py-8 text-center">No facts extracted across this agent’s conversations yet.</p>;
-  }
-  return (
-    <div className="flex flex-wrap gap-2">
-      {facts.map(f => (
-        <div key={f.id} className="rounded-lg bg-elevated border border-border px-3 py-2">
-          <p className="text-[10px] uppercase tracking-wide text-muted-foreground/70 mb-0.5">{f.key}</p>
-          <p className="text-[12.5px] text-foreground font-medium">{f.value}</p>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/* ─── Right panel: Episodes tab ──────────────────────────────────────────── */
-function EpisodesTab({ agentId }: { agentId: number }) {
-  const { data, isLoading } = useListAgentMemoryEpisodes(agentId);
-  const episodes = (data ?? []) as AgentMemoryEpisode[];
-
-  if (isLoading) {
-    return (
-      <div className="space-y-2.5">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="rounded-xl border border-border bg-card p-4 space-y-2">
-            <Skeleton className="h-3 w-28" />
-            <Skeleton className="h-3 w-full" />
-            <Skeleton className="h-3 w-4/5" />
+            <span className="text-[12px] font-medium text-foreground text-right max-w-[60%]">{r.value}</span>
           </div>
         ))}
       </div>
-    );
-  }
-  if (episodes.length === 0) {
-    return <p className="text-[12.5px] text-muted-foreground py-8 text-center">No conversation episodes recorded for this agent yet.</p>;
-  }
-  return (
-    <div className="space-y-2.5">
-      {episodes.map(ep => (
-        <div key={ep.id} className="rounded-xl border border-border bg-card p-4">
-          <div className="flex items-center gap-2 text-[11px] text-muted-foreground/70 mb-2">
-            <Layers className="w-3 h-3" />
-            <span>{timeAgo(ep.createdAt)}</span>
-            {ep.durationSeconds != null && <span>· {formatDuration(ep.durationSeconds)}</span>}
-            {ep.callId != null && (
-              <Link href={`/app/calls/${ep.callId}`} className="ml-auto text-blue-400 hover:text-blue-300 flex items-center gap-1">
-                View call <ChevronRight className="w-3 h-3" />
-              </Link>
-            )}
-          </div>
-          {ep.summary ? (
-            <p className="text-[12.5px] text-foreground leading-relaxed">{ep.summary}</p>
-          ) : (
-            <p className="text-[12px] text-muted-foreground italic">No summary available.</p>
-          )}
-        </div>
-      ))}
     </div>
   );
 }
 
-/* ─── Right panel: Call History tab ──────────────────────────────────────── */
-function DirectionBadge({ direction }: { direction: Direction }) {
-  const cfg: Record<Direction, { icon: React.ReactNode; cls: string }> = {
-    Inbound:  { icon: <ArrowDownLeft className="w-3 h-3" />, cls: "text-emerald-400" },
-    Outbound: { icon: <ArrowUpRight className="w-3 h-3" />,  cls: "text-blue-400" },
-    Web:      { icon: <Globe className="w-3 h-3" />,         cls: "text-violet-400" },
-  };
-  const c = cfg[direction];
+function FactsPreview({ agentId, total, onViewAll }: { agentId: number; total: number; onViewAll: () => void }) {
+  const { data, isLoading } = useListAgentMemoryFacts(agentId);
+  const facts = ((data ?? []) as AgentMemoryFact[]).slice(0, 6);
+
   return (
-    <span className={`inline-flex items-center gap-1 text-[11px] ${c.cls}`}>
-      {c.icon}{direction}
-    </span>
+    <div className="rounded-xl border border-border bg-card p-4 flex flex-col">
+      <PanelHeader title="Facts" count={total} />
+      <div className="flex-1">
+        {isLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}
+          </div>
+        ) : facts.length === 0 ? (
+          <p className="text-[12px] text-muted-foreground py-6 text-center">No facts yet.</p>
+        ) : (
+          <FactsGrid facts={facts} />
+        )}
+      </div>
+      {total > 0 && <ViewAllLink label="View all facts" onClick={onViewAll} />}
+    </div>
   );
 }
 
-function CallHistoryTab({ agentId }: { agentId: number }) {
-  const { data, isLoading } = useListCalls({ agentId });
-  const calls = (data ?? []) as Call[];
+function EpisodesPreview({ agentId, total, onViewAll }: { agentId: number; total: number; onViewAll: () => void }) {
+  const { data, isLoading } = useListAgentMemoryEpisodes(agentId);
+  const episodes = useMemo(
+    () => ((data ?? []) as AgentMemoryEpisode[])
+      .slice()
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 3),
+    [data],
+  );
 
-  if (isLoading) {
-    return (
-      <div className="space-y-2">
-        {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-lg" />)}
-      </div>
-    );
-  }
-  if (calls.length === 0) {
-    return <p className="text-[12.5px] text-muted-foreground py-8 text-center">No calls recorded for this agent yet.</p>;
-  }
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden divide-y divide-border">
-      {calls.map(call => (
-        <Link
-          key={call.id}
-          href={`/app/calls/${call.id}`}
-          className="flex items-center gap-3 px-4 py-3 hover:bg-accent/30 transition-colors group"
-        >
-          <PhoneCall className="w-3.5 h-3.5 text-muted-foreground/50 shrink-0" />
-          <div className="flex-1 min-w-0">
-            <DirectionBadge direction={callDirection(call)} />
-            <p className="text-[11px] text-muted-foreground mt-0.5">{timeAgo(call.createdAt)}</p>
+    <div className="rounded-xl border border-border bg-card p-4 flex flex-col">
+      <PanelHeader title="Episodes" count={total} />
+      <div className="flex-1">
+        {isLoading ? (
+          <div className="space-y-4 pl-6">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="space-y-2">
+                <Skeleton className="h-3 w-28" />
+                <Skeleton className="h-3 w-full" />
+              </div>
+            ))}
           </div>
-          <div className="hidden sm:block text-right">
-            <Badge variant="outline" className="text-[10px] capitalize">{call.status.replace("_", " ")}</Badge>
+        ) : episodes.length === 0 ? (
+          <p className="text-[12px] text-muted-foreground py-6 text-center">No episodes yet.</p>
+        ) : (
+          <EpisodeTimeline episodes={episodes} />
+        )}
+      </div>
+      {total > 0 && <ViewAllLink label="View all episodes" onClick={onViewAll} />}
+    </div>
+  );
+}
+
+function CallHistoryPreview({ agentId, onViewAll }: { agentId: number; onViewAll: () => void }) {
+  const { data, isLoading } = useListCalls({ agentId });
+  const allCalls = (data ?? []) as Call[];
+  const calls = allCalls.slice(0, 3);
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-4 flex flex-col">
+      <PanelHeader title="Call History" count={allCalls.length} />
+      <div className="flex-1">
+        {isLoading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-16 w-full rounded-lg" />)}
           </div>
-          <div className="text-[11px] text-muted-foreground tabular-nums w-14 text-right">
-            {formatDuration(call.durationSeconds)}
-          </div>
-          <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/30 shrink-0 group-hover:text-muted-foreground/60" />
-        </Link>
-      ))}
+        ) : calls.length === 0 ? (
+          <p className="text-[12px] text-muted-foreground py-6 text-center">No calls yet.</p>
+        ) : (
+          <CallList calls={calls} />
+        )}
+      </div>
+      {allCalls.length > 0 && <ViewAllLink label="View all calls" onClick={onViewAll} />}
+    </div>
+  );
+}
+
+function OverviewTab({
+  agent, summary, onNavigate,
+}: {
+  agent: Agent | undefined;
+  summary: AgentMemorySummary;
+  onNavigate: (tab: string) => void;
+}) {
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+      <AgentInfoCard agent={agent} summary={summary} />
+      <FactsPreview agentId={summary.agentId} total={summary.totalFacts} onViewAll={() => onNavigate("facts")} />
+      <EpisodesPreview agentId={summary.agentId} total={summary.totalEpisodes} onViewAll={() => onNavigate("episodes")} />
+      <CallHistoryPreview agentId={summary.agentId} onViewAll={() => onNavigate("calls")} />
     </div>
   );
 }
@@ -376,6 +591,7 @@ function CallHistoryTab({ agentId }: { agentId: number }) {
 /* ─── Right panel ────────────────────────────────────────────────────────── */
 function AgentDetailPanel({ summary, agent }: { summary: AgentMemorySummary; agent: Agent | undefined }) {
   const [noteOpen, setNoteOpen] = useState(false);
+  const [tab, setTab] = useState("overview");
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -383,16 +599,16 @@ function AgentDetailPanel({ summary, agent }: { summary: AgentMemorySummary; age
       <div className="flex items-start gap-4 px-6 py-5 border-b border-border shrink-0">
         <AgentAvatar name={summary.agentName} size="lg" />
         <div className="flex-1 min-w-0">
-          <h2 className="text-[16px] font-semibold text-foreground truncate">{summary.agentName}</h2>
-          <p className="text-[12px] text-muted-foreground mt-0.5 flex items-center gap-1.5">
-            <Clock className="w-3 h-3" />
-            Last active {timeAgo(summary.lastActiveAt)}
-          </p>
+          <div className="flex items-center gap-2">
+            <h2 className="text-[18px] font-semibold text-foreground truncate">{summary.agentName}</h2>
+            <Star className="w-4 h-4 text-muted-foreground/40" />
+          </div>
+          <p className="text-[12.5px] text-blue-400 mt-0.5">Agent</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <Button size="sm" onClick={() => setNoteOpen(true)}>
-            <Plus className="w-3.5 h-3.5 mr-1.5" />
-            Add Note
+          <Button variant="outline" size="sm" onClick={() => setNoteOpen(true)}>
+            <Pencil className="w-3.5 h-3.5 mr-1.5" />
+            Add note
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -421,23 +637,51 @@ function AgentDetailPanel({ summary, agent }: { summary: AgentMemorySummary; age
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 px-6 py-4 shrink-0">
-        <StatCard icon={<Phone className="w-3.5 h-3.5" />}    label="Total Calls"    value={summary.totalCalls} />
-        <StatCard icon={<FileText className="w-3.5 h-3.5" />} label="Total Facts"    value={summary.totalFacts} />
-        <StatCard icon={<Layers className="w-3.5 h-3.5" />}   label="Total Episodes" value={summary.totalEpisodes} />
-        <StatCard icon={<Clock className="w-3.5 h-3.5" />}    label="Last Active"    value={<span className="text-[14px]">{timeAgo(summary.lastActiveAt)}</span>} />
+        <StatCard
+          icon={<Phone className="w-5 h-5" />}
+          iconCls="text-blue-400 bg-blue-500/10 border-blue-500/20"
+          label="Total Calls" value={summary.totalCalls}
+        />
+        <StatCard
+          icon={<BarChart3 className="w-5 h-5" />}
+          iconCls="text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
+          label="Facts" value={summary.totalFacts}
+        />
+        <StatCard
+          icon={<Layers className="w-5 h-5" />}
+          iconCls="text-violet-400 bg-violet-500/10 border-violet-500/20"
+          label="Episodes" value={summary.totalEpisodes}
+        />
+        <StatCard
+          icon={<Clock className="w-5 h-5" />}
+          iconCls="text-amber-400 bg-amber-500/10 border-amber-500/20"
+          label="Last Active" value={<span className="text-[15px]">{timeAgo(summary.lastActiveAt)}</span>}
+        />
       </div>
 
       {/* Tabs */}
       <div className="flex-1 min-h-0 px-6 pb-6 overflow-hidden flex flex-col">
-        <Tabs defaultValue="overview" className="flex flex-col h-full min-h-0">
-          <TabsList className="shrink-0">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="facts">Facts</TabsTrigger>
-            <TabsTrigger value="episodes">Episodes</TabsTrigger>
-            <TabsTrigger value="calls">Call History</TabsTrigger>
+        <Tabs value={tab} onValueChange={setTab} className="flex flex-col h-full min-h-0">
+          <TabsList className="shrink-0 h-auto w-full justify-start gap-6 rounded-none border-b border-border bg-transparent p-0">
+            {[
+              { value: "overview", label: "Overview" },
+              { value: "facts",    label: "Facts" },
+              { value: "episodes", label: "Episodes" },
+              { value: "calls",    label: "Call History" },
+            ].map(t => (
+              <TabsTrigger
+                key={t.value}
+                value={t.value}
+                className="rounded-none border-b-2 border-transparent bg-transparent px-0 pb-2.5 pt-0 text-[13px] font-medium text-muted-foreground shadow-none data-[state=active]:border-blue-500 data-[state=active]:bg-transparent data-[state=active]:text-blue-400 data-[state=active]:shadow-none"
+              >
+                {t.label}
+              </TabsTrigger>
+            ))}
           </TabsList>
-          <div className="flex-1 min-h-0 overflow-y-auto mt-4">
-            <TabsContent value="overview" className="mt-0"><OverviewTab agent={agent} summary={summary} /></TabsContent>
+          <div className="flex-1 min-h-0 overflow-y-auto mt-5">
+            <TabsContent value="overview" className="mt-0">
+              <OverviewTab agent={agent} summary={summary} onNavigate={setTab} />
+            </TabsContent>
             <TabsContent value="facts" className="mt-0"><FactsTab agentId={summary.agentId} /></TabsContent>
             <TabsContent value="episodes" className="mt-0"><EpisodesTab agentId={summary.agentId} /></TabsContent>
             <TabsContent value="calls" className="mt-0"><CallHistoryTab agentId={summary.agentId} /></TabsContent>
