@@ -333,12 +333,10 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
 
   const cartesiaOverviewOpts = useMemo(() => {
     const all = whitelistedData?.voices ?? [];
-    if (all.length === 0) {
-      const opts = [...(TTS_VOICES.cartesia ?? []).filter(v => v.value !== "__custom__")];
-      opts.push({ value: "__custom__", label: "Paste custom Voice ID" });
-      return opts;
-    }
-    // Show only voices matching the agent's language (e.g. "ta-IN" → "ta")
+    // Strictly show only voices whose language metadata matches the selected
+    // Transcriber language (e.g. "ta-IN" → "ta"). No fallback to the static
+    // English list — an empty/loading whitelist must never surface English
+    // voices for a non-English language.
     const baseLang = (language ?? "en-US").split("-")[0]!.toLowerCase();
     const matched = all.filter(v => v.language?.toLowerCase() === baseLang);
     // If no voices for this language, show only the custom paste option
@@ -346,6 +344,22 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
     opts.push({ value: "__custom__", label: "Paste custom Voice ID" });
     return opts;
   }, [whitelistedData, language]);
+
+  // When the language changes (or the whitelist finishes loading), clear a
+  // selected curated voice that no longer supports the language. User-pasted
+  // custom IDs (not present in the whitelist) are left untouched.
+  useEffect(() => {
+    if (ttsProvider !== "cartesia") return;
+    const all = whitelistedData?.voices ?? [];
+    if (all.length === 0) return;
+    if (!ttsVoice || ttsVoice === "__custom__") return;
+    const known = all.find(v => v.id === ttsVoice);
+    if (!known) return; // user-pasted custom ID — leave it alone
+    const baseLang = (language ?? "en-US").split("-")[0]!.toLowerCase();
+    if (known.language?.toLowerCase() !== baseLang) {
+      form.setValue("ttsVoice", "", { shouldDirty: true });
+    }
+  }, [language, whitelistedData, ttsProvider, ttsVoice, form]);
 
   const ttsVoiceRaw   = ttsProvider in TTS_VOICES ? TTS_VOICES[ttsProvider] : undefined;
   const ttsVoiceFree  = ttsVoiceRaw === null;
@@ -623,8 +637,7 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
                 )}
                 {ttsProvider === "cartesia" && (whitelistedData?.voices ?? []).length > 0 && curatedVoiceOpts.length === 0 && (
                   <p className="text-[10px] text-amber-400/80 leading-relaxed rounded-md border border-amber-500/20 bg-amber-500/5 px-2.5 py-2">
-                    No voices available for <span className="font-semibold">{langLabel}</span>. Paste a Voice ID from{" "}
-                    <a href="https://cartesia.ai" target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-amber-300">cartesia.ai</a>.
+                    No voices available for the selected language.
                   </p>
                 )}
                 {showCustomVoiceInput && (
@@ -838,17 +851,12 @@ function VoiceTab({ form }: { form: any }) {
     staleTime: 5 * 60 * 1000,
   });
 
-  // For Cartesia: show only voices matching the agent's transcriber language.
-  // e.g. "ta-IN" → show only "ta" voices; "te-IN" → "te"; "en-US" → "en".
-  // Falls back to all whitelisted voices if none match the language.
-  // Falls back to built-in list if whitelist is empty.
+  // For Cartesia: strictly show only voices whose language metadata matches the
+  // selected Transcriber language. e.g. "ta-IN" → "ta"; "te-IN" → "te"; "en-US" → "en".
+  // No fallback to the static English list — an empty/loading whitelist must
+  // never surface English voices for a non-English language.
   const cartesiaVoiceOpts = useMemo(() => {
     const all = whitelistedData?.voices ?? [];
-    if (all.length === 0) {
-      const opts = [...(TTS_VOICES.cartesia ?? []).filter(v => v.value !== "__custom__")];
-      opts.push({ value: "__custom__", label: "Paste custom Voice ID" });
-      return opts;
-    }
     const baseLang = agentLanguage.split("-")[0]!.toLowerCase();
     const matched = all.filter(v => v.language?.toLowerCase() === baseLang);
     // If no voices for this language, show only the custom paste option
@@ -856,6 +864,22 @@ function VoiceTab({ form }: { form: any }) {
     opts.push({ value: "__custom__", label: "Paste custom Voice ID" });
     return opts;
   }, [whitelistedData, agentLanguage]);
+
+  // When the language changes (or the whitelist finishes loading), clear a
+  // selected curated voice that no longer supports the language. User-pasted
+  // custom IDs (not present in the whitelist) are left untouched.
+  useEffect(() => {
+    if (ttsProvider !== "cartesia") return;
+    const all = whitelistedData?.voices ?? [];
+    if (all.length === 0) return;
+    if (!ttsVoice || ttsVoice === "__custom__") return;
+    const known = all.find(v => v.id === ttsVoice);
+    if (!known) return; // user-pasted custom ID — leave it alone
+    const baseLang = agentLanguage.split("-")[0]!.toLowerCase();
+    if (known.language?.toLowerCase() !== baseLang) {
+      form.setValue("ttsVoice", "", { shouldDirty: true });
+    }
+  }, [agentLanguage, whitelistedData, ttsProvider, ttsVoice, form]);
 
   // For non-Cartesia providers fall back to the hardcoded list
   const ttsVoiceRawV  = ttsProvider in TTS_VOICES ? TTS_VOICES[ttsProvider] : undefined;
@@ -1066,9 +1090,7 @@ function VoiceTab({ form }: { form: any }) {
 
           {ttsProvider === "cartesia" && (whitelistedData?.voices ?? []).length > 0 && curatedVoiceOptsV.length === 0 && (
             <p className="text-xs text-amber-400/80 leading-relaxed rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2.5">
-              No voices available for <span className="font-semibold">{LANGUAGES.find(l => l.value === agentLanguage)?.label ?? agentLanguage}</span>.
-              {" "}Paste a Voice ID from{" "}
-              <a href="https://cartesia.ai" target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-amber-300">cartesia.ai</a>.
+              No voices available for the selected language.
             </p>
           )}
 
