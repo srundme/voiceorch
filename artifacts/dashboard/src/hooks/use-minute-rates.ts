@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { customFetch } from "@workspace/api-client-react";
 
 export interface MinuteRate {
   category: string;       // "llm" | "asr" | "tts" | "telephony"
@@ -8,9 +9,12 @@ export interface MinuteRate {
 }
 
 async function fetchMinuteRates(): Promise<MinuteRate[]> {
-  const res = await fetch("/api/billing/rates", { credentials: "include" });
-  if (!res.ok) return [];
-  return res.json() as Promise<MinuteRate[]>;
+  try {
+    const res = await customFetch<MinuteRate[]>("/api/billing/rates");
+    return res ?? [];
+  } catch {
+    return [];
+  }
 }
 
 /** Returns a lookup map: "category:providerName" → rateCentsPerMin */

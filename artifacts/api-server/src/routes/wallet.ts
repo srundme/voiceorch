@@ -40,6 +40,10 @@ router.get("/wallet", requireAuth, async (req, res) => {
 
 // POST /api/wallet/topup — create Razorpay order
 router.post("/wallet/topup", requireAuth, async (req, res) => {
+  if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+    res.status(503).json({ error: "Payment gateway not configured" });
+    return;
+  }
   const clerkId = (req as any).clerkUserId as string;
   const { amountCents } = req.body as { amountCents: number };
   if (!amountCents || amountCents < 1000) {
@@ -52,12 +56,20 @@ router.post("/wallet/topup", requireAuth, async (req, res) => {
     return;
   }
   const razorpay = getRazorpay();
-  const order = await razorpay.orders.create({
-    amount: amountCents,
-    currency: "USD",
-    receipt: `uid_${user.id}_${Date.now()}`,
-    notes: { userId: String(user.id), clerkId },
-  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let order: any;
+  try {
+    order = await razorpay.orders.create({
+      amount: amountCents,
+      currency: "USD",
+      receipt: `uid_${user.id}_${Date.now()}`,
+      notes: { userId: String(user.id), clerkId },
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Razorpay error";
+    res.status(502).json({ error: `Failed to create payment order: ${msg}` });
+    return;
+  }
 
   // Create pending transaction
   await db.insert(walletTransactionsTable).values({
