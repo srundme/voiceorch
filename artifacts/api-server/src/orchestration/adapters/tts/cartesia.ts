@@ -39,7 +39,7 @@ export class CartesiaTTS implements TTSAdapter {
 
   constructor(apiKey: string, voice: string | null, model: string | null, language?: string | null) {
     this.key = apiKey;
-    this.voiceId = voice ?? "a0e99841-438c-4a64-b679-ae501e7d6091"; // British Reading Lady
+    this.voiceId = voice ?? "2ee87190-8f84-4925-97da-e52547f9462c"; // Arushi — warm Indian English female (matches UI default)
     // Normalise legacy / invalid model IDs to the supported set
     const VALID = new Set([
       // Sonic 3.5 (latest, May 2026) — 42 languages, industry-leading latency
