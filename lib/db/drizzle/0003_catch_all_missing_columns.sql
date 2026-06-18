@@ -1,5 +1,5 @@
--- Idempotent catch-all for columns that were in 0001_production_schema_sync
--- but may have been skipped on DBs where 0001 was seeded-not-run by
+-- Idempotent catch-all for ADD COLUMN statements from 0001_production_schema_sync
+-- that may have been skipped on DBs where 0001 was seeded-not-run by
 -- bootstrapMigrationJournal. All statements use IF NOT EXISTS.
 
 ALTER TABLE "agents" ADD COLUMN IF NOT EXISTS "snapserve_agent_id" text;

@@ -29,6 +29,13 @@
       "when": 1781746700000,
       "tag": "0003_catch_all_missing_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1781747200000,
+      "tag": "0004_create_missing_tables",
+      "breakpoints": true
     }
   ]
 }

@@ -23,8 +23,8 @@ const BRANCH = "main";
 
 const FILES_TO_PUSH = [
   "lib/db/drizzle/0003_catch_all_missing_columns.sql",
+  "lib/db/drizzle/0004_create_missing_tables.sql",
   "lib/db/drizzle/meta/_journal.json",
-  "artifacts/api-server/src/index.ts",
 ];
 
 async function ghFetch(apiPath: string, options: RequestInit = {}) {
@@ -61,7 +61,7 @@ async function pushFile(relPath: string) {
   await ghFetch(`contents/${relPath}`, {
     method: "PUT",
     body: JSON.stringify({
-      message: `fix: add migration 0003 to apply missing agents columns skipped by bootstrap seeding`,
+      message: `fix: add migration 0004 — CREATE TABLE for all missing tables (agent_knowledge_sources, agent_dispositions, call_events, call_dispositions, execution_logs, agent_versions, simulation_*)`,
       content: encoded,
       branch: BRANCH,
       ...(sha ? { sha } : {}),
