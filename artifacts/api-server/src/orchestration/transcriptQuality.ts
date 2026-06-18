@@ -21,7 +21,9 @@ export function checkTranscriptQuality(text: string): { isGarbled: boolean; reas
   if (t.length < 2) return { isGarbled: true, reason: "too-short" };
 
   // Only punctuation / special chars — no actual linguistic content
-  if (/^[\W_]+$/u.test(t)) return { isGarbled: true, reason: "no-alphanumeric" };
+  // Use \p{L} (Unicode letter) + \p{N} (Unicode digit) so Indic scripts
+  // (Tamil, Hindi, etc.) are NOT flagged as garbled — \W only covers ASCII.
+  if (!/[\p{L}\p{N}]/u.test(t)) return { isGarbled: true, reason: "no-alphanumeric" };
 
   // Single repeated character: "aaaaaaa", "mmmmmm", "-------"
   if (/^(.)\1{4,}$/u.test(t)) return { isGarbled: true, reason: "single-char-repeat" };
