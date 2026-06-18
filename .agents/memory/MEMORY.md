@@ -23,3 +23,4 @@
 - [TTS final-words clipping](tts-tail-drain.md) — last words cut off on teardown; telephony=sleep before onCallEnd, web=send silence frames; re-arm echo-grace at EVERY playback exit, not just main loops
 - [Object Storage on Railway](object-storage-railway.md) — Replit Object Storage absent in Railway prod; recordings now in Postgres bytea, ambient still GCS-bound
 - [Dashboard agent form schema shared](agent-form-schema-shared.md) — edit.schema.ts/AgentFormValues/buildUpdateAgentPayload shared by edit.tsx AND builder.tsx; removing a field breaks the create wizard
+- [Webcall echo-grace re-arm](webcall-echo-grace-rearm.md) — webcall START echo-grace must re-arm per sentence (echoGraceUntil), not anchor to one speakingStartedAt, or long replies clip mid-sentence; pipeline already does this via bargeInHoldUntil
