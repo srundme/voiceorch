@@ -15,8 +15,8 @@
 // ── Named threshold constants ─────────────────────────────────────────────────
 /** Snappy flush: "yes", "no", ends in "." / "?" */
 export const ENDPOINT_FAST_MS        = 150;
-/** Neutral baseline (matches old VAD_SILENCE_MS on the telephony path). */
-export const ENDPOINT_DEFAULT_MS     = 250;
+/** Neutral baseline — snappier default endpointing window (was 250ms). */
+export const ENDPOINT_DEFAULT_MS     = 150;
 /** Mid-thought: ends in conjunction / filler word ("and", "so", "um"). */
 export const ENDPOINT_LONG_MS        = 600;
 /** Digit-collection: caller is reading a policy/phone/OTP number. */

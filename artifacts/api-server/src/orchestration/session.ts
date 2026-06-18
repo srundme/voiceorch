@@ -209,7 +209,7 @@ export async function createSession(params: {
     // P1-C: Webhook HMAC secret
     webhookSecret: (agentCfg["webhookSecret"] as string | undefined) ?? null,
     // P1-D: VAD / Barge-in tuning (defaults match the hardcoded pipeline constants)
-    vadSilenceMs:           (agentCfg["vadSilenceMs"]           as number  | undefined) ?? 250,
+    vadSilenceMs:           (agentCfg["vadSilenceMs"]           as number  | undefined) ?? 150,
     bargeInEnabled:         (agentCfg["bargeInEnabled"]         as boolean | undefined) ?? true,
     bargeInEnergyThreshold: (agentCfg["bargeInEnergyThreshold"] as number  | undefined) ?? 1200,
     bargeInMinFrames:       (agentCfg["bargeInMinFrames"]       as number  | undefined) ?? 4,

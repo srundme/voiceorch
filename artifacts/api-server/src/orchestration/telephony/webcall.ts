@@ -40,7 +40,7 @@ const activeCalls = new Map<string, number>();
 const DEFAULT_CONCURRENT_LIMIT = 15; // default when user row has no value
 
 // ── Tuning constants ─────────────────────────────────────────────────────────
-const VAD_SILENCE_MS           = 200;   // silence window before sending audio to STT (ms)
+const VAD_SILENCE_MS           = 150;   // default silence window before sending audio to STT (ms) — per-agent tunable via vadSilenceMs
 const SPEECH_RMS_THRESHOLD     = 400;   // normal VAD — user speaking (agent silent)
 const BARGE_IN_RMS             = 800;   // energy threshold while agent is speaking.
                                         // Browser echoCancellation suppresses the mic signal during TTS by ~6–12 dB,

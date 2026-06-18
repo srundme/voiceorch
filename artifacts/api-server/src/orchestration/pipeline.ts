@@ -42,7 +42,7 @@ import {
   writeTransferLeadDb,
 } from "../services/tool-executor.js";
 
-const VAD_SILENCE_MS          = 250;    // silence window before STT flush
+const VAD_SILENCE_MS          = 150;    // default silence window before STT flush (per-agent tunable via vadSilenceMs)
 const MIN_SPEECH_BYTES        = 3200;   // ~200ms @ 8kHz PCM — skip noise bursts shorter than this
 const CHUNK_SIZE_MULAW        = 160;    // 20ms @ 8kHz mulaw for paced batch playback
 const VAD_THRESHOLD           = 100;    // RMS threshold for speech detection
@@ -69,6 +69,10 @@ const TELEPHONY_TAIL_DRAIN_MS = 300;    // After the final utterance fully strea
                                          // before tearing the call down so the carrier's jitter
                                          // buffer plays out the last words (mirrors the web path's
                                          // AUDIO_TAIL_SILENCE_MS) — prevents clipped goodbyes.
+const KB_CONTEXT_RACE_MS      = 200;    // Max time the turn waits for KB-context retrieval before
+                                         // starting the LLM. If the prefetch is slower than this, the
+                                         // turn proceeds with whatever context resolved (possibly none)
+                                         // so first-token time stays low; the late prefetch is discarded.
 
 /** BCP-47 locale → display name used in LLM language-switch instructions. */
 const LANG_DISPLAY_NAMES: Record<string, string> = {
@@ -1592,8 +1596,30 @@ export class OrchestrationPipeline {
       }
     }
 
-    // Await KB result — by now it has been running concurrently with the backchannel TTS
-    const kbContext = await kbContextPromise;
+    // Await KB result — by now it has been running concurrently with the backchannel TTS.
+    // Race it against a short timeout so a slow KB lookup doesn't stall the turn: if the
+    // prefetch hasn't resolved within KB_CONTEXT_RACE_MS the LLM starts with whatever
+    // context is ready (possibly none) to keep first-token time low. The no-KB path
+    // (knowledgeSourceIds empty) resolves immediately and is unaffected.
+    let kbContext: string | null;
+    if (this.agent.knowledgeSourceIds.length === 0) {
+      kbContext = await kbContextPromise;
+    } else {
+      // safeKb never rejects (the source promises already .catch), so the race can't throw.
+      const safeKb: Promise<string | null> = kbContextPromise.catch(() => null);
+      let kbRaceTimer: ReturnType<typeof setTimeout> | null = null;
+      const kbTimeout = new Promise<null>((resolve) => {
+        kbRaceTimer = setTimeout(() => { kbRaceTimer = null; resolve(null); }, KB_CONTEXT_RACE_MS);
+      });
+      kbContext = await Promise.race([safeKb, kbTimeout]);
+      if (kbRaceTimer) clearTimeout(kbRaceTimer);
+      // Drain any late-resolving prefetch so it can't surface as an unhandled rejection;
+      // its value is intentionally discarded (the turn already proceeded without it).
+      void safeKb.catch(() => null);
+      if (kbContext === null) {
+        logger.debug({ callId: this.config.callId, raceMs: KB_CONTEXT_RACE_MS }, "KB context: race timed out or empty — proceeding without context");
+      }
+    }
     if (kbContext) {
       systemPromptForTurn = `${systemPromptForTurn}\n\n## Relevant Knowledge Base Context\n\n${kbContext}`;
     }
