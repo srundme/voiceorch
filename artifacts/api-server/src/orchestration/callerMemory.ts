@@ -844,7 +844,13 @@ export async function updateCallerProfile(opts: {
   }
 
   // ── Phase 3a: save L0 facts with supersession + fact_sources provenance ───
-  const validFacts = (extracted.facts ?? []).filter(
+  // Promote the top-level `name` field into the facts array so it gets
+  // stored in caller_facts and shows up in the UI Facts count.
+  const nameFact = extracted.name?.trim()
+    ? [{ key: "name", value: extracted.name.trim(), confidence: 0.95 }]
+    : [];
+
+  const validFacts = [...nameFact, ...(extracted.facts ?? [])].filter(
     f => f.key && f.value && typeof f.confidence === "number" && f.confidence >= 0.7,
   );
 
@@ -913,12 +919,18 @@ export async function updateCallerProfile(opts: {
 
 // ── Real-time name latch (unchanged) ──────────────────────────────────────────
 
+// \p{L} matches any Unicode letter (Latin, Tamil, Devanagari, Telugu, etc.)
+// \p{M} matches combining marks (vowel signs in Indic scripts)
 const NAME_PATTERNS: RegExp[] = [
-  /\bmy name is ([A-Za-z][a-z]+(?: [A-Za-z][a-z]+)?)\b/i,
-  /\bi(?:'m| am) ([A-Za-z][a-z]+(?: [A-Za-z][a-z]+)?)\b/i,
-  /\bthis is ([A-Za-z][a-z]+(?: [A-Za-z][a-z]+)?)(?:\s+(?:speaking|calling|here))?\b/i,
-  /\bcall me ([A-Za-z][a-z]+(?: [A-Za-z][a-z]+)?)\b/i,
-  /\bname(?:'s| is) ([A-Za-z][a-z]+(?: [A-Za-z][a-z]+)?)\b/i,
+  /\bmy name is ([\p{L}\p{M}][\p{L}\p{M}]*(?: [\p{L}\p{M}][\p{L}\p{M}]*)?)\b/iu,
+  /\bi(?:'m| am) ([\p{L}\p{M}][\p{L}\p{M}]*(?: [\p{L}\p{M}][\p{L}\p{M}]*)?)\b/iu,
+  /\bthis is ([\p{L}\p{M}][\p{L}\p{M}]*(?: [\p{L}\p{M}][\p{L}\p{M}]*)?)(?:\s+(?:speaking|calling|here))?\b/iu,
+  /\bcall me ([\p{L}\p{M}][\p{L}\p{M}]*(?: [\p{L}\p{M}][\p{L}\p{M}]*)?)\b/iu,
+  /\bname(?:'s| is) ([\p{L}\p{M}][\p{L}\p{M}]*(?: [\p{L}\p{M}][\p{L}\p{M}]*)?)\b/iu,
+  // Tamil: "என் பேர் <name>" / "என்னோட பேர் <name>"
+  /என்(?:னோட)?\s*பேர்\s+([\p{L}\p{M}][\p{L}\p{M}]*(?:\s[\p{L}\p{M}][\p{L}\p{M}]*)?)/u,
+  // Hindi: "मेरा नाम <name>" / "मैं <name> हूँ"
+  /मेरा\s*नाम\s+([\p{L}\p{M}][\p{L}\p{M}]*(?:\s[\p{L}\p{M}][\p{L}\p{M}]*)?)/u,
 ];
 
 const NAME_STOPWORDS = new Set([
