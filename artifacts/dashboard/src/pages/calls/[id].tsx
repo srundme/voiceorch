@@ -897,6 +897,9 @@ export default function CallDetail() {
                 <TabsTrigger value="transcript" className="text-xs h-6 gap-1">
                   <FileText className="h-3 w-3" /> Transcript
                 </TabsTrigger>
+                <TabsTrigger value="summary" className="text-xs h-6 gap-1">
+                  <Sparkles className="h-3 w-3" /> Summary
+                </TabsTrigger>
                 <TabsTrigger value="tools" className="text-xs h-6 gap-1">
                   <Zap className="h-3 w-3" /> Tools {toolEvents.length > 0 && `(${toolEvents.length})`}
                 </TabsTrigger>
@@ -986,6 +989,25 @@ export default function CallDetail() {
                         </div>
                       )}
                     </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="summary" className="flex-1 overflow-auto mt-2 min-h-0">
+                <Card className="h-full flex flex-col">
+                  <CardHeader className="shrink-0 pb-3">
+                    <CardTitle className="flex items-center gap-2 text-sm">
+                      <Sparkles className="h-4 w-4 text-primary" /> Conversation Summary
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="flex-1 overflow-auto min-h-0">
+                    {callSummary ? (
+                      <p className="text-sm text-muted-foreground whitespace-pre-line leading-relaxed">
+                        {callSummary}
+                      </p>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No summary available for this call.</p>
+                    )}
                   </CardContent>
                 </Card>
               </TabsContent>

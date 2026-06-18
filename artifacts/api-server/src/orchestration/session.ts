@@ -930,11 +930,11 @@ export async function endSession(sessionId: string): Promise<void> {
                 const customPrompt = (agCfgForWebhook["summarizationPrompt"] as string | undefined) ?? "";
                 const userContent = customPrompt
                   ? `${customPrompt}\n\nTranscript:\n${transcript.slice(0, 6000)}`
-                  : `Summarize this call transcript in exactly 3 concise bullet points:\n\n${transcript.slice(0, 6000)}`;
+                  : `Summarize this call transcript as a single natural paragraph of 4 to 6 sentences. Briefly cover why the customer called, what was discussed, any important information collected, the outcome, and any follow-up or next steps (only if applicable). Write plain prose — do not use bullet points, numbered lists, or headings.\n\nTranscript:\n${transcript.slice(0, 6000)}`;
                 let summary = "";
                 await llm.chat(
                   [{ role: "user", content: userContent }],
-                  "You are a call analyst. Summarize the call concisely and factually. Start each bullet with '•'.",
+                  "You are a call analyst. Write a concise, factual summary of the call as a single natural paragraph of 4 to 6 sentences. Do not use bullet points, numbered lists, or headings — write plain readable prose only.",
                   () => {},
                   (full) => { summary = full; }
                 );
