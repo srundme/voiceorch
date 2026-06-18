@@ -1,0 +1,269 @@
+# Memory / CRM Page Redesign (UI + Backend)
+
+Redesign the **Memory / CRM** page to match a modern, premium SaaS dashboard while keeping the existing SnapServe design language.
+
+This page is **Agent-centric**, not caller-centric.
+
+Each AI Agent has its own memory profile. Every conversation handled by an agent contributes to that agent's memory. Facts and Episodes accumulate over time across all conversations made with that agent.
+
+Do not redesign the sidebar, top navigation, or the overall application theme.
+
+---
+
+# Overall Layout
+
+Use a two-column layout.
+
+## Left Panel (Agent List)
+
+Display a searchable list of AI Agents.
+
+At the top include:
+
+- Search by Agent Name
+- Agent filter dropdown
+
+Each Agent card should display:
+
+- Agent Name
+- Total Calls
+- Total Facts
+- Total Episodes
+- Last Active
+
+Example:
+
+Ravilla
+
+15 Calls • 19 Facts • 17 Episodes
+
+Last Active: 9 minutes ago
+
+Selecting an Agent should instantly load its memory on the right.
+
+The left panel should remain fixed while switching between agents.
+
+Do NOT display any caller information in this panel.
+
+Only display Agent names.
+
+Examples:
+
+- Ravilla
+- Ethika
+- Aarav
+- Maya
+
+Do NOT display caller names like:
+
+- Benishya
+- Peneshya
+- John
+- Kumar
+
+---
+
+# Right Panel (Agent Memory)
+
+Display information for the selected Agent.
+
+Top section:
+
+- Agent Avatar
+- Agent Name
+- Add Note button
+- Overflow menu
+
+Below that display four statistic cards:
+
+- Total Calls
+- Facts
+- Episodes
+- Last Active
+
+---
+
+# Navigation Tabs
+
+Display tabs:
+
+- Overview
+- Facts
+- Episodes
+- Call History
+
+Switch tabs without leaving the page.
+
+---
+
+# Overview Tab
+
+Rename this section to:
+
+**Agent Information**
+
+Display:
+
+- Agent Name
+- Date Created
+- Last Active
+- Total Calls
+- Notes
+
+Use a clean two-column card layout.
+
+---
+
+# Facts Tab
+
+Display all Facts extracted from conversations.
+
+Each fact should appear inside a small rounded card.
+
+Examples:
+
+- Policy Interest
+- Budget
+- Location
+- Concerns
+- Follow-up Needed
+- Preferred Call Time
+
+Keep the current card design.
+
+---
+
+# Episodes Tab
+
+Display conversation memories in chronological order.
+
+Each episode should appear as a timeline card.
+
+Each card should contain:
+
+- Timestamp
+- AI-generated summary (2–3 sentences)
+
+Display newest first.
+
+---
+
+# Call History Tab
+
+Display every call made with the selected Agent.
+
+Each row should include:
+
+- Call ID
+- Date
+- Duration
+- Direction
+- View Details button
+
+Clicking **View Details** should open the existing Call Log page.
+
+---
+
+# Remove Customer-Centric UI
+
+This page should NOT contain customer information.
+
+Remove:
+
+- Customer Name
+- Phone Number
+- Email
+- Preferred Agent
+- Caller Profile
+
+Replace customer terminology with Agent terminology.
+
+Examples:
+
+Customer Information → Agent Information
+
+Search by phone or name → Search by Agent Name
+
+Caller → Agent
+
+---
+
+# Backend Requirements
+
+Do NOT use mock data.
+
+Do NOT generate placeholder data.
+
+Reuse the existing Memory/CRM backend.
+
+Reuse the existing database.
+
+Reuse the existing APIs wherever possible.
+
+This is primarily a UI redesign that should display the existing memory data.
+
+For every Agent:
+
+- Load all Agents created by the current user.
+- Display one Agent card in the left panel.
+- Show real values for:
+  - Total Calls
+  - Facts Count
+  - Episodes Count
+  - Last Active
+
+When an Agent is selected:
+
+Load only that Agent's memory.
+
+Fetch:
+
+- Facts
+- Episodes
+- Call History
+- Statistics
+
+using the existing backend.
+
+Display the real stored data.
+
+Do NOT create duplicate memory records.
+
+Do NOT create a separate CRM database.
+
+Continue using the current Agent Memory storage.
+
+If memory is currently stored using Agent IDs, continue using the same architecture.
+
+Do not break the existing memory pipeline.
+
+Every new conversation should automatically update:
+
+- Total Calls
+- Facts
+- Episodes
+- Last Active
+- Call History
+
+for the corresponding Agent.
+
+The redesigned UI should simply visualize the existing memory data in a cleaner way.
+
+---
+
+# Styling
+
+Maintain the existing SnapServe design language.
+
+- Dark Theme
+- Rounded Cards
+- Blue Accent Colors
+- Existing Typography
+- Existing Icons
+- Existing Sidebar
+- Existing Top Navigation
+- Consistent Spacing
+
+The page should feel like a premium SaaS CRM built specifically for AI Agents.
+
+Do not modify any other pages in the application.
