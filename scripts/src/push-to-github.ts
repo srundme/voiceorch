@@ -22,7 +22,9 @@ const REPO  = "voiceorch";
 const BRANCH = "main";
 
 const FILES_TO_PUSH = [
-  "artifacts/api-server/src/routes/agents.ts",
+  "lib/db/drizzle/0003_catch_all_missing_columns.sql",
+  "lib/db/drizzle/meta/_journal.json",
+  "artifacts/api-server/src/index.ts",
 ];
 
 async function ghFetch(apiPath: string, options: RequestInit = {}) {
@@ -59,7 +61,7 @@ async function pushFile(relPath: string) {
   await ghFetch(`contents/${relPath}`, {
     method: "PUT",
     body: JSON.stringify({
-      message: `fix: guard POST /agents against missing required fields → 400 instead of 500`,
+      message: `fix: add migration 0003 to apply missing agents columns skipped by bootstrap seeding`,
       content: encoded,
       branch: BRANCH,
       ...(sha ? { sha } : {}),
