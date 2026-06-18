@@ -16,6 +16,7 @@ import { RecordingBuffer } from "../recorder.js";
 import type { ConversationTurn, STTConfig, StreamSTT } from "../types.js";
 import { DEFAULT_GOODBYE_MESSAGE, resolveGoodbyeMessage } from "../types.js";
 import { decryptKey } from "../../lib/crypto.js";
+import { getFlatRateCentsPerMin } from "../../services/minute-rates.js";
 import { loadCallerContext, injectEnhancedMemory, updateCallerProfile, latchCallerName, latchCallerFact, detectCallbackRequest } from "../callerMemory.js";
 
 import { GenderDetector } from "../genderDetector.js";
@@ -2517,15 +2518,15 @@ export async function handleWebCallWebSocket(
       }
 
       // Deduct platform fee from wallet.
-      // Pricing: < 30 s → $0.02 flat; ≥ 30 s → ceil(seconds/60) × $0.03/min.
+      // Pricing: managed = $0.05/min (5 ¢), BYOP = $0.035/min (3.5 ¢).
+      // All calls billed by ceil(seconds / 60) started minutes.
       const callUserId = agent.userId ?? null;
       if (callUserId && durationSeconds > 0) {
-        const debitCents = Math.round(durationSeconds < 30
-          ? 2                                           // $0.02 flat for short calls (integer)
-          : Math.ceil(durationSeconds / 60) * 3);      // $0.03 per started minute
-        const billableLabel = durationSeconds < 30
-          ? "< 30 s flat"
-          : `${Math.ceil(durationSeconds / 60)} min × $0.03`;
+        const rateCentsPerMin  = getFlatRateCentsPerMin(agent.agentMode);
+        const billableMinutes  = Math.ceil(durationSeconds / 60);
+        const debitCents       = Math.round(billableMinutes * rateCentsPerMin);
+        const modeLabel        = isManaged ? "managed" : "BYOP";
+        const billableLabel    = `${billableMinutes} min × $${(rateCentsPerMin / 100).toFixed(3)}/min (${modeLabel})`;
 
         // Persist cost on the call row so it shows up in call log detail
         await db.update(callsTable).set({ costCents: debitCents }).where(eq(callsTable.id, callId));

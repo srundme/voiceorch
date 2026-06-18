@@ -1,62 +1,24 @@
 /**
- * minute-rates.ts — helpers for per-minute reseller billing
+ * minute-rates.ts — flat per-minute billing rates
  *
- * Rates are cached in memory for 60 s to avoid a DB round-trip on every call.
- * Invalidate the cache by calling invalidateMinuteRatesCache() after an admin update.
+ * Two tiers:
+ *   managed — $0.050 / min  (5 cents)   agent uses platform-provided keys
+ *   byop    — $0.035 / min  (3.5 cents) agent uses the user's own API keys
+ *
+ * Rates are exposed via GET /billing/rates and used in both the telephony
+ * call-end path (calls.ts) and the webcall path (webcall.ts).
  */
 
-import { db, providerMinuteRatesTable } from "@workspace/db";
-import { logger } from "../lib/logger.js";
+export const MANAGED_RATE_CENTS_PER_MIN = 5;    // $0.050 / min
+export const BYOP_RATE_CENTS_PER_MIN    = 3.5;  // $0.035 / min
 
-const CACHE_TTL_MS = 60_000;
-
-type RateMap = Map<string, number>; // key: "category:provider_name", value: cents/min
-
-let _cache: RateMap | null = null;
-let _cacheAt = 0;
-
-export function invalidateMinuteRatesCache(): void {
-  _cache = null;
-  _cacheAt = 0;
+/**
+ * Returns the flat per-minute charge in cents for an agent based on its mode.
+ * Unrecognised / null modes default to the BYOP rate.
+ */
+export function getFlatRateCentsPerMin(agentMode: string | null | undefined): number {
+  return agentMode === "managed" ? MANAGED_RATE_CENTS_PER_MIN : BYOP_RATE_CENTS_PER_MIN;
 }
 
-async function getRateMap(): Promise<RateMap> {
-  if (_cache && Date.now() - _cacheAt < CACHE_TTL_MS) return _cache;
-  try {
-    const rows = await db.select().from(providerMinuteRatesTable);
-    const map: RateMap = new Map();
-    for (const r of rows) {
-      map.set(`${r.category}:${r.providerName.toLowerCase()}`, r.rateCentsPerMin);
-    }
-    _cache = map;
-    _cacheAt = Date.now();
-    return map;
-  } catch (err) {
-    logger.error({ err }, "Failed to load minute rates from DB");
-    return _cache ?? new Map();
-  }
-}
-
-/** Returns total per-minute charge in cents for an agent's provider stack. */
-export async function getAgentRateCentsPerMin(agent: {
-  llmProvider?: string | null;
-  asrProvider?: string | null;
-  ttsProvider?: string | null;
-  telephonyProvider?: string | null;
-}): Promise<number> {
-  const map = await getRateMap();
-  const get = (cat: string, prov: string | null | undefined) =>
-    map.get(`${cat}:${(prov ?? "").toLowerCase()}`) ?? 0;
-
-  return (
-    get("llm",       agent.llmProvider)       +
-    get("asr",       agent.asrProvider)       +
-    get("tts",       agent.ttsProvider)       +
-    get("telephony", agent.telephonyProvider)
-  );
-}
-
-/** Returns all rates as a flat list (for admin UI and dashboard display). */
-export async function getAllMinuteRates() {
-  return getRateMap();
-}
+/** Invalidate cache shim — kept for callers that still import it; now a no-op. */
+export function invalidateMinuteRatesCache(): void {}

@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { randomBytes } from "crypto";
 import { eq, desc, and, sql, gte, gt } from "drizzle-orm";
 import { db, callsTable, callEventsTable, executionLogsTable, agentsTable, providersTable, usersTable, walletTransactionsTable, activityLogsTable, callTransfersTable, vobizAccountsTable, verifiedPhoneDestinationsTable, platformSettingsTable, phoneNumbersTable } from "@workspace/db";
-import { getAgentRateCentsPerMin } from "../services/minute-rates.js";
+import { getFlatRateCentsPerMin } from "../services/minute-rates.js";
 import {
   InitiateCallBody,
   InitiateOutboundCallBody,
@@ -120,7 +120,7 @@ router.post("/calls/outbound", async (req, res): Promise<void> => {
       return;
     }
     if (user && user.walletBalanceCents > 0) {
-      const agentRate = await getAgentRateCentsPerMin(agent);
+      const agentRate = getFlatRateCentsPerMin(agent.agentMode);
       if (agentRate > 0) {
         const maxMinutes = Math.floor(user.walletBalanceCents / agentRate);
         maxDurationSeconds = Math.max(60, maxMinutes * 60);
@@ -620,16 +620,15 @@ router.patch("/calls/:id/end", async (req, res): Promise<void> => {
   // Fetch agent early — needed for rate lookup and metrics update
   const [agentForBilling] = await db.select().from(agentsTable).where(eq(agentsTable.id, existing.agentId));
 
-  // Compute per-minute rate from admin-set minute rates (falls back to 1 cent if no rates configured)
-  const rateCentsPerMin = agentForBilling ? await getAgentRateCentsPerMin(agentForBilling) : 1;
-  const rateLabel = `$${(rateCentsPerMin / 100).toFixed(3)}/min`;
-  // Pricing: < 30 s → half the per-minute rate flat; ≥ 30 s → ceil(seconds/60) × full rate.
+  // Flat per-minute rate: managed = $0.05/min (5 ¢), BYOP = $0.035/min (3.5 ¢).
+  // All calls billed by ceil(seconds / 60) started minutes.
+  const rateCentsPerMin = getFlatRateCentsPerMin(agentForBilling?.agentMode);
+  const modeLabel = agentForBilling?.agentMode === "managed" ? "managed" : "BYOP";
+  const billableMinutes = durationSeconds <= 0 ? 0 : Math.ceil(durationSeconds / 60);
+  const rateLabel = `$${(rateCentsPerMin / 100).toFixed(3)}/min (${modeLabel})`;
   const debitCents = durationSeconds <= 0
     ? 0
-    : durationSeconds < 30
-      ? Math.round(rateCentsPerMin / 2)                           // flat half-rate for short calls
-      : Math.round(Math.ceil(durationSeconds / 60) * rateCentsPerMin);
-  const billableMinutes = durationSeconds < 30 ? 0 : Math.ceil(durationSeconds / 60);
+    : Math.round(billableMinutes * rateCentsPerMin);
 
   const callUpdateSet: Partial<typeof callsTable.$inferInsert> = {
     status: "completed",

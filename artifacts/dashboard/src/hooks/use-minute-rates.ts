@@ -1,53 +1,46 @@
 import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 
-export interface MinuteRate {
-  category: string;       // "llm" | "asr" | "tts" | "telephony"
-  providerName: string;
+export interface FlatRate {
+  mode: string;           // "managed" | "byop"
   rateCentsPerMin: number;
   label: string | null;
 }
 
-async function fetchMinuteRates(): Promise<MinuteRate[]> {
+async function fetchMinuteRates(): Promise<FlatRate[]> {
   try {
-    const res = await customFetch<MinuteRate[]>("/api/billing/rates");
+    const res = await customFetch<FlatRate[]>("/api/billing/rates");
     return res ?? [];
   } catch {
     return [];
   }
 }
 
-/** Returns a lookup map: "category:providerName" → rateCentsPerMin */
+/** Returns a lookup map: "managed" | "byop" → rateCentsPerMin (with hardcoded fallbacks). */
 export function useMinuteRatesMap(): Map<string, number> {
-  const { data } = useQuery<MinuteRate[]>({
+  const { data } = useQuery<FlatRate[]>({
     queryKey: ["billing-rates"],
     queryFn: fetchMinuteRates,
     staleTime: 60_000,
   });
   const map = new Map<string, number>();
+  map.set("managed", 5);    // $0.05 / min default
+  map.set("byop",    3.5);  // $0.035 / min default
   for (const r of data ?? []) {
-    map.set(`${r.category}:${r.providerName.toLowerCase()}`, r.rateCentsPerMin);
+    if (r.mode) map.set(r.mode.toLowerCase(), r.rateCentsPerMin);
   }
   return map;
 }
 
-/** Computes total per-minute cost in paise for an agent's provider stack. */
+/**
+ * Returns the per-minute cost in cents for an agent based on its mode.
+ * Accepts the full agent object — only agentMode is used for the lookup.
+ */
 export function computeAgentRateCents(
   rateMap: Map<string, number>,
-  agent: {
-    llmProvider?: string | null;
-    asrProvider?: string | null;
-    ttsProvider?: string | null;
-    telephonyProvider?: string | null;
-  },
+  agent: { agentMode?: string | null; [key: string]: unknown },
 ): number {
   if (!(rateMap instanceof Map)) return 0;
-  const get = (cat: string, prov: string | null | undefined) =>
-    rateMap.get(`${cat}:${(prov ?? "").toLowerCase()}`) ?? 0;
-  return (
-    get("llm",       agent.llmProvider)       +
-    get("asr",       agent.asrProvider)       +
-    get("tts",       agent.ttsProvider)       +
-    get("telephony", agent.telephonyProvider)
-  );
+  const mode = agent.agentMode === "managed" ? "managed" : "byop";
+  return rateMap.get(mode) ?? (mode === "managed" ? 5 : 3.5);
 }

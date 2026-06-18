@@ -1,11 +1,12 @@
 /**
  * /billing routes — lightweight, authenticated (non-admin) endpoints used
- * by the user dashboard for displaying per-agent cost information.
+ * by the user dashboard for displaying pricing information.
  */
 import { Router } from "express";
-import { db, providerMinuteRatesTable, platformSettingsTable } from "@workspace/db";
+import { db, platformSettingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { MANAGED_RATE_CENTS_PER_MIN, BYOP_RATE_CENTS_PER_MIN } from "../services/minute-rates.js";
 
 async function getManagedKey(key: string): Promise<string | null> {
   const [row] = await db
@@ -19,19 +20,14 @@ const router = Router();
 
 /**
  * GET /billing/rates
- * Returns all admin-set per-minute reseller rates. Authenticated users can
- * read these so the dashboard can compute cost/min per agent.
+ * Returns the two flat per-minute billing tiers so the dashboard can display
+ * cost/min per agent based on its mode ("managed" vs "byop").
  */
-router.get("/billing/rates", requireAuth, async (req, res): Promise<void> => {
-  const rows = await db.select().from(providerMinuteRatesTable);
-  res.json(
-    rows.map((r) => ({
-      category:        r.category,
-      providerName:    r.providerName,
-      rateCentsPerMin: r.rateCentsPerMin,
-      label:           r.label,
-    })),
-  );
+router.get("/billing/rates", requireAuth, async (_req, res): Promise<void> => {
+  res.json([
+    { mode: "managed", rateCentsPerMin: MANAGED_RATE_CENTS_PER_MIN, label: "Managed — platform keys ($0.05/min)" },
+    { mode: "byop",    rateCentsPerMin: BYOP_RATE_CENTS_PER_MIN,    label: "BYOP — your own keys ($0.035/min)" },
+  ]);
 });
 
 /**
@@ -51,7 +47,6 @@ router.get("/billing/webcall-key-status", requireAuth, async (_req, res): Promis
     sarvam:   !!sarvam,
     cartesia: !!cartesia,
     qwen:     !!qwen,
-    // "Groq" provider agents resolve the same managed Groq key as "Qwen (via Groq)"
     groq:     !!qwen,
     openai:   !!openai,
     deepgram: !!deepgram,
