@@ -6,6 +6,14 @@ import { useAuth } from "@/lib/auth";
 type CallStatus = "idle" | "connecting" | "listening" | "thinking" | "speaking" | "ended";
 interface Msg { speaker: "user" | "agent"; text: string }
 
+// When an `interrupted` message arrives, only flush the audio queue if there is
+// still meaningfully more than the final word/tail scheduled ahead. A genuine
+// barge-in fires mid-response, so seconds of audio remain queued; a spurious
+// self-echo interrupt at end-of-turn fires when only the final word + tail
+// silence (~0.8s) remain. Below this threshold we let playback finish so the
+// last word is never clipped.
+const LATE_INTERRUPT_GUARD_S = 1.0;
+
 export function useWebcallKeyStatus() {
   const [keys, setKeys]       = useState<Record<string, boolean> | null>(null);
   const [loading, setLoading] = useState(true);
@@ -237,8 +245,17 @@ export function WebCallPanel({
               setStreamingText(prev => prev + chunk);
             }
           } else if (msg.type === "interrupted") {
-            // Barge-in: commit any pending agent turn, then clear state
-            stopAllAudio();
+            // Barge-in: commit any pending agent turn, then clear state.
+            // Guard against a LATE/spurious interrupt: only flush the audio queue
+            // when there is still meaningfully more than the final word/tail
+            // scheduled ahead (a genuine mid-response barge-in). If the server's
+            // own final-word echo trips a false barge-in right at end-of-turn,
+            // little audio remains — keep playing it so the last word isn't clipped.
+            const ctx = audioCtxRef.current;
+            const remainingS = ctx ? Math.max(0, nextPlayRef.current - ctx.currentTime) : 0;
+            if (remainingS > LATE_INTERRUPT_GUARD_S) {
+              stopAllAudio();
+            }
             if (pendingAgentTextRef.current) {
               const t = pendingAgentTextRef.current;
               pendingAgentTextRef.current = null;

@@ -1539,6 +1539,14 @@ export class OrchestrationPipeline {
       }
       this.isPlaying = false;
       this.armTailEchoGrace();
+      // Drain the carrier's jitter buffer before the turn returns to listening.
+      // playSentence's drain loop resolves as soon as the last chunk is handed
+      // off, but the carrier still holds ~100-300ms — without this wait the final
+      // word of a NORMAL turn is clipped as the turn ends (previously only the
+      // goodbye/terminal/transfer paths drained). drainPlaybackTail is a no-op on
+      // barge-in (the user is already speaking, so we must stop immediately) and
+      // when closed. Mirrors the web path's per-turn tail-silence drain.
+      await this.drainPlaybackTail();
     };
 
     const playPromise = playTask();
@@ -2269,6 +2277,14 @@ export class OrchestrationPipeline {
       }
       this.isPlaying = false;
       this.armTailEchoGrace();
+      // Drain the carrier's jitter buffer before the turn returns to listening.
+      // playSentence's drain loop resolves as soon as the last chunk is handed
+      // off, but the carrier still holds ~100-300ms — without this wait the final
+      // word of a NORMAL turn is clipped as the turn ends (previously only the
+      // goodbye/terminal/transfer paths drained). drainPlaybackTail is a no-op on
+      // barge-in (the user is already speaking, so we must stop immediately) and
+      // when closed. Mirrors the web path's per-turn tail-silence drain.
+      await this.drainPlaybackTail();
     };
 
     const playPromise = playTask();

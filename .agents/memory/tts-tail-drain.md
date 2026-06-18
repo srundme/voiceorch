@@ -25,7 +25,18 @@ tail handling, so they each have to replicate it.
 **Rules to apply when touching call audio:**
 1. Every path that calls `onCallEnd()`/hangup right after speaking must drain the
    tail first. On telephony this includes the hangup-after-LLM-call path, not
-   just the explicit goodbye/end_call paths — it's easy to miss.
+   just the explicit goodbye/end_call paths — it's easy to miss. NORMAL turns
+   need the drain too, not only teardown: the telephony `playTask` must
+   `await drainPlaybackTail()` right after `isPlaying=false`/`armTailEchoGrace()`
+   (covers BOTH the processTurn and continueWithToolResult playTask copies), or
+   the carrier clips the final word before the next listen. On web the parity is
+   extending `echoGraceUntil` through the whole tail-silence drain + an
+   echo-decay margin (the agent's own final-word echo returns via the mic LATER
+   than the server sent it — client AudioContext buffering lag + round-trip — so
+   server-send-timing grace expires mid-drain and trips a false barge-in). Also
+   add a client-side guard (webcall-panel.tsx): on `interrupted`, only
+   `stopAllAudio()` if scheduled audio remaining (`nextPlayRef - currentTime`)
+   exceeds a threshold, else a late self-echo interrupt flushes the last word.
 2. Echo grace protects the START of playback by default. It must ALSO be re-armed
    at EVERY playback exit (every place that flips the speaking flag off —
    including short direct branches like garbled-transcript clarification,

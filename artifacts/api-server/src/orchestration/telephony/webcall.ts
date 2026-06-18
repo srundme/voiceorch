@@ -55,6 +55,10 @@ const BARGE_IN_END_GRACE_MS    = 600;  // suppress barge-in for 600ms after the 
                                         // of the final word triggering a false barge-in and cutting it off
 const AUDIO_TAIL_SILENCE_MS    = 300;  // extra wait after the last chunk so the client's audio buffer drains
                                         // before the server signals "listening" (prevents last-word cutoff)
+const WEB_TAIL_ECHO_MARGIN_MS  = 500;  // extra echo-grace held PAST the tail-silence drain so the agent's own
+                                        // final-word echo — which returns through the mic LATER than we sent it
+                                        // (client AudioContext buffering lag + network round-trip) — can't trip a
+                                        // false barge-in that flushes the last word on the client
 const TTS_TAIL_SILENCE_MS      = 150;  // PCM silence appended to every TTS buffer so the last word isn't clipped
                                         // by the client's AudioContext reaching the end of its scheduled queue
 const MIN_PCM_BYTES            = 3200; // ~100ms at 16kHz Int16 — minimum speech before processing
@@ -1952,6 +1956,16 @@ export async function handleWebCallWebSocket(
       // Sending silence frames extends the scheduled timeline past the last
       // word, ensuring it plays to completion before the queue empties.
       if (!interrupted && !closed) {
+        // Hold the echo-grace window through the ENTIRE tail-silence drain plus an
+        // echo-decay margin. The per-sentence grace above was computed from
+        // server-side send timing only; the client plays (and echoes) the final
+        // word LATER than we sent it (AudioContext buffering lag + network
+        // round-trip). Without this, the echo of the last word can arrive after
+        // grace expires and trip a false barge-in that flushes it on the client.
+        echoGraceUntil = Math.max(
+          echoGraceUntil,
+          Date.now() + AUDIO_TAIL_SILENCE_MS + WEB_TAIL_ECHO_MARGIN_MS,
+        );
         const silenceChunk = Buffer.alloc(AUDIO_CHUNK_BYTES, 0);
         const silenceFrames = Math.ceil(AUDIO_TAIL_SILENCE_MS / 40);
         for (let s = 0; s < silenceFrames && !interrupted && !closed; s++) {
