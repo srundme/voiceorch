@@ -820,6 +820,56 @@ export const ArchiveAgentVersionResponse = zod.object({
 
 
 /**
+ * Read-only aggregation across the caller memory tables, rolled up to the agent level. Returns one row per agent owned by the user (zeroed counts when an agent has no memory yet) so the left-panel CRM list can render in a single request without N+1 calls.
+ * @summary Per-agent rolled-up memory stats for the authenticated user's agents
+ */
+export const ListAgentMemorySummariesResponseItem = zod.object({
+  "agentId": zod.number(),
+  "agentName": zod.string(),
+  "totalCalls": zod.number().describe('Total calls handled by this agent (from the calls table)'),
+  "totalFacts": zod.number().describe('Current (non-superseded) facts across all of this agent\'s conversations'),
+  "totalEpisodes": zod.number().describe('Conversation episodes archived for this agent'),
+  "lastActiveAt": zod.coerce.date().nullish().describe('Timestamp of this agent\'s most recent call, or null if never active'),
+  "createdAt": zod.coerce.date().describe('When the agent was created')
+})
+export const ListAgentMemorySummariesResponse = zod.array(ListAgentMemorySummariesResponseItem)
+
+
+/**
+ * @summary All current facts extracted across every conversation an agent handled
+ */
+export const ListAgentMemoryFactsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListAgentMemoryFactsResponseItem = zod.object({
+  "id": zod.number(),
+  "key": zod.string(),
+  "value": zod.string(),
+  "confidence": zod.number(),
+  "createdAt": zod.coerce.date()
+})
+export const ListAgentMemoryFactsResponse = zod.array(ListAgentMemoryFactsResponseItem)
+
+
+/**
+ * @summary All conversation episodes for an agent, newest first
+ */
+export const ListAgentMemoryEpisodesParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListAgentMemoryEpisodesResponseItem = zod.object({
+  "id": zod.number(),
+  "callId": zod.number().nullish(),
+  "summary": zod.string().nullish(),
+  "durationSeconds": zod.number().nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const ListAgentMemoryEpisodesResponse = zod.array(ListAgentMemoryEpisodesResponseItem)
+
+
+/**
  * @summary List calls with optional agent filter
  */
 export const ListCallsQueryParams = zod.object({

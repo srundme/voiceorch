@@ -49,6 +49,9 @@ import type {
   AdminUsageServiceResponse,
   Agent,
   AgentInput,
+  AgentMemoryEpisode,
+  AgentMemoryFact,
+  AgentMemorySummary,
   AgentStats,
   AgentTemplate,
   AgentUpdate,
@@ -1267,6 +1270,238 @@ export const useArchiveAgentVersion = <TError = ErrorType<void>,
       > => {
       return useMutation(getArchiveAgentVersionMutationOptions(options));
     }
+
+export const getListAgentMemorySummariesUrl = () => {
+
+
+
+
+  return `/api/agents/memory/summary`
+}
+
+/**
+ * Read-only aggregation across the caller memory tables, rolled up to the agent level. Returns one row per agent owned by the user (zeroed counts when an agent has no memory yet) so the left-panel CRM list can render in a single request without N+1 calls.
+ * @summary Per-agent rolled-up memory stats for the authenticated user's agents
+ */
+export const listAgentMemorySummaries = async ( options?: RequestInit): Promise<AgentMemorySummary[]> => {
+
+  return customFetch<AgentMemorySummary[]>(getListAgentMemorySummariesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAgentMemorySummariesQueryKey = () => {
+    return [
+    `/api/agents/memory/summary`
+    ] as const;
+    }
+
+
+export const getListAgentMemorySummariesQueryOptions = <TData = Awaited<ReturnType<typeof listAgentMemorySummaries>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAgentMemorySummaries>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAgentMemorySummariesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAgentMemorySummaries>>> = ({ signal }) => listAgentMemorySummaries({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAgentMemorySummaries>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAgentMemorySummariesQueryResult = NonNullable<Awaited<ReturnType<typeof listAgentMemorySummaries>>>
+export type ListAgentMemorySummariesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Per-agent rolled-up memory stats for the authenticated user's agents
+ */
+
+export function useListAgentMemorySummaries<TData = Awaited<ReturnType<typeof listAgentMemorySummaries>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAgentMemorySummaries>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAgentMemorySummariesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListAgentMemoryFactsUrl = (id: number,) => {
+
+
+
+
+  return `/api/agents/${id}/memory/facts`
+}
+
+/**
+ * @summary All current facts extracted across every conversation an agent handled
+ */
+export const listAgentMemoryFacts = async (id: number, options?: RequestInit): Promise<AgentMemoryFact[]> => {
+
+  return customFetch<AgentMemoryFact[]>(getListAgentMemoryFactsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAgentMemoryFactsQueryKey = (id: number,) => {
+    return [
+    `/api/agents/${id}/memory/facts`
+    ] as const;
+    }
+
+
+export const getListAgentMemoryFactsQueryOptions = <TData = Awaited<ReturnType<typeof listAgentMemoryFacts>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAgentMemoryFacts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAgentMemoryFactsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAgentMemoryFacts>>> = ({ signal }) => listAgentMemoryFacts(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAgentMemoryFacts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAgentMemoryFactsQueryResult = NonNullable<Awaited<ReturnType<typeof listAgentMemoryFacts>>>
+export type ListAgentMemoryFactsQueryError = ErrorType<void>
+
+
+/**
+ * @summary All current facts extracted across every conversation an agent handled
+ */
+
+export function useListAgentMemoryFacts<TData = Awaited<ReturnType<typeof listAgentMemoryFacts>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAgentMemoryFacts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAgentMemoryFactsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListAgentMemoryEpisodesUrl = (id: number,) => {
+
+
+
+
+  return `/api/agents/${id}/memory/episodes`
+}
+
+/**
+ * @summary All conversation episodes for an agent, newest first
+ */
+export const listAgentMemoryEpisodes = async (id: number, options?: RequestInit): Promise<AgentMemoryEpisode[]> => {
+
+  return customFetch<AgentMemoryEpisode[]>(getListAgentMemoryEpisodesUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAgentMemoryEpisodesQueryKey = (id: number,) => {
+    return [
+    `/api/agents/${id}/memory/episodes`
+    ] as const;
+    }
+
+
+export const getListAgentMemoryEpisodesQueryOptions = <TData = Awaited<ReturnType<typeof listAgentMemoryEpisodes>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAgentMemoryEpisodes>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAgentMemoryEpisodesQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAgentMemoryEpisodes>>> = ({ signal }) => listAgentMemoryEpisodes(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAgentMemoryEpisodes>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAgentMemoryEpisodesQueryResult = NonNullable<Awaited<ReturnType<typeof listAgentMemoryEpisodes>>>
+export type ListAgentMemoryEpisodesQueryError = ErrorType<void>
+
+
+/**
+ * @summary All conversation episodes for an agent, newest first
+ */
+
+export function useListAgentMemoryEpisodes<TData = Awaited<ReturnType<typeof listAgentMemoryEpisodes>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAgentMemoryEpisodes>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAgentMemoryEpisodesQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 
 export const getListCallsUrl = (params?: ListCallsParams,) => {
   const normalizedParams = new URLSearchParams();

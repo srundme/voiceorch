@@ -929,6 +929,43 @@ export interface SnapServeExecutionsResponse {
   data?: SnapServeExecution[];
 }
 
+export interface AgentMemorySummary {
+  agentId: number;
+  agentName: string;
+  /** Total calls handled by this agent (from the calls table) */
+  totalCalls: number;
+  /** Current (non-superseded) facts across all of this agent's conversations */
+  totalFacts: number;
+  /** Conversation episodes archived for this agent */
+  totalEpisodes: number;
+  /**
+     * Timestamp of this agent's most recent call, or null if never active
+     * @nullable
+     */
+  lastActiveAt?: string | null;
+  /** When the agent was created */
+  createdAt: string;
+}
+
+export interface AgentMemoryFact {
+  id: number;
+  key: string;
+  value: string;
+  confidence: number;
+  createdAt: string;
+}
+
+export interface AgentMemoryEpisode {
+  id: number;
+  /** @nullable */
+  callId?: number | null;
+  /** @nullable */
+  summary?: string | null;
+  /** @nullable */
+  durationSeconds?: number | null;
+  createdAt: string;
+}
+
 export type CallStatus = typeof CallStatus[keyof typeof CallStatus];
 
 

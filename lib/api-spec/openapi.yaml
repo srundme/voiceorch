@@ -362,6 +362,73 @@ paths:
         "404":
           description: Not found
 
+  # ── Agent Memory (CRM) ──────────────────────────────────────────────────────
+  /agents/memory/summary:
+    get:
+      operationId: listAgentMemorySummaries
+      tags: [agents]
+      summary: Per-agent rolled-up memory stats for the authenticated user's agents
+      description: >-
+        Read-only aggregation across the caller memory tables, rolled up to the
+        agent level. Returns one row per agent owned by the user (zeroed counts
+        when an agent has no memory yet) so the left-panel CRM list can render in
+        a single request without N+1 calls.
+      responses:
+        "200":
+          description: List of agent memory summaries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgentMemorySummary"
+
+  /agents/{id}/memory/facts:
+    get:
+      operationId: listAgentMemoryFacts
+      tags: [agents]
+      summary: All current facts extracted across every conversation an agent handled
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of current (non-superseded) facts for the agent
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgentMemoryFact"
+        "404":
+          description: Agent not found
+
+  /agents/{id}/memory/episodes:
+    get:
+      operationId: listAgentMemoryEpisodes
+      tags: [agents]
+      summary: All conversation episodes for an agent, newest first
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of episodes for the agent
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgentMemoryEpisode"
+        "404":
+          description: Agent not found
+
   # ── Calls ───────────────────────────────────────────────────────────────────
   /calls:
     get:
@@ -6442,6 +6509,65 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/SnapServeExecution"
+
+    # ── Agent Memory (CRM) ──────────────────────────────────────────────────────
+    AgentMemorySummary:
+      type: object
+      required: [agentId, agentName, totalCalls, totalFacts, totalEpisodes, createdAt]
+      properties:
+        agentId:
+          type: integer
+        agentName:
+          type: string
+        totalCalls:
+          type: integer
+          description: Total calls handled by this agent (from the calls table)
+        totalFacts:
+          type: integer
+          description: Current (non-superseded) facts across all of this agent's conversations
+        totalEpisodes:
+          type: integer
+          description: Conversation episodes archived for this agent
+        lastActiveAt:
+          type: ["string", "null"]
+          format: date-time
+          description: Timestamp of this agent's most recent call, or null if never active
+        createdAt:
+          type: string
+          format: date-time
+          description: When the agent was created
+
+    AgentMemoryFact:
+      type: object
+      required: [id, key, value, confidence, createdAt]
+      properties:
+        id:
+          type: integer
+        key:
+          type: string
+        value:
+          type: string
+        confidence:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+
+    AgentMemoryEpisode:
+      type: object
+      required: [id, createdAt]
+      properties:
+        id:
+          type: integer
+        callId:
+          type: ["integer", "null"]
+        summary:
+          type: ["string", "null"]
+        durationSeconds:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+          format: date-time
 
     # ── Call ───────────────────────────────────────────────────────────────────
     Call:

@@ -1,7 +1,7 @@
 // agents router — supports call_transfer + webhook (custom function) tools + AMD voicemail detection
 import { Router, type IRouter } from "express";
-import { eq, and, count, desc, isNull, inArray } from "drizzle-orm";
-import { db, agentsTable, schedulingCalendarsTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callerSentencesTable, callerFactSentenceLinksTable, callerEpisodeFactLinksTable, providersTable, agentKnowledgeSourcesTable, phoneNumbersTable } from "@workspace/db";
+import { eq, and, count, desc, isNull, inArray, max } from "drizzle-orm";
+import { db, agentsTable, schedulingCalendarsTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callerSentencesTable, callerFactSentenceLinksTable, callerEpisodeFactLinksTable, providersTable, agentKnowledgeSourcesTable, phoneNumbersTable, callsTable } from "@workspace/db";
 import {
   CreateAgentBody,
   UpdateAgentBody,
@@ -13,6 +13,9 @@ import {
   GetAgentResponse,
   UpdateAgentResponse,
   ToggleAgentResponse,
+  ListAgentMemorySummariesResponse,
+  ListAgentMemoryFactsResponse,
+  ListAgentMemoryEpisodesResponse,
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logActivity } from "../lib/activity.js";
@@ -309,6 +312,120 @@ router.delete("/agents/:id", requireAuth, async (req, res): Promise<void> => {
   }
   await logActivity({ userId: clerkId, eventType: "agent.deleted", resourceType: "agent", resourceId: String(deleted.id), description: `Agent "${deleted.name}" deleted` });
   res.sendStatus(204);
+});
+
+// ── Agent Memory (CRM) endpoints ───────────────────────────────────────────
+// Read-only aggregations that roll the per-caller memory tables up to the agent
+// level. No new tables, no writes — purely a different lens on existing data.
+
+// Per-agent rolled-up memory stats for all of the user's agents (single request,
+// no N+1). Returns one row per agent, zeroed when an agent has no memory yet.
+router.get("/agents/memory/summary", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+
+  const agents = await db
+    .select({ id: agentsTable.id, name: agentsTable.name, createdAt: agentsTable.createdAt })
+    .from(agentsTable)
+    .where(eq(agentsTable.userId, clerkId))
+    .orderBy(desc(agentsTable.createdAt));
+
+  const ids = agents.map(a => a.id);
+  if (ids.length === 0) { res.json(ListAgentMemorySummariesResponse.parse([])); return; }
+
+  const [callStats, factStats, episodeStats] = await Promise.all([
+    db.select({
+        agentId: callsTable.agentId,
+        cnt:     count(),
+        lastAt:  max(callsTable.createdAt),
+      })
+      .from(callsTable)
+      .where(inArray(callsTable.agentId, ids))
+      .groupBy(callsTable.agentId),
+    db.select({ agentId: callerFactsTable.agentId, cnt: count() })
+      .from(callerFactsTable)
+      .where(and(inArray(callerFactsTable.agentId, ids), isNull(callerFactsTable.supersededById)))
+      .groupBy(callerFactsTable.agentId),
+    db.select({ agentId: callerCallArchiveTable.agentId, cnt: count() })
+      .from(callerCallArchiveTable)
+      .where(inArray(callerCallArchiveTable.agentId, ids))
+      .groupBy(callerCallArchiveTable.agentId),
+  ]);
+
+  const callMap    = new Map(callStats.map(r => [r.agentId, r]));
+  const factMap    = new Map(factStats.map(r => [r.agentId, r.cnt]));
+  const episodeMap = new Map(episodeStats.map(r => [r.agentId, r.cnt]));
+
+  const summaries = agents.map(a => {
+    const calls = callMap.get(a.id);
+    const lastAt = calls?.lastAt ?? null;
+    return {
+      agentId:       a.id,
+      agentName:     a.name,
+      totalCalls:    calls?.cnt ?? 0,
+      totalFacts:    factMap.get(a.id) ?? 0,
+      totalEpisodes: episodeMap.get(a.id) ?? 0,
+      lastActiveAt:  lastAt ? new Date(lastAt).toISOString() : null,
+      createdAt:     a.createdAt.toISOString(),
+    };
+  });
+
+  res.json(ListAgentMemorySummariesResponse.parse(summaries));
+});
+
+// All current (non-superseded) facts across every conversation an agent handled
+router.get("/agents/:id/memory/facts", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const agentId = parseInt(String(req.params["id"] ?? ""), 10);
+  if (isNaN(agentId)) { res.status(400).json({ error: "Invalid agent id" }); return; }
+
+  const [agent] = await db.select({ id: agentsTable.id })
+    .from(agentsTable)
+    .where(and(eq(agentsTable.id, agentId), eq(agentsTable.userId, clerkId)));
+  if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+
+  const facts = await db.select()
+    .from(callerFactsTable)
+    .where(and(eq(callerFactsTable.agentId, agentId), isNull(callerFactsTable.supersededById)))
+    .orderBy(desc(callerFactsTable.createdAt));
+
+  res.json(ListAgentMemoryFactsResponse.parse(facts.map(f => ({
+    id:         f.id,
+    key:        f.key,
+    value:      f.value,
+    confidence: f.confidence,
+    createdAt:  f.createdAt.toISOString(),
+  }))));
+});
+
+// All conversation episodes for an agent, newest first (timeline source)
+router.get("/agents/:id/memory/episodes", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const agentId = parseInt(String(req.params["id"] ?? ""), 10);
+  if (isNaN(agentId)) { res.status(400).json({ error: "Invalid agent id" }); return; }
+
+  const [agent] = await db.select({ id: agentsTable.id })
+    .from(agentsTable)
+    .where(and(eq(agentsTable.id, agentId), eq(agentsTable.userId, clerkId)));
+  if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+
+  const episodes = await db.select({
+      id:              callerCallArchiveTable.id,
+      callId:          callerCallArchiveTable.callId,
+      summary:         callerCallArchiveTable.summary,
+      durationSeconds: callerCallArchiveTable.durationSeconds,
+      createdAt:       callerCallArchiveTable.createdAt,
+    })
+    .from(callerCallArchiveTable)
+    .where(eq(callerCallArchiveTable.agentId, agentId))
+    .orderBy(desc(callerCallArchiveTable.createdAt));
+
+  res.json(ListAgentMemoryEpisodesResponse.parse(episodes.map(e => ({
+    id:              e.id,
+    callId:          e.callId,
+    summary:         e.summary,
+    durationSeconds: e.durationSeconds,
+    createdAt:       e.createdAt.toISOString(),
+  }))));
 });
 
 // ── Caller Memory endpoints ────────────────────────────────────────────────

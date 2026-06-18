@@ -1,69 +1,42 @@
 import { useState, useMemo } from "react";
-import { Brain, Phone, User, Clock, ChevronRight, Search, Sparkles, X, Loader2 } from "lucide-react";
+import { Link } from "wouter";
+import {
+  Brain, Search, Phone, FileText, Layers, Clock, MoreVertical, Plus, Bot,
+  Loader2, ChevronRight, Pencil, Calendar, Cpu, Mic, Volume2, PhoneCall,
+  ArrowDownLeft, ArrowUpRight, Globe, Sparkles,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useListAgents, getListAgentsQueryKey } from "@workspace/api-client-react";
-import { useAuth } from "@/lib/auth";
+import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  useListAgentMemorySummaries, getListAgentMemorySummariesQueryKey,
+  useListAgentMemoryFacts,
+  useListAgentMemoryEpisodes,
+  useListCalls,
+  useListAgents, getListAgentsQueryKey,
+  useUpdateAgent,
+} from "@workspace/api-client-react";
+import type {
+  AgentMemorySummary, AgentMemoryFact, AgentMemoryEpisode, Agent, Call,
+} from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 
-/* ─── Types ──────────────────────────────────────────────────────────────── */
-interface CallerMemory {
-  phone: string;
-  name?: string;
-  callCount: number;
-  lastSeen: string;
-  agentName: string;
-  agentId: number;
-  factCount: number;
-}
-
-interface CallerFact {
-  id: number;
-  key: string;
-  value: string;
-  confidence: number;
-  createdAt: string;
-  history: Array<{ id: number; value: string; confidence: number; createdAt: string }>;
-}
-
-interface CallerSentence {
-  id: number;
-  sequenceNum: number;
-  speaker: string;
-  text: string;
-}
-
-interface CallerEpisode {
-  id: number;
-  callId: number | null;
-  summary: string | null;
-  durationSeconds: number | null;
-  createdAt: string;
-  insightFactIds: number[];
-  sentences: CallerSentence[];
-}
-
-interface CallerDetail {
-  facts: CallerFact[];
-  episodes: CallerEpisode[];
-}
-
-interface ApiCallerRow {
-  phoneNumber: string;
-  name: string | null;
-  callCount: number;
-  factCount: number;
-  lastCalledAt: string | null;
-}
-
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
-function timeAgo(iso: string | null): string {
-  if (!iso) return "—";
+function timeAgo(iso: string | null | undefined): string {
+  if (!iso) return "Never";
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60_000);
-  if (mins < 1)  return "just now";
+  if (mins < 1)  return "Just now";
   if (mins < 60) return `${mins}m ago`;
   const hrs = Math.floor(mins / 60);
   if (hrs < 24)  return `${hrs}h ago`;
@@ -72,412 +45,473 @@ function timeAgo(iso: string | null): string {
   return `${Math.floor(days / 30)}mo ago`;
 }
 
-function sentimentEmoji(summary: string | null): string {
-  if (!summary) return "";
-  const s = summary.toLowerCase();
-  if (s.includes("angry") || s.includes("frustrat") || s.includes("upset")) return "angry";
-  if (s.includes("happy") || s.includes("satisf") || s.includes("great")) return "happy";
-  if (s.includes("neutral") || s.includes("inquir")) return "neutral";
-  return "";
+function formatDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
-/* ─── Hooks ──────────────────────────────────────────────────────────────── */
-function useAuthHeaders() {
-  const { getToken } = useAuth();
-  return async (): Promise<HeadersInit> => {
-    const token = await getToken();
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
+function formatDuration(seconds?: number | null): string {
+  if (!seconds) return "—";
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
 }
 
-function callerListKey(agentId: number) {
-  return ["caller-memory", "list", agentId];
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
+  return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase();
 }
 
-function callerDetailKey(agentId: number, phone: string) {
-  return ["caller-memory", "detail", agentId, phone];
+type Direction = "Inbound" | "Outbound" | "Web";
+function callDirection(call: Call): Direction {
+  let meta: Record<string, unknown> = {};
+  if (call.metadata) {
+    try { meta = JSON.parse(call.metadata) as Record<string, unknown>; } catch { /* ignore */ }
+  }
+  if (call.toNumber === "webcall" || call.fromNumber === "browser" || meta["channel"] === "webcall") return "Web";
+  if (meta["providerCallId"]) return "Outbound";
+  return "Inbound";
 }
 
-function useCallerDetail(agentId: number | null, phone: string | null) {
-  const getHeaders = useAuthHeaders();
-  return useQuery<CallerDetail>({
-    queryKey: callerDetailKey(agentId ?? 0, phone ?? ""),
-    enabled: agentId !== null && phone !== null,
-    queryFn: async () => {
-      const headers = await getHeaders();
-      const r = await fetch(`/api/agents/${agentId}/caller-memory/${encodeURIComponent(phone!)}`, { headers });
-      if (!r.ok) throw new Error("Failed to load caller detail");
-      return r.json();
+/* ─── Avatar ─────────────────────────────────────────────────────────────── */
+function AgentAvatar({ name, size = "md" }: { name: string; size?: "sm" | "md" | "lg" }) {
+  const dims = size === "lg" ? "w-12 h-12 text-[15px]" : size === "sm" ? "w-8 h-8 text-[11px]" : "w-10 h-10 text-[13px]";
+  return (
+    <div className={`${dims} rounded-xl bg-blue-500/15 border border-blue-500/30 flex items-center justify-center shrink-0`}>
+      <span className="font-semibold text-blue-400 tracking-tight">{initials(name)}</span>
+    </div>
+  );
+}
+
+/* ─── Left panel: agent card ─────────────────────────────────────────────── */
+function AgentCard({ agent, selected, onClick }: { agent: AgentMemorySummary; selected: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full text-left rounded-xl border p-3 transition-colors ${
+        selected
+          ? "border-blue-500/50 bg-blue-500/10"
+          : "border-border bg-card hover:bg-accent/30"
+      }`}
+    >
+      <div className="flex items-center gap-3 mb-3">
+        <AgentAvatar name={agent.agentName} size="sm" />
+        <div className="flex-1 min-w-0">
+          <p className="text-[13px] font-semibold text-foreground truncate">{agent.agentName}</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1">
+            <Clock className="w-2.5 h-2.5" />
+            {timeAgo(agent.lastActiveAt)}
+          </p>
+        </div>
+        <ChevronRight className={`w-3.5 h-3.5 shrink-0 ${selected ? "text-blue-400" : "text-muted-foreground/30"}`} />
+      </div>
+      <div className="grid grid-cols-3 gap-1.5">
+        {[
+          { label: "Calls", value: agent.totalCalls },
+          { label: "Facts", value: agent.totalFacts },
+          { label: "Episodes", value: agent.totalEpisodes },
+        ].map(s => (
+          <div key={s.label} className="rounded-lg bg-elevated border border-border px-2 py-1.5 text-center">
+            <p className="text-[13px] font-semibold text-foreground tabular-nums leading-none">{s.value}</p>
+            <p className="text-[9.5px] text-muted-foreground mt-1 uppercase tracking-wide">{s.label}</p>
+          </div>
+        ))}
+      </div>
+    </button>
+  );
+}
+
+/* ─── Right panel: stat card ─────────────────────────────────────────────── */
+function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-border bg-card p-4">
+      <div className="flex items-center gap-2 text-muted-foreground mb-2">
+        {icon}
+        <span className="text-[11px] uppercase tracking-wide font-medium">{label}</span>
+      </div>
+      <p className="text-[20px] font-semibold text-foreground tabular-nums leading-none">{value}</p>
+    </div>
+  );
+}
+
+/* ─── Add Note dialog ────────────────────────────────────────────────────── */
+function AddNoteDialog({
+  open, onOpenChange, agentId, agentName, currentNote,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  agentId: number;
+  agentName: string;
+  currentNote: string;
+}) {
+  const [note, setNote] = useState(currentNote);
+  const qc = useQueryClient();
+  const { toast } = useToast();
+
+  // Reset local state whenever the dialog is (re)opened for an agent
+  useMemo(() => { if (open) setNote(currentNote); }, [open, currentNote]);
+
+  const updateAgent = useUpdateAgent({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getListAgentsQueryKey() });
+        toast({ title: "Note saved", description: `Updated note for ${agentName}.` });
+        onOpenChange(false);
+      },
+      onError: (e: unknown) => {
+        const msg = e instanceof Error ? e.message : "Failed to save note";
+        toast({ title: "Error", description: msg, variant: "destructive" });
+      },
     },
   });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Agent Note</DialogTitle>
+          <DialogDescription>
+            Add a free-form note for <span className="text-foreground font-medium">{agentName}</span>. Stored on the agent and visible in its details.
+          </DialogDescription>
+        </DialogHeader>
+        <Textarea
+          value={note}
+          onChange={e => setNote(e.target.value)}
+          placeholder="e.g. Handles after-hours overflow for the support line…"
+          className="min-h-[120px] text-[13px]"
+        />
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={updateAgent.isPending}>
+            Cancel
+          </Button>
+          <Button
+            onClick={() => updateAgent.mutate({ id: agentId, data: { description: note } })}
+            disabled={updateAgent.isPending}
+          >
+            {updateAgent.isPending && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
+            Save Note
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
-/* ─── Empty state ─────────────────────────────────────────────────────────── */
-function EmptyState() {
+/* ─── Right panel: Overview tab ──────────────────────────────────────────── */
+function OverviewTab({ agent, summary }: { agent: Agent | undefined; summary: AgentMemorySummary }) {
+  const rows: Array<{ icon: React.ReactNode; label: string; value: React.ReactNode }> = [
+    { icon: <Bot className="w-3.5 h-3.5" />, label: "Status", value: agent
+        ? <Badge variant="outline" className="text-[10.5px] capitalize">{agent.status}</Badge>
+        : "—" },
+    { icon: <Cpu className="w-3.5 h-3.5" />, label: "LLM Provider", value: agent?.llmProvider ?? "—" },
+    { icon: <Mic className="w-3.5 h-3.5" />, label: "ASR Provider", value: agent?.asrProvider ?? "—" },
+    { icon: <Volume2 className="w-3.5 h-3.5" />, label: "TTS Provider", value: agent?.ttsProvider ?? "—" },
+    { icon: <Calendar className="w-3.5 h-3.5" />, label: "Created", value: formatDate(summary.createdAt) },
+    { icon: <Clock className="w-3.5 h-3.5" />, label: "Last Active", value: timeAgo(summary.lastActiveAt) },
+  ];
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-xl border border-border bg-card overflow-hidden">
+        <div className="px-4 py-2.5 border-b border-border bg-elevated">
+          <h3 className="text-[12px] font-semibold text-foreground">Agent Information</h3>
+        </div>
+        <div className="divide-y divide-border">
+          {rows.map(r => (
+            <div key={r.label} className="flex items-center gap-3 px-4 py-2.5">
+              <div className="text-muted-foreground/60">{r.icon}</div>
+              <span className="text-[12px] text-muted-foreground flex-1">{r.label}</span>
+              <span className="text-[12px] font-medium text-foreground capitalize">{r.value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-border bg-card overflow-hidden">
+        <div className="px-4 py-2.5 border-b border-border bg-elevated">
+          <h3 className="text-[12px] font-semibold text-foreground">Note</h3>
+        </div>
+        <div className="px-4 py-3">
+          {agent?.description ? (
+            <p className="text-[12.5px] text-foreground leading-relaxed whitespace-pre-wrap">{agent.description}</p>
+          ) : (
+            <p className="text-[12px] text-muted-foreground italic">No note yet. Use “Add Note” to add context for this agent.</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Right panel: Facts tab ─────────────────────────────────────────────── */
+function FactsTab({ agentId }: { agentId: number }) {
+  const { data, isLoading } = useListAgentMemoryFacts(agentId);
+  const facts = (data ?? []) as AgentMemoryFact[];
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-wrap gap-2">
+        {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-7 w-32 rounded-lg" />)}
+      </div>
+    );
+  }
+  if (facts.length === 0) {
+    return <p className="text-[12.5px] text-muted-foreground py-8 text-center">No facts extracted across this agent’s conversations yet.</p>;
+  }
+  return (
+    <div className="flex flex-wrap gap-2">
+      {facts.map(f => (
+        <div key={f.id} className="rounded-lg bg-elevated border border-border px-3 py-2">
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground/70 mb-0.5">{f.key}</p>
+          <p className="text-[12.5px] text-foreground font-medium">{f.value}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ─── Right panel: Episodes tab ──────────────────────────────────────────── */
+function EpisodesTab({ agentId }: { agentId: number }) {
+  const { data, isLoading } = useListAgentMemoryEpisodes(agentId);
+  const episodes = (data ?? []) as AgentMemoryEpisode[];
+
+  if (isLoading) {
+    return (
+      <div className="space-y-2.5">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="rounded-xl border border-border bg-card p-4 space-y-2">
+            <Skeleton className="h-3 w-28" />
+            <Skeleton className="h-3 w-full" />
+            <Skeleton className="h-3 w-4/5" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+  if (episodes.length === 0) {
+    return <p className="text-[12.5px] text-muted-foreground py-8 text-center">No conversation episodes recorded for this agent yet.</p>;
+  }
+  return (
+    <div className="space-y-2.5">
+      {episodes.map(ep => (
+        <div key={ep.id} className="rounded-xl border border-border bg-card p-4">
+          <div className="flex items-center gap-2 text-[11px] text-muted-foreground/70 mb-2">
+            <Layers className="w-3 h-3" />
+            <span>{timeAgo(ep.createdAt)}</span>
+            {ep.durationSeconds != null && <span>· {formatDuration(ep.durationSeconds)}</span>}
+            {ep.callId != null && (
+              <Link href={`/app/calls/${ep.callId}`} className="ml-auto text-blue-400 hover:text-blue-300 flex items-center gap-1">
+                View call <ChevronRight className="w-3 h-3" />
+              </Link>
+            )}
+          </div>
+          {ep.summary ? (
+            <p className="text-[12.5px] text-foreground leading-relaxed">{ep.summary}</p>
+          ) : (
+            <p className="text-[12px] text-muted-foreground italic">No summary available.</p>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ─── Right panel: Call History tab ──────────────────────────────────────── */
+function DirectionBadge({ direction }: { direction: Direction }) {
+  const cfg: Record<Direction, { icon: React.ReactNode; cls: string }> = {
+    Inbound:  { icon: <ArrowDownLeft className="w-3 h-3" />, cls: "text-emerald-400" },
+    Outbound: { icon: <ArrowUpRight className="w-3 h-3" />,  cls: "text-blue-400" },
+    Web:      { icon: <Globe className="w-3 h-3" />,         cls: "text-violet-400" },
+  };
+  const c = cfg[direction];
+  return (
+    <span className={`inline-flex items-center gap-1 text-[11px] ${c.cls}`}>
+      {c.icon}{direction}
+    </span>
+  );
+}
+
+function CallHistoryTab({ agentId }: { agentId: number }) {
+  const { data, isLoading } = useListCalls({ agentId });
+  const calls = (data ?? []) as Call[];
+
+  if (isLoading) {
+    return (
+      <div className="space-y-2">
+        {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-lg" />)}
+      </div>
+    );
+  }
+  if (calls.length === 0) {
+    return <p className="text-[12.5px] text-muted-foreground py-8 text-center">No calls recorded for this agent yet.</p>;
+  }
+  return (
+    <div className="rounded-xl border border-border bg-card overflow-hidden divide-y divide-border">
+      {calls.map(call => (
+        <Link
+          key={call.id}
+          href={`/app/calls/${call.id}`}
+          className="flex items-center gap-3 px-4 py-3 hover:bg-accent/30 transition-colors group"
+        >
+          <PhoneCall className="w-3.5 h-3.5 text-muted-foreground/50 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <DirectionBadge direction={callDirection(call)} />
+            <p className="text-[11px] text-muted-foreground mt-0.5">{timeAgo(call.createdAt)}</p>
+          </div>
+          <div className="hidden sm:block text-right">
+            <Badge variant="outline" className="text-[10px] capitalize">{call.status.replace("_", " ")}</Badge>
+          </div>
+          <div className="text-[11px] text-muted-foreground tabular-nums w-14 text-right">
+            {formatDuration(call.durationSeconds)}
+          </div>
+          <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/30 shrink-0 group-hover:text-muted-foreground/60" />
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+/* ─── Right panel ────────────────────────────────────────────────────────── */
+function AgentDetailPanel({ summary, agent }: { summary: AgentMemorySummary; agent: Agent | undefined }) {
+  const [noteOpen, setNoteOpen] = useState(false);
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Header */}
+      <div className="flex items-start gap-4 px-6 py-5 border-b border-border shrink-0">
+        <AgentAvatar name={summary.agentName} size="lg" />
+        <div className="flex-1 min-w-0">
+          <h2 className="text-[16px] font-semibold text-foreground truncate">{summary.agentName}</h2>
+          <p className="text-[12px] text-muted-foreground mt-0.5 flex items-center gap-1.5">
+            <Clock className="w-3 h-3" />
+            Last active {timeAgo(summary.lastActiveAt)}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button size="sm" onClick={() => setNoteOpen(true)}>
+            <Plus className="w-3.5 h-3.5 mr-1.5" />
+            Add Note
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon" className="h-8 w-8">
+                <MoreVertical className="w-4 h-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setNoteOpen(true)}>
+                <Plus className="w-3.5 h-3.5 mr-2" /> Add / edit note
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href={`/app/agents/${summary.agentId}/edit`}>
+                  <Pencil className="w-3.5 h-3.5 mr-2" /> Edit agent
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href={`/app/analytics/agents/${summary.agentId}`}>
+                  <Layers className="w-3.5 h-3.5 mr-2" /> View analytics
+                </Link>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 px-6 py-4 shrink-0">
+        <StatCard icon={<Phone className="w-3.5 h-3.5" />}    label="Total Calls"    value={summary.totalCalls} />
+        <StatCard icon={<FileText className="w-3.5 h-3.5" />} label="Total Facts"    value={summary.totalFacts} />
+        <StatCard icon={<Layers className="w-3.5 h-3.5" />}   label="Total Episodes" value={summary.totalEpisodes} />
+        <StatCard icon={<Clock className="w-3.5 h-3.5" />}    label="Last Active"    value={<span className="text-[14px]">{timeAgo(summary.lastActiveAt)}</span>} />
+      </div>
+
+      {/* Tabs */}
+      <div className="flex-1 min-h-0 px-6 pb-6 overflow-hidden flex flex-col">
+        <Tabs defaultValue="overview" className="flex flex-col h-full min-h-0">
+          <TabsList className="shrink-0">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="facts">Facts</TabsTrigger>
+            <TabsTrigger value="episodes">Episodes</TabsTrigger>
+            <TabsTrigger value="calls">Call History</TabsTrigger>
+          </TabsList>
+          <div className="flex-1 min-h-0 overflow-y-auto mt-4">
+            <TabsContent value="overview" className="mt-0"><OverviewTab agent={agent} summary={summary} /></TabsContent>
+            <TabsContent value="facts" className="mt-0"><FactsTab agentId={summary.agentId} /></TabsContent>
+            <TabsContent value="episodes" className="mt-0"><EpisodesTab agentId={summary.agentId} /></TabsContent>
+            <TabsContent value="calls" className="mt-0"><CallHistoryTab agentId={summary.agentId} /></TabsContent>
+          </div>
+        </Tabs>
+      </div>
+
+      <AddNoteDialog
+        open={noteOpen}
+        onOpenChange={setNoteOpen}
+        agentId={summary.agentId}
+        agentName={summary.agentName}
+        currentNote={agent?.description ?? ""}
+      />
+    </div>
+  );
+}
+
+/* ─── Empty states ───────────────────────────────────────────────────────── */
+function NoAgentsState() {
   return (
     <div className="flex flex-col items-center justify-center py-24 text-center px-4">
       <div className="w-14 h-14 rounded-2xl bg-elevated border border-border flex items-center justify-center mb-5">
         <Brain className="w-6 h-6 text-muted-foreground/40" />
       </div>
-      <h3 className="font-semibold text-foreground text-[15px] mb-2">No caller memory yet</h3>
+      <h3 className="font-semibold text-foreground text-[15px] mb-2">No agents yet</h3>
       <p className="text-sm text-muted-foreground max-w-[340px] leading-relaxed mb-5">
-        Once your agents start taking calls, SnapServe will automatically extract facts, episodes,
-        and verbatim quotes from each conversation and build a persistent memory profile per caller.
+        Create a voice agent and start taking calls. SnapServe will automatically build a per-agent
+        memory profile from facts, episodes, and call history.
       </p>
-      <div className="flex flex-col gap-2 text-left max-w-xs w-full">
-        {[
-          { icon: "F", label: "Facts", desc: "Structured data extracted per call" },
-          { icon: "E", label: "Episodes", desc: "AI-written summaries of each call" },
-          { icon: "Q", label: "Sentences", desc: "Verbatim notable quotes preserved" },
-        ].map(item => (
-          <div key={item.label} className="flex items-start gap-3 px-3 py-2.5 rounded-lg border border-border bg-card">
-            <span className="text-base mt-0.5">{item.icon}</span>
-            <div>
-              <p className="text-[12.5px] font-semibold text-foreground">{item.label}</p>
-              <p className="text-[11.5px] text-muted-foreground mt-0.5">{item.desc}</p>
-            </div>
-          </div>
-        ))}
-      </div>
+      <Button asChild>
+        <Link href="/app/agents">Create an agent</Link>
+      </Button>
     </div>
   );
 }
 
-/* ─── Skeleton rows ───────────────────────────────────────────────────────── */
-function SkeletonRows() {
-  return (
-    <>
-      {Array.from({ length: 5 }).map((_, i) => (
-        <div key={i} className="flex items-center gap-4 px-5 py-3.5 border-b border-border">
-          <Skeleton className="w-8 h-8 rounded-full shrink-0" />
-          <div className="flex-1 space-y-1.5">
-            <Skeleton className="h-3 w-32" />
-            <Skeleton className="h-2.5 w-24" />
-          </div>
-          <Skeleton className="hidden sm:block h-3 w-8" />
-          <Skeleton className="hidden md:block h-3 w-16" />
-          <Skeleton className="hidden lg:block h-5 w-20 rounded-full" />
-        </div>
-      ))}
-    </>
-  );
-}
-
-/* ─── Caller row ──────────────────────────────────────────────────────────── */
-function CallerRow({ caller, onClick }: { caller: CallerMemory; onClick: () => void }) {
-  return (
-    <div
-      onClick={onClick}
-      className="flex items-center gap-4 px-5 py-3.5 border-b border-border hover:bg-accent/30 cursor-pointer transition-colors group"
-    >
-      <div className="w-8 h-8 rounded-full bg-elevated border border-border flex items-center justify-center shrink-0">
-        <User className="w-3.5 h-3.5 text-muted-foreground/50" />
-      </div>
-
-      <div className="flex-1 min-w-0">
-        <p className="text-[13px] font-medium text-foreground tabular-nums">{caller.phone}</p>
-        {caller.name && (
-          <p className="text-[11.5px] text-muted-foreground mt-0.5 truncate">{caller.name}</p>
-        )}
-      </div>
-
-      <div className="hidden sm:flex flex-col items-center gap-0.5 min-w-[48px]">
-        <Phone className="w-3 h-3 text-muted-foreground/40" />
-        <span className="text-[11px] tabular-nums text-muted-foreground">{caller.callCount}</span>
-      </div>
-
-      <div className="hidden md:flex flex-col items-end gap-0.5 min-w-[80px]">
-        <Clock className="w-3 h-3 text-muted-foreground/40" />
-        <span className="text-[11px] text-muted-foreground">{caller.lastSeen}</span>
-      </div>
-
-      <div className="hidden lg:block min-w-[100px]">
-        <Badge variant="outline" className="text-[10.5px] font-medium max-w-[100px] truncate">
-          {caller.agentName}
-        </Badge>
-      </div>
-
-      <div className="hidden xl:flex items-center gap-1 min-w-[80px]">
-        {caller.factCount > 0 ? (
-          <span className="text-[11px] px-2 py-0.5 rounded-full bg-elevated border border-border text-muted-foreground">
-            {caller.factCount} {caller.factCount === 1 ? "fact" : "facts"}
-          </span>
-        ) : (
-          <span className="text-[11px] text-muted-foreground/40">No facts</span>
-        )}
-      </div>
-
-      <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/30 shrink-0 group-hover:text-muted-foreground/60 transition-colors" />
-    </div>
-  );
-}
-
-/* ─── Memory drawer ───────────────────────────────────────────────────────── */
-function MemoryDrawer({
-  caller,
-  onClose,
-}: {
-  caller: CallerMemory;
-  onClose: () => void;
-}) {
-  const getHeaders = useAuthHeaders();
-  const qc = useQueryClient();
-  const { toast } = useToast();
-
-  const { data: detail, isLoading: detailLoading } = useCallerDetail(caller.agentId, caller.phone);
-
-  const deleteFact = useMutation({
-    mutationFn: async (factId: number) => {
-      const headers = await getHeaders();
-      const r = await fetch(
-        `/api/agents/${caller.agentId}/caller-memory/${encodeURIComponent(caller.phone)}/facts/${factId}`,
-        { method: "DELETE", headers },
-      );
-      if (!r.ok && r.status !== 204) throw new Error("Failed to delete fact");
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: callerListKey(caller.agentId) });
-      qc.invalidateQueries({ queryKey: callerDetailKey(caller.agentId, caller.phone) });
-    },
-    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
-  });
-
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end">
-      <div className="fixed inset-0 bg-background/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-md bg-background border-l border-border flex flex-col shadow-2xl overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
-          <div>
-            <p className="font-semibold text-foreground text-[14px] tabular-nums">{caller.phone}</p>
-            {caller.name && <p className="text-[12px] text-muted-foreground mt-0.5">{caller.name}</p>}
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Stats bar */}
-        <div className="grid grid-cols-3 gap-px bg-border shrink-0">
-          {[
-            { label: "Calls",     value: String(caller.callCount) },
-            { label: "Agent",     value: caller.agentName },
-            { label: "Last seen", value: caller.lastSeen },
-          ].map(s => (
-            <div key={s.label} className="bg-card px-4 py-3 text-center">
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide mb-1">{s.label}</p>
-              <p className="text-[13px] font-semibold text-foreground truncate">{s.value}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* Memory layers */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-5">
-          {/* ── Facts ── */}
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-base text-muted-foreground">F</span>
-              <h3 className="text-[12.5px] font-semibold text-foreground">Facts</h3>
-              <Badge variant="outline" className="text-[9.5px] ml-auto">
-                {detailLoading ? "…" : (detail?.facts.length ?? 0)}
-              </Badge>
-            </div>
-
-            {detailLoading ? (
-              <div className="flex flex-wrap gap-2">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <Skeleton key={i} className="h-6 w-24 rounded-full" />
-                ))}
-              </div>
-            ) : detail && detail.facts.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {detail.facts.map(fact => (
-                  <span
-                    key={fact.id}
-                    className="group flex items-center gap-1.5 text-[11.5px] px-2.5 py-1 rounded-full bg-elevated border border-border text-muted-foreground"
-                  >
-                    <span className="font-medium text-foreground/70">{fact.key}:</span>
-                    <span>{fact.value}</span>
-                    {fact.history.length > 0 && (
-                      <span className="text-[10px] text-muted-foreground/40" title={`Updated ${fact.history.length} time(s)`}>
-                        ({fact.history.length}↑)
-                      </span>
-                    )}
-                    <button
-                      onClick={() => deleteFact.mutate(fact.id)}
-                      disabled={deleteFact.isPending}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground/60 hover:text-destructive ml-0.5"
-                      title="Delete fact"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <p className="text-[12px] text-muted-foreground">No facts extracted yet.</p>
-            )}
-          </div>
-
-          {/* ── Episodes ── */}
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-base text-muted-foreground">E</span>
-              <h3 className="text-[12.5px] font-semibold text-foreground">Episodes</h3>
-              <Badge variant="outline" className="text-[9.5px] ml-auto">
-                {detailLoading ? "…" : (detail?.episodes.length ?? 0)}
-              </Badge>
-            </div>
-
-            {detailLoading ? (
-              <div className="space-y-2">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="rounded-lg border border-border bg-card p-3 space-y-1.5">
-                    <Skeleton className="h-2.5 w-24" />
-                    <Skeleton className="h-3 w-full" />
-                    <Skeleton className="h-3 w-4/5" />
-                  </div>
-                ))}
-              </div>
-            ) : detail && detail.episodes.length > 0 ? (
-              <div className="space-y-2">
-                {detail.episodes.map(ep => (
-                  <div key={ep.id} className="rounded-lg border border-border bg-card p-3">
-                    <p className="text-[11px] text-muted-foreground/60 mb-1.5 flex items-center gap-1.5">
-                      <span>{sentimentEmoji(ep.summary)}</span>
-                      <span>{timeAgo(ep.createdAt)}</span>
-                      {ep.durationSeconds != null && (
-                        <span>· {Math.floor(ep.durationSeconds / 60)}m {ep.durationSeconds % 60}s</span>
-                      )}
-                    </p>
-                    {ep.summary ? (
-                      <p className="text-[12px] text-foreground leading-relaxed">{ep.summary}</p>
-                    ) : (
-                      <p className="text-[12px] text-muted-foreground italic">No summary available.</p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-[12px] text-muted-foreground">No episodes recorded yet.</p>
-            )}
-          </div>
-
-          {/* ── Verbatim quotes ── */}
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-base text-muted-foreground">Q</span>
-              <h3 className="text-[12.5px] font-semibold text-foreground">Verbatim Quotes</h3>
-            </div>
-
-            {detailLoading ? (
-              <div className="space-y-2">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <Skeleton key={i} className="h-10 w-full rounded-lg" />
-                ))}
-              </div>
-            ) : (() => {
-              const allSentences = detail?.episodes.flatMap(ep =>
-                ep.sentences.map(s => ({ ...s, episodeId: ep.id, episodeAt: ep.createdAt }))
-              ) ?? [];
-              return allSentences.length > 0 ? (
-                <div className="space-y-2">
-                  {allSentences.map(s => (
-                    <div key={s.id} className="rounded-lg border border-border bg-card px-3 py-2.5">
-                      <p className="text-[10px] text-muted-foreground/50 mb-1 uppercase tracking-wide">
-                        {s.speaker === "agent" ? "Agent" : "Caller"}
-                      </p>
-                      <p className="text-[12px] text-foreground leading-relaxed">"{s.text}"</p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-[12px] text-muted-foreground italic">No verbatim quotes captured yet.</p>
-              );
-            })()}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ─── Page ────────────────────────────────────────────────────────────────── */
+/* ─── Page ───────────────────────────────────────────────────────────────── */
 export default function MemoryPage() {
   const [search, setSearch]           = useState("");
   const [agentFilter, setAgentFilter] = useState("all");
-  const [selected, setSelected]       = useState<CallerMemory | null>(null);
+  const [selectedId, setSelectedId]   = useState<number | null>(null);
 
-  const { getToken } = useAuth();
-  const { toast }    = useToast();
+  const { toast } = useToast();
 
-  const { data: agents } = useListAgents({ query: { queryKey: getListAgentsQueryKey() } });
-  const agentList = agents ?? [];
+  const { data: summaryData, isLoading, isError, error } =
+    useListAgentMemorySummaries({ query: { queryKey: getListAgentMemorySummariesQueryKey() } });
+  const { data: agentsData } = useListAgents({ query: { queryKey: getListAgentsQueryKey() } });
 
-  // Determine which agents to fetch
-  const targetAgents = agentFilter === "all"
-    ? agentList
-    : agentList.filter(a => String(a.id) === agentFilter);
+  const summaries = (summaryData ?? []) as AgentMemorySummary[];
+  const agents = (agentsData ?? []) as Agent[];
+  const agentById = useMemo(() => new Map(agents.map(a => [a.id, a])), [agents]);
 
-  // Parallel per-agent caller-list queries
-  const callerQueries = useQueries({
-    queries: targetAgents.map(agent => ({
-      queryKey: callerListKey(agent.id),
-      queryFn: async (): Promise<{ agentId: number; agentName: string; rows: ApiCallerRow[] }> => {
-        const token = await getToken();
-        const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
-        const r = await fetch(`/api/agents/${agent.id}/caller-memory`, { headers });
-        if (!r.ok) throw new Error(`Failed to load callers for agent ${agent.name}`);
-        const rows: ApiCallerRow[] = await r.json();
-        return { agentId: agent.id, agentName: agent.name, rows };
-      },
-      staleTime: 30_000,
-    })),
-  });
-
-  const isLoading = callerQueries.some(q => q.isLoading);
-  const hasError  = callerQueries.some(q => q.isError);
-
-  // Show toast on first error
   useMemo(() => {
-    if (hasError) {
-      const errQ = callerQueries.find(q => q.isError);
-      if (errQ?.error instanceof Error) {
-        toast({ title: "Error loading callers", description: errQ.error.message, variant: "destructive" });
-      }
+    if (isError && error instanceof Error) {
+      toast({ title: "Error loading agents", description: error.message, variant: "destructive" });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasError]);
+  }, [isError]);
 
-  // Merge all results into a flat list
-  const allCallers: CallerMemory[] = useMemo(() => {
-    const rows: CallerMemory[] = [];
-    for (const q of callerQueries) {
-      if (!q.data) continue;
-      for (const r of q.data.rows) {
-        rows.push({
-          phone:     r.phoneNumber,
-          name:      r.name ?? undefined,
-          callCount: r.callCount,
-          lastSeen:  timeAgo(r.lastCalledAt),
-          agentName: q.data.agentName,
-          agentId:   q.data.agentId,
-          factCount: r.factCount,
-        });
-      }
-    }
-    // Sort by most recent (we sort by lastCalledAt desc on server but across agents merge by call count as proxy)
-    return rows.sort((a, b) => b.callCount - a.callCount);
-  }, [callerQueries]);
+  const filtered = useMemo(() => {
+    return summaries.filter(s => {
+      if (agentFilter !== "all" && String(s.agentId) !== agentFilter) return false;
+      if (search.trim() && !s.agentName.toLowerCase().includes(search.trim().toLowerCase())) return false;
+      return true;
+    });
+  }, [summaries, agentFilter, search]);
 
-  const filtered = allCallers.filter(c =>
-    search === "" ||
-    c.phone.includes(search) ||
-    c.name?.toLowerCase().includes(search.toLowerCase()),
-  );
+  // Keep a valid selection
+  const selected = useMemo(() => {
+    if (filtered.length === 0) return null;
+    const found = filtered.find(s => s.agentId === selectedId);
+    return found ?? filtered[0]!;
+  }, [filtered, selectedId]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -487,81 +521,87 @@ export default function MemoryPage() {
           <Brain className="w-4 h-4 text-muted-foreground/60" />
           <div>
             <h1 className="font-semibold text-foreground text-[14px]">Memory / CRM</h1>
-            <p className="text-[11.5px] text-muted-foreground mt-0.5">Cross-call caller profiles — facts, episodes, voice prints</p>
+            <p className="text-[11.5px] text-muted-foreground mt-0.5">Per-agent memory — facts, episodes & call history rolled up by AI agent</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-border bg-elevated">
-            <Sparkles className="w-3 h-3 text-muted-foreground/50" />
-            <span className="text-[10.5px] text-muted-foreground font-medium">Exclusive to SnapServe</span>
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-border bg-elevated">
+          <Sparkles className="w-3 h-3 text-muted-foreground/50" />
+          <span className="text-[10.5px] text-muted-foreground font-medium">Exclusive to SnapServe</span>
+        </div>
+      </div>
+
+      {/* Body: two panels */}
+      <div className="flex-1 min-h-0 flex overflow-hidden">
+        {/* Left panel */}
+        <div className="w-full max-w-[340px] border-r border-border flex flex-col shrink-0">
+          {/* Filters */}
+          <div className="p-3 border-b border-border space-y-2 shrink-0">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/40" />
+              <Input
+                type="search"
+                placeholder="Search agents…"
+                className="pl-9 h-8 text-xs"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </div>
+            <select
+              className="w-full h-8 text-xs px-2.5 rounded-md border border-input bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              value={agentFilter}
+              onChange={e => setAgentFilter(e.target.value)}
+            >
+              <option value="all">All agents</option>
+              {summaries.map(s => (
+                <option key={s.agentId} value={s.agentId}>{s.agentName}</option>
+              ))}
+            </select>
+            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground tabular-nums px-0.5">
+              {isLoading && <Loader2 className="w-3 h-3 animate-spin" />}
+              {filtered.length} {filtered.length === 1 ? "agent" : "agents"}
+            </div>
+          </div>
+
+          {/* List */}
+          <div className="flex-1 overflow-y-auto p-3 space-y-2 min-h-0">
+            {isLoading ? (
+              Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-[104px] w-full rounded-xl" />)
+            ) : filtered.length === 0 ? (
+              <p className="text-[12px] text-muted-foreground text-center py-8">No agents match your search.</p>
+            ) : (
+              filtered.map(agent => (
+                <AgentCard
+                  key={agent.agentId}
+                  agent={agent}
+                  selected={selected?.agentId === agent.agentId}
+                  onClick={() => setSelectedId(agent.agentId)}
+                />
+              ))
+            )}
           </div>
         </div>
-      </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-2 px-5 py-3 border-b border-border shrink-0">
-        <div className="relative flex-1 max-w-xs min-w-[160px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/40" />
-          <Input
-            type="search"
-            placeholder="Search by phone or name…"
-            className="pl-9 h-8 text-xs"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-        </div>
-
-        <select
-          className="h-8 text-xs px-2.5 rounded-md border border-input bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-          value={agentFilter}
-          onChange={e => { setAgentFilter(e.target.value); setSelected(null); }}
-        >
-          <option value="all">All agents</option>
-          {agentList.map(a => (
-            <option key={a.id} value={a.id}>{a.name}</option>
-          ))}
-        </select>
-
-        <div className="ml-auto flex items-center gap-2 text-[11px] text-muted-foreground tabular-nums">
-          {isLoading && <Loader2 className="w-3 h-3 animate-spin" />}
-          {filtered.length} callers
+        {/* Right panel */}
+        <div className="flex-1 min-w-0 overflow-hidden">
+          {isLoading ? (
+            <div className="p-6 space-y-4">
+              <Skeleton className="h-14 w-64 rounded-xl" />
+              <div className="grid grid-cols-4 gap-3">
+                {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
+              </div>
+              <Skeleton className="h-72 w-full rounded-xl" />
+            </div>
+          ) : summaries.length === 0 ? (
+            <NoAgentsState />
+          ) : selected ? (
+            <AgentDetailPanel key={selected.agentId} summary={selected} agent={agentById.get(selected.agentId)} />
+          ) : (
+            <div className="flex items-center justify-center h-full text-[13px] text-muted-foreground">
+              Select an agent to view its memory.
+            </div>
+          )}
         </div>
       </div>
-
-      {/* Table header */}
-      {(isLoading || filtered.length > 0) && (
-        <div className="flex items-center gap-4 px-5 py-2 border-b border-border bg-card shrink-0 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/50">
-          <div className="w-8 shrink-0" />
-          <div className="flex-1">Phone / Name</div>
-          <div className="hidden sm:block w-12 text-center">Calls</div>
-          <div className="hidden md:block w-20 text-right">Last seen</div>
-          <div className="hidden lg:block w-24">Agent</div>
-          <div className="hidden xl:flex flex-1 max-w-[120px]">Key facts</div>
-          <div className="w-4" />
-        </div>
-      )}
-
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto min-h-0">
-        {isLoading ? (
-          <SkeletonRows />
-        ) : filtered.length === 0 ? (
-          <EmptyState />
-        ) : (
-          filtered.map(caller => (
-            <CallerRow
-              key={`${caller.agentId}-${caller.phone}`}
-              caller={caller}
-              onClick={() => setSelected(caller)}
-            />
-          ))
-        )}
-      </div>
-
-      {/* Detail drawer */}
-      {selected && (
-        <MemoryDrawer caller={selected} onClose={() => setSelected(null)} />
-      )}
     </div>
   );
 }
