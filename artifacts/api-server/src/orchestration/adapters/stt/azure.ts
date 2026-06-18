@@ -106,11 +106,6 @@ const LOCALE_MAP: Record<string, string> = {
   "ar": "ar-EG", "ru": "ru-RU",
 };
 
-// Indic primary locales that benefit from Hindi+English LID candidates.
-const INDIC_LOCALES = new Set([
-  "hi-IN", "ta-IN", "te-IN", "kn-IN", "ml-IN", "mr-IN",
-  "bn-IN", "gu-IN", "pa-IN", "or-IN", "ur-IN",
-]);
 
 /** Expand a short code ("hi") or already-full locale ("hi-IN") to the
  *  canonical IETF tag Azure requires.
@@ -138,8 +133,6 @@ export class AzureSTT implements STTAdapter {
   private readonly language: string;
   private readonly endpointId: string | null;
   private readonly cfg: STTConfig;
-  /** Extra candidate locales for Azure LID (multi-language detection). */
-  private readonly candidateLocales: string[];
 
   constructor(
     apiKey: string,
@@ -155,26 +148,12 @@ export class AzureSTT implements STTAdapter {
           region?: string;
           language?: string;
           endpointId?: string;
-          candidateLocales?: string[];
         })
       : {};
 
     this.region = extra.region ?? "eastus";
     const rawLang = cfg.language ?? extra.language ?? "en-IN";
     this.language = normalizeLocale(rawLang);
-
-    // For Indic locales, automatically add English (India) as a candidate so
-    // code-switched Hinglish / Tamil-English speech is recognized correctly.
-    // extraConfig.candidateLocales can override; otherwise auto-detect from locale.
-    if (extra.candidateLocales) {
-      this.candidateLocales = extra.candidateLocales.map(normalizeLocale);
-    } else if (INDIC_LOCALES.has(this.language)) {
-      this.candidateLocales = [this.language, "en-IN"].filter(
-        (l, i, arr) => arr.indexOf(l) === i,
-      );
-    } else {
-      this.candidateLocales = [];
-    }
 
     // A custom deployment is only honored when a real GUID is supplied — either
     // explicitly via extraConfig.endpointId or as a GUID-shaped asrModel.
@@ -190,12 +169,6 @@ export class AzureSTT implements STTAdapter {
   private buildParams(): URLSearchParams {
     const params = new URLSearchParams({ language: this.language, format: "detailed" });
     if (this.endpointId) params.set("endpointId", this.endpointId);
-    // Language identification: enable when multiple candidate locales are set.
-    // This lets Azure handle code-switching (e.g. Hinglish = hi-IN + en-IN).
-    if (this.candidateLocales.length > 1) {
-      params.set("lidEnabled", "true");
-      params.set("candidateLocales", this.candidateLocales.join(","));
-    }
     return params;
   }
 
@@ -303,25 +276,18 @@ export class AzureSTT implements STTAdapter {
           ),
         );
 
-        // ② Speech context — language detection mode + phrase list
-        // Use AtStart mode (detect language once per utterance) for Indic
-        // code-switching. Continuous mode adds latency and is not needed.
-        if (this.candidateLocales.length > 1 || this.cfg.keyterms.length > 0) {
+        // ② Speech context — phrase list (keyterms only; no LID)
+        if (this.cfg.keyterms.length > 0) {
           const ctx: Record<string, unknown> = {
             phraseDetection: {
               onInterim: { resultType: "Always" },
               onSuccess: { resultType: "Always" },
               mode: "Conversation",
             },
-          };
-          if (this.candidateLocales.length > 1) {
-            ctx.languageId = { mode: "AtStart", priority: "PrioritizeLatency" };
-          }
-          if (this.cfg.keyterms.length > 0) {
-            ctx.phraseList = {
+            phraseList: {
               onRecognition: { enabled: true, phrases: this.cfg.keyterms },
-            };
-          }
+            },
+          };
           ws.send(textFrame("speech.context", JSON.stringify(ctx), requestId));
         }
 
@@ -334,7 +300,6 @@ export class AzureSTT implements STTAdapter {
           {
             region: this.region,
             language: this.language,
-            candidateLocales: this.candidateLocales,
             keyterms: this.cfg.keyterms.length,
             hasEndpointId: !!this.endpointId,
             reconnectAttempts,
@@ -392,12 +357,7 @@ export class AzureSTT implements STTAdapter {
               return;
             }
 
-            // Pass detected language when Azure LID returns one (multilingual mode).
-            const detectedLang = best?.Language
-              ? normalizeLocale(best.Language)
-              : undefined;
-
-            onTranscript(text, true, detectedLang);
+            onTranscript(text, true);
           } catch {
             // malformed JSON — ignore
           }
