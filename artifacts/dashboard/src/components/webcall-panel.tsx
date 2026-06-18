@@ -58,6 +58,8 @@ export function WebCallPanel({
   const [streamingStale, setStreamingStale] = useState<boolean>(false);
   // sentence highlight: which sentence the agent is currently speaking
   const [speakingSentence, setSpeakingSentence] = useState<string>("");
+  // full agent reply received from backend — committed to msgs after TTS finishes
+  const pendingAgentTextRef = useRef<string | null>(null);
   const { keys: keyStatus, loading: keyLoading } = useWebcallKeyStatus();
   const { userId: callerUserId, getToken } = useAuth();
   const hasAutoStarted = useRef(false);
@@ -141,6 +143,12 @@ export function WebCallPanel({
     streamRef.current = null;
     if (wsRef.current && wsRef.current.readyState < 2) wsRef.current.close();
     wsRef.current = null;
+    // finalize any pending agent turn before clearing
+    if (pendingAgentTextRef.current) {
+      const t = pendingAgentTextRef.current;
+      pendingAgentTextRef.current = null;
+      setMsgs(prev => [...prev, { speaker: "agent", text: t }]);
+    }
     // clear streaming state
     setStreamingText("");
     setSpeakingSentence("");
@@ -155,6 +163,7 @@ export function WebCallPanel({
     setDuration(null);
     setStreamingText("");
     setSpeakingSentence("");
+    pendingAgentTextRef.current = null;
     streamingStaleRef.current = false;
     setStreamingStale(false);
     setStatus("connecting");
@@ -228,8 +237,13 @@ export function WebCallPanel({
               setStreamingText(prev => prev + chunk);
             }
           } else if (msg.type === "interrupted") {
-            // Freeze the streaming bubble instead of clearing it on barge-in
+            // Barge-in: commit any pending agent turn, then clear state
             stopAllAudio();
+            if (pendingAgentTextRef.current) {
+              const t = pendingAgentTextRef.current;
+              pendingAgentTextRef.current = null;
+              setMsgs(prev => [...prev, { speaker: "agent", text: t }]);
+            }
             setStreamingText("");
             mutedRef.current = true;
             streamingStaleRef.current = true;
@@ -237,23 +251,48 @@ export function WebCallPanel({
             setSpeakingSentence("");
             setStatus("listening");
           } else if (msg.type === "sentence_start") {
-            // #635 — clear typing bubble; highlight this sentence in the transcript
-            setStreamingText("");
+            // TTS starting a sentence — keep streaming text visible, just update highlight
             streamingStaleRef.current = false;
             setStreamingStale(false);
             setSpeakingSentence(msg.text ?? "");
           } else if (msg.type === "status" && msg.status) {
             if (msg.status === "thinking" || msg.status === "speaking") mutedRef.current = false;
-            if (msg.status === "listening") setSpeakingSentence(""); // agent done speaking
+            if (msg.status === "listening") {
+              // Agent finished speaking — commit the pending turn to msgs
+              setSpeakingSentence("");
+              if (pendingAgentTextRef.current) {
+                const t = pendingAgentTextRef.current;
+                pendingAgentTextRef.current = null;
+                setStreamingText("");
+                streamingStaleRef.current = false;
+                setStreamingStale(false);
+                setMsgs(prev => [...prev, { speaker: "agent", text: t }]);
+              }
+            }
             setStatus(msg.status);
           } else if (msg.type === "transcript" && msg.speaker && msg.text) {
-            // Final transcript — clear streaming bubble, keep sentence highlight until audio finishes
-            setStreamingText("");
-            streamingStaleRef.current = false;
-            setStreamingStale(false);
-            setMsgs(prev => [...prev, { speaker: msg.speaker!, text: msg.text! }]);
+            if (msg.speaker === "agent") {
+              // Store full text; keep streaming bubble visible during TTS playback.
+              // Will be committed to msgs when status → listening (agent done speaking).
+              pendingAgentTextRef.current = msg.text;
+              // Ensure bubble shows the complete text (tokens may still be trickling)
+              setStreamingText(msg.text);
+              streamingStaleRef.current = false;
+              setStreamingStale(false);
+            } else {
+              // User transcript — add immediately
+              setStreamingText("");
+              streamingStaleRef.current = false;
+              setStreamingStale(false);
+              setMsgs(prev => [...prev, { speaker: "user", text: msg.text! }]);
+            }
           } else if (msg.type === "ended") {
             setDuration(msg.durationSeconds ?? null);
+            if (pendingAgentTextRef.current) {
+              const t = pendingAgentTextRef.current;
+              pendingAgentTextRef.current = null;
+              setMsgs(prev => [...prev, { speaker: "agent", text: t }]);
+            }
             setStreamingText("");
             setStatus("ended");
             cleanup();
@@ -337,7 +376,7 @@ export function WebCallPanel({
     );
   }
 
-  // Renders the streaming "typing" bubble that appears while LLM tokens arrive
+  // Renders the streaming "typing" bubble — visible during LLM generation AND TTS playback
   function renderStreamingBubble(sizeClass: "sm" | "xs") {
     if (!streamingText) return null;
     const base = sizeClass === "xs"
@@ -346,12 +385,17 @@ export function WebCallPanel({
     const label = sizeClass === "xs"
       ? "text-[9px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5"
       : "text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1";
+    const isSpeaking = status === "speaking";
     return (
       <div className="flex justify-start">
         <div className={`${base} bg-primary/10 border border-primary/10 rounded-bl-sm transition-opacity duration-300 ${streamingStale ? "opacity-35" : "opacity-100"}`}>
           <p className={label}>{agentName}</p>
-          <span>{streamingText}</span>
-          {!streamingStale && <span className="ml-0.5 animate-pulse text-primary/70">▍</span>}
+          <AgentText text={streamingText} highlight={speakingSentence} />
+          {!streamingStale && (
+            isSpeaking
+              ? <span className="inline-block ml-1 w-1.5 h-1.5 rounded-full bg-primary/60 animate-pulse align-middle" />
+              : <span className="ml-0.5 animate-pulse text-primary/70">▍</span>
+          )}
         </div>
       </div>
     );
