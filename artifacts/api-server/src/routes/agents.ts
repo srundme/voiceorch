@@ -175,6 +175,16 @@ router.post("/agents", requireAuth, async (req, res): Promise<void> => {
     }
   }
 
+  // Guard: these columns are NOT NULL with no DB default — a missing value
+  // would produce a cryptic Postgres error instead of a clear 400.
+  const REQUIRED_FIELDS = ["asrProvider", "llmProvider", "ttsProvider", "telephonyProvider", "systemPrompt"] as const;
+  const missingFields = REQUIRED_FIELDS.filter((f) => !insertData[f]);
+  if (missingFields.length > 0) {
+    req.log.warn({ missingFields, body: req.body }, "Agent create missing required fields");
+    res.status(400).json({ error: `Missing required fields: ${missingFields.join(", ")}` });
+    return;
+  }
+
   const [agent] = await db
     .insert(agentsTable)
     .values(insertData as typeof agentsTable.$inferInsert)

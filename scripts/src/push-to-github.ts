@@ -22,13 +22,7 @@ const REPO  = "voiceorch";
 const BRANCH = "main";
 
 const FILES_TO_PUSH = [
-  "artifacts/api-server/src/orchestration/telephony/webcall.ts",
-  "artifacts/api-server/src/orchestration/pipeline.ts",
-  "artifacts/api-server/src/orchestration/adapters/stt/azure.ts",
-  "artifacts/api-server/src/orchestration/types.ts",
-  "artifacts/api-server/src/orchestration/session.ts",
-  "artifacts/api-server/src/orchestration/callerMemory.ts",
-  "artifacts/dashboard/src/components/webcall-panel.tsx",
+  "artifacts/api-server/src/routes/agents.ts",
 ];
 
 async function ghFetch(apiPath: string, options: RequestInit = {}) {
@@ -65,7 +59,7 @@ async function pushFile(relPath: string) {
   await ghFetch(`contents/${relPath}`, {
     method: "PUT",
     body: JSON.stringify({
-      message: `refactor: remove multilingual module — restore stable single-language orchestration`,
+      message: `fix: guard POST /agents against missing required fields → 400 instead of 500`,
       content: encoded,
       branch: BRANCH,
       ...(sha ? { sha } : {}),
