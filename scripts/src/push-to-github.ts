@@ -22,8 +22,7 @@ const REPO  = "voiceorch";
 const BRANCH = "main";
 
 const FILES_TO_PUSH = [
-  "artifacts/api-server/src/orchestration/adapters/stt/azure.ts",
-  "artifacts/dashboard/src/components/webcall-panel.tsx",
+  "scripts/src/sync-to-github.ts",
   "scripts/src/push-to-github.ts",
 ];
 
@@ -61,7 +60,7 @@ async function pushFile(relPath: string) {
   await ghFetch(`contents/${relPath}`, {
     method: "PUT",
     body: JSON.stringify({
-      message: `fix: remove LID/candidateLocales from Azure STT; fix browser sample-rate mismatch in webcall panel`,
+      message: `fix: sync-to-github — handle empty tree after skipping absent files; fix sha:null for deletions`,
       content: encoded,
       branch: BRANCH,
       ...(sha ? { sha } : {}),

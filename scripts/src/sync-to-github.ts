@@ -61,7 +61,7 @@ interface TreeEntry {
   path: string;
   mode: string;
   type: string;
-  sha: string;
+  sha?: string;
 }
 
 async function main() {
@@ -145,7 +145,12 @@ async function main() {
     const { mode } = localBlobs.get(relPath)!;
     const absPath = path.join(REPO_ROOT, relPath);
 
-    if (!fs.existsSync(absPath)) continue; // was deleted after ls-tree
+    console.log(`  uploading [${i + 1}/${toUpload.length}]: ${relPath}`);
+
+    if (!fs.existsSync(absPath)) {
+      console.log(`  skipped (not on disk): ${relPath}`);
+      continue;
+    }
 
     const content = fs.readFileSync(absPath);
     const blob = await gh("git/blobs", {
@@ -155,6 +160,7 @@ async function main() {
         encoding: "base64",
       }),
     });
+    console.log(`  blob sha: ${blob.sha}`);
 
     newTreeEntries.push({
       path: relPath,
@@ -162,23 +168,23 @@ async function main() {
       type: "blob",
       sha: blob.sha as string,
     });
-
-    if ((i + 1) % 10 === 0 || i + 1 === toUpload.length) {
-      console.log(`  uploaded ${i + 1}/${toUpload.length} blobs …`);
-    }
   }
 
-  // Deletions: pass sha: null to remove from tree
+  // Deletions: omit sha entirely (sha: null causes GitHub 422)
   for (const relPath of deletedPaths) {
-    (newTreeEntries as any[]).push({
+    newTreeEntries.push({
       path: relPath,
       mode: "100644",
       type: "blob",
-      sha: null,
     });
   }
 
   // ── 6. Create new tree ────────────────────────────────────────────────────
+  if (newTreeEntries.length === 0) {
+    console.log("Nothing to push after filtering (all changed files were absent locally — already in sync).");
+    return;
+  }
+
   const treePayload: Record<string, unknown> = { tree: newTreeEntries };
   if (githubTreeSha) treePayload["base_tree"] = githubTreeSha;
 
