@@ -621,8 +621,11 @@ router.get("/admin/managed-phone-numbers", requireAdmin, async (_req, res): Prom
   const authId    = process.env["VOBIZ_AUTH_ID"];
   const authToken = process.env["VOBIZ_AUTH_TOKEN"];
   let available: Array<{ number: string; numberType?: string; region?: string }> = [];
+  let fetchError: string | null = null;
 
-  if (authId && authToken) {
+  if (!authId || !authToken) {
+    fetchError = "VOBIZ_AUTH_ID / VOBIZ_AUTH_TOKEN environment variables are not set on the server.";
+  } else {
     try {
       const resp = await fetch(`https://api.vobiz.ai/api/v1/Account/${authId}/Number/`, {
         headers: { "X-Auth-ID": authId, "X-Auth-Token": authToken, "Accept": "application/json" },
@@ -634,13 +637,16 @@ router.get("/admin/managed-phone-numbers", requireAdmin, async (_req, res): Prom
           numberType: n.number_type,
           region:     n.region,
         }));
+      } else {
+        const body = await resp.text().catch(() => "");
+        fetchError = `Vobiz API error ${resp.status}: ${body.slice(0, 200) || resp.statusText}`;
       }
-    } catch {
-      // Non-fatal — return empty list
+    } catch (err) {
+      fetchError = `Network error calling Vobiz API: ${err instanceof Error ? err.message : String(err)}`;
     }
   }
 
-  res.json({ selected, available });
+  res.json({ selected, available, fetchError });
 });
 
 // ── Admin: POST /admin/managed-phone-numbers ──────────────────────────────────

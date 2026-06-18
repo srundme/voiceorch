@@ -180,6 +180,7 @@ export function useSaveManagedKeys() {
 export interface ManagedPhoneNumbersData {
   selected: string[];
   available: Array<{ number: string; numberType?: string; region?: string }>;
+  fetchError?: string | null;
 }
 
 export function useManagedPhoneNumbers() {

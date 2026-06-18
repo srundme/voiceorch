@@ -48,7 +48,8 @@ export default function ManagedNumbers() {
     });
   };
 
-  const available = data?.available ?? [];
+  const available  = data?.available ?? [];
+  const fetchError = data?.fetchError ?? null;
   const notInPool  = available.filter(n => !selected.includes(n.number));
 
   return (
@@ -119,13 +120,15 @@ export default function ManagedNumbers() {
               {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
             </div>
           ) : available.length === 0 ? (
-            <div className="flex items-start gap-2 text-sm text-muted-foreground py-2">
-              <Info className="h-4 w-4 mt-0.5 shrink-0" />
-              <span>
-                No numbers found in the master Vobiz account, or{" "}
-                <code className="text-xs">VOBIZ_AUTH_ID</code> /{" "}
-                <code className="text-xs">VOBIZ_AUTH_TOKEN</code> environment variables are not set.
-              </span>
+            <div className="flex items-start gap-2 text-sm py-2">
+              <Info className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
+              {fetchError ? (
+                <span className="text-destructive">{fetchError}</span>
+              ) : (
+                <span className="text-muted-foreground">
+                  No numbers registered in the master Vobiz account.
+                </span>
+              )}
             </div>
           ) : (
             <div className="space-y-2">
