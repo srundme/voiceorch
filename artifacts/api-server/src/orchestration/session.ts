@@ -137,6 +137,11 @@ export async function createSession(params: {
     effectiveSystemPrompt += `\n\n[STRICT LANGUAGE RULE] You MUST respond ONLY in ${langName} at ALL times. Never switch to any other language under any circumstances, even if the caller speaks a different language. Always reply in ${langName} regardless of what language the caller uses.`;
   }
 
+  // Auto-switch to English: when enabled, allow the agent to move to English mid-call on request.
+  if (agentCfg["autoSwitchToEnglish"] === true) {
+    effectiveSystemPrompt += `\n\nIf the caller asks you to speak in English, switch immediately and continue in English.`;
+  }
+
   // P1-K: Inject regulatory compliance disclosures into the system prompt
   const complianceCfg = agentCfg["compliance"] as { irdai?: boolean; dpdp?: boolean; hipaa?: boolean; trai?: boolean } | undefined;
   if (complianceCfg?.irdai) {

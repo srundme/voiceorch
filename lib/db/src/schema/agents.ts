@@ -103,6 +103,8 @@ export type AgentConfig = {
   genderDetectionNeutralSalutation?: string;
   // P1-G: LLM timezone injection — IANA timezone name (e.g. "Asia/Kolkata")
   timezone?: string;
+  // Auto-switch to English mid-call if the caller requests it (defaults to off)
+  autoSwitchToEnglish?: boolean;
   // P1-I: Start Speaking Plan
   startSpeakingPlan?: {
     waitSeconds?: number;

@@ -1250,6 +1250,11 @@ export async function handleWebCallWebSocket(
         ? `${wcLangGuard}\n\n${dtInjection}\n\n${systemPromptForTurn}\n\n${wcLangGuard}`
         : `${dtInjection}\n\n${systemPromptForTurn}`;
 
+      // Auto-switch to English: when enabled, allow the agent to move to English mid-call on request.
+      if (agentCfg["autoSwitchToEnglish"] === true) {
+        systemPromptForTurn += `\n\nIf the caller asks you to speak in English, switch immediately and continue in English.`;
+      }
+
       const detectedGender = genderDetector?.gender ?? null;
       if (detectedGender === "male") {
         systemPromptForTurn += `\n\n[CALLER GENDER] The caller has been identified as male. Always address them respectfully as "${maleSal}" when appropriate (e.g. "Yes, ${maleSal}", "Of course, ${maleSal}"). Never use "${femaleSal}".`;

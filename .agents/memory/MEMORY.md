@@ -22,3 +22,4 @@
 - [LLM fallback chain pattern](llm-fallback-pattern.md) — fallbackLlm initialised at call start in pipeline.ts; fires only when primary throws AND llmFirstTokenAt===null; webcall reads raw agent row for fallback fields (cast as any)
 - [TTS final-words clipping](tts-tail-drain.md) — last words cut off on teardown; telephony=sleep before onCallEnd, web=send silence frames; re-arm echo-grace at EVERY playback exit, not just main loops
 - [Object Storage on Railway](object-storage-railway.md) — Replit Object Storage absent in Railway prod; recordings now in Postgres bytea, ambient still GCS-bound
+- [Dashboard agent form schema shared](agent-form-schema-shared.md) — edit.schema.ts/AgentFormValues/buildUpdateAgentPayload shared by edit.tsx AND builder.tsx; removing a field breaks the create wizard

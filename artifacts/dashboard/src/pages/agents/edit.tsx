@@ -59,7 +59,7 @@ export type { AgentFormValues } from "./edit.schema";
 export function buildUpdateAgentPayload(data: AgentFormValues) {
   const {
     webhookSecret, promptVariables, vadSilenceMs, bargeInEnabled, bargeInEnergyThreshold, bargeInMinFrames,
-    timezone, machineDetectionMode, voicemailAction, voicemailMessage, genderDetectionEnabled, recordingEnabled,
+    timezone, autoSwitchToEnglish, machineDetectionMode, voicemailAction, voicemailMessage, genderDetectionEnabled, recordingEnabled,
     startSpeakingWaitSecs, startSpeakingOnPunctuationSecs, startSpeakingOnNoPunctuationSecs, startSpeakingOnNumberSecs,
     stopSpeakingNumWords, stopSpeakingVoiceSecs, stopSpeakingBackOffSecs,
     complianceIrdai, complianceDpdp, complianceHipaa, complianceTrai,
@@ -78,6 +78,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   if (bargeInEnergyThreshold != null && bargeInEnergyThreshold !== 1200) agentConfig["bargeInEnergyThreshold"] = bargeInEnergyThreshold;
   if (bargeInMinFrames != null && bargeInMinFrames !== 4) agentConfig["bargeInMinFrames"] = bargeInMinFrames;
   if (timezone) agentConfig["timezone"] = timezone;
+  agentConfig["autoSwitchToEnglish"] = !!autoSwitchToEnglish;
   if (machineDetectionMode && machineDetectionMode !== "disabled") agentConfig["machineDetectionMode"] = machineDetectionMode;
   if (voicemailAction && voicemailAction !== "hangup") agentConfig["voicemailAction"] = voicemailAction;
   if (voicemailMessage) agentConfig["voicemailMessage"] = voicemailMessage;
@@ -299,12 +300,13 @@ export default function AgentEdit() {
       llmProvider: "openai", llmModel: "", ttsProvider: "elevenlabs",
       ttsVoice: "", ttsModel: "", telephonyProvider: "twilio",
       systemPrompt: "", temperature: 0.10, maxDuration: 300,
-      greetingMessage: "Hello", firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
+      firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
       language: "en-US", asrLanguage: "", backchannelingEnabled: true, backchannelingFrequency: 0.5,
       webhookUrl: "", webhookSecret: "", noiseCancellationEnabled: true,
       ambientNoiseEnabled: false, ambientNoiseTrack: "",
       promptVariables: [], vadSilenceMs: 250, bargeInEnabled: true, bargeInEnergyThreshold: 1200, bargeInMinFrames: 4,
       timezone: "",
+      autoSwitchToEnglish: false,
       machineDetectionMode: "disabled", voicemailAction: "hangup",
       voicemailMessage: "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
       tools: [],
@@ -489,7 +491,6 @@ export default function AgentEdit() {
       systemPrompt:      agent.systemPrompt,
       temperature:       agent.temperature ?? 0.10,
       maxDuration:       agent.maxDuration ?? 300,
-      greetingMessage:         agent.greetingMessage ?? "Hello",
       firstSpeaker:            ((agent as any).firstSpeaker === "user" ? "user" : "assistant") as AgentFormValues["firstSpeaker"],
       endCallPhrases:          agent.endCallPhrases ?? "",
       silenceTimeoutSeconds:   agent.silenceTimeoutSeconds ?? 30,
@@ -509,6 +510,7 @@ export default function AgentEdit() {
       bargeInEnergyThreshold:   ((agent as any).agentConfig?.bargeInEnergyThreshold as number | undefined) ?? 1200,
       bargeInMinFrames:         ((agent as any).agentConfig?.bargeInMinFrames as number | undefined) ?? 4,
       timezone:                 ((agent as any).agentConfig?.timezone as string | undefined) ?? "",
+      autoSwitchToEnglish:      ((agent as any).agentConfig?.autoSwitchToEnglish as boolean | undefined) ?? false,
       machineDetectionMode:     ((agent as any).agentConfig?.machineDetectionMode as string | undefined) as AgentFormValues["machineDetectionMode"] ?? "disabled",
       voicemailAction:          ((agent as any).agentConfig?.voicemailAction as string | undefined) as AgentFormValues["voicemailAction"] ?? "hangup",
       voicemailMessage:         ((agent as any).agentConfig?.voicemailMessage as string | undefined) ?? "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
@@ -633,6 +635,57 @@ export default function AgentEdit() {
                     <FormMessage />
                   </FormItem>
                 )} />
+
+                {/* ── Prompt Variables ── */}
+                <div className="space-y-3 rounded-md border p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium leading-none">Prompt Variables</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Define <code>{"{{key}}"}</code> placeholders for your system prompt. Defaults are used unless overridden by inbound call parameters.
+                      </p>
+                    </div>
+                    <Button type="button" variant="outline" size="sm" className="gap-1"
+                      onClick={() => appendPromptVar({ key: "", defaultValue: "", description: "" })}>
+                      <Plus className="h-3.5 w-3.5" /> Add Variable
+                    </Button>
+                  </div>
+                  {promptVarFields.length > 0 && (
+                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                      {promptVarFields.map((field, index) => (
+                        <div key={field.id} className="relative grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 border rounded-md bg-muted/20">
+                          <Button type="button" variant="ghost" size="icon"
+                            className="absolute top-2 right-2 h-7 w-7 text-muted-foreground hover:text-destructive"
+                            onClick={() => removePromptVar(index)}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                          <FormField control={form.control} name={`promptVariables.${index}.key`} render={({ field: f }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs">Key</FormLabel>
+                              <FormControl><Input placeholder="e.g. customer_name" className="h-8 text-sm" {...f} /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+                          <FormField control={form.control} name={`promptVariables.${index}.defaultValue`} render={({ field: f }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs">Default Value</FormLabel>
+                              <FormControl><Input placeholder="e.g. valued customer" className="h-8 text-sm" {...f} /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+                          <FormField control={form.control} name={`promptVariables.${index}.description`} render={({ field: f }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs">Description <span className="text-muted-foreground">(optional)</span></FormLabel>
+                              <FormControl><Input placeholder="e.g. The caller's first name" className="h-8 text-sm" {...f} /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <FormField control={form.control} name="timezone" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Timezone</FormLabel>
@@ -677,16 +730,6 @@ export default function AgentEdit() {
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-4">
-                    <FormField control={form.control} name="greetingMessage" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Greeting Message</FormLabel>
-                        <FormControl>
-                          <Textarea placeholder="e.g. Hello! Thanks for calling. How can I help you today?" className="min-h-[80px]" {...field} />
-                        </FormControl>
-                        <FormDescription>First thing the agent says. Leave blank to let the LLM generate one.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
                     <FormField control={form.control} name="endCallPhrases" render={({ field }) => (
                       <FormItem>
                         <FormLabel>End-Call Phrases</FormLabel>
@@ -694,6 +737,17 @@ export default function AgentEdit() {
                           <Input placeholder="goodbye, bye, have a great day, thank you for calling" {...field} />
                         </FormControl>
                         <FormDescription>Comma-separated. Triggers automatic hangup when detected.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="autoSwitchToEnglish" render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>Auto Switch to English</FormLabel>
+                        <div className="flex items-center gap-3 pt-2">
+                          <Switch checked={!!field.value} onCheckedChange={field.onChange} />
+                          <span className="text-sm text-muted-foreground">{field.value ? "Enabled" : "Disabled"}</span>
+                        </div>
+                        <FormDescription>When enabled, the agent switches to English mid-conversation if the caller requests it, while defaulting to the primary language.</FormDescription>
                         <FormMessage />
                       </FormItem>
                     )} />
@@ -970,58 +1024,6 @@ export default function AgentEdit() {
               </CardContent>
             </Card>
           </div>
-
-          {/* ── Prompt Variables ── */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2">Prompt Variables</CardTitle>
-                  <CardDescription>
-                    Define <code>{"{{key}}"}</code> placeholders for your system prompt. Defaults are used unless overridden by inbound call parameters.
-                  </CardDescription>
-                </div>
-                <Button type="button" variant="outline" size="sm" className="gap-1"
-                  onClick={() => appendPromptVar({ key: "", defaultValue: "", description: "" })}>
-                  <Plus className="h-3.5 w-3.5" /> Add Variable
-                </Button>
-              </div>
-            </CardHeader>
-            {promptVarFields.length > 0 && (
-              <CardContent className="space-y-3 max-h-96 overflow-y-auto">
-                {promptVarFields.map((field, index) => (
-                  <div key={field.id} className="relative grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 border rounded-md bg-muted/20">
-                    <Button type="button" variant="ghost" size="icon"
-                      className="absolute top-2 right-2 h-7 w-7 text-muted-foreground hover:text-destructive"
-                      onClick={() => removePromptVar(index)}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                    <FormField control={form.control} name={`promptVariables.${index}.key`} render={({ field: f }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs">Key</FormLabel>
-                        <FormControl><Input placeholder="e.g. customer_name" className="h-8 text-sm" {...f} /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name={`promptVariables.${index}.defaultValue`} render={({ field: f }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs">Default Value</FormLabel>
-                        <FormControl><Input placeholder="e.g. valued customer" className="h-8 text-sm" {...f} /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name={`promptVariables.${index}.description`} render={({ field: f }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs">Description <span className="text-muted-foreground">(optional)</span></FormLabel>
-                        <FormControl><Input placeholder="e.g. The caller's first name" className="h-8 text-sm" {...f} /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                  </div>
-                ))}
-              </CardContent>
-            )}
-          </Card>
 
           {/* ── Voice Activity Detection ── */}
           <Card>
