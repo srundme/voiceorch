@@ -89,8 +89,7 @@ export const agentFormSchema = z.object({
   stagedPromptCoreIdentity: z.string().optional(),
   inboundPhoneNumberId: z.number().optional().nullable(),
   outboundPhoneNumberId: z.number().optional().nullable(),
-  isMultilingual: z.boolean().optional(),
-  multilingualLanguages: z.array(z.string()).optional(),
+
 }).superRefine((data, ctx) => {
   const asrErr = getModelError(data.asrProvider, data.asrModel, ASR_MODELS);
   if (asrErr) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["asrModel"], message: asrErr });

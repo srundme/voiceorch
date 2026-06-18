@@ -67,7 +67,6 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     contextWindowTurns, tokenSummarizationEnabled, tokenSummarizationThresholdTurns,
     stagedPromptEnabled, stagedPromptStages, stagedPromptCoreIdentity,
     ambientNoiseEnabled, ambientNoiseTrack,
-    isMultilingual, multilingualLanguages,
     ...rest
   } = data;
   const agentConfig: Record<string, unknown> = {};
@@ -85,8 +84,6 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   agentConfig["recordingEnabled"] = !!recordingEnabled;
   agentConfig["ambientNoiseEnabled"] = !!ambientNoiseEnabled;
   if (ambientNoiseTrack) agentConfig["ambientNoiseTrack"] = ambientNoiseTrack;
-  agentConfig["isMultilingual"] = !!isMultilingual;
-  if (isMultilingual && multilingualLanguages?.length) agentConfig["multilingualLanguages"] = multilingualLanguages;
   agentConfig["startSpeakingPlan"] = {
     waitSeconds:            startSpeakingWaitSecs          ?? 0,
     onPunctuationSeconds:   startSpeakingOnPunctuationSecs ?? 0.1,
