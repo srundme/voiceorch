@@ -1924,12 +1924,17 @@ export async function handleWebCallWebSocket(
         // Signal which sentence is now playing so the UI can highlight it
         send({ type: "sentence_start", index: i, text: sentenceTexts[i] ?? "" });
 
-        // Re-arm the start echo-grace for THIS sentence — the window must begin
-        // when this sentence's audio actually starts streaming (after the TTS
-        // await + inter-sentence pause), not at the start of the whole turn.
-        // This gives the browser AEC time to re-adapt after each pause so the
-        // agent's own echo can't trip a false barge-in between sentences.
-        echoGraceUntil = Date.now() + BARGE_IN_ECHO_GRACE_MS;
+        // Re-arm the echo-grace window to cover the FULL sentence duration so the
+        // agent's own echo can't trip a false barge-in on long sentences.
+        // A flat 700ms window from sentence-start only covers short utterances;
+        // Tamil/Hindi sentences of 2–4 s would expire mid-sentence, letting the
+        // mic echo of the agent's voice trigger a false interruption and cut off
+        // the last words.  We now extend the window to:
+        //   sentence playback duration  +  BARGE_IN_ECHO_GRACE_MS (echo decay)
+        {
+          const sentenceDurationMs = Math.round((pcmOut.length / 2 / 16000) * 1000);
+          echoGraceUntil = Date.now() + sentenceDurationMs + BARGE_IN_ECHO_GRACE_MS;
+        }
 
         for (let j = 0; j < pcmOut.length; j += AUDIO_CHUNK_BYTES) {
           if (closed || interrupted) break;
@@ -2196,7 +2201,10 @@ export async function handleWebCallWebSocket(
     sendStatus("speaking");
     speaking = true;
     speakingStartedAt = Date.now();
-    echoGraceUntil = Date.now() + BARGE_IN_ECHO_GRACE_MS;
+    {
+      const sentenceDurationMs = Math.round((audio.length / 2 / 16000) * 1000);
+      echoGraceUntil = Date.now() + sentenceDurationMs + BARGE_IN_ECHO_GRACE_MS;
+    }
     for (let j = 0; j < audio.length; j += AUDIO_CHUNK_BYTES) {
       if (closed || interrupted) break;
       sendSpeechAudio(audio.slice(j, j + AUDIO_CHUNK_BYTES));
@@ -2303,7 +2311,6 @@ export async function handleWebCallWebSocket(
         sendStatus("speaking");
         speaking = true;
         speakingStartedAt = Date.now();
-        echoGraceUntil = Date.now() + BARGE_IN_ECHO_GRACE_MS;
 
         let greetAudio: Buffer;
         try {
@@ -2314,6 +2321,13 @@ export async function handleWebCallWebSocket(
           } else {
             const { audio } = await tts.synthesize(greetingText);
             greetAudio = withTailSilence(audio);
+          }
+
+          // Set echo-grace to cover the full greeting duration so the mic echo
+          // of the agent's own voice doesn't trigger a false barge-in mid-greeting.
+          {
+            const greetDurationMs = Math.round((greetAudio.length / 2 / 16000) * 1000);
+            echoGraceUntil = Date.now() + greetDurationMs + BARGE_IN_ECHO_GRACE_MS;
           }
 
           // Send transcript before audio starts so the UI shows the text
