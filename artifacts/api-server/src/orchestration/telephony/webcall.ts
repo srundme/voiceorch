@@ -1175,21 +1175,29 @@ export async function handleWebCallWebSocket(
       let systemPromptForTurn = systemPrompt;
       const agentTimezone = (agentCfg["timezone"] as string | undefined) || "Asia/Kolkata";
       const dtInjection = buildDatetimeInjection(agentTimezone);
-      systemPromptForTurn = `${dtInjection}\n\n${systemPromptForTurn}`;
-      // Tell the LLM which language to reply in for this turn.
+      // Language guard placed at BOTH top (highest LLM attention) and bottom (recency).
+      // Prevents Gemini/GPT from drifting to English when confused by an unfamiliar name.
+      const LANG_NAMES: Record<string, string> = {
+        "hi-IN": "Hindi", "ta-IN": "Tamil", "te-IN": "Telugu", "kn-IN": "Kannada",
+        "ml-IN": "Malayalam", "mr-IN": "Marathi", "bn-IN": "Bengali", "gu-IN": "Gujarati",
+        "pa-IN": "Punjabi", "or-IN": "Odia", "ur-IN": "Urdu",
+        "en-IN": "English", "en-US": "English", "en-GB": "English",
+        "fr-FR": "French", "de-DE": "German", "es-ES": "Spanish", "pt-BR": "Portuguese",
+        "it-IT": "Italian", "ja-JP": "Japanese", "ko-KR": "Korean", "zh-CN": "Chinese",
+        "ar-EG": "Arabic", "ru-RU": "Russian",
+      };
+      let wcLangGuard = "";
       if (currentLangWc) {
-        const LANG_NAMES: Record<string, string> = {
-          "hi-IN": "Hindi", "ta-IN": "Tamil", "te-IN": "Telugu", "kn-IN": "Kannada",
-          "ml-IN": "Malayalam", "mr-IN": "Marathi", "bn-IN": "Bengali", "gu-IN": "Gujarati",
-          "pa-IN": "Punjabi", "or-IN": "Odia", "ur-IN": "Urdu",
-          "en-IN": "English", "en-US": "English", "en-GB": "English",
-          "fr-FR": "French", "de-DE": "German", "es-ES": "Spanish", "pt-BR": "Portuguese",
-          "it-IT": "Italian", "ja-JP": "Japanese", "ko-KR": "Korean", "zh-CN": "Chinese",
-          "ar-EG": "Arabic", "ru-RU": "Russian",
-        };
         const langName = LANG_NAMES[currentLangWc] ?? currentLangWc;
-        systemPromptForTurn += `\n\n[LANGUAGE — NON-NEGOTIABLE] This agent is configured for ${langName} ONLY. You MUST respond in ${langName} regardless of any stored language_pref in caller memory or inferred language from the conversation. Do NOT switch to any other language under any circumstances.`;
+        wcLangGuard =
+          `[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in ${langName}. ` +
+          `This applies to EVERY reply without exception — including when you are confused, ` +
+          `do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. ` +
+          `Never switch to English or any other language under any circumstances.`;
       }
+      systemPromptForTurn = wcLangGuard
+        ? `${wcLangGuard}\n\n${dtInjection}\n\n${systemPromptForTurn}\n\n${wcLangGuard}`
+        : `${dtInjection}\n\n${systemPromptForTurn}`;
 
       const detectedGender = genderDetector?.gender ?? null;
       if (detectedGender === "male") {
@@ -1363,6 +1371,21 @@ export async function handleWebCallWebSocket(
         iterSystemPrompt += buildRescheduleContextBlock(activeRescheduleBooking);
       }
 
+      // Per-turn language reminder: append a compact note to the last user turn
+      // in the history copy sent to the LLM. Sits immediately before generation —
+      // the strongest possible enforcement against mid-conversation English drift.
+      let historyForLlm = history as ConversationTurn[];
+      if (wcLangGuard && toolIterations === 0 && history.length > 0) {
+        const lastTurn = history[history.length - 1]!;
+        if (lastTurn.role === "user") {
+          const langName = LANG_NAMES[currentLangWc ?? ""] ?? currentLangWc ?? "";
+          historyForLlm = [
+            ...history.slice(0, -1),
+            { ...lastTurn, content: `${lastTurn.content}\n\n[Reminder: reply in ${langName} only]` },
+          ];
+        }
+      }
+
       const llmStartMs = Date.now();
       logExecution("LLM", "request", {
         provider: agent.llmProvider,
@@ -1377,7 +1400,7 @@ export async function handleWebCallWebSocket(
 
       try {
        await llm.chat(
-        history,
+        historyForLlm,
         iterSystemPrompt,
         (token) => {
           if (_tLlmFirstToken === null) { _tLlmFirstToken = performance.now(); _llmStreamActive = true; }

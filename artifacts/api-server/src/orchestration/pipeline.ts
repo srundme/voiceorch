@@ -1546,14 +1546,21 @@ export class OrchestrationPipeline {
     // fall back to launching it here so it still overlaps with backchannel TTS.
     let systemPromptForTurn = this.agent.systemPrompt;
     const dtInjection = buildDatetimeInjection(this.agent.timezone);
-    systemPromptForTurn = `${dtInjection}\n\n${systemPromptForTurn}`;
-    // Tell the LLM which language to reply in — prevents Indic language drift
-    // when the agent is configured for a specific locale but the system prompt
-    // is written in English.
+    // Language guard placed at BOTH top (highest LLM attention) and bottom (recency).
+    // This prevents Gemini/GPT from drifting to English even when confused by an
+    // unrecognised name, unfamiliar word, or code-switching in the transcript.
+    let langGuard = "";
     if (this.currentLang) {
       const langName = LANG_DISPLAY_NAMES[this.currentLang] ?? this.currentLang;
-      systemPromptForTurn += `\n\n[LANGUAGE — NON-NEGOTIABLE] This agent is configured for ${langName} ONLY. You MUST respond in ${langName} regardless of any stored language_pref in caller memory or inferred language from the conversation. Do NOT switch to any other language under any circumstances.`;
+      langGuard =
+        `[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in ${langName}. ` +
+        `This applies to EVERY reply without exception — including when you are confused, ` +
+        `do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. ` +
+        `Never switch to English or any other language under any circumstances.`;
     }
+    systemPromptForTurn = langGuard
+      ? `${langGuard}\n\n${dtInjection}\n\n${systemPromptForTurn}\n\n${langGuard}`
+      : `${dtInjection}\n\n${systemPromptForTurn}`;
     let kbContextPromise: Promise<string | null>;
     if (this.kbPrefetchPromise) {
       kbContextPromise = this.kbPrefetchPromise;
@@ -1697,6 +1704,20 @@ export class OrchestrationPipeline {
       historyForLlm = this.conversationHistory.slice(-this.agent.contextWindowTurns);
     }
     const sentHistoryLen = historyForLlm.length;
+
+    // Per-turn language reminder: append a compact reminder to the last user turn.
+    // This is the strongest enforcement point — it sits immediately before the LLM
+    // generates, so it can't be pushed out of attention by a long system prompt.
+    if (langGuard && historyForLlm.length > 0) {
+      const lastTurn = historyForLlm[historyForLlm.length - 1]!;
+      if (lastTurn.role === "user") {
+        const langName = LANG_DISPLAY_NAMES[this.currentLang!] ?? this.currentLang!;
+        historyForLlm = [
+          ...historyForLlm.slice(0, -1),
+          { ...lastTurn, content: `${lastTurn.content}\n\n[Reminder: reply in ${langName} only]` },
+        ];
+      }
+    }
 
     // Layer 4: Staged Prompt — override system prompt with active stage block
     if (tokenOptEnabled && this.agent.stagedPromptEnabled && this.agent.stagedPromptStages.length > 0) {
