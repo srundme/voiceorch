@@ -89,6 +89,7 @@ export const agentFormSchema = z.object({
   stagedPromptCoreIdentity: z.string().optional(),
   inboundPhoneNumberId: z.number().optional().nullable(),
   outboundPhoneNumberId: z.number().optional().nullable(),
+  preferredManagedNumber: z.string().optional().nullable(),
 
 }).superRefine((data, ctx) => {
   const asrErr = getModelError(data.asrProvider, data.asrModel, ASR_MODELS);

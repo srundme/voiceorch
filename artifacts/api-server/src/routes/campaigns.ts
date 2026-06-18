@@ -5,7 +5,7 @@ import {
   CreateCampaignBody,
   UpdateCampaignBody,
 } from "@workspace/api-zod";
-import { db, campaignsTable, campaignLeadsTable, callsTable, type CampaignFieldMappings } from "@workspace/db";
+import { db, campaignsTable, campaignLeadsTable, callsTable, agentsTable, providersTable, platformSettingsTable, type CampaignFieldMappings } from "@workspace/db";
 import { eq, and, count, desc, inArray } from "drizzle-orm";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
 
@@ -81,6 +81,41 @@ router.post("/campaigns", async (req, res): Promise<void> => {
   const fieldMappings: CampaignFieldMappings = parsed.data.fieldMappings
     ? (parsed.data.fieldMappings as CampaignFieldMappings)
     : { phone: "phone" };
+
+  // ── Block managed platform numbers from being used in campaigns ──
+  if (parsed.data.agentId) {
+    const [campaignAgent] = await db
+      .select({ telephonyProvider: agentsTable.telephonyProvider })
+      .from(agentsTable)
+      .where(eq(agentsTable.id, parsed.data.agentId));
+
+    if (campaignAgent && campaignAgent.telephonyProvider.toLowerCase() === "vobiz") {
+      const [providerRow] = await db
+        .select({ extraConfig: providersTable.extraConfig })
+        .from(providersTable)
+        .where(and(eq(providersTable.userId, userId), eq(providersTable.providerName, "vobiz")));
+
+      const cfg = providerRow?.extraConfig ? (JSON.parse(providerRow.extraConfig) as Record<string, string>) : {};
+      const hasOwnCreds = !!(providerRow && cfg["authId"] && cfg["fromNumber"]);
+
+      if (!hasOwnCreds) {
+        // Also check if there's an existing managed pool — if empty, different error
+        const [numbersRow] = await db
+          .select({ value: platformSettingsTable.value })
+          .from(platformSettingsTable)
+          .where(eq(platformSettingsTable.key, "managed_phone_numbers"));
+        const hasManagedPool = !!(numbersRow?.value && (JSON.parse(numbersRow.value) as string[]).length > 0);
+
+        if (hasManagedPool) {
+          res.status(403).json({
+            error: "Platform managed numbers cannot be used for campaigns. Configure your own VoBiz sub-account and number to run outbound campaigns.",
+            code: "MANAGED_NUMBER_CAMPAIGN_BLOCKED",
+          });
+          return;
+        }
+      }
+    }
+  }
 
   const [campaign] = await db.insert(campaignsTable).values({
     userId,

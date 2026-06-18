@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
-import { db, usersTable, walletTransactionsTable, phoneNumbersTable, agentsTable, vobizAccountsTable } from "@workspace/db";
+import { db, usersTable, walletTransactionsTable, phoneNumbersTable, agentsTable, vobizAccountsTable, platformSettingsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logActivity } from "../lib/activity.js";
 import {
@@ -153,6 +153,21 @@ async function enrichNumber(row: typeof phoneNumbersTable.$inferSelect) {
     createdAt:    row.createdAt.toISOString(),
   };
 }
+
+// ── GET /phone-numbers/managed ────────────────────────────────────────────────
+// Returns platform-owned managed numbers visible to all authenticated users.
+// These are numbers from the platform's Vobiz account that users can assign
+// to their agents for test calls without KYC or purchasing their own number.
+
+router.get("/phone-numbers/managed", requireAuth, async (req, res): Promise<void> => {
+  const [row] = await db
+    .select({ value: platformSettingsTable.value })
+    .from(platformSettingsTable)
+    .where(eq(platformSettingsTable.key, "managed_phone_numbers"));
+
+  const numbers: string[] = row?.value ? (JSON.parse(row.value) as string[]) : [];
+  res.json({ numbers });
+});
 
 // ── GET /phone-numbers ────────────────────────────────────────────────────────
 

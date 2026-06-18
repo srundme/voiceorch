@@ -249,9 +249,12 @@ router.post("/calls/outbound", async (req, res): Promise<void> => {
           return;
         }
 
-        // Prefer agent's assigned outbound number (if it's in the managed pool), else pick randomly
-        const fromNumber = (agentOutboundNumber && numbers.includes(agentOutboundNumber))
-          ? agentOutboundNumber
+        // Prefer agent's assigned outbound number or preferred managed number (if in pool), else pick randomly
+        const preferredNumber = agentOutboundNumber
+          ?? (agentCfg2["preferredManagedNumber"] as string | undefined)
+          ?? null;
+        const fromNumber = (preferredNumber && numbers.includes(preferredNumber))
+          ? preferredNumber
           : numbers[Math.floor(Math.random() * numbers.length)]!;
         effectiveFromNumber = fromNumber;
         providerCallId = await dialVobiz({

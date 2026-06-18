@@ -323,6 +323,14 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
   });
   const phoneNumbers = Array.isArray(phoneNumbersRaw) ? phoneNumbersRaw : [];
 
+  // Fetch platform-managed numbers (no KYC or purchase required — for testing)
+  const { data: managedNumbersRaw } = useQuery({
+    queryKey: ["phone-numbers", "managed"],
+    queryFn: () => customFetch<{ numbers: string[] }>(`${DASH_API}/phone-numbers/managed`),
+    staleTime: 5 * 60 * 1000,
+  });
+  const managedNumbers: string[] = managedNumbersRaw?.numbers ?? [];
+
   const cartesiaOverviewOpts = useMemo(() => {
     const all = whitelistedData?.voices ?? [];
     if (all.length === 0) {
@@ -481,21 +489,41 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
                     <p className="text-[10px] text-muted-foreground">Calls to this number route here</p>
                   </FormItem>
                 )} />
-                <FormField control={form.control} name="outboundPhoneNumberId" render={({ field }) => (
+                <FormField control={form.control} name="outboundPhoneNumberId" render={({ field }) => {
+                  const preferredManaged = form.watch("preferredManagedNumber");
+                  const selectValue = field.value
+                    ? String(field.value)
+                    : preferredManaged
+                    ? `managed:${preferredManaged}`
+                    : "__none__";
+                  return (
                   <FormItem className="space-y-1">
                     <FormLabel className="text-[10px] text-muted-foreground">Outbound Caller ID</FormLabel>
                     <SmallSelect
-                      value={field.value ? String(field.value) : "__none__"}
-                      onChange={(v) => field.onChange(v === "__none__" ? null : parseInt(v, 10))}
+                      value={selectValue}
+                      onChange={(v) => {
+                        if (v === "__none__") {
+                          field.onChange(null);
+                          form.setValue("preferredManagedNumber", null);
+                        } else if (v.startsWith("managed:")) {
+                          field.onChange(null);
+                          form.setValue("preferredManagedNumber", v.slice(8));
+                        } else {
+                          field.onChange(parseInt(v, 10));
+                          form.setValue("preferredManagedNumber", null);
+                        }
+                      }}
                       options={[
                         { value: "__none__", label: "— None —" },
                         ...phoneNumbers.map(p => ({ value: String(p.id), label: p.number })),
+                        ...managedNumbers.map(n => ({ value: `managed:${n}`, label: `${n} ★ Platform` })),
                       ]}
                       placeholder="Select number"
                     />
                     <p className="text-[10px] text-muted-foreground">Caller ID for outbound calls</p>
                   </FormItem>
-                )} />
+                  );
+                }} />
               </div>
             </div>
           )}
@@ -3526,6 +3554,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       stagedPromptCoreIdentity: "",
       inboundPhoneNumberId: undefined,
       outboundPhoneNumberId: undefined,
+      preferredManagedNumber: null,
     },
   });
 
@@ -3592,6 +3621,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       stagedPromptCoreIdentity:        (agent as any).stagedPromptCoreIdentity ?? "",
       inboundPhoneNumberId:            (agent as any).inboundPhoneNumberId ?? undefined,
       outboundPhoneNumberId:           (agent as any).outboundPhoneNumberId ?? undefined,
+      preferredManagedNumber:          ((agent as any).agentConfig?.preferredManagedNumber as string | undefined) ?? null,
     });
   }, [agent]);
 

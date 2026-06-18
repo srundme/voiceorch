@@ -67,6 +67,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     contextWindowTurns, tokenSummarizationEnabled, tokenSummarizationThresholdTurns,
     stagedPromptEnabled, stagedPromptStages, stagedPromptCoreIdentity,
     ambientNoiseEnabled, ambientNoiseTrack,
+    preferredManagedNumber,
     ...rest
   } = data;
   const agentConfig: Record<string, unknown> = {};
@@ -84,6 +85,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   agentConfig["recordingEnabled"] = !!recordingEnabled;
   agentConfig["ambientNoiseEnabled"] = !!ambientNoiseEnabled;
   if (ambientNoiseTrack) agentConfig["ambientNoiseTrack"] = ambientNoiseTrack;
+  if (preferredManagedNumber) agentConfig["preferredManagedNumber"] = preferredManagedNumber;
   agentConfig["startSpeakingPlan"] = {
     waitSeconds:            startSpeakingWaitSecs          ?? 0,
     onPunctuationSeconds:   startSpeakingOnPunctuationSecs ?? 0.1,
