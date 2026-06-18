@@ -65,6 +65,10 @@ const BARGE_IN_ENERGY_THRESHOLD = 1200; // Much higher than normal VAD (300) —
 const BARGE_IN_ECHO_GRACE_MS  = 600;    // Suppress barge-in for 600 ms after playback starts —
                                          // gives audio time to reach the caller before we start
                                          // counting any returning echo as a real interruption.
+const TELEPHONY_TAIL_DRAIN_MS = 300;    // After the final utterance fully streams, wait this long
+                                         // before tearing the call down so the carrier's jitter
+                                         // buffer plays out the last words (mirrors the web path's
+                                         // AUDIO_TAIL_SILENCE_MS) — prevents clipped goodbyes.
 
 /** BCP-47 locale → display name used in LLM language-switch instructions. */
 const LANG_DISPLAY_NAMES: Record<string, string> = {
@@ -402,12 +406,34 @@ export class OrchestrationPipeline {
     // flag so the NEXT utterance triggers a fresh KB prefetch.
     this.inSpeechSegment = false;
 
+    // Tail-echo guard: a final transcript arriving shortly after the agent
+    // stopped speaking — when we did NOT detect a genuine barge-in — is almost
+    // certainly the echo/sidetone of our own closing words returning via the
+    // carrier. Discard it so it neither starts a spurious new turn nor (had it
+    // landed a few ms earlier) clips the tail of the final sentence. The window
+    // is the echo grace re-armed at the end of playback (armTailEchoGrace()),
+    // mirroring the web path's end grace.
+    if (!this.isPlaying && !this.bargeInRequested && Date.now() < this.bargeInHoldUntil) {
+      this.streamingBargeInWordCount = 0;
+      logger.info({ callId: this.config.callId, transcript }, "Streaming STT: discarding post-playback echo transcript");
+      return;
+    }
+
     if (this.bargeInEnabled && this.isPlaying && !this.bargeInRequested) {
-      // P0-C: Semantic barge-in — certain keywords bypass the word-count gate entirely
+      // P0-C: Semantic barge-in — certain keywords ("stop", "wait", …) bypass
+      // BOTH the word-count gate AND the echo grace: our own audio never utters
+      // them, so they are always a genuine caller interruption.
       if (isSemanticInterrupt(transcript)) {
         this.bargeInRequested = true;
         this.bargeInCallback?.();
         logger.info({ callId: this.config.callId, transcript }, "Semantic barge-in triggered (streaming STT)");
+      } else if (Date.now() < this.bargeInHoldUntil) {
+        // Echo grace — suppress non-semantic barge-in while our own freshly
+        // (re)started audio may still be echoing back, mirroring the energy-based
+        // batch STT path (which also gates on bargeInHoldUntil). Protects the
+        // start of each sentence; combined with the end-of-playback re-arm it
+        // also protects the tail of the final sentence from self-echo.
+        logger.info({ callId: this.config.callId }, "Streaming STT: barge-in suppressed during echo grace");
       } else {
         // Accumulate word count across streaming callbacks for this user turn and
         // only fire barge-in once the wordsForInterruption threshold is reached,
@@ -674,6 +700,7 @@ export class OrchestrationPipeline {
         await this.playSentence(greeting);
       } finally {
         this.isPlaying = false;
+        this.armTailEchoGrace();
       }
     } catch (err) {
       logger.error({ callId: this.config.callId, err }, "Greeting error");
@@ -731,7 +758,10 @@ export class OrchestrationPipeline {
   /** Speak the inactivity farewell message (if configured) before triggering call end. */
   private async playInactivityMessageAndEnd(): Promise<void> {
     if (this.agent.inactivityMessage && !this.closed) {
-      try { await this.playSentence(this.agent.inactivityMessage); } catch { /* ignore */ }
+      try {
+        await this.playSentence(this.agent.inactivityMessage);
+        await this.drainPlaybackTail();
+      } catch { /* ignore */ }
     }
     if (!this.closed) this.config.onCallEnd();
   }
@@ -1194,7 +1224,9 @@ export class OrchestrationPipeline {
         logger.error({ callId: this.config.callId, err }, "Warm handoff TTS error");
       } finally {
         this.isPlaying = false;
+        this.armTailEchoGrace();
       }
+      await this.drainPlaybackTail();
     }
 
     // ── Warm summary: generate operator briefing from conversation history ──
@@ -1249,7 +1281,9 @@ export class OrchestrationPipeline {
         logger.error({ callId: this.config.callId, err }, "transfer_cold: hold message TTS error");
       } finally {
         this.isPlaying = false;
+        this.armTailEchoGrace();
       }
+      await this.drainPlaybackTail();
     }
 
     // Notify session layer (triggers telephony redirect)
@@ -1279,7 +1313,9 @@ export class OrchestrationPipeline {
         logger.error({ callId: this.config.callId, err }, "transfer_warm: hold message TTS error");
       } finally {
         this.isPlaying = false;
+        this.armTailEchoGrace();
       }
+      await this.drainPlaybackTail();
     }
 
     // Generate LLM operator briefing
@@ -1403,8 +1439,9 @@ export class OrchestrationPipeline {
       this.conversationHistory.push({ role: "assistant", content: clarification });
       this.config.onTranscript("agent", clarification);
       this.config.onConversationUpdate?.(this.conversationHistory);
+      this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
       this.isPlaying = true;
-      try { await this.playSentence(clarification); } finally { this.isPlaying = false; }
+      try { await this.playSentence(clarification); } finally { this.isPlaying = false; this.armTailEchoGrace(); }
       return;
     }
 
@@ -1414,8 +1451,9 @@ export class OrchestrationPipeline {
       this.conversationHistory.push({ role: "assistant", content: guardrailResponse });
       this.config.onTranscript("agent", guardrailResponse);
       this.config.onConversationUpdate?.(this.conversationHistory);
+      this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
       this.isPlaying = true;
-      try { await this.playSentence(guardrailResponse); } finally { this.isPlaying = false; }
+      try { await this.playSentence(guardrailResponse); } finally { this.isPlaying = false; this.armTailEchoGrace(); }
       return;
     }
 
@@ -1495,6 +1533,7 @@ export class OrchestrationPipeline {
         }
       }
       this.isPlaying = false;
+      this.armTailEchoGrace();
     };
 
     const playPromise = playTask();
@@ -1958,6 +1997,10 @@ export class OrchestrationPipeline {
     // ── Hangup after LLM call ───────────────────────────────────────────────
     if (this.agent.hangupAfterLlmCall && !this.closed) {
       logger.info({ callId: this.config.callId }, "hangupAfterLlmCall — ending call");
+      // Drain the carrier playout buffer so the final response isn't clipped by
+      // teardown — the playTask above resolved as soon as the last chunk was
+      // handed off, but the jitter buffer still holds a few hundred ms.
+      await this.drainPlaybackTail();
       this.config.onCallEnd();
     }
   }
@@ -2159,6 +2202,7 @@ export class OrchestrationPipeline {
         }
       }
       this.isPlaying = false;
+      this.armTailEchoGrace();
     };
 
     const playPromise = playTask();
@@ -2297,9 +2341,10 @@ export class OrchestrationPipeline {
     this.dtmfDetector.reset();
 
     logger.info({ callId: this.config.callId, options: options.length }, "IVR: playing menu");
+    this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
     this.isPlaying = true;
     try { await this.playSentence(ivrGreeting); }
-    finally { this.isPlaying = false; }
+    finally { this.isPlaying = false; this.armTailEchoGrace(); }
 
     if (this.closed) { this.dtmfDetector = null; return false; }
 
@@ -2340,6 +2385,33 @@ export class OrchestrationPipeline {
   async speakRaw(text: string): Promise<void> {
     if (!text.trim() || this.closed) return;
     await this.playSentence(text);
+    // speakRaw is used for terminal utterances (goodbye / end-call line) that are
+    // immediately followed by onCallEnd(); drain the carrier's playout buffer so
+    // the final words aren't clipped by teardown.
+    await this.drainPlaybackTail();
+  }
+
+  /**
+   * Wait for the carrier to play out the final streamed audio before teardown.
+   * playSentence's drain loop sends mulaw in real time, so when it resolves the
+   * last chunk has only just been handed off — the carrier's jitter buffer still
+   * holds a few hundred ms.  Calling onCallEnd() immediately would drop it and
+   * clip the final words (especially the goodbye on hangup).  Mirrors the web
+   * path's AUDIO_TAIL_SILENCE_MS tail drain.
+   */
+  private async drainPlaybackTail(): Promise<void> {
+    if (this.closed || this.bargeInRequested) return;
+    await new Promise<void>((r) => setTimeout(r, TELEPHONY_TAIL_DRAIN_MS));
+  }
+
+  /**
+   * Re-arm the echo-grace window after playback ends so the agent's own trailing
+   * audio (sidetone/echo) returning via STT cannot trigger a barge-in or a
+   * spurious new turn that would clip the final words.  Mirrors the web path's
+   * end grace (BARGE_IN_END_GRACE_MS).
+   */
+  private armTailEchoGrace(): void {
+    this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
   }
 
   /**

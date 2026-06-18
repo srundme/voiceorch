@@ -483,6 +483,16 @@ export async function handleWebCallWebSocket(
               logger.info({ callId, text, wc, wordsForInterruption }, "Webcall: ignoring short STT transcript during speaking");
               return;
             }
+            // Start echo-grace gate (parity with the energy-based path's inStartGrace).
+            // During the grace window after TTS begins, a non-semantic transcript is almost
+            // certainly the agent's own audio echoed back through the mic before browser AEC
+            // has adapted. Discard it so self-echo can't trigger a false barge-in that clips
+            // the response tail. Semantic interrupts (e.g. "stop") still bypass — our own
+            // audio never utters them.
+            if (!semanticOverride && Date.now() - speakingStartedAt < BARGE_IN_ECHO_GRACE_MS) {
+              logger.info({ callId, text, msSinceStart: Date.now() - speakingStartedAt }, "Webcall: ignoring STT transcript within start echo grace");
+              return;
+            }
             interrupted = true;
             send({ type: "interrupted" });
             sendStatus("thinking");
@@ -522,15 +532,21 @@ export async function handleWebCallWebSocket(
                   (text: string, isFinal: boolean) => {
                     if (!isFinal || !text.trim() || closed) return;
                     if (speaking) {
+                      const semanticOverride = isSemanticInterrupt(text);
                       const wc = text.trim().split(/\s+/).length;
-                      if (wc < wordsForInterruption) {
+                      if (!semanticOverride && wc < wordsForInterruption) {
                         logger.info({ callId, text, wc, wordsForInterruption }, "Webcall: ignoring short transcript (fallback STT)");
+                        return;
+                      }
+                      // Start echo-grace gate (parity with primary STT + energy path).
+                      if (!semanticOverride && Date.now() - speakingStartedAt < BARGE_IN_ECHO_GRACE_MS) {
+                        logger.info({ callId, text, msSinceStart: Date.now() - speakingStartedAt }, "Webcall: ignoring transcript within start echo grace (fallback STT)");
                         return;
                       }
                       interrupted = true;
                       send({ type: "interrupted" });
                       sendStatus("thinking");
-                      logger.info({ callId, wc }, "Webcall: barge-in via fallback streaming STT");
+                      logger.info({ callId, wc, semanticOverride }, "Webcall: barge-in via fallback streaming STT");
                     } else if (speakingEndedAt > 0 && Date.now() - speakingEndedAt < BARGE_IN_END_GRACE_MS) {
                       logger.info({ callId, msSinceEnd: Date.now() - speakingEndedAt }, "Webcall: discarding post-speech transcript (fallback STT)");
                       return;
@@ -1002,21 +1018,7 @@ export async function handleWebCallWebSocket(
             const goodbyeText = phrases[0]?.trim() || DEFAULT_GOODBYE_MESSAGE;
             history.push({ role: "assistant", content: goodbyeText });
             send({ type: "transcript", speaker: "agent", text: goodbyeText });
-            try {
-              const { audio } = await tts.synthesize(goodbyeText);
-              if (!closed) {
-                sendStatus("speaking");
-                speaking = true;
-                speakingStartedAt = Date.now();
-                for (let j = 0; j < audio.length; j += AUDIO_CHUNK_BYTES) {
-                  if (closed || interrupted) break;
-                  sendSpeechAudio(audio.slice(j, j + AUDIO_CHUNK_BYTES));
-                  await new Promise<void>((r) => setTimeout(r, 40));
-                }
-                speaking = false;
-                speakingEndedAt = Date.now();
-              }
-            } catch { /* ignore TTS errors on goodbye */ }
+            await speakFinalUtterance(goodbyeText);
             if (!closed) void hangup("normal");
             return;
           }
@@ -1542,21 +1544,7 @@ export async function handleWebCallWebSocket(
           );
           history.push({ role: "assistant", content: goodbye });
           send({ type: "transcript", speaker: "agent", text: goodbye });
-          try {
-            const { audio } = await tts.synthesize(goodbye);
-            if (!closed) {
-              sendStatus("speaking");
-              speaking = true;
-              speakingStartedAt = Date.now();
-              for (let j = 0; j < audio.length; j += AUDIO_CHUNK_BYTES) {
-                if (closed || interrupted) break;
-                sendSpeechAudio(audio.slice(j, j + AUDIO_CHUNK_BYTES));
-                await new Promise<void>((r) => setTimeout(r, 40));
-              }
-              speaking = false;
-              speakingEndedAt = Date.now();
-            }
-          } catch { /* ignore TTS errors on goodbye */ }
+          await speakFinalUtterance(goodbye);
           if (!closed) void hangup("normal");
           processing = false;
           return;
@@ -1710,16 +1698,7 @@ export async function handleWebCallWebSocket(
               );
               history.push({ role: "assistant", content: goodbye });
               send({ type: "transcript", speaker: "agent", text: goodbye });
-              try {
-                const { audio } = await tts.synthesize(goodbye);
-                if (!closed) {
-                  for (let j = 0; j < audio.length; j += AUDIO_CHUNK_BYTES) {
-                    if (closed || interrupted) break;
-                    sendSpeechAudio(audio.slice(j, j + AUDIO_CHUNK_BYTES));
-                    await new Promise<void>((r) => setTimeout(r, 40));
-                  }
-                }
-              } catch { /* ignore */ }
+              await speakFinalUtterance(goodbye);
               if (!closed) void hangup("normal");
               processing = false;
               return;
@@ -1912,16 +1891,7 @@ export async function handleWebCallWebSocket(
               );
               history.push({ role: "assistant", content: goodbye });
               send({ type: "transcript", speaker: "agent", text: goodbye });
-              try {
-                const { audio } = await tts.synthesize(goodbye);
-                if (!closed) {
-                  for (let j = 0; j < audio.length; j += AUDIO_CHUNK_BYTES) {
-                    if (closed || interrupted) break;
-                    sendSpeechAudio(audio.slice(j, j + AUDIO_CHUNK_BYTES));
-                    await new Promise<void>((r) => setTimeout(r, 40));
-                  }
-                }
-              } catch { /* ignore */ }
+              await speakFinalUtterance(goodbye);
               if (!closed) void hangup("normal");
               processing = false;
               return;
@@ -2084,18 +2054,51 @@ export async function handleWebCallWebSocket(
       logger.info({ callId }, "Webcall: silence timeout — ending call");
       void (async () => {
         if (agent.inactivityMessage && !closed) {
-          try {
-            const { audio } = await tts.synthesize(agent.inactivityMessage);
-            for (let j = 0; j < audio.length; j += AUDIO_CHUNK_BYTES) {
-              if (closed) break;
-              sendSpeechAudio(audio.slice(j, j + AUDIO_CHUNK_BYTES));
-              await new Promise<void>((r) => setTimeout(r, 40));
-            }
-          } catch { /* ignore — still hang up */ }
+          await speakFinalUtterance(agent.inactivityMessage);
         }
         if (!closed) void hangup("silence_timeout");
       })();
     }, agent.silenceTimeoutSeconds * 1000);
+  }
+
+  // Speak a terminal/final utterance (goodbye, end-call line, inactivity
+  // message) and fully drain its tail before the call is torn down. Mirrors the
+  // per-sentence playback loop: the audio is wrapped in withTailSilence and
+  // followed by AUDIO_TAIL_SILENCE_MS of real PCM silence frames so the
+  // browser's AudioContext plays the final word to completion before the queue
+  // empties / the WebSocket closes. Without this the goodbye is clipped because
+  // hangup() flips `closed` immediately after the last audio chunk is sent.
+  async function speakFinalUtterance(text: string): Promise<void> {
+    if (!text.trim() || closed) return;
+    let audio: Buffer;
+    try {
+      const res = await tts.synthesize(text);
+      audio = withTailSilence(res.audio);
+    } catch {
+      return; // ignore TTS errors on terminal utterances — caller still hangs up
+    }
+    if (closed) return;
+    ttsCharactersTotal += text.length;
+    sendStatus("speaking");
+    speaking = true;
+    speakingStartedAt = Date.now();
+    for (let j = 0; j < audio.length; j += AUDIO_CHUNK_BYTES) {
+      if (closed || interrupted) break;
+      sendSpeechAudio(audio.slice(j, j + AUDIO_CHUNK_BYTES));
+      await new Promise<void>((r) => setTimeout(r, 40));
+    }
+    // Tail-silence drain — keep the client's scheduled audio timeline fed past
+    // the final word so it isn't clipped when the queue empties on hangup.
+    if (!interrupted && !closed) {
+      const silenceChunk = Buffer.alloc(AUDIO_CHUNK_BYTES, 0);
+      const silenceFrames = Math.ceil(AUDIO_TAIL_SILENCE_MS / 40);
+      for (let s = 0; s < silenceFrames && !interrupted && !closed; s++) {
+        sendAudio(silenceChunk);
+        await new Promise<void>((r) => setTimeout(r, 40));
+      }
+    }
+    speaking = false;
+    speakingEndedAt = Date.now();
   }
 
   // ── Ready ─────────────────────────────────────────────────────────────────

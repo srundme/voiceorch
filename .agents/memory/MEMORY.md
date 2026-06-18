@@ -20,3 +20,4 @@
 - [Drizzle bootstrap migration gap](drizzle-bootstrap-migration-gap.md) — bootstrapMigrationJournal seeds old migrations without running SQL; new tables/columns MUST have a new migration file with a fresh `when` timestamp
 - [Webcall extractSentences tuple shape](webcall-extract-sentences.md) — extractSentences in webcall.ts returns [string[], string] tuple (NOT object); pipeline.ts uses a named-return object — verify shape before copying between files
 - [LLM fallback chain pattern](llm-fallback-pattern.md) — fallbackLlm initialised at call start in pipeline.ts; fires only when primary throws AND llmFirstTokenAt===null; webcall reads raw agent row for fallback fields (cast as any)
+- [TTS final-words clipping](tts-tail-drain.md) — last words cut off on teardown; telephony=sleep before onCallEnd, web=send silence frames; re-arm echo-grace at EVERY playback exit, not just main loops
