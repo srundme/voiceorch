@@ -1,4 +1,4 @@
-# Build: 2026-06-18 — include all workspace package.json files in prod stage
+# Build: 2026-06-18 — include all workspace package.json in builder; keep prod stage minimal
 FROM node:22-slim AS builder
 WORKDIR /workspace
 
@@ -16,6 +16,7 @@ COPY artifacts/admin/package.json ./artifacts/admin/
 COPY artifacts/family-app/package.json ./artifacts/family-app/
 COPY artifacts/family-mobile/package.json ./artifacts/family-mobile/
 COPY artifacts/gender-service/package.json ./artifacts/gender-service/
+COPY artifacts/mockup-sandbox/package.json ./artifacts/mockup-sandbox/
 COPY artifacts/pitch-deck/package.json ./artifacts/pitch-deck/
 COPY scripts/package.json ./scripts/
 
@@ -43,13 +44,6 @@ COPY lib/api-spec/package.json ./lib/api-spec/
 COPY lib/api-zod/package.json ./lib/api-zod/
 COPY lib/api-client-react/package.json ./lib/api-client-react/
 COPY artifacts/api-server/package.json ./artifacts/api-server/
-COPY artifacts/dashboard/package.json ./artifacts/dashboard/
-COPY artifacts/admin/package.json ./artifacts/admin/
-COPY artifacts/family-app/package.json ./artifacts/family-app/
-COPY artifacts/family-mobile/package.json ./artifacts/family-mobile/
-COPY artifacts/gender-service/package.json ./artifacts/gender-service/
-COPY artifacts/pitch-deck/package.json ./artifacts/pitch-deck/
-COPY scripts/package.json ./scripts/
 
 RUN pnpm install --frozen-lockfile --prod
 
