@@ -69,11 +69,14 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
     return;
   }
 
-  // Per-IP rate limiting — apply to all providers to prevent resource exhaustion
+  // Per-IP rate limiting — apply to all providers to prevent resource exhaustion.
+  // Localhost is exempt (load tests, internal services) — in production localhost
+  // is never the source of a real user's WebSocket connection.
   const remoteIp =
     (request.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ??
     (request.socket?.remoteAddress ?? "unknown");
-  if (isWsRateLimited(remoteIp)) {
+  const isLocalhost = remoteIp === "127.0.0.1" || remoteIp === "::1" || remoteIp === "::ffff:127.0.0.1";
+  if (!isLocalhost && isWsRateLimited(remoteIp)) {
     logger.warn({ remoteIp, url }, "WebSocket upgrade rate-limited");
     socket.write("HTTP/1.1 429 Too Many Requests\r\nContent-Length: 0\r\n\r\n");
     socket.destroy();

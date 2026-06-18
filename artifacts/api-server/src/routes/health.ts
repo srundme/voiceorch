@@ -46,12 +46,14 @@ router.get("/healthz/deep", async (_req, res) => {
     overall = "degraded";
   }
 
-  // Active calls
+  // Active calls — warn at 100, degrade at 150 (informational; Railway uses /healthz not /healthz/deep)
   const activeCalls = getAllSessions().length;
   checks["activeCalls"] = { status: "ok", detail: `${activeCalls} active calls` };
-  if (activeCalls > 50) {
+  if (activeCalls > 150) {
     checks["activeCalls"].status = "warn";
     overall = "degraded";
+  } else if (activeCalls > 100) {
+    checks["activeCalls"].status = "warn";
   }
 
   // Campaign concurrency

@@ -1070,13 +1070,15 @@ router.get("/admin/health", async (req, res): Promise<void> => {
     overall = "degraded";
   }
 
-  // Active calls
+  // Active calls — warn at 100, degrade at 150
   const activeSessions = getAllSessions();
   const activeCalls = activeSessions.length;
   checks["activeCalls"] = { status: "ok", detail: `${activeCalls} active calls` };
-  if (activeCalls > 50) {
+  if (activeCalls > 150) {
     checks["activeCalls"].status = "warn";
     overall = "degraded";
+  } else if (activeCalls > 100) {
+    checks["activeCalls"].status = "warn";
   }
 
   // Campaign concurrency
@@ -1084,10 +1086,8 @@ router.get("/admin/health", async (req, res): Promise<void> => {
   const campaignDetails = Array.from(campaignConcurrency.entries()).map(([id, count]) => `campaign ${id}: ${count}`).join(", ");
   checks["campaignConcurrency"] = { status: "ok", detail: campaignDetails || "none" };
 
-  // Rate limit violations (last 1h) — count via pino-http logs if available, else skip
-  // For now: report if active sessions > 0, which is the proxy indicator
   checks["load"] = { status: "ok", detail: `${activeCalls} active / ${activeSessions.length} sessions` };
-  if (activeCalls > 80) {
+  if (activeCalls > 200) {
     checks["load"].status = "warn";
     overall = "degraded";
   }

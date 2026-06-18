@@ -1,71 +1,95 @@
 /**
- * Concurrent webcall load-test script.
+ * Concurrent webcall load-test — VoiceOrch / SnapServe
  *
  * Usage:
- *   AGENT_ID=<uuid> pnpm --filter @workspace/scripts run loadtest-calls
+ *   AGENT_ID=46 pnpm --filter @workspace/scripts run loadtest-calls
  *
  * Optional env vars:
- *   CONCURRENCY    — number of simultaneous WebSocket clients (default: 5)
- *   TURNS          — speaking turns per client (default: 3)
- *   WS_URL         — base WebSocket URL (default: ws://localhost:80)
- *   AUTH_TOKEN     — JWT session token; required if auth is enabled
+ *   CONCURRENCY   — simultaneous WebSocket clients (default: 20)
+ *   TURNS         — speaking turns per client (default: 2)
+ *   API_URL       — HTTP base (default: http://localhost:8080)
+ *   WS_URL        — WS base  (default: ws://localhost:8080)
  *
- * The server must be started with STUB_PROVIDERS=1 so all provider calls
- * are replaced by in-process stubs (no real ASR/LLM/TTS keys needed).
+ * The server must be started with STUB_PROVIDERS=1 so all provider
+ * calls are replaced by in-process stubs (STT=120ms, LLM~700ms, TTS~700ms).
  *
- * Each client:
- *   1. Opens a WebSocket to /api/calls/webcall?agentId=<id>
- *   2. Streams 1.5 s of 16-kHz sine-wave PCM to simulate speech
- *   3. Waits for the agent to reply (first `audio` message)
- *   4. Records `return_ms` (vad-flush → first audio out) per turn
- *   5. Repeats TURNS times then hangs up
- *
- * Prints a per-client summary and aggregate P50/P95/P99/max when done.
+ * Auth: a throwaway HS256 JWT is minted using SESSION_SECRET (must be set).
+ * Each virtual user fetches its own single-use ticket (POST /api/webcall/ticket)
+ * before opening the WebSocket so the ticket system is exercised correctly.
  */
 
 import WebSocket from "ws";
+import { createHmac, randomBytes } from "crypto";
 
-const AGENT_ID   = process.env["AGENT_ID"]    ?? "";
-const CONCURRENCY = Number(process.env["CONCURRENCY"] ?? "5");
-const TURNS       = Number(process.env["TURNS"]       ?? "3");
-const WS_URL      = process.env["WS_URL"]     ?? "ws://localhost:80";
-const AUTH_TOKEN  = process.env["AUTH_TOKEN"] ?? "";
+const AGENT_ID    = Number(process.env["AGENT_ID"]    ?? "0");
+const CONCURRENCY = Number(process.env["CONCURRENCY"] ?? "20");
+const TURNS       = Number(process.env["TURNS"]       ?? "2");
+const API_URL     = process.env["API_URL"]  ?? "http://localhost:8080";
+const WS_URL      = process.env["WS_URL"]  ?? "ws://localhost:8080";
+const SESSION_SECRET = process.env["SESSION_SECRET"] ?? "";
+const USER_ID     = process.env["USER_ID"]  ?? "loadtest-user";
 
-if (!AGENT_ID) {
-  console.error("AGENT_ID env var is required");
-  process.exit(1);
+if (!AGENT_ID) { console.error("AGENT_ID env var is required"); process.exit(1); }
+if (!SESSION_SECRET) { console.error("SESSION_SECRET env var is required"); process.exit(1); }
+
+// ── Minimal HS256 JWT (no deps needed) ────────────────────────────────────────
+function b64url(buf: Buffer | string): string {
+  const b = typeof buf === "string" ? Buffer.from(buf) : buf;
+  return b.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+}
+function mintJwt(sub: string, secret: string, ttlSeconds = 3600): string {
+  const header  = b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
+  const now     = Math.floor(Date.now() / 1000);
+  const payload = b64url(JSON.stringify({ sub, email: "loadtest@snapserve.ai", name: "LoadTest", iat: now, exp: now + ttlSeconds }));
+  const sig = b64url(createHmac("sha256", secret).update(`${header}.${payload}`).digest());
+  return `${header}.${payload}.${sig}`;
 }
 
-// ── PCM16 sine-wave generator (16 kHz, 1.5 s) ──────────────────────────────
-const SAMPLE_RATE   = 16_000;
-const SPEECH_SECS   = 1.5;
-const FREQ_HZ       = 440;
-const SAMPLES       = Math.ceil(SAMPLE_RATE * SPEECH_SECS);
-const AMPLITUDE     = 8_000;
+const JWT = mintJwt(USER_ID, SESSION_SECRET);
 
-function makeSinePcm(): Buffer {
-  const buf = Buffer.allocUnsafe(SAMPLES * 2);
-  for (let i = 0; i < SAMPLES; i++) {
-    const v = Math.round(AMPLITUDE * Math.sin(2 * Math.PI * FREQ_HZ * i / SAMPLE_RATE));
-    buf.writeInt16LE(v, i * 2);
+// ── Get a per-VU single-use ticket ────────────────────────────────────────────
+async function getTicket(): Promise<string> {
+  const res = await fetch(`${API_URL}/api/webcall/ticket`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${JWT}` },
+    body: JSON.stringify({ agentId: AGENT_ID }),
+    signal: AbortSignal.timeout(8_000),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Ticket fetch failed: HTTP ${res.status} — ${body}`);
   }
-  return buf;
+  const { ticket } = await res.json() as { ticket: string };
+  return ticket;
 }
 
-const SPEECH_PCM = makeSinePcm();
+// ── PCM16 sine-wave (1.5 s @ 16 kHz) ─────────────────────────────────────────
+const SAMPLE_RATE = 16_000;
+const SPEECH_SECS = 1.5;
+const FREQ_HZ     = 440;
+const SAMPLES     = Math.ceil(SAMPLE_RATE * SPEECH_SECS);
+const AMPLITUDE   = 8_000;
 
-// ── 200 ms of silence — sent after speech so VAD flushes ───────────────────
-const SILENCE_SECS  = 0.4;
-const SILENCE_SAMPLES = Math.ceil(SAMPLE_RATE * SILENCE_SECS);
-const SILENCE_PCM   = Buffer.alloc(SILENCE_SAMPLES * 2, 0);
+const SPEECH_PCM = Buffer.allocUnsafe(SAMPLES * 2);
+for (let i = 0; i < SAMPLES; i++) {
+  SPEECH_PCM.writeInt16LE(Math.round(AMPLITUDE * Math.sin(2 * Math.PI * FREQ_HZ * i / SAMPLE_RATE)), i * 2);
+}
+const SILENCE_PCM = Buffer.alloc(Math.ceil(SAMPLE_RATE * 0.4) * 2, 0);
 
-// ── One client session ──────────────────────────────────────────────────────
-type TurnResult = { turnMs: number; ok: boolean };
+// ── Per-VU session ─────────────────────────────────────────────────────────────
+type TurnResult = { turnMs: number; ok: boolean; error?: string };
 
-function runClient(clientIdx: number): Promise<TurnResult[]> {
-  return new Promise((resolve, reject) => {
-    const url = `${WS_URL}/api/calls/webcall?agentId=${AGENT_ID}${AUTH_TOKEN ? `&token=${AUTH_TOKEN}` : ""}`;
-    const ws = new WebSocket(url);
+async function runClient(vuIdx: number): Promise<TurnResult[]> {
+  let ticket: string;
+  try { ticket = await getTicket(); }
+  catch (e) {
+    console.error(`[vu${vuIdx}] ticket error: ${e}`);
+    return [{ turnMs: 0, ok: false, error: String(e) }];
+  }
+
+  return new Promise((resolve) => {
+    const url = `${WS_URL}/api/ws/webcall/${AGENT_ID}?ticket=${encodeURIComponent(ticket)}`;
+    const ws  = new WebSocket(url);
     ws.binaryType = "nodebuffer";
 
     const results: TurnResult[] = [];
@@ -77,121 +101,102 @@ function runClient(clientIdx: number): Promise<TurnResult[]> {
       if (ws.readyState !== WebSocket.OPEN) return;
       tFlush = performance.now();
       waitingForAudio = true;
-      // Send speech in 20 ms chunks (matching real browser behaviour)
-      const CHUNK = SAMPLE_RATE * 2 * 0.02; // 20 ms at 16 kHz, 16-bit
+      const CHUNK = SAMPLE_RATE * 2 * 0.02; // 20 ms chunks
       let offset = 0;
       function sendChunk() {
-        if (!waitingForAudio) return; // barge-in reset; skip remaining
+        if (!waitingForAudio) return;
         if (offset < SPEECH_PCM.length) {
           const end = Math.min(offset + CHUNK, SPEECH_PCM.length);
           ws.send(SPEECH_PCM.subarray(offset, end));
           offset = end;
           setTimeout(sendChunk, 20);
         } else {
-          // Send silence to trigger VAD flush
           ws.send(SILENCE_PCM);
         }
       }
       sendChunk();
     }
 
-    ws.on("open", () => {
-      console.log(`[client ${clientIdx}] connected`);
-      // Small delay so the server finishes its greeting
-      setTimeout(sendSpeech, 1_500);
+    ws.on("open",  () => { setTimeout(sendSpeech, 1_200); }); // wait for greeting
+    ws.on("error", (err) => {
+      console.error(`[vu${vuIdx}] WS error: ${err.message}`);
+      results.push({ turnMs: 0, ok: false, error: err.message });
+      resolve(results);
     });
-
     ws.on("message", (data) => {
       if (typeof data === "string") {
         try {
-          const msg = JSON.parse(data) as { type: string };
-          if (msg.type === "error") {
-            console.error(`[client ${clientIdx}] server error:`, data);
-            ws.close();
-            resolve(results);
+          const m = JSON.parse(data) as { type: string };
+          if (m.type === "error") {
+            console.error(`[vu${vuIdx}] server error: ${data}`);
+            ws.close(); resolve(results);
           }
-        } catch { /* non-JSON text, ignore */ }
+        } catch { /* ignore */ }
         return;
       }
-      // Binary = audio chunk from TTS
       if (waitingForAudio) {
-        const returnMs = Math.round(performance.now() - tFlush);
-        results.push({ turnMs: returnMs, ok: true });
+        const ms = Math.round(performance.now() - tFlush);
+        results.push({ turnMs: ms, ok: true });
         waitingForAudio = false;
         turn++;
-        console.log(`[client ${clientIdx}] turn ${turn} return_ms=${returnMs}`);
-        if (turn >= TURNS) {
-          ws.close(1000, "done");
-          resolve(results);
-        } else {
-          // Wait for agent to finish speaking before next turn
-          setTimeout(sendSpeech, 2_500);
-        }
+        process.stdout.write(`  vu${vuIdx} turn${turn} ${ms}ms\n`);
+        if (turn >= TURNS) { ws.close(1000, "done"); resolve(results); }
+        else { setTimeout(sendSpeech, 2_500); }
       }
     });
-
-    ws.on("error", (err) => {
-      console.error(`[client ${clientIdx}] WS error:`, err.message);
-      reject(err);
-    });
-
     ws.on("close", (code) => {
-      if (turn < TURNS) {
-        console.warn(`[client ${clientIdx}] closed early after ${turn}/${TURNS} turns (code ${code})`);
-      }
+      if (turn < TURNS) console.warn(`[vu${vuIdx}] closed early after ${turn}/${TURNS} turns (code ${code})`);
       resolve(results);
     });
-
-    // Hard timeout: 5 minutes max
-    setTimeout(() => {
-      if (ws.readyState === WebSocket.OPEN) ws.close(1001, "timeout");
-      resolve(results);
-    }, 5 * 60_000);
+    setTimeout(() => { if (ws.readyState === WebSocket.OPEN) ws.close(1001, "timeout"); resolve(results); }, 5 * 60_000);
   });
 }
 
-// ── Aggregate stats ─────────────────────────────────────────────────────────
-function percentile(sorted: number[], p: number): number {
-  const idx = Math.ceil((p / 100) * sorted.length) - 1;
-  return sorted[Math.max(0, idx)]!;
+// ── Percentile ─────────────────────────────────────────────────────────────────
+function pct(sorted: number[], p: number): number {
+  if (!sorted.length) return 0;
+  return sorted[Math.max(0, Math.ceil((p / 100) * sorted.length) - 1)]!;
 }
 
-// ── Main ────────────────────────────────────────────────────────────────────
+// ── Main ───────────────────────────────────────────────────────────────────────
 async function main() {
-  console.log(`\nSnapServe webcall load test`);
+  console.log(`\nSnapServe webcall concurrency test`);
   console.log(`  agentId=${AGENT_ID}  concurrency=${CONCURRENCY}  turns=${TURNS}`);
-  console.log(`  wsUrl=${WS_URL}  STUB_PROVIDERS must=1 on server\n`);
+  console.log(`  apiUrl=${API_URL}  wsUrl=${WS_URL}  (STUB_PROVIDERS must=1)\n`);
 
-  const clientPromises = Array.from({ length: CONCURRENCY }, (_, i) =>
-    runClient(i + 1).catch((err: unknown) => {
-      console.error(`client ${i + 1} fatal:`, err);
-      return [] as TurnResult[];
-    })
-  );
+  // Stagger VU start slightly so they don't all hit DB simultaneously
+  const stagger = Math.min(50, 2000 / CONCURRENCY); // spread over up to 2s
+  const clientPromises = Array.from({ length: CONCURRENCY }, async (_, i) => {
+    await new Promise(r => setTimeout(r, i * stagger));
+    return runClient(i + 1).catch(err => { console.error(`vu${i+1} fatal:`, err); return [] as TurnResult[]; });
+  });
 
-  const allResults = await Promise.all(clientPromises);
+  const all = await Promise.all(clientPromises);
+  const allMs = all.flat().filter(r => r.ok).map(r => r.turnMs).sort((a, b) => a - b);
+  const errors = all.flat().filter(r => !r.ok).length;
+  const total  = all.flat().length;
 
-  const allMs = allResults.flat().filter(r => r.ok).map(r => r.turnMs).sort((a, b) => a - b);
-
-  console.log(`\n── Results ──────────────────────────────────────`);
-  for (let i = 0; i < allResults.length; i++) {
-    const turns = allResults[i]!;
-    const ms = turns.map(t => t.turnMs);
-    if (ms.length === 0) { console.log(`  client ${i + 1}: no completed turns`); continue; }
-    const avg = Math.round(ms.reduce((a, b) => a + b, 0) / ms.length);
-    console.log(`  client ${i + 1}: ${turns.length} turns  avg=${avg}ms  [${ms.join(", ")}]ms`);
+  console.log(`\n${"═".repeat(60)}`);
+  console.log(`  Webcall Concurrency Test — ${CONCURRENCY} VUs × ${TURNS} turns`);
+  console.log(`${"═".repeat(60)}`);
+  for (let i = 0; i < all.length; i++) {
+    const turns = all[i]!;
+    const ms = turns.filter(t => t.ok).map(t => t.turnMs);
+    if (!ms.length) { console.log(`  vu${i+1}: FAILED (${turns.map(t => t.error).join(", ")})`); continue; }
+    console.log(`  vu${i+1}: ${ms.length}/${TURNS} turns  avg=${Math.round(ms.reduce((a,b)=>a+b,0)/ms.length)}ms  [${ms.join(", ")}]ms`);
   }
-
-  if (allMs.length > 0) {
-    console.log(`\n── Aggregate (N=${allMs.length} turns) ──────────────────`);
-    console.log(`  min=${allMs[0]}ms`);
-    console.log(`  p50=${percentile(allMs, 50)}ms`);
-    console.log(`  p95=${percentile(allMs, 95)}ms`);
-    console.log(`  p99=${percentile(allMs, 99)}ms`);
-    console.log(`  max=${allMs[allMs.length - 1]}ms`);
+  console.log(`${"─".repeat(60)}`);
+  if (allMs.length) {
+    console.log(`  successful turns : ${allMs.length} / ${total}`);
+    console.log(`  errors           : ${errors}`);
+    console.log(`  p50              : ${pct(allMs,50)}ms`);
+    console.log(`  p95              : ${pct(allMs,95)}ms`);
+    console.log(`  p99              : ${pct(allMs,99)}ms`);
+    console.log(`  max              : ${allMs[allMs.length-1]}ms`);
   } else {
-    console.log(`\nNo completed turns recorded.`);
+    console.log("  No successful turns.");
   }
+  console.log(`${"═".repeat(60)}\n`);
 }
 
 main().catch(err => { console.error(err); process.exit(1); });
