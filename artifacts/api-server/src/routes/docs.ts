@@ -80,7 +80,7 @@ router.get("/docs/changelog", async (req, res) => {
       return;
     }
 
-    const commits: GitHubCommit[] = await ghRes.json();
+    const commits = (await ghRes.json()) as GitHubCommit[];
     const weekMap = new Map<string, ChangelogEntry[]>();
 
     for (const c of commits) {

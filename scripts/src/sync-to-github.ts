@@ -61,7 +61,7 @@ interface TreeEntry {
   path: string;
   mode: string;
   type: string;
-  sha?: string;
+  sha?: string | null;
 }
 
 async function main() {
@@ -170,12 +170,13 @@ async function main() {
     });
   }
 
-  // Deletions: omit sha entirely (sha: null causes GitHub 422)
+  // Deletions: sha must be null explicitly — GitHub Trees API uses null to signal removal
   for (const relPath of deletedPaths) {
     newTreeEntries.push({
       path: relPath,
       mode: "100644",
       type: "blob",
+      sha: null,
     });
   }
 
