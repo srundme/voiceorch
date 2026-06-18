@@ -1114,6 +1114,57 @@ export async function handleWebCallWebSocket(
         }
         return out;
       }
+      // ── Markup-tag filter: strips <emotion …>/</emotion>/<break …/> from TTS ──
+      // Mirrors makeMarkupTagFilter() in pipeline.ts but inlined for webcall.
+      // Keeps the speakable text between the tags; buffers partial tags split
+      // across streaming chunks; collapses double spaces left behind.
+      const MARKUP_STRIP_PREFIXES = ["<emotion", "</emotion", "<break"];
+      let markupBuf = "";
+      let markupPrevSpace = false;
+
+      function filterMarkupToken(token: string): string {
+        markupBuf += token;
+        let raw = "";
+        while (markupBuf.length > 0) {
+          const lt = markupBuf.indexOf("<");
+          if (lt === -1) {
+            raw += markupBuf;
+            markupBuf = "";
+            break;
+          }
+          raw += markupBuf.slice(0, lt);
+          markupBuf = markupBuf.slice(lt);
+          const lower = markupBuf.toLowerCase();
+          let matched = false;
+          let partial = false;
+          for (const p of MARKUP_STRIP_PREFIXES) {
+            if (lower.startsWith(p)) { matched = true; break; }
+            if (p.startsWith(lower)) { partial = true; }
+          }
+          if (matched) {
+            const gt = markupBuf.indexOf(">");
+            if (gt === -1) break;
+            markupBuf = markupBuf.slice(gt + 1);
+          } else if (partial) {
+            break;
+          } else {
+            raw += "<";
+            markupBuf = markupBuf.slice(1);
+          }
+        }
+        let out = "";
+        for (const ch of raw) {
+          if (ch === " ") {
+            if (markupPrevSpace) continue;
+            markupPrevSpace = true;
+            out += ch;
+          } else {
+            markupPrevSpace = false;
+            out += ch;
+          }
+        }
+        return out;
+      }
       // ──────────────────────────────────────────────────────────────────────
 
       function queueSentence(text: string) {
@@ -1352,6 +1403,8 @@ export async function handleWebCallWebSocket(
       thinkBuf = "";
       inFnTag = false;
       fnBuf = "";
+      markupBuf = "";
+      markupPrevSpace = false;
       triggeredToolName = null;
       triggeredToolArgs = {};
 
@@ -1407,7 +1460,9 @@ export async function handleWebCallWebSocket(
           fullReply += token;                         // keep raw (for cleaning later)
           const afterThink = filterThinkToken(token); // strip <think>…</think>
           if (!afterThink) return;                    // token was entirely inside a think block
-          const filtered = filterFnToken(afterThink); // strip <function=…> inline tags from TTS
+          const afterFn = filterFnToken(afterThink);  // strip <function=…> inline tags from TTS
+          if (!afterFn) return;
+          const filtered = filterMarkupToken(afterFn); // strip <emotion>/<break> markup from TTS
           if (!filtered) return;
           tokenBuf += filtered;
           send({ type: "token", text: filtered });
@@ -1442,6 +1497,7 @@ export async function handleWebCallWebSocket(
             fullReply = "";
             inThinkBlock = false; thinkBuf = "";
             inFnTag = false; fnBuf = "";
+            markupBuf = ""; markupPrevSpace = false;
             try {
               const fallbackLlm = createLLMAdapter(fallbackProvider, fallbackKey, fallbackModel ?? null);
               await fallbackLlm.chat(
@@ -1454,8 +1510,10 @@ export async function handleWebCallWebSocket(
                   if (!afterThink) return;
                   const afterFn = filterFnToken(afterThink);
                   if (!afterFn) return;
-                  tokenBuf += afterFn;
-                  send({ type: "token", text: afterFn });
+                  const filtered = filterMarkupToken(afterFn);
+                  if (!filtered) return;
+                  tokenBuf += filtered;
+                  send({ type: "token", text: filtered });
                   const [sentences, remainder] = extractSentences(tokenBuf);
                   for (const s of sentences) {
                     queueSentence(s);
@@ -1524,6 +1582,9 @@ export async function handleWebCallWebSocket(
           .replace(/<function=\w+[^>]*>[\s\S]*?<\/function>/g, "")
           .replace(/<function=\w+[^>]*\/>/g, "")
           .replace(/<function=\w+[^>]*>/g, "")
+          .replace(/<\/?emotion[^>]*>/gi, "")
+          .replace(/<break[^>]*\/?>/gi, "")
+          .replace(/[^\S\r\n]{2,}/g, " ")
           .trim();
         const [, trueRemainder] = extractSentences(cleanForFlush);
         const flushText = trueRemainder.trim().length > tokenBuf.trim().length
@@ -1540,6 +1601,9 @@ export async function handleWebCallWebSocket(
           .replace(/<function=\w+[^>]*>[\s\S]*?<\/function>/g, "")
           .replace(/<function=\w+[^>]*\/>/g, "")
           .replace(/<function=\w+[^>]*>/g, "")
+          .replace(/<\/?emotion[^>]*>/gi, "")
+          .replace(/<break[^>]*\/?>/gi, "")
+          .replace(/[^\S\r\n]{2,}/g, " ")
           .trim()
           || `[calling tool: ${triggeredToolName}]`;
         history.push({ role: "assistant", content: assistantToolContent });
@@ -1690,6 +1754,9 @@ export async function handleWebCallWebSocket(
         .replace(/<function=\w+[^>]*>[\s\S]*?<\/function>/g, "")
         .replace(/<function=\w+[^>]*\/>/g, "")
         .replace(/<function=\w+[^>]*>/g, "")
+        .replace(/<\/?emotion[^>]*>/gi, "")
+        .replace(/<break[^>]*\/?>/gi, "")
+        .replace(/[^\S\r\n]{2,}/g, " ")
         .trim();
 
       if (!cleanReply || sentenceJobs.length === 0) {

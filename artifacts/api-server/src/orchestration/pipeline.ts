@@ -1490,6 +1490,7 @@ export class OrchestrationPipeline {
     // inline tags that some LLMs emit as text instead of using the tool API.
     const filterThinkToken = makeThinkFilter();
     const filterFnTag = makeFunctionTagFilter();
+    const filterMarkup = makeMarkupTagFilter();
 
     const sentenceQueue: string[] = [];
     let wakePlayer: (() => void) | null = null;
@@ -1776,7 +1777,9 @@ export class OrchestrationPipeline {
           llmResponse += token;                  // keep raw response (incl. think blocks)
           const afterThink = filterThinkToken(token);
           if (!afterThink) return;               // token was entirely inside a think block
-          const filtered = filterFnTag(afterThink); // strip <function=…> inline tags from TTS
+          const afterFn = filterFnTag(afterThink); // strip <function=…> inline tags from TTS
+          if (!afterFn) return;
+          const filtered = filterMarkup(afterFn);  // strip <emotion>/<break> markup from TTS
           if (!filtered) return;
           pendingText += filtered;
           const { sentences, remainder } = extractSentences(pendingText);
@@ -1839,7 +1842,9 @@ export class OrchestrationPipeline {
               llmResponse += token;
               const afterThink = filterThinkToken(token);
               if (!afterThink) return;
-              const filtered = filterFnTag(afterThink);
+              const afterFn = filterFnTag(afterThink);
+              if (!afterFn) return;
+              const filtered = filterMarkup(afterFn);
               if (!filtered) return;
               pendingText += filtered;
               const { sentences, remainder } = extractSentences(pendingText);
@@ -1886,7 +1891,7 @@ export class OrchestrationPipeline {
       // Without this, continueWithToolResult would see two consecutive "user" messages
       // (the caller's speech + the tool result), which breaks Sarvam's strict turn
       // alternation and confuses all LLMs lacking a tool-result role.
-      const assistantToolContent = stripFunctionTags(llmResponse.replace(/<think>[\s\S]*?<\/think>/g, "")).trim() || `[calling tool: ${triggeredToolName}]`;
+      const assistantToolContent = stripMarkupTags(stripFunctionTags(llmResponse.replace(/<think>[\s\S]*?<\/think>/g, ""))).trim() || `[calling tool: ${triggeredToolName}]`;
       this.conversationHistory.push({ role: "assistant", content: assistantToolContent });
 
       // Enqueue a brief filler (language-aware) so the caller hears something while
@@ -1918,7 +1923,7 @@ export class OrchestrationPipeline {
     // they don't appear in the transcript UI or pollute conversation history.
     // Computed BEFORE the final flush so the spoken tail and the stored history
     // are derived from the exact same fully-cleaned text.
-    const cleanResponse = stripFunctionTags(llmResponse.replace(/<think>[\s\S]*?<\/think>/g, "")).trim();
+    const cleanResponse = stripMarkupTags(stripFunctionTags(llmResponse.replace(/<think>[\s\S]*?<\/think>/g, ""))).trim();
 
     // Final flush: the LLM token stream occasionally ends a few words early while
     // llmResponse (set by the onComplete callback) holds the complete text. Re-run
@@ -2207,6 +2212,7 @@ export class OrchestrationPipeline {
 
     const filterThinkToken = makeThinkFilter();
     const filterFnTag = makeFunctionTagFilter();
+    const filterMarkup = makeMarkupTagFilter();
 
     const sentenceQueue: string[] = [];
     let wakePlayer: (() => void) | null = null;
@@ -2281,7 +2287,9 @@ export class OrchestrationPipeline {
           llmResponse += token;
           const afterThink = filterThinkToken(token);
           if (!afterThink) return;
-          const filtered = filterFnTag(afterThink);
+          const afterFn = filterFnTag(afterThink);
+          if (!afterFn) return;
+          const filtered = filterMarkup(afterFn);
           if (!filtered) return;
           pendingText += filtered;
           const { sentences, remainder } = extractSentences(pendingText);
@@ -2320,7 +2328,7 @@ export class OrchestrationPipeline {
 
     // Compute the fully-cleaned response BEFORE the final flush so the spoken
     // tail and the stored history are derived from the exact same text.
-    const cleanResponse = stripFunctionTags(llmResponse.replace(/<think>[\s\S]*?<\/think>/g, "")).trim();
+    const cleanResponse = stripMarkupTags(stripFunctionTags(llmResponse.replace(/<think>[\s\S]*?<\/think>/g, ""))).trim();
 
     // Final flush: prefer the fullReply-derived remainder over the possibly-
     // truncated pendingText, and enqueue any non-empty trailing text — a length
@@ -2585,6 +2593,21 @@ function stripFunctionTags(text: string): string {
 }
 
 /**
+ * Strips inline prosody/markup tags the LLM sometimes emits — `<emotion …>`,
+ * `</emotion>`, and self-closing `<break …/>` — while KEEPING the speakable
+ * text between them. Without this they reach TTS verbatim and get XML-escaped
+ * (Azure) or spoken literally (Cartesia/ElevenLabs/Deepgram), mangling audio
+ * and corrupting sentence splitting. Whole-string variant of makeMarkupTagFilter.
+ */
+function stripMarkupTags(text: string): string {
+  return text
+    .replace(/<\/?emotion[^>]*>/gi, "")
+    .replace(/<break[^>]*\/?>/gi, "")
+    .replace(/[^\S\r\n]{2,}/g, " ")
+    .trim();
+}
+
+/**
  * Extracts the first inline `<function=NAME>BODY</function>` tag from a response string.
  * Returns the function name and parsed args (body treated as JSON), or null if none found.
  */
@@ -2653,6 +2676,71 @@ function makeFunctionTagFilter(): (token: string) => string {
           buf = buf.slice(tail);
           break;
         }
+      }
+    }
+    return out;
+  };
+}
+
+/**
+ * Stateful per-turn filter that strips inline markup tags — `<emotion …>`,
+ * `</emotion>`, and self-closing `<break …/>` — from the LLM token stream
+ * while KEEPING the speakable text between them. Buffers partial tags split
+ * across streaming chunks and collapses double spaces left behind so words
+ * aren't run together. Analogous to makeFunctionTagFilter.
+ */
+function makeMarkupTagFilter(): (token: string) => string {
+  // Lower-cased prefixes of the tags we strip (everything up to the attributes).
+  const STRIP_PREFIXES = ["<emotion", "</emotion", "<break"];
+  let buf = "";
+  let prevEndedWithSpace = false;
+
+  return function filterMarkupToken(token: string): string {
+    buf += token;
+    let raw = "";
+
+    while (buf.length > 0) {
+      const lt = buf.indexOf("<");
+      if (lt === -1) {
+        raw += buf;
+        buf = "";
+        break;
+      }
+      // Emit any plain text preceding the "<"
+      raw += buf.slice(0, lt);
+      buf = buf.slice(lt);
+
+      const lower = buf.toLowerCase();
+      let matched = false;
+      let partial = false;
+      for (const p of STRIP_PREFIXES) {
+        if (lower.startsWith(p)) { matched = true; break; }
+        if (p.startsWith(lower)) { partial = true; }
+      }
+
+      if (matched) {
+        const gt = buf.indexOf(">");
+        if (gt === -1) break;        // tag not finished yet — wait for more tokens
+        buf = buf.slice(gt + 1);     // drop the whole tag, keep surrounding text
+      } else if (partial) {
+        break;                       // "<" might still grow into one of our tags
+      } else {
+        raw += "<";                  // a "<" that isn't our tag — keep it
+        buf = buf.slice(1);
+      }
+    }
+
+    // Collapse runs of spaces left where a tag was removed, including runs
+    // straddling streaming-chunk boundaries (one space already emitted last call).
+    let out = "";
+    for (const ch of raw) {
+      if (ch === " ") {
+        if (prevEndedWithSpace) continue;
+        prevEndedWithSpace = true;
+        out += ch;
+      } else {
+        prevEndedWithSpace = false;
+        out += ch;
       }
     }
     return out;
