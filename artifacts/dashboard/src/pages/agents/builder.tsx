@@ -3658,6 +3658,8 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
   };
 
   const handleDelete = async () => {
+    const agentName = form.getValues("name") || "this agent";
+    if (!confirm(`Delete "${agentName}"? This cannot be undone.`)) return;
     try {
       await deleteAgent.mutateAsync({ id: agentId });
       queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
