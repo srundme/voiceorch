@@ -781,6 +781,7 @@ export default function CallDetail() {
       : [];
 
   const callSummary = (call as any).callSummary as string | null | undefined;
+  const summarizationEnabled = ((agent as any)?.agentConfig?.summarizationEnabled as boolean | undefined) ?? false;
   const rawEval = (call as any).successEvaluation as string | null | undefined;
   const evalVerdict = rawEval ? rawEval.split(/\r?\n/)[0]?.trim().toUpperCase() : undefined;
   const evalReason = rawEval ? rawEval.split(/\r?\n/).slice(1).join(" ").trim() : undefined;
@@ -1005,8 +1006,10 @@ export default function CallDetail() {
                       <p className="text-sm text-muted-foreground whitespace-pre-line leading-relaxed">
                         {callSummary}
                       </p>
-                    ) : (
+                    ) : summarizationEnabled ? (
                       <p className="text-sm text-muted-foreground">No summary available for this call.</p>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">Auto Summarization is disabled for this agent.</p>
                     )}
                   </CardContent>
                 </Card>

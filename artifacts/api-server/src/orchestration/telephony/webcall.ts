@@ -2521,10 +2521,19 @@ export async function handleWebCallWebSocket(
     }
 
     // ── Post-call AI summary (fire-and-forget) ────────────────────────────────
+    // No transcript-length gate: every completed call gets a summary when enabled.
     const summarizationEnabled = (agentCfg["summarizationEnabled"] as boolean | undefined) ?? false;
-    if (summarizationEnabled && transcript && transcript.length > 100) {
+    if (summarizationEnabled) {
       void (async () => {
         try {
+          const hasTranscript = !!(transcript && transcript.trim().length > 0);
+          if (!hasTranscript) {
+            // Empty-transcript edge case: store a short placeholder rather than failing.
+            await db.update(callsTable)
+              .set({ callSummary: "No conversation took place on this call, so there is nothing to summarize." })
+              .where(eq(callsTable.id, callId));
+            return;
+          }
           const customPrompt = (agentCfg["summarizationPrompt"] as string | undefined) ?? "";
           const userContent = customPrompt
             ? `${customPrompt}\n\nTranscript:\n${transcript.slice(0, 6000)}`

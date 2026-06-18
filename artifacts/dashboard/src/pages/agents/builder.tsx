@@ -1939,7 +1939,6 @@ function AdvancedTab({ form }: { form: any }) {
   const [section, setSection] = useState<AdvSection>("timing");
   const bargeIn = form.watch("bargeInEnabled");
   const llmProvider = form.watch("llmProvider");
-  const tokenSummarizationEnabled = form.watch("tokenSummarizationEnabled");
   const stagedPromptEnabled = form.watch("stagedPromptEnabled");
 
   const nav: { id: AdvSection; icon: React.ReactNode; label: string }[] = [
@@ -2255,41 +2254,21 @@ function AdvancedTab({ form }: { form: any }) {
               </FormItem>
             )} />
 
-            {/* Auto Summarization */}
-            <FormField control={form.control} name="tokenSummarizationEnabled" render={({ field }) => (
+            {/* Auto Summarization (post-call summary) */}
+            <FormField control={form.control} name="summarizationEnabled" render={({ field }) => (
               <FormItem className={cn("rounded-xl border bg-card/40 px-4 py-3.5 space-y-0 transition-colors", field.value ? "border-primary/30" : "border-border/50")}>
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", field.value ? "bg-primary/15 text-primary" : "bg-muted/40 text-muted-foreground/50")}>
-                      <Brain className="h-4 w-4" />
+                      <Sparkles className="h-4 w-4" />
                     </div>
                     <div>
                       <FormLabel className="text-[12.5px] font-semibold">Auto Summarization</FormLabel>
-                      <FormDescription className="text-[10px]">Old turns replaced with a compact AI summary at threshold</FormDescription>
+                      <FormDescription className="text-[10px]">Generate a concise AI summary for every completed call, shown in the call log</FormDescription>
                     </div>
                   </div>
                   <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} /></FormControl>
                 </div>
-                {tokenSummarizationEnabled && (
-                  <div className="mt-3 pt-3 border-t border-border/40">
-                    <FormField control={form.control} name="tokenSummarizationThresholdTurns" render={({ field: tf }) => (
-                      <FormItem>
-                        <div className="flex items-center gap-2">
-                          <FormLabel className="text-[11px] text-muted-foreground shrink-0">Summarize after</FormLabel>
-                          <FormControl>
-                            <Input type="number" min={5} max={500} placeholder="20"
-                              className="w-20 h-7 text-xs text-center"
-                              value={tf.value == null ? "" : String(tf.value)}
-                              onChange={(e) => tf.onChange(e.target.value === "" ? null : parseInt(e.target.value, 10))}
-                            />
-                          </FormControl>
-                          <span className="text-[11px] text-muted-foreground">turns</span>
-                        </div>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                  </div>
-                )}
               </FormItem>
             )} />
 
@@ -3569,8 +3548,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       complianceIrdai: false, complianceDpdp: false, complianceHipaa: false, complianceTrai: false,
       knowledgeSourceIds: [],
       contextWindowTurns: undefined,
-      tokenSummarizationEnabled: false,
-      tokenSummarizationThresholdTurns: undefined,
+      summarizationEnabled: false,
       stagedPromptEnabled: false,
       stagedPromptStages: [],
       stagedPromptCoreIdentity: "",
@@ -3636,8 +3614,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       snapserveAgentId: (agent as any).snapserveAgentId ?? "",
       knowledgeSourceIds:       ((agent as any).knowledgeSourceIds ?? []) as number[],
       contextWindowTurns:              (agent as any).contextWindowTurns ?? undefined,
-      tokenSummarizationEnabled:       (agent as any).tokenSummarizationEnabled ?? false,
-      tokenSummarizationThresholdTurns:(agent as any).tokenSummarizationThresholdTurns ?? undefined,
+      summarizationEnabled:            (agent as any).agentConfig?.summarizationEnabled ?? false,
       stagedPromptEnabled:             (agent as any).stagedPromptEnabled ?? false,
       stagedPromptStages:              (agent as any).stagedPromptStages ?? [],
       stagedPromptCoreIdentity:        (agent as any).stagedPromptCoreIdentity ?? "",

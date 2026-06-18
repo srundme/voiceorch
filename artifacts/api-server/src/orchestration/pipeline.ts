@@ -1991,7 +1991,9 @@ export class OrchestrationPipeline {
     }
 
     // ── Token Optimization: Layer 3 — Summarization (async, non-blocking) ─
-    if (tokenOptEnabled && this.agent.tokenSummarizationEnabled) {
+    // Runs automatically in the background to keep mid-call token cost down.
+    // No longer gated by a user-visible toggle — uses the default threshold (20 turns).
+    if (tokenOptEnabled) {
       const threshold = this.agent.tokenSummarizationThresholdTurns ?? 20;
       const histLen = this.conversationHistory.length;
       if (histLen >= threshold) {

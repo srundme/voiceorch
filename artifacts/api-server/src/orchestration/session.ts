@@ -918,34 +918,42 @@ export async function endSession(sessionId: string): Promise<void> {
           let callSummary = "";
           let dispositionResult: Record<string, unknown> | null = null;
 
-          // 1. Generate call summary (only when agent has summarization enabled)
+          // 1. Generate call summary (when agent has Auto Summarization enabled).
+          // No transcript-length gate: every completed call gets a summary when enabled.
           const summarizationEnabled = (agCfgForWebhook["summarizationEnabled"] as boolean | undefined) ?? false;
-          if (summarizationEnabled && transcript && transcript.length > 100 && ag.userId) {
+          if (summarizationEnabled && ag.userId) {
             try {
-              const llmProvs = await db.select().from(providersTable).where(
-                and(
-                  eq(providersTable.isActive, true),
-                  eq(providersTable.userId, ag.userId!),
-                  eq(providersTable.providerName, ag.llmProvider)
-                )
-              );
-              const llmKey = llmProvs[0]?.apiKey;
-              if (llmKey) {
-                const llm = createLLMAdapter(ag.llmProvider, llmKey, ag.llmModel);
-                const customPrompt = (agCfgForWebhook["summarizationPrompt"] as string | undefined) ?? "";
-                const userContent = customPrompt
-                  ? `${customPrompt}\n\nTranscript:\n${transcript.slice(0, 6000)}`
-                  : `Summarize this call transcript as a single natural paragraph of 4 to 6 sentences. Briefly cover why the customer called, what was discussed, any important information collected, the outcome, and any follow-up or next steps (only if applicable). Write plain prose — do not use bullet points, numbered lists, or headings.\n\nTranscript:\n${transcript.slice(0, 6000)}`;
-                let summary = "";
-                await llm.chat(
-                  [{ role: "user", content: userContent }],
-                  "You are a call analyst. Write a concise, factual summary of the call as a single natural paragraph of 4 to 6 sentences. Do not use bullet points, numbered lists, or headings — write plain readable prose only.",
-                  () => {},
-                  (full) => { summary = full; }
+              const hasTranscript = !!(transcript && transcript.trim().length > 0);
+              if (!hasTranscript) {
+                // Empty-transcript edge case: store a short placeholder rather than failing.
+                callSummary = "No conversation took place on this call, so there is nothing to summarize.";
+                await db.update(callsTable).set({ callSummary }).where(eq(callsTable.id, session.callId));
+              } else {
+                const llmProvs = await db.select().from(providersTable).where(
+                  and(
+                    eq(providersTable.isActive, true),
+                    eq(providersTable.userId, ag.userId!),
+                    eq(providersTable.providerName, ag.llmProvider)
+                  )
                 );
-                if (summary) {
-                  callSummary = summary;
-                  await db.update(callsTable).set({ callSummary: summary }).where(eq(callsTable.id, session.callId));
+                const llmKey = llmProvs[0]?.apiKey;
+                if (llmKey) {
+                  const llm = createLLMAdapter(ag.llmProvider, llmKey, ag.llmModel);
+                  const customPrompt = (agCfgForWebhook["summarizationPrompt"] as string | undefined) ?? "";
+                  const userContent = customPrompt
+                    ? `${customPrompt}\n\nTranscript:\n${transcript.slice(0, 6000)}`
+                    : `Summarize this call transcript as a single natural paragraph of 4 to 6 sentences. Briefly cover why the customer called, what was discussed, any important information collected, the outcome, and any follow-up or next steps (only if applicable). Write plain prose — do not use bullet points, numbered lists, or headings.\n\nTranscript:\n${transcript.slice(0, 6000)}`;
+                  let summary = "";
+                  await llm.chat(
+                    [{ role: "user", content: userContent }],
+                    "You are a call analyst. Write a concise, factual summary of the call as a single natural paragraph of 4 to 6 sentences. Do not use bullet points, numbered lists, or headings — write plain readable prose only.",
+                    () => {},
+                    (full) => { summary = full; }
+                  );
+                  if (summary) {
+                    callSummary = summary;
+                    await db.update(callsTable).set({ callSummary: summary }).where(eq(callsTable.id, session.callId));
+                  }
                 }
               }
             } catch (summaryErr) {

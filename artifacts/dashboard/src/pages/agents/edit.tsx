@@ -64,7 +64,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     stopSpeakingNumWords, stopSpeakingVoiceSecs, stopSpeakingBackOffSecs,
     complianceIrdai, complianceDpdp, complianceHipaa, complianceTrai,
     snapserveAgentId,
-    contextWindowTurns, tokenSummarizationEnabled, tokenSummarizationThresholdTurns,
+    contextWindowTurns, summarizationEnabled,
     stagedPromptEnabled, stagedPromptStages, stagedPromptCoreIdentity,
     ambientNoiseEnabled, ambientNoiseTrack,
     preferredManagedNumber,
@@ -84,6 +84,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   if (voicemailMessage) agentConfig["voicemailMessage"] = voicemailMessage;
   agentConfig["genderDetectionEnabled"] = !!genderDetectionEnabled;
   agentConfig["recordingEnabled"] = !!recordingEnabled;
+  agentConfig["summarizationEnabled"] = !!summarizationEnabled;
   agentConfig["ambientNoiseEnabled"] = !!ambientNoiseEnabled;
   if (ambientNoiseTrack) agentConfig["ambientNoiseTrack"] = ambientNoiseTrack;
   if (preferredManagedNumber) agentConfig["preferredManagedNumber"] = preferredManagedNumber;
@@ -138,8 +139,6 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     asrLanguage: rest.asrLanguage || null,
     snapserveAgentId: snapserveAgentId || null,
     contextWindowTurns: contextWindowTurns ?? null,
-    tokenSummarizationEnabled: tokenSummarizationEnabled ?? false,
-    tokenSummarizationThresholdTurns: tokenSummarizationThresholdTurns ?? null,
     stagedPromptEnabled: stagedPromptEnabled ?? false,
     stagedPromptStages: stagedPromptStages ?? [],
     stagedPromptCoreIdentity: stagedPromptCoreIdentity || undefined,
@@ -314,8 +313,7 @@ export default function AgentEdit() {
       recordingEnabled: false,
       snapserveAgentId: "",
       contextWindowTurns: undefined,
-      tokenSummarizationEnabled: false,
-      tokenSummarizationThresholdTurns: undefined,
+      summarizationEnabled: false,
       stagedPromptEnabled: false,
       stagedPromptStages: [],
       stagedPromptCoreIdentity: "",
@@ -519,8 +517,7 @@ export default function AgentEdit() {
       recordingEnabled: (agent as any).agentConfig?.recordingEnabled ?? false,
       snapserveAgentId: (agent as any).snapserveAgentId ?? "",
       contextWindowTurns: (agent as any).contextWindowTurns ?? undefined,
-      tokenSummarizationEnabled: (agent as any).tokenSummarizationEnabled ?? false,
-      tokenSummarizationThresholdTurns: (agent as any).tokenSummarizationThresholdTurns ?? undefined,
+      summarizationEnabled: (agent as any).agentConfig?.summarizationEnabled ?? false,
       stagedPromptEnabled: (agent as any).stagedPromptEnabled ?? false,
       stagedPromptStages: (agent as any).stagedPromptStages ?? [],
       stagedPromptCoreIdentity: (agent as any).stagedPromptCoreIdentity ?? "",
@@ -1469,39 +1466,6 @@ export default function AgentEdit() {
                 </div>
               </div>
 
-              {/* Layer 3: Summarization */}
-              <div className="space-y-3 border-t border-border pt-4">
-                <FormField control={form.control} name="tokenSummarizationEnabled" render={({ field }) => (
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium">Automatic Summarization</p>
-                      <p className="text-xs text-muted-foreground">When conversation history reaches the threshold, old turns are summarized and replaced with a compact summary block.</p>
-                    </div>
-                    <Switch checked={!!field.value} onCheckedChange={field.onChange} />
-                  </div>
-                )} />
-                {form.watch("tokenSummarizationEnabled") && (
-                  <FormField control={form.control} name="tokenSummarizationThresholdTurns" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-xs">Summarization threshold (turns)</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min={5}
-                          max={500}
-                          placeholder="20"
-                          className="w-32 h-8 text-xs"
-                          value={field.value == null ? "" : String(field.value)}
-                          onChange={(e) => field.onChange(e.target.value === "" ? null : parseInt(e.target.value, 10))}
-                        />
-                      </FormControl>
-                      <FormDescription className="text-[10px]">Summarize when history exceeds this many turns. Default: 20.</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                )}
-              </div>
-
               {/* Layer 4: Staged Prompt */}
               <div className="space-y-3 border-t border-border pt-4">
                 <FormField control={form.control} name="stagedPromptEnabled" render={({ field }) => (
@@ -1533,6 +1497,27 @@ export default function AgentEdit() {
                   </div>
                 )}
               </div>
+            </CardContent>
+          </Card>
+
+          {/* ── Auto Summarization ── */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Sparkles className="h-4 w-4 text-primary" /> Auto Summarization
+              </CardTitle>
+              <CardDescription>Generate a concise AI summary of every completed call and show it in the call log.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <FormField control={form.control} name="summarizationEnabled" render={({ field }) => (
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Auto Summarization</p>
+                    <p className="text-xs text-muted-foreground">When on, a short AI summary is created for every completed call — web or phone, any length.</p>
+                  </div>
+                  <Switch checked={!!field.value} onCheckedChange={field.onChange} />
+                </div>
+              )} />
             </CardContent>
           </Card>
 
