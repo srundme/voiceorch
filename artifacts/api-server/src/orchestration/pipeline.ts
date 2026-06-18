@@ -1914,8 +1914,22 @@ export class OrchestrationPipeline {
       return;
     }
 
-    const tail = pendingText.trim();
-    if (tail.length >= 2) enqueue(tail);
+    // Strip think blocks and inline function tags from the stored response so
+    // they don't appear in the transcript UI or pollute conversation history.
+    // Computed BEFORE the final flush so the spoken tail and the stored history
+    // are derived from the exact same fully-cleaned text.
+    const cleanResponse = stripFunctionTags(llmResponse.replace(/<think>[\s\S]*?<\/think>/g, "")).trim();
+
+    // Final flush: the LLM token stream occasionally ends a few words early while
+    // llmResponse (set by the onComplete callback) holds the complete text. Re-run
+    // extractSentences on the full clean reply and prefer its remainder over the
+    // possibly-truncated pendingText buffer. Enqueue any non-empty trailing text —
+    // a length gate would silently drop very short final fragments (e.g. "Ok").
+    const { remainder: trueRemainder } = extractSentences(cleanResponse);
+    const flushText = trueRemainder.trim().length > pendingText.trim().length
+      ? trueRemainder
+      : pendingText;
+    if (flushText.trim()) enqueue(flushText);
     allEnqueued = true;
     const finalWake = wakePlayer as (() => void) | null;
     wakePlayer = null;
@@ -1926,9 +1940,6 @@ export class OrchestrationPipeline {
       "LLM complete"
     );
 
-    // Strip think blocks and inline function tags from the stored response so
-    // they don't appear in the transcript UI or pollute conversation history.
-    const cleanResponse = stripFunctionTags(llmResponse.replace(/<think>[\s\S]*?<\/think>/g, "")).trim();
     this.conversationHistory.push({ role: "assistant", content: cleanResponse });
     this.config.onTranscript("agent", cleanResponse);
     this.config.onConversationUpdate?.(this.conversationHistory);
@@ -2307,8 +2318,18 @@ export class OrchestrationPipeline {
       return;
     }
 
-    const tail = pendingText.trim();
-    if (tail.length >= 2) enqueue(tail);
+    // Compute the fully-cleaned response BEFORE the final flush so the spoken
+    // tail and the stored history are derived from the exact same text.
+    const cleanResponse = stripFunctionTags(llmResponse.replace(/<think>[\s\S]*?<\/think>/g, "")).trim();
+
+    // Final flush: prefer the fullReply-derived remainder over the possibly-
+    // truncated pendingText, and enqueue any non-empty trailing text — a length
+    // gate would silently drop very short final fragments.
+    const { remainder: trueRemainder } = extractSentences(cleanResponse);
+    const flushText = trueRemainder.trim().length > pendingText.trim().length
+      ? trueRemainder
+      : pendingText;
+    if (flushText.trim()) enqueue(flushText);
     allEnqueued = true;
     const wFinal = wakePlayer as (() => void) | null; wakePlayer = null; if (wFinal) wFinal();
     await playPromise;
@@ -2316,8 +2337,7 @@ export class OrchestrationPipeline {
     // ── Chained tool call — the agent invoked another tool off the result ──
     if (triggeredToolName) {
       const chainedName: string = triggeredToolName;
-      const assistantToolContent = stripFunctionTags(llmResponse.replace(/<think>[\s\S]*?<\/think>/g, "")).trim()
-        || `[calling tool: ${chainedName}]`;
+      const assistantToolContent = cleanResponse || `[calling tool: ${chainedName}]`;
       this.conversationHistory.push({ role: "assistant", content: assistantToolContent });
       const chainedResult = await this.handleToolCall(chainedName, triggeredToolArgs);
       if (chainedResult !== undefined) {
@@ -2326,7 +2346,6 @@ export class OrchestrationPipeline {
       return;
     }
 
-    const cleanResponse = stripFunctionTags(llmResponse.replace(/<think>[\s\S]*?<\/think>/g, "")).trim();
     if (cleanResponse) {
       this.conversationHistory.push({ role: "assistant", content: cleanResponse });
       this.config.onTranscript("agent", cleanResponse);

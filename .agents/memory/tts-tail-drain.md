@@ -41,3 +41,11 @@ tail handling, so they each have to replicate it.
    transcribed during the start window would set `interrupted=true` and clip the
    tail. Any place that can flip an interrupt flag during playback must apply the
    same non-semantic start/end echo gate; fixing only one detector is incomplete.
+5. Final-flush gate must be a non-empty `.trim()` check, never a length gate
+   (`tail.length >= 2` silently drops one-char/short tails like "Ok"/"K"). At
+   end-of-stream prefer the remainder from re-running extractSentences on the
+   fully-cleaned full reply over the raw token buffer (the token stream can end a
+   few words early). Derive the flushed tail AND the stored history turn from the
+   SAME cleaned full-reply text so memory equals what was actually spoken. webcall
+   already did this; pipeline.ts had the length gate + separate derivations in BOTH
+   the main turn and continueWithToolResult — keep all flush sites in parity.
