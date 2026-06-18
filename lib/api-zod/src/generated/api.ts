@@ -1393,7 +1393,8 @@ export const GetWalletResponse = zod.object({
   "freeCreditsGranted": zod.boolean(),
   "autoPayEnabled": zod.boolean(),
   "autoPayThresholdCents": zod.number(),
-  "autoPayAmountCents": zod.number()
+  "autoPayAmountCents": zod.number(),
+  "mandateActive": zod.boolean().describe('Whether a Razorpay recurring mandate token is saved for auto-pay')
 })
 
 
@@ -1405,14 +1406,17 @@ export const createTopupBodyAmountCentsMin = 1000;
 
 
 export const CreateTopupBody = zod.object({
-  "amountCents": zod.number().min(createTopupBodyAmountCentsMin).describe('Amount in cents (minimum 1000 = $10)')
+  "amountCents": zod.number().min(createTopupBodyAmountCentsMin).describe('Amount in cents (minimum 1000 = $10)'),
+  "setupMandate": zod.boolean().optional().describe('When true, creates a recurring mandate order (user authorizes auto-pay once)')
 })
 
 export const CreateTopupResponse = zod.object({
   "orderId": zod.string(),
-  "amountCents": zod.number(),
-  "currency": zod.string(),
-  "keyId": zod.string()
+  "amountCents": zod.number().describe('Amount in USD cents (used for wallet credit)'),
+  "amountPaise": zod.number().describe('Amount in INR paise (used for Razorpay checkout)'),
+  "currency": zod.string().describe('Always INR'),
+  "keyId": zod.string(),
+  "customerId": zod.string().nullish().describe('Razorpay customer ID (present when setupMandate=true)')
 })
 
 
@@ -1431,7 +1435,8 @@ export const VerifyPaymentResponse = zod.object({
   "freeCreditsGranted": zod.boolean(),
   "autoPayEnabled": zod.boolean(),
   "autoPayThresholdCents": zod.number(),
-  "autoPayAmountCents": zod.number()
+  "autoPayAmountCents": zod.number(),
+  "mandateActive": zod.boolean().describe('Whether a Razorpay recurring mandate token is saved for auto-pay')
 })
 
 
@@ -1480,7 +1485,8 @@ export const UpdateAutopayResponse = zod.object({
   "freeCreditsGranted": zod.boolean(),
   "autoPayEnabled": zod.boolean(),
   "autoPayThresholdCents": zod.number(),
-  "autoPayAmountCents": zod.number()
+  "autoPayAmountCents": zod.number(),
+  "mandateActive": zod.boolean().describe('Whether a Razorpay recurring mandate token is saved for auto-pay')
 })
 
 

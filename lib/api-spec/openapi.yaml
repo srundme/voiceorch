@@ -6884,7 +6884,7 @@ components:
     # ── Wallet ─────────────────────────────────────────────────────────────────
     WalletInfo:
       type: object
-      required: [balanceCents, balanceUsd, freeCreditsGranted, autoPayEnabled, autoPayThresholdCents, autoPayAmountCents]
+      required: [balanceCents, balanceUsd, freeCreditsGranted, autoPayEnabled, autoPayThresholdCents, autoPayAmountCents, mandateActive]
       properties:
         balanceCents:
           type: integer
@@ -6900,6 +6900,9 @@ components:
           type: integer
         autoPayAmountCents:
           type: integer
+        mandateActive:
+          type: boolean
+          description: Whether a Razorpay recurring mandate token is saved for auto-pay
 
     WalletTransaction:
       type: object
@@ -6937,19 +6940,30 @@ components:
           type: integer
           minimum: 1000
           description: Amount in cents (minimum 1000 = $10)
+        setupMandate:
+          type: boolean
+          description: When true, creates a recurring mandate order (user authorizes auto-pay once)
 
     TopupOrder:
       type: object
-      required: [orderId, amountCents, currency, keyId]
+      required: [orderId, amountCents, amountPaise, currency, keyId]
       properties:
         orderId:
           type: string
         amountCents:
           type: integer
+          description: Amount in USD cents (used for wallet credit)
+        amountPaise:
+          type: integer
+          description: Amount in INR paise (used for Razorpay checkout)
         currency:
           type: string
+          description: Always INR
         keyId:
           type: string
+        customerId:
+          type: ["string", "null"]
+          description: Razorpay customer ID (present when setupMandate=true)
 
     VerifyPaymentInput:
       type: object

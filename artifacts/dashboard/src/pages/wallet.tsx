@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from "react";
-import { Wallet, Plus, RefreshCw, ArrowDownLeft, ArrowUpRight, Zap, CreditCard, ToggleLeft, ToggleRight, AlertCircle } from "lucide-react";
+import { Wallet, Plus, RefreshCw, ArrowDownLeft, ArrowUpRight, Zap, CreditCard, ToggleLeft, ToggleRight, AlertCircle, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,13 +28,17 @@ function centsToUsd(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
+function paiseToinr(paise: number): string {
+  return `₹${(paise / 100).toLocaleString("en-IN")}`;
+}
+
 function txTypeLabel(type: string): { label: string; color: string; icon: React.ReactNode } {
   switch (type) {
-    case "free_credit": return { label: "Free Credit", color: "text-foreground", icon: <Zap className="w-3.5 h-3.5" /> };
-    case "topup":       return { label: "Top-up",       color: "text-zinc-400",    icon: <ArrowDownLeft className="w-3.5 h-3.5" /> };
-    case "auto_topup":  return { label: "Auto Top-up",  color: "text-zinc-400",    icon: <RefreshCw className="w-3.5 h-3.5" /> };
-    case "call_debit":  return { label: "Call Usage",   color: "text-muted-foreground",    icon: <ArrowUpRight className="w-3.5 h-3.5" /> };
-    default:            return { label: type,            color: "text-muted-foreground",    icon: null };
+    case "free_credit": return { label: "Free Credit",   color: "text-foreground",        icon: <Zap          className="w-3.5 h-3.5" /> };
+    case "topup":       return { label: "Top-up",        color: "text-zinc-400",           icon: <ArrowDownLeft className="w-3.5 h-3.5" /> };
+    case "auto_topup":  return { label: "Auto Top-up",   color: "text-zinc-400",           icon: <RefreshCw    className="w-3.5 h-3.5" /> };
+    case "call_debit":  return { label: "Call Usage",    color: "text-muted-foreground",   icon: <ArrowUpRight  className="w-3.5 h-3.5" /> };
+    default:            return { label: type,             color: "text-muted-foreground",   icon: null };
   }
 }
 
@@ -43,17 +47,65 @@ const TOPUP_PRESETS = [10, 25, 50, 100];
 export default function WalletPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [topupAmount, setTopupAmount] = useState(25);
-  const [customAmount, setCustomAmount] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [topupAmount, setTopupAmount]     = useState(25);
+  const [customAmount, setCustomAmount]   = useState("");
+  const [loading, setLoading]             = useState(false);
+  const [mandateLoading, setMandateLoading] = useState(false);
 
   const { data: wallet, isLoading: walletLoading } = useGetWallet();
-  const { data: transactions = [] } = useListTransactions({ limit: 50, offset: 0 });
-  const { mutateAsync: createTopup } = useCreateTopup();
-  const { mutateAsync: verifyPayment } = useVerifyPayment();
-  const { mutateAsync: updateAutopay } = useUpdateAutopay();
+  const { data: transactions = [] }                 = useListTransactions({ limit: 50, offset: 0 });
+  const { mutateAsync: createTopup }                = useCreateTopup();
+  const { mutateAsync: verifyPayment }              = useVerifyPayment();
+  const { mutateAsync: updateAutopay }              = useUpdateAutopay();
 
   const effectiveAmount = customAmount ? Math.max(10, Number(customAmount)) : topupAmount;
+
+  // Open Razorpay checkout — handles both normal topup and mandate setup
+  const openCheckout = useCallback(async (amountCents: number, setupMandate = false) => {
+    await loadRazorpay();
+    const order = await createTopup({ data: { amountCents, setupMandate } });
+
+    return new Promise<void>((resolve, reject) => {
+      const opts: Record<string, unknown> = {
+        key:       order.keyId,
+        amount:    order.amountPaise,
+        currency:  order.currency,
+        order_id:  order.orderId,
+        name:      "SnapServe",
+        description: setupMandate
+          ? `Auto-pay mandate — ${centsToUsd(amountCents)}`
+          : `Wallet top-up — ${centsToUsd(amountCents)}`,
+        theme: { color: "#ededed" },
+        handler: async (response: {
+          razorpay_order_id: string;
+          razorpay_payment_id: string;
+          razorpay_signature: string;
+        }) => {
+          try {
+            await verifyPayment({
+              data: {
+                razorpayOrderId:   response.razorpay_order_id,
+                razorpayPaymentId:  response.razorpay_payment_id,
+                razorpaySignature: response.razorpay_signature,
+              },
+            });
+            queryClient.invalidateQueries({ queryKey: getGetWalletQueryKey() });
+            resolve();
+          } catch {
+            reject(new Error("Payment verification failed"));
+          }
+        },
+      };
+
+      // Pass customer_id + recurring flag when setting up a mandate
+      if (setupMandate && order.customerId) {
+        opts.customer_id = order.customerId;
+        opts.recurring   = 1;
+      }
+
+      new window.Razorpay(opts).open();
+    });
+  }, [createTopup, verifyPayment, queryClient]);
 
   const handleTopup = useCallback(async () => {
     const amountCents = effectiveAmount * 100;
@@ -63,39 +115,27 @@ export default function WalletPage() {
     }
     setLoading(true);
     try {
-      await loadRazorpay();
-      const order = await createTopup({ data: { amountCents } });
-      const rzp = new window.Razorpay({
-        key: order.keyId,
-        amount: order.amountCents,
-        currency: order.currency,
-        order_id: order.orderId,
-        name: "SnapServe",
-        description: `Wallet top-up — ${centsToUsd(amountCents)}`,
-        theme: { color: "#ededed" },
-        handler: async (response: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => {
-          try {
-            await verifyPayment({
-              data: {
-                razorpayOrderId: response.razorpay_order_id,
-                razorpayPaymentId: response.razorpay_payment_id,
-                razorpaySignature: response.razorpay_signature,
-              },
-            });
-            queryClient.invalidateQueries({ queryKey: getGetWalletQueryKey() });
-            toast({ title: `Wallet topped up — ${centsToUsd(amountCents)} added!` });
-          } catch {
-            toast({ title: "Payment verification failed", variant: "destructive" });
-          }
-        },
-      });
-      rzp.open();
-    } catch (err) {
-      toast({ title: "Failed to initiate payment", variant: "destructive" });
+      await openCheckout(amountCents, false);
+      toast({ title: `Wallet topped up — ${centsToUsd(amountCents)} added!` });
+    } catch {
+      toast({ title: "Payment failed or cancelled", variant: "destructive" });
     } finally {
       setLoading(false);
     }
-  }, [effectiveAmount, createTopup, verifyPayment, queryClient, toast]);
+  }, [effectiveAmount, openCheckout, toast]);
+
+  const handleSetupMandate = useCallback(async () => {
+    const amountCents = (wallet?.autoPayAmountCents ?? 1000);
+    setMandateLoading(true);
+    try {
+      await openCheckout(amountCents, true);
+      toast({ title: "Auto-pay mandate set up! Wallet will top up automatically." });
+    } catch {
+      toast({ title: "Mandate setup failed or cancelled", variant: "destructive" });
+    } finally {
+      setMandateLoading(false);
+    }
+  }, [wallet, openCheckout, toast]);
 
   const handleToggleAutopay = useCallback(async () => {
     if (!wallet) return;
@@ -107,13 +147,14 @@ export default function WalletPage() {
     await updateAutopay({
       data: {
         autoPayThresholdCents: Math.round(thresholdUsd * 100),
-        autoPayAmountCents: Math.round(amountUsd * 100),
+        autoPayAmountCents:    Math.round(amountUsd * 100),
       },
     });
     queryClient.invalidateQueries({ queryKey: getGetWalletQueryKey() });
   }, [updateAutopay, queryClient]);
 
-  const balanceLow = wallet && wallet.balanceCents < 100;
+  const balanceLow    = wallet && wallet.balanceCents < 100;
+  const mandateActive = wallet?.mandateActive ?? false;
 
   return (
     <div className="flex flex-col h-full overflow-auto">
@@ -158,6 +199,7 @@ export default function WalletPage() {
               <div className="flex items-center gap-2">
                 <CreditCard className="w-4 h-4 text-muted-foreground" />
                 <h2 className="font-medium text-foreground text-sm">Add Funds</h2>
+                <span className="ml-auto text-[10px] text-muted-foreground bg-muted rounded px-1.5 py-0.5">Card · UPI · QR · NetBanking</span>
               </div>
 
               <div className="grid grid-cols-4 gap-2">
@@ -211,16 +253,22 @@ export default function WalletPage() {
                 <div className="flex items-center gap-2">
                   <RefreshCw className="w-4 h-4 text-muted-foreground" />
                   <h2 className="font-medium text-foreground text-sm">Auto-pay</h2>
+                  {mandateActive && (
+                    <span className="flex items-center gap-1 text-[10px] text-foreground bg-muted border border-border rounded px-1.5 py-0.5">
+                      <ShieldCheck className="w-3 h-3" /> Mandate active
+                    </span>
+                  )}
                 </div>
                 <button onClick={handleToggleAutopay} className="text-muted-foreground hover:text-foreground transition-colors">
                   {wallet?.autoPayEnabled
                     ? <ToggleRight className="w-6 h-6 text-foreground" />
-                    : <ToggleLeft className="w-6 h-6" />}
+                    : <ToggleLeft  className="w-6 h-6" />}
                 </button>
               </div>
 
               <p className="text-xs text-muted-foreground">
-                Automatically top up your wallet when the balance drops below the threshold. Requires a saved Razorpay payment method.
+                Automatically top up your wallet when the balance drops below the threshold.
+                {!mandateActive && " Authorize once via UPI or card to enable."}
               </p>
 
               <div className="space-y-3">
@@ -252,11 +300,28 @@ export default function WalletPage() {
                 </div>
               </div>
 
-              <div className={`text-xs px-3 py-2 rounded-lg ${wallet?.autoPayEnabled ? "bg-muted text-foreground border border-border" : "bg-muted text-muted-foreground"}`}>
-                {wallet?.autoPayEnabled
-                  ? `Auto-pay ON — will top up ${centsToUsd(wallet.autoPayAmountCents)} when balance < ${centsToUsd(wallet.autoPayThresholdCents)}`
-                  : "Auto-pay is disabled"}
-              </div>
+              {/* Mandate setup / status */}
+              {!mandateActive ? (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={handleSetupMandate}
+                  disabled={mandateLoading}
+                >
+                  {mandateLoading ? (
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <ShieldCheck className="w-4 h-4 mr-2" />
+                  )}
+                  Set up Auto-pay Mandate
+                </Button>
+              ) : (
+                <div className={`text-xs px-3 py-2 rounded-lg ${wallet?.autoPayEnabled ? "bg-muted text-foreground border border-border" : "bg-muted text-muted-foreground"}`}>
+                  {wallet?.autoPayEnabled
+                    ? `Auto-pay ON — will charge ${centsToUsd(wallet.autoPayAmountCents)} when balance < ${centsToUsd(wallet.autoPayThresholdCents)}`
+                    : "Mandate saved — enable the toggle to activate auto-pay"}
+                </div>
+              )}
             </div>
           </div>
 
@@ -283,7 +348,7 @@ export default function WalletPage() {
                         <p className={`text-sm font-medium tabular-nums ${isCredit ? "text-foreground" : "text-muted-foreground"}`}>
                           {isCredit ? "+" : ""}{centsToUsd(txn.amountCents)}
                         </p>
-                        <Badge variant="outline" className={`text-[10px] ${txn.status === "completed" ? "border-border text-foreground" : txn.status === "pending" ? "border-border text-foreground" : "border-border text-foreground"}`}>
+                        <Badge variant="outline" className="text-[10px] border-border text-foreground">
                           {txn.status}
                         </Badge>
                       </div>

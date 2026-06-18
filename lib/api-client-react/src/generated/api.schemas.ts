@@ -1352,6 +1352,8 @@ export interface WalletInfo {
   autoPayEnabled: boolean;
   autoPayThresholdCents: number;
   autoPayAmountCents: number;
+  /** Whether a Razorpay recurring mandate token is saved for auto-pay */
+  mandateActive: boolean;
 }
 
 export type WalletTransactionType = typeof WalletTransactionType[keyof typeof WalletTransactionType];
@@ -1395,13 +1397,24 @@ export interface TopupInput {
      * @minimum 1000
      */
   amountCents: number;
+  /** When true, creates a recurring mandate order (user authorizes auto-pay once) */
+  setupMandate?: boolean;
 }
 
 export interface TopupOrder {
   orderId: string;
+  /** Amount in USD cents (used for wallet credit) */
   amountCents: number;
+  /** Amount in INR paise (used for Razorpay checkout) */
+  amountPaise: number;
+  /** Always INR */
   currency: string;
   keyId: string;
+  /**
+     * Razorpay customer ID (present when setupMandate=true)
+     * @nullable
+     */
+  customerId?: string | null;
 }
 
 export interface VerifyPaymentInput {

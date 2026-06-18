@@ -688,17 +688,17 @@ router.patch("/calls/:id/end", async (req, res): Promise<void> => {
         callId:      call.id,
       });
 
-      // Autopay trigger: balance dropped below threshold
+      // Autopay trigger: balance dropped below threshold — fire real debit
       if (user.autoPayEnabled && newBalance < user.autoPayThresholdCents) {
-        await db.insert(activityLogsTable).values({
-          userId:      callUserId,
-          eventType:   "wallet.low_balance",
-          description: `Balance dropped to $${(newBalance / 100).toFixed(2)} — autopay top-up of $${(user.autoPayAmountCents / 100).toFixed(2)} queued.`,
-        });
         req.log.info(
           { userId: callUserId, newBalance, threshold: user.autoPayThresholdCents, topUpAmount: user.autoPayAmountCents },
           "Autopay threshold triggered",
         );
+        import("../services/wallet-auto-debit.js").then(({ triggerAutoDebit }) => {
+          triggerAutoDebit(user.id, callUserId, user.autoPayAmountCents).catch((err) => {
+            req.log.error({ err, userId: callUserId }, "Auto-debit fire-and-forget error");
+          });
+        }).catch(() => {});
       }
     }
   }

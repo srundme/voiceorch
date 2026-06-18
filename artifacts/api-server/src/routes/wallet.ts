@@ -2,9 +2,10 @@ import { Router } from "express";
 import crypto from "crypto";
 import Razorpay from "razorpay";
 import { db } from "@workspace/db";
-import { usersTable, walletTransactionsTable } from "@workspace/db/schema";
+import { usersTable, walletTransactionsTable, platformSettingsTable } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { logger } from "../lib/logger.js";
 
 const router = Router();
 
@@ -20,6 +21,31 @@ async function getDbUser(clerkId: string) {
   return user ?? null;
 }
 
+// Cache the USD→INR rate for 5 minutes to avoid per-request DB hits
+let _inrRateCache: { rate: number; expiresAt: number } | null = null;
+async function getUsdToInrRate(): Promise<number> {
+  if (_inrRateCache && Date.now() < _inrRateCache.expiresAt) return _inrRateCache.rate;
+  const [row] = await db
+    .select({ value: platformSettingsTable.value })
+    .from(platformSettingsTable)
+    .where(eq(platformSettingsTable.key, "usd_to_inr_rate"));
+  const rate = row ? parseFloat(row.value) || 85 : 85;
+  _inrRateCache = { rate, expiresAt: Date.now() + 5 * 60 * 1000 };
+  return rate;
+}
+
+function walletInfoPayload(user: typeof usersTable.$inferSelect) {
+  return {
+    balanceCents:          user.walletBalanceCents,
+    balanceUsd:            user.walletBalanceCents / 100,
+    freeCreditsGranted:    user.freeCreditsGranted,
+    autoPayEnabled:        user.autoPayEnabled,
+    autoPayThresholdCents: user.autoPayThresholdCents,
+    autoPayAmountCents:    user.autoPayAmountCents,
+    mandateActive:         !!(user.razorpayCustomerId && user.razorpayTokenId),
+  };
+}
+
 // GET /api/wallet
 router.get("/wallet", requireAuth, async (req, res) => {
   const clerkId = (req as any).clerkUserId as string;
@@ -28,24 +54,17 @@ router.get("/wallet", requireAuth, async (req, res) => {
     res.status(404).json({ error: "User not found" });
     return;
   }
-  res.json({
-    balanceCents: user.walletBalanceCents,
-    balanceUsd: user.walletBalanceCents / 100,
-    freeCreditsGranted: user.freeCreditsGranted,
-    autoPayEnabled: user.autoPayEnabled,
-    autoPayThresholdCents: user.autoPayThresholdCents,
-    autoPayAmountCents: user.autoPayAmountCents,
-  });
+  res.json(walletInfoPayload(user));
 });
 
-// POST /api/wallet/topup — create Razorpay order
+// POST /api/wallet/topup — create Razorpay order (INR, optionally recurring for mandate setup)
 router.post("/wallet/topup", requireAuth, async (req, res) => {
   if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
     res.status(503).json({ error: "Payment gateway not configured" });
     return;
   }
   const clerkId = (req as any).clerkUserId as string;
-  const { amountCents } = req.body as { amountCents: number };
+  const { amountCents, setupMandate } = req.body as { amountCents: number; setupMandate?: boolean };
   if (!amountCents || amountCents < 1000) {
     res.status(400).json({ error: "Minimum top-up is $10 (1000 cents)" });
     return;
@@ -55,41 +74,73 @@ router.post("/wallet/topup", requireAuth, async (req, res) => {
     res.status(404).json({ error: "User not found" });
     return;
   }
+
+  const usdToInr = await getUsdToInrRate();
+  const amountPaise = Math.round(amountCents * usdToInr);
+
   const razorpay = getRazorpay();
+
+  // Get or create Razorpay customer (needed for recurring mandate)
+  let customerId = user.razorpayCustomerId ?? null;
+  if (!customerId) {
+    try {
+      const customer = await (razorpay.customers as any).create({
+        name:  user.name  ?? user.email ?? "User",
+        email: user.email ?? `user_${user.id}@snapserve.ai`,
+        contact: "",
+        fail_existing: 0,
+      });
+      customerId = customer.id as string;
+      await db.update(usersTable)
+        .set({ razorpayCustomerId: customerId })
+        .where(eq(usersTable.id, user.id));
+    } catch (err) {
+      logger.warn({ err }, "Failed to create Razorpay customer — proceeding without mandate");
+      customerId = null;
+    }
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let order: any;
   try {
-    order = await razorpay.orders.create({
-      amount: amountCents,
-      currency: "USD",
-      receipt: `uid_${user.id}_${Date.now()}`,
-      notes: { userId: String(user.id), clerkId },
-    });
+    const orderPayload: Record<string, unknown> = {
+      amount:          amountPaise,
+      currency:        "INR",
+      receipt:         `uid_${user.id}_${Date.now()}`,
+      notes:           { userId: String(user.id), clerkId },
+      payment_capture: 1,
+    };
+    if (setupMandate && customerId) {
+      orderPayload.customer_id = customerId;
+      orderPayload.method      = "upi";
+    }
+    order = await razorpay.orders.create(orderPayload as any);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Razorpay error";
     res.status(502).json({ error: `Failed to create payment order: ${msg}` });
     return;
   }
 
-  // Create pending transaction
   await db.insert(walletTransactionsTable).values({
-    userId: user.id,
-    type: "topup",
+    userId:         user.id,
+    type:           setupMandate ? "topup" : "topup",
     amountCents,
-    description: `Wallet top-up $${(amountCents / 100).toFixed(2)}`,
-    status: "pending",
+    description:    `Wallet top-up $${(amountCents / 100).toFixed(2)}`,
+    status:         "pending",
     razorpayOrderId: order.id,
   });
 
   res.json({
-    orderId: order.id,
+    orderId:    order.id,
     amountCents,
-    currency: "USD",
-    keyId: process.env.RAZORPAY_KEY_ID,
+    amountPaise,
+    currency:   "INR",
+    keyId:      process.env.RAZORPAY_KEY_ID,
+    customerId: setupMandate ? customerId : null,
   });
 });
 
-// POST /api/wallet/verify-payment — verify signature and credit wallet
+// POST /api/wallet/verify-payment — verify signature, save mandate token, credit wallet
 router.post("/wallet/verify-payment", requireAuth, async (req, res) => {
   const clerkId = (req as any).clerkUserId as string;
   const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body as {
@@ -115,7 +166,6 @@ router.post("/wallet/verify-payment", requireAuth, async (req, res) => {
     return;
   }
 
-  // Find pending transaction for this order
   const [txn] = await db
     .select()
     .from(walletTransactionsTable)
@@ -126,7 +176,22 @@ router.post("/wallet/verify-payment", requireAuth, async (req, res) => {
     return;
   }
 
-  // Credit wallet and mark transaction completed atomically
+  // Try to fetch payment details to extract recurring token_id
+  try {
+    const razorpay = getRazorpay();
+    const payment = await (razorpay.payments as any).fetch(razorpayPaymentId);
+    const tokenId = payment?.token_id as string | undefined;
+    if (tokenId) {
+      await db.update(usersTable)
+        .set({ razorpayTokenId: tokenId })
+        .where(eq(usersTable.id, user.id));
+      logger.info({ userId: user.id, tokenId }, "Razorpay mandate token saved");
+    }
+  } catch (err) {
+    logger.warn({ err, razorpayPaymentId }, "Could not fetch Razorpay payment details for token");
+  }
+
+  // Credit wallet and complete transaction
   const [updated] = await db
     .update(usersTable)
     .set({ walletBalanceCents: user.walletBalanceCents + txn.amountCents })
@@ -138,22 +203,15 @@ router.post("/wallet/verify-payment", requireAuth, async (req, res) => {
     .set({ status: "completed", razorpayPaymentId })
     .where(eq(walletTransactionsTable.id, txn.id));
 
-  res.json({
-    balanceCents: updated.walletBalanceCents,
-    balanceUsd: updated.walletBalanceCents / 100,
-    freeCreditsGranted: updated.freeCreditsGranted,
-    autoPayEnabled: updated.autoPayEnabled,
-    autoPayThresholdCents: updated.autoPayThresholdCents,
-    autoPayAmountCents: updated.autoPayAmountCents,
-  });
+  res.json(walletInfoPayload(updated));
 });
 
 // GET /api/wallet/transactions
 router.get("/wallet/transactions", requireAuth, async (req, res) => {
   const clerkId = (req as any).clerkUserId as string;
-  const limit = Math.min(Number(req.query.limit ?? 20), 100);
+  const limit  = Math.min(Number(req.query.limit  ?? 20), 100);
   const offset = Number(req.query.offset ?? 0);
-  const user = await getDbUser(clerkId);
+  const user   = await getDbUser(clerkId);
   if (!user) {
     res.status(404).json({ error: "User not found" });
     return;
@@ -168,16 +226,16 @@ router.get("/wallet/transactions", requireAuth, async (req, res) => {
 
   res.json(
     txns.map((t) => ({
-      id: t.id,
-      type: t.type,
-      amountCents: t.amountCents,
-      amountUsd: t.amountCents / 100,
-      description: t.description,
-      status: t.status,
-      razorpayOrderId: t.razorpayOrderId,
+      id:               t.id,
+      type:             t.type,
+      amountCents:      t.amountCents,
+      amountUsd:        t.amountCents / 100,
+      description:      t.description,
+      status:           t.status,
+      razorpayOrderId:  t.razorpayOrderId,
       razorpayPaymentId: t.razorpayPaymentId,
-      callId: t.callId,
-      createdAt: t.createdAt,
+      callId:           t.callId,
+      createdAt:        t.createdAt,
     })),
   );
 });
@@ -205,14 +263,7 @@ router.patch("/wallet/autopay", requireAuth, async (req, res) => {
     .where(eq(usersTable.id, user.id))
     .returning();
 
-  res.json({
-    balanceCents: updated.walletBalanceCents,
-    balanceUsd: updated.walletBalanceCents / 100,
-    freeCreditsGranted: updated.freeCreditsGranted,
-    autoPayEnabled: updated.autoPayEnabled,
-    autoPayThresholdCents: updated.autoPayThresholdCents,
-    autoPayAmountCents: updated.autoPayAmountCents,
-  });
+  res.json(walletInfoPayload(updated));
 });
 
 export default router;
