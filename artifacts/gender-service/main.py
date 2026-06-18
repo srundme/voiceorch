@@ -23,10 +23,73 @@ import os
 import httpx
 import uvicorn
 from contextlib import asynccontextmanager
-from fastapi import APIRouter, FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, FastAPI, File, HTTPException, Response, UploadFile, WebSocket, WebSocketDisconnect
 from typing import List
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+
+# Readiness state for the gender-ml-v2 pipeline. Populated by the background
+# warmup at startup and surfaced via GET /voice-analysis/ready so a missing
+# heavy dependency fails fast and visibly instead of as per-call 500s.
+_ml_v2_readiness: dict = {
+    "ok": False,
+    "checks": {"soundfile": False, "torch": False, "transformers": False, "wav2vec2_model": False},
+    "errors": {},
+    "checked": False,
+}
+
+
+def _check_ml_v2_dependencies() -> dict:
+    """Verify every heavy dependency the gender-ml-v2 handler relies on.
+
+    Decodes a tiny WAV through soundfile/libsndfile, imports torch + transformers,
+    and forces the wav2vec2 model to load. Returns a structured status dict and
+    never raises — each check is isolated so one failure does not mask others.
+    """
+    import io          # noqa: PLC0415
+    import traceback   # noqa: PLC0415
+
+    checks = {"soundfile": False, "torch": False, "transformers": False, "wav2vec2_model": False}
+    errors: dict = {}
+
+    try:
+        import numpy as np       # noqa: PLC0415
+        import soundfile as sf   # noqa: PLC0415
+        sr = 16000
+        tone = (0.1 * np.sin(2 * np.pi * 220 * np.linspace(0, 0.1, int(sr * 0.1), endpoint=False))).astype(np.float32)
+        b = io.BytesIO()
+        sf.write(b, tone, sr, format="WAV", subtype="PCM_16")
+        b.seek(0)
+        sf.read(b, dtype="float32")
+        checks["soundfile"] = True
+    except Exception as exc:  # noqa: BLE001
+        errors["soundfile"] = f"{type(exc).__name__}: {exc}"
+        print(f"[readiness] soundfile/libsndfile check failed: {traceback.format_exc()}", flush=True)
+
+    try:
+        import torch  # noqa: PLC0415, F401
+        checks["torch"] = True
+    except Exception as exc:  # noqa: BLE001
+        errors["torch"] = f"{type(exc).__name__}: {exc}"
+        print(f"[readiness] torch import failed: {traceback.format_exc()}", flush=True)
+
+    try:
+        import transformers  # noqa: PLC0415, F401
+        checks["transformers"] = True
+    except Exception as exc:  # noqa: BLE001
+        errors["transformers"] = f"{type(exc).__name__}: {exc}"
+        print(f"[readiness] transformers import failed: {traceback.format_exc()}", flush=True)
+
+    try:
+        from gender_service_ml import _ModelLoader  # noqa: PLC0415
+        _ModelLoader.get()  # actually loads wav2vec2 weights into memory
+        checks["wav2vec2_model"] = True
+    except Exception as exc:  # noqa: BLE001
+        errors["wav2vec2_model"] = f"{type(exc).__name__}: {exc}"
+        print(f"[readiness] wav2vec2 model load failed: {traceback.format_exc()}", flush=True)
+
+    return {"ok": all(checks.values()), "checks": checks, "errors": errors, "checked": True}
 
 
 async def _bg_warmup() -> None:
@@ -36,20 +99,23 @@ async def _bg_warmup() -> None:
     startup immediately — this coroutine runs fully in the background.
     """
     loop = asyncio.get_running_loop()
-    def _load():
-        try:
-            from gender_detector import classify_audio_bytes  # noqa: PLC0415
-        except Exception:
-            pass
-    await loop.run_in_executor(concurrent.futures.ThreadPoolExecutor(max_workers=1), _load)
 
-    def _load_ml_v2():
+    def _load_v1():
         try:
-            from gender_service_ml import _ModelLoader  # noqa: PLC0415
-            _ModelLoader.get()  # actually loads wav2vec2 weights into memory
+            from gender_detector import classify_audio_bytes  # noqa: PLC0415, F401
         except Exception:
-            pass
-    await loop.run_in_executor(concurrent.futures.ThreadPoolExecutor(max_workers=1), _load_ml_v2)
+            import traceback  # noqa: PLC0415
+            print(f"[warmup] gender_detector (v1) load failed: {traceback.format_exc()}", flush=True)
+    await loop.run_in_executor(concurrent.futures.ThreadPoolExecutor(max_workers=1), _load_v1)
+
+    def _warmup_ml_v2():
+        global _ml_v2_readiness
+        _ml_v2_readiness = _check_ml_v2_dependencies()
+        if _ml_v2_readiness["ok"]:
+            print("[warmup] gender-ml-v2 dependencies ready (soundfile, torch, transformers, wav2vec2)", flush=True)
+        else:
+            print(f"[warmup] gender-ml-v2 NOT ready — errors: {_ml_v2_readiness['errors']}", flush=True)
+    await loop.run_in_executor(concurrent.futures.ThreadPoolExecutor(max_workers=1), _warmup_ml_v2)
 
 
 
@@ -85,8 +151,25 @@ router = APIRouter(prefix="/voice-analysis")
 
 @router.get("/health")
 def health():
-    """Service health check."""
+    """Service health check (liveness) — returns as soon as the process is up."""
     return {"status": "ok", "service": "voice-analysis", "version": "1.0.0"}
+
+
+# ── Readiness ─────────────────────────────────────────────────────────────────
+
+@router.get("/ready")
+def ready(response: Response):
+    """Readiness probe for the gender-ml-v2 pipeline.
+
+    Verifies soundfile/libsndfile can decode audio, torch + transformers import,
+    and the wav2vec2 model loads. Returns 200 only when every dependency is
+    available; otherwise 503 with the failing checks so missing dependencies
+    surface immediately instead of as per-call 500s.
+    """
+    result = _ml_v2_readiness if _ml_v2_readiness.get("checked") else _check_ml_v2_dependencies()
+    if not result.get("ok"):
+        response.status_code = 503
+    return {"service": "voice-analysis", **result}
 
 
 # ── Gender — file upload ──────────────────────────────────────────────────────
@@ -231,35 +314,53 @@ async def detect_gender_ml_v2_upload(file: UploadFile = File(...)):
             "processing_time_ms": int
         }
     """
-    import io    # noqa: PLC0415
-    import time  # noqa: PLC0415
-    import numpy as np   # noqa: PLC0415
-    import soundfile as sf  # noqa: PLC0415
+    import io          # noqa: PLC0415
+    import time        # noqa: PLC0415
+    import traceback   # noqa: PLC0415
+
     audio_bytes = await file.read()
     if not audio_bytes:
         raise HTTPException(status_code=400, detail="Empty audio file")
-    from gender_service_ml import MLGenderService  # noqa: PLC0415
+
     t0 = time.monotonic()
+    try:
+        import numpy as np       # noqa: PLC0415
+        import soundfile as sf   # noqa: PLC0415
+        from gender_service_ml import MLGenderService  # noqa: PLC0415
 
-    # Decode WAV → mono float32 → int16 PCM bytes (MLGenderService buffer format)
-    audio_float, sr = sf.read(io.BytesIO(audio_bytes), dtype="float32", always_2d=False)
-    if audio_float.ndim > 1:
-        audio_float = audio_float.mean(axis=1)
-    pcm_bytes = (audio_float * 32768.0).astype(np.int16).tobytes()
+        # Decode WAV → mono float32 → int16 PCM bytes (MLGenderService buffer format)
+        audio_float, sr = sf.read(io.BytesIO(audio_bytes), dtype="float32", always_2d=False)
+        if audio_float.ndim > 1:
+            audio_float = audio_float.mean(axis=1)
+        pcm_bytes = (audio_float * 32768.0).astype(np.int16).tobytes()
 
-    svc = MLGenderService(enabled=True, sample_rate=int(sr))
-    svc._buffer.extend(pcm_bytes)
-    svc._run_detection()
+        svc = MLGenderService(enabled=True, sample_rate=int(sr))
+        svc._buffer.extend(pcm_bytes)
+        svc._run_detection()
 
-    result = svc.get_result()
-    processing_time_ms = int((time.monotonic() - t0) * 1000)
-    gender = result.get("gender", "neutral")
-    estimated_gender = gender if gender in ("male", "female") else "unknown"
-    return {
-        "estimated_gender": estimated_gender,
-        "confidence": result.get("confidence", 0.0),
-        "processing_time_ms": processing_time_ms,
-    }
+        result = svc.get_result()
+        gender = result.get("gender", "neutral")
+        estimated_gender = gender if gender in ("male", "female") else "unknown"
+        return {
+            "estimated_gender": estimated_gender,
+            "confidence": result.get("confidence", 0.0),
+            "processing_time_ms": int((time.monotonic() - t0) * 1000),
+        }
+    except Exception as exc:  # noqa: BLE001
+        # Never 500 on decode/processing failures — the orchestrator treats any
+        # non-200 as a hard error. Log the real exception and degrade gracefully.
+        # Full exception + traceback go to the server logs only; the response
+        # carries a generic, client-safe flag (no internal details leaked).
+        print(
+            f"[gender-ml-v2] handler failure: {type(exc).__name__}: {exc}\n{traceback.format_exc()}",
+            flush=True,
+        )
+        return {
+            "estimated_gender": "unknown",
+            "confidence": 0.0,
+            "processing_time_ms": int((time.monotonic() - t0) * 1000),
+            "error": "processing_failed",
+        }
 
 
 
