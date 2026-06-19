@@ -137,14 +137,9 @@ export async function handleVobizWebSocket(
         if (msg.media.track && msg.media.track !== "inbound") break;
         const session = getSession(sessionId);
         if (!session) break;
-        // Vobiz sends inbound audio as big-endian (network byte order) per their docs.
-        // Our pipeline expects little-endian LINEAR16. Byte-swap every sample pair.
-        const rawBE = Buffer.from(msg.media.payload, "base64");
-        const pcm8k = Buffer.allocUnsafe(rawBE.length);
-        for (let i = 0; i + 1 < rawBE.length; i += 2) {
-          pcm8k[i]     = rawBE[i + 1];
-          pcm8k[i + 1] = rawBE[i];
-        }
+        // Vobiz sends inbound audio as little-endian LINEAR16 PCM (same as outbound).
+        // Pass directly to pipeline — no byte-swap needed.
+        const pcm8k = Buffer.from(msg.media.payload, "base64");
         session.pipeline.onRawPcm8kIn(pcm8k);
         break;
       }
