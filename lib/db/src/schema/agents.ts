@@ -125,6 +125,13 @@ export type AgentConfig = {
     hipaa?: boolean;
     trai?: boolean;
   };
+  // IRDAI advisory prompt-check result (informational only; never blocks).
+  // Populated on save when compliance.irdai is enabled; cleared when disabled.
+  irdaiComplianceStatus?: Array<{
+    requirement: string;
+    status: "present" | "missing";
+    detail: string;
+  }>;
 };
 
 export const agentsTable = pgTable("agents", {

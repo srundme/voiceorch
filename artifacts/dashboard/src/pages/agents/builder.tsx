@@ -1940,10 +1940,37 @@ function AdvSlider({ form, name, label, hint, min, max, step, fmt }: {
   );
 }
 
-function AdvancedTab({ form }: { form: any }) {
+function IrdaiComplianceBanner({ enabled, agent }: { enabled: boolean; agent?: any }) {
+  if (!enabled) return null;
+  const status = (agent?.agentConfig?.irdaiComplianceStatus ?? []) as Array<{ requirement: string; status: "present" | "missing"; detail: string }>;
+  if (!Array.isArray(status) || status.length === 0) return null;
+  const missing = status.filter((s) => s.status === "missing");
+  if (missing.length > 0) {
+    return (
+      <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 space-y-2">
+        <p className="text-[12.5px] font-semibold text-amber-600 dark:text-amber-400">
+          This agent's system prompt may not meet IRDAI guidelines
+        </p>
+        <ul className="list-disc pl-4 space-y-1 text-[11.5px] text-muted-foreground">
+          {missing.map((m) => (
+            <li key={m.requirement}>{m.detail}</li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+  return (
+    <p className="text-[11.5px] text-emerald-600 dark:text-emerald-400">
+      This agent's system prompt meets IRDAI guideline requirements
+    </p>
+  );
+}
+
+function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
   const [section, setSection] = useState<AdvSection>("timing");
   const [traiConfirmOpen, setTraiConfirmOpen] = useState(false);
   const [dpdpConfirmOpen, setDpdpConfirmOpen] = useState(false);
+  const [irdaiConfirmOpen, setIrdaiConfirmOpen] = useState(false);
   const bargeIn = form.watch("bargeInEnabled");
   const llmProvider = form.watch("llmProvider");
   const stagedPromptEnabled = form.watch("stagedPromptEnabled");
@@ -2186,12 +2213,14 @@ function AdvancedTab({ form }: { form: any }) {
                 { name: "complianceTrai",  label: "TRAI",     badge: "Telecom",     desc: "Telecom Regulatory Authority of India — for commercial communications; includes opt-out"      },
               ] as const).map(({ name, label, badge, desc }) => (
                 <FormField key={name} control={form.control} name={name} render={({ field }) => {
-                  // TRAI/DPDP: intercept OFF→ON to require confirmation; ON→OFF stays immediate.
+                  // TRAI/DPDP/IRDAI: intercept OFF→ON to require confirmation; ON→OFF stays immediate.
                   const isTrai = name === "complianceTrai";
                   const isDpdp = name === "complianceDpdp";
+                  const isIrdai = name === "complianceIrdai";
                   const setValue = (next: boolean) => {
                     if (isTrai && next && !field.value) { setTraiConfirmOpen(true); return; }
                     if (isDpdp && next && !field.value) { setDpdpConfirmOpen(true); return; }
+                    if (isIrdai && next && !field.value) { setIrdaiConfirmOpen(true); return; }
                     field.onChange(next);
                   };
                   return (
@@ -2289,6 +2318,41 @@ function AdvancedTab({ form }: { form: any }) {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
+
+            <AlertDialog open={irdaiConfirmOpen} onOpenChange={setIrdaiConfirmOpen}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Enable IRDAI Compliance</AlertDialogTitle>
+                  <AlertDialogDescription asChild>
+                    <div className="space-y-2.5 text-[12px] text-muted-foreground">
+                      <p>Enabling IRDAI compliance checks this agent's saved system prompt against IRDAI disclosure guidelines:</p>
+                      <ul className="list-disc pl-4 space-y-1.5">
+                        <li>The prompt is checked for <span className="font-medium text-foreground">insurer identification</span> and a <span className="font-medium text-foreground">call-recording disclosure</span>.</li>
+                        <li>It flags any <span className="font-medium text-foreground">guaranteed-outcome language</span> and missing <span className="font-medium text-foreground">indicative-quote</span> disclosures.</li>
+                        <li>It checks for <span className="font-medium text-foreground">grievance redressal</span> details and <span className="font-medium text-foreground">human handoff for claim decisions</span>.</li>
+                        <li>A warning is shown if any disclosures are missing — this <span className="font-medium text-foreground">does not block calls or saving</span>.</li>
+                      </ul>
+                      <p className="text-[11px] text-muted-foreground/80">
+                        This is an informational check only. It does not alter call behavior or block any action.
+                      </p>
+                    </div>
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel onClick={() => setIrdaiConfirmOpen(false)}>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => {
+                      form.setValue("complianceIrdai", true, { shouldDirty: true });
+                      setIrdaiConfirmOpen(false);
+                    }}
+                  >
+                    Confirm &amp; Enable
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+
+            <IrdaiComplianceBanner enabled={!!form.watch("complianceIrdai")} agent={agent} />
           </>
         )}
 
@@ -3911,7 +3975,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
             {activeTab === "tools"     && <ToolsTab form={form} agentId={agentId} />}
             {activeTab === "analysis"  && <AnalysisTab form={form} agentId={agentId} />}
             {activeTab === "voicemail" && <VoicemailTab form={form} />}
-            {activeTab === "advanced"  && <AdvancedTab form={form} />}
+            {activeTab === "advanced"  && <AdvancedTab form={form} agent={agent} />}
           </form>
         </Form>
       )}

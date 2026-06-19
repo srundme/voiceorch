@@ -1,7 +1,7 @@
 // agents router — supports call_transfer + webhook (custom function) tools + AMD voicemail detection
 import { Router, type IRouter } from "express";
 import { eq, and, count, desc, isNull, inArray, max } from "drizzle-orm";
-import { db, agentsTable, schedulingCalendarsTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callerSentencesTable, callerFactSentenceLinksTable, callerEpisodeFactLinksTable, providersTable, agentKnowledgeSourcesTable, phoneNumbersTable, callsTable } from "@workspace/db";
+import { db, agentsTable, schedulingCalendarsTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callerSentencesTable, callerFactSentenceLinksTable, callerEpisodeFactLinksTable, providersTable, agentKnowledgeSourcesTable, phoneNumbersTable, callsTable, type AgentConfig } from "@workspace/db";
 import {
   CreateAgentBody,
   UpdateAgentBody,
@@ -26,6 +26,7 @@ import {
   type WizardInputs,
 } from "../services/prompt-template.js";
 import { sanitizeToolName } from "../services/tool-executor.js";
+import { checkIrdaiCompliance } from "../services/irdai/index.js";
 
 const router: IRouter = Router();
 
@@ -258,11 +259,25 @@ router.patch("/agents/:id", requireAuth, async (req, res): Promise<void> => {
   // so saving one tab's fields doesn't wipe another tab's saved values.
   if (updateData.agentConfig != null) {
     const [existing] = await db
-      .select({ agentConfig: agentsTable.agentConfig })
+      .select({ agentConfig: agentsTable.agentConfig, systemPrompt: agentsTable.systemPrompt })
       .from(agentsTable)
       .where(and(eq(agentsTable.id, params.data.id), eq(agentsTable.userId, clerkId)));
     if (existing) {
-      updateData.agentConfig = { ...(existing.agentConfig as object ?? {}), ...(updateData.agentConfig as object) };
+      const merged: AgentConfig = {
+        ...(existing.agentConfig as AgentConfig ?? {}),
+        ...(updateData.agentConfig as AgentConfig),
+      };
+      // IRDAI advisory prompt check (informational only — never blocks the save).
+      // When IRDAI is enabled, statically analyze the resulting system prompt
+      // against the IRDAI disclosure checklist and persist the result. When
+      // disabled, clear the status so the banner does not show.
+      if (merged.compliance?.irdai === true) {
+        const promptText = (updateData.systemPrompt as string | undefined) ?? existing.systemPrompt ?? "";
+        merged.irdaiComplianceStatus = checkIrdaiCompliance(promptText);
+      } else {
+        delete merged.irdaiComplianceStatus;
+      }
+      updateData.agentConfig = merged;
     }
   }
   const [agent] = await db
