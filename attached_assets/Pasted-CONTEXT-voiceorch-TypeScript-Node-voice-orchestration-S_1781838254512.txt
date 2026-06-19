@@ -1,0 +1,40 @@
+CONTEXT
+voiceorch — TypeScript/Node voice orchestration. Streaming clause-by-clause LLM→TTS: processTurn streams LLM tokens → filters → pendingText → extractSentences() → enqueue() → playTask producer/consumer → playSentence(). TTS is Cartesia Sonic over websocket. Two parallel paths: orchestration/pipeline.ts (telephony) and orchestration/telephony/webcall.ts (browser WS).
+
+BUG
+On EVERY agent turn, the TTS audio drops the final words/clause. The displayed transcript shows the full text, but the spoken audio stops short of the end. Reproduces in Tamil; likely language-agnostic. This is an OUTPUT-side bug — do NOT touch the listening-state safety net, barge-in, or STT.
+
+STEP 0 — DIAGNOSE FIRST (required, before any fix)
+Determine whether the tail is lost on the LLM/text side or the TTS/audio side.
+- Log, per turn: (a) the FULL accumulated cleanResponse text, and (b) the EXACT concatenation of every chunk actually passed to enqueue()/the TTS adapter.
+- Compare them.
+- Report one of:
+  FINDING = TEXT_SIDE  → the enqueued text is missing the trailing clause (extractSentences/pendingText never flushes the remainder at stream end).
+  FINDING = TTS_SIDE   → enqueued text is complete, but the last audio chunk is never synthesized/emitted (Cartesia stream closed without a flush/finalize, or final frames not awaited).
+Show the evidence (a sample turn's full text vs enqueued text). Then branch.
+
+STEP 1 — FIX (branch on STEP 0)
+
+IF TEXT_SIDE:
+- In processTurn, when the LLM token stream completes, FORCE-FLUSH any remaining non-empty pendingText to enqueue() — run it through the same clause path, but unconditionally emit the remainder even with no terminal boundary.
+- Verify extractSentences isn't holding the final sentence due to a trailing-whitespace requirement or the abbreviation guard waiting on a lookahead char that never arrives at end-of-stream.
+- Ensure the flush happens on ALL turn-end exits (normal completion, tool-call resumption), not just the happy path.
+
+IF TTS_SIDE:
+- In the Cartesia adapter, send the explicit flush/finalize signal when the turn's text is done, and AWAIT the final audio frames before closing/reusing the socket or transitioning to listening.
+- Verify playTask/playSentence drains and plays the final synthesized chunk before the turn is marked complete — the play loop must not break on turn-end before the last frame is transmitted.
+- Check no off-by-one where the last enqueued sentence is consumed but its audio isn't awaited.
+
+CONSTRAINTS
+- Apply the fix to BOTH pipeline.ts and webcall.ts — they have separate extractSentences/playback logic and will both have this bug. Do not fix one and leave the other.
+- TypeScript only. No changes to barge-in teardown, the safety net, STT, or the provider abstraction.
+- Touch the minimum files; list every change with a one-line why.
+
+ACCEPTANCE
+- STEP 0 finding reported (TEXT_SIDE or TTS_SIDE) with a sample turn's full-text vs enqueued-text evidence.
+- After the fix, the spoken audio includes the final clause of the turn — verify on a multi-sentence Tamil response where the last sentence ends without trailing whitespace.
+- Both pipeline.ts and webcall.ts produce complete final audio.
+- A short-response turn (single sentence, no internal boundaries) also plays fully — this is the edge case most likely to expose a missing end-of-stream flush.
+- No regression to barge-in: a real barge-in still cuts the agent off mid-turn as before.
+
+Start with STEP 0. Report the finding and evidence before applying any fix.
