@@ -1138,7 +1138,26 @@ export async function endSession(sessionId: string): Promise<void> {
                   eq(providersTable.providerName, session.agentLlmProvider),
                 ),
               );
-              const memLlmKey = memLlmProvs[0]?.apiKey;
+              let memLlmKey: string | null = memLlmProvs[0]?.apiKey ?? null;
+              // Managed plan: no BYOP key → fall back to platform managed key
+              if (!memLlmKey) {
+                const MANAGED_LLM: Record<string, string> = {
+                  qwen: "managed_qwen_key", groq: "managed_qwen_key",
+                  google: "managed_gemini_key", gemini: "managed_gemini_key",
+                  openai: "managed_openai_key",
+                  deepseek: "managed_qwen_key",
+                  anthropic: "managed_openai_key",
+                  mistral: "managed_openai_key",
+                  cohere: "managed_openai_key",
+                };
+                const settingsKey = MANAGED_LLM[session.agentLlmProvider.toLowerCase()];
+                if (settingsKey) {
+                  const [row] = await db.select().from(platformSettingsTable).where(eq(platformSettingsTable.key, settingsKey));
+                  memLlmKey = row?.value ?? null;
+                }
+                // Final fallback: GROQ_API_KEY env var (seeds managed_qwen_key at startup)
+                if (!memLlmKey) memLlmKey = process.env["GROQ_API_KEY"] ?? null;
+              }
               if (memLlmKey) {
                 const memLlm = createLLMAdapter(session.agentLlmProvider, memLlmKey, session.agentLlmModel);
                 const history = session.pipeline.getHistory();
