@@ -26,6 +26,7 @@
 - [Webcall extractSentences tuple shape](webcall-extract-sentences.md) — extractSentences in webcall.ts returns [string[], string] tuple (NOT object); pipeline.ts uses a named-return object — verify shape before copying between files
 - [LLM fallback chain pattern](llm-fallback-pattern.md) — fallbackLlm initialised at call start in pipeline.ts; fires only when primary throws AND llmFirstTokenAt===null; webcall reads raw agent row for fallback fields (cast as any)
 - [TTS final-words clipping](tts-tail-drain.md) — last words cut off on teardown; telephony=sleep before onCallEnd, web=send silence frames; re-arm echo-grace at EVERY playback exit, not just main loops
+- [Webcall flush truncation](webcall-flush-truncation.md) — LLM final token arrives only in onComplete not onToken → tokenBuf is a prefix; flush must use full sentence from cleanForFlush when tokenBuf starts it but is shorter
 - [Object Storage on Railway](object-storage-railway.md) — Replit Object Storage absent in Railway prod; recordings now in Postgres bytea, ambient still GCS-bound
 - [Dashboard agent form schema shared](agent-form-schema-shared.md) — edit.schema.ts/AgentFormValues/buildUpdateAgentPayload shared by edit.tsx AND builder.tsx; removing a field breaks the create wizard
 - [Webcall echo-grace re-arm](webcall-echo-grace-rearm.md) — webcall START echo-grace must re-arm per sentence (echoGraceUntil), not anchor to one speakingStartedAt, or long replies clip mid-sentence; pipeline already does this via bargeInHoldUntil

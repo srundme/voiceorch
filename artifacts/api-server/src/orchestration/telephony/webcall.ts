@@ -73,7 +73,10 @@ const HANDOFF_SILENCE_MS       = 3000; // sustained silence that may indicate a 
 const TTS_VOLUME_GAIN          = 1.5;  // PCM amplitude multiplier — reduced from 2.5 to prevent hard-clipping distortion
 
 const BACKCHANNEL_PHRASES = [
-  "I see.", "Got it.", "Okay.", "Mm-hmm.", "Sure.", "I understand.", "Go on.",
+  // Tamil — primary (matches the agent's language for Tamil callers)
+  "சரி.", "ஓகே.", "புரிஞ்சுது.", "தெரியும்.", "சரிதான்.",
+  // English — fallback (for English-language agents)
+  "I see.", "Got it.", "Okay.", "Sure.", "I understand.",
 ];
 
 /** Transcript phrases that strongly suggest the caller is handing the phone to someone else. */
@@ -197,9 +200,14 @@ function extractSentences(buf: string): [string[], string] {
 
   // Comma-clause fallback: fire TTS early on long Indic/list-heavy responses
   // that haven't hit a sentence boundary yet.
+  // Threshold lowered from 30 → 15: commas in short Tamil lead-ins like
+  // "ஓகே, வடபழனில apartment, villa..." sit at position ~22, which was
+  // previously skipped (22 < 30) forcing TTS to wait until LLM completion.
+  // At >= 15 the first comma-clause fires during streaming, giving TTS a
+  // 400–600ms headstart on the main sentence.
   if (sentences.length === 0 && remainder.length >= 60) {
     const commaIdx = remainder.lastIndexOf(", ");
-    if (commaIdx >= 30) {
+    if (commaIdx >= 15) {
       const clause = remainder.slice(0, commaIdx).trim();
       if (clause.length >= 8) {
         sentences.push(clause);
@@ -1664,10 +1672,23 @@ export async function handleWebCallWebSocket(
           .replace(/<break[^>]*\/?>/gi, "")
           .replace(/[^\S\r\n]{2,}/g, " ")
           .trim();
-        const [, trueRemainder] = extractSentences(cleanForFlush);
-        const flushText = trueRemainder.trim().length > tokenBuf.trim().length
-          ? trueRemainder
-          : tokenBuf;
+        const [allSentences, trueRemainder] = extractSentences(cleanForFlush);
+        const trimmedTB = tokenBuf.trim();
+        // Guard: if tokenBuf is a TRUNCATED PREFIX of the last complete sentence
+        // in the full reply (e.g. the LLM's final streaming token "சார்?" arrived
+        // only in onComplete and never in any onToken call), use the full sentence
+        // from cleanForFlush instead of the partial tokenBuf — preventing the
+        // tail-word drop confirmed in the call-62 log where the flush queued
+        // "...பாக்குறீங்க" while the LLM text had "...பாக்குறீங்க சார்?".
+        const lastFullSentence = allSentences.length > 0 ? allSentences[allSentences.length - 1]! : "";
+        const tokenBufIsPartial =
+          trimmedTB.length > 0 &&
+          lastFullSentence.length > trimmedTB.length &&
+          lastFullSentence.startsWith(trimmedTB) &&
+          !sentenceTexts.includes(lastFullSentence); // don't re-queue something already sent
+        const flushText = tokenBufIsPartial
+          ? lastFullSentence
+          : (trueRemainder.trim().length > trimmedTB.length ? trueRemainder : tokenBuf);
         if (flushText.trim()) queueSentence(flushText);
       }
 
