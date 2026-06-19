@@ -1,4 +1,4 @@
-// trigger rebuild — multilingual complete (pipeline + session + webcall)
+// trigger rebuild — dynamic billing display fix (dashboard Vite bundle)
 import http from "http";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
