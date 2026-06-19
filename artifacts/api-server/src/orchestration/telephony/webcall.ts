@@ -1106,7 +1106,11 @@ export async function handleWebCallWebSocket(
       // Each job starts as soon as its sentence is extracted, so synthesis
       // overlaps with LLM streaming. By the time LLM finishes, sentence 1
       // audio is usually already fully collected — minimising first-audio delay.
-      let sentenceJobs: Promise<Buffer>[] = [];
+      // StreamJob: synthesis started immediately; readChunks() yields PCM as it
+      // arrives from the TTS provider (no full-buffer wait).  Used when the
+      // provider exposes synthesizeStream.  Fallback is Promise<Buffer>.
+      type StreamJob = { readChunks: () => AsyncGenerator<Buffer>; done: Promise<void> };
+      let sentenceJobs: (Promise<Buffer> | StreamJob)[] = [];
       let sentenceTexts: string[] = [];  // parallel to sentenceJobs — canonical text per sentence for UI highlighting
       let sentenceSynthDoneAt: number[] = []; // STEP 0b diag: ms wall-clock when each sentence's TTS audio finished synthesizing
       let tokenBuf    = "";   // filtered text waiting to be split into sentences
@@ -1264,28 +1268,56 @@ export async function handleWebCallWebSocket(
         // Either way, the job resolves to a complete Buffer — played from memory
         // with no per-chunk network jitter.
         const _jobIdx = sentenceJobs.length; // STEP 0b diag: stable index for this sentence's synth-done stamp
-        let job: Promise<Buffer>;
         if (tts.synthesizeStream) {
-          job = (async () => {
-            const chunks: Buffer[] = [];
-            await tts.synthesizeStream!(t, (c) => {
+          // ── True-streaming path ────────────────────────────────────────────
+          // Cartesia (and any provider with synthesizeStream) delivers the first
+          // PCM byte in ~80-150ms.  We pipe chunks directly into an async queue
+          // so the playback loop can start sending audio to the browser the
+          // moment the first chunk arrives — no full-buffer wait.
+          const chunkQueue: Buffer[] = [];
+          let totalBytes = 0;
+          let synthFinished = false;
+          let wakeup: (() => void) | null = null;
+
+          const synthDone = tts.synthesizeStream!(
+            t,
+            (c) => {
               if (_tTtsFirstByte === null) _tTtsFirstByte = performance.now();
-              chunks.push(c);
-            }, () => {});
-            const audio = Buffer.concat(chunks);
-            sentenceSynthDoneAt[_jobIdx] = Date.now(); // STEP 0b diag (a): last TTS byte for this sentence received
-            logger.info({ callId, sentenceText: t, audioBytes: audio.length }, "TTS sentence synthesized");
-            logExecution("TTS", "response", {
-              provider: agent.ttsProvider,
-              responsePayload: { audioBytes: audio.length, textLength: t.length },
-              latencyMs: Date.now() - ttsReqStart,
-              status: "success",
-            });
-            return withTailSilence(audio);
-          })();
+              totalBytes += c.length;
+              chunkQueue.push(c);
+              if (wakeup) { const r = wakeup; wakeup = null; r(); }
+            },
+            () => {
+              sentenceSynthDoneAt[_jobIdx] = Date.now();
+              logger.info({ callId, sentenceText: t, audioBytes: totalBytes }, "TTS sentence synthesized");
+              logExecution("TTS", "response", {
+                provider: agent.ttsProvider,
+                responsePayload: { audioBytes: totalBytes, textLength: t.length },
+                latencyMs: Date.now() - ttsReqStart,
+                status: "success",
+              });
+              synthFinished = true;
+              if (wakeup) { const r = wakeup; wakeup = null; r(); }
+            },
+          );
+          synthDone.catch(() => {
+            synthFinished = true;
+            if (wakeup) { const r = wakeup; wakeup = null; r(); }
+          });
+
+          const readChunks = async function* (): AsyncGenerator<Buffer> {
+            while (true) {
+              while (chunkQueue.length > 0) yield chunkQueue.shift()!;
+              if (synthFinished) break;
+              await new Promise<void>((r) => { wakeup = r; });
+            }
+          };
+
+          sentenceJobs.push({ readChunks, done: synthDone });
         } else {
-          job = tts.synthesize(t).then(({ audio }) => {
-            sentenceSynthDoneAt[_jobIdx] = Date.now(); // STEP 0b diag (a): last TTS byte for this sentence received
+          // ── Buffered fallback (providers without synthesizeStream) ─────────
+          const job: Promise<Buffer> = tts.synthesize(t).then(({ audio }) => {
+            sentenceSynthDoneAt[_jobIdx] = Date.now();
             logger.info({ callId, sentenceText: t, audioBytes: audio.length }, "TTS sentence synthesized");
             logExecution("TTS", "response", {
               provider: agent.ttsProvider,
@@ -1295,11 +1327,9 @@ export async function handleWebCallWebSocket(
             });
             return withTailSilence(audio);
           });
+          job.catch(() => {});
+          sentenceJobs.push(job);
         }
-        // Attach a no-op catch immediately so Node.js doesn't fire
-        // unhandledRejection before the for-loop below awaits the job.
-        job.catch(() => {});
-        sentenceJobs.push(job);
         sentenceTexts.push(t);
       }
 
@@ -1997,47 +2027,97 @@ export async function handleWebCallWebSocket(
           await new Promise<void>(r => setTimeout(r, incrementalDelayMs));
         }
 
-        let pcmOut: Buffer;
-        try {
-          pcmOut = await sentenceJobs[i]!;
-        } catch (ttsErr) {
-          const reason = toReadableError(ttsErr, "TTS error");
-          logger.error({ callId, err: ttsErr }, reason);
-          send({ type: "error", message: reason });
-          speaking = false;
-          speakingEndedAt = Date.now();
-          processing = false;
-          if (!closed) void hangup("error", reason);
-          return;
-        }
-        if (interrupted || closed) break;
-
         if (!transcriptSent) {
           send({ type: "transcript", speaker: "agent", text: cleanReply });
           transcriptSent = true;
         }
-        // Signal which sentence is now playing so the UI can highlight it
         send({ type: "sentence_start", index: i, text: sentenceTexts[i] ?? "" });
 
-        // Re-arm the echo-grace window to cover the FULL sentence duration so the
-        // agent's own echo can't trip a false barge-in on long sentences.
-        // A flat 700ms window from sentence-start only covers short utterances;
-        // Tamil/Hindi sentences of 2–4 s would expire mid-sentence, letting the
-        // mic echo of the agent's voice trigger a false interruption and cut off
-        // the last words.  We now extend the window to:
-        //   sentence playback duration  +  BARGE_IN_ECHO_GRACE_MS (echo decay)
-        {
-          const sentenceDurationMs = Math.round((pcmOut.length / 2 / 16000) * 1000);
-          echoGraceUntil = Date.now() + sentenceDurationMs + BARGE_IN_ECHO_GRACE_MS;
+        const jobEntry = sentenceJobs[i]!;
+
+        if ("readChunks" in jobEntry) {
+          // ── True-streaming path ─────────────────────────────────────────────
+          // Pipe PCM chunks directly to the browser as they arrive from the TTS
+          // provider. First audio byte reaches the browser in ~150ms after the
+          // TTS request fires — no full-buffer wait.
+          // echoGrace: open immediately on sentence start; we extend it on every
+          // frame so the window always covers the current playback position.
+          echoGraceUntil = Date.now() + BARGE_IN_ECHO_GRACE_MS;
+          let frameBuf = Buffer.alloc(0);
+          let bytesSent = 0;
+          try {
+            for await (const raw of jobEntry.readChunks()) {
+              if (closed || interrupted) break;
+              frameBuf = Buffer.concat([frameBuf, raw]);
+              while (frameBuf.length >= AUDIO_CHUNK_BYTES) {
+                if (closed || interrupted) break;
+                const frame = frameBuf.subarray(0, AUDIO_CHUNK_BYTES);
+                frameBuf = frameBuf.subarray(AUDIO_CHUNK_BYTES);
+                bytesSent += AUDIO_CHUNK_BYTES;
+                // Keep echoGrace window alive: one 40ms frame + decay margin
+                echoGraceUntil = Date.now() + 40 + BARGE_IN_ECHO_GRACE_MS;
+                recording.addAgentChunk(frame);
+                sendSpeechAudio(frame);
+                await new Promise<void>(r => setTimeout(r, 40));
+              }
+            }
+          } catch (ttsErr) {
+            const reason = toReadableError(ttsErr, "TTS error");
+            logger.error({ callId, err: ttsErr }, reason);
+            send({ type: "error", message: reason });
+            speaking = false; speakingEndedAt = Date.now(); processing = false;
+            if (!closed) void hangup("error", reason);
+            return;
+          }
+          // Flush any sub-frame remainder (pad to full frame with silence)
+          if (!interrupted && !closed && frameBuf.length > 0) {
+            const padded = Buffer.alloc(AUDIO_CHUNK_BYTES);
+            frameBuf.copy(padded);
+            recording.addAgentChunk(padded);
+            sendSpeechAudio(padded);
+            await new Promise<void>(r => setTimeout(r, 40));
+          }
+          // Append per-sentence tail silence (same as withTailSilence on buffered path)
+          if (!interrupted && !closed) {
+            const tsSilenceBytes = Math.round((TTS_TAIL_SILENCE_MS / 1000) * 16000) * 2;
+            const tsFrames = Math.ceil(tsSilenceBytes / AUDIO_CHUNK_BYTES);
+            const tsFrame = Buffer.alloc(AUDIO_CHUNK_BYTES);
+            for (let s = 0; s < tsFrames && !interrupted && !closed; s++) {
+              recording.addAgentChunk(tsFrame);
+              sendSpeechAudio(tsFrame);
+              await new Promise<void>(r => setTimeout(r, 40));
+            }
+          }
+        } else {
+          // ── Buffered fallback (providers without synthesizeStream) ──────────
+          let pcmOut: Buffer;
+          try {
+            pcmOut = await jobEntry;
+          } catch (ttsErr) {
+            const reason = toReadableError(ttsErr, "TTS error");
+            logger.error({ callId, err: ttsErr }, reason);
+            send({ type: "error", message: reason });
+            speaking = false; speakingEndedAt = Date.now(); processing = false;
+            if (!closed) void hangup("error", reason);
+            return;
+          }
+          if (interrupted || closed) break;
+
+          // Re-arm echo-grace for full sentence duration
+          {
+            const sentenceDurationMs = Math.round((pcmOut.length / 2 / 16000) * 1000);
+            echoGraceUntil = Date.now() + sentenceDurationMs + BARGE_IN_ECHO_GRACE_MS;
+          }
+
+          for (let j = 0; j < pcmOut.length; j += AUDIO_CHUNK_BYTES) {
+            if (closed || interrupted) break;
+            const chunk = pcmOut.slice(j, j + AUDIO_CHUNK_BYTES);
+            recording.addAgentChunk(chunk);
+            sendSpeechAudio(chunk);
+            await new Promise<void>(r => setTimeout(r, 40));
+          }
         }
 
-        for (let j = 0; j < pcmOut.length; j += AUDIO_CHUNK_BYTES) {
-          if (closed || interrupted) break;
-          const chunk = pcmOut.slice(j, j + AUDIO_CHUNK_BYTES);
-          recording.addAgentChunk(chunk);
-          sendSpeechAudio(chunk);
-          await new Promise<void>(r => setTimeout(r, 40));
-        }
         if (!interrupted && !closed) lastPlayedIndex = i; // STEP 0b diag: this sentence fully streamed
       }
       logger.info({ callId, evt: "playback_done", lastPlayedIndex, totalSentences: sentenceJobs.length, interrupted, closed }, "STEP 0b playback_done: did the loop reach the final sentence, or break early (barge-in/close)?");
