@@ -621,11 +621,6 @@ function AgentDetailPanel({ summary, agent }: { summary: AgentMemorySummary; age
                 <Plus className="w-3.5 h-3.5 mr-2" /> Add / edit note
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Link href={`/app/agents/${summary.agentId}/edit`}>
-                  <Pencil className="w-3.5 h-3.5 mr-2" /> Edit agent
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
                 <Link href={`/app/analytics/agents/${summary.agentId}`}>
                   <Layers className="w-3.5 h-3.5 mr-2" /> View analytics
                 </Link>
