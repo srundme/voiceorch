@@ -1,0 +1,54 @@
+Implement IRDAI compliance for agents in SnapServe. This must be a non-invasive pre/post wrapper — do not modify the existing STT/LLM/TTS pipeline, conversation logic, live call handling, or other Advanced tab settings. Only the IRDAI toggle on Advanced > Compliance gets wired; DPDP, TRAI stay as already implemented, HIPAA remains inert. Reuse the existing compliance_frameworks JSON field — use the irdai.enabled key. This is domain-agnostic in code structure but the checklist content itself is IRDAI-specific (insurance).
+
+This implementation does NOT include any live, per-response, or real-time filtering of agent speech during calls. It only analyzes the agent's saved system prompt text.
+
+PART 1 — Backend wiring
+
+1. Create lib/irdaiCheck.js with one function:
+   - checkIrdaiCompliance(systemPromptText): runs a static analysis of the prompt text against a checklist of required elements (keyword/phrase presence check, not live audio). Returns an array of results, each item: { requirement, status: 'present' | 'missing', detail }.
+
+   Checklist items to check for (presence of relevant language in the prompt, case-insensitive keyword/phrase matching):
+   - Insurer/entity identification: prompt should instruct the agent to state which insurer/company it represents
+   - Call recording disclosure: prompt should instruct the agent to mention the call may be recorded
+   - No guaranteed outcomes language: prompt should NOT contain instructions encouraging the agent to guarantee claim approval, guaranteed returns, or guaranteed outcomes
+   - Indicative quotes disclosure: prompt should instruct the agent to clarify that quotes/premiums are indicative, pending underwriting
+   - Grievance redressal mention: prompt should instruct the agent to inform caller how to escalate complaints if asked
+   - Human handoff for claims decisions: prompt should instruct the agent to defer final claim approval/settlement decisions to a human/system of record, not state them itself
+
+2. Wherever the agent's system prompt is saved (existing Save button on the Prompt tab or Advanced tab), if agent.compliance_frameworks.irdai.enabled is true, run checkIrdaiCompliance on the current system prompt text after save completes. Store the result in a new field on the agent config: irdai_compliance_status (JSON array, same structure as the function's return value).
+
+3. Do NOT block saving, publishing, or calling based on this check. This is purely informational — agents can be saved, published, and used regardless of the check results.
+
+PART 2 — Warning display
+
+4. On the Advanced > Compliance tab, when IRDAI is enabled, display a warning banner/card below the IRDAI toggle (only when at least one checklist item has status 'missing'):
+   Banner text: "This agent's system prompt may not meet IRDAI guidelines"
+   Below it, list each missing requirement as a bullet, using plain language, e.g.:
+   - "No mention of which insurer the agent represents"
+   - "No disclosure that calls may be recorded"
+   - "Prompt may include language suggesting guaranteed claim outcomes"
+   - "No mention that quotes/premiums are indicative"
+   - "No grievance redressal information for callers"
+   - "No instruction to defer claim decisions to a human"
+   
+   If all checklist items are 'present', show a small confirmation instead: "This agent's system prompt meets IRDAI guideline requirements" — no banner styling, just a quiet confirmation line.
+
+5. Re-run the check automatically every time the system prompt is saved while IRDAI is enabled, and update the banner/confirmation accordingly — no manual refresh needed.
+
+PART 3 — Confirmation modal on enable
+
+6. When the user clicks the IRDAI toggle to turn it ON (off-to-on transition only), intercept the click — do not flip the toggle yet. Open a modal, styled to match the existing dark theme UI, reusing the same modal component built for TRAI/DPDP.
+
+   Modal title: "Enable IRDAI Compliance"
+   Modal body (bullet list):
+   - "Your agent's system prompt will be checked against IRDAI disclosure guidelines"
+   - "You'll see a warning if required disclosures are missing — this does not block calls or saving"
+   - "Checks include: insurer identification, recording disclosure, no guaranteed-outcome language, indicative quote disclosure, grievance redressal info, and human handoff for claim decisions"
+
+   Footer note: "This is an informational check only. It does not alter call behavior or block any action."
+
+   Buttons: "Cancel" (closes modal, toggle stays OFF) and "Confirm & Enable" (closes modal, toggle flips ON, saves compliance_frameworks.irdai.enabled = true via existing save flow, and runs the initial check immediately).
+
+7. Turning the toggle OFF does NOT show a modal — remains a direct, immediate toggle off.
+
+Do not touch HIPAA toggle/modal in this pass. Do not touch TRAI or DPDP implementations already in place.

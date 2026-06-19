@@ -136,7 +136,14 @@ export async function handleVobizWebSocket(
         if (msg.media.track && msg.media.track !== "inbound") break;
         const session = getSession(sessionId);
         if (!session) break;
-        const pcm8k = Buffer.from(msg.media.payload, "base64");
+        // Vobiz sends inbound audio as big-endian (network byte order) per their docs.
+        // Our pipeline expects little-endian LINEAR16. Byte-swap every sample pair.
+        const rawBE = Buffer.from(msg.media.payload, "base64");
+        const pcm8k = Buffer.allocUnsafe(rawBE.length);
+        for (let i = 0; i + 1 < rawBE.length; i += 2) {
+          pcm8k[i]     = rawBE[i + 1];
+          pcm8k[i + 1] = rawBE[i];
+        }
         session.pipeline.onRawPcm8kIn(pcm8k);
         break;
       }
@@ -175,8 +182,14 @@ export function getVobizAnswerXML(
   if (opts.campaignLeadId) qsParts.push(`campaignLeadId=${opts.campaignLeadId}`);
   const qs = qsParts.length ? `?${qsParts.join("&")}` : "";
   const wsUrl = `${wsBaseUrl}/api/ws/vobiz/${agentId}${qs}`;
+  // contentType="audio/x-l16;rate=8000" explicitly negotiates LINEAR16 8kHz for
+  // both the inbound stream and the outbound playAudio events.  Without this,
+  // Vobiz may default to µ-law, which causes it to mis-decode our LINEAR16
+  // playAudio payload — producing the "tractor/glitch" audio artifact on the
+  // caller side.  Per Vobiz docs the playAudio contentType must match the
+  // stream-negotiated format, so locking it here fixes the outbound path.
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Stream bidirectional="true" keepCallAlive="true">${wsUrl}</Stream>
+  <Stream bidirectional="true" keepCallAlive="true" contentType="audio/x-l16;rate=8000">${wsUrl}</Stream>
 </Response>`;
 }
