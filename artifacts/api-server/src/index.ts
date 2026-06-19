@@ -6,6 +6,7 @@ import { WebSocketServer } from "ws";
 import * as agnost from "agnostai";
 import app from "./app.js";
 import { logger } from "./lib/logger.js";
+import { installSharedHttpPool, closeSharedHttpPool } from "./orchestration/http/pool.js";
 import { initAudioPool } from "./orchestration/audioPool.js";
 import { startCallbackPoller } from "./orchestration/callbackScheduler.js";
 import { startSpikeChecker } from "./services/spike-checker.js";
@@ -30,6 +31,12 @@ const rawPort = process.env["PORT"];
 if (!rawPort) throw new Error("PORT environment variable is required but was not provided.");
 const port = Number(rawPort);
 if (Number.isNaN(port) || port <= 0) throw new Error(`Invalid PORT value: "${rawPort}"`);
+
+// Install the shared keep-alive HTTP pool as the global dispatcher BEFORE any
+// outbound provider call can happen. Keeps sockets warm across turn gaps so
+// repeat LLM/TTS/STT calls skip the TCP+TLS handshake. Process-wide: also covers
+// telephony REST, webhooks, memory proxy, etc. WebSocket streaming is unaffected.
+installSharedHttpPool();
 
 const server = http.createServer(app);
 
@@ -270,23 +277,41 @@ server.listen(port, () => {
     });
 });
 
-function gracefulShutdown(signal: string) {
+let isShuttingDown = false;
+async function gracefulShutdown(signal: string) {
+  if (isShuttingDown) return; // ignore repeated SIGTERM/SIGINT during drain
+  isShuttingDown = true;
   logger.info({ signal }, "Received shutdown signal, closing server");
   void agnost.shutdown();
-  server.close((err) => {
-    if (err) {
-      logger.error({ err }, "Error closing server");
-      process.exit(1);
-    }
-    logger.info("Server closed cleanly");
-    process.exit(0);
-  });
 
-  // Force exit after 10 seconds if connections don't drain
-  setTimeout(() => {
+  // Hard backstop: force exit if a drain step hangs past the deploy grace window.
+  const force = setTimeout(() => {
     logger.warn("Forcing exit after timeout");
     process.exit(1);
-  }, 10_000).unref();
+  }, 10_000);
+  force.unref();
+
+  // 1) Stop accepting new connections.
+  server.close((err) => {
+    if (err) logger.error({ err }, "Error closing server");
+    else logger.info("Server closed cleanly");
+  });
+
+  // 2) Drain in-flight outbound provider HTTP before exiting. close() (not
+  //    destroy()) lets an LLM/TTS call mid-response on a live call finish rather
+  //    than being aborted by a Railway SIGTERM redeploy. Bounded so a stuck
+  //    socket can't block past the backstop above.
+  try {
+    await Promise.race([
+      closeSharedHttpPool(),
+      new Promise((resolve) => setTimeout(resolve, 8_000)),
+    ]);
+  } catch (err: unknown) {
+    logger.warn({ err }, "Error draining HTTP pool on shutdown");
+  }
+
+  clearTimeout(force);
+  process.exit(0);
 }
 
 process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
